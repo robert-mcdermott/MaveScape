@@ -6,7 +6,7 @@
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
-// data); all by default. Exits with status 1 when a check fails.
+// data), experiment (external data); all by default. Exits with status 1 when a check fails.
 //
 // Suites marked "external data" need files that node validation/fetch.mjs downloads into
 // validation/cache/ (wave 1, slice 2); without them the suite is skipped, and fails with
@@ -27,6 +27,9 @@ import { buildCountSet, joinCountTables } from '../web/lib/counts.js';
 import { KIND_NAMES } from '../web/lib/variants.js';
 import { parseFasta, targetFromSequence } from '../web/lib/target.js';
 import { createRandom, shuffle } from '../web/lib/random.js';
+import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
+import { designFromSampleSheet } from '../web/lib/samplesheet.js';
+import { addSource, addTarget, createWorkspace, parseWorkspace, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
 
@@ -447,6 +450,60 @@ const suites = {
     const expected = ['blocks:duplicate-variants@3+17+4+6', 'blocks:negative@11', 'blocks:not-numeric@10', 'blocks:ragged-rows', 'warns:invalid-variants@7+8+9+14', 'warns:non-integer'].sort();
     check('import', 'the malformed fixture: every planted problem found, on its line, and nothing else', found.join(', '), JSON.stringify(found) === JSON.stringify(expected), expected.join(', '));
     check('import', 'the malformed fixture: lenient names (K3R, an unsorted multi-variant, _wt) read and kept beside their originals', `${review.summary.warning} read leniently: ${[2, 13, 14].map((r) => `${review.variants.original[r]} → ${review.variants.key[r]}`).join(', ')}`, review.summary.warning === 3 && review.variants.key[14] === 'p.=', '3');
+  },
+
+  // The Experiment view (wave 1, slice 4): every feasibility design expressed with the editor's
+  // operations alone, read from a sample sheet, and kept in a workspace whose history is chained.
+  experiment() {
+    for (const c of DESIGN_CASES) {
+      const design = readDesign(c.design);
+      const counts = table(c.dataset, c.counts);
+      const rebuilt = rebuild(design);
+      const same = JSON.stringify(meaning(rebuilt)) === JSON.stringify(meaning(design));
+      const result = validateDesign(rebuilt, { columns: counts.columns });
+      check('experiment', `${c.name}: rebuilt with the editor's operations alone, it says what the hand-written design says`, `${meaning(design).slots.length} slots, ${design.samples.length} samples, ${meaning(design).copies.length} copies${same ? '' : '; differs'}${result.ok ? '' : `; ${result.errors[0].message}`}`, same && result.ok, 'the same, and valid');
+    }
+    const grb2 = readDesign('grb2-sh3.design.json');
+    check('experiment', 'GRB2: two populations made a time series and back loses nothing', 'compared', JSON.stringify(meaning(modelRoundTrip(grb2))) === JSON.stringify(meaning(grb2)), 'the same');
+
+    // Sample sheets, as a lab would write them, against the hand-written designs.
+    const sheets = [
+      { name: 'grb2-sh3', sheet: 'grb2-sh3.samples.csv', dataset: 'mavedb-grb2-sh3', counts: 'counts.csv' },
+      { name: 'brca1-ring-e2', sheet: 'brca1-ring-e2.samples.csv', dataset: 'mavedb-brca1-ring', counts: 'aa/counts.csv' },
+      { name: 'factor9', sheet: 'factor9.samples.csv', dataset: 'mavedb-factor9', counts: 'counts.csv' },
+    ];
+    for (const x of sheets) {
+      const written = readDesign(`${x.name}.design.json`);
+      const counts = table(x.dataset, x.counts);
+      const countColumns = counts.columns.filter((name) => !['accession', 'hgvs_nt', 'hgvs_splice', 'hgvs_pro'].includes(name));
+      const sheet = parseTable(new Uint8Array(readFileSync(new URL(`./fixtures/${x.sheet}`, import.meta.url))));
+      const { design, problems } = designFromSampleSheet(sheet, { countColumns, variants: written.variants, targets: written.targets });
+      // A sheet does not give tile ranges: they are set in the view, as here.
+      for (const [i, t] of (design.library.tiles ?? []).entries()) Object.assign(t, { start: written.library.tiles[i].start, end: written.library.tiles[i].end });
+      const a = meaning(design);
+      const b = meaning(written);
+      const same = JSON.stringify(a.slots) === JSON.stringify(b.slots) && a.model === b.model && JSON.stringify(a.samples) === JSON.stringify(b.samples);
+      const result = validateDesign(design, { columns: counts.columns });
+      check('experiment', `${x.name}: the design read from a sample sheet (fixtures/${x.sheet}) has the hand-written design's samples and slots`, `${a.slots.length} slots; problems: ${problems.filter((p) => p.level === 'error').map((p) => p.message).join('; ') || 'none'}${result.ok ? '' : `; ${result.errors[0].message}`}`, same && result.ok && !problems.some((p) => p.level === 'error'), 'the same, and valid');
+    }
+    const demo = dataset('dimsum-demo');
+    const toyColumns = parseTable(demo.bytes('countFile_Toy.txt')).columns.map((col) => col.name);
+    const fromDiMSum = designFromSampleSheet(parseTable(demo.bytes('experimentDesign_Toy.txt')), { countColumns: toyColumns.filter((n) => n !== 'nt_seq'), variants: { column: 'nt_seq', level: 'nucleotide' }, targets: [targetFromSequence({ id: 'tdp43', description: '', sequence: demo.set.wildType }).target] });
+    const toyResult = validateDesign(fromDiMSum.design, { columns: toyColumns });
+    check('experiment', 'DiMSum\'s own experiment design file (CR line ends) as a sample sheet for its demo counts', `${fromDiMSum.design.replicates.map((r) => `${r.biological}: ${r.input} → ${r.output}`).join(', ')}${toyResult.ok ? '' : `; ${toyResult.errors[0].message}`}`, toyResult.ok && fromDiMSum.design.replicates.length === 4, '4 replicates, valid');
+
+    // A workspace through the slice's edits: its history chained, saved and reopened intact.
+    let ws = createWorkspace('GRB2', { now: '2026-10-08T12:00:00.000Z' });
+    ws = addTarget(ws, grb2.targets[0]).ws;
+    ws = addSource(ws, { name: 'counts.csv', sha256: 'd4c966d5e7b9605227b5931904685358b68f1952818cb7523e606d86dff9e016', rows: 1121, mapping: { countColumns: [] } }).ws;
+    ws = setDesign(ws, grb2, 'Set the design', 'counts.csv');
+    ws = updateTarget(ws, grb2.targets[0].id, { offset: 0 }, 'Set the offset to 0');
+    check('experiment', 'a target "changed" to what it already is is not a change', 'compared', updateTarget(ws, grb2.targets[0].id, { offset: 0 }) === ws, 'no entry');
+    const reopened = parseWorkspace(serializeWorkspace(ws));
+    const chain = verifyHistory(reopened);
+    check('experiment', 'a workspace through the slice\'s edits: its history chained, and intact after saving and reopening', `${chain.entries} entries (${reopened.history.map((e) => e.action).join(', ')}), head ${chain.head.slice(0, 12)}…`, chain.ok && chain.entries === 5, '5 entries, unbroken');
+    const tampered = { ...reopened, history: reopened.history.map((e, i) => (i === 3 ? { ...e, detail: 'Set the design (edited later)' } : e)) };
+    check('experiment', 'an entry edited afterward breaks the chain where it was edited', `broken at entry ${verifyHistory(tampered).broken[0]?.index + 1}`, verifyHistory(tampered).broken[0]?.index === 3, 'entry 4');
   },
 };
 

@@ -185,7 +185,9 @@ export function draftDesign(table, roles, options = {}) {
     const numbered = members.find((m) => m.replicate !== null)?.replicate;
     const count = (biological.get(key) ?? 0) + 1;
     biological.set(key, count);
-    const replicate = { id: slug(group), name: group, biological: count };
+    // "count_rep1" says no more than its number: "Replicate 1". "PlusE2NewRep3" names a library too.
+    const generic = /^(?:counts?|reads?)?[_\s.-]*(?:bio)?rep(?:licate)?[_\s.-]*\d+$/i.test(group);
+    const replicate = { id: slug(group), name: generic && numbered !== undefined ? `Replicate ${numbered}` : group, biological: count };
     if (numbered !== undefined) replicate.biological = numbered;
     if (tileId) {
       replicate.tile = tileId;

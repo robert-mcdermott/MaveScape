@@ -24,15 +24,7 @@ const toImport = { label: 'Open files', icon: 'table', run: (app) => app.pickFil
 // the list in the waves that build them (roadmap.md).
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
-  {
-    id: 'experiment', label: 'Experiment', icon: 'experiment',
-    load: async () => plannedMode({
-      title: 'Experiment', icon: 'experiment',
-      purpose: 'Say what each column of the counts is: the sample, its role (input, output, time point or bin), condition, biological and technical replicate, and the control variants. MaveScape suggests roles from the column names; nothing is applied until you accept it.',
-      steps: ['Open a count table (CSV, TSV or Excel).', 'Give the target sequence (FASTA) the variants are named against.', 'Check the design summary, then go on to QC.'],
-      actions: [toImport],
-    }),
-  },
+  { id: 'experiment', label: 'Experiment', icon: 'experiment', load: () => import('./ui/mode-experiment.js').then((m) => m.mountExperimentMode) },
   {
     id: 'qc', label: 'QC', icon: 'qc',
     load: async () => plannedMode({

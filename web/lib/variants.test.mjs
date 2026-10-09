@@ -73,3 +73,7 @@ test('per-sample files joined on their variants; what absence means is the user\
 test('kind names cover every kind', () => {
   assert.equal(KIND_NAMES.length, Object.keys(KIND).length);
 });
+
+test('columns with no values are not reported identical', () => {
+  assert.deepEqual(identicalColumns({ rows: 0, columns: [{ name: 'a', values: [] }, { name: 'b', values: [] }] }, ['a', 'b']), []);
+});

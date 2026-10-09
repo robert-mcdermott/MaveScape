@@ -10,8 +10,8 @@ import { applyTemplate, detectLayout, makeTemplate, namesFromSequences, reviewIm
 import { joinCountTables } from '../lib/counts.js';
 import { STATUS, KIND_NAMES } from '../lib/variants.js';
 import { parseFasta, targetFromSequence } from '../lib/target.js';
-import { addSource, addTarget } from '../lib/workspace.js';
-import { IDENTIFIER_COLUMNS } from '../lib/design.js';
+import { addSource, addTarget, setDesign } from '../lib/workspace.js';
+import { IDENTIFIER_COLUMNS, validateDesign, summarizeDesign } from '../lib/design.js';
 
 const LINE_ENDS = { crlf: 'CRLF (Windows) line ends', lf: 'LF line ends', cr: 'CR (old Mac) line ends' };
 const DELIMITER_NAMES = { ',': 'comma-separated', '\t': 'tab-separated', ';': 'semicolon-separated', '|': 'bar-separated' };
@@ -21,7 +21,19 @@ export function installImport(app) {
   app.tables = new Map();
   app.importers.set('table', (items) => openImportWizard(app, items));
   app.importers.set('sequence', (items) => importSequences(app, items));
+  app.importers.set('design', (items) => importDesigns(app, items));
+  app.importers.set('json', (items) => importDesigns(app, items));
   app.parseTableFile = (item) => parseTableFile(app, item);
+  // A source's table, read again from the library (by its SHA-256) when this session has not read it.
+  app.sourceTable = async (source) => {
+    if (app.tables.has(source.id)) return app.tables.get(source.id).table;
+    if (source.files?.length > 1) throw new Error(`${source.name} was joined from ${source.files.length} files; open them again to read it.`);
+    const bytes = await app.library.getFile(source.sha256);
+    if (!bytes) throw new Error(`${source.fileName} (SHA-256 ${source.sha256.slice(0, 12)}…) is not in the library.`);
+    const table = await parseTableFile(app, { name: source.fileName, file: new Blob([bytes]) });
+    app.tables.set(source.id, { table, review: null });
+    return table;
+  };
 }
 
 async function parseTableFile(app, item) {
@@ -55,6 +67,37 @@ async function importSequences(app, items) {
   if (added.length) {
     app.store.commit(ws, `Add target${added.length > 1 ? 's' : ''} ${added.join(', ')}`);
     toast(`Added ${added.length === 1 ? `the target ${added[0]}` : `${added.length} targets`}.`, { kind: 'ok' });
+  }
+}
+
+// Designs (*.design.json): set as the workspace's design, for the table whose columns it fits.
+async function importDesigns(app, items) {
+  for (const item of items) {
+    let design;
+    try {
+      design = JSON.parse(new TextDecoder().decode(await app.readBytes(item)));
+    } catch {
+      toast(`${item.name} is not JSON.`, { kind: 'error' });
+      continue;
+    }
+    if (design?.format !== 'mavescape-design') {
+      toast(`${item.name} is not a MaveScape design (its format is not "mavescape-design").`, { kind: 'error' });
+      continue;
+    }
+    const sources = app.store.ws.sources;
+    const fits = sources.map((s) => ({ s, r: validateDesign(design, { columns: s.columns.map((c) => c.name) }) }));
+    const best = fits.find((x) => x.r.ok) ?? fits.sort((a, b) => a.r.errors.length - b.r.errors.length)[0];
+    if (!best) {
+      toast('Open the count table first: a design describes its columns.', { kind: 'error' });
+      continue;
+    }
+    // The workspace's own target (with the same sequence) stands in for the design's copy.
+    const own = app.store.ws.targets.find((t) => t.sequence === design.targets?.[0]?.sequence);
+    const next = own ? { ...design, targets: [own, ...design.targets.slice(1)] } : design;
+    app.store.commit(setDesign(app.store.ws, next, `Opened the design ${item.name}`, best.s.id), `Open the design ${item.name}`);
+    const r = best.r;
+    toast(r.ok ? `Opened the design ${item.name} for ${best.s.name}: ${summarizeDesign(next).lines.slice(-2, -1)[0] ?? ''}` : `Opened the design ${item.name}; ${r.errors.length} problem${r.errors.length > 1 ? 's' : ''} with ${best.s.name} to fix in the Experiment view.`, { kind: r.ok ? 'ok' : 'error' });
+    app.setMode('experiment');
   }
 }
 

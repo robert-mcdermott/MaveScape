@@ -160,13 +160,36 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
        it is now offered, and its cells are listed as blocking problems (found by the fixture).
      - DiMSum's demo wild type is 126 nt, its count table CRLF-terminated (with an unterminated last
        line) and its design file CR-terminated.
-4. **Experiment view (E2, E5, E6, V6).** The design editor for two-population experiments
-   (samples × role, condition, biological and technical replicate, batch; controls WT,
-   synonymous, nonsense auto-detected and editable), the human-readable design summary, undo and
-   the hash-chained history (`web/lib/workspace.js` adapted from CytoWeave). A design can be
-   filled from a **sample sheet** (CSV or XLSX: sample, column or file, role, condition,
-   replicate, time or bin value), the form labs already keep, and is saved and reopened as
-   `*.design.json`.
+4. **Experiment view (E2, E3, E5, E6, V6, D13): done.** `web/ui/mode-experiment.js`: the design
+   as two tables, columns → samples (a sample of its own, a technical replicate of another, a copy
+   of a shared sample's column, or not used, with why) and replicates × slots (input and output;
+   each time, edited in the column heads; each bin, with its value), with conditions (a reference
+   one), tiles, controls, the kind of experiment, the time unit and what bin values are; the
+   plain-language summary and every error and warning of `validateDesign` as it changes; the
+   target's name, offset, coding start and identifiers. A design starts from the draft MaveScape
+   makes from the column names (slice 3) or from a sample sheet (`web/lib/samplesheet.js`:
+   columns named loosely; DiMSum's experiment design file is one), and is exported and opened as
+   `*.design.json`. `web/lib/design-edit.js`: the edits, each returning a new design.
+   `web/lib/workspace.js`: the hash-chained history (CytoWeave's change log), written by every
+   material change (import, target, design, rename) and shown, checked, in the drawer.
+   - Validation (suite `experiment`, 12 checks): each of the four hand-written designs rebuilt with
+     the editor's operations alone says what it says (slots, samples, copies) and validates;
+     sample sheets for GRB2, BRCA1 and factor IX (`fixtures/*.samples.csv`) give designs with the
+     hand-written designs' samples and slots; DiMSum's own experiment design file is a sample sheet
+     for its demo; a workspace's history survives saving and reopening, and an entry edited
+     afterward breaks it where it was edited. 12 more unit tests (78 in all). In the window: GRB2's
+     and BRCA1's drafts are complete designs at once (BRCA1's shared inputs found from the data);
+     the offset set in the view moves the summary's positions to 159–214; the drawer lists the
+     chained history.
+   - Found by slice 4:
+     - **A sample sheet needs to say which replicates share a sample**: BRCA1's two libraries each
+       have their own input, so "no replicate = shared by all" was not enough. A sheet now lists
+       them ("1;2;3"); no replicate still means every replicate of its condition and tile.
+     - **Drafting after reopening a workspace read empty columns as identical**, so every column
+       became a "copy": a table not in the session is now read again from the library by its
+       SHA-256 first, and columns with no values are never compared.
+     - **Columns left out at import were reported as unaccounted**: a draft now sets them aside
+       with that reason.
 5. **Scoring (S1–S5, S11, V7).** `web/lib/score-ratio.js` (WT, complete, full and synonymous
    normalization; pseudocount; SE), `web/lib/replicates.js` (pooling technical replicates; fixed
    effects; REML random effects; the Enrich2-compatible estimator; τ², I², leave-one-out),

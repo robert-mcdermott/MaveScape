@@ -44,6 +44,17 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   16,959 test strings, and a lenient mode for lab and legacy names (A12V, `_wt`, `p.Ala12*`,
   repeated or unsorted components), which keeps the original beside the canonical name.
 
+- **The Experiment view (wave 1, slice 4).** Say what each column of the counts is: a sample, a
+  technical replicate of one (summed), a copy of a shared sample's column, or not used (and why);
+  and each replicate's samples: input and output, each time, or each bin, with conditions, tiles,
+  controls and the target's offset and identifiers. A design starts from MaveScape's draft from the
+  column names, or from a sample sheet (one row per sample: column, role, replicate, condition,
+  time or bin, tile, batch; DiMSum's experiment design file works as one), and is checked and
+  described in plain language as you edit. Designs export and open as `*.design.json`.
+- **A history that cannot be rewritten quietly.** Every material change (an import, a target, the
+  design) is written to the workspace's history, each entry chained to the one before by SHA-256;
+  the drawer lists it and says whether the chain holds.
+
 ### Validation
 
 - Go tests of the host: security headers, foreign Host headers and cross-origin requests refused,
@@ -71,3 +82,7 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   have the hand-written designs' shape; shuffled rows and columns, text read in parts and per-sample
   files joined give the same counts; DiMSum's demo is named against its wild type; a fixture with
   one problem of each kind raises exactly those, on their lines (29 checks).
+- `validation/run.mjs experiment` (wave 1, slice 4): each feasibility design rebuilt with the
+  editor's operations alone says what the hand-written one says; sample sheets for GRB2, BRCA1 and
+  factor IX, and DiMSum's own design file, give the same samples and slots; a workspace's history
+  survives saving and reopening, and an entry edited afterward is caught (12 checks).

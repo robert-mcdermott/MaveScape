@@ -46,7 +46,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | D9 | One million rows imported in under 15 s, under 1 GB of memory | planned (wave 2, benchmarked) |
 | D10 | Variants beyond single substitutions: multi-substitutions, insertions, deletions, delins, stop, nucleotide-to-protein translation, splice; optional GA4GH VRS identifiers | planned (wave 3) |
 | D12 | Built-in import templates for the layouts in common use, none of them required: MaveDB score and count CSVs, DiMSum count tables, generic per-variant tables (HGVS or `A12V`-style identifiers); later dms_variants and Enrich2 count files | done for MaveDB, DiMSum and generic tables (wave 1, slice 3); dms_variants and Enrich2 count files planned (wave 2) |
-| D13 | Standard files for everything that is not counts: targets from FASTA (single or multi-record) or GenBank; designs from a sample sheet (CSV/XLSX); one count table or one file per sample; barcode maps as CSV/TSV; structures as PDB, mmCIF or BinaryCIF; alignments as FASTA or A3M; custom tracks as CSV or GFF3; predictor scores as CSV/TSV. Every format documented in `docs/FORMATS.md`, with blank layouts on the Start page | planned (wave 1: FASTA, sample sheet, per-sample files, layouts; wave 3: GenBank, alignments, tracks; wave 4: structures) |
+| D13 | Standard files for everything that is not counts: targets from FASTA (single or multi-record) or GenBank; designs from a sample sheet (CSV/XLSX); one count table or one file per sample; barcode maps as CSV/TSV; structures as PDB, mmCIF or BinaryCIF; alignments as FASTA or A3M; custom tracks as CSV or GFF3; predictor scores as CSV/TSV. Every format documented in `docs/FORMATS.md`, with blank layouts on the Start page | partial (wave 1, slices 3–4: FASTA, per-sample files, sample sheets in CSV/TSV, DiMSum's design file; layouts and `docs/FORMATS.md` in slice 8; XLSX and GenBank wave 3; structures wave 4) |
 | D11 | Hardened readers: fuzzed CSV, HGVS and archive parsing with no crash or hang and a clear message for every refusal | planned (wave 9) |
 
 ## Experiment design
@@ -54,11 +54,11 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | done (wave 1, slice 2: three MaveDB data sets of different designs, four designs, no data-set code; validation `designs`). Barcode libraries are planned (wave 2) |
-| E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | planned (wave 1: two-population; wave 2: time, bins, barcodes, conditions) |
-| E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | partial (wave 1, slice 3: from FASTA files or pasted, type, translation, UniProt accession from the header; editing offsets and identifiers in the Experiment view, slice 4) |
+| E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | done (wave 1, slice 4: every model, conditions and tiles; validation `experiment`). Barcode libraries planned (wave 2); named control classes planned (wave 6) |
+| E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | done (wave 1, slices 3–4: from FASTA files or pasted; name, offset, coding start and identifiers edited in the Experiment view). Offsets found from UniProt: wave 3 |
 | E4 | Role suggestions shown as suggestions, never applied silently | done (wave 1, slice 3: suggested from column names, drafts equal the hand-written designs' shape on all four feasibility designs) |
-| E5 | A human-readable design summary and validation before scoring | planned (wave 1) |
-| E6 | Every material change undoable and recorded in a hash-chained history | planned (wave 1) |
+| E5 | A human-readable design summary and validation before scoring | done (wave 1, slice 4) |
+| E6 | Every material change undoable and recorded in a hash-chained history | done (wave 1, slice 4: verified in the drawer; validation `experiment`) |
 
 ## Quality control
 
@@ -101,7 +101,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | V3 | Selection by click, rectangle, freeform and query; named selection sets that propagate across views | planned (wave 1: click and rectangle; wave 5: freeform and query) |
 | V4 | Variant inspector: identifiers, score and CI, counts by sample, replicate scores, filters and warnings, sequence context, position distribution, provenance; later barcodes, conditions, annotations, structure | planned (wave 1, extended by waves 2–4) |
 | V5 | Sequence tracks synchronized with the map: reference, coverage, position effect and uncertainty, domains and motifs, secondary structure, conservation, ClinVar, population frequency, custom tracks, structure availability; show, hide, reorder, filter, export | planned (wave 3) |
-| V6 | Undo, history and a visible filter bar; analysis-changing actions distinct from view-only actions | planned (wave 1) |
+| V6 | Undo, history and a visible filter bar; analysis-changing actions distinct from view-only actions | partial (wave 1, slice 4: undo and the history; the filter bar comes with scoring, slice 5) |
 | V7 | Long operations in workers with progress and cancel | planned (wave 1) |
 
 ## Comparison

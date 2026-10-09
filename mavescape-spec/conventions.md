@@ -216,7 +216,11 @@ significant digits; see CytoWeave's wave 8 finding).
 ### Workspace
 
 In the library, a workspace is one JSON document (as CytoWeave's), referring to count tables by
-SHA-256. Exported, it is a `.msz` ZIP archive:
+SHA-256: `{ format: 'mavescape-workspace', version, id, name, created, modified, sources, targets,
+design, designSource /* the source the design describes */, runs, selections, history:
+[{ time, action, detail, hash }], historyAnchor? }`. Every material change goes through
+`change()` in `web/lib/workspace.js`, which appends a history entry whose hash is the SHA-256 of the
+previous entry's hash and the entry (canonical JSON); `verifyHistory` checks the chain. Exported, it is a `.msz` ZIP archive:
 
 ```
 manifest.json            format 'mavescape-archive', version, created, software, contents with SHA-256

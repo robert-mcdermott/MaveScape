@@ -57,6 +57,8 @@ export function buildCountSet(table, mapping) {
 // Columns that are identical value for value: a sample written once per replicate (as MaveDB does
 // for shared inputs), suggested as one sample. [[name, name, …], …].
 export function identicalColumns(table, names) {
+  // Columns with no values (a table not read yet) are not evidence of anything.
+  if (!table.rows) return [];
   const groups = new Map();
   for (const name of names) {
     const column = table.columns.find((c) => c.name === name);
