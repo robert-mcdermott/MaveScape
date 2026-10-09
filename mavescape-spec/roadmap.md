@@ -230,17 +230,49 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
      - MaveScape's default leaves out a replicate measurement with no input reads (the variant was
        not in that library); the Enrich2-compatible preset scores it from the pseudocount, as
        Enrich2 does. The difference is a parameter, recorded in each run.
-6. **Quality control (Q1–Q7, Q9).** `web/lib/qc.js` and `web/lib/findings.js`: depth,
-   observed fraction, count distributions, low and zero counts, rank-abundance, coverage by
-   position and substitution, replicate agreement (Pearson and Spearman on variants above an
-   input-count threshold), leave-one-out z for outlier replicates, control distributions and
-   separation, the synonymous log-ratio variance against its Poisson expectation as a bottleneck
-   check, score stability against input count, effect against SE, missingness, filter flow. The
-   QC view lists findings (pass/review/fail, advisory or blocking, threshold and rationale), each
-   linked to its plot; thresholds are parameters in provenance.
-   - Validation (suite `qc`): fixtures for a clean experiment, poor replicate agreement, a
-     severe bottleneck, a low-count tail and a missing sample each raise exactly their expected
-     findings, and the clean one none.
+6. **Quality control (Q1–Q7, Q9): done.** `web/lib/stats.js` (order statistics, Pearson and
+   Spearman, AUC, a robust variance, a non-negative line fit), `web/lib/qc.js` (the metrics) and
+   `web/lib/findings.js` (twelve findings, each pass, review, fail or not assessed, advisory or
+   blocking, with its threshold, rationale, affected samples or replicates and plot; thresholds
+   in the workspace, every change in its history), `web/lib/simulate.js` (built here for the
+   fixtures: library, bottlenecks, selection with replicate noise, sequencing; seeded, labeled
+   simulated), the score worker's `qc` message, `web/ui/plots.js` (bars, lines, scatter, class
+   histograms, the filter flow, the coverage grid) and the QC view (`web/ui/mode-qc.js`): QC of a
+   run or of the counts alone, the findings beside the overall status, each finding's detail and
+   plot, the thresholds. From the counts alone: every sample has counts (blocking), depth, low
+   counts before selection, missingness, missing after selection (dropouts), coverage of the
+   designed substitutions by position, replicate agreement, variance beyond counting
+   (bottleneck), outlier replicates. From a run: separation of the controls, resolution, variants
+   scored.
+   - Validation (suite `qc`, 15 checks): simulated experiments, three seeds each, raise exactly
+     their findings: clean, none; poor replicate agreement; one failing replicate; a severe
+     bottleneck; a low-count tail; a missing sample (blocking, with scoring refused and QC still
+     run). The variance ratio follows a simulated bottleneck (about 1 + D/2N for N cells and D
+     reads per variant; within 30%, low by up to 25% at 20 cells); QC is the same with rows and
+     columns shuffled and with or without a run; thresholds act and are recorded. The feasibility
+     data's findings are locked as found. 14 more unit tests (111 in all). In the window: GRB2 and
+     BRCA1 (two conditions), counts-only and from a run, light and dark.
+   - Found by slice 6:
+     - **GRB2's replicate differences vary 11× more than counting predicts**, as from a
+       bottleneck: the Domainome's own DiMSum analysis found an input bottleneck (its
+       multiplicative error term about 6). MaveScape's REML τ² takes up the excess between
+       replicates; DiMSum's error model (wave 2) will model it.
+     - **BRCA1's table writes variants that dropped out as missing, never 0**: about 30% of the
+       variants are missing from the E2 assay's last round, and they had already fallen to 1–3% of
+       their input by the round before (others 12–54%). Missing is not zero, so they are not scored
+       in that replicate and scores lean toward wild type, as in the published Enrich2 scores. A
+       "missing after selection" finding now says so; reading such cells as 0, per sample, is an
+       import option for wave 2 (time series).
+     - **BRCA1's Y2H nonsense variants are not loss-of-function controls**: before residue 61 they
+       score about −3.7, after residue 110 about +0.5 (truncations that keep the RING domain keep
+       binding BARD1), so the controls' separation fails. Controls named by position (the design's
+       explicit nonsense list) are the remedy; the finding's rationale says so.
+     - **A bottleneck and replicate noise cannot always be told apart**: a bottleneck multiplies
+       the counting variance, replicate noise adds a constant, and separating them needs counts
+       spanning a wide range. The finding reports the split only when the counts allow it, and
+       rests its verdict on the ratio.
+     - A sample with every count missing is read by the importer as an empty column; scoring and QC
+       now take it as missing counts (QC's blocking "every sample has counts"), not as text.
 7. **The map and the inspector (V2, V3, V4, R3, T6).** `web/ui/variant-map.js` (canvas; overview
    and viewport; pan, zoom, hover; click and rectangle selection; row orders; WT marks; the
    state patterns for missing, filtered, low-confidence and not designed; score color and state
@@ -256,7 +288,8 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
    counts (MaveDB column conventions), QC tables, design JSON, provenance JSON, selections; the
    methods paragraph with references and BibTeX (`web/lib/methods.js` framework from CytoWeave).
    Two examples: GRB2 SH3 from the Domainome (published, CC0, 1,121 variants, structure 2VWF),
-   and a simulated two-population experiment with known true effects (`web/lib/simulate.js`:
+   and a simulated two-population experiment with known true effects (`web/lib/simulate.js`, written
+   in slice 6 for the QC fixtures:
    library composition, bottleneck, selection, sequencing noise; clearly labeled simulated),
    which later waves extend to time series, bins, barcodes and planted faults. The Start page
    offers blank, annotated layouts (count table, sample sheet, target FASTA) and
@@ -278,7 +311,9 @@ runs and the performance targets.
 1. **Time series (S6, Q10, E2).** `web/lib/score-regression.js`: WLS and OLS of normalized log
    frequency on scaled time (Enrich2's weights and residual-scaled SE), non-uniform spacing,
    usable points, residual diagnostics, "insufficient support" without assuming non-monotonic
-   means invalid. The design editor gains times and units.
+   means invalid. The design editor gains times and units. An import option to read a variant
+   missing from a sample after selection as 0, per sample, for tables that write dropouts as
+   missing (BRCA1's; found by wave 1, slice 6), recorded in the run.
    - Validation: equal to Enrich2 2.0.2 and statsmodels WLS within 1e-10; the feasibility time
      series.
 2. **FACS bins (S7, Q10).** `web/lib/score-bins.js`: weighted average of bin values (rank,

@@ -11,22 +11,15 @@ import { validateDesign } from '../lib/design.js';
 import { checkParameters, DEFAULT_PARAMETERS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
 import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
-import { DEFAULT_FILTERS, FLAG, flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
+import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
 import { addRun, describeMethod, describeParameters, makeRun, outputDigest, recordedInputs, removeRun, runId, runInputs } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
-import { KIND, KIND_NAMES } from '../lib/variants.js';
-import { categoricalColor } from '../lib/colormaps.js';
+import { KIND_NAMES } from '../lib/variants.js';
+import { classHistogram, flowBars, scoreGroups } from './plots.js';
+import { workerInput } from './score-input.js';
 
 const PAGE = 50;
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
-const CLASSES = [
-  { kinds: [KIND.SYNONYMOUS], label: 'Synonymous', color: 0 },
-  { kinds: [KIND.NONSENSE], label: 'Nonsense', color: 1 },
-  { kinds: [KIND.MISSENSE], label: 'Missense', color: 2 },
-  { kinds: null, label: 'Other', color: 3 },
-];
-// Classes with fewer scores are drawn as ticks, not as a distribution.
-const FEW = 10;
 
 export function mountScoreMode(app, container) {
   const { store } = app;
@@ -77,27 +70,9 @@ export function mountScoreMode(app, container) {
   }
 
   // --- Running ----------------------------------------------------------------------------------
-  // The worker's input from a table: the variant names and the design's count columns (copies:
-  // the table keeps its own).
-  function payloadFor(table, design, parameters, mode) {
-    const byName = new Map(table.columns.map((c) => [c.name, c]));
-    const names = byName.get(design.variants.column)?.values;
-    if (!names) throw new Error(`The table has no column "${design.variants.column}" of variant names.`);
-    const columns = {};
-    for (const sample of design.samples) {
-      for (const name of sample.columns) {
-        const column = byName.get(name);
-        if (!column) throw new Error(`The table has no column "${name}".`);
-        if (!column.numeric) throw new Error(`Column "${name}" is not all numbers.`);
-        columns[name] = column.numeric.slice();
-      }
-    }
-    return { payload: { names, columns, design, parameters, mode }, transfer: Object.values(columns).map((c) => c.buffer) };
-  }
-
   async function compute(table, design, parameters, mode) {
-    const { payload, transfer } = payloadFor(table, design, parameters, mode);
-    const job = app.worker('score').run('score', payload, { transfer, onProgress: (fraction, message) => { view.progress = [fraction, message]; renderProgress(); } });
+    const { names, columns, transfer } = workerInput(table, design);
+    const job = app.worker('score').run('score', { names, columns, design, parameters, mode }, { transfer, onProgress: (fraction, message) => { view.progress = [fraction, message]; renderProgress(); } });
     view.job = job;
     renderProgress();
     try {
@@ -275,82 +250,13 @@ export function mountScoreMode(app, container) {
         : h('p.muted', { style: { margin: 0 } }, 'No run yet. Each run is kept unchanged with its inputs and parameters; the same inputs and parameters always make the same run.'));
   }
 
-  // The score distribution of each class (density, so that small classes show), as SVG, with
-  // its medians as text.
   function histogram(c, results) {
-    const kind = results.variants.kind;
-    const values = [];
-    for (let i = 0; i < results.rows; i += 1) if (!c.reason[i] && Number.isFinite(c.score[i])) values.push(c.score[i]);
-    if (values.length < 2) return h('p.muted', 'Too few scores to draw.');
-    const sorted = Float64Array.from(values).sort();
-    const lo = sorted[Math.floor(sorted.length * 0.005)];
-    const hi = sorted[Math.ceil(sorted.length * 0.995) - 1];
-    const span = hi - lo || 1;
-    const B = 48;
-    const W = 560;
-    const H = 150;
-    const pad = { l: 8, r: 8, t: 8, b: 22 };
-    const named = new Set(CLASSES.flatMap((x) => x.kinds ?? []).concat([KIND.WT]));
-    const classes = CLASSES.map((x) => {
-      const counts = new Float64Array(B);
-      const scores = [];
-      for (let i = 0; i < results.rows; i += 1) {
-        const member = x.kinds ? x.kinds.includes(kind[i]) : !named.has(kind[i]);
-        if (c.reason[i] || !member || !Number.isFinite(c.score[i])) continue;
-        scores.push(c.score[i]);
-        counts[Math.min(B - 1, Math.max(0, Math.floor(((c.score[i] - lo) / span) * B)))] += 1;
-      }
-      return { ...x, n: scores.length, scores, median: median(scores), density: Array.from(counts, (v) => (scores.length ? v / scores.length : 0)) };
-    }).filter((x) => x.n);
-    const top = Math.max(...classes.filter((x) => x.n >= FEW).flatMap((x) => x.density), 1e-9);
-    const X = (v) => pad.l + ((v - lo) / span) * (W - pad.l - pad.r);
-    const Y = (d) => H - pad.b - (d / top) * (H - pad.t - pad.b);
-    const step = (density) => density.map((d, b) => `${b ? 'L' : 'M'}${X(lo + (b / B) * span).toFixed(1)},${Y(d).toFixed(1)} L${X(lo + ((b + 1) / B) * span).toFixed(1)},${Y(d).toFixed(1)}`).join(' ');
-    const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.setAttribute('class', 'score-histogram');
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', `Score distributions: ${classes.map((x) => `${x.label.toLowerCase()} median ${fmt(x.median, 2)} (${x.n})`).join(', ')}.`);
-    const add = (name, attrs) => {
-      const el = document.createElementNS(ns, name);
-      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-      svg.append(el);
-      return el;
-    };
-    add('line', { x1: pad.l, x2: W - pad.r, y1: H - pad.b, y2: H - pad.b, class: 'axis' });
-    const ticks = 6;
-    for (let t = 0; t <= ticks; t += 1) {
-      const v = lo + (t / ticks) * span;
-      add('text', { x: X(v), y: H - 6, 'text-anchor': 'middle', class: 'tick' }).textContent = fmt(v, 1);
-    }
-    if (results.controls.wt >= 0 && !c.reason[results.controls.wt]) {
-      const x = X(c.score[results.controls.wt]);
-      if (x >= pad.l && x <= W - pad.r) add('line', { x1: x, x2: x, y1: pad.t, y2: H - pad.b, class: 'wt-mark' });
-    }
-    for (const x of classes) {
-      if (x.n >= FEW) {
-        add('path', { d: step(x.density), fill: 'none', stroke: categoricalColor(x.color), 'stroke-width': 2 });
-        continue;
-      }
-      for (const v of x.scores) {
-        const px = X(Math.min(hi, Math.max(lo, v)));
-        add('line', { x1: px, x2: px, y1: H - pad.b - 14, y2: H - pad.b, stroke: categoricalColor(x.color), 'stroke-width': 2 });
-      }
-    }
-    return h('div',
-      h('div.legend', ...classes.map((x) => h('span.legend-item', h('span.swatch', { style: { background: categoricalColor(x.color) } }), `${x.label} (${formatCount(x.n)}${x.n < FEW ? `, ${x.n === 1 ? 'a tick' : 'ticks'}` : ''}): median ${fmt(x.median, 2)}`)),
-        results.controls.wt >= 0 ? h('span.legend-item', h('span.swatch.wt'), 'wild type') : null),
-      svg);
+    const wt = results.controls.wt;
+    return classHistogram({ groups: scoreGroups(c, results.variants.kind, results.rows), marks: wt >= 0 && !c.reason[wt] ? [{ value: c.score[wt], label: 'wild type' }] : [], label: 'Score distributions by class' });
   }
 
   function flowView(c) {
-    const total = c.flow.length ? c.flow[0].remaining + c.flow[0].removed : 0;
-    return h('div.flow', ...c.flow.map((x) => h('div.flow-row', { title: x.removed ? `${x.removed} left out: ${STAGE_BY_CODE.get([...STAGE_BY_CODE.values()].find((s) => s.id === x.stage).code).reason}` : '' },
-      h('span.flow-label', x.label),
-      h('span.flow-bar', h('span', { style: { width: `${total ? (x.remaining / total) * 100 : 0}%` } })),
-      h('span.flow-count', formatCount(x.remaining)),
-      h('span.flow-removed', x.removed ? `−${formatCount(x.removed)}` : ''))));
+    return flowBars(c.flow, (x) => `${x.removed} left out: ${STAGE_BY_ID.get(x.stage).reason}`);
   }
 
   function replicatesTable(results, c, p) {
@@ -448,7 +354,8 @@ export function mountScoreMode(app, container) {
         h('span.spacer'), h('button.btn.small', { type: 'button', onclick: () => { app.runResults.delete(run.id); render(); } }, 'Check again')) : null,
       ...run.warnings.map((w) => h('div.callout.warn', { style: { marginTop: '6px' } }, icon('warning'), h('span', w.message))),
       run.info?.length ? h('ul.summary-lines', { style: { marginTop: '8px', fontSize: '12px' } }, ...run.info.map((x) => h('li', x))) : null,
-      h('details', { style: { marginTop: '8px' } }, h('summary', 'Method, as it would be written'), h('p', { style: { fontSize: '12.5px' } }, describeMethod(run).join(' '))));
+      h('details', { style: { marginTop: '8px' } }, h('summary', 'Method, as it would be written'), h('p', { style: { fontSize: '12.5px' } }, describeMethod(run).join(' '))),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => { app.focusItem({ kind: 'run', id: run.id }); app.setMode('qc'); } }, icon('qc'), 'Quality control of this run')));
     if (!r?.results) return [head, h('div.pane', h('p.muted', { style: { margin: 0 } }, r?.status === 'checking' ? 'Recomputing the scores from the run\'s inputs…' : 'The scores are recomputed from the run\'s inputs when it is shown.'), progressEl)];
     const results = r.results;
     view.condition = Math.min(view.condition, results.conditions.length - 1);

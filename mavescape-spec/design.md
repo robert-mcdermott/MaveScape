@@ -151,9 +151,19 @@ against its output hash. A run that no longer reproduces says so.
 ### QC findings
 
 `web/lib/qc.js` computes metrics; `web/lib/findings.js` turns them into findings, each `{ id,
-status: 'pass'|'review'|'fail', blocking, title, explanation, threshold, rationale, affected:
-{ samples, variants }, view }`. Thresholds are parameters recorded in provenance. The overall
-indicator is the worst finding, shown next to the list, never instead of it.
+status: 'pass'|'review'|'fail'|'na', blocking, title, value, explanation, threshold, rationale,
+affected: { samples, replicates }, plot, level: 'counts'|'scores' }`. Thresholds are parameters
+kept in the workspace (`ws.qc.thresholds`), each change in its history. The overall indicator is
+the worst finding, shown next to the list, never instead of it. (Wave 1, slice 6.)
+
+Most findings need only the counts and the design, so QC runs before (or without) scoring:
+replicate agreement and variance are computed on raw log ratios, which per-replicate
+normalization only shifts. The bottleneck check compares the variance of replicate differences
+with the counting (Poisson) variance, robustly (median of squared standardized differences ÷
+0.4549), and fits observed = a·counting + e over bins of counting variance when the counts span
+enough of a range: a > 1 is a multiplier (a bottleneck), e a constant (replicate noise), as
+DiMSum's error terms. Scored-variant findings (control separation, resolution, variants scored)
+come from a run, recomputed with its recorded inputs in the score worker.
 
 ### The variant-effect map
 

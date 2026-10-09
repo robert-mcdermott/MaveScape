@@ -64,15 +64,15 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| Q1 | Depth: total counts per sample, observed variant fraction, count distributions, low- and zero-count fractions, rank-abundance | planned (wave 1) |
-| Q2 | Coverage by position and substitution class | planned (wave 1) |
-| Q3 | Replicate agreement (pairwise, filtered by input count) and replicate outlier detection (leave-one-out z) | planned (wave 1) |
-| Q4 | Bottleneck diagnostics (input-to-output; synonymous log-ratio variance against the Poisson expectation; DiMSum's multiplicative error terms) | planned (wave 1: Poisson check; wave 2: error-model terms) |
-| Q5 | Control distributions (WT, synonymous, nonsense, user classes) and their separation | planned (wave 1) |
-| Q6 | Score stability against starting count; effect against uncertainty; missingness patterns | planned (wave 1) |
-| Q7 | Filter flow: retained and excluded variants at each stage, by reason | planned (wave 1) |
+| Q1 | Depth: total counts per sample, observed variant fraction, count distributions, low- and zero-count fractions, rank-abundance | done (wave 1, slice 6) |
+| Q2 | Coverage by position and substitution class | done (wave 1, slice 6: protein-level single substitutions; nucleotide coverage with wave 3's mapping) |
+| Q3 | Replicate agreement (pairwise, filtered by input count) and replicate outlier detection (leave-one-out z) | done (wave 1, slice 6) |
+| Q4 | Bottleneck diagnostics (input-to-output; synonymous log-ratio variance against the Poisson expectation; DiMSum's multiplicative error terms) | done for wave 1 (slice 6: replicate differences and synonymous variants against counting, a multiplier fitted when the counts allow; checked on simulated bottlenecks); DiMSum's terms: wave 2 |
+| Q5 | Control distributions (WT, synonymous, nonsense, user classes) and their separation | done (wave 1, slice 6: AUC, standardized median difference, nonsense above the synonymous 5th percentile) |
+| Q6 | Score stability against starting count; effect against uncertainty; missingness patterns | done (wave 1, slice 6, with dropouts written as missing) |
+| Q7 | Filter flow: retained and excluded variants at each stage, by reason | done (wave 1: Score view, slice 5; QC, slice 6) |
 | Q8 | Barcode agreement within variants and outlier barcodes | planned (wave 2) |
-| Q9 | Findings with status (pass/review/fail), explanation, affected samples or variants, threshold and rationale, link to the visual, advisory or blocking; thresholds configurable and recorded | planned (wave 1) |
+| Q9 | Findings with status (pass/review/fail), explanation, affected samples or variants, threshold and rationale, link to the visual, advisory or blocking; thresholds configurable and recorded | done (wave 1, slice 6: thresholds in the workspace and its history; validation `qc`) |
 | Q10 | Time-series fit diagnostics (usable points, residuals) and bin diagnostics (cells per bin, bin occupancy) | planned (wave 2) |
 
 ## Scoring

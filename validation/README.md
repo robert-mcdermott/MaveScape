@@ -14,6 +14,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
 | `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `fixtures/`; MaveDB, external |
+| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`) raise exactly their findings, a clean one none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 
 ## Public data (`sources.json`)
@@ -165,4 +166,28 @@ Rscript validation/reference/generate_metafor.R
   counts and replicate scores with its score NA and its stage; a missing reference class (no
   wild-type row, no synonymous or nonsense controls when needed) refuses the run with the reason;
   very low depth is warned about sample by sample.
+
+## Quality control (wave 1, slice 6)
+
+`qc-cases.mjs` simulates (web/lib/simulate.js, seeds 20261009–11) a 40-residue protein's 839
+variants (wild type, synonymous, nonsense, every missense) in three replicates at 200 reads per
+variant, each case with one problem: replicate noise of SD 0.7 in every replicate (poor
+agreement), or 0.9 in one (a failing replicate); 20 cells per variant into selection (a
+bottleneck); library frequencies of log-SD 1.6 at 60 reads per variant (a low-count tail); one
+output sample missing. Each must raise exactly its findings (review or fail); the clean
+experiment none. Findings that need one another are expected together: replicate noise raises
+both disagreement and variance beyond counting, a failing replicate also an outlier.
+
+What QC found in the feasibility data, with MaveScape's default scoring (locked by the suite):
+
+- **GRB2 SH3**: variance beyond counting, about 11× (fail): the input bottleneck the data's own
+  DiMSum analysis reported. Everything else passes, coverage 100%.
+- **BRCA1 E2**: coverage 76% of single substitutions (an error-prone-PCR library), replicate
+  agreement down to r = 0.68, variance 36× counting, and dropouts: about 30% of the variants are
+  missing from the last round with no count of 0 anywhere in the table, and those had fallen to
+  1–3% of their input a round earlier (others 12–54%).
+- **BRCA1 Y2H**: the controls do not separate (AUC 0.39): nonsense variants before residue 61
+  score about −3.7, after residue 110 about +0.5. Truncations that keep the RING domain keep
+  binding BARD1, so most nonsense variants are not loss-of-function controls in this assay.
+- **Factor IX**: counts-level findings pass; bins are scored from wave 2.
 

@@ -88,6 +88,8 @@ export function createWorkspace(name = 'Untitled workspace', options = {}) {
     designSource: null,
     // Immutable score runs.
     runs: [],
+    // Quality control: its thresholds (null: MaveScape's defaults, web/lib/findings.js).
+    qc: null,
     // Named sets of variants or positions.
     selections: [],
     // The hash-chained log of material changes: [{ time, action, detail, hash }].
@@ -178,6 +180,12 @@ export function updateTarget(ws, id, patch, detail = null) {
   // The design holds its own copy of its targets: kept in step.
   const design = ws.design ? { ...ws.design, targets: ws.design.targets.map((t) => (t.id === id ? { ...t, ...patch, id } : t)) } : ws.design;
   return change(ws, { targets: next, design }, 'target', detail ?? `Changed the target ${target.name}: ${fields.join(', ')}`);
+}
+
+// Sets the QC thresholds (null: the defaults), with what changed in the history.
+export function setQcThresholds(ws, thresholds, detail) {
+  if (JSON.stringify(thresholds ?? null) === JSON.stringify(ws.qc?.thresholds ?? null)) return ws;
+  return change(ws, { qc: thresholds ? { ...(ws.qc ?? {}), thresholds } : null }, 'qc', detail);
 }
 
 // Sets (or clears) the design, and the table it describes.

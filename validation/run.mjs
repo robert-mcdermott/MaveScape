@@ -6,7 +6,8 @@
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
-// data), experiment (external data), scoring (its last checks need external data); all by default.
+// data), experiment (external data), scoring and qc (their last checks need external data); all by
+// default.
 // Exits with status 1 when a check fails.
 //
 // Suites marked "external data" need files that node validation/fetch.mjs downloads into
@@ -40,6 +41,11 @@ import { combineFixed, combineREML, heterogeneity } from '../web/lib/replicates.
 import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE } from '../web/lib/filters.js';
 import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs } from '../web/lib/runs.js';
 import { median } from '../web/lib/score-ratio.js';
+import { QC_FIXTURES, QC_SEEDS, matches, raised, runFixture } from './qc-cases.mjs';
+import { computeQC } from '../web/lib/qc.js';
+import { checkThresholds, defaultThresholds, findingsFrom, overall } from '../web/lib/findings.js';
+import { simulateExperiment } from '../web/lib/simulate.js';
+import { setQcThresholds } from '../web/lib/workspace.js';
 
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
@@ -771,6 +777,93 @@ const suites = {
       check('scoring', 'BRCA1, the whole table drafted from its column names: E2 binding (6 time points) and Y2H (4) become two conditions, scored apart; the E2 condition scores as the hand-written E2 design does', `${both.conditions.map((c) => `${c.name}: ${c.replicates.length} replicates, ${formatCount(c.scored)} scored`).join('; ')}; E2 against the hand-written design ${dd.worst.toExponential(2)} over ${pairs.length / 2} variants`, both.conditions.length === 2 && !!e2Condition && dd.worst <= 1e-12 && pairs.length > 0, 'two conditions; ≤ 1e-12');
       const f9 = scoreExperiment({ ...engineInput(parseTable(dataset('mavedb-factor9').bytes('counts.csv')), readDesign('factor9.design.json')), parameters: DEFAULT_PARAMETERS });
       check('scoring', 'factor IX (FACS bins): refused, saying bins are scored from 0.2.0 (not scored some other way)', f9.ok ? 'scored' : f9.errors[0], !f9.ok && /0\.2\.0/.test(f9.errors[0]), 'refused');
+    }
+  },
+  // Quality control (wave 1, slice 6): simulated experiments with one problem each raise exactly
+  // the findings for it (the clean one none); the variance ratio follows a simulated bottleneck;
+  // QC does not depend on row order or on whether a run is given; thresholds act and are recorded;
+  // the feasibility data's findings, as found.
+  qc() {
+    const show = (r) => (Object.keys(r).length ? Object.entries(r).map(([k, v]) => `${k}:${v}`).join(', ') : 'none');
+    for (const [name, options, expected] of QC_FIXTURES) {
+      const got = QC_SEEDS.map((seed) => raised(runFixture(options, seed).findings));
+      const ok = got.every((g) => matches(g, expected));
+      check('qc', `${name}: raises exactly its findings (3 seeds)`, got.map(show).join(' | '), ok, show(Object.fromEntries(Object.entries(expected).map(([k, v]) => [k, Array.isArray(v) ? v.join('/') : v]))));
+    }
+    {
+      const missing = runFixture(QC_FIXTURES[5][1], QC_SEEDS[0]);
+      const o = overall(missing.findings);
+      check('qc', 'a missing sample: scoring is refused, QC still runs from the counts, and the finding blocks the analysis', `${missing.scored.ok ? 'scored' : `refused (${missing.scored.errors[0]})`}; overall ${o.status}, blocking ${o.blocking.join(', ')}`, !missing.scored.ok && o.blocking.includes('missing-sample'), 'refused; blocking');
+    }
+
+    // The variance ratio against a simulated bottleneck: about 1 + D/(2N) for N cells per variant
+    // and D reads per variant before and after selection.
+    {
+      const rows = [];
+      let ok = true;
+      let previous = 0;
+      for (const cells of [Infinity, 400, 100, 40, 20]) {
+        const ratios = QC_SEEDS.map((seed) => {
+          const sim = simulateExperiment({ seed, inputCells: cells, replicateNoise: 0 });
+          const table = parseTable(sim.csv);
+          const q = computeQC({ names: table.columns[0].values, columns: Object.fromEntries(table.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design });
+          return median(q.conditions[0].pairs.map((p) => p.ratio));
+        });
+        const measured = median(ratios);
+        const predicted = 1 + 200 / (2 * cells);
+        rows.push(`${Number.isFinite(cells) ? cells : 'no bottleneck'}: ${measured.toFixed(2)} (predicted ${predicted.toFixed(2)})`);
+        if (!(measured > previous) || Math.abs(measured - predicted) / predicted > 0.3) ok = false;
+        previous = measured;
+      }
+      check('qc', 'variance beyond counting follows a simulated bottleneck (cells per variant into selection): measured ratio against 1 + D/(2N)', rows.join('; '), ok, 'increasing, within 30%');
+    }
+
+    // Invariance and independence.
+    {
+      const base = runFixture(QC_FIXTURES[2][1], QC_SEEDS[0]);
+      const shuffled = shuffledTable(base.table, createRandom(3));
+      const names = shuffled.columns.find((c) => c.name === 'hgvs_pro').values;
+      const columns = Object.fromEntries(shuffled.columns.filter((c) => c.name !== 'hgvs_pro').map((c) => [c.name, c.numeric]));
+      const again = findingsFrom(computeQC({ names, columns, design: base.sim.design }), defaultThresholds());
+      const countsOnly = findingsFrom(computeQC({ names: base.names, columns: base.columns, design: base.sim.design }), defaultThresholds());
+      const same = (a, b) => JSON.stringify(a.filter((f) => f.level === 'counts').map((f) => [f.id, f.status, f.value])) === JSON.stringify(b.filter((f) => f.level === 'counts').map((f) => [f.id, f.status, f.value]));
+      check('qc', 'rows and columns shuffled give the same count-level findings, value for value; and they are the same with or without a score run', `${base.findings.filter((f) => f.level === 'counts').length} findings compared`, same(again, base.findings) && same(countsOnly, base.findings), 'identical');
+    }
+
+    // Thresholds: they act, are checked and are recorded.
+    {
+      const clean = runFixture({}, QC_SEEDS[0]);
+      const r = clean.qc.conditions[0].pairs.reduce((a, p) => Math.min(a, p.pearson), 1);
+      const stricter = { ...defaultThresholds(), agreement: { review: Math.ceil(r * 100) / 100 + 0.01, fail: 0.5 } };
+      const flipped = raised(findingsFrom(clean.qc, stricter));
+      let ws = createWorkspace('QC', { now: '2026-10-09T12:00:00.000Z' });
+      ws = setQcThresholds(ws, stricter, `QC: replicate agreement review level 0.8 → ${stricter.agreement.review}`);
+      const unchanged = setQcThresholds(ws, stricter, 'again');
+      const reopened = parseWorkspace(serializeWorkspace(ws));
+      check('qc', 'a threshold raised above the clean experiment\'s agreement turns that finding to review; the change is in the history, and setting it again changes nothing', `r = ${r.toFixed(3)}, review below ${stricter.agreement.review}: ${show(flipped)}; history: ${reopened.history.at(-1).detail}`, flipped.agreement === 'review' && Object.keys(flipped).length === 1 && unchanged === ws && verifyHistory(reopened).ok && reopened.qc.thresholds.agreement.review === stricter.agreement.review, 'agreement: review; recorded');
+      const bad = checkThresholds({ agreement: { review: 0.5, fail: 0.8 } });
+      check('qc', 'thresholds whose fail level is on the wrong side of the review level are refused', bad[0] ?? 'accepted', bad.length === 1, 'refused');
+    }
+
+    // The feasibility data (external): findings as found, with MaveScape's default scoring.
+    const expectations = [
+      ['grb2-sh3', 'mavedb-grb2-sh3', 'counts.csv', { 'excess-variance': 'fail' }, 'replicate differences vary about 11× more than counting predicts: the input bottleneck DiMSum\'s error model found in these data'],
+      ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { dropout: 'review', coverage: 'review', agreement: 'review', 'excess-variance': 'fail' }, 'an error-prone-PCR library (76% of single substitutions), replicates of a time series scored by its ends, and variants that dropped out in the last round written as missing (no 0 in the table)'],
+      ['brca1-ring-y2h', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'outlier-replicate': 'review', separation: 'fail', resolution: 'review' }, 'nonsense variants are not separated from the wild type in the Y2H assay: those before residue 61 score about −3.7, those after residue 110 about +0.5 (truncations that keep the RING domain keep binding BARD1), so most are not loss-of-function controls here'],
+      ['factor9', 'mavedb-factor9', 'counts.csv', {}, 'FACS bins: counts-level findings only until bins are scored (wave 2)'],
+    ];
+    for (const [name, data, path, expected, note] of expectations) {
+      const design = readDesign(`${name}.design.json`);
+      const table = parseTable(dataset(data).bytes(path));
+      const names = table.columns.find((c) => c.name === design.variants.column).values;
+      const columns = {};
+      for (const s of design.samples) for (const c of s.columns) columns[c] = table.columns.find((x) => x.name === c).numeric;
+      const t0 = performance.now();
+      const scored = scoreExperiment({ names, columns, design, parameters: DEFAULT_PARAMETERS });
+      const qc = computeQC({ names, columns, design, results: scored.ok ? scored.results : null });
+      const ms = performance.now() - t0;
+      const got = raised(findingsFrom(qc, defaultThresholds()));
+      check('qc', `${name} (scored and checked in ${ms.toFixed(0)} ms): ${note}`, show(got), matches(got, expected), show(expected));
     }
   },
 };

@@ -72,6 +72,19 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
 - **Drafts that keep experiments apart.** A table holding two assays (BRCA1's E2 binding and
   yeast two-hybrid) drafts into two conditions instead of one experiment.
 
+- **Quality control (wave 1, slice 6).** The QC view says whether the experiment supports
+  reliable scores, finding by finding: every sample has counts (blocking when not), sequencing
+  depth, low counts before selection, missing counts, variants missing after selection (a table
+  that writes dropouts as missing), coverage of the designed substitutions (a grid by position),
+  replicate agreement, variance beyond counting (a bottleneck), outlier replicates, and from a
+  score run the separation of the controls, the resolution of the scores and the variants
+  scored. Each says pass, review, fail or not assessed (and why), with what it found in numbers,
+  its threshold and rationale, what it concerns and its plot; the overall status is shown beside
+  the list. QC runs from the counts alone, before scoring, or of any score run. Thresholds can be
+  changed, and each change goes into the history.
+- **Simulated experiments** (`web/lib/simulate.js`): a library, bottlenecks, selection with
+  replicate noise and sequencing, seeded and labeled simulated.
+
 ### Validation
 
 - Go tests of the host: security headers, foreign Host headers and cross-origin requests refused,
@@ -109,3 +122,8 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   each of the PRD's two-population edge cases, planted in the fixture, behaves as specified;
   scores are deterministic, independent of row and column order, and reproduced from a saved
   workspace (46 checks).
+- `validation/run.mjs qc` (wave 1, slice 6): simulated experiments with one problem each (poor
+  replicate agreement, a failing replicate, a severe bottleneck, a low-count tail, a missing
+  sample) raise exactly their findings on three seeds, and a clean one none; the variance check
+  follows a simulated bottleneck; findings do not depend on row order or on a run; the
+  feasibility data's findings as found (15 checks).

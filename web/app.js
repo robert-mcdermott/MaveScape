@@ -25,15 +25,7 @@ const toImport = { label: 'Open files', icon: 'table', run: (app) => app.pickFil
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
   { id: 'experiment', label: 'Experiment', icon: 'experiment', load: () => import('./ui/mode-experiment.js').then((m) => m.mountExperimentMode) },
-  {
-    id: 'qc', label: 'QC', icon: 'qc',
-    load: async () => plannedMode({
-      title: 'Quality control', icon: 'qc',
-      purpose: 'Whether the experiment supports reliable scores: depth and coverage, replicate agreement, bottlenecks, the separation of synonymous and nonsense controls. Each finding says pass, review or fail, with its threshold, the variants it concerns and why it matters.',
-      steps: ['Open the counts and set the design in Experiment.', 'Read the findings; open the plot behind any of them.'],
-      actions: [toImport],
-    }),
-  },
+  { id: 'qc', label: 'QC', icon: 'qc', load: () => import('./ui/mode-qc.js').then((m) => m.mountQcMode) },
   { id: 'score', label: 'Score', icon: 'score', load: () => import('./ui/mode-score.js').then((m) => m.mountScoreMode) },
   'sep',
   {

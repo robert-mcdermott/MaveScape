@@ -12,7 +12,8 @@ functional effects for research; it does not classify variants as pathogenic or 
 > **Status: in development.** Wave 1 (release 0.1.0) is being built. Count tables import, designs
 > are set in the Experiment view, and two-population experiments (and time series, by their first
 > and last samples) are scored, with numbers checked against Enrich2, dms_variants and metafor.
-> QC, the map and exports arrive in the next slices ([roadmap](mavescape-spec/roadmap.md)).
+> Quality control reports findings from the counts and from each score run. The map and exports
+> arrive in the next slices ([roadmap](mavescape-spec/roadmap.md)).
 
 ## Install
 
