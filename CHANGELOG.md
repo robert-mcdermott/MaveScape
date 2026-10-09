@@ -55,6 +55,23 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   design) is written to the workspace's history, each entry chained to the one before by SHA-256;
   the drawer lists it and says whether the chain holds.
 
+- **Scoring (wave 1, slice 5).** The Score view turns the counts and the design into functional
+  scores with standard errors: log ratios normalized to the wild type, complete cases, all reads
+  or the synonymous median, with a pseudocount; technical replicates summed, biological
+  replicates scored separately and combined by REML random effects, fixed effects or Enrich2's own
+  estimator (an "Enrich2-compatible" preset reproduces Enrich2 2.0.2's numbers); heterogeneity
+  (Q, I², τ²) and leave-one-replicate-out sensitivity for every variant; optional rescaling
+  (nonsense 0 and wild type 1; synonymous 0 and nonsense −1). Filters are ordered and visible (a
+  filter bar and the filter flow), and a filtered variant keeps its counts and replicate scores
+  with the stage that left it out; nothing unscored is shown as 0. Conditions are scored apart.
+  Scoring runs in a worker, with progress and cancel.
+- **Runs that can be repeated.** Each run is kept unchanged with its table's SHA-256, the design,
+  the parameters, the software version and the hash of its output; the same inputs always make
+  the same run. Reopened, a run is recomputed and checked against its output hash. The run says in
+  sentences how its scores were made.
+- **Drafts that keep experiments apart.** A table holding two assays (BRCA1's E2 binding and
+  yeast two-hybrid) drafts into two conditions instead of one experiment.
+
 ### Validation
 
 - Go tests of the host: security headers, foreign Host headers and cross-origin requests refused,
@@ -86,3 +103,9 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   editor's operations alone says what the hand-written one says; sample sheets for GRB2, BRCA1 and
   factor IX, and DiMSum's own design file, give the same samples and slots; a workspace's history
   survives saving and reopening, and an entry edited afterward is caught (12 checks).
+- `validation/run.mjs scoring` (wave 1, slice 5): the scoring engine equals Enrich2 2.0.2 replicate
+  by replicate and combined (GRB2 with three normalizations, BRCA1 E2, a synthetic fixture), and
+  dms_variants 1.6.0's `func_scores`, to 5 × 10⁻¹³; its REML equals metafor 5.2-1 to 3.4 × 10⁻¹²;
+  each of the PRD's two-population edge cases, planted in the fixture, behaves as specified;
+  scores are deterministic, independent of row and column order, and reproduced from a saved
+  workspace (46 checks).

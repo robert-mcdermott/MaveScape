@@ -79,17 +79,17 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| S1 | Two-population log ratio with WT, complete-case, all-read or synonymous normalization and a configurable pseudocount; SE per variant | planned (wave 1; equal to Enrich2 2.0.2) |
-| S2 | Technical replicates pooled; biological replicates scored separately and combined by fixed effects or REML random effects, with an Enrich2-compatible estimator; heterogeneity and leave-one-replicate-out sensitivity | planned (wave 1) |
-| S3 | Ordered, visible filters with reason codes and stage; filtered variants keep their measurements; explicit NA for unscored variants | planned (wave 1) |
-| S4 | Immutable score runs: input and output hashes, import mapping, design, software and algorithm versions, parameters, filters, seeds, warnings | planned (wave 1) |
-| S5 | The PRD's two-population edge cases (zero in both, in input only, in output only; missing replicate; very low depth; absent from one replicate; observed but filtered; reference class unavailable) specified and tested | planned (wave 1) |
+| S1 | Two-population log ratio with WT, complete-case, all-read or synonymous normalization and a configurable pseudocount; SE per variant | done (wave 1, slice 5: equal to Enrich2 2.0.2 and dms_variants 1.6.0 to 5 × 10⁻¹³, validation `scoring`; time series scored by their first and last samples until wave 2) |
+| S2 | Technical replicates pooled; biological replicates scored separately and combined by fixed effects or REML random effects, with an Enrich2-compatible estimator; heterogeneity and leave-one-replicate-out sensitivity | done (wave 1, slice 5: REML equal to metafor 5.2-1 to 3.4 × 10⁻¹², Enrich2's estimator to Enrich2; Q, I², τ², leave-one-out per variant) |
+| S3 | Ordered, visible filters with reason codes and stage; filtered variants keep their measurements; explicit NA for unscored variants | done (wave 1, slice 5: eight stages, count filters per replicate, the filter flow; barcode disagreement comes with barcodes, wave 2) |
+| S4 | Immutable score runs: input and output hashes, import mapping, design, software and algorithm versions, parameters, filters, seeds, warnings | done (wave 1, slice 5: ids from the canonical inputs; scores recomputed when a run is reopened and checked against its output hash) |
+| S5 | The PRD's two-population edge cases (zero in both, in input only, in output only; missing replicate; very low depth; absent from one replicate; observed but filtered; reference class unavailable) specified and tested | done (wave 1, slice 5: planted in `fixtures/two-population.csv`, each checked, Enrich2 and dms_variants scoring the same table) |
 | S6 | Time series: weighted (and ordinary) regression of normalized log frequency on time, non-uniform spacing, slope, SE, usable points; insufficient support flagged | planned (wave 2; equal to Enrich2) |
 | S7 | Bin scores: weighted average from ordered bins with explicit values and weight type; uncertainty analytically or by seeded bootstrap; optional maximum-likelihood estimate | planned (wave 2) |
 | S8 | Barcode aggregation: sum-then-score and score-then-combine | planned (wave 2; equal to dms_variants) |
 | S9 | DiMSum's error model as an alternative uncertainty model | planned (wave 2) |
 | S10 | Differential scores between compatible conditions, with a model that accounts for a shared input | planned (wave 2; against Enrich2's z and mutscan's limma contrasts) |
-| S11 | Score rescaling conventions (WT = 0; nonsense = 0 and WT = 1; synonymous and nonsense medians) recorded in the run | planned (wave 1) |
+| S11 | Score rescaling conventions (WT = 0; nonsense = 0 and WT = 1; synonymous and nonsense medians) recorded in the run | done (wave 1, slice 5: none, nonsense 0 and WT 1, synonymous 0 and nonsense −1; anchors recorded; factor IX's lowest-5%-of-missense convention to add with its data, wave 2) |
 | S12 | 100,000 variants × 6 samples scored in under 10 s | planned (wave 2, benchmarked) |
 
 ## Views
@@ -101,8 +101,8 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | V3 | Selection by click, rectangle, freeform and query; named selection sets that propagate across views | planned (wave 1: click and rectangle; wave 5: freeform and query) |
 | V4 | Variant inspector: identifiers, score and CI, counts by sample, replicate scores, filters and warnings, sequence context, position distribution, provenance; later barcodes, conditions, annotations, structure | planned (wave 1, extended by waves 2–4) |
 | V5 | Sequence tracks synchronized with the map: reference, coverage, position effect and uncertainty, domains and motifs, secondary structure, conservation, ClinVar, population frequency, custom tracks, structure availability; show, hide, reorder, filter, export | planned (wave 3) |
-| V6 | Undo, history and a visible filter bar; analysis-changing actions distinct from view-only actions | partial (wave 1, slice 4: undo and the history; the filter bar comes with scoring, slice 5) |
-| V7 | Long operations in workers with progress and cancel | planned (wave 1) |
+| V6 | Undo, history and a visible filter bar; analysis-changing actions distinct from view-only actions | done (wave 1: undo and the history, slice 4; the filter bar in the Score view, slice 5) |
+| V7 | Long operations in workers with progress and cancel | done (wave 1: reading tables, slice 3; scoring, slice 5) |
 
 ## Comparison
 

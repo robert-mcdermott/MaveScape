@@ -176,6 +176,7 @@ export function draftDesign(table, roles, options = {}) {
   }
   const sampleFor = (column) => sampleOf.get(copyOf.get(column) ?? column);
   const replicates = [];
+  const groupOf = new Map();
   const tiles = new Map();
   const biological = new Map();
   for (const [group, members] of groups) {
@@ -204,15 +205,41 @@ export function draftDesign(table, roles, options = {}) {
       replicate.bins = members.filter((m) => m.role === 'bin').map((m) => ({ sample: sampleFor(m.column), order: m.bin, value: m.bin })).sort((a, b) => a.order - b.order);
     }
     replicates.push(replicate);
+    groupOf.set(replicate, group);
   }
-  // Biological numbers repeated within a tile (PlusE2Rep3 and PlusE2NewRep3 both "3") are renumbered.
-  for (const key of new Set(replicates.map((r) => r.tile ?? ''))) {
-    const inTile = replicates.filter((r) => (r.tile ?? '') === key);
+  // Replicates with different numbers of time points or bins look like different experiments
+  // (BRCA1's table holds an E2-binding assay of six times and a yeast two-hybrid assay of four):
+  // each kind becomes a condition, named by what its replicates' names share, so that they are not
+  // combined unless the user says they are one experiment. (Different times alone are not enough:
+  // BRCA1's two Y2H libraries were sampled on different schedules.)
+  const shapeOf = (r) => (r.timepoints ? `${r.timepoints.length} time points` : r.bins ? `${r.bins.length} bins` : 'two populations');
+  const shapes = new Map();
+  for (const r of replicates) {
+    if (!shapes.has(shapeOf(r))) shapes.set(shapeOf(r), []);
+    shapes.get(shapeOf(r)).push(r);
+  }
+  const conditions = [];
+  if (shapes.size > 1) {
+    for (const [shape, members] of shapes) {
+      let name = commonStem(members.map((r) => groupOf.get(r))) || shape[0].toUpperCase() + shape.slice(1);
+      if (conditions.some((c) => c.name === name)) name = `${name} (${shape})`;
+      const id = slug(name);
+      conditions.push({ id, name });
+      for (const r of members) r.condition = id;
+    }
+    notes.push(`Replicates differ in their number of ${model === 'bins' ? 'bins' : 'time points'} (${[...shapes.keys()].join('; ')}): they look like different experiments, so each is a condition (${conditions.map((c) => c.name).join(', ')}), scored apart. If they are one experiment, give them one condition in the Experiment view.`);
+  }
+  // Biological numbers repeated within a condition and tile (PlusE2Rep3 and PlusE2NewRep3 both
+  // "3") are renumbered.
+  let renumbered = false;
+  for (const key of new Set(replicates.map((r) => `${r.condition ?? ''}|${r.tile ?? ''}`))) {
+    const inTile = replicates.filter((r) => `${r.condition ?? ''}|${r.tile ?? ''}` === key);
     if (new Set(inTile.map((r) => r.biological)).size < inTile.length) {
       inTile.forEach((r, i) => { r.biological = i + 1; });
-      notes.push('Replicate numbers in the column names repeat; replicates are numbered in order.');
+      renumbered = true;
     }
   }
+  if (renumbered) notes.push('Replicate numbers in the column names repeat; replicates are numbered in order.');
   const design = {
     format: 'mavescape-design',
     version: 1,
@@ -225,6 +252,7 @@ export function draftDesign(table, roles, options = {}) {
     replicates,
     controls: { wildType: 'auto', synonymous: 'auto', nonsense: 'auto' },
   };
+  if (conditions.length) design.conditions = conditions;
   if (tiles.size) design.library.tiles = [...tiles].sort((a, b) => a[1] - b[1]).map(([id, n]) => ({ id, name: `Tile ${n}`, ...tileRange(table, options, used.filter((r) => r.tile === n).map((r) => r.column)) }));
   if (model === 'time-series') design.time = { unit: 'other' };
   if (model === 'bins') {
@@ -238,6 +266,15 @@ export function draftDesign(table, roles, options = {}) {
     notes.push(`${unused.length} column${unused.length > 1 ? 's have' : ' has'} no suggested role: ${unused.slice(0, 4).join(', ')}${unused.length > 4 ? ', …' : ''}.`);
   }
   return { design, notes };
+}
+
+// What names share at their start, without a trailing replicate number or separator:
+// PlusE2Rep3, PlusE2NewRep4 → "PlusE2"; Y2H_1_Rep1, Y2H_2_Rep2 → "Y2H".
+function commonStem(names) {
+  if (!names.length) return '';
+  let prefix = names[0];
+  for (const n of names) while (!n.startsWith(prefix)) prefix = prefix.slice(0, -1);
+  return prefix.replace(/(?:[_\s.-]*(?:bio)?rep(?:licate)?[_\s.-]*\d*|[_\s.-]+\d*)$/i, '');
 }
 
 // The positions counted in a tile's columns (from the variants' first positions).

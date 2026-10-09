@@ -46,7 +46,8 @@ CACHE = os.path.join(ROOT, "validation", "cache")
 DESIGNS = os.path.join(ROOT, "validation", "designs")
 OUT = os.path.join(ROOT, "validation", "reference", "enrich2.json")
 
-# (case, design file, counts file in the cache, [(scoring method, log-ratio method)])
+
+# (case, design file, counts file in the cache (or "fixtures/…"), [(scoring method, log-ratio method)])
 CASES = [
     ("grb2-sh3", "grb2-sh3.design.json", "mavedb-grb2-sh3/counts.csv",
      [("ratios", "wt"), ("ratios", "complete"), ("ratios", "full")]),
@@ -54,6 +55,9 @@ CASES = [
      [("WLS", "wt"), ("OLS", "wt"), ("ratios", "wt")]),
     ("brca1-ring-y2h", "brca1-ring-y2h.design.json", "mavedb-brca1-ring/aa/counts.csv",
      [("WLS", "wt")]),
+    # The synthetic fixture with the PRD's edge cases (fixtures/make-two-population.mjs).
+    ("two-population", "fixtures/two-population.design.json", "fixtures/two-population.csv",
+     [("ratios", "wt"), ("ratios", "complete"), ("ratios", "full")]),
 ]
 
 WT = "_wt"
@@ -61,7 +65,7 @@ WT = "_wt"
 # Which variants a case keeps: "all", or every n-th variant by name plus the wild-type and
 # synonymous rows and the first `partial` variants (by name) missing from some replicates but not
 # all (how missing counts are handled).
-KEEP = {"grb2-sh3": "all", "brca1-ring-e2": {"every": 6, "partial": 300}, "brca1-ring-y2h": {"every": 6, "partial": 300}}
+KEEP = {"grb2-sh3": "all", "two-population": "all", "brca1-ring-e2": {"every": 6, "partial": 300}, "brca1-ring-y2h": {"every": 6, "partial": 300}}
 
 
 def sha256(path):
@@ -205,8 +209,8 @@ def main():
         "cases": {},
     }
     for case, design_file, counts_file, methods in CASES:
-        design_path = os.path.join(DESIGNS, design_file)
-        counts_path = os.path.join(CACHE, counts_file)
+        design_path = os.path.join(ROOT, "validation", design_file) if design_file.startswith("fixtures/") else os.path.join(DESIGNS, design_file)
+        counts_path = os.path.join(ROOT, "validation", counts_file) if counts_file.startswith("fixtures/") else os.path.join(CACHE, counts_file)
         if not os.path.exists(counts_path):
             sys.exit(f"{counts_path} is missing: run node validation/fetch.mjs first")
         with open(design_path) as f:

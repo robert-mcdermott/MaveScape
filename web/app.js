@@ -34,15 +34,7 @@ const MODES = [
       actions: [toImport],
     }),
   },
-  {
-    id: 'score', label: 'Score', icon: 'score',
-    load: async () => plannedMode({
-      title: 'Score', icon: 'score',
-      purpose: 'Functional scores with standard errors from the counts: the normalization, pseudocount, filters and replicate combination in plain view, each run kept unchanged with everything needed to repeat it. The numbers are checked against Enrich2 and other reference tools.',
-      steps: ['Set the design and review QC.', 'Choose the scoring parameters, or keep the defaults, and run.'],
-      actions: [toImport],
-    }),
-  },
+  { id: 'score', label: 'Score', icon: 'score', load: () => import('./ui/mode-score.js').then((m) => m.mountScoreMode) },
   'sep',
   {
     id: 'map', label: 'Map', icon: 'heatmap',

@@ -50,6 +50,23 @@ export function mountInspector(app) {
       h('p.mono', { style: { fontSize: '11px', wordBreak: 'break-all', margin: '8px 0 0', color: 'var(--text-2)' } }, target.sequence.length > 240 ? `${target.sequence.slice(0, 240)}…` : target.sequence));
   }
 
+  function runSection(run) {
+    const checked = app.runResults?.get(run.id);
+    const c = run.output.conditions;
+    return h('section.inspector-section', h('h3', icon('score'), run.name),
+      h('dl.kv',
+        h('dt', 'Id'), h('dd.mono', run.id),
+        h('dt', 'Made'), h('dd', relativeTime(run.created)),
+        h('dt', 'Table'), h('dd', { title: run.inputs.source.sha256 }, run.inputs.source.name),
+        h('dt', 'Design'), h('dd', run.inputs.design.name ?? 'design'),
+        h('dt', 'Scored'), h('dd', c.map((x) => `${formatCount(x.scored)} of ${formatCount(run.output.variants)}${c.length > 1 ? ` (${x.name})` : ''}`).join('; ')),
+        h('dt', 'Output'), h('dd.mono', { title: run.output.sha256 }, `${run.output.sha256.slice(0, 12)}…`),
+        h('dt', 'Checked'), h('dd', !checked ? 'not yet' : checked.status === 'reproduced' ? 'reproduced from its inputs' : checked.status === 'computed' ? 'computed in this session' : checked.status === 'checking' ? 'recomputing…' : checked.status === 'differs' ? 'differs from the record' : 'could not be recomputed'),
+        h('dt', 'Software'), h('dd', `MaveScape ${run.software.version}${run.software.commit ? ` (${run.software.commit.slice(0, 7)})` : ''}`)),
+      ...run.warnings.map((w) => h('div.callout.warn', { style: { marginTop: '6px', fontSize: '12px' } }, w.message)),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => app.setMode('score') }, icon('score'), 'Open in Score')));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
     if (focus?.kind === 'source') {
@@ -59,6 +76,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'target') {
       const target = app.store.ws.targets.find((x) => x.id === focus.id);
       if (target) return targetSection(target);
+    }
+    if (focus?.kind === 'run') {
+      const run = app.store.ws.runs.find((x) => x.id === focus.id);
+      if (run) return runSection(run);
     }
     if (!focus) {
       return h('section.inspector-section',

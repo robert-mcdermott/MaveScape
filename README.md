@@ -9,9 +9,10 @@ It runs on your own computer as one self-contained program, with no account, Pyt
 are analyzed in the browser and never leave your machine. MaveScape reports experimental
 functional effects for research; it does not classify variants as pathogenic or benign.
 
-> **Status: in development.** Wave 1 (release 0.1.0) is being built. The program runs and opens
-> its workbench; importing, scoring and the map arrive slice by slice
-> ([roadmap](mavescape-spec/roadmap.md)).
+> **Status: in development.** Wave 1 (release 0.1.0) is being built. Count tables import, designs
+> are set in the Experiment view, and two-population experiments (and time series, by their first
+> and last samples) are scored, with numbers checked against Enrich2, dms_variants and metafor.
+> QC, the map and exports arrive in the next slices ([roadmap](mavescape-spec/roadmap.md)).
 
 ## Install
 

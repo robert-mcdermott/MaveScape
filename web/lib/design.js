@@ -249,7 +249,7 @@ export function validateDesign(design, table = null) {
       groups.get(key).set(shape, replicate.id);
     }
     for (const shapes of groups.values()) {
-      if (shapes.size > 1) warn('replicates', `Replicates ${[...shapes.values()].join(', ')} of one condition differ in their ${model === 'time-series' ? 'times' : 'bins'}; they are scored alike only on what they share.`);
+      if (shapes.size > 1) warn('replicates', `Replicates ${[...shapes.values()].join(', ')} of one condition differ in their ${model === 'time-series' ? 'times' : 'bins'}: combining their scores treats them as one experiment, on one scale.`);
     }
   }
 

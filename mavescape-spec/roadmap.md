@@ -190,17 +190,46 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
        SHA-256 first, and columns with no values are never compared.
      - **Columns left out at import were reported as unaccounted**: a draft now sets them aside
        with that reason.
-5. **Scoring (S1–S5, S11, V7).** `web/lib/score-ratio.js` (WT, complete, full and synonymous
-   normalization; pseudocount; SE), `web/lib/replicates.js` (pooling technical replicates; fixed
-   effects; REML random effects; the Enrich2-compatible estimator; τ², I², leave-one-out),
-   `web/lib/filters.js` (ordered stages, reason codes), `web/lib/runs.js` (immutable runs, ids
-   from canonical inputs, provenance), `score-worker.js`. The Score view: parameters, filter bar,
-   run list, warnings.
-   - Validation (`validation` suite `scoring`): equal to Enrich2 2.0.2 within 1e-10 relative on
-     the feasibility set and on synthetic fixtures for every PRD edge case; equal to dms_variants
-     (÷ ln 2) in WT mode; the Enrich2-compatible estimator equal to Enrich2 exactly and REML equal
-     to `metafor::rma(method = "REML")` within 1e-6 where it converges; determinism and
-     row-order invariance as property tests.
+5. **Scoring (S1–S5, S11, V7): done.** `web/lib/score-ratio.js` (log ratios with wild-type,
+   complete-case, all-read and synonymous-median normalization; pseudocount; SE),
+   `web/lib/replicates.js` (technical replicates summed; fixed effects; REML random effects by
+   metafor's Fisher scoring; Enrich2 2.0.2's estimator exactly; Q, I², τ², leave-one-out),
+   `web/lib/filters.js` (eight ordered stages with reason codes, count filters per replicate, the
+   filter flow), `web/lib/score.js` (the pipeline: controls by kind or name, conditions scored
+   apart, tiles, rescaling, run warnings, refusals with reasons), `web/lib/runs.js` (ids from the
+   canonical inputs; the output hashed; the method in sentences), `web/workers/score-worker.js`.
+   The Score view (`web/ui/mode-score.js`): presets (MaveScape defaults, Enrich2-compatible),
+   parameters, the filter bar, the run list, each run's warnings, filter flow, scores by class,
+   replicates and every variant with its per-replicate evidence; the inspector describes runs.
+   Runs keep their inputs and the hash of their output, not the scores: reopened, a run is
+   recomputed in the worker and must have its output hash ("reproduced").
+   - Validation (suite `scoring`, 46 checks): equal to Enrich2 2.0.2 (replicate and combined, three
+     normalizations) on GRB2, BRCA1 E2 and a synthetic fixture with every PRD edge case planted
+     (`fixtures/two-population.csv`, made by `make-two-population.mjs`), to 5 × 10⁻¹³; to
+     dms_variants 1.6.0's `func_scores` on the fixture (natural log; 4.6 × 10⁻¹³); REML to metafor
+     5.2-1 on 2,865 variants and six synthetic sets (3.4 × 10⁻¹²; required 10⁻⁶); each edge case's
+     outcome; rescaling anchors exact; determinism, row- and column-order invariance (bit for bit,
+     on the fixture and BRCA1) and input/output symmetry; a run saved, reopened and recomputed
+     with its recorded output hash. 19 more unit tests (97 in all). References made by
+     `generate_dms_variants.py` and `generate_metafor.R` (`validation/README.md`). In the window:
+     GRB2 scored, reopened and reproduced; BRCA1's 12,316 rows × 12 replicates scored in half a
+     second in the worker.
+   - Found by slice 5:
+     - **BRCA1's draft combined two assays**: the design drafted from all the column names made
+       E2 binding and Y2H replicates of one experiment, and scoring averaged them. Replicates with
+       different numbers of time points (or bins) now become separate conditions in the draft,
+       named by their columns' common stem (PlusE2, Y2H), and a run warns when one condition mixes
+       them; the E2 condition then scores exactly as the hand-written E2 design.
+     - **Enrich2's estimator is REML where it has converged** (GRB2: 479 variants with epsilon 0,
+       equal to metafor to 10⁻¹²), confirming research.md §2.1; elsewhere its answer depends on
+       the table's size.
+     - **dms_variants 1.6.0 adds no depth-scaled pseudocount**: its `func_scores` is Enrich2's
+       wild-type ratio exactly, so it is a cross-check to machine precision, not "÷ ln 2".
+     - **Shared inputs make replicates dependent** (BRCA1): the combined SE is then too small; runs
+       say so. Wave 2's differential scores already plan for shared inputs.
+     - MaveScape's default leaves out a replicate measurement with no input reads (the variant was
+       not in that library); the Enrich2-compatible preset scores it from the pseudocount, as
+       Enrich2 does. The difference is a parameter, recorded in each run.
 6. **Quality control (Q1–Q7, Q9).** `web/lib/qc.js` and `web/lib/findings.js`: depth,
    observed fraction, count distributions, low and zero counts, rank-abundance, coverage by
    position and substitution, replicate agreement (Pearson and Spearman on variants above an

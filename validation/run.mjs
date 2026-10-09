@@ -6,7 +6,8 @@
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
-// data), experiment (external data); all by default. Exits with status 1 when a check fails.
+// data), experiment (external data), scoring (its last checks need external data); all by default.
+// Exits with status 1 when a check fails.
 //
 // Suites marked "external data" need files that node validation/fetch.mjs downloads into
 // validation/cache/ (wave 1, slice 2); without them the suite is skipped, and fails with
@@ -30,8 +31,15 @@ import { createRandom, shuffle } from '../web/lib/random.js';
 import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
 import { designFromSampleSheet } from '../web/lib/samplesheet.js';
 import { addSource, addTarget, createWorkspace, parseWorkspace, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
+const formatCount = (n) => n.toLocaleString('en-US');
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
+import { EDGE_EXPECTATIONS, byKey, engineInput, fixtureDesign, fixtureTable, score, shuffledTable, variantTable } from './scoring-cases.mjs';
+import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS } from '../web/lib/score.js';
+import { combineFixed, combineREML, heterogeneity } from '../web/lib/replicates.js';
+import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE } from '../web/lib/filters.js';
+import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs } from '../web/lib/runs.js';
+import { median } from '../web/lib/score-ratio.js';
 
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
@@ -504,6 +512,266 @@ const suites = {
     check('experiment', 'a workspace through the slice\'s edits: its history chained, and intact after saving and reopening', `${chain.entries} entries (${reopened.history.map((e) => e.action).join(', ')}), head ${chain.head.slice(0, 12)}…`, chain.ok && chain.entries === 5, '5 entries, unbroken');
     const tampered = { ...reopened, history: reopened.history.map((e, i) => (i === 3 ? { ...e, detail: 'Set the design (edited later)' } : e)) };
     check('experiment', 'an entry edited afterward breaks the chain where it was edited', `broken at entry ${verifyHistory(tampered).broken[0]?.index + 1}`, verifyHistory(tampered).broken[0]?.index === 3, 'entry 4');
+  },
+  // Scoring (wave 1, slice 5): the engine (web/lib/score.js) against Enrich2 2.0.2, dms_variants
+  // 1.6.0 and metafor 5.2-1 (reference/*.json), the PRD's two-population edge cases on the
+  // synthetic fixture (fixtures/two-population.csv), rescaling, determinism, row- and column-order
+  // invariance, and runs that reproduce. The feasibility data come last (external data).
+  scoring() {
+    const enrich2 = JSON.parse(readFileSync(new URL('./reference/enrich2.json', import.meta.url), 'utf8'));
+    const dmsv = JSON.parse(readFileSync(new URL('./reference/dms_variants.json', import.meta.url), 'utf8'));
+    const metafor = JSON.parse(readFileSync(new URL('./reference/metafor.json', import.meta.url), 'utf8'));
+    const fixture = fixtureTable();
+    const design = fixtureDesign();
+
+    // The engine with Enrich2-compatible parameters against Enrich2's own output, replicate by
+    // replicate and combined, on the variants Enrich2 stored.
+    const againstEnrich2 = (caseName, table, caseDesign) => {
+      const entry = enrich2.cases[caseName];
+      const names = table.columns.find((c) => c.name === caseDesign.variants.column).values;
+      const row = new Map(names.map((n, i) => [n, i]));
+      for (const [method, values] of Object.entries(entry.methods)) {
+        const [scoring, normalization] = method.split('/');
+        if (scoring !== 'ratios') continue;
+        const t0 = performance.now();
+        const results = score(table, caseDesign, { ...PRESETS.enrich2.parameters, normalization });
+        const ms = performance.now() - t0;
+        const pairs = [];
+        let oneSide = 0;
+        for (const rep of results.replicates) {
+          const theirs = values.replicates[rep.id];
+          entry.variants.forEach((name, j) => {
+            const i = row.get(name);
+            const mine = rep.state[i] === REPLICATE_STATE.USED;
+            if (mine !== (theirs.score[j] !== null)) {
+              oneSide += 1;
+              return;
+            }
+            if (mine) pairs.push([`${rep.id} ${name}`, rep.score[i], theirs.score[j]], [`${rep.id} ${name} SE`, rep.se[i], theirs.se[j]]);
+          });
+        }
+        const d = worstDifference(pairs);
+        check('scoring', `${caseName} ${method}: each replicate's scores and SEs equal Enrich2 2.0.2's (${pairs.length / 2} values; scored in ${ms.toFixed(0)} ms)`, `${d.worst.toExponential(2)} (${d.where})${oneSide ? `; ${oneSide} scored by one side only` : ''}`, d.worst <= 1e-10 && !oneSide && pairs.length > 0, '≤ 1e-10 relative, the same variants');
+        const c = results.conditions[0];
+        const combined = values.combined.all;
+        const cPairs = [];
+        let cOneSide = 0;
+        entry.variants.forEach((name, j) => {
+          const i = row.get(name);
+          if ((c.reason[i] === 0) !== (combined.score[j] !== null)) {
+            cOneSide += 1;
+            return;
+          }
+          if (!c.reason[i]) cPairs.push([name, c.score[i], combined.score[j]], [`${name} SE`, c.se[i], combined.se[j]]);
+        });
+        const dc = worstDifference(cPairs);
+        check('scoring', `${caseName} ${method}: combined scores and SEs (Enrich2's estimator, the wild type 0 ± 0) equal Enrich2's (${cPairs.length / 2} variants)`, `${dc.worst.toExponential(2)} (${dc.where})${cOneSide ? `; ${cOneSide} combined by one side only` : ''}`, dc.worst <= 1e-10 && !cOneSide && cPairs.length > 0, '≤ 1e-10 relative, the same variants');
+      }
+    };
+    againstEnrich2('two-population', fixture, design);
+
+    // dms_variants' func_scores (natural logarithms) on the fixture, replicate by replicate.
+    {
+      const results = score(fixture, design, { ...DEFAULT_PARAMETERS, normalization: 'wt' });
+      const names = fixture.columns.find((c) => c.name === 'hgvs_pro').values;
+      const pairs = [];
+      let oneSide = 0;
+      for (const rep of results.replicates) {
+        const theirs = dmsv.replicates[rep.id];
+        dmsv.variants.forEach((name, j) => {
+          const i = names.indexOf(name);
+          const mine = Number.isFinite(rep.score[i]);
+          if (mine !== (theirs.score[j] !== null)) {
+            oneSide += 1;
+            return;
+          }
+          if (mine) pairs.push([`${rep.id} ${name}`, rep.score[i], theirs.score[j]], [`${rep.id} ${name} variance`, rep.se[i] ** 2, theirs.var[j]]);
+        });
+      }
+      const d = worstDifference(pairs);
+      check('scoring', `fixture: each replicate's scores and variances equal dms_variants ${dmsv.versions.dms_variants} func_scores (wild-type ratios, natural log; ${pairs.length / 2} values)`, `${d.worst.toExponential(2)} (${d.where})${oneSide ? `; ${oneSide} by one side only` : ''}`, d.worst <= 1e-10 && !oneSide, '≤ 1e-10 relative');
+    }
+
+    // REML and fixed effects against metafor, on Enrich2's replicate scores (from enrich2.json, in
+    // its replicates' order) and on synthetic sets.
+    for (const c of metafor.cases) {
+      let inputs = null;
+      if (c.name !== 'synthetic') {
+        const [caseName, method] = c.name.split(' ');
+        const entry = enrich2.cases[caseName];
+        const reps = Object.values(entry.methods[method].replicates);
+        const index = new Map(entry.variants.map((v, i) => [v, i]));
+        inputs = (name) => {
+          const i = index.get(name);
+          const y = [];
+          const v = [];
+          for (const r of reps) {
+            if (r.score[i] === null || r.se[i] === null) continue;
+            y.push(r.score[i]);
+            v.push(r.se[i] ** 2);
+          }
+          return { y, v };
+        };
+      }
+      const reml = [];
+      const fixed = [];
+      const q = [];
+      let atZero = 0;
+      let iterations = 0;
+      for (const set of c.sets) {
+        const { y, v } = inputs ? inputs(set.name) : set;
+        const m = combineREML(y, v);
+        iterations = Math.max(iterations, m.iterations);
+        if (set.reml.tau2 === 0) atZero += 1;
+        reml.push([`${set.name}`, m.estimate, set.reml.estimate], [`${set.name} SE`, m.se, set.reml.se], [`${set.name} τ²`, m.tau2, set.reml.tau2]);
+        const f = combineFixed(y, v);
+        fixed.push([set.name, f.estimate, set.fixed.estimate], [`${set.name} SE`, f.se, set.fixed.se]);
+        q.push([set.name, heterogeneity(y, v).q, set.reml.q]);
+      }
+      const d = worstDifference(reml);
+      check('scoring', `${c.name}: REML random effects equal metafor ${metafor.versions.metafor} rma(method = "REML") (${c.sets.length} variants, τ² = 0 in ${atZero}; at most ${iterations} Fisher-scoring steps)`, `${d.worst.toExponential(2)} (${d.where})`, d.worst <= 1e-6, '≤ 1e-6 relative');
+      const df = worstDifference(fixed);
+      const dq = worstDifference(q);
+      check('scoring', `${c.name}: fixed effects and Cochran's Q equal metafor's (method = "EE")`, `estimates and SEs ${df.worst.toExponential(2)}, Q ${dq.worst.toExponential(2)}`, df.worst <= 1e-10 && dq.worst <= 1e-10, '≤ 1e-10 relative');
+    }
+    // Where Enrich2's 50 iterations converged, its estimator is REML (research.md §2.1).
+    {
+      const entry = enrich2.cases['grb2-sh3'];
+      const combined = entry.methods['ratios/wt'].combined.all;
+      const reference = new Map(metafor.cases[0].sets.map((s) => [s.name, s.reml.estimate]));
+      const pairs = [];
+      entry.variants.forEach((name, i) => {
+        if (combined.epsilon[i] === 0 && reference.has(name) && name !== 'p.=') pairs.push([name, combined.score[i], reference.get(name)]);
+      });
+      const d = worstDifference(pairs);
+      check('scoring', `GRB2: Enrich2's combined scores where its estimator converged (epsilon 0) equal metafor's REML (${pairs.length} variants)`, `${d.worst.toExponential(2)} (${d.where})`, d.worst <= 1e-8 && pairs.length > 0, '≤ 1e-8 relative');
+    }
+
+    // The PRD's edge cases, as planted in the fixture, under MaveScape's defaults.
+    const defaults = score(fixture, design, DEFAULT_PARAMETERS);
+    const names = fixture.columns.find((c) => c.name === 'hgvs_pro').values;
+    const c0 = defaults.conditions[0];
+    for (const [name, what, states, used, stage, flags] of EDGE_EXPECTATIONS) {
+      const i = names.indexOf(name);
+      const got = { states: defaults.replicates.map((r) => r.state[i]), used: c0.k[i], stage: c0.reason[i] || null, flags: c0.flags[i] };
+      const scored = !got.stage && Number.isFinite(c0.score[i]) && Number.isFinite(c0.se[i]);
+      const ok = JSON.stringify(got) === JSON.stringify({ states, used, stage, flags }) && (stage ? Number.isNaN(c0.score[i]) : scored);
+      check('scoring', `edge case: ${what} (${name})`, `${stage ? `not scored: ${STAGE_BY_CODE.get(got.stage)?.reason}` : `scored ${fmt(c0.score[i])} ± ${fmt(c0.se[i])} from ${got.used} replicate${got.used === 1 ? '' : 's'}`}; replicate states ${got.states.join(',')}${got.flags ? `; flags ${got.flags}` : ''}`, ok, `states ${states.join(',')}, ${used} used${stage ? `, stage ${STAGE_BY_CODE.get(stage).id}` : ''}${flags ? `, flags ${flags}` : ''}`);
+    }
+    {
+      const results = score(fixture, design, { ...DEFAULT_PARAMETERS, filters: { ...DEFAULT_PARAMETERS.filters, minInputCount: 10 } });
+      const i = names.indexOf('p.Thr9Ala');
+      const c = results.conditions[0];
+      const kept = results.replicates.every((r) => Number.isFinite(r.score[i]) && r.first[i] === 3);
+      check('scoring', 'edge case: observed but filtered (p.Thr9Ala, 3 input reads; minimum input count 10): NA with its stage, its counts and replicate scores kept', `stage ${STAGE_BY_CODE.get(c.reason[i])?.id}; score ${c.score[i]}; replicate scores ${results.replicates.map((r) => fmt(r.score[i])).join(', ')}`, c.reason[i] === STAGE_BY_ID.get('input-count').code && Number.isNaN(c.score[i]) && kept, 'input-count; NaN; kept');
+      const flow = c.flow;
+      const total = flow.reduce((a, x) => a + x.removed, 0) + c.scored;
+      check('scoring', 'the filter flow accounts for every variant', flow.filter((x) => x.removed).map((x) => `${x.stage} −${x.removed}`).join(', ') + `; ${c.scored} scored of ${results.rows}`, total === results.rows && flow.at(-1).remaining === c.scored, 'removed + scored = rows');
+    }
+    {
+      // Enrich2's conventions on the same edge cases: zero inputs scored, partial variants not combined.
+      const results = score(fixture, design, PRESETS.enrich2.parameters);
+      const c = results.conditions[0];
+      const at = (n) => names.indexOf(n);
+      const ok = c.k[at('p.Lys3Arg')] === 3 && c.k[at('p.Gly4Asp')] === 3 && c.reason[at('p.Glu6Lys')] === STAGE_BY_ID.get('replicates').code && c.reason[at('p.Leu7Pro')] === STAGE_BY_ID.get('replicates').code && Number.isFinite(results.replicates[0].score[at('p.Glu6Lys')]);
+      check('scoring', 'Enrich2-compatible: zero inputs scored with the pseudocount, variants missing from a replicate not combined (their replicate scores kept)', `Lys3Arg ${c.k[at('p.Lys3Arg')]} replicates, Gly4Asp ${c.k[at('p.Gly4Asp')]}; Glu6Lys and Leu7Pro: ${STAGE_BY_CODE.get(c.reason[at('p.Glu6Lys')])?.id}`, ok, 'as Enrich2');
+    }
+    {
+      // Reference class unavailable: refused, saying why.
+      const noWt = variantTable(fixture, { drop: ['p.='] });
+      const refusals = [
+        ['no wild-type row, wild-type normalization', scoreExperiment({ ...engineInput(noWt, design), parameters: DEFAULT_PARAMETERS }), /wild type/i],
+        ['no synonymous controls, synonymous normalization', scoreExperiment({ ...engineInput(fixture, { ...design, controls: { ...design.controls, synonymous: 'none' } }), parameters: { ...DEFAULT_PARAMETERS, normalization: 'synonymous' } }), /synonymous/i],
+        ['no nonsense controls, rescaled to the nonsense median', scoreExperiment({ ...engineInput(fixture, { ...design, controls: { ...design.controls, nonsense: 'none' } }), parameters: { ...DEFAULT_PARAMETERS, rescale: 'nonsense-wt' } }), /nonsense/i],
+      ];
+      for (const [what, out, pattern] of refusals) check('scoring', `edge case: reference class unavailable (${what}): the run is refused, with the reason`, out.ok ? 'scored anyway' : out.errors[0], !out.ok && pattern.test(out.errors.join(' ')), 'refused');
+      const shallow = score(variantTable(fixture, { divide: 2000 }), design, { ...DEFAULT_PARAMETERS, normalization: 'complete' });
+      const low = shallow.warnings.filter((w) => w.code === 'low-depth');
+      check('scoring', 'edge case: very low sequencing depth (the fixture\'s counts ÷ 2000) is warned about, sample by sample', `${low.length} samples: ${low[0]?.message ?? 'none'}`, low.length >= 6, 'every sample');
+    }
+    // Rescaling (S11): the anchors land where they are sent.
+    for (const [rescale, check1, check2] of [['nonsense-wt', ['nonsense median', 0], ['wild type', 1]], ['synonymous-nonsense', ['synonymous median', 0], ['nonsense median', -1]]]) {
+      const results = score(fixture, design, { ...DEFAULT_PARAMETERS, rescale });
+      const c = results.conditions[0];
+      const kinds = results.variants.kind;
+      const med = (k) => median([...c.score].filter((x, i) => kinds[i] === k && !c.reason[i]));
+      const value = (what) => (what === 'wild type' ? c.score[results.controls.wt] : med(what.startsWith('nonsense') ? 4 : 2));
+      const a = value(check1[0]);
+      const b = value(check2[0]);
+      check('scoring', `rescaling "${rescale}": ${check1[0]} → ${check1[1]}, ${check2[0]} → ${check2[1]}`, `${fmt(a, 12)}, ${fmt(b, 12)}`, Math.abs(a - check1[1]) < 1e-12 && Math.abs(b - check2[1]) < 1e-12, 'exact (≤ 1e-12)');
+    }
+
+    // Determinism, order invariance and symmetry.
+    {
+      const once = outputDigest(score(fixture, design, DEFAULT_PARAMETERS));
+      const twice = outputDigest(score(fixture, design, DEFAULT_PARAMETERS));
+      check('scoring', 'determinism: the same inputs give the same output hash', `${once.slice(0, 16)}… twice`, once === twice, 'identical');
+      const random = createRandom(5);
+      let differing = 0;
+      for (let k = 0; k < 5; k += 1) {
+        const shuffled = byKey(score(shuffledTable(fixture, random), design, DEFAULT_PARAMETERS));
+        const original = byKey(score(fixture, design, DEFAULT_PARAMETERS));
+        differing += [...original].filter(([key, value]) => shuffled.get(key) !== value).length;
+      }
+      check('scoring', 'row and column order: the fixture shuffled five times gives every variant the same scores, bit for bit', `${differing} differences`, differing === 0, '0');
+      const swapped = { ...design, replicates: design.replicates.map((r) => ({ ...r, input: r.output, output: r.input })) };
+      const forward = score(fixture, design, { ...DEFAULT_PARAMETERS, filters: { ...DEFAULT_PARAMETERS.filters, minInputCount: 0 } });
+      const backward = score(fixture, swapped, { ...DEFAULT_PARAMETERS, filters: { ...DEFAULT_PARAMETERS.filters, minInputCount: 0 } });
+      const pairs = [];
+      for (let i = 0; i < forward.rows; i += 1) if (!forward.conditions[0].reason[i]) pairs.push([names[i], -backward.conditions[0].score[i], forward.conditions[0].score[i]], [`${names[i]} SE`, backward.conditions[0].se[i], forward.conditions[0].se[i]]);
+      const d = worstDifference(pairs);
+      check('scoring', 'symmetry: input and output swapped negate every score and keep every SE (REML)', `${d.worst.toExponential(2)} (${d.where || 'none'})`, d.worst <= 1e-12, '≤ 1e-12');
+    }
+
+    // Runs: ids from inputs, outputs reproduced from a saved workspace.
+    {
+      const source = { id: 'counts', name: 'two-population.csv', sha256: 'f'.repeat(64), rows: fixture.rows, mapping: { mode: 'lenient' } };
+      const inputs = runInputs({ source, design, parameters: DEFAULT_PARAMETERS });
+      const results = score(fixture, design, DEFAULT_PARAMETERS);
+      const run = makeRun({ inputs, source, results, software: { version: '0.1.0', commit: '' }, name: 'Run 1', created: '2026-10-08T12:00:00.000Z' });
+      const other = runId(runInputs({ source, design, parameters: { ...DEFAULT_PARAMETERS, pseudocount: 0.25 } }));
+      check('scoring', 'run ids: the same inputs make the same id, another pseudocount another', `${run.id}, ${other}`, run.id === runId(runInputs({ source, design: JSON.parse(JSON.stringify(design)), parameters: { ...DEFAULT_PARAMETERS } })) && other !== run.id, 'same; different');
+      let ws = createWorkspace('Scoring', { now: '2026-10-08T12:00:00.000Z' });
+      ws = addRun(ws, run).ws;
+      const again = addRun(ws, run);
+      const reopened = parseWorkspace(serializeWorkspace(ws));
+      const recorded = recordedInputs(reopened.runs[0]);
+      const recomputed = scoreExperiment({ ...engineInput(fixture, recorded.design), parameters: recorded.parameters, mode: recorded.mapping.mode });
+      check('scoring', 'a run saved in a workspace, reopened and recomputed from its recorded inputs has its recorded output hash; adding it again adds nothing', `${run.output.sha256.slice(0, 16)}…; ${verifyHistory(reopened).entries} history entries`, recomputed.ok && outputDigest(recomputed.results) === run.output.sha256 && again.existing && again.ws === ws && verifyHistory(reopened).ok, 'reproduced');
+    }
+
+    // The feasibility data (external).
+    for (const c of DESIGN_CASES.filter((x) => ['grb2-sh3', 'brca1-ring-e2'].includes(x.name))) {
+      const table = parseTable(dataset(c.dataset).bytes(c.counts));
+      againstEnrich2(c.name, table, readDesign(c.design));
+    }
+    {
+      // Row order on real data with shared inputs and a time series: BRCA1, rows shuffled.
+      const e2 = readDesign('brca1-ring-e2.design.json');
+      const table = parseTable(dataset('mavedb-brca1-ring').bytes('aa/counts.csv'));
+      const t0 = performance.now();
+      const results = score(table, e2, DEFAULT_PARAMETERS);
+      const ms = performance.now() - t0;
+      const shuffled = byKey(score(shuffledTable(table, createRandom(9)), e2, DEFAULT_PARAMETERS));
+      const differing = [...byKey(results)].filter(([key, value]) => shuffled.get(key) !== value).length;
+      const codes = results.warnings.map((w) => w.code);
+      check('scoring', `BRCA1 E2 (${formatCount(results.rows)} rows × 6 replicates, MaveScape defaults, ${ms.toFixed(0)} ms): rows and columns shuffled give the same scores; warned that inputs are shared and the time series is scored by its ends`, `${differing} differences; warnings: ${codes.join(', ')}`, differing === 0 && codes.includes('shared-samples') && codes.includes('time-series-ratio'), '0; both warnings');
+      // The whole table drafted from its column names: two assays, two conditions, scored apart;
+      // the E2 condition scores as the hand-written E2 design does.
+      const layout = detectLayout(table);
+      const drafted = draftDesign(table, suggestRoles(layout.countColumns), { variantColumn: layout.variantColumn, level: layout.level, target: e2.targets[0] }).design;
+      const both = score(table, drafted, DEFAULT_PARAMETERS);
+      const e2Condition = both.conditions.find((c) => c.replicates.length === 6 && c.replicates.every((id) => /PlusE2/.test(id)));
+      const pairs = [];
+      if (e2Condition) {
+        const c = results.conditions[0];
+        for (let i = 0; i < results.rows; i += 1) if (!c.reason[i]) pairs.push([results.variants.key[i], e2Condition.score[i], c.score[i]], [`${results.variants.key[i]} SE`, e2Condition.se[i], c.se[i]]);
+      }
+      const dd = worstDifference(pairs);
+      check('scoring', 'BRCA1, the whole table drafted from its column names: E2 binding (6 time points) and Y2H (4) become two conditions, scored apart; the E2 condition scores as the hand-written E2 design does', `${both.conditions.map((c) => `${c.name}: ${c.replicates.length} replicates, ${formatCount(c.scored)} scored`).join('; ')}; E2 against the hand-written design ${dd.worst.toExponential(2)} over ${pairs.length / 2} variants`, both.conditions.length === 2 && !!e2Condition && dd.worst <= 1e-12 && pairs.length > 0, 'two conditions; ≤ 1e-12');
+      const f9 = scoreExperiment({ ...engineInput(parseTable(dataset('mavedb-factor9').bytes('counts.csv')), readDesign('factor9.design.json')), parameters: DEFAULT_PARAMETERS });
+      check('scoring', 'factor IX (FACS bins): refused, saying bins are scored from 0.2.0 (not scored some other way)', f9.ok ? 'scored' : f9.errors[0], !f9.ok && /0\.2\.0/.test(f9.errors[0]), 'refused');
+    }
   },
 };
 

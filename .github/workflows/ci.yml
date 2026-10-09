@@ -49,7 +49,7 @@ jobs:
       - name: Syntax check
         run: |
           shopt -s nullglob
-          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs; do node --check "$file"; done
+          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs validation/fixtures/*.mjs; do node --check "$file"; done
       - name: node --test
         run: node --test "web/lib/*.test.mjs"
       - name: Cache external validation data

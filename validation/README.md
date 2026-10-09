@@ -13,6 +13,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `enrich2` | Enrich2 2.0.2's scores of those data (`reference/enrich2.json`) against the formulas of `mavescape-spec/research.md` §2.1 computed independently, and the published BRCA1 scores against Enrich2 2.0.2 | MaveDB, external; `reference/enrich2.json` |
 | `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
+| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `fixtures/`; MaveDB, external |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 
 ## Public data (`sources.json`)
@@ -46,8 +47,8 @@ specific to any of them. What they asked of the schema (wave 1, slice 2):
 - **Known differences from the reference.** The BRCA1 construct encodes Arg at codon 174 (UniProt
   P38398 residue 175 is Lys); the target records it, so it is not reported as an error.
 - **Non-uniform times, and replicates with different times.** The two Y2H libraries were sampled
-  at different times; the design allows it and warns that the replicates are combined only on what
-  they share.
+  at different times; the design allows it and warns that combining their scores treats them as
+  one experiment, on one scale.
 
 ## The MAVE-HGVS reference (`reference/mavehgvs.json`)
 
@@ -74,9 +75,10 @@ uv run --python 3.12 --with enrich2==2.0.2 python validation/reference/generate_
 ```
 
 and committed, so CI needs neither Python nor Enrich2. The generator builds Enrich2's
-configuration from the design files. Enrich2 scores the whole tables; for BRCA1 the file keeps a
-fixed subset of variants (every sixth by name, the `_wt` and `_sy` rows, and 300 variants missing
-from some replicates), 2.2 MB in all.
+configuration from the design files, and scores the synthetic fixture too (`two-population`,
+below). Enrich2 scores the whole tables; for BRCA1 the file keeps a fixed subset of variants
+(every sixth by name, the `_wt` and `_sy` rows, and 300 variants missing from some replicates),
+2.3 MB in all.
 
 Enrich2 2.0.2 (BSD-3, `pip install enrich2`, Python 3.12, pandas 3.0) as found when generating
 it:
@@ -112,3 +114,55 @@ it:
 - **GRB2's published scores** come from DiMSum (absolute growth rates from culture densities and
   times, which the table does not hold, and another error model); Enrich2's log ratios correlate
   with them at r = 0.987. DiMSum's model arrives in wave 2.
+
+## The synthetic fixture (`fixtures/two-population.*`)
+
+`node validation/fixtures/make-two-population.mjs` writes it, deterministically (seed 20261008):
+a 20-codon target (`two-population.fasta`), its design (`two-population.design.json`) and a count
+table (`two-population.csv`) of 202 variants (the wild type; synonymous, nonsense and 8 missense
+variants by position), simulated before and after selection in three biological replicates, the
+third's output on two sequencing lanes (technical replicates, summed). The PRD's two-population
+edge cases are planted on named variants: zero in both samples (p.Lys3Arg, replicate 1), zero in
+the input only (p.Gly4Asp), zero in the output only (p.Glu5Ter, every replicate), a missing
+measurement (p.Glu6Lys, no output count in replicate 2), absent from one replicate (p.Leu7Pro),
+very low depth (p.Phe8Ser, 2 and 1 reads), observed but below an input filter of 10 (p.Thr9Ala, 3
+reads) and not counted at all (p.Gly10Ala). Each variant is also written as a codon substitution
+(column `codon`), so that dms_variants can score the same table. The suite derives the other edge
+cases from it: the wild-type row removed, controls declared absent, counts divided by 2,000.
+
+## Scoring references (`reference/dms_variants.json`, `reference/metafor.json`)
+
+```sh
+uv run --python 3.12 --with dms_variants==1.6.0 python validation/reference/generate_dms_variants.py
+Rscript validation/reference/generate_metafor.R
+```
+
+- **dms_variants 1.6.0** (Bloom lab; GPLv3, an external reference only) scores the fixture with
+  `CodonVariantTable.func_scores` by barcode (one barcode per variant), pseudocount 0.5, natural
+  logarithms. Its formula is Enrich2's wild-type ratio, and its variance the same four reciprocal
+  counts; it does not tell a missing count from 0, so rows the fixture leaves NA are not compared.
+- **metafor 5.2-1** (R 4.6.1) combines Enrich2's replicate scores of GRB2 and BRCA1 E2 (taken from
+  `enrich2.json`, so the reference does not depend on MaveScape's scoring) and six synthetic sets,
+  by `rma(method = "REML")` with a convergence threshold of 10⁻¹⁴ and by `rma(method = "EE")`.
+
+### What the comparisons showed (wave 1, slice 5)
+
+- **The engine equals Enrich2 2.0.2** with its Enrich2-compatible parameters, replicate by replicate
+  and combined, to about 5 × 10⁻¹³ (the reference's 13 digits): GRB2 with the three normalizations,
+  BRCA1 E2 (a time series scored by its ends, shared inputs; 9,279 replicate and 1,141 combined
+  scores) and the fixture, scoring exactly the variants Enrich2 scores.
+- **It equals dms_variants' func_scores** on the fixture (601 replicate scores and variances,
+  4.6 × 10⁻¹³).
+- **Its REML equals metafor's** to 3.4 × 10⁻¹² on 2,865 real variants (τ² at its bound of 0 for
+  231 of them) and the synthetic sets, following metafor's Fisher scoring (the Hedges start, step
+  halving at 0, the check against τ² = 0); fixed effects and Cochran's Q to 5 × 10⁻¹³.
+- **Enrich2's estimator is REML where it converged**: on GRB2, its combined scores with epsilon 0
+  equal metafor's REML to 10⁻¹²; elsewhere they differ, as its start predicts.
+- **The edge cases** each behave as specified: a replicate with no input reads does not count
+  (MaveScape's default minimum input count is 1; Enrich2-compatible scores it from the
+  pseudocount); a zero output is scored and flagged as resting on the pseudocount; a variant
+  missing from a replicate is combined from the others and flagged; a filtered variant keeps its
+  counts and replicate scores with its score NA and its stage; a missing reference class (no
+  wild-type row, no synonymous or nonsense controls when needed) refuses the run with the reason;
+  very low depth is warned about sample by sample.
+

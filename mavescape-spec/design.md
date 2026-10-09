@@ -127,14 +127,26 @@ CSV/TSV/XLSX ─parse (worker, streaming)→ table (columns as strings + typed n
 | Imported scores | validation and mapping only | MaveDB |
 
 Replicates: technical replicates are summed before scoring. Biological replicates are scored
-separately and combined by inverse-variance fixed effects or by REML random effects; an
-"Enrich2-compatible" option reproduces Enrich2's estimator exactly, including its starting value
-and fixed 50 iterations, so that numbers can be compared with published Enrich2 results. Each
-combination reports heterogeneity (τ², I²) and leave-one-replicate-out sensitivity.
+separately and combined by inverse-variance fixed effects or by REML random effects (Fisher
+scoring as metafor's `rma`: the Hedges start, step halving at τ² = 0, the check against τ² = 0, to
+convergence); an "Enrich2-compatible" option reproduces Enrich2's estimator exactly, including its
+starting value and fixed 50 iterations, so that numbers can be compared with published Enrich2
+results. Each combination reports heterogeneity (τ², Cochran's Q and I² = (Q − df)/Q) and
+leave-one-replicate-out sensitivity. Conditions are scored apart; a variant's expected replicates
+are those whose tile covers it. (`web/lib/score.js`, wave 1, slice 5.)
 
-Filters are ordered stages (minimum input count, minimum total count, minimum usable replicates,
-maximum SE, barcode disagreement, identifier validity, variant class, user exclusions). A filtered
-variant keeps its measurements, reason code and stage, and the filter flow is drawn.
+Filters are ordered stages: counted in a replicate and a valid identifier (always), variant class,
+user exclusions, minimum input count and minimum total count (per replicate: a replicate below
+them does not count for that variant), minimum usable replicates, maximum SE; barcode
+disagreement joins with barcodes (wave 2). A filtered variant keeps its measurements, reason code
+and stage, and the filter flow is drawn. A run that cannot be done as asked (the reference class
+absent, a rescaling anchor missing, an unsupported design) is refused with the reason, never done
+another way.
+
+Runs keep their inputs (the table's SHA-256, the mapping, the design, the parameters, the scoring
+version), which give the run its id, and the SHA-256 of their output, not the scores: scoring a
+large table takes well under a second in the worker, so a reopened run is recomputed and checked
+against its output hash. A run that no longer reproduces says so.
 
 ### QC findings
 
