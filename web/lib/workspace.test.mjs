@@ -44,3 +44,23 @@ test('rename returns a new value and leaves the original alone', () => {
   assert.equal(rename(ws, '   '), ws);
   assert.equal(rename(ws, 'A'), ws);
 });
+
+test('sources and targets are added with ids of their own; an identical target is not added twice', async () => {
+  const { addSource, addTarget, removeSource, uniqueId, updateTarget } = await import('./workspace.js');
+  let ws = createWorkspace('W');
+  let r = addSource(ws, { name: 'counts.csv', sha256: 'a'.repeat(64) });
+  ws = r.ws;
+  assert.equal(r.id, 'counts.csv');
+  r = addSource(ws, { name: 'counts.csv', sha256: 'b'.repeat(64) });
+  assert.equal(r.id, 'counts.csv-2');
+  ws = removeSource(r.ws, 'counts.csv');
+  assert.deepEqual(ws.sources.map((s) => s.id), ['counts.csv-2']);
+  const t = { id: 'grb2', name: 'GRB2 SH3', sequenceType: 'protein', sequence: 'TYVQALFDF' };
+  const first = addTarget(ws, t);
+  const again = addTarget(first.ws, t);
+  assert.equal(again.existing, true);
+  assert.equal(again.ws, first.ws);
+  ws = updateTarget(first.ws, 'grb2', { offset: 158 });
+  assert.equal(ws.targets[0].offset, 158);
+  assert.equal(uniqueId('a b/c', [{ id: 'a-b-c' }]), 'a-b-c-2');
+});

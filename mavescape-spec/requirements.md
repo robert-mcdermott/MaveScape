@@ -35,17 +35,17 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| D1 | Read CSV and TSV (streaming, in a worker): delimiter, quoting, header, BOM and encoding detection; XLSX sheets | planned (wave 1; XLSX wave 3) |
-| D2 | Detect candidate variant identifier columns and numeric columns; preview counts, missingness and duplicates | planned (wave 1) |
-| D3 | Parse and validate MAVE-HGVS (nucleotide, splice and protein; single and multi-variants; synonymous and WT special values) against the target sequence, with a message per invalid row | planned (wave 1: protein and coding nucleotide substitutions; wave 3: the full MAVE-HGVS grammar) |
-| D4 | Never coerce silently: block scoring on ambiguous duplicate keys or non-numeric counts, listing rows | planned (wave 1) |
-| D5 | Keep original identifiers and columns verbatim beside the normalized fields | planned (wave 1) |
-| D6 | Reusable import templates (column mapping, roles, identifier columns) | planned (wave 1) |
-| D7 | Content-addressed library: tables stored once by SHA-256; workspaces survive moved files | planned (wave 1) |
+| D1 | Read CSV and TSV (streaming, in a worker): delimiter, quoting, header, BOM and encoding detection; XLSX sheets | done for CSV/TSV (wave 1, slice 3: CRLF, LF and CR line ends, gzip, validation `import`); XLSX planned (wave 3) |
+| D2 | Detect candidate variant identifier columns and numeric columns; preview counts, missingness and duplicates | done (wave 1, slice 3) |
+| D3 | Parse and validate MAVE-HGVS (nucleotide, splice and protein; single and multi-variants; synonymous and WT special values) against the target sequence, with a message per invalid row | done (wave 1, slice 3: the whole grammar, equal to mavehgvs 0.8.1 on 16,959 strings, validation `hgvs`; a lenient mode for lab and legacy forms). Nucleotide-to-protein mapping of imported c. names: wave 3 |
+| D4 | Never coerce silently: block scoring on ambiguous duplicate keys or non-numeric counts, listing rows | done (wave 1, slice 3: duplicates however written, non-numbers, negative counts and ragged rows block, by line; fixture `malformed-counts.csv`) |
+| D5 | Keep original identifiers and columns verbatim beside the normalized fields | done (wave 1, slice 3) |
+| D6 | Reusable import templates (column mapping, roles, identifier columns) | done (wave 1, slice 3: library records of kind import-template, applied when a table fits) |
+| D7 | Content-addressed library: tables stored once by SHA-256; workspaces survive moved files | done (wave 1, slices 1 and 3) |
 | D8 | Barcode tables with a barcode-to-variant map | planned (wave 2) |
 | D9 | One million rows imported in under 15 s, under 1 GB of memory | planned (wave 2, benchmarked) |
 | D10 | Variants beyond single substitutions: multi-substitutions, insertions, deletions, delins, stop, nucleotide-to-protein translation, splice; optional GA4GH VRS identifiers | planned (wave 3) |
-| D12 | Built-in import templates for the layouts in common use, none of them required: MaveDB score and count CSVs, DiMSum count tables, generic per-variant tables (HGVS or `A12V`-style identifiers); later dms_variants and Enrich2 count files | planned (wave 1; wave 2 for dms_variants and Enrich2) |
+| D12 | Built-in import templates for the layouts in common use, none of them required: MaveDB score and count CSVs, DiMSum count tables, generic per-variant tables (HGVS or `A12V`-style identifiers); later dms_variants and Enrich2 count files | done for MaveDB, DiMSum and generic tables (wave 1, slice 3); dms_variants and Enrich2 count files planned (wave 2) |
 | D13 | Standard files for everything that is not counts: targets from FASTA (single or multi-record) or GenBank; designs from a sample sheet (CSV/XLSX); one count table or one file per sample; barcode maps as CSV/TSV; structures as PDB, mmCIF or BinaryCIF; alignments as FASTA or A3M; custom tracks as CSV or GFF3; predictor scores as CSV/TSV. Every format documented in `docs/FORMATS.md`, with blank layouts on the Start page | planned (wave 1: FASTA, sample sheet, per-sample files, layouts; wave 3: GenBank, alignments, tracks; wave 4: structures) |
 | D11 | Hardened readers: fuzzed CSV, HGVS and archive parsing with no crash or hang and a clear message for every refusal | planned (wave 9) |
 
@@ -55,8 +55,8 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | --- | --- | --- |
 | E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | done (wave 1, slice 2: three MaveDB data sets of different designs, four designs, no data-set code; validation `designs`). Barcode libraries are planned (wave 2) |
 | E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | planned (wave 1: two-population; wave 2: time, bins, barcodes, conditions) |
-| E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | planned (wave 1) |
-| E4 | Role suggestions shown as suggestions, never applied silently | planned (wave 1) |
+| E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | partial (wave 1, slice 3: from FASTA files or pasted, type, translation, UniProt accession from the header; editing offsets and identifiers in the Experiment view, slice 4) |
+| E4 | Role suggestions shown as suggestions, never applied silently | done (wave 1, slice 3: suggested from column names, drafts equal the hand-written designs' shape on all four feasibility designs) |
 | E5 | A human-readable design summary and validation before scoring | planned (wave 1) |
 | E6 | Every material change undoable and recorded in a hash-chained history | planned (wave 1) |
 

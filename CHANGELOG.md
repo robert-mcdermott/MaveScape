@@ -31,6 +31,19 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   several experiments in one table and known differences between a construct and its reference.
   Every column of a table is a sample's or set aside with a reason: none is dropped silently.
 
+- **Import (wave 1, slice 3).** Open count or score tables (CSV or TSV, gzip too; per-sample
+  files together) and the target's FASTA. The import wizard says what it found (layout, rows,
+  delimiter, line ends, encoding), lets you choose the variant names and the count columns,
+  suggests each column's role from its name (input, output, time, bin, tile, replicate; shown,
+  never applied), checks every variant name against the target and lists, by line, every problem
+  that blocks scoring: the same variant on two rows (however written), counts that are not numbers
+  or are negative, rows of the wrong width. Missing counts are never read as 0. Tables are kept in
+  the library by SHA-256; a mapping can be saved as a template. MaveDB's tables, DiMSum's (whose
+  variants are whole sequences, named against the wild type) and generic tables are recognized.
+- **MAVE-HGVS** (`web/lib/hgvs.js`): the whole grammar, agreeing with mavehgvs 0.8.1 on every one of
+  16,959 test strings, and a lenient mode for lab and legacy names (A12V, `_wt`, `p.Ala12*`,
+  repeated or unsorted components), which keeps the original beside the canonical name.
+
 ### Validation
 
 - Go tests of the host: security headers, foreign Host headers and cross-origin requests refused,
@@ -51,3 +64,10 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   generated from MaveScape's designs) equal the scoring formulas MaveScape will use, computed
   independently, to 5 × 10⁻¹³; Enrich2 2.0.2 reproduces the BRCA1 replicate scores published in 2017
   to the same precision, which confirms their method (19 checks).
+- `validation/run.mjs hgvs` (wave 1, slice 3): the MAVE-HGVS parser against mavehgvs 0.8.1 on
+  16,959 strings: the same decision, reason, canonical form and parts for every one.
+- `validation/run.mjs import`: the four feasibility tables import with every variant name valid
+  against its target; 13,757 legacy BRCA1 names read leniently; designs drafted from column names
+  have the hand-written designs' shape; shuffled rows and columns, text read in parts and per-sample
+  files joined give the same counts; DiMSum's demo is named against its wild type; a fixture with
+  one problem of each kind raises exactly those, on their lines (29 checks).

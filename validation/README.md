@@ -11,6 +11,8 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `accessibility` | WCAG AA contrast of every text-on-surface pair in both themes, with color-vision-friendly colors off and on; palettes, status colors and score maps apart in protanopia, deuteranopia and tritanopia (Machado et al. 2009, CIEDE2000) | `web/styles.css` |
 | `designs` | The design schema on three public data sets of different designs: each design satisfies `docs/schemas/design.v1.json` and `validateDesign` against its table, accounts for every column, and agrees with the data (copied columns identical, the wild type counted everywhere, every variant's reference residue the target's, tiles holding the variants counted in them) | MaveDB, external |
 | `enrich2` | Enrich2 2.0.2's scores of those data (`reference/enrich2.json`) against the formulas of `mavescape-spec/research.md` §2.1 computed independently, and the published BRCA1 scores against Enrich2 2.0.2 | MaveDB, external; `reference/enrich2.json` |
+| `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
+| `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 
 ## Public data (`sources.json`)
 
@@ -19,6 +21,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `mavedb-grb2-sh3` (urn:mavedb:00000835-a-1) | two populations × 3 replicates | the common case; DiMSum behind the published scores |
 | `mavedb-brca1-ring` (urn:mavedb:00000003-a-1, -a-2) | time series: 2 libraries × 3 replicates × 6 rounds (E2 binding), and 2 × 3 × 4 non-uniform times (Y2H), in one table | shared inputs, two assays in one table, legacy `_wt`/`_sy` rows, a DNA target with an offset and a known difference from UniProt; Enrich2 behind the published scores |
 | `mavedb-factor9` (urn:mavedb:00001200-a-1) | FACS bins: 3 overlapping tiles × 3 replicates × 4 bins | tiled libraries, VAMP-seq-style weights |
+| `dimsum-demo` (lehner-lab/DiMSum `inst/demo`, MIT) | 40,591 whole nucleotide sequences × 4 inputs and 4 outputs; its design file | DiMSum's layout (variants as sequences, named against the 126-nt wild type); CR-only line ends |
 
 All are CC0 on MaveDB. MaveDB's API writes these CSV files identically on every request (checked
 2026-10-08), with Windows line ends (CRLF) and `NA` for missing values; counts are written as
@@ -44,6 +47,21 @@ specific to any of them. What they asked of the schema (wave 1, slice 2):
 - **Non-uniform times, and replicates with different times.** The two Y2H libraries were sampled
   at different times; the design allows it and warns that the replicates are combined only on what
   they share.
+
+## The MAVE-HGVS reference (`reference/mavehgvs.json`)
+
+Made by
+
+```sh
+uv run --python 3.12 --with mavehgvs==0.8.1 python validation/reference/generate_mavehgvs.py
+```
+
+from a corpus of 16,959 strings: every string literal of mavehgvs's own tests at v0.8.1 (as
+written, and with each prefix in front), identifiers from the feasibility data (all of GRB2, a fixed
+sample of the others), 3,000 variants generated from the grammar and 4,000 single-character edits
+(seed 20261008). mavehgvs accepts 7,741 and refuses 9,218 for nine reasons; for every valid string
+its canonical form is the string itself. `web/lib/hgvs.js` is written to the same grammar and
+rules, not ported from mavehgvs's regular expressions, and agrees on every string.
 
 ## Reference outputs (`reference/`)
 

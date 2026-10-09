@@ -72,6 +72,26 @@
      "sha256": "80a405e84a5a1c69aa53e73a9e83f74f6190fc85f09cc1ab5cbdc77390cedfba"
     }
    ]
+  },
+  "dimsum-demo": {
+   "title": "DiMSum's demo variant counts (TDP-43, lehner-lab/DiMSum inst/demo)",
+   "description": "DiMSum's own count table: 40,591 whole nucleotide sequences (lower case; CRLF line ends, the last line unterminated) × 4 input and 4 output samples, and its experiment design file (old Mac line ends, CR only). The wild type, 126 nt (42 codons), is set in DiMSum's R/dimsum.R for --runDemo.",
+   "source": "https://github.com/lehner-lab/DiMSum (Faure et al., Genome Biology 2020, doi:10.1186/s13059-020-02091-3)",
+   "license": "MIT (DiMSum)",
+   "base": "https://raw.githubusercontent.com/lehner-lab/DiMSum/a441cdfbdc50a68631b87cd1c1dbcc00ea86c859/inst/demo/",
+   "wildType": "GGTAATAGCAGAGGGGGTGGAGCTGGTTTGGGAAACAATCAAGGTAGTAATATGGGTGGTGGGATGAACTTTGGTGCGTTCAGCATTAATCCAGCCATGATGGCTGCCGCCCAGGCAGCACTACAG",
+   "files": [
+    {
+     "path": "countFile_Toy.txt",
+     "size": 5848421,
+     "sha256": "7308ede4320f88a78b4abbc5e2bfa8da143a8ba3640ae5d76768d5b0451d38af"
+    },
+    {
+     "path": "experimentDesign_Toy.txt",
+     "size": 646,
+     "sha256": "799c4565533e9fd69e0afdd2b0849e88e340b2e1afb9cdb062121825414e71f8"
+    }
+   ]
   }
  }
 }

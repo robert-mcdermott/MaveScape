@@ -78,3 +78,35 @@ export function rename(ws, name) {
 export function isEmptyWorkspace(ws) {
   return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length;
 }
+
+// An id not yet used in a list: the base, or the base with a number.
+export function uniqueId(base, list) {
+  const taken = new Set(list.map((x) => x.id));
+  const clean = String(base).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 56) || 'item';
+  if (!taken.has(clean)) return clean;
+  let n = 2;
+  while (taken.has(`${clean}-${n}`)) n += 1;
+  return `${clean}-${n}`;
+}
+
+// Adds an imported table (a source: file, SHA-256, layout, mapping, summary; wave 1 slice 3).
+export function addSource(ws, source) {
+  const id = uniqueId(source.id ?? source.name ?? 'table', ws.sources);
+  return { ws: touch({ ...ws, sources: [...ws.sources, { ...source, id }] }), id };
+}
+
+export function removeSource(ws, id) {
+  return touch({ ...ws, sources: ws.sources.filter((s) => s.id !== id) });
+}
+
+// Adds a target; a target with the same sequence and name already there is returned instead.
+export function addTarget(ws, target) {
+  const same = ws.targets.find((t) => t.sequence === target.sequence && t.name === target.name);
+  if (same) return { ws, id: same.id, existing: true };
+  const id = uniqueId(target.id ?? target.name ?? 'target', ws.targets);
+  return { ws: touch({ ...ws, targets: [...ws.targets, { ...target, id }] }), id, existing: false };
+}
+
+export function updateTarget(ws, id, patch) {
+  return touch({ ...ws, targets: ws.targets.map((t) => (t.id === id ? { ...t, ...patch, id } : t)) });
+}

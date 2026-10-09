@@ -1,0 +1,17 @@
+# One problem of each kind the importer must find (validation suite `import`). Target: MSKGEELFTG.
+variant,input_rep1,output_rep1,input_rep2,output_rep2,notes
+p.=,1000,1100,900,950,wild type
+p.Ser2Ala,50,10,45,12,
+K3R,30,28,31,25,one-letter name: read leniently
+p.Ser2Ala,51,11,46,13,the same variant again
+p.Ala4Val,20,5,22,6,reference residue is not the target's (Gly)
+p.Gly11Ala,5,1,5,1,beyond the target
+p.Xaa5Val,5,1,5,1,not MAVE-HGVS
+p.Glu5Asp,ten,3,9,2,a count that is not a number
+p.Glu6Lys,7,-2,8,3,a negative count
+p.Leu7Pro,7,2.5,8,3,a count with a fraction
+p.Phe8Ser,NA,4,NA,5,missing in the inputs
+,3,3,3,3,no variant name
+p.Thr9Ala,5,6,7
+p.[Gly10Asp;Phe8Leu],3,1,2,1,a multi-variant out of order: read leniently
+_wt,1000,1100,900,950,the wild type again in Enrich2's form

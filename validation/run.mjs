@@ -5,8 +5,8 @@
 //
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
-// Suites: accessibility, designs (external data), enrich2 (external data); all by default. Exits
-// with status 1 when a check fails.
+// Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
+// data); all by default. Exits with status 1 when a check fails.
 //
 // Suites marked "external data" need files that node validation/fetch.mjs downloads into
 // validation/cache/ (wave 1, slice 2); without them the suite is skipped, and fails with
@@ -20,6 +20,13 @@ import { DESIGN_CASES, dataChecks, readDesign, readTable } from './design-cases.
 import { checkSchema } from './json-schema.mjs';
 import { enrich2Combination, normalizers, ratioScores, regressionScores, replicateCounts } from './enrich2-formulas.mjs';
 import { summarizeDesign, validateDesign } from '../web/lib/design.js';
+import { parseHgvs, formatPosition } from '../web/lib/hgvs.js';
+import { createTableParser, parseTable } from '../web/lib/csv.js';
+import { detectLayout, draftDesign, namesFromSequences, reviewImport, suggestRoles } from '../web/lib/importer.js';
+import { buildCountSet, joinCountTables } from '../web/lib/counts.js';
+import { KIND_NAMES } from '../web/lib/variants.js';
+import { parseFasta, targetFromSequence } from '../web/lib/target.js';
+import { createRandom, shuffle } from '../web/lib/random.js';
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
 
@@ -49,7 +56,7 @@ function dataset(name) {
     return !existsSync(path) || statSync(path).size !== f.size;
   });
   if (missing.length) throw new MissingData(`${missing.length} of ${set.files.length} files of "${name}" are missing; run node validation/fetch.mjs ${name}`);
-  return { text: (path) => readFileSync(join(root, path), 'utf8') };
+  return { text: (path) => readFileSync(join(root, path), 'utf8'), bytes: (path) => new Uint8Array(readFileSync(join(root, path))), set };
 }
 
 const tables = new Map();
@@ -279,6 +286,167 @@ const suites = {
       b.push(Number(theirs));
     }
     check('enrich2', `GRB2 SH3: Enrich2 log ratios against the published DiMSum scores (another model; ${a.length} variants), Pearson r`, pearson(a, b).toFixed(4), pearson(a, b) > 0.9, '> 0.9 (known difference)');
+  },
+
+  // web/lib/hgvs.js against mavehgvs 0.8.1 (reference/mavehgvs.json, made by
+  // generate_mavehgvs.py): the same decision, reason, canonical form, types, positions, sequences
+  // and flags for every string of the corpus.
+  hgvs() {
+    const reference = JSON.parse(readFileSync(new URL('./reference/mavehgvs.json', import.meta.url), 'utf8'));
+    check('hgvs', 'reference made with', `mavehgvs ${reference.versions.mavehgvs} (fqfa ${reference.versions.fqfa}); ${reference.counts.strings} strings, ${reference.counts.valid} valid`, reference.versions.mavehgvs === '0.8.1', 'mavehgvs 0.8.1');
+    const disagree = { decision: [], reason: [], canonical: [], parts: [] };
+    const sequenceOf = (c) => (c.type === 'sub' ? [c.ref, c.alt] : c.type === 'ins' || c.type === 'delins' ? c.seq : c.type === 'equal' ? c.equal : null);
+    for (const r of reference.results) {
+      const p = parseHgvs(r.s);
+      if (p.ok !== r.ok) {
+        disagree.decision.push(`${JSON.stringify(r.s)} (mavehgvs ${r.ok ? 'accepts' : 'refuses'})`);
+        continue;
+      }
+      if (!r.ok) {
+        if (p.error !== r.error) disagree.reason.push(`${JSON.stringify(r.s)}: "${p.error}" for "${r.error}"`);
+        continue;
+      }
+      if (p.canonical !== r.canonical) disagree.canonical.push(`${r.s} → ${p.canonical}`);
+      const positions = p.components.map((c) => (c.start ? (c.end ? [formatPosition(c.start), formatPosition(c.end)] : formatPosition(c.start)) : null));
+      const same = p.prefix === r.prefix && (p.target ?? null) === (r.target ?? null) && JSON.stringify(p.components.map((c) => c.type)) === JSON.stringify(r.types)
+        && JSON.stringify(positions) === JSON.stringify(r.positions) && JSON.stringify(p.components.map(sequenceOf)) === JSON.stringify(r.sequences)
+        && p.synonymous === r.synonymous && p.identical === r.identical;
+      if (!same) disagree.parts.push(r.s);
+    }
+    const show = (list) => (list.length ? `${list.length}: ${list.slice(0, 3).join('; ')}` : '0');
+    check('hgvs', `valid or not, as mavehgvs decides (${reference.results.length} strings)`, `${show(disagree.decision)} disagree`, !disagree.decision.length, '0');
+    check('hgvs', `the reason for refusing, word for word (${reference.counts.invalid} refused)`, `${show(disagree.reason)} differ`, !disagree.reason.length, '0');
+    check('hgvs', `the canonical form (${reference.counts.valid} valid)`, `${show(disagree.canonical)} differ`, !disagree.canonical.length, '0');
+    check('hgvs', 'the prefix, target, variant types, positions, sequences, synonymous and identical flags', `${show(disagree.parts)} differ`, !disagree.parts.length, '0');
+  },
+
+  // Import (wave 1, slice 3): the feasibility tables, DiMSum's demo and a table with one problem
+  // of each kind, through the importer as the wizard uses it.
+  import() {
+    const designs = Object.fromEntries(DESIGN_CASES.map((c) => [c.name, readDesign(c.design)]));
+    const cases = [
+      { name: 'GRB2 SH3', dataset: 'mavedb-grb2-sh3', path: 'counts.csv', target: designs['grb2-sh3'].targets[0], expect: { layout: 'mavedb-counts', column: 'hgvs_pro', valid: 1121, lenient: 0 } },
+      { name: 'BRCA1 RING, amino acids', dataset: 'mavedb-brca1-ring', path: 'aa/counts.csv', target: designs['brca1-ring-e2'].targets[0], expect: { layout: 'mavedb-counts', column: 'hgvs_pro', valid: 12314, lenient: 2 } },
+      { name: 'BRCA1 RING, nucleotides', dataset: 'mavedb-brca1-ring', path: 'nt/counts.csv', target: designs['brca1-ring-e2'].targets[0], expect: { layout: 'mavedb-counts', column: 'hgvs_nt', valid: 20723, lenient: 1 } },
+      { name: 'factor IX', dataset: 'mavedb-factor9', path: 'counts.csv', target: designs.factor9.targets[0], expect: { layout: 'mavedb-counts', column: 'hgvs_pro', valid: 9682, lenient: 0 } },
+    ];
+    for (const c of cases) {
+      const bytes = dataset(c.dataset).bytes(c.path);
+      const t0 = performance.now();
+      const table = parseTable(bytes);
+      const ms = performance.now() - t0;
+      const layout = detectLayout(table);
+      check('import', `${c.name}: read (${(bytes.length / 1e6).toFixed(1)} MB, ${table.rows} rows × ${table.columns.length} columns, ${table.lineEnd}) in ${ms.toFixed(0)} ms; layout`, `${layout.layout}, variants in ${layout.variantColumn} (${layout.level}), ${layout.countColumns.length} count columns`, layout.layout === c.expect.layout && layout.variantColumn === c.expect.column && table.lineEnd === 'crlf' && !table.diagnostics.length, `${c.expect.layout}, ${c.expect.column}, no diagnostics`);
+      const review = reviewImport(table, { variantColumn: layout.variantColumn, level: layout.level, countColumns: layout.countColumns, target: c.target });
+      const s = review.summary;
+      check('import', `${c.name}: every variant name valid against the design's target`, `${s.valid} valid, ${s.warning} read leniently, ${s.invalid} not valid; ${Object.entries(s.byKind).map(([k, n]) => `${n} ${k}`).join(', ')}`, s.valid === c.expect.valid && s.warning === c.expect.lenient && s.invalid === 0, `${c.expect.valid} valid, ${c.expect.lenient} lenient, 0 invalid`);
+      check('import', `${c.name}: nothing blocks scoring`, review.blocking.map((b) => b.message).join(' | ') || 'nothing', !review.blocking.length, 'nothing');
+      const counts = review.countSet;
+      const missing = counts.samples.reduce((a, x) => a + x.missing, 0);
+      const zeros = counts.samples.reduce((a, x) => a + x.zeros, 0);
+      const naInFile = table.columns.filter((col) => layout.countColumns.includes(col.name)).reduce((a, col) => a + col.values.filter((v) => v === 'NA').length, 0);
+      check('import', `${c.name}: counts written NA are missing and explicit zeros stay 0`, `${missing} missing (${naInFile} NA in the file), ${zeros} zeros`, missing === naInFile, 'missing = NA cells');
+    }
+
+    // The designs drafted from column names, against the designs written by hand in slice 2.
+    const draftFor = (path, design) => {
+      const table = parseTable(dataset(design.source.mavedb.includes('835') ? 'mavedb-grb2-sh3' : design.source.mavedb.includes('1200') ? 'mavedb-factor9' : 'mavedb-brca1-ring').bytes(path));
+      const columns = design.samples.flatMap((x) => x.columns).concat((design.ignoredColumns ?? []).filter((x) => x.copyOf).map((x) => x.column));
+      return { table, ...draftDesign(table, suggestRoles(columns), { variantColumn: design.variants.column, level: design.variants.level, target: design.targets[0] }) };
+    };
+    const shape = (d) => ({
+      model: d.model,
+      replicates: d.replicates.length,
+      samples: d.samples.length,
+      shared: summarizeDesign(d).counts.sharedSamples,
+      points: [...new Set(d.replicates.map((r) => (r.timepoints ?? r.bins ?? [1, 2]).length))].join(','),
+      tiles: (d.library?.tiles ?? []).map((t) => `${t.start}-${t.end}`).join(' '),
+    });
+    for (const [name, path] of [['grb2-sh3', 'counts.csv'], ['brca1-ring-e2', 'aa/counts.csv'], ['brca1-ring-y2h', 'aa/counts.csv'], ['factor9', 'counts.csv']]) {
+      const { table, design } = draftFor(path, designs[name]);
+      const drafted = shape(design);
+      const written = shape(designs[name]);
+      const result = validateDesign({ ...design, ignoredColumns: [...(design.ignoredColumns ?? []), ...(designs[name].ignoredColumns ?? []).filter((x) => !x.copyOf)] }, { columns: table.columns.map((x) => x.name) });
+      check('import', `${name}: the design drafted from column names has the hand-written design's shape`, `${JSON.stringify(drafted)}${result.ok ? '' : `; ${result.errors[0].message}`}`, JSON.stringify(drafted) === JSON.stringify(written) && result.ok, JSON.stringify(written));
+    }
+
+    // Row and column order do not matter (T1: property).
+    const grb2 = parseTable(dataset('mavedb-grb2-sh3').bytes('counts.csv'));
+    const byVariant = (table) => {
+      const review = reviewImport(table, { variantColumn: 'hgvs_pro', level: 'protein', countColumns: ['input_count_rep1', 'input_count_rep2', 'input_count_rep3', 'output_count_rep1', 'output_count_rep2', 'output_count_rep3'], target: designs['grb2-sh3'].targets[0] });
+      const out = new Map();
+      review.variants.key.forEach((key, i) => out.set(key, review.countSet.samples.map((x) => `${x.column}=${x.counts[i]}`).sort().join(' ')));
+      return out;
+    };
+    const random = createRandom(11);
+    const order = shuffle([...Array(grb2.columns.length).keys()], random);
+    const rows = shuffle([...Array(grb2.rows).keys()], random);
+    const lines = [order.map((j) => grb2.columns[j].name).join(','), ...rows.map((r) => order.map((j) => grb2.columns[j].values[r]).join(','))];
+    const shuffled = byVariant(parseTable(`${lines.join('\n')}\n`));
+    const original = byVariant(grb2);
+    const differing = [...original].filter(([k, v]) => shuffled.get(k) !== v);
+    check('import', 'GRB2 with rows and columns shuffled imports the same counts for every variant', `${original.size - differing.length} of ${original.size} variants the same`, !differing.length && shuffled.size === original.size, 'all');
+    const parser = createTableParser();
+    const text = dataset('mavedb-grb2-sh3').text('counts.csv');
+    for (let i = 0; i < text.length; i += 997) parser.push(text.slice(i, i + 997));
+    const parts = parser.finish();
+    check('import', 'GRB2 read in parts of 997 characters (a quote or CRLF across parts) equals GRB2 read at once', `${parts.rows} rows`, JSON.stringify(parts.columns.map((x) => x.values)) === JSON.stringify(grb2.columns.map((x) => x.values)), 'identical');
+
+    // Per-sample files: GRB2 split into one file per sample (each listing only the variants it
+    // counts) and joined again.
+    const files = ['input_count_rep1', 'output_count_rep1', 'input_count_rep2'].map((name) => {
+      const variant = grb2.columns.find((x) => x.name === 'hgvs_pro').values;
+      const values = grb2.columns.find((x) => x.name === name).values;
+      const body = variant.map((v, i) => (values[i] === 'NA' ? null : `${v}\t${values[i]}`)).filter(Boolean);
+      return { name, variantColumn: 'variant', countColumns: ['count'], table: parseTable(`variant\tcount\n${body.join('\n')}\n`) };
+    });
+    const joined = joinCountTables(files);
+    const joinedSet = buildCountSet(joined.table, { variantColumn: 'variant', countColumns: files.map((f) => f.name) });
+    const originalSet = buildCountSet(grb2, { variantColumn: 'hgvs_pro', countColumns: files.map((f) => f.name) });
+    const index = new Map(joined.table.columns[0].values.map((v, i) => [v, i]));
+    let mismatches = 0;
+    grb2.columns.find((x) => x.name === 'hgvs_pro').values.forEach((v, i) => {
+      originalSet.samples.forEach((sample, j) => {
+        const a = sample.counts[i];
+        const b = index.has(v) ? joinedSet.samples[j].counts[index.get(v)] : Number.NaN;
+        if (!(a === b || (Number.isNaN(a) && Number.isNaN(b)))) mismatches += 1;
+      });
+    });
+    check('import', 'GRB2 split into per-sample files and joined: every count the same, absent as missing (not 0)', `${mismatches} counts differ`, mismatches === 0, '0');
+
+    // DiMSum's demo: whole sequences named against the wild type; its design file with CR line ends.
+    const demo = dataset('dimsum-demo');
+    const toy = parseTable(demo.bytes('countFile_Toy.txt'));
+    const toyLayout = detectLayout(toy);
+    const wildType = demo.set.wildType;
+    const named = namesFromSequences(toy.columns.find((x) => x.name === 'nt_seq').values, wildType);
+    const kinds = {};
+    const variants = reviewImport({ ...toy, columns: [...toy.columns, { name: 'hgvs_pro', values: named.pro, type: 'text' }] }, { variantColumn: 'hgvs_pro', level: 'protein', countColumns: toyLayout.countColumns, target: targetFromSequence({ id: 'tdp43', description: '', sequence: wildType }).target });
+    variants.variants.kind.forEach((k) => { kinds[KIND_NAMES[k]] = (kinds[KIND_NAMES[k]] ?? 0) + 1; });
+    const ntNamed = parseTable(`v\n${named.nt.join('\n')}\n`);
+    check('import', `DiMSum's demo: ${toy.rows} sequences in ${toyLayout.layout} layout, ${toyLayout.countColumns.length} samples, named against its 126-nt wild type`, `${named.problems.length} unnamed; ${Object.entries(kinds).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ')}`, toyLayout.layout === 'dimsum' && toyLayout.countColumns.length === 8 && !named.problems.length && named.nt.filter((n) => n === 'c.=').length === 1, 'all named, one wild type');
+    check('import', 'DiMSum\'s demo: the nucleotide names are valid MAVE-HGVS against the wild type', `${variants.summary.invalid} protein names invalid; ${named.nt.filter((n) => !parseHgvs(n).ok).length} nucleotide names invalid of ${ntNamed.rows}`, variants.summary.invalid === 0 && named.nt.every((n) => parseHgvs(n).ok), '0');
+    const sheet = parseTable(demo.bytes('experimentDesign_Toy.txt'));
+    check('import', 'DiMSum\'s experiment design file, with CR line ends, read as a table', `${sheet.lineEnd}, ${sheet.rows} rows: ${sheet.columns.find((x) => x.name === 'sample_name')?.values.join(', ')}`, sheet.lineEnd === 'cr' && sheet.rows === 8, 'CR, 8 samples');
+
+    // Legacy names in public data: BRCA1's protein column of its nucleotide table (MaveDB's
+    // oldest record) holds names mavehgvs now refuses; lenient reading takes them in.
+    const legacyNames = [...new Set(parseTable(dataset('mavedb-brca1-ring').bytes('nt/counts.csv')).columns.find((x) => x.name === 'hgvs_pro').values)];
+    const refused = legacyNames.filter((n) => !parseHgvs(n).ok);
+    const read = refused.filter((n) => parseHgvs(n, { mode: 'lenient' }).ok);
+    const reasons = {};
+    for (const n of refused) reasons[parseHgvs(n).error] = (reasons[parseHgvs(n).error] ?? 0) + 1;
+    check('import', 'BRCA1\'s legacy protein names (urn:mavedb:00000003-a-1) that strict MAVE-HGVS refuses are read leniently', `${read.length} of ${refused.length} (of ${legacyNames.length} distinct names); refused for: ${Object.entries(reasons).map(([k, v]) => `${v} ${k}`).join('; ')}${refused.length > read.length ? `; still refused: ${refused.filter((n) => !read.includes(n)).slice(0, 3).join(', ')}` : ''}`, read.length === refused.length && refused.length > 0, 'all');
+
+    // A table with one problem of each kind.
+    const table = parseTable(new Uint8Array(readFileSync(new URL('./fixtures/malformed-counts.csv', import.meta.url))));
+    const target = targetFromSequence(parseFasta(readFileSync(new URL('./fixtures/malformed-counts.fasta', import.meta.url), 'utf8'))[0]).target;
+    const layout = detectLayout(table);
+    const review = reviewImport(table, { variantColumn: layout.variantColumn, level: layout.level, countColumns: layout.countColumns, target });
+    const found = [...review.blocking.map((p) => `blocks:${p.code}${p.lines ? `@${p.lines.join('+')}` : ''}`), ...review.warnings.map((p) => `warns:${p.code}${p.lines ? `@${p.lines.join('+')}` : ''}`)].sort();
+    const expected = ['blocks:duplicate-variants@3+17+4+6', 'blocks:negative@11', 'blocks:not-numeric@10', 'blocks:ragged-rows', 'warns:invalid-variants@7+8+9+14', 'warns:non-integer'].sort();
+    check('import', 'the malformed fixture: every planted problem found, on its line, and nothing else', found.join(', '), JSON.stringify(found) === JSON.stringify(expected), expected.join(', '));
+    check('import', 'the malformed fixture: lenient names (K3R, an unsorted multi-variant, _wt) read and kept beside their originals', `${review.summary.warning} read leniently: ${[2, 13, 14].map((r) => `${review.variants.original[r]} → ${review.variants.key[r]}`).join(', ')}`, review.summary.warning === 3 && review.variants.key[14] === 'p.=', '3');
   },
 };
 

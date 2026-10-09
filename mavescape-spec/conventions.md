@@ -129,13 +129,28 @@ components, `p.A12V`, `A12V`, `*`), which normalizes to the strict form and keep
 The model never assumes single amino-acid substitutions. The map view specializes in them and
 lists everything else (multi-substitutions, indels, splice variants) in a table beside it.
 
+### Tables (`web/lib/csv.js`)
+
+`{ columns: [{ name, index, values: string[] /* as written */, numeric: Float64Array | null /* when
+every present value is a number; missing NaN */, type: 'number' | 'mixed' | 'text' | 'empty',
+integer, missing, missingTokens, nonNumeric: [{ line, value }], nonNumericCount }], rows,
+lineOfRow: Int32Array, delimiter, lineEnd: 'crlf' | 'lf' | 'cr', header, encoding, diagnostics:
+[{ level, code, message, line?, column? }] }`. Every column keeps its text, so originals are exported
+as written.
+
 ### Count sets (`web/lib/counts.js`)
 
-An immutable import of one table:
-`{ id, source: { fileName, sha256, size, importTemplate }, rows, variantIndex: Int32Array,
-columns: [{ name, original, type }], samples: [{ id, column, total, observed }], counts:
-Float64Array[] /* one per sample; NaN = missing */, barcodes?: { barcode: string[], variantRow:
-Int32Array } }`. Original columns that are not counts are kept, as strings, for export.
+`buildCountSet(table, { variantColumn, countColumns }) → { rows, samples: [{ column, counts:
+Float64Array /* NaN = missing */, total, observed, missing, zeros, nonInteger }], problems }`.
+A count set is built from the stored table when needed; the workspace keeps the table's SHA-256
+and the mapping.
+
+### Sources (the workspace's imported tables)
+
+`{ id, name, fileName, sha256, size, files: [{ fileName, sha256, size }], rows, columns: [{ name,
+type, missing }], encoding, delimiter, lineEnd, layout, mapping: { variantColumn, level, mode,
+countColumns, scoreColumns, absentMeans, derivedNames, template }, target, roleSuggestions,
+summary, problems: { blocking: [text], warnings: [text] }, imported }`.
 
 ### Design (`mavescape-design` v1, `docs/schemas/design.v1.json`, `web/lib/design.js`)
 

@@ -13,6 +13,7 @@ import { openPalette } from './ui/palette.js';
 import { WorkerClient } from './ui/workers.js';
 import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js';
 import { createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWorkspace } from './lib/workspace.js';
+import { installImport } from './ui/import.js';
 
 const VERSION = '0.1.0';
 
@@ -118,13 +119,15 @@ async function start() {
     app.workers[name] ??= new WorkerClient(`../workers/${name}-worker.js`, { max: 1 });
     return app.workers[name];
   };
-  // Readers of opened files by kind, registered by the slices that build them: kind → async (item).
+  // Readers of opened files by kind, registered by the slices that build them: kind → async
+  // (items), with all the files of that kind opened together (per-sample tables are joined).
   app.importers = new Map();
 
   app.sidebar = mountSidebar(app);
   app.inspector = mountInspector(app);
   app.drawer = mountDrawer(app);
   app.log = (message) => app.drawer.log(message);
+  installImport(app);
 
   // --- Views -------------------------------------------------------------------------------------
 
@@ -200,19 +203,27 @@ async function start() {
     const items = files.map((file, order) => ({ file, name: file.name, folder: file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(-2, -1)[0] : file.folder ?? null, order }));
     const unread = new Map();
     const unknown = [];
+    const byKind = new Map();
     for (const item of items) {
       const kind = fileKind(item.name);
-      const importer = app.importers.get(kind);
-      if (!importer) {
-        if (kind) unread.set(kind, (unread.get(kind) ?? 0) + 1);
-        else unknown.push(item.name);
+      if (!kind) {
+        unknown.push(item.name);
         continue;
       }
+      if (!app.importers.has(kind)) {
+        unread.set(kind, (unread.get(kind) ?? 0) + 1);
+        continue;
+      }
+      if (!byKind.has(kind)) byKind.set(kind, []);
+      byKind.get(kind).push(item);
+    }
+    // Sequences first, so a table opened with its target's FASTA finds the target.
+    for (const kind of [...byKind.keys()].sort((a, b) => (a === 'sequence' ? -1 : b === 'sequence' ? 1 : 0))) {
       try {
-        await importer(item);
+        await app.importers.get(kind)(byKind.get(kind));
       } catch (error) {
-        toast(`${item.name}: ${error.message}`, { kind: 'error' });
-        app.log(`${item.name}: ${error.message}`);
+        toast(error.message, { kind: 'error' });
+        app.log(error.message);
       }
     }
     const messages = [];

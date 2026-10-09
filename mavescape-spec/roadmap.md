@@ -120,27 +120,46 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
        (slice 3) handles all three.
      - Factor IX's published scores set the median of the lowest 5% of missense variants to 0,
        not the nonsense median: rescaling conventions must be parameters (S11).
-3. **Import (D1–D7, E3, E4).** `web/lib/csv.js` (streaming, worker `csv-worker.js`;
-   delimiter/quote/BOM/encoding detection, typed numeric views, row diagnostics),
-   `web/lib/hgvs.js` (MAVE-HGVS for protein and coding nucleotide substitutions, synonymous and
-   WT forms, `p.=`, `p.(=)`, multi-variants of substitutions; strict and lenient modes; common
-   lab forms such as `p.A12V`, `A12V` and `*` normalized with the original kept; checked against
-   `mavehgvs` test cases committed in `validation/reference/mavehgvs.json`), `web/lib/variants.js` (columnar variants, kinds,
-   positions, validation against the target: wrong reference residue, out of range),
-   `web/lib/target.js` (DNA or protein from a FASTA file or paste, single or multi-record for
-   several targets or tiles; translation; offset), `web/lib/counts.js` (count sets, missing ≠ 0;
-   one table with a column per sample, or several files with one sample each, as many pipelines
-   write them, joined on the variant column). The import wizard: preview, detected identifier and count columns,
-   missingness, duplicates, suggested roles shown as suggestions, blocking problems listed by
-   row; the mapping saved as an import template. Built-in templates (D12) recognize the layouts
-   in common use, so most files need no mapping: MaveDB score and count CSVs (`accession`,
-   `hgvs_nt`, `hgvs_splice`, `hgvs_pro`, `score`, free count columns), DiMSum's variant count
-   table (`nt_seq` plus one column per sample, WT found from the target), and the generic "one
-   row per variant, one column per sample" table with HGVS or `A12V`-style identifiers. MaveDB is
-   one source among these, not a requirement.
-   - Validation: unit tests per module; the three feasibility tables and a malformed-variants
-     fixture import with the expected diagnostics; row-order and column-order invariance; DiMSum's
-     own demo count table (MIT) imports with its design.
+3. **Import (D1–D7, D12, E3, E4): done.** `web/lib/csv.js` (streaming; encoding by BOM, UTF-8 or
+   Windows-1252; delimiter sniffing; RFC 4180 quoting across parts; CRLF, LF and CR line ends;
+   header and comment lines; strict numbers, missing never 0, every irregular cell listed by line)
+   and `web/workers/csv-worker.js` (16 MB parts, gzip); `web/lib/hgvs.js`, an independent
+   MAVE-HGVS parser (every prefix and variant type, multi-variants, mavehgvs's rules and messages)
+   with a lenient mode (one-letter names, `_wt`/`_sy`, `*`, repeated or unsorted components,
+   equalities in multi-variants, predicted forms), and checks against a target;
+   `web/lib/variants.js` (columnar variants: canonical key, kind, position, residues, status,
+   messages; duplicates however written), `web/lib/target.js` (FASTA, translation, placing a
+   target in its reference), `web/lib/counts.js` (count sets; identical columns; per-sample files
+   joined, with what absence means chosen by the user), `web/lib/importer.js` (MaveDB, DiMSum and
+   generic layouts; role suggestions from column names; designs drafted from them; the review of
+   blocking problems; import templates). The import wizard (`web/ui/import.js`): what was found,
+   the mapping, suggested roles (shown, not applied), the target (FASTA file or paste), checks and
+   the first rows; tables stored in the library by SHA-256; FASTA files opened as targets; the
+   inspector describes tables and targets. 66 unit tests; suites `hgvs` (5) and `import` (29).
+   - Validation: on 16,959 strings (mavehgvs's own test cases, public identifiers, generated
+     variants and near-misses; `reference/mavehgvs.json`, made by `generate_mavehgvs.py` with
+     mavehgvs 0.8.1), `hgvs.js` makes the same decision, gives the same reason word for word, writes
+     the same canonical form and finds the same parts as mavehgvs, for every one. The four
+     feasibility tables import with every name valid against the designs' targets (GRB2 1,121;
+     BRCA1 12,316 amino-acid and 20,724 nucleotide names; factor IX 9,682), nothing blocking, NA
+     cells missing and zeros 0; the 13,757 legacy BRCA1 protein names strict MAVE-HGVS refuses are
+     read leniently. Rows and columns shuffled, text read in 997-character parts, and GRB2 split into
+     per-sample files and joined give the same counts. DiMSum's demo (40,591 sequences) is named
+     against its wild type with every name valid, and its CR-terminated design file reads. A fixture
+     with one problem of each kind (`fixtures/malformed-counts.csv`) raises exactly those problems,
+     on their lines. In the window: GRB2 and its FASTA open together, import and save; DiMSum's
+     5.6 MB demo reads in the worker and is named once its wild type is chosen.
+   - Found by slice 3:
+     - **The designs can be drafted from column names**: role suggestions turn GRB2's, BRCA1's
+       (both assays) and factor IX's columns into designs with exactly the hand-written designs'
+       shape (model, replicates, samples, shared inputs, time points or bins, tile ranges). The
+       Experiment view (slice 4) starts from such a draft.
+     - **MaveDB indexes by `hgvs_nt` when present**: BRCA1's nucleotide table has 3,194 protein
+       names on several rows each, which would have been "duplicates".
+     - **A column with a few non-numbers was left out silently** by the first layout detection:
+       it is now offered, and its cells are listed as blocking problems (found by the fixture).
+     - DiMSum's demo wild type is 126 nt, its count table CRLF-terminated (with an unterminated last
+       line) and its design file CR-terminated.
 4. **Experiment view (E2, E5, E6, V6).** The design editor for two-population experiments
    (samples × role, condition, biological and technical replicate, batch; controls WT,
    synonymous, nonsense auto-detected and editable), the human-readable design summary, undo and
