@@ -850,3 +850,26 @@ table.data.compact th { position: static; }
 .example-guide h3 { flex-wrap: wrap; }
 ol.example-steps { margin: 6px 0 8px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-2); }
 ol.example-steps li span { display: block; margin-bottom: 3px; }
+
+/* ---------- MaveScape: the workflow strip (ui/workflow.js) ---------- */
+
+.view-host { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.workflow { flex: none; display: flex; align-items: center; gap: 14px; padding: 7px 14px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; flex-wrap: wrap; }
+.workflow[hidden] { display: none; }
+ol.workflow-steps { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 2px; flex: none; }
+.workflow-step + .workflow-step::before { content: ""; display: inline-block; width: 10px; height: 1px; background: var(--line-strong); vertical-align: middle; margin: 0 2px; }
+.workflow-step button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; border: 1px solid transparent; background: none; color: var(--text-3); font: inherit; font-size: 12px; cursor: pointer; }
+.workflow-step button:hover { background: var(--hover); color: var(--text); }
+.workflow-step .icon { width: 14px; height: 14px; }
+.workflow-number { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line-strong); display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; }
+.workflow-step.done button { color: var(--ok-text); }
+.workflow-step.done.verdict-review button { color: var(--warn-text); }
+.workflow-step.done.verdict-fail button { color: var(--danger-text); }
+.workflow-step.next button { color: var(--accent-text); border-color: var(--accent); background: var(--accent-soft); font-weight: 650; }
+.workflow-step.next .workflow-number { border-color: var(--accent); }
+.workflow-step.attention button { color: var(--warn-text); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: var(--warn-soft); font-weight: 650; }
+.workflow-step.here button { box-shadow: inset 0 -2px 0 var(--accent); border-radius: 6px 6px 0 0; }
+.workflow-next { flex: 1; min-width: 260px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); }
+.workflow-next-text { flex: 1; min-width: 0; }
+.workflow-next.attention .workflow-next-text b { color: var(--warn-text); }
+.workflow-next.next .workflow-next-text b { color: var(--accent-text); }

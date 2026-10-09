@@ -117,6 +117,14 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
 - **Blank layouts and `docs/FORMATS.md`.** Annotated count table, sample sheet and target FASTA to
   fill in, from the Start page; every file MaveScape reads and writes, described.
 
+- **The workflow strip.** Above every view, the analysis as steps (counts, target, design, score,
+  QC, map, record), each done, next, needing attention or still to do, and the next step said in
+  words with its button: "Draft the design" drafts it in one click. It says what is wrong when a
+  step is blocked: a table of scores rather than counts, problems that block scoring, a design to
+  fix, a design changed since the last run, a FASTA opened without its count table.
+- Starting MaveScape while one is already running now says which files were handed to it and
+  where to find its window.
+
 ### Validation
 
 - Go tests of the host: security headers, foreign Host headers and cross-origin requests refused,

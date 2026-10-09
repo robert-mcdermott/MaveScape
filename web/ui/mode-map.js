@@ -237,6 +237,11 @@ export function mountMapMode(app, container) {
       destroyMap();
       return;
     }
+    app.seen ??= { qc: new Map(), map: new Set() };
+    if (!app.seen.map.has(run.id)) {
+      app.seen.map.add(run.id);
+      queueMicrotask(() => store.notify(['workflow']));
+    }
     cellOfKey = new Map();
     for (let p = 1; p <= model.length; p += 1) for (let r = 0; r < model.rows.length; r += 1) { const cell = cellAt(model, p, r); cellOfKey.set(cellName(model, cell), cell.k); }
     const key = `${run.id}|${view.condition}`;

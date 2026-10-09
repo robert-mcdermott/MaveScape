@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -82,12 +83,23 @@ func main() {
 	// A MaveScape already running on the preferred port gets the files and a new window, so the
 	// workspace library (kept per origin by the browser) stays in one place.
 	if existing := findRunning(cfg.host, cfg.port); existing != "" {
+		handed := false
 		if len(cfg.files) > 0 {
 			if err := forwardFiles(existing, cfg.files); err != nil {
 				log.Printf("could not pass the files to the running MaveScape: %v", err)
+			} else {
+				handed = true
 			}
 		}
-		fmt.Printf("MaveScape is already running at %s\n", existing)
+		if handed {
+			names := make([]string, len(cfg.files))
+			for i, f := range cfg.files {
+				names[i] = filepath.Base(f)
+			}
+			fmt.Printf("MaveScape is already running at %s: %s handed to it.\nSwitch to its window (the files open when it comes to the front); stop it with Ctrl+C in the terminal that started it.\n", existing, strings.Join(names, ", "))
+		} else {
+			fmt.Printf("MaveScape is already running at %s; stop it with Ctrl+C in the terminal that started it.\n", existing)
+		}
 		if cfg.window != "none" {
 			if _, err := openWindow(existing, cfg.window, cfg.dataDir); err != nil {
 				log.Printf("open window: %v", err)

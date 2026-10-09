@@ -284,6 +284,15 @@ export function mountQcMode(app, container) {
       const t = thresholds();
       const findings = findingsFrom(cached.qc, t);
       const o = overall(findings);
+      // The workflow strip: this run's QC has been read.
+      if (sub.run) {
+        app.seen ??= { qc: new Map(), map: new Set() };
+        const was = app.seen.qc.get(sub.run.id);
+        if (was?.status !== o.status || was?.counts.fail !== o.counts.fail || was?.counts.review !== o.counts.review) {
+          app.seen.qc.set(sub.run.id, o);
+          queueMicrotask(() => store.notify(['workflow']));
+        }
+      }
       head.append(h(`span.badge${STATUS[o.status].badge}.qc-overall`, { title: 'The worst finding' }, `${o.status === 'pass' ? 'All pass' : `${o.counts.fail} fail · ${o.counts.review} review`} · ${o.counts.pass} pass${o.counts.na ? ` · ${o.counts.na} not assessed` : ''}`),
         o.blocking.length ? h('span.badge.danger', { style: { marginLeft: '6px' } }, 'blocking') : null);
       if (!view.finding || !findings.some((f) => f.id === view.finding)) view.finding = (findings.find((f) => f.status === 'fail') ?? findings.find((f) => f.status === 'review') ?? findings[0]).id;

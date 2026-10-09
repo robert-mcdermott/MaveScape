@@ -352,6 +352,11 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
        few bytes. Archives are dated in UTC; the same SHA-256 in UTC, Tokyo and Los Angeles.
      - The suite caught a blank layout whose example rows named residues its own example target
        does not have: layouts are checked as a whole, as a researcher would use them.
+     - **First use left people stranded** (found testing the release candidate): a table or a
+       FASTA opened in a new workspace loaded, and nothing said what came next. The workflow strip
+       (`web/lib/workflow.js`, `web/ui/workflow.js`; 4 unit tests) shows the steps and the next
+       action above every view, and explains blocked steps; a second launch says which files it
+       handed to the running MaveScape.
 
 Release 0.1.0 when the PRD's phase-1 exit holds: the whole workflow needs no command line, golden
 and reference tests run in CI, and round trips lose no material data. **All three hold at the end

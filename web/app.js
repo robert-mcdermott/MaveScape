@@ -15,6 +15,7 @@ import { createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWor
 import { installImport } from './ui/import.js';
 import { chooseArchiveExport, openArchives } from './ui/record.js';
 import { exampleGuide } from './ui/examples.js';
+import { mountWorkflow } from './ui/workflow.js';
 
 const VERSION = '0.1.0';
 
@@ -100,7 +101,10 @@ async function start() {
 
   // --- Views -------------------------------------------------------------------------------------
 
-  const workbench = document.getElementById('workbench');
+  // The workflow strip (ui/workflow.js) stays above the views; each view mounts into the host.
+  const workflowEl = h('nav.workflow', { 'aria-label': 'Analysis steps' });
+  const workbench = h('div.view-host');
+  document.getElementById('workbench').append(workflowEl, workbench);
   const switcher = document.getElementById('mode-switcher');
   let current = null;
   let currentId = null;
@@ -566,8 +570,10 @@ async function start() {
 
   // --- Store subscription ------------------------------------------------------------------------
 
+  app.workflow = mountWorkflow(app, workflowEl);
   store.subscribe((topics) => {
     if (topics.has('ws') || topics.has('history') || topics.has('saved')) updateTitle();
+    app.workflow.update(topics);
     if (topics.has('ws')) autosave();
     app.sidebar.update(topics);
     app.inspector.update(topics);

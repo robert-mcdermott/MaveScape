@@ -10,10 +10,10 @@ import {
   addCondition, addReplicate, addTile, assignColumn, columnAssignments, removeCondition, removeReplicate, removeTile,
   setAsideOtherColumns, setBinValue, setControls, setField, setModel, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample, updateTile,
 } from '../lib/design-edit.js';
-import { draftDesign } from '../lib/importer.js';
 import { designFromSampleSheet } from '../lib/samplesheet.js';
 import { parseTable } from '../lib/csv.js';
 import { setDesign, updateTarget } from '../lib/workspace.js';
+import { draftFromColumns } from './design-draft.js';
 
 const MODELS = [['two-population', 'Two populations'], ['time-series', 'Time series'], ['bins', 'FACS bins']];
 const TIME_UNITS = ['round', 'generation', 'hour', 'day', 'minute', 'other'];
@@ -39,23 +39,6 @@ export function mountExperimentMode(app, container) {
     } catch (error) {
       toast(error.message, { kind: 'error' });
     }
-  }
-
-  async function draftFromColumns(s) {
-    let table;
-    try {
-      table = await app.sourceTable(s);
-    } catch (error) {
-      toast(`${error.message} The draft cannot find shared samples without the counts.`, { kind: 'error' });
-      table = { columns: s.columns.map((c) => ({ ...c, values: [] })), rows: 0 };
-    }
-    const target = store.ws.targets.find((t) => t.id === s.target);
-    const roles = s.roleSuggestions?.length ? [...s.roleSuggestions, ...countColumns(s).filter((c) => !s.roleSuggestions.some((r) => r.column === c)).map((column) => ({ column, role: null, group: column }))] : countColumns(s).map((column) => ({ column, role: null, group: column }));
-    const { design, notes } = draftDesign(table, roles, { variantColumn: s.mapping.variantColumn, level: s.mapping.level, target, name: s.name.replace(/\.[^.]+$/, '') });
-    if (!target) design.targets = [];
-    const complete = setAsideOtherColumns(design, s.columns.map((c) => c.name), IDENTIFIER_COLUMNS);
-    store.commit(setDesign(store.ws, complete, `Drafted the design of ${s.name} from its column names`, s.id), 'Draft the design from the column names');
-    for (const note of notes) toast(note);
   }
 
   async function sampleSheet() {
@@ -321,14 +304,14 @@ export function mountExperimentMode(app, container) {
       const suggested = s.roleSuggestions?.length ?? 0;
       root.append(h('div.view-body', h('div.split', h('div', sourcePane(s), targetPane(s)), h('div', h('div.pane', h('h3', icon('experiment'), 'Design'),
         h('p', suggested ? `MaveScape suggested roles for ${suggested} of ${countColumns(s).length} columns from their names. Start from that draft, then check and correct it here; or fill the design from a sample sheet.` : 'Start a design from the columns, or fill it from a sample sheet.'),
-        h('div.btn-row', h('button.btn.primary', { type: 'button', onclick: () => draftFromColumns(s) }, icon('sparkles'), suggested ? 'Start from the suggested design' : 'Start a design'),
+        h('div.btn-row', h('button.btn.primary', { type: 'button', onclick: () => draftFromColumns(app, s) }, icon('sparkles'), suggested ? 'Start from the suggested design' : 'Start a design'),
           h('button.btn', { type: 'button', onclick: () => sampleSheet() }, icon('upload'), 'Sample sheet…')))))));
       return;
     }
     root.append(h('div.view-body', h('div.split.experiment-split',
       h('div', sourcePane(s), summaryPane(design, s), settingsPane(design), targetPane(s)),
       h('div', replicatesPane(design), columnsPane(design, s),
-        h('div.btn-row', { style: { marginTop: '12px' } }, h('button.btn', { type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Draft the design again?', message: 'The design is replaced by the draft from the column names. Undo (⌘Z) brings this one back.', confirm: 'Draft again' })) draftFromColumns(s); } }, icon('sparkles'), 'Draft again from the column names'))))));
+        h('div.btn-row', { style: { marginTop: '12px' } }, h('button.btn', { type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Draft the design again?', message: 'The design is replaced by the draft from the column names. Undo (⌘Z) brings this one back.', confirm: 'Draft again' })) draftFromColumns(app, s); } }, icon('sparkles'), 'Draft again from the column names'))))));
   }
 
   render();
