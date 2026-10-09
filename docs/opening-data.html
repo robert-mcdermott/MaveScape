@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Opening your data · MaveScape</title>
+  <meta name="description" content="What MaveScape needs (a variant count table, the target sequence and the design), the layouts it recognizes, how variant names are checked, and how missing counts are read." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/opening-data.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Opening your data" />
+  <meta property="og:description" content="What MaveScape needs (a variant count table, the target sequence and the design), the layouts it recognizes, how variant names are checked, and how missing counts are read." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/opening-data.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('mavescape-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/mavescape" aria-label="MaveScape on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="opening-data.html" aria-current="page">Opening your data</a></li>
+        </ul>
+        <h4>Analysis</h4>
+        <ul>
+          <li><a href="experiment.html">The design</a></li>
+          <li><a href="scoring.html">Scoring</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+          <li><a href="map.html">The map and the inspector</a></li>
+        </ul>
+        <h4>Results</h4>
+        <ul>
+          <li><a href="record.html">Exports and the record</a></li>
+        </ul>
+        <h4>Automate</h4>
+        <ul>
+          <li><a href="scripting.html">Remote control and scripting</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Opening your data</h1>
+      <p class="doc-lede">An analysis needs three things: the counts, the sequence the variants are named against, and the design that says which column is which sample. This page covers the first two; the next, the design.</p>
+
+      <h2 id="what-to-bring">What to bring</h2>
+      <ul>
+        <li><strong>Variant counts:</strong> a table with one row per variant and one column per sequenced sample (CSV, TSV or Excel), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per sample.</li>
+        <li><strong>The target sequence</strong> the variants are named against: a FASTA file, protein or DNA.</li>
+        <li><strong>The design:</strong> which column is which sample, replicate and time point. MaveScape drafts it from the column names, or reads it from a sample sheet (<a href="experiment.html">The design</a>).</li>
+      </ul>
+      <p>Open the files from the start page, the workspace menu (<kbd>⌘O</kbd>), by dropping them on the window, or by naming them on the command line. Open the table and its FASTA together: sequences are read first, so the table finds its target.</p>
+      <div class="code"><pre><code>hgvs_pro,input_rep1,output_rep1,input_rep2,output_rep2
+p.=,52011,61873,48320,57112
+p.Ser2Val,812,640,775,591
+p.Ser2Ter,905,12,880,9
+p.Lys3Pro,488,NA,502,33</code></pre></div>
+
+      <h2 id="import">The import wizard</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/import-dark.webp" width="2000" height="1250" loading="lazy" alt="The import wizard for GRB2's MaveDB count table: the variant column hgvs_pro at the protein level, six count columns with suggested roles, the target, the checks with 1,121 valid variants, and the first rows" /><img class="shot-light" src="../assets/img/import-light.webp" width="2000" height="1250" loading="lazy" alt="The import wizard for GRB2's MaveDB count table: the variant column hgvs_pro at the protein level, six count columns with suggested roles, the target, the checks with 1,121 valid variants, and the first rows" /></div>
+        <figcaption>The wizard for a MaveDB count table: the mapping on the left, the checks and the first rows on the right.</figcaption>
+      </figure>
+      <p>The wizard shows what MaveScape found: the layout, the column of variant names and its level, the columns of counts with the roles their names suggest, the target, and the checks. Correct anything it got wrong, then <strong>Import</strong>; <strong>Save as template</strong> remembers the mapping for the next table with the same columns. Nothing is coerced silently: problems that block scoring (the same variant on two rows, counts that are not numbers or are negative, rows of the wrong width) are listed by line.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Layout</th><th>How it is recognized</th></tr></thead>
+          <tbody>
+            <tr><td><strong>MaveDB count table</strong></td><td><code>accession</code> (MaveDB's downloads), or all of <code>hgvs_nt</code>, <code>hgvs_splice</code> and <code>hgvs_pro</code> (its upload layout, and MaveScape's own exports), with sample columns</td></tr>
+            <tr><td><strong>MaveDB score table</strong></td><td>The same identifier columns and <code>score</code></td></tr>
+            <tr><td><strong>DiMSum</strong></td><td>A <code>nt_seq</code> column of whole nucleotide sequences, named by comparing each with the wild-type DNA you give as the target</td></tr>
+            <tr><td><strong>Generic</strong></td><td>Any column of variant names, and numeric columns</td></tr>
+            <tr><td><strong>One file per sample</strong></td><td>Several files opened together, each a variant column and a count column, joined on the variants</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="names">Variant names</h2>
+      <p>Names are MAVE-HGVS, MaveDB's nomenclature: <code>p.Ala12Val</code>, <code>p.Ala12Ter</code>, <code>p.Ala12=</code> (synonymous), <code>p.=</code> (the wild type), <code>p.[Ala12Val;Lys14Arg]</code>, and <code>c.34C&gt;T</code> at the nucleotide level. Lenient reading, the default, also takes lab and legacy forms (<code>A12V</code>, <code>p.A12V</code>, <code>p.Ala12*</code>, <code>_wt</code>, <code>_sy</code>) and keeps each as written beside its MAVE-HGVS form. Every name is checked against the target: one that disagrees with it (another residue at that position, or a position beyond the target) is not scored, and says why.</p>
+
+      <h2 id="missing">Missing is not zero</h2>
+      <p>An empty cell or <code>NA</code> (also <code>N/A</code>, <code>NaN</code>, <code>null</code>, <code>None</code>) is <strong>missing</strong>: the variant was not counted in that sample, and is not scored in that replicate. Write 0 only for a variant counted zero times. Some tables write variants that dropped out during selection as missing; quality control's "Missing after selection" finding says when that happens.</p>
+
+      <h2 id="target">The target</h2>
+      <p>A FASTA file of the protein or DNA sequence the variants are named against. Positions are numbered from 1 on the target; an <strong>offset</strong>, set in the Experiment view, numbers them on the reference too (an offset of 158 makes position 1 residue 159), and the map shows both. For DNA named at the protein level, the coding start can be set.</p>
+      <div class="code"><pre><code>&gt;grb2-sh3 GRB2 SH3 domain, UniProt P62993 residues 159-214
+TYVQALFDFDPQEDGELGFRRGDFIHVMDNSDPNWWKGACHGQTGMFPRNYVTPVN</code></pre></div>
+
+      <h2 id="formats">Every file</h2>
+      <p><a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md">FORMATS.md</a> describes every file MaveScape reads and writes, and the start page has blank layouts to fill in.</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="examples.html"><span>Previous</span>Examples</a>
+        <a class="next" href="experiment.html"><span>Next</span>The design</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+          <p>A workbench for multiplexed assays of variant effect: from variant counts to checked scores, quality control and variant-effect maps. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/scoring.html">Scoring</a></li>
+            <li><a href="../docs/qc.html">Quality control</a></li>
+            <li><a href="../docs/scripting.html">Scripting</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/mavescape">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite MaveScape</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">MaveScape is licensed under the Apache License 2.0. It reports experimental functional effects for research use; it does not classify variants as pathogenic or benign. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

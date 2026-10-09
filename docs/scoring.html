@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scoring · MaveScape</title>
+  <meta name="description" content="How MaveScape scores a deep mutational scan: log ratios with normalization, replicates combined by REML random effects, ordered filters with reasons, and runs that reproduce." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/scoring.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Scoring" />
+  <meta property="og:description" content="How MaveScape scores a deep mutational scan: log ratios with normalization, replicates combined by REML random effects, ordered filters with reasons, and runs that reproduce." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/scoring.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('mavescape-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/mavescape" aria-label="MaveScape on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="opening-data.html">Opening your data</a></li>
+        </ul>
+        <h4>Analysis</h4>
+        <ul>
+          <li><a href="experiment.html">The design</a></li>
+          <li><a href="scoring.html" aria-current="page">Scoring</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+          <li><a href="map.html">The map and the inspector</a></li>
+        </ul>
+        <h4>Results</h4>
+        <ul>
+          <li><a href="record.html">Exports and the record</a></li>
+        </ul>
+        <h4>Automate</h4>
+        <ul>
+          <li><a href="scripting.html">Remote control and scripting</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Scoring</h1>
+      <p class="doc-lede">Scoring turns the counts into a functional score with a standard error for every variant, in a run that keeps everything needed to repeat it. The parameters and the filters are in plain view in the Score view.</p>
+
+      <h2 id="score">Scores</h2>
+      <p>A variant's score in one replicate is the natural logarithm of its frequency after selection over its frequency before, normalized so that the reference scores 0, with a pseudocount (0.5) added to every count and a standard error from the counts, as Enrich2 computes them. Normalizations:</p>
+      <ul>
+        <li><strong>Wild type</strong> (the default when the table counts it): scores relative to the wild type, which scores 0.</li>
+        <li><strong>Complete cases:</strong> relative to the variants counted in every sample.</li>
+        <li><strong>All reads</strong> of each sample.</li>
+        <li><strong>Synonymous median:</strong> relative to the median synonymous variant.</li>
+      </ul>
+      <p>Optional rescaling anchors the scale: nonsense median 0 and wild type 1, or synonymous median 0 and nonsense median −1.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/score-dark.webp" width="2000" height="1250" loading="lazy" alt="The Score view: parameters, two runs of the GRB2 counts, the run's warnings, filter flow and scores by class" /><img class="shot-light" src="../assets/img/score-light.webp" width="2000" height="1250" loading="lazy" alt="The Score view: parameters, two runs of the GRB2 counts, the run's warnings, filter flow and scores by class" /></div>
+        <figcaption>Two runs of the GRB2 counts. Each run lists its parameters, warnings, filter flow and scores by class.</figcaption>
+      </figure>
+
+      <h2 id="replicates">Replicates</h2>
+      <p>Technical replicates (one library sequenced more than once) are summed first. Each biological replicate is scored on its own, and a variant's replicate scores are combined:</p>
+      <ul>
+        <li><strong>REML random effects</strong> (the default), computed as metafor's <code>rma(method = "REML")</code>: the excess spread between replicates (τ²) widens the standard error.</li>
+        <li><strong>Fixed effects:</strong> the inverse-variance weighted mean.</li>
+        <li><strong>Enrich2's estimator,</strong> exactly as Enrich2 2.0.2 computes it, for comparison with published scores.</li>
+      </ul>
+      <p>Each variant also has Cochran's Q, I² and τ², and how far its score moves when one replicate is left out. The inspector shows them.</p>
+
+      <h2 id="filters">Filters, in order</h2>
+      <p>Variants pass eight stages in order; a variant left out is left out at its first failing stage, with that stage as its reason. The filter flow shows how many each stage removed.</p>
+      <ol>
+        <li><strong>Counted in a replicate</strong> (always): counted in every sample of at least one replicate.</li>
+        <li><strong>Valid identifier</strong> (always): a valid name that agrees with the target.</li>
+        <li><strong>Variant class:</strong> the classes scored.</li>
+        <li><strong>Exclusion list:</strong> identifiers you exclude.</li>
+        <li><strong>Minimum input count,</strong> per replicate (default 1: a variant with no input reads was not in that library).</li>
+        <li><strong>Minimum total count,</strong> per replicate.</li>
+        <li><strong>Minimum usable replicates.</strong></li>
+        <li><strong>Maximum SE.</strong></li>
+      </ol>
+      <p>Variants scored from fewer replicates than expected, or with a zero count, are kept but marked low confidence.</p>
+
+      <h2 id="presets">Presets</h2>
+      <p><strong>MaveScape defaults</strong> leave out a replicate measurement with no input reads and combine replicates by REML to convergence. <strong>Enrich2-compatible</strong> reproduces Enrich2 2.0.2's "ratios": no count filter, variants combined only when scored in every replicate, and its random-effects estimator. Any parameter can be changed from either.</p>
+
+      <h2 id="runs">Runs</h2>
+      <p>Each scoring is a run: immutable, named, with an id made from its table, design, parameters and the scoring engine's version. Scoring the same inputs again shows the existing run rather than computing it twice. A run keeps its inputs and the SHA-256 of its output, not the scores: when a workspace is reopened, each run is recomputed from its recorded inputs and must have its recorded hash, and the run says <strong>reproduced</strong> (or why not).</p>
+      <p>The scoring engine computes its logarithms with fdlibm's algorithms in plain arithmetic, so every browser gives the same bits (<a href="../science.html#same-everywhere">why</a>). Runs made by MaveScape 0.1.0, which used the browser's own logarithms, reopen with scores that differ only in their last digits, and say so.</p>
+
+      <h2 id="refusals">When scoring is refused</h2>
+      <p>A run that cannot be done as asked is refused with the reasons, never quietly done another way: a design with errors, a blocking problem in the table, a normalization whose reference is absent, a rescaling anchor missing, or parameters that cannot score (a pseudocount of 0, Enrich2's estimator without every replicate).</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="experiment.html"><span>Previous</span>The design</a>
+        <a class="next" href="qc.html"><span>Next</span>Quality control</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+          <p>A workbench for multiplexed assays of variant effect: from variant counts to checked scores, quality control and variant-effect maps. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/scoring.html">Scoring</a></li>
+            <li><a href="../docs/qc.html">Quality control</a></li>
+            <li><a href="../docs/scripting.html">Scripting</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/mavescape">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite MaveScape</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">MaveScape is licensed under the Apache License 2.0. It reports experimental functional effects for research use; it does not classify variants as pathogenic or benign. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>
