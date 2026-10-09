@@ -24,6 +24,13 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
 - **Installers** (`install.sh`, `install.ps1`) that check the download's SHA-256 and version, and a
   release workflow that builds six binaries with their checksums.
 
+- **The experiment design (wave 1, slice 2).** A versioned schema (`mavescape-design` v1,
+  `docs/schemas/design.v1.json`) and `web/lib/design.js`, which checks a design against its table
+  and describes it in plain language. One schema represents two-population, time-series, FACS-bin
+  and score-only experiments, samples shared between replicates, tiled libraries (overlapping too),
+  several experiments in one table and known differences between a construct and its reference.
+  Every column of a table is a sample's or set aside with a reason: none is dropped silently.
+
 ### Validation
 
 - Go tests of the host: security headers, foreign Host headers and cross-origin requests refused,
@@ -35,3 +42,12 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   color-vision-friendly colors off and on, at WCAG AA contrast (lowest 4.58:1); the palettes and
   status colors apart in protanopia, deuteranopia and tritanopia; the diverging score maps' two
   ends apart in every vision.
+- `validation/run.mjs designs` (wave 1, slice 2): three public MaveDB data sets of different
+  designs (GRB2 SH3, two populations; BRCA1 RING, time series with shared inputs and a second assay
+  in the same table; factor IX, FACS bins in overlapping tiles), downloaded and checksummed by
+  `validation/fetch.mjs`, each described by a design written as data, with no code for any of them;
+  every design satisfies the schema and agrees with its data (37 checks).
+- `validation/run.mjs enrich2`: reference scores from Enrich2 2.0.2 (`validation/reference/`,
+  generated from MaveScape's designs) equal the scoring formulas MaveScape will use, computed
+  independently, to 5 × 10⁻¹³; Enrich2 2.0.2 reproduces the BRCA1 replicate scores published in 2017
+  to the same precision, which confirms their method (19 checks).

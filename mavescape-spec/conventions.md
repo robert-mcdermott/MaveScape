@@ -98,6 +98,7 @@ target = {
   codingStart: 1,                 // for DNA targets: first base of the reading frame
   offset: 0,                      // added to positions to report them in the reference protein
   identifiers: { uniprot: 'P38398', refseq: 'NM_007294.4', ensembl: 'ENST…', gene: 'BRCA1' },
+  differences: [{ position: 174, target: 'R', reference: 'K', note }],  // construct vs reference
 }
 ```
 
@@ -136,32 +137,42 @@ columns: [{ name, original, type }], samples: [{ id, column, total, observed }],
 Float64Array[] /* one per sample; NaN = missing */, barcodes?: { barcode: string[], variantRow:
 Int32Array } }`. Original columns that are not counts are kept, as strings, for export.
 
-### Design (`mavescape-design`, JSON Schema in `docs/schemas/design.v1.json`)
+### Design (`mavescape-design` v1, `docs/schemas/design.v1.json`, `web/lib/design.js`)
 
 ```js
 design = {
-  format: 'mavescape-design', version: 1,
+  format: 'mavescape-design', version: 1, name, description,
   model: 'two-population' | 'time-series' | 'bins' | 'scores',
-  targets: [target, ...],
-  library: { level: 'variant' | 'barcode', designedVariants?: 'all-single-aa' | [keys] },
-  conditions: [{ id, name, reference: false }],
-  samples: [{
-    id, name, column, condition,
-    role: 'input' | 'output' | 'timepoint' | 'bin' | 'score',
-    biologicalReplicate: 1, technicalReplicate: 1, batch: null,
-    tile: null,                   // tiled libraries: the region (positions) this sample's library covers
-    time: { value: 0, unit: 'generation' | 'hour' | 'day' | 'round' } | null,
-    bin: { order: 1, value: 0.25, weight: 'rank' | 'fluorescence' | 'other', cells: null } | null,
-  }],
-  controls: { wildType: 'auto' | key, synonymous: 'auto' | [keys], nonsense: 'auto' | [keys],
-              classes: [{ name, keys, source }] },
+  source: { mavedb: 'urn:mavedb:…', citation, license },
+  variants: { column: 'hgvs_pro', level: 'protein' | 'nucleotide' | 'splice' },
+  targets: [target, ...],               // target.differences: known construct differences
+  library: { level: 'variant' | 'barcode', tiles: [{ id, name, start, end }] },  // tiles may overlap
+  conditions: [{ id, name, reference }],
+  // Physical sequenced samples; a sample's columns are its technical replicates (summed).
+  samples: [{ id, name, columns: ['input_count_rep1'], batch, cells }],
+  // Biological replicates, each scored on its own and then combined. A sample may be named by
+  // several replicates (an input selected three times).
+  replicates: [{ id, name, biological: 1, condition, tile,
+                 input, output,                                // two-population
+                 timepoints: [{ sample, time }],               // time-series
+                 bins: [{ sample, order, value }] }],          // bins
+  time: { unit: 'round' | 'generation' | 'hour' | 'day' | 'minute' | 'other' },
+  bins: { weight: 'rank' | 'fluorescence' | 'other' },
+  scores: { score, se, ciLow, ciHigh },                       // model 'scores'
+  controls: { wildType: 'auto' | id, synonymous: 'auto' | 'none' | [ids], nonsense: …, classes },
+  // Every column of the table is a sample's, an identifier or here, with a reason; a column that
+  // repeats a shared sample says so (copyOf).
+  ignoredColumns: [{ column, reason, copyOf }],
+  notes: [text],
 }
 ```
 
-The design is *capability-based*: a model declares the roles it needs and validates the rest
-(`validateDesign(design, countSet) → { ok, errors, warnings, summary }`). Technical replicates are
-pooled before scoring; biological replicates are scored separately and combined. The UI never
-presents the two as equivalent.
+`validateDesign(design, { columns }) → { ok, errors, warnings }` checks the structure and the
+rules of each model against the table's header; `summarizeDesign(design) → { model, counts,
+lines }` describes it for people (requirement E5). Technical replicates are pooled before scoring;
+biological replicates are scored separately and combined. The UI never presents the two as
+equivalent. Three public data sets of different designs are represented with no code for any of
+them (`validation/designs/`, suite `designs`).
 
 ### Score runs (`web/lib/runs.js`)
 
@@ -171,7 +182,7 @@ run = {
   id,                              // SHA-256 of the canonical inputs, design, model and parameters
   created, model: 'ratio' | 'wls' | 'ols' | 'bins' | 'bins-mle' | 'dimsum' | 'imported',
   software: { name: 'MaveScape', version, commit, engine },
-  inputs: { countSets: [sha256], design: sha256, importTemplates: [sha256] },
+  inputs: { countSets: [sha256], design: sha256, importTemplates: [sha256] },  // the design's SHA-256
   params: { pseudocount: 0.5, normalization: 'wt' | 'complete' | 'full' | 'synonymous',
             combination: 'fixed' | 'reml' | 'enrich2', filters: [{ id, kind, params }], seed },
   warnings: [{ code, message, variants? }],

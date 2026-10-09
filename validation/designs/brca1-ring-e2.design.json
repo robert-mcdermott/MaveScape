@@ -1,0 +1,619 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "BRCA1 RING domain, E2 (UBE2D1) binding by phage display",
+  "description": "Six rounds of phage-display selection for E2 binding (round 0 = input), in two library preparations of three replicates each; the replicates of a library share its input.",
+  "source": {
+    "mavedb": "urn:mavedb:00000003-a-2",
+    "citation": "Starita et al., Genetics 2015, doi:10.1534/genetics.115.175802; rescored in Rubin et al., Genome Biology 2017, doi:10.1186/s13059-017-1272-5",
+    "license": "CC0"
+  },
+  "model": "time-series",
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "brca1-ring",
+      "name": "BRCA1 RING domain",
+      "sequenceType": "dna",
+      "sequence": "GATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCCATCTGCCTGGAGTTGATCAAGGAACCTGTCTCCACAAAGTGTGACCACATATTTTGCAAATTTTGCATGCTGAAACTTCTCAACCAGAAGAAAGGGCCTTCACAGTGTCCTTTATGTAAGAATGATATAACCAAAAGGAGCCTACAAGAAAGTACGAGATTTAGTCAACTTGTTGAAGAGCTATTGAAAATCATTTGTGCTTTTCAGCTTGACACAGGTTTGGAGTATGCAAACAGCTATAATTTTGCAAAAAAGGAAAATAACTCTCCTGAACATCTAAAAGATGAAGTTTCTATCATCCAAAGTATGGGCTACAGAAACCGTGCCAAAAGACTTCTACAGAGTGAACCCGAAAATCCTTCCTTGCAGGAAACCAGTCTCAGTGTCCAACTCTCTAACCTTGGAACTGTGAGAACTCTGAGGACAAAGCAGCGGATACAACCTCAAAGGACGTCTGTCTACATTGAATTGGGATCTGATTCTTCTGAAGATACCGTTAATAAGGCAACTTATTGCAGTGTGGGAGATCAAGAATTGTTACAAATCACCCCTCAAGGAACCAGGGATGAAATCAGTTTGGATTCTGCAAAAAAGGCTGCTTGTGAATTTTCTGAGACGGATGTAACAAATACTGAACATCATCAACCCAGTAATAATGATTTGAACACCACTGAGAAGCGTGCAGCTGAGAGGCATCCAGAAAAGTATCAGGGTAGTTCTGTTTCAAACTTGCATGTGGAGCCATGTGGCACAAATACTCATGCCAGCTCATTACAGCATGAGAACAGCAGTTTATTACTCACTAAAGACAGAATGAATGTAGAAAAGGCTGAGTTC",
+      "codingStart": 1,
+      "offset": 1,
+      "organism": "Homo sapiens",
+      "identifiers": {
+        "uniprot": "P38398",
+        "gene": "BRCA1"
+      },
+      "differences": [
+        {
+          "position": 174,
+          "target": "R",
+          "reference": "K",
+          "note": "The construct's codon 174 (BRCA1 residue 175) encodes Arg; UniProt P38398 has Lys."
+        }
+      ]
+    }
+  ],
+  "library": {
+    "level": "variant"
+  },
+  "time": {
+    "unit": "round"
+  },
+  "samples": [
+    {
+      "id": "e2-new-input",
+      "name": "New library, input (round 0)",
+      "columns": [
+        "PlusE2NewRep3_c_0"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "e2-orig-input",
+      "name": "Original library, input (round 0)",
+      "columns": [
+        "PlusE2Rep3_c_0"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2newrep3-round1",
+      "name": "PlusE2NewRep3, round 1",
+      "columns": [
+        "PlusE2NewRep3_c_1"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep3-round2",
+      "name": "PlusE2NewRep3, round 2",
+      "columns": [
+        "PlusE2NewRep3_c_2"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep3-round3",
+      "name": "PlusE2NewRep3, round 3",
+      "columns": [
+        "PlusE2NewRep3_c_3"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep3-round4",
+      "name": "PlusE2NewRep3, round 4",
+      "columns": [
+        "PlusE2NewRep3_c_4"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep3-round5",
+      "name": "PlusE2NewRep3, round 5",
+      "columns": [
+        "PlusE2NewRep3_c_5"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep4-round1",
+      "name": "PlusE2NewRep4, round 1",
+      "columns": [
+        "PlusE2NewRep4_c_1"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep4-round2",
+      "name": "PlusE2NewRep4, round 2",
+      "columns": [
+        "PlusE2NewRep4_c_2"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep4-round3",
+      "name": "PlusE2NewRep4, round 3",
+      "columns": [
+        "PlusE2NewRep4_c_3"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep4-round4",
+      "name": "PlusE2NewRep4, round 4",
+      "columns": [
+        "PlusE2NewRep4_c_4"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep4-round5",
+      "name": "PlusE2NewRep4, round 5",
+      "columns": [
+        "PlusE2NewRep4_c_5"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep5-round1",
+      "name": "PlusE2NewRep5, round 1",
+      "columns": [
+        "PlusE2NewRep5_c_1"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep5-round2",
+      "name": "PlusE2NewRep5, round 2",
+      "columns": [
+        "PlusE2NewRep5_c_2"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep5-round3",
+      "name": "PlusE2NewRep5, round 3",
+      "columns": [
+        "PlusE2NewRep5_c_3"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep5-round4",
+      "name": "PlusE2NewRep5, round 4",
+      "columns": [
+        "PlusE2NewRep5_c_4"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2newrep5-round5",
+      "name": "PlusE2NewRep5, round 5",
+      "columns": [
+        "PlusE2NewRep5_c_5"
+      ],
+      "batch": "New library"
+    },
+    {
+      "id": "pluse2rep3-round1",
+      "name": "PlusE2Rep3, round 1",
+      "columns": [
+        "PlusE2Rep3_c_1"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep3-round2",
+      "name": "PlusE2Rep3, round 2",
+      "columns": [
+        "PlusE2Rep3_c_2"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep3-round3",
+      "name": "PlusE2Rep3, round 3",
+      "columns": [
+        "PlusE2Rep3_c_3"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep3-round4",
+      "name": "PlusE2Rep3, round 4",
+      "columns": [
+        "PlusE2Rep3_c_4"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep3-round5",
+      "name": "PlusE2Rep3, round 5",
+      "columns": [
+        "PlusE2Rep3_c_5"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep4-round1",
+      "name": "PlusE2Rep4, round 1",
+      "columns": [
+        "PlusE2Rep4_c_1"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep4-round2",
+      "name": "PlusE2Rep4, round 2",
+      "columns": [
+        "PlusE2Rep4_c_2"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep4-round3",
+      "name": "PlusE2Rep4, round 3",
+      "columns": [
+        "PlusE2Rep4_c_3"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep4-round4",
+      "name": "PlusE2Rep4, round 4",
+      "columns": [
+        "PlusE2Rep4_c_4"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep4-round5",
+      "name": "PlusE2Rep4, round 5",
+      "columns": [
+        "PlusE2Rep4_c_5"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep5-round1",
+      "name": "PlusE2Rep5, round 1",
+      "columns": [
+        "PlusE2Rep5_c_1"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep5-round2",
+      "name": "PlusE2Rep5, round 2",
+      "columns": [
+        "PlusE2Rep5_c_2"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep5-round3",
+      "name": "PlusE2Rep5, round 3",
+      "columns": [
+        "PlusE2Rep5_c_3"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep5-round4",
+      "name": "PlusE2Rep5, round 4",
+      "columns": [
+        "PlusE2Rep5_c_4"
+      ],
+      "batch": "Original library"
+    },
+    {
+      "id": "pluse2rep5-round5",
+      "name": "PlusE2Rep5, round 5",
+      "columns": [
+        "PlusE2Rep5_c_5"
+      ],
+      "batch": "Original library"
+    }
+  ],
+  "replicates": [
+    {
+      "id": "pluse2newrep3",
+      "name": "PlusE2NewRep3",
+      "biological": 1,
+      "timepoints": [
+        {
+          "sample": "e2-new-input",
+          "time": 0
+        },
+        {
+          "sample": "pluse2newrep3-round1",
+          "time": 1
+        },
+        {
+          "sample": "pluse2newrep3-round2",
+          "time": 2
+        },
+        {
+          "sample": "pluse2newrep3-round3",
+          "time": 3
+        },
+        {
+          "sample": "pluse2newrep3-round4",
+          "time": 4
+        },
+        {
+          "sample": "pluse2newrep3-round5",
+          "time": 5
+        }
+      ]
+    },
+    {
+      "id": "pluse2newrep4",
+      "name": "PlusE2NewRep4",
+      "biological": 2,
+      "timepoints": [
+        {
+          "sample": "e2-new-input",
+          "time": 0
+        },
+        {
+          "sample": "pluse2newrep4-round1",
+          "time": 1
+        },
+        {
+          "sample": "pluse2newrep4-round2",
+          "time": 2
+        },
+        {
+          "sample": "pluse2newrep4-round3",
+          "time": 3
+        },
+        {
+          "sample": "pluse2newrep4-round4",
+          "time": 4
+        },
+        {
+          "sample": "pluse2newrep4-round5",
+          "time": 5
+        }
+      ]
+    },
+    {
+      "id": "pluse2newrep5",
+      "name": "PlusE2NewRep5",
+      "biological": 3,
+      "timepoints": [
+        {
+          "sample": "e2-new-input",
+          "time": 0
+        },
+        {
+          "sample": "pluse2newrep5-round1",
+          "time": 1
+        },
+        {
+          "sample": "pluse2newrep5-round2",
+          "time": 2
+        },
+        {
+          "sample": "pluse2newrep5-round3",
+          "time": 3
+        },
+        {
+          "sample": "pluse2newrep5-round4",
+          "time": 4
+        },
+        {
+          "sample": "pluse2newrep5-round5",
+          "time": 5
+        }
+      ]
+    },
+    {
+      "id": "pluse2rep3",
+      "name": "PlusE2Rep3",
+      "biological": 4,
+      "timepoints": [
+        {
+          "sample": "e2-orig-input",
+          "time": 0
+        },
+        {
+          "sample": "pluse2rep3-round1",
+          "time": 1
+        },
+        {
+          "sample": "pluse2rep3-round2",
+          "time": 2
+        },
+        {
+          "sample": "pluse2rep3-round3",
+          "time": 3
+        },
+        {
+          "sample": "pluse2rep3-round4",
+          "time": 4
+        },
+        {
+          "sample": "pluse2rep3-round5",
+          "time": 5
+        }
+      ]
+    },
+    {
+      "id": "pluse2rep4",
+      "name": "PlusE2Rep4",
+      "biological": 5,
+      "timepoints": [
+        {
+          "sample": "e2-orig-input",
+          "time": 0
+        },
+        {
+          "sample": "pluse2rep4-round1",
+          "time": 1
+        },
+        {
+          "sample": "pluse2rep4-round2",
+          "time": 2
+        },
+        {
+          "sample": "pluse2rep4-round3",
+          "time": 3
+        },
+        {
+          "sample": "pluse2rep4-round4",
+          "time": 4
+        },
+        {
+          "sample": "pluse2rep4-round5",
+          "time": 5
+        }
+      ]
+    },
+    {
+      "id": "pluse2rep5",
+      "name": "PlusE2Rep5",
+      "biological": 6,
+      "timepoints": [
+        {
+          "sample": "e2-orig-input",
+          "time": 0
+        },
+        {
+          "sample": "pluse2rep5-round1",
+          "time": 1
+        },
+        {
+          "sample": "pluse2rep5-round2",
+          "time": 2
+        },
+        {
+          "sample": "pluse2rep5-round3",
+          "time": 3
+        },
+        {
+          "sample": "pluse2rep5-round4",
+          "time": 4
+        },
+        {
+          "sample": "pluse2rep5-round5",
+          "time": 5
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "wildType": "_wt",
+    "synonymous": [
+      "_sy"
+    ],
+    "nonsense": "auto"
+  },
+  "ignoredColumns": [
+    {
+      "column": "PlusE2NewRep4_c_0",
+      "reason": "repeats the input its library's replicates share",
+      "copyOf": "PlusE2NewRep3_c_0"
+    },
+    {
+      "column": "PlusE2NewRep5_c_0",
+      "reason": "repeats the input its library's replicates share",
+      "copyOf": "PlusE2NewRep3_c_0"
+    },
+    {
+      "column": "PlusE2Rep4_c_0",
+      "reason": "repeats the input its library's replicates share",
+      "copyOf": "PlusE2Rep3_c_0"
+    },
+    {
+      "column": "PlusE2Rep5_c_0",
+      "reason": "repeats the input its library's replicates share",
+      "copyOf": "PlusE2Rep3_c_0"
+    },
+    {
+      "column": "Y2H_1_Rep1_c_0",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep1_c_18",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep1_c_37",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep1_c_45",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep2_c_0",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep2_c_18",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep2_c_37",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep2_c_45",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep3_c_0",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep3_c_18",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep3_c_37",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_1_Rep3_c_45",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep1_c_0",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep1_c_16",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep1_c_41",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep1_c_64",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep2_c_0",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep2_c_16",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep2_c_41",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep2_c_64",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep3_c_0",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep3_c_16",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep3_c_41",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    },
+    {
+      "column": "Y2H_2_Rep3_c_64",
+      "reason": "yeast two-hybrid assay, a separate experiment (brca1-ring-y2h.design.json)"
+    }
+  ],
+  "notes": [
+    "Counts are summed over the barcodes of each amino-acid sequence (Enrich2). _wt and _sy are Enrich2's rows for the wild type and for synonymous variants pooled."
+  ]
+}

@@ -53,7 +53,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | planned (wave 1; checked on three heterogeneous MaveDB datasets) |
+| E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | done (wave 1, slice 2: three MaveDB data sets of different designs, four designs, no data-set code; validation `designs`). Barcode libraries are planned (wave 2) |
 | E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | planned (wave 1: two-population; wave 2: time, bins, barcodes, conditions) |
 | E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | planned (wave 1) |
 | E4 | Role suggestions shown as suggestions, never applied silently | planned (wave 1) |
@@ -170,7 +170,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | T1 | Unit, property, cross-implementation, golden UI, round-trip, MaveDB conformance, security and performance tests in CI | planned (from wave 1, by layer) |
-| T2 | Reference comparisons document tool and version, input transformation, compared values, tolerances, known differences and failure threshold | planned (wave 1) |
+| T2 | Reference comparisons document tool and version, input transformation, compared values, tolerances, known differences and failure threshold | done for Enrich2 (wave 1, slice 2: `validation/README.md`, `reference/enrich2.json`); each later reference the same way |
 | T3 | Fixtures: clean two-population, poor replicate agreement, severe bottleneck, low-count tail, barcode conflicts, missing samples, malformed variants, time series, bins, two conditions, a published MaveDB record | planned (waves 1–3) |
 | T4 | Bundled examples (five to seven), each with a question, source and license, expected findings, opening view, known QC outcomes, reference scores, citation and a guided workflow under ten minutes; simulated data labeled as such | planned (wave 1: two; wave 2: five; wave 3: seven) |
 | T5 | Security: loopback binding, Host check, tokens, file-access restriction, response and decompression limits, archive path traversal, CSP, no remote code, escaped labels; `--offline` and `--no-remote-control`; tested | planned (wave 1; reviewed in wave 9) |

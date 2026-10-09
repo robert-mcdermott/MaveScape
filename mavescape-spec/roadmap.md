@@ -41,7 +41,7 @@ The PRD lists decisions to make before implementation. Proposed answers, to conf
 | Product and executable name | **MaveScape**, `mavescape`; Go module `mavescape`; archives `.msz` |
 | A shared suite UI package | Not now. Copy CytoWeave's and Proteoscope's modules with an origin comment in each file; revisit at 1.0 (`design.md`). |
 | First scoring reference | **Enrich2 2.0.2** (Python 3, BSD-3, `pip install enrich2`): ratio, WLS and random-effects combination. Cross-checked by dms_variants `func_scores`. DiMSum 1.4 for its error model (wave 2). |
-| Three feasibility datasets | All CC0 on MaveDB, with counts, deliberately different (`research.md` §3): **GRB2 SH3** (Domainome, `urn:mavedb:00000835-a-1`; two populations × 3 replicates; scored by DiMSum), **BRCA1 RING** (`urn:mavedb:00000003-a-1`/`-a-2`; 6 replicates × 6 time points; scored by Enrich2, so its published scores are a reference too; legacy HGVS), **Factor IX MultiSTEP** (`urn:mavedb:00001200-a-1`; 4 FACS bins × 3 tiles × 3 replicates). Backups: Hsp90 (`00000011-a-1`), Gcn4 sort-seq (`00000052-b-1`). |
+| Three feasibility datasets | Done (wave 1, slice 2): all CC0 on MaveDB, with counts, deliberately different (`research.md` §3): **GRB2 SH3** (Domainome, `urn:mavedb:00000835-a-1`; two populations × 3 replicates; scored by DiMSum), **BRCA1 RING** (`urn:mavedb:00000003-a-1`/`-a-2`; 6 replicates × 6 rounds, inputs shared, plus a Y2H assay in the same table; scored by Enrich2, so its published scores are a reference too; legacy HGVS), **Factor IX MultiSTEP** (`urn:mavedb:00001200-a-1`; 4 FACS bins × 3 overlapping tiles × 3 replicates). |
 | Design schema before UI forms | Yes: wave 1, slice 2 writes `mavescape-design` v1 and represents the three datasets in it before slice 4 builds the editor. |
 | Structure viewing and Proteoscope code | A full Structure view in MaveScape (wave 4), copied from Proteoscope (Apache-2.0, same author): its parser, WebGPU renderer with Canvas fallback, cartoon, surfaces, DSSP, selection language, coloring and alignment. No runtime dependency on Proteoscope; an optional "Open in Proteoscope" for its deeper analyses. |
 | MAVE-HGVS | Port `mavehgvs` 0.8.1's regular-expression grammar to JavaScript (BSD-3; no JS implementation exists; keep its notice) with a **strict** mode (the spec, for export) and a **lenient** mode (legacy MaveDB data and lab tables: `_wt`/`_sy`, duplicated components, `p.A12V`, `A12V`, `*`), always keeping the original string. Validate against `mavehgvs`'s own test cases and outputs, committed as a reference. |
@@ -84,24 +84,42 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
      slice 6).
    - `--version` prints one line (`mavescape X.Y.Z`), which the installers compare exactly; the
      commit is in `/api/info` and the status bar.
-2. **Feasibility: the design schema on real data (E1, T2, PRD phase 0).** Add the three MaveDB
-   datasets (GRB2 SH3, BRCA1 RING, Factor IX MultiSTEP; see the decisions above) to
-   `validation/sources.json`, downloaded from the MaveDB API and checksummed by
-   `validation/fetch.mjs` (with retries: MaveDB's CSV endpoints sometimes answer 504 at first).
-   They differ on purpose: two populations against time series against bins, a sequence target
-   with an offset, legacy HGVS, tiled libraries (each tile its own input), and two scoring tools
-   behind the published scores.
-   Write `docs/schemas/design.v1.json` and `web/lib/design.js` (`validateDesign`,
-   `summarizeDesign`), and hand-write each dataset's design: no dataset-specific code allowed.
-   Generate reference scores with pinned Enrich2 2.0.2
-   (`validation/reference/generate_enrich2.py`, `uv run --python 3.12 --with enrich2==2.0.2`)
-   and dms_variants, committed as `validation/reference/enrich2.json`; Enrich2's quirks (the
-   `count` header, `_wt` rows, the library-size pseudocount, the random-effects starting value)
-   are documented in `validation/README.md`. The published scores are compared too: BRCA1's
-   with Enrich2's (same tool, so close agreement is expected), GRB2's with DiMSum's (a different
-   error model: agreement by correlation, documented, until wave 2 adds DiMSum's model).
-   - Exit: three designs validate; the reference outputs are committed with tool versions; any
-     schema change this forces is made now, before forms exist.
+2. **Feasibility: the design schema on real data (E1, T2, PRD phase 0): done.** Three MaveDB data
+   sets (CC0) in `validation/sources.json`, fetched and checksummed by `validation/fetch.mjs`:
+   GRB2 SH3 (two populations × 3 replicates), BRCA1 RING (time series: E2 binding and Y2H in one
+   table) and factor IX MultiSTEP (FACS bins × 3 overlapping tiles). `docs/schemas/design.v1.json`
+   and `web/lib/design.js` (`validateDesign`, `summarizeDesign`, `sharedSamples`; 12 unit tests);
+   four designs written as data (`validation/designs/`), with no code for any data set. Enrich2
+   2.0.2 references (`validation/reference/generate_enrich2.py` builds Enrich2's configuration from
+   the designs; `enrich2.json`, 2.2 MB, committed). Suites `designs` (37 checks) and `enrich2` (19).
+   - Validation: every design satisfies the schema (checked by `validation/json-schema.mjs`) and
+     `validateDesign` against its table, accounts for every column, and agrees with the data
+     (copies identical cell for cell, the wild type counted in every sample, all 21,175 BRCA1 and
+     9,681 factor IX reference residues the target's, tiles holding the variants counted in
+     them). The formulas of `research.md` §2.1, computed independently in
+     `validation/enrich2-formulas.mjs`, equal Enrich2 2.0.2 to 5 × 10⁻¹³ (13 significant digits
+     stored) for log ratios with three normalizations, WLS and OLS, non-uniform times and the
+     random-effects combination; slice 5 builds the engine on them.
+   - Found by slice 2:
+     - **The schema needed samples, and replicates that name them**, not one record per column:
+       BRCA1's replicates share their inputs, which MaveDB writes once per replicate. Copies are
+       declared (`ignoredColumns[].copyOf`) and checked; three "inputs" would overstate the
+       replicates' independence.
+     - **A table can hold two experiments** (BRCA1's E2 and Y2H), so every column must be a
+       sample's or ignored with a reason; that is now an error, not a silent drop.
+     - **Tiles overlap** (factor IX 146–164, 299–318) and **targets differ from the reference**
+       (BRCA1 codon 174 R; UniProt K): both are in the schema.
+     - **The published BRCA1 scores are reproduced** by Enrich2 2.0.2 with WLS and wild-type
+       normalization (all 9,279 stored replicate values, 5 × 10⁻¹³), and their combined scores
+       where Enrich2's 50 iterations converged; elsewhere they differ by up to 0.034 because the
+       estimator's start depends on the number of variants (the quirk the Enrich2-compatible mode
+       will reproduce).
+     - **GRB2's published scores** are DiMSum growth rates, from culture densities and times the
+       table does not hold: r = 0.987 against Enrich2's log ratios; DiMSum's model is wave 2.
+     - **MaveDB writes CRLF line ends**, `NA` for missing and counts as decimals: the importer
+       (slice 3) handles all three.
+     - Factor IX's published scores set the median of the lowest 5% of missense variants to 0,
+       not the nonsense median: rescaling conventions must be parameters (S11).
 3. **Import (D1–D7, E3, E4).** `web/lib/csv.js` (streaming, worker `csv-worker.js`;
    delimiter/quote/BOM/encoding detection, typed numeric views, row diagnostics),
    `web/lib/hgvs.js` (MAVE-HGVS for protein and coding nucleotide substitutions, synonymous and

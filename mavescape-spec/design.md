@@ -106,7 +106,7 @@ CSV/TSV/XLSX ─parse (worker, streaming)→ table (columns as strings + typed n
 ### Import
 
 - The parser streams the file in a worker (16 MB parts), detects the delimiter, quoting, header,
-  BOM and encoding, and keeps every column as text plus a typed numeric view where every value
+  BOM, encoding and line ends (MaveDB writes CRLF), and keeps every column as text plus a typed numeric view where every value
   parses. Values that do not parse are listed by row; they are never coerced silently.
 - Candidate identifier columns are found by trying the MAVE-HGVS parser on a sample of rows
   (`hgvs_nt`, `hgvs_pro`, `hgvs_splice` and MaveDB's `accession` are recognized by name too).

@@ -1,0 +1,572 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "Coagulation factor IX, secretion (MultiSTEP, strep II tag)",
+  "description": "Cells displaying factor IX variants sorted into four bins of strep II tag signal; the protein in three overlapping tiles (positions 146–164 and 299–318 are in two), each in three biological replicates.",
+  "source": {
+    "mavedb": "urn:mavedb:00001200-a-1",
+    "citation": "Popp et al., Nature Structural & Molecular Biology 2025, doi:10.1038/s41594-025-01582-w",
+    "license": "CC0"
+  },
+  "model": "bins",
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "f9",
+      "name": "Coagulation factor IX",
+      "sequenceType": "protein",
+      "sequence": "MQRVNMIMAESPGLITICLLGYLLSAECTVFLDHENANKILNRPKRYNSGKLEEFVQGNLERECMEEKCSFEEAREVFENTERTTEFWKQYVDGDQCESNPCLNGGSCKDDINSYECWCPFGFEGKNCELDVTCNIKNGRCEQFCKNSADNKVVCSCTEGYRLAENQKSCEPAVPFPCGRVSVSQTSKLTRAETVFPDVDYVNSTEAETILDNITQSTQSFNDFTRVVGGEDAKPGQFPWQVVLNGKVDAFCGGSIVNEKWIVTAAHCVETGVKITVVAGEHNIEETEHTEQKRNVIRIIPHHNYNAAINKYNHDIALLELDEPLVLNSYVTPICIADKEYTNIFLKFGSGYVSGWGRVFHKGRSALVLQYLRVPLVDRATCLRSTKFTIYNNMFCAGFHEGGRDSCQGDSGGPHVTEVEGTSFLTGIISWGEECAMKGKYGIYTKVSRYVNWIKEKTKLT",
+      "offset": 0,
+      "organism": "Homo sapiens",
+      "identifiers": {
+        "uniprot": "P00740",
+        "gene": "F9"
+      }
+    }
+  ],
+  "library": {
+    "level": "variant",
+    "tiles": [
+      {
+        "id": "tile1",
+        "name": "Tile 1",
+        "start": 1,
+        "end": 164
+      },
+      {
+        "id": "tile2",
+        "name": "Tile 2",
+        "start": 146,
+        "end": 318
+      },
+      {
+        "id": "tile3",
+        "name": "Tile 3",
+        "start": 299,
+        "end": 461
+      }
+    ]
+  },
+  "bins": {
+    "weight": "rank"
+  },
+  "samples": [
+    {
+      "id": "t1-r1-bin1",
+      "name": "Tile 1, replicate 1, bin 1",
+      "columns": [
+        "Count_Tile_1_Bin_1_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t1-r1-bin2",
+      "name": "Tile 1, replicate 1, bin 2",
+      "columns": [
+        "Count_Tile_1_Bin_2_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t1-r1-bin3",
+      "name": "Tile 1, replicate 1, bin 3",
+      "columns": [
+        "Count_Tile_1_Bin_3_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t1-r1-bin4",
+      "name": "Tile 1, replicate 1, bin 4",
+      "columns": [
+        "Count_Tile_1_Bin_4_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t1-r2-bin1",
+      "name": "Tile 1, replicate 2, bin 1",
+      "columns": [
+        "Count_Tile_1_Bin_1_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t1-r2-bin2",
+      "name": "Tile 1, replicate 2, bin 2",
+      "columns": [
+        "Count_Tile_1_Bin_2_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t1-r2-bin3",
+      "name": "Tile 1, replicate 2, bin 3",
+      "columns": [
+        "Count_Tile_1_Bin_3_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t1-r2-bin4",
+      "name": "Tile 1, replicate 2, bin 4",
+      "columns": [
+        "Count_Tile_1_Bin_4_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t1-r3-bin1",
+      "name": "Tile 1, replicate 3, bin 1",
+      "columns": [
+        "Count_Tile_1_Bin_1_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t1-r3-bin2",
+      "name": "Tile 1, replicate 3, bin 2",
+      "columns": [
+        "Count_Tile_1_Bin_2_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t1-r3-bin3",
+      "name": "Tile 1, replicate 3, bin 3",
+      "columns": [
+        "Count_Tile_1_Bin_3_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t1-r3-bin4",
+      "name": "Tile 1, replicate 3, bin 4",
+      "columns": [
+        "Count_Tile_1_Bin_4_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t2-r1-bin1",
+      "name": "Tile 2, replicate 1, bin 1",
+      "columns": [
+        "Count_Tile_2_Bin_1_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t2-r1-bin2",
+      "name": "Tile 2, replicate 1, bin 2",
+      "columns": [
+        "Count_Tile_2_Bin_2_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t2-r1-bin3",
+      "name": "Tile 2, replicate 1, bin 3",
+      "columns": [
+        "Count_Tile_2_Bin_3_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t2-r1-bin4",
+      "name": "Tile 2, replicate 1, bin 4",
+      "columns": [
+        "Count_Tile_2_Bin_4_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t2-r2-bin1",
+      "name": "Tile 2, replicate 2, bin 1",
+      "columns": [
+        "Count_Tile_2_Bin_1_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t2-r2-bin2",
+      "name": "Tile 2, replicate 2, bin 2",
+      "columns": [
+        "Count_Tile_2_Bin_2_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t2-r2-bin3",
+      "name": "Tile 2, replicate 2, bin 3",
+      "columns": [
+        "Count_Tile_2_Bin_3_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t2-r2-bin4",
+      "name": "Tile 2, replicate 2, bin 4",
+      "columns": [
+        "Count_Tile_2_Bin_4_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t2-r3-bin1",
+      "name": "Tile 2, replicate 3, bin 1",
+      "columns": [
+        "Count_Tile_2_Bin_1_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t2-r3-bin2",
+      "name": "Tile 2, replicate 3, bin 2",
+      "columns": [
+        "Count_Tile_2_Bin_2_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t2-r3-bin3",
+      "name": "Tile 2, replicate 3, bin 3",
+      "columns": [
+        "Count_Tile_2_Bin_3_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t2-r3-bin4",
+      "name": "Tile 2, replicate 3, bin 4",
+      "columns": [
+        "Count_Tile_2_Bin_4_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t3-r1-bin1",
+      "name": "Tile 3, replicate 1, bin 1",
+      "columns": [
+        "Count_Tile_3_Bin_1_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t3-r1-bin2",
+      "name": "Tile 3, replicate 1, bin 2",
+      "columns": [
+        "Count_Tile_3_Bin_2_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t3-r1-bin3",
+      "name": "Tile 3, replicate 1, bin 3",
+      "columns": [
+        "Count_Tile_3_Bin_3_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t3-r1-bin4",
+      "name": "Tile 3, replicate 1, bin 4",
+      "columns": [
+        "Count_Tile_3_Bin_4_BioReplicate_1"
+      ]
+    },
+    {
+      "id": "t3-r2-bin1",
+      "name": "Tile 3, replicate 2, bin 1",
+      "columns": [
+        "Count_Tile_3_Bin_1_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t3-r2-bin2",
+      "name": "Tile 3, replicate 2, bin 2",
+      "columns": [
+        "Count_Tile_3_Bin_2_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t3-r2-bin3",
+      "name": "Tile 3, replicate 2, bin 3",
+      "columns": [
+        "Count_Tile_3_Bin_3_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t3-r2-bin4",
+      "name": "Tile 3, replicate 2, bin 4",
+      "columns": [
+        "Count_Tile_3_Bin_4_BioReplicate_2"
+      ]
+    },
+    {
+      "id": "t3-r3-bin1",
+      "name": "Tile 3, replicate 3, bin 1",
+      "columns": [
+        "Count_Tile_3_Bin_1_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t3-r3-bin2",
+      "name": "Tile 3, replicate 3, bin 2",
+      "columns": [
+        "Count_Tile_3_Bin_2_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t3-r3-bin3",
+      "name": "Tile 3, replicate 3, bin 3",
+      "columns": [
+        "Count_Tile_3_Bin_3_BioReplicate_3"
+      ]
+    },
+    {
+      "id": "t3-r3-bin4",
+      "name": "Tile 3, replicate 3, bin 4",
+      "columns": [
+        "Count_Tile_3_Bin_4_BioReplicate_3"
+      ]
+    }
+  ],
+  "replicates": [
+    {
+      "id": "t1-r1",
+      "name": "Tile 1, replicate 1",
+      "biological": 1,
+      "tile": "tile1",
+      "bins": [
+        {
+          "sample": "t1-r1-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t1-r1-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t1-r1-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t1-r1-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "t1-r2",
+      "name": "Tile 1, replicate 2",
+      "biological": 2,
+      "tile": "tile1",
+      "bins": [
+        {
+          "sample": "t1-r2-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t1-r2-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t1-r2-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t1-r2-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "t1-r3",
+      "name": "Tile 1, replicate 3",
+      "biological": 3,
+      "tile": "tile1",
+      "bins": [
+        {
+          "sample": "t1-r3-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t1-r3-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t1-r3-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t1-r3-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "t2-r1",
+      "name": "Tile 2, replicate 1",
+      "biological": 1,
+      "tile": "tile2",
+      "bins": [
+        {
+          "sample": "t2-r1-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t2-r1-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t2-r1-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t2-r1-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "t2-r2",
+      "name": "Tile 2, replicate 2",
+      "biological": 2,
+      "tile": "tile2",
+      "bins": [
+        {
+          "sample": "t2-r2-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t2-r2-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t2-r2-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t2-r2-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "t2-r3",
+      "name": "Tile 2, replicate 3",
+      "biological": 3,
+      "tile": "tile2",
+      "bins": [
+        {
+          "sample": "t2-r3-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t2-r3-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t2-r3-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t2-r3-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "t3-r1",
+      "name": "Tile 3, replicate 1",
+      "biological": 1,
+      "tile": "tile3",
+      "bins": [
+        {
+          "sample": "t3-r1-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t3-r1-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t3-r1-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t3-r1-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "t3-r2",
+      "name": "Tile 3, replicate 2",
+      "biological": 2,
+      "tile": "tile3",
+      "bins": [
+        {
+          "sample": "t3-r2-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t3-r2-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t3-r2-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t3-r2-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "id": "t3-r3",
+      "name": "Tile 3, replicate 3",
+      "biological": 3,
+      "tile": "tile3",
+      "bins": [
+        {
+          "sample": "t3-r3-bin1",
+          "order": 1,
+          "value": 0.25
+        },
+        {
+          "sample": "t3-r3-bin2",
+          "order": 2,
+          "value": 0.5
+        },
+        {
+          "sample": "t3-r3-bin3",
+          "order": 3,
+          "value": 0.75
+        },
+        {
+          "sample": "t3-r3-bin4",
+          "order": 4,
+          "value": 1.0
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "wildType": "p.=",
+    "synonymous": "auto",
+    "nonsense": "auto"
+  },
+  "notes": [
+    "Bin values are the VAMP-seq weights the authors used (0.25, 0.5, 0.75, 1). Their scores set the median of WT barcodes to 1 and the median of the lowest 5% of missense variants to 0, per replicate, and average replicates."
+  ]
+}
