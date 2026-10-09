@@ -31,7 +31,7 @@ const SECTIONS = [
     kind: 'run', title: 'Score runs', icon: 'score',
     items: (ws) => ws.runs,
     label: (r) => r.name ?? r.model ?? 'Score run',
-    meta: (r) => r.created?.slice(0, 10) ?? '',
+    meta: (r) => (r.output ? `${formatCount(r.output.conditions[0]?.scored ?? 0)} scored` : ''),
     empty: 'Each scoring of the counts, with its parameters, kept unchanged.',
   },
   {

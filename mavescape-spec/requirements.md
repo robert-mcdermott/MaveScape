@@ -35,61 +35,61 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| D1 | Read CSV and TSV (streaming, in a worker): delimiter, quoting, header, BOM and encoding detection; XLSX sheets | planned (wave 1; XLSX wave 3) |
-| D2 | Detect candidate variant identifier columns and numeric columns; preview counts, missingness and duplicates | planned (wave 1) |
-| D3 | Parse and validate MAVE-HGVS (nucleotide, splice and protein; single and multi-variants; synonymous and WT special values) against the target sequence, with a message per invalid row | planned (wave 1: protein and coding nucleotide substitutions; wave 3: the full MAVE-HGVS grammar) |
-| D4 | Never coerce silently: block scoring on ambiguous duplicate keys or non-numeric counts, listing rows | planned (wave 1) |
-| D5 | Keep original identifiers and columns verbatim beside the normalized fields | planned (wave 1) |
-| D6 | Reusable import templates (column mapping, roles, identifier columns) | planned (wave 1) |
-| D7 | Content-addressed library: tables stored once by SHA-256; workspaces survive moved files | planned (wave 1) |
+| D1 | Read CSV and TSV (streaming, in a worker): delimiter, quoting, header, BOM and encoding detection; XLSX sheets | done for CSV/TSV (wave 1, slice 3: CRLF, LF and CR line ends, gzip, validation `import`); XLSX planned (wave 3) |
+| D2 | Detect candidate variant identifier columns and numeric columns; preview counts, missingness and duplicates | done (wave 1, slice 3) |
+| D3 | Parse and validate MAVE-HGVS (nucleotide, splice and protein; single and multi-variants; synonymous and WT special values) against the target sequence, with a message per invalid row | done (wave 1, slice 3: the whole grammar, equal to mavehgvs 0.8.1 on 16,959 strings, validation `hgvs`; a lenient mode for lab and legacy forms). Nucleotide-to-protein mapping of imported c. names: wave 3 |
+| D4 | Never coerce silently: block scoring on ambiguous duplicate keys or non-numeric counts, listing rows | done (wave 1, slice 3: duplicates however written, non-numbers, negative counts and ragged rows block, by line; fixture `malformed-counts.csv`) |
+| D5 | Keep original identifiers and columns verbatim beside the normalized fields | done (wave 1, slice 3) |
+| D6 | Reusable import templates (column mapping, roles, identifier columns) | done (wave 1, slice 3: library records of kind import-template, applied when a table fits) |
+| D7 | Content-addressed library: tables stored once by SHA-256; workspaces survive moved files | done (wave 1, slices 1 and 3) |
 | D8 | Barcode tables with a barcode-to-variant map | planned (wave 2) |
 | D9 | One million rows imported in under 15 s, under 1 GB of memory | planned (wave 2, benchmarked) |
 | D10 | Variants beyond single substitutions: multi-substitutions, insertions, deletions, delins, stop, nucleotide-to-protein translation, splice; optional GA4GH VRS identifiers | planned (wave 3) |
-| D12 | Built-in import templates for the layouts in common use, none of them required: MaveDB score and count CSVs, DiMSum count tables, generic per-variant tables (HGVS or `A12V`-style identifiers); later dms_variants and Enrich2 count files | planned (wave 1; wave 2 for dms_variants and Enrich2) |
-| D13 | Standard files for everything that is not counts: targets from FASTA (single or multi-record) or GenBank; designs from a sample sheet (CSV/XLSX); one count table or one file per sample; barcode maps as CSV/TSV; structures as PDB, mmCIF or BinaryCIF; alignments as FASTA or A3M; custom tracks as CSV or GFF3; predictor scores as CSV/TSV. Every format documented in `docs/FORMATS.md`, with blank layouts on the Start page | planned (wave 1: FASTA, sample sheet, per-sample files, layouts; wave 3: GenBank, alignments, tracks; wave 4: structures) |
+| D12 | Built-in import templates for the layouts in common use, none of them required: MaveDB score and count CSVs, DiMSum count tables, generic per-variant tables (HGVS or `A12V`-style identifiers); later dms_variants and Enrich2 count files | done for MaveDB, DiMSum and generic tables (wave 1, slice 3); dms_variants and Enrich2 count files planned (wave 2) |
+| D13 | Standard files for everything that is not counts: targets from FASTA (single or multi-record) or GenBank; designs from a sample sheet (CSV/XLSX); one count table or one file per sample; barcode maps as CSV/TSV; structures as PDB, mmCIF or BinaryCIF; alignments as FASTA or A3M; custom tracks as CSV or GFF3; predictor scores as CSV/TSV. Every format documented in `docs/FORMATS.md`, with blank layouts on the Start page | partial (wave 1: FASTA, per-sample files, sample sheets in CSV/TSV, DiMSum's design file, slices 3–4; `docs/FORMATS.md` and the blank layouts, slice 8; XLSX and GenBank wave 3; structures wave 4) |
 | D11 | Hardened readers: fuzzed CSV, HGVS and archive parsing with no crash or hang and a clear message for every refusal | planned (wave 9) |
 
 ## Experiment design
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | planned (wave 1; checked on three heterogeneous MaveDB datasets) |
-| E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | planned (wave 1: two-population; wave 2: time, bins, barcodes, conditions) |
-| E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | planned (wave 1) |
-| E4 | Role suggestions shown as suggestions, never applied silently | planned (wave 1) |
-| E5 | A human-readable design summary and validation before scoring | planned (wave 1) |
-| E6 | Every material change undoable and recorded in a hash-chained history | planned (wave 1) |
+| E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | done (wave 1, slice 2: three MaveDB data sets of different designs, four designs, no data-set code; validation `designs`). Barcode libraries are planned (wave 2) |
+| E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | done (wave 1, slice 4: every model, conditions and tiles; validation `experiment`). Barcode libraries planned (wave 2); named control classes planned (wave 6) |
+| E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | done (wave 1, slices 3–4: from FASTA files or pasted; name, offset, coding start and identifiers edited in the Experiment view). Offsets found from UniProt: wave 3 |
+| E4 | Role suggestions shown as suggestions, never applied silently | done (wave 1, slice 3: suggested from column names, drafts equal the hand-written designs' shape on all four feasibility designs) |
+| E5 | A human-readable design summary and validation before scoring | done (wave 1, slice 4) |
+| E6 | Every material change undoable and recorded in a hash-chained history | done (wave 1, slice 4: verified in the drawer; validation `experiment`) |
 
 ## Quality control
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| Q1 | Depth: total counts per sample, observed variant fraction, count distributions, low- and zero-count fractions, rank-abundance | planned (wave 1) |
-| Q2 | Coverage by position and substitution class | planned (wave 1) |
-| Q3 | Replicate agreement (pairwise, filtered by input count) and replicate outlier detection (leave-one-out z) | planned (wave 1) |
-| Q4 | Bottleneck diagnostics (input-to-output; synonymous log-ratio variance against the Poisson expectation; DiMSum's multiplicative error terms) | planned (wave 1: Poisson check; wave 2: error-model terms) |
-| Q5 | Control distributions (WT, synonymous, nonsense, user classes) and their separation | planned (wave 1) |
-| Q6 | Score stability against starting count; effect against uncertainty; missingness patterns | planned (wave 1) |
-| Q7 | Filter flow: retained and excluded variants at each stage, by reason | planned (wave 1) |
+| Q1 | Depth: total counts per sample, observed variant fraction, count distributions, low- and zero-count fractions, rank-abundance | done (wave 1, slice 6) |
+| Q2 | Coverage by position and substitution class | done (wave 1, slice 6: protein-level single substitutions; nucleotide coverage with wave 3's mapping) |
+| Q3 | Replicate agreement (pairwise, filtered by input count) and replicate outlier detection (leave-one-out z) | done (wave 1, slice 6) |
+| Q4 | Bottleneck diagnostics (input-to-output; synonymous log-ratio variance against the Poisson expectation; DiMSum's multiplicative error terms) | done for wave 1 (slice 6: replicate differences and synonymous variants against counting, a multiplier fitted when the counts allow; checked on simulated bottlenecks); DiMSum's terms: wave 2 |
+| Q5 | Control distributions (WT, synonymous, nonsense, user classes) and their separation | done (wave 1, slice 6: AUC, standardized median difference, nonsense above the synonymous 5th percentile) |
+| Q6 | Score stability against starting count; effect against uncertainty; missingness patterns | done (wave 1, slice 6, with dropouts written as missing) |
+| Q7 | Filter flow: retained and excluded variants at each stage, by reason | done (wave 1: Score view, slice 5; QC, slice 6) |
 | Q8 | Barcode agreement within variants and outlier barcodes | planned (wave 2) |
-| Q9 | Findings with status (pass/review/fail), explanation, affected samples or variants, threshold and rationale, link to the visual, advisory or blocking; thresholds configurable and recorded | planned (wave 1) |
+| Q9 | Findings with status (pass/review/fail), explanation, affected samples or variants, threshold and rationale, link to the visual, advisory or blocking; thresholds configurable and recorded | done (wave 1, slice 6: thresholds in the workspace and its history; validation `qc`) |
 | Q10 | Time-series fit diagnostics (usable points, residuals) and bin diagnostics (cells per bin, bin occupancy) | planned (wave 2) |
 
 ## Scoring
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| S1 | Two-population log ratio with WT, complete-case, all-read or synonymous normalization and a configurable pseudocount; SE per variant | planned (wave 1; equal to Enrich2 2.0.2) |
-| S2 | Technical replicates pooled; biological replicates scored separately and combined by fixed effects or REML random effects, with an Enrich2-compatible estimator; heterogeneity and leave-one-replicate-out sensitivity | planned (wave 1) |
-| S3 | Ordered, visible filters with reason codes and stage; filtered variants keep their measurements; explicit NA for unscored variants | planned (wave 1) |
-| S4 | Immutable score runs: input and output hashes, import mapping, design, software and algorithm versions, parameters, filters, seeds, warnings | planned (wave 1) |
-| S5 | The PRD's two-population edge cases (zero in both, in input only, in output only; missing replicate; very low depth; absent from one replicate; observed but filtered; reference class unavailable) specified and tested | planned (wave 1) |
+| S1 | Two-population log ratio with WT, complete-case, all-read or synonymous normalization and a configurable pseudocount; SE per variant | done (wave 1, slice 5: equal to Enrich2 2.0.2 and dms_variants 1.6.0 to 5 × 10⁻¹³, validation `scoring`; time series scored by their first and last samples until wave 2) |
+| S2 | Technical replicates pooled; biological replicates scored separately and combined by fixed effects or REML random effects, with an Enrich2-compatible estimator; heterogeneity and leave-one-replicate-out sensitivity | done (wave 1, slice 5: REML equal to metafor 5.2-1 to 3.4 × 10⁻¹², Enrich2's estimator to Enrich2; Q, I², τ², leave-one-out per variant) |
+| S3 | Ordered, visible filters with reason codes and stage; filtered variants keep their measurements; explicit NA for unscored variants | done (wave 1, slice 5: eight stages, count filters per replicate, the filter flow; barcode disagreement comes with barcodes, wave 2) |
+| S4 | Immutable score runs: input and output hashes, import mapping, design, software and algorithm versions, parameters, filters, seeds, warnings | done (wave 1, slice 5: ids from the canonical inputs; scores recomputed when a run is reopened and checked against its output hash) |
+| S5 | The PRD's two-population edge cases (zero in both, in input only, in output only; missing replicate; very low depth; absent from one replicate; observed but filtered; reference class unavailable) specified and tested | done (wave 1, slice 5: planted in `fixtures/two-population.csv`, each checked, Enrich2 and dms_variants scoring the same table) |
 | S6 | Time series: weighted (and ordinary) regression of normalized log frequency on time, non-uniform spacing, slope, SE, usable points; insufficient support flagged | planned (wave 2; equal to Enrich2) |
 | S7 | Bin scores: weighted average from ordered bins with explicit values and weight type; uncertainty analytically or by seeded bootstrap; optional maximum-likelihood estimate | planned (wave 2) |
 | S8 | Barcode aggregation: sum-then-score and score-then-combine | planned (wave 2; equal to dms_variants) |
 | S9 | DiMSum's error model as an alternative uncertainty model | planned (wave 2) |
 | S10 | Differential scores between compatible conditions, with a model that accounts for a shared input | planned (wave 2; against Enrich2's z and mutscan's limma contrasts) |
-| S11 | Score rescaling conventions (WT = 0; nonsense = 0 and WT = 1; synonymous and nonsense medians) recorded in the run | planned (wave 1) |
+| S11 | Score rescaling conventions (WT = 0; nonsense = 0 and WT = 1; synonymous and nonsense medians) recorded in the run | done (wave 1, slice 5: none, nonsense 0 and WT 1, synonymous 0 and nonsense −1; anchors recorded; factor IX's lowest-5%-of-missense convention to add with its data, wave 2) |
 | S12 | 100,000 variants × 6 samples scored in under 10 s | planned (wave 2, benchmarked) |
 
 ## Views
@@ -97,12 +97,12 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | V1 | Shell: Start, Experiment, QC, Score, Map, Compare, Structure, Calibrate, Figures, Report; left dataset tree, right inspector, bottom drawer, top command bar | planned (wave 1, views added by later waves) |
-| V2 | Variant-effect map: pan and zoom, color by score, differential, uncertainty, missingness, depth or QC status; distinct missing, filtered, low-confidence and not-designed states; WT marks; row orders; row and column summaries | planned (wave 1) |
-| V3 | Selection by click, rectangle, freeform and query; named selection sets that propagate across views | planned (wave 1: click and rectangle; wave 5: freeform and query) |
-| V4 | Variant inspector: identifiers, score and CI, counts by sample, replicate scores, filters and warnings, sequence context, position distribution, provenance; later barcodes, conditions, annotations, structure | planned (wave 1, extended by waves 2–4) |
+| V2 | Variant-effect map: pan and zoom, color by score, differential, uncertainty, missingness, depth or QC status; distinct missing, filtered, low-confidence and not-designed states; WT marks; row orders; row and column summaries | done (wave 1, slice 7: score, SE, replicates, input count; differential with wave 2) |
+| V3 | Selection by click, rectangle, freeform and query; named selection sets that propagate across views | partial (wave 1, slice 7: click, rectangle and keyboard; named selections in the workspace; wave 5: freeform and query) |
+| V4 | Variant inspector: identifiers, score and CI, counts by sample, replicate scores, filters and warnings, sequence context, position distribution, provenance; later barcodes, conditions, annotations, structure | done for wave 1 (slice 7); extended by waves 2–4 |
 | V5 | Sequence tracks synchronized with the map: reference, coverage, position effect and uncertainty, domains and motifs, secondary structure, conservation, ClinVar, population frequency, custom tracks, structure availability; show, hide, reorder, filter, export | planned (wave 3) |
-| V6 | Undo, history and a visible filter bar; analysis-changing actions distinct from view-only actions | planned (wave 1) |
-| V7 | Long operations in workers with progress and cancel | planned (wave 1) |
+| V6 | Undo, history and a visible filter bar; analysis-changing actions distinct from view-only actions | done (wave 1: undo and the history, slice 4; the filter bar in the Score view, slice 5) |
+| V7 | Long operations in workers with progress and cancel | done (wave 1: reading tables, slice 3; scoring, slice 5) |
 
 ## Comparison
 
@@ -137,10 +137,10 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| R1 | Exports: variant scores CSV, variant counts CSV, per-variant and per-sample QC tables, design JSON, provenance JSON, selected variants CSV/JSON | planned (wave 1) |
-| R2 | Workspace archive (`.msz`): manifest, targets, sources or checksums, design, runs, annotation cache, selections, figures, history, methods and citations; save and reopen with identical results | planned (wave 1) |
-| R3 | Map and plot export as SVG and PNG | planned (wave 1) |
-| R4 | Methods text from the operations actually performed, with numbered references and BibTeX, parameter tables, input checksums, software version and commit, research-use statement; regenerated when a setting changes | planned (wave 1: scoring and QC; wave 6: complete) |
+| R1 | Exports: variant scores CSV, variant counts CSV, per-variant and per-sample QC tables, design JSON, provenance JSON, selected variants CSV/JSON | done (wave 1, slice 8: MaveDB columns; re-import without loss, validation `roundtrip`) |
+| R2 | Workspace archive (`.msz`): manifest, targets, sources or checksums, design, runs, annotation cache, selections, figures, history, methods and citations; save and reopen with identical results | done for wave 1 (slice 8: identical bytes on reopening; tampering reported); annotations with wave 3, figures with wave 6 |
+| R3 | Map and plot export as SVG and PNG | done for the map (wave 1, slice 7; golden-file test); other plots with figures, wave 6 |
+| R4 | Methods text from the operations actually performed, with numbered references and BibTeX, parameter tables, input checksums, software version and commit, research-use statement; regenerated when a setting changes | partial (wave 1, slice 8: scoring and QC, with references and BibTeX; parameter tables and the rest with wave 6) |
 | R5 | Figure builder: multi-panel figures from live views; SVG, high-resolution PNG, vector PDF, clipboard; embedded analysis metadata and a figure manifest; reopened figures rebuilt with differences reported | planned (wave 6) |
 | R6 | Analysis decision log, checkpoints and semantic diff of analyses | planned (wave 6) |
 | R7 | Reproducibility certificate re-computing every reported number (`mavescape verify`) and a self-contained review report | planned (wave 6) |
@@ -170,10 +170,10 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | T1 | Unit, property, cross-implementation, golden UI, round-trip, MaveDB conformance, security and performance tests in CI | planned (from wave 1, by layer) |
-| T2 | Reference comparisons document tool and version, input transformation, compared values, tolerances, known differences and failure threshold | planned (wave 1) |
+| T2 | Reference comparisons document tool and version, input transformation, compared values, tolerances, known differences and failure threshold | done for Enrich2 (wave 1, slice 2: `validation/README.md`, `reference/enrich2.json`); each later reference the same way |
 | T3 | Fixtures: clean two-population, poor replicate agreement, severe bottleneck, low-count tail, barcode conflicts, missing samples, malformed variants, time series, bins, two conditions, a published MaveDB record | planned (waves 1–3) |
-| T4 | Bundled examples (five to seven), each with a question, source and license, expected findings, opening view, known QC outcomes, reference scores, citation and a guided workflow under ten minutes; simulated data labeled as such | planned (wave 1: two; wave 2: five; wave 3: seven) |
+| T4 | Bundled examples (five to seven), each with a question, source and license, expected findings, opening view, known QC outcomes, reference scores, citation and a guided workflow under ten minutes; simulated data labeled as such | partial (wave 1, slice 8: two, GRB2 SH3 and a simulated experiment; wave 2: five; wave 3: seven) |
 | T5 | Security: loopback binding, Host check, tokens, file-access restriction, response and decompression limits, archive path traversal, CSP, no remote code, escaped labels; `--offline` and `--no-remote-control`; tested | planned (wave 1; reviewed in wave 9) |
-| T6 | WCAG AA contrast in both themes, color-vision-safe palettes, patterns besides colors, full keyboard operation, screen-reader descriptions and tabular alternatives for every chart, adjustable scale | planned (wave 1 foundations; wave 9 audit) |
+| T6 | WCAG AA contrast in both themes, color-vision-safe palettes, patterns besides colors, full keyboard operation, screen-reader descriptions and tabular alternatives for every chart, adjustable scale | partial (wave 1: contrast and palettes, slice 1; the map's states as marks, keyboard, description and table, slice 7; wave 9 audit) |
 | T7 | Workspace migrations, opening at least two previous schema versions | planned (wave 9) |
 | T8 | Crash-safe writes; network failure cannot corrupt local work | planned (wave 1) |

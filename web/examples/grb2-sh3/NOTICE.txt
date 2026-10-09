@@ -1,0 +1,9 @@
+GRB2 SH3 domain: variant counts from MaveDB score set urn:mavedb:00000835-a-1
+(https://mavedb.org/score-sets/urn:mavedb:00000835-a-1), released under CC0 1.0.
+
+Beltran A, et al. Site-saturation mutagenesis of 500 human protein domains.
+Nature 2025. doi:10.1038/s41586-024-08370-4
+
+counts.csv is MaveDB's count table for this score set, unchanged (SHA-256
+d4c966d5e7b9605227b5931904685358b68f1952818cb7523e606d86dff9e016). design.json
+and target.fasta were written for MaveScape from the record's description.

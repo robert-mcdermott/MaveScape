@@ -1,0 +1,16 @@
+# MaveScape count table: one row per variant and one column per sequenced sample.
+# Variant names in MAVE-HGVS against your target: p.Ala12Val (protein) or c.34C>T (coding DNA).
+# The wild type is p.= (or c.=); a synonymous variant is p.Ala12=; a stop is p.Ala12Ter.
+# Counts are whole numbers of reads. Leave a cell empty or write NA when a sample did not count
+# a variant: missing is never read as 0. Write 0 only when the variant was counted zero times.
+# Name samples so their role shows: input or output (or pre and post); rep1 and rep2 for
+# biological replicates; t0 t1 t2 for times; bin1 bin2 for sorted bins. MaveScape suggests
+# roles from such names; you confirm them in the Experiment view.
+# The example rows name residues of the example target (target.fasta): S2 and K3.
+# Lines starting with # are skipped. Delete them and these example rows; keep the header.
+hgvs_pro,input_rep1,output_rep1,input_rep2,output_rep2
+p.=,52011,61873,48320,57112
+p.Ser2Val,812,640,775,591
+p.Ser2Ter,905,12,880,9
+p.Ser2=,640,655,602,631
+p.Lys3Pro,488,NA,502,33

@@ -3,6 +3,7 @@
 
 import { h, clear, iconButton } from './dom.js';
 import { prefs } from './storage.js';
+import { verifyHistory } from '../lib/workspace.js';
 
 export function mountDrawer(app) {
   const root = document.getElementById('drawer');
@@ -14,13 +15,19 @@ export function mountDrawer(app) {
   const log = [];
   let height = prefs.get('drawerHeight', 240);
 
+  // The workspace's hash-chained history (workspace.js), newest first, with the chain checked.
   function renderHistory() {
-    const { state } = app.store;
-    const done = state.labels.past.map((label) => ({ label, undone: false }));
-    const undone = [...state.labels.future].reverse().map((label) => ({ label, undone: true }));
-    const rows = [...done, ...undone];
-    if (!rows.length) return h('p.muted', 'Changes to the analysis are listed here as you make them; undo (⌘Z) steps back through them.');
-    return h('ol.history-list', ...rows.map((row, i) => h(`li${row.undone ? '.undone' : ''}`, h('time', `#${i + 1}`), h('span', row.label, row.undone ? ' (undone)' : ''))));
+    const { ws, state } = app.store;
+    const history = ws.history ?? [];
+    const check = verifyHistory(ws);
+    const undone = state.labels.future.length;
+    const status = check.ok
+      ? h('p.muted', { style: { margin: '4px 0 6px', fontSize: '12px' } }, `${history.length} change${history.length === 1 ? '' : 's'}, each chained to the one before (SHA-256; the latest ${check.head ? `${check.head.slice(0, 12)}…` : '—'}): a change altered or removed later breaks the chain.${undone ? ` ${undone} undone change${undone > 1 ? 's' : ''} can be redone (⇧⌘Z).` : ''}`)
+      : h('div.callout.danger', { style: { margin: '4px 0 6px' } }, `The history's chain is broken at entry ${check.broken[0].index + 1}: ${check.broken[0].reason}.`);
+    if (!history.length) return h('p.muted', 'Changes to the analysis are listed here as you make them.');
+    return h('div', status, h('ol.history-list', ...history.slice().reverse().map((entry) => h('li',
+      h('time', { title: entry.time }, new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+      h('span', entry.detail || entry.action)))));
   }
 
   function renderLog() {
@@ -74,7 +81,7 @@ export function mountDrawer(app) {
       render();
     },
     update(topics) {
-      if (topics.has('drawer') || topics.has('history') || topics.has('workspace-loaded')) render();
+      if (topics.has('drawer') || topics.has('history') || topics.has('ws') || topics.has('workspace-loaded')) render();
     },
   };
 }

@@ -98,6 +98,7 @@ target = {
   codingStart: 1,                 // for DNA targets: first base of the reading frame
   offset: 0,                      // added to positions to report them in the reference protein
   identifiers: { uniprot: 'P38398', refseq: 'NM_007294.4', ensembl: 'ENST…', gene: 'BRCA1' },
+  differences: [{ position: 174, target: 'R', reference: 'K', note }],  // construct vs reference
 }
 ```
 
@@ -128,40 +129,65 @@ components, `p.A12V`, `A12V`, `*`), which normalizes to the strict form and keep
 The model never assumes single amino-acid substitutions. The map view specializes in them and
 lists everything else (multi-substitutions, indels, splice variants) in a table beside it.
 
+### Tables (`web/lib/csv.js`)
+
+`{ columns: [{ name, index, values: string[] /* as written */, numeric: Float64Array | null /* when
+every present value is a number; missing NaN */, type: 'number' | 'mixed' | 'text' | 'empty',
+integer, missing, missingTokens, nonNumeric: [{ line, value }], nonNumericCount }], rows,
+lineOfRow: Int32Array, delimiter, lineEnd: 'crlf' | 'lf' | 'cr', header, encoding, diagnostics:
+[{ level, code, message, line?, column? }] }`. Every column keeps its text, so originals are exported
+as written.
+
 ### Count sets (`web/lib/counts.js`)
 
-An immutable import of one table:
-`{ id, source: { fileName, sha256, size, importTemplate }, rows, variantIndex: Int32Array,
-columns: [{ name, original, type }], samples: [{ id, column, total, observed }], counts:
-Float64Array[] /* one per sample; NaN = missing */, barcodes?: { barcode: string[], variantRow:
-Int32Array } }`. Original columns that are not counts are kept, as strings, for export.
+`buildCountSet(table, { variantColumn, countColumns }) → { rows, samples: [{ column, counts:
+Float64Array /* NaN = missing */, total, observed, missing, zeros, nonInteger }], problems }`.
+A count set is built from the stored table when needed; the workspace keeps the table's SHA-256
+and the mapping.
 
-### Design (`mavescape-design`, JSON Schema in `docs/schemas/design.v1.json`)
+### Sources (the workspace's imported tables)
+
+`{ id, name, fileName, sha256, size, files: [{ fileName, sha256, size }], rows, columns: [{ name,
+type, missing }], encoding, delimiter, lineEnd, layout, mapping: { variantColumn, level, mode,
+countColumns, scoreColumns, absentMeans, derivedNames, template }, target, roleSuggestions,
+summary, problems: { blocking: [text], warnings: [text] }, imported }`.
+
+### Design (`mavescape-design` v1, `docs/schemas/design.v1.json`, `web/lib/design.js`)
 
 ```js
 design = {
-  format: 'mavescape-design', version: 1,
+  format: 'mavescape-design', version: 1, name, description,
   model: 'two-population' | 'time-series' | 'bins' | 'scores',
-  targets: [target, ...],
-  library: { level: 'variant' | 'barcode', designedVariants?: 'all-single-aa' | [keys] },
-  conditions: [{ id, name, reference: false }],
-  samples: [{
-    id, name, column, condition,
-    role: 'input' | 'output' | 'timepoint' | 'bin' | 'score',
-    biologicalReplicate: 1, technicalReplicate: 1, batch: null,
-    tile: null,                   // tiled libraries: the region (positions) this sample's library covers
-    time: { value: 0, unit: 'generation' | 'hour' | 'day' | 'round' } | null,
-    bin: { order: 1, value: 0.25, weight: 'rank' | 'fluorescence' | 'other', cells: null } | null,
-  }],
-  controls: { wildType: 'auto' | key, synonymous: 'auto' | [keys], nonsense: 'auto' | [keys],
-              classes: [{ name, keys, source }] },
+  source: { mavedb: 'urn:mavedb:…', citation, license },
+  variants: { column: 'hgvs_pro', level: 'protein' | 'nucleotide' | 'splice' },
+  targets: [target, ...],               // target.differences: known construct differences
+  library: { level: 'variant' | 'barcode', tiles: [{ id, name, start, end }] },  // tiles may overlap
+  conditions: [{ id, name, reference }],
+  // Physical sequenced samples; a sample's columns are its technical replicates (summed).
+  samples: [{ id, name, columns: ['input_count_rep1'], batch, cells }],
+  // Biological replicates, each scored on its own and then combined. A sample may be named by
+  // several replicates (an input selected three times).
+  replicates: [{ id, name, biological: 1, condition, tile,
+                 input, output,                                // two-population
+                 timepoints: [{ sample, time }],               // time-series
+                 bins: [{ sample, order, value }] }],          // bins
+  time: { unit: 'round' | 'generation' | 'hour' | 'day' | 'minute' | 'other' },
+  bins: { weight: 'rank' | 'fluorescence' | 'other' },
+  scores: { score, se, ciLow, ciHigh },                       // model 'scores'
+  controls: { wildType: 'auto' | id, synonymous: 'auto' | 'none' | [ids], nonsense: …, classes },
+  // Every column of the table is a sample's, an identifier or here, with a reason; a column that
+  // repeats a shared sample says so (copyOf).
+  ignoredColumns: [{ column, reason, copyOf }],
+  notes: [text],
 }
 ```
 
-The design is *capability-based*: a model declares the roles it needs and validates the rest
-(`validateDesign(design, countSet) → { ok, errors, warnings, summary }`). Technical replicates are
-pooled before scoring; biological replicates are scored separately and combined. The UI never
-presents the two as equivalent.
+`validateDesign(design, { columns }) → { ok, errors, warnings }` checks the structure and the
+rules of each model against the table's header; `summarizeDesign(design) → { model, counts,
+lines }` describes it for people (requirement E5). Technical replicates are pooled before scoring;
+biological replicates are scored separately and combined. The UI never presents the two as
+equivalent. Three public data sets of different designs are represented with no code for any of
+them (`validation/designs/`, suite `designs`).
 
 ### Score runs (`web/lib/runs.js`)
 
@@ -171,7 +197,7 @@ run = {
   id,                              // SHA-256 of the canonical inputs, design, model and parameters
   created, model: 'ratio' | 'wls' | 'ols' | 'bins' | 'bins-mle' | 'dimsum' | 'imported',
   software: { name: 'MaveScape', version, commit, engine },
-  inputs: { countSets: [sha256], design: sha256, importTemplates: [sha256] },
+  inputs: { countSets: [sha256], design: sha256, importTemplates: [sha256] },  // the design's SHA-256
   params: { pseudocount: 0.5, normalization: 'wt' | 'complete' | 'full' | 'synonymous',
             combination: 'fixed' | 'reml' | 'enrich2', filters: [{ id, kind, params }], seed },
   warnings: [{ code, message, variants? }],
@@ -190,20 +216,30 @@ significant digits; see CytoWeave's wave 8 finding).
 ### Workspace
 
 In the library, a workspace is one JSON document (as CytoWeave's), referring to count tables by
-SHA-256. Exported, it is a `.msz` ZIP archive:
+SHA-256: `{ format: 'mavescape-workspace', version, id, name, created, modified, sources, targets,
+design, designSource /* the source the design describes */, runs, selections, history:
+[{ time, action, detail, hash }], historyAnchor? }`. Every material change goes through
+`change()` in `web/lib/workspace.js`, which appends a history entry whose hash is the SHA-256 of the
+previous entry's hash and the entry (canonical JSON); `verifyHistory` checks the chain. Exported, it is a `.msz` ZIP archive:
 
 ```
-manifest.json            format 'mavescape-archive', version, created, software, contents with SHA-256
-workspace.json           targets, design, import templates, runs (parameters and summaries),
-                         selections, figures, calibration, history (hash-chained), checkpoints
-sources/<sha256>.csv     the imported tables, unless exported with checksums only
-results/<run-id>.csv     each run's per-variant results
-annotations/<source>.json cached public records with retrieval metadata
-methods.md, references.bib
+manifest.json            format 'mavescape-archive', version, created, software, sources
+                         ('included' | 'checksums'), every other file with its SHA-256 and size
+workspace.json           the workspace document: targets, design, runs (inputs, parameters,
+                         output hash), selections, QC thresholds, example, the hash-chained history
+sources/<sha256>.<ext>   the imported tables, byte for byte, unless exported with checksums only
+results/<run-id>.csv     each run's scores (results/<run-id>.<condition>.csv for further conditions)
+methods.md, references.bib   the latest run's methods
+annotations/…            cached public records with retrieval metadata (from 0.3)
 ```
 
-Archives are written atomically, read with path-traversal and decompression limits, and migrated
-explicitly (`web/lib/migrate.js`); MaveScape opens at least the two previous schema versions.
+Archives (`web/lib/archive.js`, wave 1 slice 8) are written deterministically (the entries are
+dated with the workspace's modification time; the same workspace gives the same bytes) and read
+defensively: only these names, nothing outside the archive's folders, each file's size limited
+and enforced while decompressing, every file's SHA-256 against the manifest, every table's against
+its name, the history's chain verified; problems are reported, never hidden. Version 1 is the
+first; migrations (`web/lib/migrate.js`) arrive with version 2, and MaveScape will open at least
+the two previous versions. A workspace whose id is already in the library opens as a copy.
 
 ## Workers
 

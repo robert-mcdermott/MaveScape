@@ -1,0 +1,108 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "GRB2 SH3 domain, Domainome abundance (aPCA)",
+  "description": "Variant libraries of the GRB2 SH3 domain fused to a DHFR fragment in yeast; abundance selected by growth in methotrexate. Input and output sequenced in three biological replicates.",
+  "source": {
+    "mavedb": "urn:mavedb:00000835-a-1",
+    "citation": "Beltran et al., Nature 2025, doi:10.1038/s41586-024-08370-4",
+    "license": "CC0"
+  },
+  "model": "two-population",
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "grb2-sh3",
+      "name": "GRB2 SH3 domain",
+      "sequenceType": "protein",
+      "sequence": "TYVQALFDFDPQEDGELGFRRGDFIHVMDNSDPNWWKGACHGQTGMFPRNYVTPVN",
+      "offset": 158,
+      "organism": "Homo sapiens",
+      "identifiers": {
+        "uniprot": "P62993",
+        "gene": "GRB2"
+      }
+    }
+  ],
+  "library": {
+    "level": "variant"
+  },
+  "samples": [
+    {
+      "id": "input-rep1",
+      "name": "Input, replicate 1",
+      "columns": [
+        "input_count_rep1"
+      ]
+    },
+    {
+      "id": "input-rep2",
+      "name": "Input, replicate 2",
+      "columns": [
+        "input_count_rep2"
+      ]
+    },
+    {
+      "id": "input-rep3",
+      "name": "Input, replicate 3",
+      "columns": [
+        "input_count_rep3"
+      ]
+    },
+    {
+      "id": "output-rep1",
+      "name": "Output, replicate 1",
+      "columns": [
+        "output_count_rep1"
+      ]
+    },
+    {
+      "id": "output-rep2",
+      "name": "Output, replicate 2",
+      "columns": [
+        "output_count_rep2"
+      ]
+    },
+    {
+      "id": "output-rep3",
+      "name": "Output, replicate 3",
+      "columns": [
+        "output_count_rep3"
+      ]
+    }
+  ],
+  "replicates": [
+    {
+      "id": "rep1",
+      "name": "Replicate 1",
+      "biological": 1,
+      "input": "input-rep1",
+      "output": "output-rep1"
+    },
+    {
+      "id": "rep2",
+      "name": "Replicate 2",
+      "biological": 2,
+      "input": "input-rep2",
+      "output": "output-rep2"
+    },
+    {
+      "id": "rep3",
+      "name": "Replicate 3",
+      "biological": 3,
+      "input": "input-rep3",
+      "output": "output-rep3"
+    }
+  ],
+  "controls": {
+    "wildType": "p.=",
+    "synonymous": "auto",
+    "nonsense": "auto"
+  },
+  "notes": [
+    "The authors scored these counts with DiMSum 1.2.11 using culture optical densities and selection times (absolute growth rates), which the table does not hold; MaveDB's score is rescaled so WT = 0 and the 2.5th percentile of missense variants and WT = −1."
+  ]
+}

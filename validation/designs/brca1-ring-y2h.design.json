@@ -1,0 +1,523 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "BRCA1 RING domain, BARD1 binding by yeast two-hybrid",
+  "description": "Yeast two-hybrid selection for BARD1 binding, sampled at four times, in two libraries of three replicates; the libraries were sampled at different times (0, 18, 37, 45 and 0, 16, 41, 64), whose unit the record does not state.",
+  "source": {
+    "mavedb": "urn:mavedb:00000003-a-2",
+    "citation": "Starita et al., Genetics 2015, doi:10.1534/genetics.115.175802",
+    "license": "CC0"
+  },
+  "model": "time-series",
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "brca1-ring",
+      "name": "BRCA1 RING domain",
+      "sequenceType": "dna",
+      "sequence": "GATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCCATCTGCCTGGAGTTGATCAAGGAACCTGTCTCCACAAAGTGTGACCACATATTTTGCAAATTTTGCATGCTGAAACTTCTCAACCAGAAGAAAGGGCCTTCACAGTGTCCTTTATGTAAGAATGATATAACCAAAAGGAGCCTACAAGAAAGTACGAGATTTAGTCAACTTGTTGAAGAGCTATTGAAAATCATTTGTGCTTTTCAGCTTGACACAGGTTTGGAGTATGCAAACAGCTATAATTTTGCAAAAAAGGAAAATAACTCTCCTGAACATCTAAAAGATGAAGTTTCTATCATCCAAAGTATGGGCTACAGAAACCGTGCCAAAAGACTTCTACAGAGTGAACCCGAAAATCCTTCCTTGCAGGAAACCAGTCTCAGTGTCCAACTCTCTAACCTTGGAACTGTGAGAACTCTGAGGACAAAGCAGCGGATACAACCTCAAAGGACGTCTGTCTACATTGAATTGGGATCTGATTCTTCTGAAGATACCGTTAATAAGGCAACTTATTGCAGTGTGGGAGATCAAGAATTGTTACAAATCACCCCTCAAGGAACCAGGGATGAAATCAGTTTGGATTCTGCAAAAAAGGCTGCTTGTGAATTTTCTGAGACGGATGTAACAAATACTGAACATCATCAACCCAGTAATAATGATTTGAACACCACTGAGAAGCGTGCAGCTGAGAGGCATCCAGAAAAGTATCAGGGTAGTTCTGTTTCAAACTTGCATGTGGAGCCATGTGGCACAAATACTCATGCCAGCTCATTACAGCATGAGAACAGCAGTTTATTACTCACTAAAGACAGAATGAATGTAGAAAAGGCTGAGTTC",
+      "codingStart": 1,
+      "offset": 1,
+      "organism": "Homo sapiens",
+      "identifiers": {
+        "uniprot": "P38398",
+        "gene": "BRCA1"
+      },
+      "differences": [
+        {
+          "position": 174,
+          "target": "R",
+          "reference": "K",
+          "note": "The construct's codon 174 (BRCA1 residue 175) encodes Arg; UniProt P38398 has Lys."
+        }
+      ]
+    }
+  ],
+  "library": {
+    "level": "variant"
+  },
+  "time": {
+    "unit": "other"
+  },
+  "samples": [
+    {
+      "id": "y2h1-input",
+      "name": "Y2H library 1, input",
+      "columns": [
+        "Y2H_1_Rep1_c_0"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep1-t18",
+      "name": "Y2H library 1, replicate 1, time 18",
+      "columns": [
+        "Y2H_1_Rep1_c_18"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep1-t37",
+      "name": "Y2H library 1, replicate 1, time 37",
+      "columns": [
+        "Y2H_1_Rep1_c_37"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep1-t45",
+      "name": "Y2H library 1, replicate 1, time 45",
+      "columns": [
+        "Y2H_1_Rep1_c_45"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep2-t18",
+      "name": "Y2H library 1, replicate 2, time 18",
+      "columns": [
+        "Y2H_1_Rep2_c_18"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep2-t37",
+      "name": "Y2H library 1, replicate 2, time 37",
+      "columns": [
+        "Y2H_1_Rep2_c_37"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep2-t45",
+      "name": "Y2H library 1, replicate 2, time 45",
+      "columns": [
+        "Y2H_1_Rep2_c_45"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep3-t18",
+      "name": "Y2H library 1, replicate 3, time 18",
+      "columns": [
+        "Y2H_1_Rep3_c_18"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep3-t37",
+      "name": "Y2H library 1, replicate 3, time 37",
+      "columns": [
+        "Y2H_1_Rep3_c_37"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h1-rep3-t45",
+      "name": "Y2H library 1, replicate 3, time 45",
+      "columns": [
+        "Y2H_1_Rep3_c_45"
+      ],
+      "batch": "Y2H library 1"
+    },
+    {
+      "id": "y2h2-input",
+      "name": "Y2H library 2, input",
+      "columns": [
+        "Y2H_2_Rep1_c_0"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep1-t16",
+      "name": "Y2H library 2, replicate 1, time 16",
+      "columns": [
+        "Y2H_2_Rep1_c_16"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep1-t41",
+      "name": "Y2H library 2, replicate 1, time 41",
+      "columns": [
+        "Y2H_2_Rep1_c_41"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep1-t64",
+      "name": "Y2H library 2, replicate 1, time 64",
+      "columns": [
+        "Y2H_2_Rep1_c_64"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep2-t16",
+      "name": "Y2H library 2, replicate 2, time 16",
+      "columns": [
+        "Y2H_2_Rep2_c_16"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep2-t41",
+      "name": "Y2H library 2, replicate 2, time 41",
+      "columns": [
+        "Y2H_2_Rep2_c_41"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep2-t64",
+      "name": "Y2H library 2, replicate 2, time 64",
+      "columns": [
+        "Y2H_2_Rep2_c_64"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep3-t16",
+      "name": "Y2H library 2, replicate 3, time 16",
+      "columns": [
+        "Y2H_2_Rep3_c_16"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep3-t41",
+      "name": "Y2H library 2, replicate 3, time 41",
+      "columns": [
+        "Y2H_2_Rep3_c_41"
+      ],
+      "batch": "Y2H library 2"
+    },
+    {
+      "id": "y2h2-rep3-t64",
+      "name": "Y2H library 2, replicate 3, time 64",
+      "columns": [
+        "Y2H_2_Rep3_c_64"
+      ],
+      "batch": "Y2H library 2"
+    }
+  ],
+  "replicates": [
+    {
+      "id": "y2h1-rep1",
+      "name": "Y2H_1_Rep1",
+      "biological": 1,
+      "timepoints": [
+        {
+          "sample": "y2h1-input",
+          "time": 0
+        },
+        {
+          "sample": "y2h1-rep1-t18",
+          "time": 18
+        },
+        {
+          "sample": "y2h1-rep1-t37",
+          "time": 37
+        },
+        {
+          "sample": "y2h1-rep1-t45",
+          "time": 45
+        }
+      ]
+    },
+    {
+      "id": "y2h1-rep2",
+      "name": "Y2H_1_Rep2",
+      "biological": 2,
+      "timepoints": [
+        {
+          "sample": "y2h1-input",
+          "time": 0
+        },
+        {
+          "sample": "y2h1-rep2-t18",
+          "time": 18
+        },
+        {
+          "sample": "y2h1-rep2-t37",
+          "time": 37
+        },
+        {
+          "sample": "y2h1-rep2-t45",
+          "time": 45
+        }
+      ]
+    },
+    {
+      "id": "y2h1-rep3",
+      "name": "Y2H_1_Rep3",
+      "biological": 3,
+      "timepoints": [
+        {
+          "sample": "y2h1-input",
+          "time": 0
+        },
+        {
+          "sample": "y2h1-rep3-t18",
+          "time": 18
+        },
+        {
+          "sample": "y2h1-rep3-t37",
+          "time": 37
+        },
+        {
+          "sample": "y2h1-rep3-t45",
+          "time": 45
+        }
+      ]
+    },
+    {
+      "id": "y2h2-rep1",
+      "name": "Y2H_2_Rep1",
+      "biological": 4,
+      "timepoints": [
+        {
+          "sample": "y2h2-input",
+          "time": 0
+        },
+        {
+          "sample": "y2h2-rep1-t16",
+          "time": 16
+        },
+        {
+          "sample": "y2h2-rep1-t41",
+          "time": 41
+        },
+        {
+          "sample": "y2h2-rep1-t64",
+          "time": 64
+        }
+      ]
+    },
+    {
+      "id": "y2h2-rep2",
+      "name": "Y2H_2_Rep2",
+      "biological": 5,
+      "timepoints": [
+        {
+          "sample": "y2h2-input",
+          "time": 0
+        },
+        {
+          "sample": "y2h2-rep2-t16",
+          "time": 16
+        },
+        {
+          "sample": "y2h2-rep2-t41",
+          "time": 41
+        },
+        {
+          "sample": "y2h2-rep2-t64",
+          "time": 64
+        }
+      ]
+    },
+    {
+      "id": "y2h2-rep3",
+      "name": "Y2H_2_Rep3",
+      "biological": 6,
+      "timepoints": [
+        {
+          "sample": "y2h2-input",
+          "time": 0
+        },
+        {
+          "sample": "y2h2-rep3-t16",
+          "time": 16
+        },
+        {
+          "sample": "y2h2-rep3-t41",
+          "time": 41
+        },
+        {
+          "sample": "y2h2-rep3-t64",
+          "time": 64
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "wildType": "_wt",
+    "synonymous": [
+      "_sy"
+    ],
+    "nonsense": "auto"
+  },
+  "ignoredColumns": [
+    {
+      "column": "Y2H_1_Rep2_c_0",
+      "reason": "repeats the input its library's replicates share",
+      "copyOf": "Y2H_1_Rep1_c_0"
+    },
+    {
+      "column": "Y2H_1_Rep3_c_0",
+      "reason": "repeats the input its library's replicates share",
+      "copyOf": "Y2H_1_Rep1_c_0"
+    },
+    {
+      "column": "Y2H_2_Rep2_c_0",
+      "reason": "repeats the input its library's replicates share",
+      "copyOf": "Y2H_2_Rep1_c_0"
+    },
+    {
+      "column": "Y2H_2_Rep3_c_0",
+      "reason": "repeats the input its library's replicates share",
+      "copyOf": "Y2H_2_Rep1_c_0"
+    },
+    {
+      "column": "PlusE2NewRep3_c_0",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep3_c_1",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep3_c_2",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep3_c_3",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep3_c_4",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep3_c_5",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep4_c_0",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep4_c_1",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep4_c_2",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep4_c_3",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep4_c_4",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep4_c_5",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep5_c_0",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep5_c_1",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep5_c_2",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep5_c_3",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep5_c_4",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2NewRep5_c_5",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep3_c_0",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep3_c_1",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep3_c_2",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep3_c_3",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep3_c_4",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep3_c_5",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep4_c_0",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep4_c_1",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep4_c_2",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep4_c_3",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep4_c_4",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep4_c_5",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep5_c_0",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep5_c_1",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep5_c_2",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep5_c_3",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep5_c_4",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    },
+    {
+      "column": "PlusE2Rep5_c_5",
+      "reason": "E2 binding assay, a separate experiment (brca1-ring-e2.design.json)"
+    }
+  ],
+  "notes": [
+    "The counts share a table with the E2 binding selection; MaveDB's scores of this table are E2 binding only."
+  ]
+}

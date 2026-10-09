@@ -8,58 +8,27 @@ import { createLibrary, detectBackend, prefs } from './ui/storage.js';
 import { mountSidebar } from './ui/sidebar.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountDrawer } from './ui/drawer.js';
-import { plannedMode } from './ui/mode-planned.js';
 import { openPalette } from './ui/palette.js';
 import { WorkerClient } from './ui/workers.js';
 import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js';
 import { createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWorkspace } from './lib/workspace.js';
+import { installImport } from './ui/import.js';
+import { chooseArchiveExport, openArchives } from './ui/record.js';
+import { exampleGuide } from './ui/examples.js';
+import { mountWorkflow } from './ui/workflow.js';
 
 const VERSION = '0.1.0';
-
-const toImport = { label: 'Open files', icon: 'table', run: (app) => app.pickFiles() };
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
 // show what they are for (mode-planned.js); Compare, Structure, Calibrate, Figures and Report join
 // the list in the waves that build them (roadmap.md).
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
-  {
-    id: 'experiment', label: 'Experiment', icon: 'experiment',
-    load: async () => plannedMode({
-      title: 'Experiment', icon: 'experiment',
-      purpose: 'Say what each column of the counts is: the sample, its role (input, output, time point or bin), condition, biological and technical replicate, and the control variants. MaveScape suggests roles from the column names; nothing is applied until you accept it.',
-      steps: ['Open a count table (CSV, TSV or Excel).', 'Give the target sequence (FASTA) the variants are named against.', 'Check the design summary, then go on to QC.'],
-      actions: [toImport],
-    }),
-  },
-  {
-    id: 'qc', label: 'QC', icon: 'qc',
-    load: async () => plannedMode({
-      title: 'Quality control', icon: 'qc',
-      purpose: 'Whether the experiment supports reliable scores: depth and coverage, replicate agreement, bottlenecks, the separation of synonymous and nonsense controls. Each finding says pass, review or fail, with its threshold, the variants it concerns and why it matters.',
-      steps: ['Open the counts and set the design in Experiment.', 'Read the findings; open the plot behind any of them.'],
-      actions: [toImport],
-    }),
-  },
-  {
-    id: 'score', label: 'Score', icon: 'score',
-    load: async () => plannedMode({
-      title: 'Score', icon: 'score',
-      purpose: 'Functional scores with standard errors from the counts: the normalization, pseudocount, filters and replicate combination in plain view, each run kept unchanged with everything needed to repeat it. The numbers are checked against Enrich2 and other reference tools.',
-      steps: ['Set the design and review QC.', 'Choose the scoring parameters, or keep the defaults, and run.'],
-      actions: [toImport],
-    }),
-  },
+  { id: 'experiment', label: 'Experiment', icon: 'experiment', load: () => import('./ui/mode-experiment.js').then((m) => m.mountExperimentMode) },
+  { id: 'qc', label: 'QC', icon: 'qc', load: () => import('./ui/mode-qc.js').then((m) => m.mountQcMode) },
+  { id: 'score', label: 'Score', icon: 'score', load: () => import('./ui/mode-score.js').then((m) => m.mountScoreMode) },
   'sep',
-  {
-    id: 'map', label: 'Map', icon: 'heatmap',
-    load: async () => plannedMode({
-      title: 'Variant-effect map', icon: 'heatmap',
-      purpose: 'Positions across, substitutions down, colored by score; missing, filtered and low-confidence measurements each drawn their own way, never as "no effect". Select variants to follow them back to their counts.',
-      steps: ['Score the counts, or open a published score table.', 'Pan, zoom and select; the inspector shows each variant\'s evidence.'],
-      actions: [toImport],
-    }),
-  },
+  { id: 'map', label: 'Map', icon: 'heatmap', load: () => import('./ui/mode-map.js').then((m) => m.mountMapMode) },
 ];
 
 // --- Theme ---------------------------------------------------------------------------------------
@@ -118,17 +87,24 @@ async function start() {
     app.workers[name] ??= new WorkerClient(`../workers/${name}-worker.js`, { max: 1 });
     return app.workers[name];
   };
-  // Readers of opened files by kind, registered by the slices that build them: kind → async (item).
+  // Readers of opened files by kind, registered by the slices that build them: kind → async
+  // (items), with all the files of that kind opened together (per-sample tables are joined).
   app.importers = new Map();
 
   app.sidebar = mountSidebar(app);
   app.inspector = mountInspector(app);
   app.drawer = mountDrawer(app);
   app.log = (message) => app.drawer.log(message);
+  installImport(app);
+  app.importers.set('workspace', (items) => openArchives(app, items));
+  app.inspector.setSection('example', exampleGuide);
 
   // --- Views -------------------------------------------------------------------------------------
 
-  const workbench = document.getElementById('workbench');
+  // The workflow strip (ui/workflow.js) stays above the views; each view mounts into the host.
+  const workflowEl = h('nav.workflow', { 'aria-label': 'Analysis steps' });
+  const workbench = h('div.view-host');
+  document.getElementById('workbench').append(workflowEl, workbench);
   const switcher = document.getElementById('mode-switcher');
   let current = null;
   let currentId = null;
@@ -200,19 +176,27 @@ async function start() {
     const items = files.map((file, order) => ({ file, name: file.name, folder: file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(-2, -1)[0] : file.folder ?? null, order }));
     const unread = new Map();
     const unknown = [];
+    const byKind = new Map();
     for (const item of items) {
       const kind = fileKind(item.name);
-      const importer = app.importers.get(kind);
-      if (!importer) {
-        if (kind) unread.set(kind, (unread.get(kind) ?? 0) + 1);
-        else unknown.push(item.name);
+      if (!kind) {
+        unknown.push(item.name);
         continue;
       }
+      if (!app.importers.has(kind)) {
+        unread.set(kind, (unread.get(kind) ?? 0) + 1);
+        continue;
+      }
+      if (!byKind.has(kind)) byKind.set(kind, []);
+      byKind.get(kind).push(item);
+    }
+    // Sequences first, so a table opened with its target's FASTA finds the target.
+    for (const kind of [...byKind.keys()].sort((a, b) => (a === 'sequence' ? -1 : b === 'sequence' ? 1 : 0))) {
       try {
-        await importer(item);
+        await app.importers.get(kind)(byKind.get(kind));
       } catch (error) {
-        toast(`${item.name}: ${error.message}`, { kind: 'error' });
-        app.log(`${item.name}: ${error.message}`);
+        toast(error.message, { kind: 'error' });
+        app.log(error.message);
       }
     }
     const messages = [];
@@ -345,6 +329,7 @@ async function start() {
       { label: 'A folder…', icon: 'folder', onSelect: () => app.pickFolder() },
       '-',
       { section: 'Export' },
+      { label: 'Workspace archive (.msz)…', icon: 'download', onSelect: () => chooseArchiveExport(app) },
       { label: 'Workspace document (JSON)', icon: 'download', onSelect: exportWorkspaceJSON },
       '-',
       { label: 'Start page', icon: 'grid', onSelect: () => app.setMode('welcome') },
@@ -360,6 +345,7 @@ async function start() {
     { label: 'New workspace', icon: 'plus', run: () => app.newWorkspace() },
     { label: 'Open a saved workspace', icon: 'library', hint: `${modKey}⇧O`, run: openLibraryDialog },
     { label: 'Save workspace now', icon: 'save', hint: `${modKey}S`, run: saveNow },
+    { label: 'Export the workspace archive (.msz)', icon: 'download', run: () => chooseArchiveExport(app), keywords: 'save zip record share' },
     { label: 'Export the workspace document', icon: 'download', run: exportWorkspaceJSON },
     { label: 'Show or hide the drawer (history, log)', icon: 'drawer', hint: `${modKey}J`, run: () => app.toggleDrawer(), keywords: 'history log undo' },
     { label: 'Toggle dark theme', icon: 'moon', run: () => toggleTheme() },
@@ -584,8 +570,10 @@ async function start() {
 
   // --- Store subscription ------------------------------------------------------------------------
 
+  app.workflow = mountWorkflow(app, workflowEl);
   store.subscribe((topics) => {
     if (topics.has('ws') || topics.has('history') || topics.has('saved')) updateTitle();
+    app.workflow.update(topics);
     if (topics.has('ws')) autosave();
     app.sidebar.update(topics);
     app.inspector.update(topics);

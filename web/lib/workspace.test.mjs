@@ -44,3 +44,60 @@ test('rename returns a new value and leaves the original alone', () => {
   assert.equal(rename(ws, '   '), ws);
   assert.equal(rename(ws, 'A'), ws);
 });
+
+test('sources and targets are added with ids of their own; an identical target is not added twice', async () => {
+  const { addSource, addTarget, removeSource, uniqueId, updateTarget } = await import('./workspace.js');
+  let ws = createWorkspace('W');
+  let r = addSource(ws, { name: 'counts.csv', sha256: 'a'.repeat(64) });
+  ws = r.ws;
+  assert.equal(r.id, 'counts.csv');
+  r = addSource(ws, { name: 'counts.csv', sha256: 'b'.repeat(64) });
+  assert.equal(r.id, 'counts.csv-2');
+  ws = removeSource(r.ws, 'counts.csv');
+  assert.deepEqual(ws.sources.map((s) => s.id), ['counts.csv-2']);
+  const t = { id: 'grb2', name: 'GRB2 SH3', sequenceType: 'protein', sequence: 'TYVQALFDF' };
+  const first = addTarget(ws, t);
+  const again = addTarget(first.ws, t);
+  assert.equal(again.existing, true);
+  assert.equal(again.ws, first.ws);
+  ws = updateTarget(first.ws, 'grb2', { offset: 158 });
+  assert.equal(ws.targets[0].offset, 158);
+  assert.equal(uniqueId('a b/c', [{ id: 'a-b-c' }]), 'a-b-c-2');
+});
+
+test('the history is hash-chained: any entry changed, removed, inserted or reordered breaks it', async () => {
+  const { addTarget, setDesign, verifyHistory, appendHistory, HISTORY_LIMIT } = await import('./workspace.js');
+  let ws = createWorkspace('Chained', { now: '2026-10-08T00:00:00.000Z' });
+  ws = addTarget(ws, { id: 't', name: 'T', sequenceType: 'protein', sequence: 'MSK' }).ws;
+  ws = setDesign(ws, { format: 'mavescape-design' }, 'Set the design');
+  ws = rename(ws, 'Renamed');
+  const ok = verifyHistory(ws);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ws.history.map((e) => e.action), ['create', 'target', 'design', 'rename']);
+  const edited = { ...ws, history: ws.history.map((e, i) => (i === 1 ? { ...e, detail: 'Added something else' } : e)) };
+  assert.equal(verifyHistory(edited).broken[0].index, 1);
+  const removed = { ...ws, history: ws.history.filter((_, i) => i !== 1) };
+  assert.equal(verifyHistory(removed).broken[0].index, 1);
+  const swapped = { ...ws, history: [ws.history[0], ws.history[2], ws.history[1], ws.history[3]] };
+  assert.equal(verifyHistory(swapped).ok, false);
+  // The chain survives saving and reopening.
+  assert.equal(verifyHistory(parseWorkspace(serializeWorkspace(ws))).head, ok.head);
+  // Beyond the limit the oldest entries go, and the anchor keeps the chain checkable.
+  let long = { history: [], historyAnchor: undefined };
+  for (let i = 0; i < HISTORY_LIMIT + 3; i += 1) long = { ...long, ...appendHistory(long, 'edit', `#${i}`, '2026-10-08T00:00:00.000Z') };
+  assert.equal(long.history.length, HISTORY_LIMIT);
+  assert.equal(verifyHistory(long).ok, true);
+  assert.equal(long.history[0].detail, '#3');
+});
+
+test('named selections: saved and removed, each in the history', async () => {
+  const { addSelection, removeSelection, createWorkspace, verifyHistory } = await import('./workspace.js');
+  let ws = createWorkspace('s');
+  const added = addSelection(ws, { name: 'Hot spot', run: 'run-x', condition: 0, keys: ['p.Ala2Val', 'p.Ala2Ter'] });
+  ws = added.ws;
+  assert.equal(added.id, 'Hot-spot');
+  assert.equal(addSelection(ws, { name: 'Hot spot', run: 'run-x', keys: [] }).id, 'Hot-spot-2');
+  ws = removeSelection(ws, added.id);
+  assert.deepEqual(ws.history.map((e) => e.action), ['create', 'selection', 'remove-selection']);
+  assert.ok(verifyHistory(ws).ok);
+});

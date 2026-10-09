@@ -1,0 +1,7 @@
+column,role,replicate
+input_count_rep1,input,1
+output_count_rep1,output,1
+input_count_rep2,input,2
+output_count_rep2,output,2
+input_count_rep3,input,3
+output_count_rep3,output,3

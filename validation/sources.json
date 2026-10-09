@@ -1,0 +1,97 @@
+{
+ "about": "Public data the validation suites use, downloaded and checked by node validation/fetch.mjs into validation/cache/<data set>/. Nothing here is stored in the repository or the MaveScape program. MaveDB's API writes its CSV files the same way each time (checked 2026-10-08); if a checksum stops matching, MaveDB has rewritten the file and the reference outputs that depend on it must be regenerated.",
+ "datasets": {
+  "mavedb-grb2-sh3": {
+   "title": "GRB2 SH3 domain, Domainome abundance (urn:mavedb:00000835-a-1)",
+   "description": "Two populations (input and output of a yeast abundance selection, aPCA) × 3 biological replicates; 1,121 variants of a 56-residue domain (UniProt P62993, offset 158), WT row p.=. Scored by the authors with DiMSum 1.2.11 (absolute growth rates), rescaled so WT = 0 and the 2.5th percentile of missense variants = −1.",
+   "source": "MaveDB; Beltran et al., Nature 2025 (doi:10.1038/s41586-024-08370-4)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000835-a-1/scores",
+     "size": 117721,
+     "sha256": "f04ee5723ab52c6d470925e3300c4b198f75f836afd42dd33f7c1eb08c5bb7c0"
+    },
+    {
+     "path": "counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000835-a-1/counts",
+     "size": 88909,
+     "sha256": "d4c966d5e7b9605227b5931904685358b68f1952818cb7523e606d86dff9e016"
+    }
+   ]
+  },
+  "mavedb-brca1-ring": {
+   "title": "BRCA1 RING domain, E2 binding and Y2H (urn:mavedb:00000003-a-1 and -a-2)",
+   "description": "Time series: E2 binding by phage display, 2 libraries × 3 replicates × 6 rounds (inputs shared within a library), and yeast two-hybrid, 2 libraries × 3 replicates × 4 time points (0/18/37/45 and 0/16/41/64 in the column names, units not stated in the record; non-uniform), in one count table. 909-nt DNA target (BRCA1 codons 2–304); -a-1 at nucleotide level (20,724 variants), -a-2 at amino-acid level (12,316). Scored by the Enrich2 authors with weighted least squares and random-effects combination; Enrich2's legacy _wt and _sy rows.",
+   "source": "MaveDB; Starita et al., Genetics 2015 (doi:10.1534/genetics.115.175802), rescored in Rubin et al., Genome Biology 2017 (doi:10.1186/s13059-017-1272-5)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "aa/scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000003-a-2/scores",
+     "size": 3193620,
+     "sha256": "4f18e53106ce809bc2fea09f7af21b70e6f08faf4f46efdd2a79183168d573a5"
+    },
+    {
+     "path": "aa/counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000003-a-2/counts",
+     "size": 4607317,
+     "sha256": "c6afef9deec861cea25f879473fc9de3d718e0bd1109b1860fdfc77e4c1973a3"
+    },
+    {
+     "path": "nt/scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000003-a-1/scores",
+     "size": 6044713,
+     "sha256": "f4586ebbbc41f0e19ea73a49f29a56c3a7bc05bb4fab8d31aa020cce07657e48"
+    },
+    {
+     "path": "nt/counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000003-a-1/counts",
+     "size": 8294139,
+     "sha256": "83681190e5f17fa4c4badc4dc6810768664db1acb3f65bc3f5efbe26595eed2b"
+    }
+   ]
+  },
+  "mavedb-factor9": {
+   "title": "Coagulation factor IX, MultiSTEP secretion, strep II tag (urn:mavedb:00001200-a-1)",
+   "description": "FACS bins: 3 tiles × 4 bins × 3 biological replicates; 9,682 variants of the 461-residue protein (WT row p.= in every tile). Scored by the authors as VAMP-seq weighted averages (bin weights 0.25–1), rescaled per replicate so the median of WT barcodes = 1 and the median of the lowest 5% of missense variants = 0, averaged over replicates.",
+   "source": "MaveDB; Popp et al., Nature Structural & Molecular Biology 2025 (doi:10.1038/s41594-025-01582-w)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00001200-a-1/scores",
+     "size": 1548253,
+     "sha256": "cd9a34b6f9ce96b8704cb0796b62a15c49edf2302853e6316eb162a74e9b6469"
+    },
+    {
+     "path": "counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00001200-a-1/counts",
+     "size": 1979154,
+     "sha256": "80a405e84a5a1c69aa53e73a9e83f74f6190fc85f09cc1ab5cbdc77390cedfba"
+    }
+   ]
+  },
+  "dimsum-demo": {
+   "title": "DiMSum's demo variant counts (TDP-43, lehner-lab/DiMSum inst/demo)",
+   "description": "DiMSum's own count table: 40,591 whole nucleotide sequences (lower case; CRLF line ends, the last line unterminated) × 4 input and 4 output samples, and its experiment design file (old Mac line ends, CR only). The wild type, 126 nt (42 codons), is set in DiMSum's R/dimsum.R for --runDemo.",
+   "source": "https://github.com/lehner-lab/DiMSum (Faure et al., Genome Biology 2020, doi:10.1186/s13059-020-02091-3)",
+   "license": "MIT (DiMSum)",
+   "base": "https://raw.githubusercontent.com/lehner-lab/DiMSum/a441cdfbdc50a68631b87cd1c1dbcc00ea86c859/inst/demo/",
+   "wildType": "GGTAATAGCAGAGGGGGTGGAGCTGGTTTGGGAAACAATCAAGGTAGTAATATGGGTGGTGGGATGAACTTTGGTGCGTTCAGCATTAATCCAGCCATGATGGCTGCCGCCCAGGCAGCACTACAG",
+   "files": [
+    {
+     "path": "countFile_Toy.txt",
+     "size": 5848421,
+     "sha256": "7308ede4320f88a78b4abbc5e2bfa8da143a8ba3640ae5d76768d5b0451d38af"
+    },
+    {
+     "path": "experimentDesign_Toy.txt",
+     "size": 646,
+     "sha256": "799c4565533e9fd69e0afdd2b0849e88e340b2e1afb9cdb062121825414e71f8"
+    }
+   ]
+  }
+ }
+}

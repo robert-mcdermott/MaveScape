@@ -59,9 +59,10 @@ Panes are `h('div.pane', h('h3', 'Title'), content)`. Use `.btn`, `.btn.primary`
   `store.setUI(patch, topics)`; `store.notify(topics)`; `store.subscribe`; `store.sameWorkspace()`
   for work that may finish after another workspace was opened.
 - `app.focusItem({ kind, id })`: puts an item in focus (the dataset tree and the inspector follow).
-- `app.importers.set(kind, async (item) => …)`: reads opened files of a kind (`fileKind` in
-  app.js, the same table as `local.go`). `item` is `{ file, name, folder, order }`;
-  `await app.readBytes(item)` gives its bytes.
+- `app.importers.set(kind, async (items) => …)`: reads the opened files of a kind (`fileKind` in
+  app.js, the same table as `local.go`), all those opened together at once (sequences before
+  tables). Each item is `{ file, name, folder, order }`; `await app.readBytes(item)` gives its
+  bytes. `web/ui/import.js` registers `table` and `sequence`.
 - `app.inspector.setSection(id, (app) => Node)`: adds a section to the inspector (`null` removes
   it). `app.drawer.addTab(id, { label, render(app) })`: adds a drawer tab. `app.log(message)`:
   the session log.

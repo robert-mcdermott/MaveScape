@@ -1,0 +1,102 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "Synthetic two-population fixture (simulated)",
+  "description": "Simulated by validation/fixtures/make-two-population.mjs (seed 20261008): 202 variants of a 20-codon target, 3 replicates, replicate 3's output on two lanes. Edge cases: p.Lys3Arg, zero in both samples (replicate 1); p.Gly4Asp, zero only in the input (replicate 1); p.Glu5Ter, zero only in the output (every replicate); p.Glu6Lys, a missing measurement: output of replicate 2 not given; p.Leu7Pro, absent from replicate 3 (neither sample); p.Phe8Ser, very low depth (2 and 1 reads); p.Thr9Ala, observed but filtered by a minimum input count of 10 (3 input reads); p.Gly10Ala, not counted at all.",
+  "model": "two-population",
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "synthetic-20",
+      "name": "Synthetic 20-codon target",
+      "sequenceType": "dna",
+      "sequence": "ATGTCTAAAGGTGAAGAACTGTTTACCGGTGTTGTTCCGATTCTGGTTGAACTGGATGGT",
+      "codingStart": 1
+    }
+  ],
+  "library": {
+    "level": "variant"
+  },
+  "samples": [
+    {
+      "id": "input-1",
+      "name": "Input, replicate 1",
+      "columns": [
+        "input_rep1"
+      ]
+    },
+    {
+      "id": "output-1",
+      "name": "Output, replicate 1",
+      "columns": [
+        "output_rep1"
+      ]
+    },
+    {
+      "id": "input-2",
+      "name": "Input, replicate 2",
+      "columns": [
+        "input_rep2"
+      ]
+    },
+    {
+      "id": "output-2",
+      "name": "Output, replicate 2",
+      "columns": [
+        "output_rep2"
+      ]
+    },
+    {
+      "id": "input-3",
+      "name": "Input, replicate 3",
+      "columns": [
+        "input_rep3"
+      ]
+    },
+    {
+      "id": "output-3",
+      "name": "Output, replicate 3 (two lanes)",
+      "columns": [
+        "output_rep3_lane1",
+        "output_rep3_lane2"
+      ]
+    }
+  ],
+  "replicates": [
+    {
+      "id": "rep1",
+      "name": "Replicate 1",
+      "biological": 1,
+      "input": "input-1",
+      "output": "output-1"
+    },
+    {
+      "id": "rep2",
+      "name": "Replicate 2",
+      "biological": 2,
+      "input": "input-2",
+      "output": "output-2"
+    },
+    {
+      "id": "rep3",
+      "name": "Replicate 3",
+      "biological": 3,
+      "input": "input-3",
+      "output": "output-3"
+    }
+  ],
+  "controls": {
+    "wildType": "p.=",
+    "synonymous": "auto",
+    "nonsense": "auto"
+  },
+  "ignoredColumns": [
+    {
+      "column": "codon",
+      "reason": "the variant as a codon substitution (for dms_variants)"
+    }
+  ]
+}

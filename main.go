@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ import (
 	"time"
 )
 
-//go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js
+//go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/ui/*.js web/workers/*.js web/examples
 var content embed.FS
 
 var version = "0.1.0"
@@ -82,12 +83,23 @@ func main() {
 	// A MaveScape already running on the preferred port gets the files and a new window, so the
 	// workspace library (kept per origin by the browser) stays in one place.
 	if existing := findRunning(cfg.host, cfg.port); existing != "" {
+		handed := false
 		if len(cfg.files) > 0 {
 			if err := forwardFiles(existing, cfg.files); err != nil {
 				log.Printf("could not pass the files to the running MaveScape: %v", err)
+			} else {
+				handed = true
 			}
 		}
-		fmt.Printf("MaveScape is already running at %s\n", existing)
+		if handed {
+			names := make([]string, len(cfg.files))
+			for i, f := range cfg.files {
+				names[i] = filepath.Base(f)
+			}
+			fmt.Printf("MaveScape is already running at %s: %s handed to it.\nSwitch to its window (the files open when it comes to the front); stop it with Ctrl+C in the terminal that started it.\n", existing, strings.Join(names, ", "))
+		} else {
+			fmt.Printf("MaveScape is already running at %s; stop it with Ctrl+C in the terminal that started it.\n", existing)
+		}
 		if cfg.window != "none" {
 			if _, err := openWindow(existing, cfg.window, cfg.dataDir); err != nil {
 				log.Printf("open window: %v", err)
@@ -201,13 +213,24 @@ func start(cfg config, out io.Writer) (*runningServer, error) {
 			// An app window with its own browser profile tells us when it closes; the
 			// default browser does not, so the server keeps running until Ctrl+C.
 			if wait != nil && !cfg.keepRunning {
+				opened := time.Now()
 				wait()
+				// A browser already running with this profile (on macOS, Chrome keeps
+				// running after its last window closes) takes the window over and the
+				// process started here exits at once: that is not the window closing.
+				if time.Since(opened) < handOffTime {
+					fmt.Fprintln(out, "The window opened in a MaveScape browser that was already running; MaveScape keeps serving until you press Ctrl+C (or quit that browser with Cmd+Q and start again).")
+					return
+				}
 				close(closed)
 			}
 		}()
 	}
 	return running, nil
 }
+
+// A window process that exits sooner than this handed the window to a browser already running.
+const handOffTime = 5 * time.Second
 
 func parseConfig(args []string) (config, error) {
 	var cfg config

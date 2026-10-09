@@ -41,7 +41,7 @@ The PRD lists decisions to make before implementation. Proposed answers, to conf
 | Product and executable name | **MaveScape**, `mavescape`; Go module `mavescape`; archives `.msz` |
 | A shared suite UI package | Not now. Copy CytoWeave's and Proteoscope's modules with an origin comment in each file; revisit at 1.0 (`design.md`). |
 | First scoring reference | **Enrich2 2.0.2** (Python 3, BSD-3, `pip install enrich2`): ratio, WLS and random-effects combination. Cross-checked by dms_variants `func_scores`. DiMSum 1.4 for its error model (wave 2). |
-| Three feasibility datasets | All CC0 on MaveDB, with counts, deliberately different (`research.md` §3): **GRB2 SH3** (Domainome, `urn:mavedb:00000835-a-1`; two populations × 3 replicates; scored by DiMSum), **BRCA1 RING** (`urn:mavedb:00000003-a-1`/`-a-2`; 6 replicates × 6 time points; scored by Enrich2, so its published scores are a reference too; legacy HGVS), **Factor IX MultiSTEP** (`urn:mavedb:00001200-a-1`; 4 FACS bins × 3 tiles × 3 replicates). Backups: Hsp90 (`00000011-a-1`), Gcn4 sort-seq (`00000052-b-1`). |
+| Three feasibility datasets | Done (wave 1, slice 2): all CC0 on MaveDB, with counts, deliberately different (`research.md` §3): **GRB2 SH3** (Domainome, `urn:mavedb:00000835-a-1`; two populations × 3 replicates; scored by DiMSum), **BRCA1 RING** (`urn:mavedb:00000003-a-1`/`-a-2`; 6 replicates × 6 rounds, inputs shared, plus a Y2H assay in the same table; scored by Enrich2, so its published scores are a reference too; legacy HGVS), **Factor IX MultiSTEP** (`urn:mavedb:00001200-a-1`; 4 FACS bins × 3 overlapping tiles × 3 replicates). |
 | Design schema before UI forms | Yes: wave 1, slice 2 writes `mavescape-design` v1 and represents the three datasets in it before slice 4 builds the editor. |
 | Structure viewing and Proteoscope code | A full Structure view in MaveScape (wave 4), copied from Proteoscope (Apache-2.0, same author): its parser, WebGPU renderer with Canvas fallback, cartoon, surfaces, DSSP, selection language, coloring and alignment. No runtime dependency on Proteoscope; an optional "Open in Proteoscope" for its deeper analyses. |
 | MAVE-HGVS | Port `mavehgvs` 0.8.1's regular-expression grammar to JavaScript (BSD-3; no JS implementation exists; keep its notice) with a **strict** mode (the spec, for export) and a **lenient** mode (legacy MaveDB data and lab tables: `_wt`/`_sy`, duplicated components, `p.A12V`, `A12V`, `*`), always keeping the original string. Validate against `mavehgvs`'s own test cases and outputs, committed as a reference. |
@@ -84,100 +84,283 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
      slice 6).
    - `--version` prints one line (`mavescape X.Y.Z`), which the installers compare exactly; the
      commit is in `/api/info` and the status bar.
-2. **Feasibility: the design schema on real data (E1, T2, PRD phase 0).** Add the three MaveDB
-   datasets (GRB2 SH3, BRCA1 RING, Factor IX MultiSTEP; see the decisions above) to
-   `validation/sources.json`, downloaded from the MaveDB API and checksummed by
-   `validation/fetch.mjs` (with retries: MaveDB's CSV endpoints sometimes answer 504 at first).
-   They differ on purpose: two populations against time series against bins, a sequence target
-   with an offset, legacy HGVS, tiled libraries (each tile its own input), and two scoring tools
-   behind the published scores.
-   Write `docs/schemas/design.v1.json` and `web/lib/design.js` (`validateDesign`,
-   `summarizeDesign`), and hand-write each dataset's design: no dataset-specific code allowed.
-   Generate reference scores with pinned Enrich2 2.0.2
-   (`validation/reference/generate_enrich2.py`, `uv run --python 3.12 --with enrich2==2.0.2`)
-   and dms_variants, committed as `validation/reference/enrich2.json`; Enrich2's quirks (the
-   `count` header, `_wt` rows, the library-size pseudocount, the random-effects starting value)
-   are documented in `validation/README.md`. The published scores are compared too: BRCA1's
-   with Enrich2's (same tool, so close agreement is expected), GRB2's with DiMSum's (a different
-   error model: agreement by correlation, documented, until wave 2 adds DiMSum's model).
-   - Exit: three designs validate; the reference outputs are committed with tool versions; any
-     schema change this forces is made now, before forms exist.
-3. **Import (D1–D7, E3, E4).** `web/lib/csv.js` (streaming, worker `csv-worker.js`;
-   delimiter/quote/BOM/encoding detection, typed numeric views, row diagnostics),
-   `web/lib/hgvs.js` (MAVE-HGVS for protein and coding nucleotide substitutions, synonymous and
-   WT forms, `p.=`, `p.(=)`, multi-variants of substitutions; strict and lenient modes; common
-   lab forms such as `p.A12V`, `A12V` and `*` normalized with the original kept; checked against
-   `mavehgvs` test cases committed in `validation/reference/mavehgvs.json`), `web/lib/variants.js` (columnar variants, kinds,
-   positions, validation against the target: wrong reference residue, out of range),
-   `web/lib/target.js` (DNA or protein from a FASTA file or paste, single or multi-record for
-   several targets or tiles; translation; offset), `web/lib/counts.js` (count sets, missing ≠ 0;
-   one table with a column per sample, or several files with one sample each, as many pipelines
-   write them, joined on the variant column). The import wizard: preview, detected identifier and count columns,
-   missingness, duplicates, suggested roles shown as suggestions, blocking problems listed by
-   row; the mapping saved as an import template. Built-in templates (D12) recognize the layouts
-   in common use, so most files need no mapping: MaveDB score and count CSVs (`accession`,
-   `hgvs_nt`, `hgvs_splice`, `hgvs_pro`, `score`, free count columns), DiMSum's variant count
-   table (`nt_seq` plus one column per sample, WT found from the target), and the generic "one
-   row per variant, one column per sample" table with HGVS or `A12V`-style identifiers. MaveDB is
-   one source among these, not a requirement.
-   - Validation: unit tests per module; the three feasibility tables and a malformed-variants
-     fixture import with the expected diagnostics; row-order and column-order invariance; DiMSum's
-     own demo count table (MIT) imports with its design.
-4. **Experiment view (E2, E5, E6, V6).** The design editor for two-population experiments
-   (samples × role, condition, biological and technical replicate, batch; controls WT,
-   synonymous, nonsense auto-detected and editable), the human-readable design summary, undo and
-   the hash-chained history (`web/lib/workspace.js` adapted from CytoWeave). A design can be
-   filled from a **sample sheet** (CSV or XLSX: sample, column or file, role, condition,
-   replicate, time or bin value), the form labs already keep, and is saved and reopened as
-   `*.design.json`.
-5. **Scoring (S1–S5, S11, V7).** `web/lib/score-ratio.js` (WT, complete, full and synonymous
-   normalization; pseudocount; SE), `web/lib/replicates.js` (pooling technical replicates; fixed
-   effects; REML random effects; the Enrich2-compatible estimator; τ², I², leave-one-out),
-   `web/lib/filters.js` (ordered stages, reason codes), `web/lib/runs.js` (immutable runs, ids
-   from canonical inputs, provenance), `score-worker.js`. The Score view: parameters, filter bar,
-   run list, warnings.
-   - Validation (`validation` suite `scoring`): equal to Enrich2 2.0.2 within 1e-10 relative on
-     the feasibility set and on synthetic fixtures for every PRD edge case; equal to dms_variants
-     (÷ ln 2) in WT mode; the Enrich2-compatible estimator equal to Enrich2 exactly and REML equal
-     to `metafor::rma(method = "REML")` within 1e-6 where it converges; determinism and
-     row-order invariance as property tests.
-6. **Quality control (Q1–Q7, Q9).** `web/lib/qc.js` and `web/lib/findings.js`: depth,
-   observed fraction, count distributions, low and zero counts, rank-abundance, coverage by
-   position and substitution, replicate agreement (Pearson and Spearman on variants above an
-   input-count threshold), leave-one-out z for outlier replicates, control distributions and
-   separation, the synonymous log-ratio variance against its Poisson expectation as a bottleneck
-   check, score stability against input count, effect against SE, missingness, filter flow. The
-   QC view lists findings (pass/review/fail, advisory or blocking, threshold and rationale), each
-   linked to its plot; thresholds are parameters in provenance.
-   - Validation (suite `qc`): fixtures for a clean experiment, poor replicate agreement, a
-     severe bottleneck, a low-count tail and a missing sample each raise exactly their expected
-     findings, and the clean one none.
-7. **The map and the inspector (V2, V3, V4, R3, T6).** `web/ui/variant-map.js` (canvas; overview
-   and viewport; pan, zoom, hover; click and rectangle selection; row orders; WT marks; the
-   state patterns for missing, filtered, low-confidence and not designed; score color and state
-   on separate color-vision-safe palettes; row and column summaries; position-level track), the
-   inspector (identifiers original and canonical, score and CI, counts by sample, replicate
-   scores, filters and warnings, sequence context, the position's distribution, the run's
-   provenance), a table alternative and a text description, SVG and PNG export
-   (`web/lib/map-svg.js`).
-   - Validation: SVG output of the map compared with a golden file for a fixture; a 20 × 5,000
-     map timed in `validation/bench.mjs` (target 30 frames per second while panning).
-8. **Record and examples (R1–R4, T4, D13).** The `.msz` archive (manifest,
-   sources or checksums, design, runs, history, methods) and the library; exports of scores and
-   counts (MaveDB column conventions), QC tables, design JSON, provenance JSON, selections; the
-   methods paragraph with references and BibTeX (`web/lib/methods.js` framework from CytoWeave).
-   Two examples: GRB2 SH3 from the Domainome (published, CC0, 1,121 variants, structure 2VWF),
-   and a simulated two-population experiment with known true effects (`web/lib/simulate.js`:
-   library composition, bottleneck, selection, sequencing noise; clearly labeled simulated),
-   which later waves extend to time series, bins, barcodes and planted faults. The Start page
-   offers blank, annotated layouts (count table, sample sheet, target FASTA) and
-   `docs/FORMATS.md` describes every file MaveScape reads and writes, so researchers whose data
-   come from their own pipeline know what to prepare.
-   - Validation (suite `roundtrip`): save, reopen and re-export give identical bytes for every
-     export; import → export → import of scores and counts loses nothing.
+2. **Feasibility: the design schema on real data (E1, T2, PRD phase 0): done.** Three MaveDB data
+   sets (CC0) in `validation/sources.json`, fetched and checksummed by `validation/fetch.mjs`:
+   GRB2 SH3 (two populations × 3 replicates), BRCA1 RING (time series: E2 binding and Y2H in one
+   table) and factor IX MultiSTEP (FACS bins × 3 overlapping tiles). `docs/schemas/design.v1.json`
+   and `web/lib/design.js` (`validateDesign`, `summarizeDesign`, `sharedSamples`; 12 unit tests);
+   four designs written as data (`validation/designs/`), with no code for any data set. Enrich2
+   2.0.2 references (`validation/reference/generate_enrich2.py` builds Enrich2's configuration from
+   the designs; `enrich2.json`, 2.2 MB, committed). Suites `designs` (37 checks) and `enrich2` (19).
+   - Validation: every design satisfies the schema (checked by `validation/json-schema.mjs`) and
+     `validateDesign` against its table, accounts for every column, and agrees with the data
+     (copies identical cell for cell, the wild type counted in every sample, all 21,175 BRCA1 and
+     9,681 factor IX reference residues the target's, tiles holding the variants counted in
+     them). The formulas of `research.md` §2.1, computed independently in
+     `validation/enrich2-formulas.mjs`, equal Enrich2 2.0.2 to 5 × 10⁻¹³ (13 significant digits
+     stored) for log ratios with three normalizations, WLS and OLS, non-uniform times and the
+     random-effects combination; slice 5 builds the engine on them.
+   - Found by slice 2:
+     - **The schema needed samples, and replicates that name them**, not one record per column:
+       BRCA1's replicates share their inputs, which MaveDB writes once per replicate. Copies are
+       declared (`ignoredColumns[].copyOf`) and checked; three "inputs" would overstate the
+       replicates' independence.
+     - **A table can hold two experiments** (BRCA1's E2 and Y2H), so every column must be a
+       sample's or ignored with a reason; that is now an error, not a silent drop.
+     - **Tiles overlap** (factor IX 146–164, 299–318) and **targets differ from the reference**
+       (BRCA1 codon 174 R; UniProt K): both are in the schema.
+     - **The published BRCA1 scores are reproduced** by Enrich2 2.0.2 with WLS and wild-type
+       normalization (all 9,279 stored replicate values, 5 × 10⁻¹³), and their combined scores
+       where Enrich2's 50 iterations converged; elsewhere they differ by up to 0.034 because the
+       estimator's start depends on the number of variants (the quirk the Enrich2-compatible mode
+       will reproduce).
+     - **GRB2's published scores** are DiMSum growth rates, from culture densities and times the
+       table does not hold: r = 0.987 against Enrich2's log ratios; DiMSum's model is wave 2.
+     - **MaveDB writes CRLF line ends**, `NA` for missing and counts as decimals: the importer
+       (slice 3) handles all three.
+     - Factor IX's published scores set the median of the lowest 5% of missense variants to 0,
+       not the nonsense median: rescaling conventions must be parameters (S11).
+3. **Import (D1–D7, D12, E3, E4): done.** `web/lib/csv.js` (streaming; encoding by BOM, UTF-8 or
+   Windows-1252; delimiter sniffing; RFC 4180 quoting across parts; CRLF, LF and CR line ends;
+   header and comment lines; strict numbers, missing never 0, every irregular cell listed by line)
+   and `web/workers/csv-worker.js` (16 MB parts, gzip); `web/lib/hgvs.js`, an independent
+   MAVE-HGVS parser (every prefix and variant type, multi-variants, mavehgvs's rules and messages)
+   with a lenient mode (one-letter names, `_wt`/`_sy`, `*`, repeated or unsorted components,
+   equalities in multi-variants, predicted forms), and checks against a target;
+   `web/lib/variants.js` (columnar variants: canonical key, kind, position, residues, status,
+   messages; duplicates however written), `web/lib/target.js` (FASTA, translation, placing a
+   target in its reference), `web/lib/counts.js` (count sets; identical columns; per-sample files
+   joined, with what absence means chosen by the user), `web/lib/importer.js` (MaveDB, DiMSum and
+   generic layouts; role suggestions from column names; designs drafted from them; the review of
+   blocking problems; import templates). The import wizard (`web/ui/import.js`): what was found,
+   the mapping, suggested roles (shown, not applied), the target (FASTA file or paste), checks and
+   the first rows; tables stored in the library by SHA-256; FASTA files opened as targets; the
+   inspector describes tables and targets. 66 unit tests; suites `hgvs` (5) and `import` (29).
+   - Validation: on 16,959 strings (mavehgvs's own test cases, public identifiers, generated
+     variants and near-misses; `reference/mavehgvs.json`, made by `generate_mavehgvs.py` with
+     mavehgvs 0.8.1), `hgvs.js` makes the same decision, gives the same reason word for word, writes
+     the same canonical form and finds the same parts as mavehgvs, for every one. The four
+     feasibility tables import with every name valid against the designs' targets (GRB2 1,121;
+     BRCA1 12,316 amino-acid and 20,724 nucleotide names; factor IX 9,682), nothing blocking, NA
+     cells missing and zeros 0; the 13,757 legacy BRCA1 protein names strict MAVE-HGVS refuses are
+     read leniently. Rows and columns shuffled, text read in 997-character parts, and GRB2 split into
+     per-sample files and joined give the same counts. DiMSum's demo (40,591 sequences) is named
+     against its wild type with every name valid, and its CR-terminated design file reads. A fixture
+     with one problem of each kind (`fixtures/malformed-counts.csv`) raises exactly those problems,
+     on their lines. In the window: GRB2 and its FASTA open together, import and save; DiMSum's
+     5.6 MB demo reads in the worker and is named once its wild type is chosen.
+   - Found by slice 3:
+     - **The designs can be drafted from column names**: role suggestions turn GRB2's, BRCA1's
+       (both assays) and factor IX's columns into designs with exactly the hand-written designs'
+       shape (model, replicates, samples, shared inputs, time points or bins, tile ranges). The
+       Experiment view (slice 4) starts from such a draft.
+     - **MaveDB indexes by `hgvs_nt` when present**: BRCA1's nucleotide table has 3,194 protein
+       names on several rows each, which would have been "duplicates".
+     - **A column with a few non-numbers was left out silently** by the first layout detection:
+       it is now offered, and its cells are listed as blocking problems (found by the fixture).
+     - DiMSum's demo wild type is 126 nt, its count table CRLF-terminated (with an unterminated last
+       line) and its design file CR-terminated.
+4. **Experiment view (E2, E3, E5, E6, V6, D13): done.** `web/ui/mode-experiment.js`: the design
+   as two tables, columns → samples (a sample of its own, a technical replicate of another, a copy
+   of a shared sample's column, or not used, with why) and replicates × slots (input and output;
+   each time, edited in the column heads; each bin, with its value), with conditions (a reference
+   one), tiles, controls, the kind of experiment, the time unit and what bin values are; the
+   plain-language summary and every error and warning of `validateDesign` as it changes; the
+   target's name, offset, coding start and identifiers. A design starts from the draft MaveScape
+   makes from the column names (slice 3) or from a sample sheet (`web/lib/samplesheet.js`:
+   columns named loosely; DiMSum's experiment design file is one), and is exported and opened as
+   `*.design.json`. `web/lib/design-edit.js`: the edits, each returning a new design.
+   `web/lib/workspace.js`: the hash-chained history (CytoWeave's change log), written by every
+   material change (import, target, design, rename) and shown, checked, in the drawer.
+   - Validation (suite `experiment`, 12 checks): each of the four hand-written designs rebuilt with
+     the editor's operations alone says what it says (slots, samples, copies) and validates;
+     sample sheets for GRB2, BRCA1 and factor IX (`fixtures/*.samples.csv`) give designs with the
+     hand-written designs' samples and slots; DiMSum's own experiment design file is a sample sheet
+     for its demo; a workspace's history survives saving and reopening, and an entry edited
+     afterward breaks it where it was edited. 12 more unit tests (78 in all). In the window: GRB2's
+     and BRCA1's drafts are complete designs at once (BRCA1's shared inputs found from the data);
+     the offset set in the view moves the summary's positions to 159–214; the drawer lists the
+     chained history.
+   - Found by slice 4:
+     - **A sample sheet needs to say which replicates share a sample**: BRCA1's two libraries each
+       have their own input, so "no replicate = shared by all" was not enough. A sheet now lists
+       them ("1;2;3"); no replicate still means every replicate of its condition and tile.
+     - **Drafting after reopening a workspace read empty columns as identical**, so every column
+       became a "copy": a table not in the session is now read again from the library by its
+       SHA-256 first, and columns with no values are never compared.
+     - **Columns left out at import were reported as unaccounted**: a draft now sets them aside
+       with that reason.
+5. **Scoring (S1–S5, S11, V7): done.** `web/lib/score-ratio.js` (log ratios with wild-type,
+   complete-case, all-read and synonymous-median normalization; pseudocount; SE),
+   `web/lib/replicates.js` (technical replicates summed; fixed effects; REML random effects by
+   metafor's Fisher scoring; Enrich2 2.0.2's estimator exactly; Q, I², τ², leave-one-out),
+   `web/lib/filters.js` (eight ordered stages with reason codes, count filters per replicate, the
+   filter flow), `web/lib/score.js` (the pipeline: controls by kind or name, conditions scored
+   apart, tiles, rescaling, run warnings, refusals with reasons), `web/lib/runs.js` (ids from the
+   canonical inputs; the output hashed; the method in sentences), `web/workers/score-worker.js`.
+   The Score view (`web/ui/mode-score.js`): presets (MaveScape defaults, Enrich2-compatible),
+   parameters, the filter bar, the run list, each run's warnings, filter flow, scores by class,
+   replicates and every variant with its per-replicate evidence; the inspector describes runs.
+   Runs keep their inputs and the hash of their output, not the scores: reopened, a run is
+   recomputed in the worker and must have its output hash ("reproduced").
+   - Validation (suite `scoring`, 46 checks): equal to Enrich2 2.0.2 (replicate and combined, three
+     normalizations) on GRB2, BRCA1 E2 and a synthetic fixture with every PRD edge case planted
+     (`fixtures/two-population.csv`, made by `make-two-population.mjs`), to 5 × 10⁻¹³; to
+     dms_variants 1.6.0's `func_scores` on the fixture (natural log; 4.6 × 10⁻¹³); REML to metafor
+     5.2-1 on 2,865 variants and six synthetic sets (3.4 × 10⁻¹²; required 10⁻⁶); each edge case's
+     outcome; rescaling anchors exact; determinism, row- and column-order invariance (bit for bit,
+     on the fixture and BRCA1) and input/output symmetry; a run saved, reopened and recomputed
+     with its recorded output hash. 19 more unit tests (97 in all). References made by
+     `generate_dms_variants.py` and `generate_metafor.R` (`validation/README.md`). In the window:
+     GRB2 scored, reopened and reproduced; BRCA1's 12,316 rows × 12 replicates scored in half a
+     second in the worker.
+   - Found by slice 5:
+     - **BRCA1's draft combined two assays**: the design drafted from all the column names made
+       E2 binding and Y2H replicates of one experiment, and scoring averaged them. Replicates with
+       different numbers of time points (or bins) now become separate conditions in the draft,
+       named by their columns' common stem (PlusE2, Y2H), and a run warns when one condition mixes
+       them; the E2 condition then scores exactly as the hand-written E2 design.
+     - **Enrich2's estimator is REML where it has converged** (GRB2: 479 variants with epsilon 0,
+       equal to metafor to 10⁻¹²), confirming research.md §2.1; elsewhere its answer depends on
+       the table's size.
+     - **dms_variants 1.6.0 adds no depth-scaled pseudocount**: its `func_scores` is Enrich2's
+       wild-type ratio exactly, so it is a cross-check to machine precision, not "÷ ln 2".
+     - **Shared inputs make replicates dependent** (BRCA1): the combined SE is then too small; runs
+       say so. Wave 2's differential scores already plan for shared inputs.
+     - MaveScape's default leaves out a replicate measurement with no input reads (the variant was
+       not in that library); the Enrich2-compatible preset scores it from the pseudocount, as
+       Enrich2 does. The difference is a parameter, recorded in each run.
+6. **Quality control (Q1–Q7, Q9): done.** `web/lib/stats.js` (order statistics, Pearson and
+   Spearman, AUC, a robust variance, a non-negative line fit), `web/lib/qc.js` (the metrics) and
+   `web/lib/findings.js` (twelve findings, each pass, review, fail or not assessed, advisory or
+   blocking, with its threshold, rationale, affected samples or replicates and plot; thresholds
+   in the workspace, every change in its history), `web/lib/simulate.js` (built here for the
+   fixtures: library, bottlenecks, selection with replicate noise, sequencing; seeded, labeled
+   simulated), the score worker's `qc` message, `web/ui/plots.js` (bars, lines, scatter, class
+   histograms, the filter flow, the coverage grid) and the QC view (`web/ui/mode-qc.js`): QC of a
+   run or of the counts alone, the findings beside the overall status, each finding's detail and
+   plot, the thresholds. From the counts alone: every sample has counts (blocking), depth, low
+   counts before selection, missingness, missing after selection (dropouts), coverage of the
+   designed substitutions by position, replicate agreement, variance beyond counting
+   (bottleneck), outlier replicates. From a run: separation of the controls, resolution, variants
+   scored.
+   - Validation (suite `qc`, 15 checks): simulated experiments, three seeds each, raise exactly
+     their findings: clean, none; poor replicate agreement; one failing replicate; a severe
+     bottleneck; a low-count tail; a missing sample (blocking, with scoring refused and QC still
+     run). The variance ratio follows a simulated bottleneck (about 1 + D/2N for N cells and D
+     reads per variant; within 30%, low by up to 25% at 20 cells); QC is the same with rows and
+     columns shuffled and with or without a run; thresholds act and are recorded. The feasibility
+     data's findings are locked as found. 14 more unit tests (111 in all). In the window: GRB2 and
+     BRCA1 (two conditions), counts-only and from a run, light and dark.
+   - Found by slice 6:
+     - **GRB2's replicate differences vary 11× more than counting predicts**, as from a
+       bottleneck: the Domainome's own DiMSum analysis found an input bottleneck (its
+       multiplicative error term about 6). MaveScape's REML τ² takes up the excess between
+       replicates; DiMSum's error model (wave 2) will model it.
+     - **BRCA1's table writes variants that dropped out as missing, never 0**: about 30% of the
+       variants are missing from the E2 assay's last round, and they had already fallen to 1–3% of
+       their input by the round before (others 12–54%). Missing is not zero, so they are not scored
+       in that replicate and scores lean toward wild type, as in the published Enrich2 scores. A
+       "missing after selection" finding now says so; reading such cells as 0, per sample, is an
+       import option for wave 2 (time series).
+     - **BRCA1's Y2H nonsense variants are not loss-of-function controls**: before residue 61 they
+       score about −3.7, after residue 110 about +0.5 (truncations that keep the RING domain keep
+       binding BARD1), so the controls' separation fails. Controls named by position (the design's
+       explicit nonsense list) are the remedy; the finding's rationale says so.
+     - **A bottleneck and replicate noise cannot always be told apart**: a bottleneck multiplies
+       the counting variance, replicate noise adds a constant, and separating them needs counts
+       spanning a wide range. The finding reports the split only when the counts allow it, and
+       rests its verdict on the ratio.
+     - A sample with every count missing is read by the importer as an empty column; scoring and QC
+       now take it as missing counts (QC's blocking "every sample has counts"), not as text.
+7. **The map and the inspector (V2, V3, V4, R3, T6): done.** `web/lib/map-model.js` (a run's
+   single substitutions as positions × the 20 amino acids and stop; each cell's state: scored, low
+   confidence, filtered, missing, not designed, reference residue; values by score, SE,
+   replicates or input count; a scale centered on the wild type and symmetric; row orders
+   biochemical, by hydrophobicity or alphabetical; position and row medians; the map in words),
+   `web/lib/map-render.js` (the drawing, on any 2D context: states as their own marks, the
+   summaries, target and reference numbering, the overview strip, selection, hover and focus;
+   hit testing), `web/lib/map-svg.js` (SVG export, deterministic), `web/ui/variant-map.js` (the
+   canvas: pan, zoom, hover, click and rectangle selection, the overview, full keyboard operation
+   with each focused cell announced), the Map view (`web/ui/mode-map.js`: run and condition,
+   color, rows, palette, legend with each state's count, saved selections, SVG and PNG export,
+   the description and every cell as a table), the variant inspector (`web/ui/variant-inspector.js`:
+   identifiers as written and canonical, score with SE and 95% CI or why it has none, flags, each
+   replicate and every sample's counts, the position's other substitutions, the sequence around
+   it, the run), opened from the map, its table and the Score view; named selections in the
+   workspace and its history (`addSelection`, `removeSelection`). Runs' results are shared by the
+   views (`web/ui/run-results.js`); results carry each sample's counts and each variant's
+   residues.
+   - Validation (suite `map`, 9 checks; `validation/bench.mjs` in CI): the fixture's map as SVG
+     byte for byte against `golden/two-population.map.svg`; each state where the fixture plants
+     it; one state per cell; missing, filtered and low-confidence cells at least ΔE 10 (CIEDE2000)
+     from the neutral color in the light, dark and export themes and both palettes; the scale
+     centered on the wild type; the row orders; GRB2's numbering (1–56 and 159–214); BRCA1's least
+     tolerant positions. The benchmark: a simulated 5,000-residue target (105,000 variants) scored
+     in 0.5 s, its map model in 26 ms, 0.6 ms of JavaScript per frame while panning (budgets 10 s,
+     1 s, 16 ms); in the window, a frame of that map draws in 3–8 ms at the median (at 14- to
+     2-pixel cells). 15 more unit tests (118 in all). In the window: BRCA1's two conditions, zoom,
+     keyboard, rectangle selection, saved selections restored from the dataset tree, PNG export
+     (7,464 × 954) under the page's security policy, light and dark.
+   - Found by slice 7:
+     - **The map agrees with the biology**: BRCA1's least tolerant RING positions (E2 binding) are
+       C27, C47, C64 and H41, zinc ligands, and D96; the suite checks it.
+     - **Missing cells looked like "no effect"**: drawn in the panel's hover gray, they were ΔE 2.7
+       from the white of a wild-type-like score, and low-confidence cells near 0 ΔE 5, so a zoomed-
+       out map (cells too small for their dot or mark) showed unmeasured variants as neutral. The
+       map now has state colors of its own (`--map-empty`, `--map-hatch`, `--map-low`), checked to
+       stay ΔE ≥ 10 from the neutral color.
+     - BRCA1's table holds 7,682 multi-variants (error-prone PCR), which a substitution map cannot
+       show; the map counts them and says so, and the Score view lists them.
+8. **Record and examples (R1–R4, T4, D13): done.** `web/lib/archive.js` (the `.msz` archive:
+   manifest with every file's SHA-256, the workspace, the tables or their checksums only, each
+   run's scores, the methods; written deterministically, in any time zone; read defensively:
+   known names only, sizes enforced while decompressing, every checksum and the history's chain
+   checked, problems reported; an archive of a workspace already in the library opens as a copy),
+   `web/lib/exports.js` (scores and counts in MaveDB's column layout, QC per sample and per
+   variant, selections as CSV and JSON, provenance JSON; numbers in their shortest exact form),
+   `web/lib/methods.js` (the methods paragraph from what the run did, with numbered references
+   and BibTeX; CytoWeave's framework, MaveScape's text), `web/lib/examples.js` and
+   `web/ui/examples.js` (two examples opened as new workspaces with a first run, and their guide in
+   the inspector), `web/ui/record.js` (the archive and the run's exports in the window: the
+   workspace menu, the Score view's Export menu, the Map view's selection export), the Start
+   page's examples and blank layouts (`web/examples/layouts/`: count table, sample sheet, target
+   FASTA, annotated), `docs/FORMATS.md`. Examples: **GRB2 SH3** (MaveDB's CC0 counts, unchanged,
+   with its notice; opens in QC) and **a simulated experiment** (40 residues, three replicates,
+   seed 20261009, labeled simulated; its true effects downloadable and compared with the scores in
+   the guide; opens in the map). Structure 2VWF joins GRB2's example with wave 4.
+   - Validation (suite `roundtrip`, 25 checks): the fixture and GRB2, as workspaces with a run, a
+     selection and changed QC thresholds, saved as `.msz`, reopened (scores recomputed from the
+     archived table, with the recorded output hash) and saved again: the same bytes; every export
+     again byte for byte (scores, counts, QC per sample and per variant, provenance, methods,
+     references, selection, map); checksums-only archives; exported scores read back to the last
+     bit and import as MaveDB score tables; exported counts scored again give the run's output
+     hash; an edited run, a rewritten history entry (with the manifest made to match), an altered
+     table, a path out of the archive and a missing file are reported, and archives from a newer
+     version, without a manifest, or inflating beyond their declared size are refused; the methods
+     cite in order with a BibTeX entry each; the GRB2 example is MaveDB's file byte for byte and
+     its design fits; the simulated example is deterministic, its scores correlate with the truth
+     at r = 0.993 and its QC passes; the blank layouts make a valid design. 8 more unit tests (126
+     in all). The built program serves the examples from its embedded files; in the window, both
+     examples open and save, and an archive reopens as a copy whose map draws from the archived
+     table.
+   - Found by slice 8:
+     - **MaveDB's upload layout was not recognized**: the importer knew MaveDB's downloads (with
+       `accession`) only, so MaveScape's own exports, which follow MaveDB's upload layout
+       (`hgvs_nt`, `hgvs_splice`, `hgvs_pro`), read as generic tables. Both are recognized now.
+     - **ZIP dates are local times**: the same workspace archived in two time zones differed by a
+       few bytes. Archives are dated in UTC; the same SHA-256 in UTC, Tokyo and Los Angeles.
+     - The suite caught a blank layout whose example rows named residues its own example target
+       does not have: layouts are checked as a whole, as a researcher would use them.
+     - **First use left people stranded** (found testing the release candidate): a table or a
+       FASTA opened in a new workspace loaded, and nothing said what came next. The workflow strip
+       (`web/lib/workflow.js`, `web/ui/workflow.js`; 4 unit tests) shows the steps and the next
+       action above every view, and explains blocked steps; a second launch says which files it
+       handed to the running MaveScape.
 
 Release 0.1.0 when the PRD's phase-1 exit holds: the whole workflow needs no command line, golden
-and reference tests run in CI, and round trips lose no material data.
+and reference tests run in CI, and round trips lose no material data. **All three hold at the end
+of slice 8** (validation suites `roundtrip`, `map`, `scoring`, `enrich2`; 211 checks in CI).
 
 ## 0.2.0: every design, checked (wave 2)
 
@@ -189,7 +372,9 @@ runs and the performance targets.
 1. **Time series (S6, Q10, E2).** `web/lib/score-regression.js`: WLS and OLS of normalized log
    frequency on scaled time (Enrich2's weights and residual-scaled SE), non-uniform spacing,
    usable points, residual diagnostics, "insufficient support" without assuming non-monotonic
-   means invalid. The design editor gains times and units.
+   means invalid. The design editor gains times and units. An import option to read a variant
+   missing from a sample after selection as 0, per sample, for tables that write dropouts as
+   missing (BRCA1's; found by wave 1, slice 6), recorded in the run.
    - Validation: equal to Enrich2 2.0.2 and statsmodels WLS within 1e-10; the feasibility time
      series.
 2. **FACS bins (S7, Q10).** `web/lib/score-bins.js`: weighted average of bin values (rank,

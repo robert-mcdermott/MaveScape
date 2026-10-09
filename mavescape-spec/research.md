@@ -68,6 +68,8 @@ Base URL `https://api.mavedb.org/api/v1/`. Spec at `https://api.mavedb.org/opena
 - Downloads begin `accession, hgvs_nt, hgvs_splice, hgvs_pro`, then data columns.
 - Missing values are written `NA`.
 - Counts are written as floats (`3232.0`).
+- Lines end in CRLF; no field is quoted (seen in every file of the feasibility data, 2026-10-08).
+- The files are byte-identical from one request to the next, so they can be checksummed.
 - An upload needs `hgvs_nt` or `hgvs_pro` and a `score` column. The counts file must have the same
   variants and index.
 - Other column names are free, and described in column-metadata JSON
@@ -195,6 +197,14 @@ All logarithms are natural unless stated. Normalized scores have WT = 0 unless s
 
 MaveScape's REML runs to convergence. An "Enrich2-compatible" option reproduces the code exactly.
 
+**Confirmed on real data (wave 1, slice 2).** Every formula above, computed independently, equals
+Enrich2 2.0.2 to 5 × 10⁻¹³ on the feasibility data: ratios with the three normalizations, WLS and
+OLS (including non-uniform times), and the random-effects combination with its starting value.
+Enrich2 2.0.2 also reproduces the BRCA1 replicate scores published in 2017 (WLS, wild-type
+normalization) to 5 × 10⁻¹³; the published combined scores agree where the 50 iterations
+converged and differ by up to 0.034 where they had not, as the starting value predicts. Details in
+`validation/README.md`.
+
 **Comparisons**
 - Between conditions: z = |β₁ − β₂|/sqrt(SE₁² + SE₂²), uncorrected.
 - Issue #59 reports that multi-condition configurations give identical scores (unconfirmed).
@@ -287,8 +297,8 @@ MaveScape's REML runs to convergence. An "Enrich2-compatible" option reproduces 
 | # | Data set (URN) | Design | Size | Structure | Use in this plan |
 | --- | --- | --- | --- | --- | --- |
 | 1 | GRB2 SH3, Domainome (Beltran 2025; `00000835-a-1`) | two populations × 3 replicates; DiMSum | 1,121 variants; 56 aa; P62993, offset 158 | 2VWF | feasibility; example (wave 1) |
-| 2 | BRCA1 RING (Starita 2015, scored by Enrich2; `00000003-a-1` nt, `-a-2` aa) | 6 replicates × t0–t5 | 20,724 nt / 12,316 aa variants; 303 codons | 1JM7 | feasibility; MaveDB round trip (wave 3); legacy HGVS |
-| 3 | Factor IX MultiSTEP (Popp 2025; `00001200-a-1`…`-e-1`) | 4 FACS bins × 3 tiles × 3 replicates; 5 readouts | 9,682 variants; 461 aa | 1RFN | feasibility; FACS example (wave 2) |
+| 2 | BRCA1 RING (Starita 2015, scored by Enrich2; `00000003-a-1` nt, `-a-2` aa) | 2 libraries × 3 replicates × rounds 0–5, each library's input shared by its replicates; the same table holds a Y2H assay (2 × 3 × 4 non-uniform times) | 20,724 nt / 12,316 aa variants; 303 codons (UniProt P38398 offset 1; codon 174 R where UniProt has K) | 1JM7 | feasibility; MaveDB round trip (wave 3); legacy HGVS |
+| 3 | Factor IX MultiSTEP (Popp 2025; `00001200-a-1`…`-e-1`) | 4 FACS bins × 3 tiles (1–164, 146–318, 299–461: overlapping) × 3 replicates; 5 readouts; scores set the lowest 5% of missense to 0 | 9,682 variants; 461 aa | 1RFN | feasibility; FACS example (wave 2) |
 | 4 | Hsp90 (Hietpas 2011; `00000011-a-1`) | 8 generations | 568 variants; 9 aa; P02829 | 2CG9 | time-series example (wave 2) |
 | 5 | DHFR (Thompson 2020; `00000063-a-1`, `-b-1`) | time series × 6 repeats × Lon protease functional / deficient | ~3,100 variants each; 159 aa | 1RX2 | two-condition example (wave 3) |
 | 6 | PSD95 PDZ3 (`00000053-a-2`, doubles `-a-1`) | two populations × 6 replicates | 1,235 singles; 648,022 doubles | 1BE9 | scale test (doubles); unpublished, replicate structure undocumented |

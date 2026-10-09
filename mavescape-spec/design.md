@@ -106,7 +106,7 @@ CSV/TSV/XLSX ─parse (worker, streaming)→ table (columns as strings + typed n
 ### Import
 
 - The parser streams the file in a worker (16 MB parts), detects the delimiter, quoting, header,
-  BOM and encoding, and keeps every column as text plus a typed numeric view where every value
+  BOM, encoding and line ends (MaveDB writes CRLF), and keeps every column as text plus a typed numeric view where every value
   parses. Values that do not parse are listed by row; they are never coerced silently.
 - Candidate identifier columns are found by trying the MAVE-HGVS parser on a sample of rows
   (`hgvs_nt`, `hgvs_pro`, `hgvs_splice` and MaveDB's `accession` are recognized by name too).
@@ -127,21 +127,43 @@ CSV/TSV/XLSX ─parse (worker, streaming)→ table (columns as strings + typed n
 | Imported scores | validation and mapping only | MaveDB |
 
 Replicates: technical replicates are summed before scoring. Biological replicates are scored
-separately and combined by inverse-variance fixed effects or by REML random effects; an
-"Enrich2-compatible" option reproduces Enrich2's estimator exactly, including its starting value
-and fixed 50 iterations, so that numbers can be compared with published Enrich2 results. Each
-combination reports heterogeneity (τ², I²) and leave-one-replicate-out sensitivity.
+separately and combined by inverse-variance fixed effects or by REML random effects (Fisher
+scoring as metafor's `rma`: the Hedges start, step halving at τ² = 0, the check against τ² = 0, to
+convergence); an "Enrich2-compatible" option reproduces Enrich2's estimator exactly, including its
+starting value and fixed 50 iterations, so that numbers can be compared with published Enrich2
+results. Each combination reports heterogeneity (τ², Cochran's Q and I² = (Q − df)/Q) and
+leave-one-replicate-out sensitivity. Conditions are scored apart; a variant's expected replicates
+are those whose tile covers it. (`web/lib/score.js`, wave 1, slice 5.)
 
-Filters are ordered stages (minimum input count, minimum total count, minimum usable replicates,
-maximum SE, barcode disagreement, identifier validity, variant class, user exclusions). A filtered
-variant keeps its measurements, reason code and stage, and the filter flow is drawn.
+Filters are ordered stages: counted in a replicate and a valid identifier (always), variant class,
+user exclusions, minimum input count and minimum total count (per replicate: a replicate below
+them does not count for that variant), minimum usable replicates, maximum SE; barcode
+disagreement joins with barcodes (wave 2). A filtered variant keeps its measurements, reason code
+and stage, and the filter flow is drawn. A run that cannot be done as asked (the reference class
+absent, a rescaling anchor missing, an unsupported design) is refused with the reason, never done
+another way.
+
+Runs keep their inputs (the table's SHA-256, the mapping, the design, the parameters, the scoring
+version), which give the run its id, and the SHA-256 of their output, not the scores: scoring a
+large table takes well under a second in the worker, so a reopened run is recomputed and checked
+against its output hash. A run that no longer reproduces says so.
 
 ### QC findings
 
 `web/lib/qc.js` computes metrics; `web/lib/findings.js` turns them into findings, each `{ id,
-status: 'pass'|'review'|'fail', blocking, title, explanation, threshold, rationale, affected:
-{ samples, variants }, view }`. Thresholds are parameters recorded in provenance. The overall
-indicator is the worst finding, shown next to the list, never instead of it.
+status: 'pass'|'review'|'fail'|'na', blocking, title, value, explanation, threshold, rationale,
+affected: { samples, replicates }, plot, level: 'counts'|'scores' }`. Thresholds are parameters
+kept in the workspace (`ws.qc.thresholds`), each change in its history. The overall indicator is
+the worst finding, shown next to the list, never instead of it. (Wave 1, slice 6.)
+
+Most findings need only the counts and the design, so QC runs before (or without) scoring:
+replicate agreement and variance are computed on raw log ratios, which per-replicate
+normalization only shifts. The bottleneck check compares the variance of replicate differences
+with the counting (Poisson) variance, robustly (median of squared standardized differences ÷
+0.4549), and fits observed = a·counting + e over bins of counting variance when the counts span
+enough of a range: a > 1 is a multiplier (a bottleneck), e a constant (replicate noise), as
+DiMSum's error terms. Scored-variant findings (control separation, resolution, variants scored)
+come from a run, recomputed with its recorded inputs in the score worker.
 
 ### The variant-effect map
 
@@ -157,6 +179,13 @@ indicator is the worst finding, shown next to the list, never instead of it.
 - Selections (click, rectangle, freeform, by query) are named `SelectionSet`s that propagate to
   tracks, tables, plots, structure and exports.
 - Every map has a tabular alternative and a generated text description for screen readers.
+- Built in wave 1, slice 7: the model (`lib/map-model.js`), the renderer on any 2D context
+  (`lib/map-render.js`, which the benchmark runs in Node) and the SVG export (`lib/map-svg.js`) are
+  pure; the canvas component (`ui/variant-map.js`) adds pointer and keyboard. The score scale is
+  symmetric about the wild type, so equal color distances are equal score distances on both
+  sides. States have colors of their own (`--map-*`), kept ΔE ≥ 10 from the neutral score color,
+  because at small zoom a cell is too small for its mark. Selections are kept by MAVE-HGVS key, so
+  they hold for any row order and for variants not in the table.
 
 ### Workspace state, undo and provenance
 

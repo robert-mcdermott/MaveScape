@@ -1,0 +1,13 @@
+# MaveScape sample sheet: one row per sequenced sample (a column of the count table).
+# column: the count table's column name. role: input, output, timepoint or bin.
+# replicate: the biological replicate's number; for a sample shared by several replicates
+# (one input library selected several times) list them: 1;2;3 (or leave it empty for all).
+# technical_replicate: 1 2 ... for the same library sequenced more than once (summed).
+# time (for time series, with its unit in the column name: generation or round or hour or day).
+# bin and value (for sorted bins: the bin's order and its weight or mean fluorescence).
+# condition and tile: optional. Lines starting with # are skipped.
+column,role,replicate,technical_replicate,condition,time,bin,value,tile
+input_rep1,input,1,1,,,,,
+output_rep1,output,1,1,,,,,
+input_rep2,input,2,1,,,,,
+output_rep2,output,2,1,,,,,

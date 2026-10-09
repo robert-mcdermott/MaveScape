@@ -1,0 +1,568 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="224" height="318" viewBox="0 0 224 318" font-family="Helvetica, Arial, sans-serif" role="img">
+<title>Variant-effect map: Synthetic 20-codon target</title>
+<desc>Variant-effect map of Synthetic 20-codon target: 20 positions by 21 substitutions (the 20 amino acids and stop), 419 designed. 193 scored, 5 scored with low confidence, 2 filtered, 219 missing. Positions least tolerant of substitution (lowest median score): L15 -1.61, V11 -1.04, S2 -0.90, G4 -0.89, G20 -0.86. Most tolerant: M1 0.04, P13 -0.03, V16 -0.04, L18 -0.07, I14 -0.18. Colors run from -2.62 to 2.62, centered on the wild type (0.00).</desc>
+<defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="#c8c6c2"/><line x1="0" y1="0" x2="0" y2="4" stroke="#6e6c68" stroke-width="1.2"/></pattern></defs>
+<rect width="224" height="318" fill="#ffffff"/>
+<text x="34" y="15" font-size="12" font-weight="bold" fill="#171b26">Synthetic 20-codon target</text>
+<g>
+<rect x="34" y="22" width="7" height="10" fill="#f7f5f4"/>
+<rect x="42" y="22" width="7" height="10" fill="#a5cee3"/>
+<rect x="50" y="22" width="7" height="10" fill="#acd2e5"/>
+<rect x="58" y="22" width="7" height="10" fill="#a5cee3"/>
+<rect x="66" y="22" width="7" height="10" fill="#eaf1f5"/>
+<rect x="74" y="22" width="7" height="10" fill="#e1edf3"/>
+<rect x="82" y="22" width="7" height="10" fill="#d5e7f1"/>
+<rect x="90" y="22" width="7" height="10" fill="#e3edf3"/>
+<rect x="98" y="22" width="7" height="10" fill="#e0ecf3"/>
+<rect x="106" y="22" width="7" height="10" fill="#bbdaea"/>
+<rect x="114" y="22" width="7" height="10" fill="#93c6de"/>
+<rect x="122" y="22" width="7" height="10" fill="#d2e6f0"/>
+<rect x="130" y="22" width="7" height="10" fill="#f5f6f7"/>
+<rect x="138" y="22" width="7" height="10" fill="#eaf1f5"/>
+<rect x="146" y="22" width="7" height="10" fill="#408fc1"/>
+<rect x="154" y="22" width="7" height="10" fill="#f3f5f6"/>
+<rect x="162" y="22" width="7" height="10" fill="#b8d8e9"/>
+<rect x="170" y="22" width="7" height="10" fill="#f2f5f6"/>
+<rect x="178" y="22" width="7" height="10" fill="#d5e7f1"/>
+<rect x="186" y="22" width="7" height="10" fill="#a7d0e4"/>
+</g>
+<g font-size="9" fill="#4b5468" text-anchor="middle">
+<text x="69.5" y="46">5</text>
+<text x="109.5" y="46">10</text>
+<text x="149.5" y="46">15</text>
+<text x="189.5" y="46">20</text>
+</g>
+<g font-size="9" font-family="Menlo, monospace" fill="#4b5468" text-anchor="middle">
+<text x="17" y="59.5">H</text>
+<text x="17" y="69.5">K</text>
+<text x="17" y="79.5">R</text>
+<text x="17" y="89.5">D</text>
+<text x="17" y="99.5">E</text>
+<text x="17" y="109.5">C</text>
+<text x="17" y="119.5">M</text>
+<text x="17" y="129.5">N</text>
+<text x="17" y="139.5">Q</text>
+<text x="17" y="149.5">S</text>
+<text x="17" y="159.5">T</text>
+<text x="17" y="169.5">A</text>
+<text x="17" y="179.5">I</text>
+<text x="17" y="189.5">L</text>
+<text x="17" y="199.5">V</text>
+<text x="17" y="209.5">F</text>
+<text x="17" y="219.5">W</text>
+<text x="17" y="229.5">Y</text>
+<text x="17" y="239.5">G</text>
+<text x="17" y="249.5">P</text>
+<text x="17" y="259.5">*</text>
+</g>
+<g>
+<rect x="34" y="52" width="7" height="9" fill="#c8c6c2"><title>M1H (missing)</title></rect><rect x="36.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="62" width="7" height="9" fill="#9bc9e0"><title>M1K</title></rect>
+<rect x="34" y="72" width="7" height="9" fill="#c8c6c2"><title>M1R (missing)</title></rect><rect x="36.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="82" width="7" height="9" fill="#f6f7f7"><title>M1D</title></rect>
+<rect x="34" y="92" width="7" height="9" fill="#f8f2ef"><title>M1E</title></rect>
+<rect x="34" y="102" width="7" height="9" fill="#c8c6c2"><title>M1C (missing)</title></rect><rect x="36.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="112" width="7" height="9" fill="#f7f6f6"><title>M1M (reference)</title></rect>
+<rect x="34.5" y="112.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="34" y="122" width="7" height="9" fill="#8ac0db"><title>M1N</title></rect>
+<rect x="34" y="132" width="7" height="9" fill="#c8c6c2"><title>M1Q (missing)</title></rect><rect x="36.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="142" width="7" height="9" fill="#fae9df"><title>M1S</title></rect>
+<rect x="34" y="152" width="7" height="9" fill="#71b0d3"><title>M1T</title></rect>
+<rect x="34" y="162" width="7" height="9" fill="#f9ebe3"><title>M1A</title></rect>
+<rect x="34" y="172" width="7" height="9" fill="#c8c6c2"><title>M1I (missing)</title></rect><rect x="36.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="182" width="7" height="9" fill="#c8c6c2"><title>M1L (missing)</title></rect><rect x="36.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="192" width="7" height="9" fill="#c8c6c2"><title>M1V (missing)</title></rect><rect x="36.5" y="195.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="202" width="7" height="9" fill="#c8c6c2"><title>M1F (missing)</title></rect><rect x="36.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="212" width="7" height="9" fill="#f8f2ef"><title>M1W</title></rect>
+<rect x="34" y="222" width="7" height="9" fill="#c8c6c2"><title>M1Y (missing)</title></rect><rect x="36.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="232" width="7" height="9" fill="#c8c6c2"><title>M1G (missing)</title></rect><rect x="36.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="242" width="7" height="9" fill="#c8c6c2"><title>M1P (missing)</title></rect><rect x="36.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="34" y="252" width="7" height="9" fill="#c8c6c2"><title>M1* (missing)</title></rect><rect x="36.5" y="255.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="52" width="7" height="9" fill="#c8c6c2"><title>S2H (missing)</title></rect><rect x="44.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="62" width="7" height="9" fill="#c8c6c2"><title>S2K (missing)</title></rect><rect x="44.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="72" width="7" height="9" fill="#bbdaea"><title>S2R</title></rect>
+<rect x="42" y="82" width="7" height="9" fill="#c8c6c2"><title>S2D (missing)</title></rect><rect x="44.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="92" width="7" height="9" fill="#c8c6c2"><title>S2E (missing)</title></rect><rect x="44.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="102" width="7" height="9" fill="#f5f6f7"><title>S2C</title></rect>
+<rect x="42" y="112" width="7" height="9" fill="#c8c6c2"><title>S2M (missing)</title></rect><rect x="44.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="122" width="7" height="9" fill="#c8c6c2"><title>S2N (missing)</title></rect><rect x="44.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="132" width="7" height="9" fill="#c8c6c2"><title>S2Q (missing)</title></rect><rect x="44.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="142" width="7" height="9" fill="#f6f7f7"><title>S2S</title></rect>
+<rect x="42.5" y="142.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="42" y="152" width="7" height="9" fill="#2f79b5"><title>S2T</title></rect>
+<rect x="42" y="162" width="7" height="9" fill="#c8c6c2"><title>S2A (missing)</title></rect><rect x="44.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="172" width="7" height="9" fill="#a7d0e4"><title>S2I</title></rect>
+<rect x="42" y="182" width="7" height="9" fill="#a5cee3"><title>S2L</title></rect>
+<rect x="42" y="192" width="7" height="9" fill="#e0ecf3"><title>S2V</title></rect>
+<rect x="42" y="202" width="7" height="9" fill="#c8c6c2"><title>S2F (missing)</title></rect><rect x="44.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="212" width="7" height="9" fill="#c8c6c2"><title>S2W (missing)</title></rect><rect x="44.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="222" width="7" height="9" fill="#3480b9"><title>S2Y</title></rect>
+<rect x="42" y="232" width="7" height="9" fill="#276eb0"><title>S2G</title></rect>
+<rect x="42" y="242" width="7" height="9" fill="#c8c6c2"><title>S2P (missing)</title></rect><rect x="44.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="42" y="252" width="7" height="9" fill="#08366a"><title>S2*</title></rect>
+<rect x="50" y="52" width="7" height="9" fill="#93c6de"><title>K3H</title></rect>
+<rect x="50" y="62" width="7" height="9" fill="#f7f6f6"><title>K3K</title></rect>
+<rect x="50.5" y="62.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="50" y="72" width="7" height="9" fill="#8da0aa"><title>K3R (low confidence)</title></rect><path d="M53.5 72H57V76Z" fill="#171b26"/>
+<rect x="50" y="82" width="7" height="9" fill="#f7f6f6"><title>K3D</title></rect>
+<rect x="50" y="92" width="7" height="9" fill="#f7f5f4"><title>K3E</title></rect>
+<rect x="50" y="102" width="7" height="9" fill="#f8f2ef"><title>K3C</title></rect>
+<rect x="50" y="112" width="7" height="9" fill="#c8c6c2"><title>K3M (missing)</title></rect><rect x="52.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="122" width="7" height="9" fill="#f2f5f6"><title>K3N</title></rect>
+<rect x="50" y="132" width="7" height="9" fill="#c8c6c2"><title>K3Q (missing)</title></rect><rect x="52.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="142" width="7" height="9" fill="#c8c6c2"><title>K3S (missing)</title></rect><rect x="52.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="152" width="7" height="9" fill="#a9d1e5"><title>K3T</title></rect>
+<rect x="50" y="162" width="7" height="9" fill="#c8c6c2"><title>K3A (missing)</title></rect><rect x="52.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="172" width="7" height="9" fill="#c8c6c2"><title>K3I (missing)</title></rect><rect x="52.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="182" width="7" height="9" fill="#2b73b3"><title>K3L</title></rect>
+<rect x="50" y="192" width="7" height="9" fill="#c8c6c2"><title>K3V (missing)</title></rect><rect x="52.5" y="195.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="202" width="7" height="9" fill="#c8c6c2"><title>K3F (missing)</title></rect><rect x="52.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="212" width="7" height="9" fill="#3480b9"><title>K3W</title></rect>
+<rect x="50" y="222" width="7" height="9" fill="#c8c6c2"><title>K3Y (missing)</title></rect><rect x="52.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="232" width="7" height="9" fill="#c8c6c2"><title>K3G (missing)</title></rect><rect x="52.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="242" width="7" height="9" fill="#c8c6c2"><title>K3P (missing)</title></rect><rect x="52.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="50" y="252" width="7" height="9" fill="#0a3b70"><title>K3*</title></rect>
+<rect x="58" y="52" width="7" height="9" fill="#c8c6c2"><title>G4H (missing)</title></rect><rect x="60.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="62" width="7" height="9" fill="#4393c3"><title>G4K</title></rect>
+<rect x="58" y="72" width="7" height="9" fill="#c8c6c2"><title>G4R (missing)</title></rect><rect x="60.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="82" width="7" height="9" fill="#4b6f90"><title>G4D (low confidence)</title></rect><path d="M61.5 82H65V86Z" fill="#171b26"/>
+<rect x="58" y="92" width="7" height="9" fill="#c8c6c2"><title>G4E (missing)</title></rect><rect x="60.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="102" width="7" height="9" fill="#c8c6c2"><title>G4C (missing)</title></rect><rect x="60.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="112" width="7" height="9" fill="#c8c6c2"><title>G4M (missing)</title></rect><rect x="60.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="122" width="7" height="9" fill="#185493"><title>G4N</title></rect>
+<rect x="58" y="132" width="7" height="9" fill="#c8c6c2"><title>G4Q (missing)</title></rect><rect x="60.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="142" width="7" height="9" fill="#c8c6c2"><title>G4S (missing)</title></rect><rect x="60.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="152" width="7" height="9" fill="#a5cee3"><title>G4T</title></rect>
+<rect x="58" y="162" width="7" height="9" fill="#ecf2f5"><title>G4A</title></rect>
+<rect x="58" y="172" width="7" height="9" fill="#f0f4f6"><title>G4I</title></rect>
+<rect x="58" y="182" width="7" height="9" fill="#c8c6c2"><title>G4L (missing)</title></rect><rect x="60.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="192" width="7" height="9" fill="#f2f5f6"><title>G4V</title></rect>
+<rect x="58" y="202" width="7" height="9" fill="#c8c6c2"><title>G4F (missing)</title></rect><rect x="60.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="212" width="7" height="9" fill="#f0f4f6"><title>G4W</title></rect>
+<rect x="58" y="222" width="7" height="9" fill="#c8c6c2"><title>G4Y (missing)</title></rect><rect x="60.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="232" width="7" height="9" fill="#f0f4f6"><title>G4G</title></rect>
+<rect x="58.5" y="232.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="58" y="242" width="7" height="9" fill="#c8c6c2"><title>G4P (missing)</title></rect><rect x="60.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="58" y="252" width="7" height="9" fill="#10457e"><title>G4*</title></rect>
+<rect x="66" y="52" width="7" height="9" fill="#1d5fa2"><title>E5H</title></rect>
+<rect x="66" y="62" width="7" height="9" fill="#d4e6f1"><title>E5K</title></rect>
+<rect x="66" y="72" width="7" height="9" fill="#c8c6c2"><title>E5R (missing)</title></rect><rect x="68.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="82" width="7" height="9" fill="#fbe6da"><title>E5D</title></rect>
+<rect x="66" y="92" width="7" height="9" fill="#f5f6f7"><title>E5E</title></rect>
+<rect x="66.5" y="92.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="66" y="102" width="7" height="9" fill="#f3f5f6"><title>E5C</title></rect>
+<rect x="66" y="112" width="7" height="9" fill="#c8c6c2"><title>E5M (missing)</title></rect><rect x="68.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="122" width="7" height="9" fill="#c8c6c2"><title>E5N (missing)</title></rect><rect x="68.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="132" width="7" height="9" fill="#529dc8"><title>E5Q</title></rect>
+<rect x="66" y="142" width="7" height="9" fill="#eaf1f5"><title>E5S</title></rect>
+<rect x="66" y="152" width="7" height="9" fill="#c8c6c2"><title>E5T (missing)</title></rect><rect x="68.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="162" width="7" height="9" fill="#c8c6c2"><title>E5A (missing)</title></rect><rect x="68.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="172" width="7" height="9" fill="#f8f2ef"><title>E5I</title></rect>
+<rect x="66" y="182" width="7" height="9" fill="#c8c6c2"><title>E5L (missing)</title></rect><rect x="68.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="192" width="7" height="9" fill="#c8c6c2"><title>E5V (missing)</title></rect><rect x="68.5" y="195.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="202" width="7" height="9" fill="#c8c6c2"><title>E5F (missing)</title></rect><rect x="68.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="212" width="7" height="9" fill="#f5f6f7"><title>E5W</title></rect>
+<rect x="66" y="222" width="7" height="9" fill="#c8c6c2"><title>E5Y (missing)</title></rect><rect x="68.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="232" width="7" height="9" fill="#c8c6c2"><title>E5G (missing)</title></rect><rect x="68.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="242" width="7" height="9" fill="#c8c6c2"><title>E5P (missing)</title></rect><rect x="68.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="66" y="252" width="7" height="9" fill="#3a4f68"><title>E5* (low confidence)</title></rect><path d="M69.5 252H73V256Z" fill="#171b26"/>
+<rect x="74" y="52" width="7" height="9" fill="#f2f5f6"><title>E6H</title></rect>
+<rect x="74" y="62" width="7" height="9" fill="#a6adb0"><title>E6K (low confidence)</title></rect><path d="M77.5 62H81V66Z" fill="#171b26"/>
+<rect x="74" y="72" width="7" height="9" fill="#c8c6c2"><title>E6R (missing)</title></rect><rect x="76.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="82" width="7" height="9" fill="#dae9f2"><title>E6D</title></rect>
+<rect x="74" y="92" width="7" height="9" fill="#f7f5f4"><title>E6E</title></rect>
+<rect x="74.5" y="92.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="74" y="102" width="7" height="9" fill="#f8f3f0"><title>E6C</title></rect>
+<rect x="74" y="112" width="7" height="9" fill="#c8c6c2"><title>E6M (missing)</title></rect><rect x="76.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="122" width="7" height="9" fill="#c8c6c2"><title>E6N (missing)</title></rect><rect x="76.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="132" width="7" height="9" fill="#c8c6c2"><title>E6Q (missing)</title></rect><rect x="76.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="142" width="7" height="9" fill="#c8c6c2"><title>E6S (missing)</title></rect><rect x="76.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="152" width="7" height="9" fill="#c8c6c2"><title>E6T (missing)</title></rect><rect x="76.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="162" width="7" height="9" fill="#c8c6c2"><title>E6A (missing)</title></rect><rect x="76.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="172" width="7" height="9" fill="#6bacd1"><title>E6I</title></rect>
+<rect x="74" y="182" width="7" height="9" fill="#c8c6c2"><title>E6L (missing)</title></rect><rect x="76.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="192" width="7" height="9" fill="#c8c6c2"><title>E6V (missing)</title></rect><rect x="76.5" y="195.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="202" width="7" height="9" fill="#f8f3f0"><title>E6F</title></rect>
+<rect x="74" y="212" width="7" height="9" fill="#c8c6c2"><title>E6W (missing)</title></rect><rect x="76.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="222" width="7" height="9" fill="#f2f5f6"><title>E6Y</title></rect>
+<rect x="74" y="232" width="7" height="9" fill="#c8c6c2"><title>E6G (missing)</title></rect><rect x="76.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="74" y="242" width="7" height="9" fill="#e1edf3"><title>E6P</title></rect>
+<rect x="74" y="252" width="7" height="9" fill="#2f79b5"><title>E6*</title></rect>
+<rect x="82" y="52" width="7" height="9" fill="#c8c6c2"><title>L7H (missing)</title></rect><rect x="84.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="62" width="7" height="9" fill="#c8c6c2"><title>L7K (missing)</title></rect><rect x="84.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="72" width="7" height="9" fill="#c8c6c2"><title>L7R (missing)</title></rect><rect x="84.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="82" width="7" height="9" fill="#2e77b5"><title>L7D</title></rect>
+<rect x="82" y="92" width="7" height="9" fill="#f3f5f6"><title>L7E</title></rect>
+<rect x="82" y="102" width="7" height="9" fill="#f2f5f6"><title>L7C</title></rect>
+<rect x="82" y="112" width="7" height="9" fill="#c8c6c2"><title>L7M (missing)</title></rect><rect x="84.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="122" width="7" height="9" fill="#c8c6c2"><title>L7N (missing)</title></rect><rect x="84.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="132" width="7" height="9" fill="#90c4dd"><title>L7Q</title></rect>
+<rect x="82" y="142" width="7" height="9" fill="#81bad8"><title>L7S</title></rect>
+<rect x="82" y="152" width="7" height="9" fill="#eff3f5"><title>L7T</title></rect>
+<rect x="82" y="162" width="7" height="9" fill="#fae8de"><title>L7A</title></rect>
+<rect x="82" y="172" width="7" height="9" fill="#c8c6c2"><title>L7I (missing)</title></rect><rect x="84.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="182" width="7" height="9" fill="#f8f1ed"><title>L7L</title></rect>
+<rect x="82.5" y="182.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="82" y="192" width="7" height="9" fill="#c8c6c2"><title>L7V (missing)</title></rect><rect x="84.5" y="195.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="202" width="7" height="9" fill="#c8c6c2"><title>L7F (missing)</title></rect><rect x="84.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="212" width="7" height="9" fill="#c8c6c2"><title>L7W (missing)</title></rect><rect x="84.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="222" width="7" height="9" fill="#c8c6c2"><title>L7Y (missing)</title></rect><rect x="84.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="82" y="232" width="7" height="9" fill="#f9eee7"><title>L7G</title></rect>
+<rect x="82" y="242" width="7" height="9" fill="#8ea1aa"><title>L7P (low confidence)</title></rect><path d="M85.5 242H89V246Z" fill="#171b26"/>
+<rect x="82" y="252" width="7" height="9" fill="#053061"><title>L7*</title></rect>
+<rect x="90" y="52" width="7" height="9" fill="#c8c6c2"><title>F8H (missing)</title></rect><rect x="92.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="62" width="7" height="9" fill="#c8c6c2"><title>F8K (missing)</title></rect><rect x="92.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="72" width="7" height="9" fill="#307ab6"><title>F8R</title></rect>
+<rect x="90" y="82" width="7" height="9" fill="#c8c6c2"><title>F8D (missing)</title></rect><rect x="92.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="92" width="7" height="9" fill="#e9f0f4"><title>F8E</title></rect>
+<rect x="90" y="102" width="7" height="9" fill="#f8f2ef"><title>F8C</title></rect>
+<rect x="90" y="112" width="7" height="9" fill="#c8c6c2"><title>F8M (missing)</title></rect><rect x="92.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="122" width="7" height="9" fill="#1f63a8"><title>F8N</title></rect>
+<rect x="90" y="132" width="7" height="9" fill="#c8c6c2"><title>F8Q (missing)</title></rect><rect x="92.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="142" width="7" height="9" fill="url(#hatch)"><title>F8S (filtered)</title></rect>
+<rect x="90" y="152" width="7" height="9" fill="#c8c6c2"><title>F8T (missing)</title></rect><rect x="92.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="162" width="7" height="9" fill="#c8c6c2"><title>F8A (missing)</title></rect><rect x="92.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="172" width="7" height="9" fill="#dbeaf2"><title>F8I</title></rect>
+<rect x="90" y="182" width="7" height="9" fill="#c8c6c2"><title>F8L (missing)</title></rect><rect x="92.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="192" width="7" height="9" fill="#c8c6c2"><title>F8V (missing)</title></rect><rect x="92.5" y="195.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="202" width="7" height="9" fill="#f8f3f0"><title>F8F</title></rect>
+<rect x="90.5" y="202.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="90" y="212" width="7" height="9" fill="#c8c6c2"><title>F8W (missing)</title></rect><rect x="92.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="222" width="7" height="9" fill="#c8c6c2"><title>F8Y (missing)</title></rect><rect x="92.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="90" y="232" width="7" height="9" fill="#fce0d0"><title>F8G</title></rect>
+<rect x="90" y="242" width="7" height="9" fill="#edf2f5"><title>F8P</title></rect>
+<rect x="90" y="252" width="7" height="9" fill="#0e4179"><title>F8*</title></rect>
+<rect x="98" y="52" width="7" height="9" fill="#c8c6c2"><title>T9H (missing)</title></rect><rect x="100.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="62" width="7" height="9" fill="#d5e7f1"><title>T9K</title></rect>
+<rect x="98" y="72" width="7" height="9" fill="#c8c6c2"><title>T9R (missing)</title></rect><rect x="100.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="82" width="7" height="9" fill="#c8c6c2"><title>T9D (missing)</title></rect><rect x="100.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="92" width="7" height="9" fill="#c8c6c2"><title>T9E (missing)</title></rect><rect x="100.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="102" width="7" height="9" fill="#c8c6c2"><title>T9C (missing)</title></rect><rect x="100.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="112" width="7" height="9" fill="#c8c6c2"><title>T9M (missing)</title></rect><rect x="100.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="122" width="7" height="9" fill="#c8c6c2"><title>T9N (missing)</title></rect><rect x="100.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="132" width="7" height="9" fill="#c8c6c2"><title>T9Q (missing)</title></rect><rect x="100.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="142" width="7" height="9" fill="#c8c6c2"><title>T9S (missing)</title></rect><rect x="100.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="152" width="7" height="9" fill="#f8f4f2"><title>T9T</title></rect>
+<rect x="98.5" y="152.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="98" y="162" width="7" height="9" fill="url(#hatch)"><title>T9A (filtered)</title></rect>
+<rect x="98" y="172" width="7" height="9" fill="#f8f1ed"><title>T9I</title></rect>
+<rect x="98" y="182" width="7" height="9" fill="#ecf2f5"><title>T9L</title></rect>
+<rect x="98" y="192" width="7" height="9" fill="#2b73b3"><title>T9V</title></rect>
+<rect x="98" y="202" width="7" height="9" fill="#bbdaea"><title>T9F</title></rect>
+<rect x="98" y="212" width="7" height="9" fill="#c8c6c2"><title>T9W (missing)</title></rect><rect x="100.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="222" width="7" height="9" fill="#f7f6f6"><title>T9Y</title></rect>
+<rect x="98" y="232" width="7" height="9" fill="#faeae1"><title>T9G</title></rect>
+<rect x="98" y="242" width="7" height="9" fill="#c8c6c2"><title>T9P (missing)</title></rect><rect x="100.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="98" y="252" width="7" height="9" fill="#1a5899"><title>T9*</title></rect>
+<rect x="106" y="52" width="7" height="9" fill="#f9efe9"><title>G10H</title></rect>
+<rect x="106" y="62" width="7" height="9" fill="#c8c6c2"><title>G10K (missing)</title></rect><rect x="108.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="72" width="7" height="9" fill="#c8c6c2"><title>G10R (missing)</title></rect><rect x="108.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="82" width="7" height="9" fill="#3e8cbf"><title>G10D</title></rect>
+<rect x="106" y="92" width="7" height="9" fill="#f8f4f2"><title>G10E</title></rect>
+<rect x="106" y="102" width="7" height="9" fill="#c8c6c2"><title>G10C (missing)</title></rect><rect x="108.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="112" width="7" height="9" fill="#c8c6c2"><title>G10M (missing)</title></rect><rect x="108.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="122" width="7" height="9" fill="#f6f7f7"><title>G10N</title></rect>
+<rect x="106" y="132" width="7" height="9" fill="#c8c6c2"><title>G10Q (missing)</title></rect><rect x="108.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="142" width="7" height="9" fill="#6bacd1"><title>G10S</title></rect>
+<rect x="106" y="152" width="7" height="9" fill="#c8c6c2"><title>G10T (missing)</title></rect><rect x="108.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="162" width="7" height="9" fill="#c8c6c2"><title>G10A (missing)</title></rect><rect x="108.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="172" width="7" height="9" fill="#bbdaea"><title>G10I</title></rect>
+<rect x="106" y="182" width="7" height="9" fill="#c8c6c2"><title>G10L (missing)</title></rect><rect x="108.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="192" width="7" height="9" fill="#f8f2ef"><title>G10V</title></rect>
+<rect x="106" y="202" width="7" height="9" fill="#c8c6c2"><title>G10F (missing)</title></rect><rect x="108.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="212" width="7" height="9" fill="#c8c6c2"><title>G10W (missing)</title></rect><rect x="108.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="222" width="7" height="9" fill="#4f9bc7"><title>G10Y</title></rect>
+<rect x="106" y="232" width="7" height="9" fill="#f7f5f4"><title>G10G</title></rect>
+<rect x="106.5" y="232.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="106" y="242" width="7" height="9" fill="#c8c6c2"><title>G10P (missing)</title></rect><rect x="108.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="106" y="252" width="7" height="9" fill="#053061"><title>G10*</title></rect>
+<rect x="114" y="52" width="7" height="9" fill="#93c6de"><title>V11H</title></rect>
+<rect x="114" y="62" width="7" height="9" fill="#c8c6c2"><title>V11K (missing)</title></rect><rect x="116.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="72" width="7" height="9" fill="#f2f5f6"><title>V11R</title></rect>
+<rect x="114" y="82" width="7" height="9" fill="#c8c6c2"><title>V11D (missing)</title></rect><rect x="116.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="92" width="7" height="9" fill="#f8f4f2"><title>V11E</title></rect>
+<rect x="114" y="102" width="7" height="9" fill="#84bcd9"><title>V11C</title></rect>
+<rect x="114" y="112" width="7" height="9" fill="#c8c6c2"><title>V11M (missing)</title></rect><rect x="116.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="122" width="7" height="9" fill="#c8c6c2"><title>V11N (missing)</title></rect><rect x="116.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="132" width="7" height="9" fill="#c8c6c2"><title>V11Q (missing)</title></rect><rect x="116.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="142" width="7" height="9" fill="#c8c6c2"><title>V11S (missing)</title></rect><rect x="116.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="152" width="7" height="9" fill="#78b4d5"><title>V11T</title></rect>
+<rect x="114" y="162" width="7" height="9" fill="#c8c6c2"><title>V11A (missing)</title></rect><rect x="116.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="172" width="7" height="9" fill="#c8c6c2"><title>V11I (missing)</title></rect><rect x="116.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="182" width="7" height="9" fill="#c8c6c2"><title>V11L (missing)</title></rect><rect x="116.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="192" width="7" height="9" fill="#f7f5f4"><title>V11V</title></rect>
+<rect x="114.5" y="192.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="114" y="202" width="7" height="9" fill="#f3f5f6"><title>V11F</title></rect>
+<rect x="114" y="212" width="7" height="9" fill="#eff3f5"><title>V11W</title></rect>
+<rect x="114" y="222" width="7" height="9" fill="#c8c6c2"><title>V11Y (missing)</title></rect><rect x="116.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="232" width="7" height="9" fill="#529dc8"><title>V11G</title></rect>
+<rect x="114" y="242" width="7" height="9" fill="#c8c6c2"><title>V11P (missing)</title></rect><rect x="116.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="114" y="252" width="7" height="9" fill="#0f437b"><title>V11*</title></rect>
+<rect x="122" y="52" width="7" height="9" fill="#c8c6c2"><title>V12H (missing)</title></rect><rect x="124.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="62" width="7" height="9" fill="#f8f3f0"><title>V12K</title></rect>
+<rect x="122" y="72" width="7" height="9" fill="#5fa5cd"><title>V12R</title></rect>
+<rect x="122" y="82" width="7" height="9" fill="#c8c6c2"><title>V12D (missing)</title></rect><rect x="124.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="92" width="7" height="9" fill="#d2e6f0"><title>V12E</title></rect>
+<rect x="122" y="102" width="7" height="9" fill="#c8c6c2"><title>V12C (missing)</title></rect><rect x="124.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="112" width="7" height="9" fill="#c8c6c2"><title>V12M (missing)</title></rect><rect x="124.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="122" width="7" height="9" fill="#f8f3f0"><title>V12N</title></rect>
+<rect x="122" y="132" width="7" height="9" fill="#2e77b5"><title>V12Q</title></rect>
+<rect x="122" y="142" width="7" height="9" fill="#c8c6c2"><title>V12S (missing)</title></rect><rect x="124.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="152" width="7" height="9" fill="#f7f6f6"><title>V12T</title></rect>
+<rect x="122" y="162" width="7" height="9" fill="#eaf1f5"><title>V12A</title></rect>
+<rect x="122" y="172" width="7" height="9" fill="#c8c6c2"><title>V12I (missing)</title></rect><rect x="124.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="182" width="7" height="9" fill="#c8c6c2"><title>V12L (missing)</title></rect><rect x="124.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="192" width="7" height="9" fill="#f8f2ef"><title>V12V</title></rect>
+<rect x="122.5" y="192.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="122" y="202" width="7" height="9" fill="#c8c6c2"><title>V12F (missing)</title></rect><rect x="124.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="212" width="7" height="9" fill="#c8c6c2"><title>V12W (missing)</title></rect><rect x="124.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="222" width="7" height="9" fill="#c8c6c2"><title>V12Y (missing)</title></rect><rect x="124.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="232" width="7" height="9" fill="#c8c6c2"><title>V12G (missing)</title></rect><rect x="124.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="122" y="242" width="7" height="9" fill="#bbdaea"><title>V12P</title></rect>
+<rect x="122" y="252" width="7" height="9" fill="#063264"><title>V12*</title></rect>
+<rect x="130" y="52" width="7" height="9" fill="#569fc9"><title>P13H</title></rect>
+<rect x="130" y="62" width="7" height="9" fill="#c8c6c2"><title>P13K (missing)</title></rect><rect x="132.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="72" width="7" height="9" fill="#c8c6c2"><title>P13R (missing)</title></rect><rect x="132.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="82" width="7" height="9" fill="#c8c6c2"><title>P13D (missing)</title></rect><rect x="132.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="92" width="7" height="9" fill="#c8c6c2"><title>P13E (missing)</title></rect><rect x="132.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="102" width="7" height="9" fill="#c8c6c2"><title>P13C (missing)</title></rect><rect x="132.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="112" width="7" height="9" fill="#c8c6c2"><title>P13M (missing)</title></rect><rect x="132.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="122" width="7" height="9" fill="#f5f6f7"><title>P13N</title></rect>
+<rect x="130" y="132" width="7" height="9" fill="#f8f2ef"><title>P13Q</title></rect>
+<rect x="130" y="142" width="7" height="9" fill="#f7f5f4"><title>P13S</title></rect>
+<rect x="130" y="152" width="7" height="9" fill="#c8c6c2"><title>P13T (missing)</title></rect><rect x="132.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="162" width="7" height="9" fill="#a7d0e4"><title>P13A</title></rect>
+<rect x="130" y="172" width="7" height="9" fill="#c8c6c2"><title>P13I (missing)</title></rect><rect x="132.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="182" width="7" height="9" fill="#c8c6c2"><title>P13L (missing)</title></rect><rect x="132.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="192" width="7" height="9" fill="#f7f6f6"><title>P13V</title></rect>
+<rect x="130" y="202" width="7" height="9" fill="#b1d5e7"><title>P13F</title></rect>
+<rect x="130" y="212" width="7" height="9" fill="#c8c6c2"><title>P13W (missing)</title></rect><rect x="132.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="222" width="7" height="9" fill="#c8c6c2"><title>P13Y (missing)</title></rect><rect x="132.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="130" y="232" width="7" height="9" fill="#fae8de"><title>P13G</title></rect>
+<rect x="130" y="242" width="7" height="9" fill="#f5f6f7"><title>P13P</title></rect>
+<rect x="130.5" y="242.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="130" y="252" width="7" height="9" fill="#053061"><title>P13*</title></rect>
+<rect x="138" y="52" width="7" height="9" fill="#c8c6c2"><title>I14H (missing)</title></rect><rect x="140.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="62" width="7" height="9" fill="#c8c6c2"><title>I14K (missing)</title></rect><rect x="140.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="72" width="7" height="9" fill="#e3edf3"><title>I14R</title></rect>
+<rect x="138" y="82" width="7" height="9" fill="#c8c6c2"><title>I14D (missing)</title></rect><rect x="140.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="92" width="7" height="9" fill="#c8c6c2"><title>I14E (missing)</title></rect><rect x="140.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="102" width="7" height="9" fill="#d2e6f0"><title>I14C</title></rect>
+<rect x="138" y="112" width="7" height="9" fill="#c8c6c2"><title>I14M (missing)</title></rect><rect x="140.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="122" width="7" height="9" fill="#7eb8d7"><title>I14N</title></rect>
+<rect x="138" y="132" width="7" height="9" fill="#eff3f5"><title>I14Q</title></rect>
+<rect x="138" y="142" width="7" height="9" fill="#c8c6c2"><title>I14S (missing)</title></rect><rect x="140.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="152" width="7" height="9" fill="#c8c6c2"><title>I14T (missing)</title></rect><rect x="140.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="162" width="7" height="9" fill="#eaf1f5"><title>I14A</title></rect>
+<rect x="138" y="172" width="7" height="9" fill="#f8f4f2"><title>I14I</title></rect>
+<rect x="138.5" y="172.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="138" y="182" width="7" height="9" fill="#c8c6c2"><title>I14L (missing)</title></rect><rect x="140.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="192" width="7" height="9" fill="#c8c6c2"><title>I14V (missing)</title></rect><rect x="140.5" y="195.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="202" width="7" height="9" fill="#c8c6c2"><title>I14F (missing)</title></rect><rect x="140.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="212" width="7" height="9" fill="#f0f4f6"><title>I14W</title></rect>
+<rect x="138" y="222" width="7" height="9" fill="#f2f5f6"><title>I14Y</title></rect>
+<rect x="138" y="232" width="7" height="9" fill="#f8f1ed"><title>I14G</title></rect>
+<rect x="138" y="242" width="7" height="9" fill="#c8c6c2"><title>I14P (missing)</title></rect><rect x="140.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="138" y="252" width="7" height="9" fill="#08366a"><title>I14*</title></rect>
+<rect x="146" y="52" width="7" height="9" fill="#3885bc"><title>L15H</title></rect>
+<rect x="146" y="62" width="7" height="9" fill="#f5f6f7"><title>L15K</title></rect>
+<rect x="146" y="72" width="7" height="9" fill="#c8c6c2"><title>L15R (missing)</title></rect><rect x="148.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="82" width="7" height="9" fill="#c8c6c2"><title>L15D (missing)</title></rect><rect x="148.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="92" width="7" height="9" fill="#3a87bd"><title>L15E</title></rect>
+<rect x="146" y="102" width="7" height="9" fill="#c8c6c2"><title>L15C (missing)</title></rect><rect x="148.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="112" width="7" height="9" fill="#c8c6c2"><title>L15M (missing)</title></rect><rect x="148.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="122" width="7" height="9" fill="#c8c6c2"><title>L15N (missing)</title></rect><rect x="148.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="132" width="7" height="9" fill="#93c6de"><title>L15Q</title></rect>
+<rect x="146" y="142" width="7" height="9" fill="#1c5c9f"><title>L15S</title></rect>
+<rect x="146" y="152" width="7" height="9" fill="#c8c6c2"><title>L15T (missing)</title></rect><rect x="148.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="162" width="7" height="9" fill="#c8c6c2"><title>L15A (missing)</title></rect><rect x="148.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="172" width="7" height="9" fill="#c8c6c2"><title>L15I (missing)</title></rect><rect x="148.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="182" width="7" height="9" fill="#f7f6f6"><title>L15L</title></rect>
+<rect x="146.5" y="182.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="146" y="192" width="7" height="9" fill="#c8c6c2"><title>L15V (missing)</title></rect><rect x="148.5" y="195.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="202" width="7" height="9" fill="#c8c6c2"><title>L15F (missing)</title></rect><rect x="148.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="212" width="7" height="9" fill="#c8c6c2"><title>L15W (missing)</title></rect><rect x="148.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="146" y="222" width="7" height="9" fill="#f9eee7"><title>L15Y</title></rect>
+<rect x="146" y="232" width="7" height="9" fill="#408fc1"><title>L15G</title></rect>
+<rect x="146" y="242" width="7" height="9" fill="#e0ecf3"><title>L15P</title></rect>
+<rect x="146" y="252" width="7" height="9" fill="#08366a"><title>L15*</title></rect>
+<rect x="154" y="52" width="7" height="9" fill="#c8c6c2"><title>V16H (missing)</title></rect><rect x="156.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="62" width="7" height="9" fill="#c8c6c2"><title>V16K (missing)</title></rect><rect x="156.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="72" width="7" height="9" fill="#f3f5f6"><title>V16R</title></rect>
+<rect x="154" y="82" width="7" height="9" fill="#c8c6c2"><title>V16D (missing)</title></rect><rect x="156.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="92" width="7" height="9" fill="#c8c6c2"><title>V16E (missing)</title></rect><rect x="156.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="102" width="7" height="9" fill="#eff3f5"><title>V16C</title></rect>
+<rect x="154" y="112" width="7" height="9" fill="#c8c6c2"><title>V16M (missing)</title></rect><rect x="156.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="122" width="7" height="9" fill="#c8c6c2"><title>V16N (missing)</title></rect><rect x="156.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="132" width="7" height="9" fill="#c7e0ed"><title>V16Q</title></rect>
+<rect x="154" y="142" width="7" height="9" fill="#c8c6c2"><title>V16S (missing)</title></rect><rect x="156.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="152" width="7" height="9" fill="#f6f7f7"><title>V16T</title></rect>
+<rect x="154" y="162" width="7" height="9" fill="#c8c6c2"><title>V16A (missing)</title></rect><rect x="156.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="172" width="7" height="9" fill="#c8c6c2"><title>V16I (missing)</title></rect><rect x="156.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="182" width="7" height="9" fill="#c8c6c2"><title>V16L (missing)</title></rect><rect x="156.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="192" width="7" height="9" fill="#f5f6f7"><title>V16V</title></rect>
+<rect x="154.5" y="192.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="154" y="202" width="7" height="9" fill="#f9f0eb"><title>V16F</title></rect>
+<rect x="154" y="212" width="7" height="9" fill="#b3d6e8"><title>V16W</title></rect>
+<rect x="154" y="222" width="7" height="9" fill="#c8c6c2"><title>V16Y (missing)</title></rect><rect x="156.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="154" y="232" width="7" height="9" fill="#f5f6f7"><title>V16G</title></rect>
+<rect x="154" y="242" width="7" height="9" fill="#f8f2ef"><title>V16P</title></rect>
+<rect x="154" y="252" width="7" height="9" fill="#053061"><title>V16*</title></rect>
+<rect x="162" y="52" width="7" height="9" fill="#b8d8e9"><title>E17H</title></rect>
+<rect x="162" y="62" width="7" height="9" fill="#c8c6c2"><title>E17K (missing)</title></rect><rect x="164.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="72" width="7" height="9" fill="#f8f4f2"><title>E17R</title></rect>
+<rect x="162" y="82" width="7" height="9" fill="#f3f5f6"><title>E17D</title></rect>
+<rect x="162" y="92" width="7" height="9" fill="#f7f5f4"><title>E17E</title></rect>
+<rect x="162.5" y="92.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="162" y="102" width="7" height="9" fill="#c8c6c2"><title>E17C (missing)</title></rect><rect x="164.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="112" width="7" height="9" fill="#c8c6c2"><title>E17M (missing)</title></rect><rect x="164.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="122" width="7" height="9" fill="#c8c6c2"><title>E17N (missing)</title></rect><rect x="164.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="132" width="7" height="9" fill="#c8c6c2"><title>E17Q (missing)</title></rect><rect x="164.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="142" width="7" height="9" fill="#f9eee7"><title>E17S</title></rect>
+<rect x="162" y="152" width="7" height="9" fill="#c8c6c2"><title>E17T (missing)</title></rect><rect x="164.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="162" width="7" height="9" fill="#c8c6c2"><title>E17A (missing)</title></rect><rect x="164.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="172" width="7" height="9" fill="#c8c6c2"><title>E17I (missing)</title></rect><rect x="164.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="182" width="7" height="9" fill="#c8c6c2"><title>E17L (missing)</title></rect><rect x="164.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="192" width="7" height="9" fill="#569fc9"><title>E17V</title></rect>
+<rect x="162" y="202" width="7" height="9" fill="#a5cee3"><title>E17F</title></rect>
+<rect x="162" y="212" width="7" height="9" fill="#c8c6c2"><title>E17W (missing)</title></rect><rect x="164.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="222" width="7" height="9" fill="#f7f6f6"><title>E17Y</title></rect>
+<rect x="162" y="232" width="7" height="9" fill="#c8c6c2"><title>E17G (missing)</title></rect><rect x="164.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="162" y="242" width="7" height="9" fill="#7eb8d7"><title>E17P</title></rect>
+<rect x="162" y="252" width="7" height="9" fill="#2267ac"><title>E17*</title></rect>
+<rect x="170" y="52" width="7" height="9" fill="#68abd0"><title>L18H</title></rect>
+<rect x="170" y="62" width="7" height="9" fill="#c8c6c2"><title>L18K (missing)</title></rect><rect x="172.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="72" width="7" height="9" fill="#c8c6c2"><title>L18R (missing)</title></rect><rect x="172.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="82" width="7" height="9" fill="#c8c6c2"><title>L18D (missing)</title></rect><rect x="172.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="92" width="7" height="9" fill="#c8c6c2"><title>L18E (missing)</title></rect><rect x="172.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="102" width="7" height="9" fill="#f8f3f0"><title>L18C</title></rect>
+<rect x="170" y="112" width="7" height="9" fill="#c8c6c2"><title>L18M (missing)</title></rect><rect x="172.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="122" width="7" height="9" fill="#f9ede5"><title>L18N</title></rect>
+<rect x="170" y="132" width="7" height="9" fill="#c8c6c2"><title>L18Q (missing)</title></rect><rect x="172.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="142" width="7" height="9" fill="#c8c6c2"><title>L18S (missing)</title></rect><rect x="172.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="152" width="7" height="9" fill="#c8c6c2"><title>L18T (missing)</title></rect><rect x="172.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="162" width="7" height="9" fill="#3a87bd"><title>L18A</title></rect>
+<rect x="170" y="172" width="7" height="9" fill="#c8c6c2"><title>L18I (missing)</title></rect><rect x="172.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="182" width="7" height="9" fill="#f6f7f7"><title>L18L</title></rect>
+<rect x="170.5" y="182.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="170" y="192" width="7" height="9" fill="#f2f5f6"><title>L18V</title></rect>
+<rect x="170" y="202" width="7" height="9" fill="#4695c4"><title>L18F</title></rect>
+<rect x="170" y="212" width="7" height="9" fill="#f8f4f2"><title>L18W</title></rect>
+<rect x="170" y="222" width="7" height="9" fill="#c8c6c2"><title>L18Y (missing)</title></rect><rect x="172.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="232" width="7" height="9" fill="#c8c6c2"><title>L18G (missing)</title></rect><rect x="172.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="170" y="242" width="7" height="9" fill="#f9efe9"><title>L18P</title></rect>
+<rect x="170" y="252" width="7" height="9" fill="#1f63a8"><title>L18*</title></rect>
+<rect x="178" y="52" width="7" height="9" fill="#c8c6c2"><title>D19H (missing)</title></rect><rect x="180.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="62" width="7" height="9" fill="#f8f2ef"><title>D19K</title></rect>
+<rect x="178" y="72" width="7" height="9" fill="#d5e7f1"><title>D19R</title></rect>
+<rect x="178" y="82" width="7" height="9" fill="#f9f0eb"><title>D19D</title></rect>
+<rect x="178.5" y="82.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="178" y="92" width="7" height="9" fill="#c8c6c2"><title>D19E (missing)</title></rect><rect x="180.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="102" width="7" height="9" fill="#c8c6c2"><title>D19C (missing)</title></rect><rect x="180.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="112" width="7" height="9" fill="#c8c6c2"><title>D19M (missing)</title></rect><rect x="180.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="122" width="7" height="9" fill="#fae8de"><title>D19N</title></rect>
+<rect x="178" y="132" width="7" height="9" fill="#c8c6c2"><title>D19Q (missing)</title></rect><rect x="180.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="142" width="7" height="9" fill="#c8c6c2"><title>D19S (missing)</title></rect><rect x="180.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="152" width="7" height="9" fill="#c8c6c2"><title>D19T (missing)</title></rect><rect x="180.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="162" width="7" height="9" fill="#ecf2f5"><title>D19A</title></rect>
+<rect x="178" y="172" width="7" height="9" fill="#acd2e5"><title>D19I</title></rect>
+<rect x="178" y="182" width="7" height="9" fill="#c8c6c2"><title>D19L (missing)</title></rect><rect x="180.5" y="185.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="192" width="7" height="9" fill="#f7f6f6"><title>D19V</title></rect>
+<rect x="178" y="202" width="7" height="9" fill="#c8c6c2"><title>D19F (missing)</title></rect><rect x="180.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="212" width="7" height="9" fill="#408fc1"><title>D19W</title></rect>
+<rect x="178" y="222" width="7" height="9" fill="#2065ab"><title>D19Y</title></rect>
+<rect x="178" y="232" width="7" height="9" fill="#c8c6c2"><title>D19G (missing)</title></rect><rect x="180.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="242" width="7" height="9" fill="#c8c6c2"><title>D19P (missing)</title></rect><rect x="180.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="178" y="252" width="7" height="9" fill="#1d5fa2"><title>D19*</title></rect>
+<rect x="186" y="52" width="7" height="9" fill="#f5f6f7"><title>G20H</title></rect>
+<rect x="186" y="62" width="7" height="9" fill="#c8c6c2"><title>G20K (missing)</title></rect><rect x="188.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="72" width="7" height="9" fill="#c8c6c2"><title>G20R (missing)</title></rect><rect x="188.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="82" width="7" height="9" fill="#a7d0e4"><title>G20D</title></rect>
+<rect x="186" y="92" width="7" height="9" fill="#3b88be"><title>G20E</title></rect>
+<rect x="186" y="102" width="7" height="9" fill="#c8c6c2"><title>G20C (missing)</title></rect><rect x="188.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="112" width="7" height="9" fill="#c8c6c2"><title>G20M (missing)</title></rect><rect x="188.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="122" width="7" height="9" fill="#c8c6c2"><title>G20N (missing)</title></rect><rect x="188.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="132" width="7" height="9" fill="#c8c6c2"><title>G20Q (missing)</title></rect><rect x="188.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="142" width="7" height="9" fill="#a7d0e4"><title>G20S</title></rect>
+<rect x="186" y="152" width="7" height="9" fill="#c8c6c2"><title>G20T (missing)</title></rect><rect x="188.5" y="155.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="162" width="7" height="9" fill="#c8c6c2"><title>G20A (missing)</title></rect><rect x="188.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="172" width="7" height="9" fill="#c8c6c2"><title>G20I (missing)</title></rect><rect x="188.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="182" width="7" height="9" fill="#f0f4f6"><title>G20L</title></rect>
+<rect x="186" y="192" width="7" height="9" fill="#dae9f2"><title>G20V</title></rect>
+<rect x="186" y="202" width="7" height="9" fill="#68abd0"><title>G20F</title></rect>
+<rect x="186" y="212" width="7" height="9" fill="#e9f0f4"><title>G20W</title></rect>
+<rect x="186" y="222" width="7" height="9" fill="#c8c6c2"><title>G20Y (missing)</title></rect><rect x="188.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="232" width="7" height="9" fill="#f9efe9"><title>G20G</title></rect>
+<rect x="186.5" y="232.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
+<rect x="186" y="242" width="7" height="9" fill="#c8c6c2"><title>G20P (missing)</title></rect><rect x="188.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
+<rect x="186" y="252" width="7" height="9" fill="#0d3f76"><title>G20*</title></rect>
+</g>
+<g>
+<rect x="202" y="52" width="10" height="9" fill="#93c6de"/>
+<rect x="202" y="62" width="10" height="9" fill="#dae9f2"/>
+<rect x="202" y="72" width="10" height="9" fill="#d5e7f1"/>
+<rect x="202" y="82" width="10" height="9" fill="#dae9f2"/>
+<rect x="202" y="92" width="10" height="9" fill="#f3f5f6"/>
+<rect x="202" y="102" width="10" height="9" fill="#f5f6f7"/>
+<rect x="202" y="122" width="10" height="9" fill="#f3f5f6"/>
+<rect x="202" y="132" width="10" height="9" fill="#93c6de"/>
+<rect x="202" y="142" width="10" height="9" fill="#d1e5f0"/>
+<rect x="202" y="152" width="10" height="9" fill="#a7d0e4"/>
+<rect x="202" y="162" width="10" height="9" fill="#ecf2f5"/>
+<rect x="202" y="172" width="10" height="9" fill="#cfe4ef"/>
+<rect x="202" y="182" width="10" height="9" fill="#d1e5f0"/>
+<rect x="202" y="192" width="10" height="9" fill="#f2f5f6"/>
+<rect x="202" y="202" width="10" height="9" fill="#b6d7e8"/>
+<rect x="202" y="212" width="10" height="9" fill="#f0f4f6"/>
+<rect x="202" y="222" width="10" height="9" fill="#f2f5f6"/>
+<rect x="202" y="232" width="10" height="9" fill="#f8f1ed"/>
+<rect x="202" y="242" width="10" height="9" fill="#e0ecf3"/>
+<rect x="202" y="252" width="10" height="9" fill="#0a3b70"/>
+</g>
+<g font-size="9" fill="#4b5468">
+<rect x="34" y="274" width="5.3" height="10" fill="#053061"/>
+<rect x="39" y="274" width="5.3" height="10" fill="#0e4179"/>
+<rect x="44" y="274" width="5.3" height="10" fill="#175290"/>
+<rect x="49" y="274" width="5.3" height="10" fill="#2065ab"/>
+<rect x="54" y="274" width="5.3" height="10" fill="#2b73b3"/>
+<rect x="59" y="274" width="5.3" height="10" fill="#3681ba"/>
+<rect x="64" y="274" width="5.3" height="10" fill="#408fc1"/>
+<rect x="69" y="274" width="5.3" height="10" fill="#59a1ca"/>
+<rect x="74" y="274" width="5.3" height="10" fill="#71b0d3"/>
+<rect x="79" y="274" width="5.3" height="10" fill="#8ac0db"/>
+<rect x="84" y="274" width="5.3" height="10" fill="#a0cce2"/>
+<rect x="89" y="274" width="5.3" height="10" fill="#b3d6e8"/>
+<rect x="94" y="274" width="5.3" height="10" fill="#cae1ee"/>
+<rect x="99" y="274" width="5.3" height="10" fill="#d8e9f1"/>
+<rect x="104" y="274" width="5.3" height="10" fill="#e4eef4"/>
+<rect x="109" y="274" width="5.3" height="10" fill="#f0f4f6"/>
+<rect x="114" y="274" width="5.3" height="10" fill="#f8f2ef"/>
+<rect x="119" y="274" width="5.3" height="10" fill="#fae9df"/>
+<rect x="124" y="274" width="5.3" height="10" fill="#fce0d0"/>
+<rect x="129" y="274" width="5.3" height="10" fill="#fcd5bf"/>
+<rect x="134" y="274" width="5.3" height="10" fill="#f9c2a7"/>
+<rect x="139" y="274" width="5.3" height="10" fill="#f6b191"/>
+<rect x="144" y="274" width="5.3" height="10" fill="#f19e7d"/>
+<rect x="149" y="274" width="5.3" height="10" fill="#e8896c"/>
+<rect x="154" y="274" width="5.3" height="10" fill="#de735c"/>
+<rect x="159" y="274" width="5.3" height="10" fill="#d35a4a"/>
+<rect x="164" y="274" width="5.3" height="10" fill="#c84440"/>
+<rect x="169" y="274" width="5.3" height="10" fill="#bd2d35"/>
+<rect x="174" y="274" width="5.3" height="10" fill="#b1182b"/>
+<rect x="179" y="274" width="5.3" height="10" fill="#960f27"/>
+<rect x="184" y="274" width="5.3" height="10" fill="#7f0823"/>
+<rect x="189" y="274" width="5.3" height="10" fill="#67001f"/>
+<text x="34" y="296">-2.62</text>
+<text x="114" y="296" text-anchor="middle">0 (wild type)</text>
+<text x="194" y="296" text-anchor="end">2.62</text>
+<text x="34" y="308">score</text>
+<rect x="218" y="274" width="7" height="9" fill="#598199"/><path d="M221 274H225V278Z" fill="#171b26"/>
+<text x="229" y="282">low confidence</text>
+<rect x="305" y="274" width="7" height="9" fill="url(#hatch)"/>
+<text x="316" y="282">filtered</text>
+<rect x="362" y="274" width="7" height="9" fill="#c8c6c2"/><rect x="364.5" y="277.5" width="2" height="2" fill="#6e6c68"/>
+<text x="373" y="282">missing</text>
+<rect x="414.5" y="274.5" width="6" height="8" fill="#f7f6f6" stroke="#171b26"/>
+<text x="425" y="282">reference residue</text>
+</g>
+</svg>
