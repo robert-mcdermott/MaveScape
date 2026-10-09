@@ -19,13 +19,14 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 
 > **Status: 0.1.0 released; 0.2.0 in progress.** Count tables import, designs are set in the
 > Experiment view, two-population experiments, time series (by weighted regression on every time
-> point) and sorted bins (by their weighted average or maximum likelihood) are scored with numbers
-> checked against Enrich2, dms_variants, statsmodels, fitdistrplus, metafor and published scores,
-> quality control reports its findings, the variant-effect map shows each run, and a
-> workspace saves to one archive that reopens identically. Scripts can drive the window
-> (`--remote-control`). Four examples are on the Start page; [`docs/FORMATS.md`](docs/FORMATS.md)
-> describes every file. The [roadmap](mavescape-spec/roadmap.md) continues with barcodes and
-> DiMSum's error model in 0.2.
+> point), sorted bins (by their weighted average or maximum likelihood) and barcoded libraries
+> (their barcodes summed, or each scored and combined, with a barcode-to-variant map) are scored
+> with numbers checked against Enrich2, dms_variants, statsmodels, fitdistrplus, metafor and
+> published scores, quality control reports its findings, the variant-effect map shows each run,
+> and a workspace saves to one archive that reopens identically. A million rows import in a few
+> seconds. Scripts can drive the window (`--remote-control`). Five examples are on the Start page;
+> [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
+> [roadmap](mavescape-spec/roadmap.md) continues with DiMSum's error model in 0.2.
 
 ## Install
 
@@ -49,7 +50,7 @@ opens in its own window.
 
 - **Variant counts**: a table with one row per variant and one column per sample (CSV, TSV or
   Excel), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per
-  sample.
+  sample; or a table of barcode counts with its barcode-to-variant map.
 - **The target sequence** the variants are named against (FASTA, or pasted).
 - **The design**: which column is which sample, its role, condition and replicate; a sample sheet
   fills it in.

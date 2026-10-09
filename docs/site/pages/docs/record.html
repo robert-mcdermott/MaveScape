@@ -10,8 +10,9 @@ lede: What leaves MaveScape is meant to be checked: scores in MaveDB's columns, 
           <thead><tr><th>File</th><th>What it holds</th></tr></thead>
           <tbody>
             <tr><td><code>*_scores.csv</code></td><td>Every variant's score, SE and 95% interval, the replicates used, its status (scored, low confidence, filtered at which stage, or not measured) and flags, τ², I², the leave-one-out change and each replicate's score, with MaveDB's identifier columns (<code>hgvs_nt</code>, <code>hgvs_splice</code>, <code>hgvs_pro</code>)</td></tr>
-            <tr><td><code>*_counts.csv</code></td><td>The counts the run scored, in the same columns; scored again they give the run's output hash</td></tr>
+            <tr><td><code>*_counts.csv</code></td><td>The counts the run scored, in the same columns (a table of barcodes: each barcode with its variant); scored again they give the run's output hash</td></tr>
             <tr><td><code>*_qc_samples.csv</code>, <code>*_qc_variants.csv</code></td><td>Quality control per sample and per variant</td></tr>
+            <tr><td><code>*_barcodes.csv</code></td><td>A table of barcodes, barcode by barcode: its variant, and in each replicate its counts, score and SE, departure from its variant's other barcodes, whether it is an outlier and whether it was used</td></tr>
             <tr><td><code>*_provenance.json</code></td><td>The inputs with their SHA-256 checksums, the parameters, the software and its commit, the QC findings and thresholds, and the files exported</td></tr>
             <tr><td><code>*_methods.md</code>, <code>*_references.bib</code></td><td>A methods paragraph written from the run, with its references in order and as BibTeX</td></tr>
           </tbody>

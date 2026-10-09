@@ -28,6 +28,11 @@ export const THRESHOLDS = [
   { key: 'timeFit', label: 'Departure of time courses from a line ÷ counting noise (median)', bad: 'above', review: 2, fail: 5, unit: '×' },
   { key: 'binShare', label: 'A bin\'s share of a replicate\'s cells (or reads)', bad: 'below', review: 0.05, fail: 0.01, unit: 'fraction' },
   { key: 'cellsPerVariant', label: 'Cells sorted per variant into a bin', bad: 'below', review: 20, fail: 5, unit: 'cells' },
+  { key: 'unmappedReads', label: 'Reads of barcodes the map does not name', bad: 'above', review: 0.05, fail: 0.2, unit: 'fraction' },
+  { key: 'singleBarcode', label: 'Variants with a single barcode', bad: 'above', review: 0.5, fail: 0.95, unit: 'fraction' },
+  { key: 'barcodeExcess', label: 'Disagreement of a variant\'s barcodes ÷ counting (φ)', bad: 'above', review: 2, fail: 5, unit: '×' },
+  { key: 'splitHalf', label: 'Agreement of each variant\'s two halves of barcodes (Pearson r)', bad: 'below', review: 0.8, fail: 0.5, unit: 'r' },
+  { key: 'outlierBarcodes', label: 'Outlier barcodes (beyond 4 in z/√φ)', bad: 'above', review: 0.01, fail: 0.05, unit: 'fraction' },
 ];
 
 export function defaultThresholds() {
@@ -275,6 +280,59 @@ export function findingsFrom(qc, thresholds) {
       rationale: 'A variant\'s distribution over the bins is sampled twice: by the cells sorted, then by the reads. Fewer cells than reads per variant means the cells limit what is known.',
       affected: { samples: [], replicates: known.filter((r, i) => cellStatus[i] !== 'pass').map((r) => r.id) },
     });
+  }
+
+  // Barcodes (Q8): the map, barcodes per variant, how a variant's barcodes agree, outliers.
+  if (qc.barcodes) {
+    const bq = qc.barcodes;
+    const ur = levels(t, 'unmappedReads');
+    add({
+      id: 'barcode-map', title: 'Barcodes the map names', plot: 'barcodes-per-variant',
+      status: statusOf(bq.unmappedReadShare, ur, 'above'),
+      value: `${pct(bq.unmappedReadShare)} of reads in ${bq.unmapped} barcode${bq.unmapped === 1 ? '' : 's'} (of ${bq.rows}) naming no variant`,
+      explanation: bq.unmapped ? `${bq.unmapped} barcodes are not in the barcode-to-variant map or are given two variants by it; their reads are not scored. ${statusOf(bq.unmappedReadShare, ur, 'above') === 'pass' ? 'They are a small share of the reads.' : 'A large share of the reads: is the map from this library, and its barcodes written the same way (strand, length)?'}` : 'Every barcode counted names a variant.',
+      threshold: thresholdText(ur, 'above', pct),
+      rationale: 'Barcodes are linked to variants by sequencing the library once (long reads); a barcode missing from that map is one seen too rarely there, a sequencing error, or a map from another library. A barcode the map gives two variants cannot be trusted for either.',
+    });
+    const sb = levels(t, 'singleBarcode');
+    const reps = bq.replicates;
+    const singleShare = (r) => (r.variants ? r.perVariant.single / r.variants : Number.NaN);
+    const singleStatus = reps.map((r) => statusOf(singleShare(r), sb, 'above'));
+    add({
+      id: 'barcodes-per-variant', title: 'Barcodes per variant', plot: 'barcodes-per-variant',
+      status: reps.length ? worst(singleStatus) : 'na',
+      value: reps.length ? reps.map((r) => `${reps.length > 1 ? `${r.name}: ` : ''}median ${num(r.perVariant.median, 0)} (${num(r.perVariant.q25, 0)}–${num(r.perVariant.q75, 0)}), ${pct(singleShare(r))} with one`).join('; ') : 'no replicate has barcodes counted',
+      explanation: `${reps.map((r) => `${r.name}: ${r.barcodes} barcodes of ${r.variants} variants with reads before selection`).join('; ')}. ${worst(singleStatus) === 'pass' ? 'Most variants are measured by several barcodes, so a barcode\'s own noise can be told from its variant\'s effect.' : 'Many variants have a single barcode: their scores cannot be checked against another barcode, and an outlier barcode passes for an effect.'}`,
+      threshold: thresholdText(sb, 'above', pct),
+      rationale: 'Several independent barcodes per variant are independent clones: they average out clonal variation and expose barcodes that carry a second mutation or are misassigned.',
+      affected: { samples: [], replicates: reps.filter((r, i) => singleStatus[i] !== 'pass').map((r) => r.id) },
+    });
+    const compared = reps.filter((r) => Number.isFinite(r.phi));
+    if (compared.length || qc.model !== 'bins') {
+      const be = levels(t, 'barcodeExcess');
+      const sh = levels(t, 'splitHalf');
+      const agreementStatus = compared.map((r) => worst([statusOf(r.phi, be, 'above'), r.splitHalf ? statusOf(r.splitHalf.r, sh, 'below') : 'pass']));
+      add({
+        id: 'barcode-agreement', title: 'Agreement of a variant\'s barcodes', plot: 'barcode-agreement',
+        status: compared.length ? worst(agreementStatus) : 'na',
+        value: compared.length ? compared.map((r) => `${compared.length > 1 ? `${r.name}: ` : ''}φ ${num(r.phi, 2)}${r.splitHalf ? `, split-half r ${num(r.splitHalf.r, 3)}` : ''}`).join('; ') : 'not assessed: no variant has two barcodes counted',
+        explanation: compared.length ? `A variant's barcodes disagree ${num(Math.max(...compared.map((r) => r.phi)), 1)}× as much as counting explains at most${compared.some((r) => r.splitHalf) ? `, and the two halves of its barcodes score alike with r ${compared.filter((r) => r.splitHalf).map((r) => num(r.splitHalf.r, 3)).join(', ')}` : ''}. ${worst(agreementStatus) === 'pass' ? 'Barcodes of one variant agree about as counting predicts.' : 'More than counting explains: few cells per barcode (a bottleneck), or clones that differ. Scoring each barcode and combining them by REML takes the extra variation into a variant\'s SE; the sums leave it out.'}` : 'Needs variants with two or more barcodes counted.',
+        threshold: `φ ${thresholdText(be, 'above', (x) => `${x}×`)}; split-half r ${thresholdText(sh, 'below')}`,
+        rationale: 'Each barcode is compared with its variant\'s other barcodes, in units of their counting error together; φ, the median square of these over its value under counting alone, is 1 when barcodes differ only by counting. The split halves are a variant\'s barcodes in two groups, scored separately: their correlation is the replicate agreement of barcodes.',
+        affected: { samples: [], replicates: compared.filter((r, i) => agreementStatus[i] !== 'pass').map((r) => r.id) },
+      });
+      const ob = levels(t, 'outlierBarcodes');
+      const outlierStatus = compared.map((r) => statusOf(r.outlierShare, ob, 'above'));
+      add({
+        id: 'outlier-barcodes', title: 'Outlier barcodes', plot: 'barcode-agreement',
+        status: compared.length ? worst(outlierStatus) : 'na',
+        value: compared.length ? compared.map((r) => `${compared.length > 1 ? `${r.name}: ` : ''}${r.outliers} of ${r.compared} (${pct(r.outlierShare)})`).join('; ') : 'not assessed: no variant has three barcodes counted',
+        explanation: compared.length ? `${compared.reduce((a, r) => a + r.outliers, 0)} barcodes depart from their variant's other barcodes by more than 4 in z/√φ (found one at a time, so that one does not hide another). ${worst(outlierStatus) === 'pass' ? 'Few: they move their variants little.' : 'Many: a barcode carrying a second mutation, or assigned to the wrong variant, scores as its variant. Leave them out with the barcode filter (Score, Filters), and look for a pattern (a library, low counts).'}` : 'Needs variants with three or more barcodes counted.',
+        threshold: thresholdText(ob, 'above', pct),
+        rationale: 'A barcode far from its siblings is rarely its variant\'s effect: it is a clone with a second mutation, a barcode linked to the wrong variant, or a sequencing artefact. Variants with fewer than three barcodes cannot say which barcode is off.',
+        affected: { samples: [], replicates: compared.filter((r, i) => outlierStatus[i] !== 'pass').map((r) => r.id) },
+      });
+    }
   }
 
   // Time series (Q10): the time points the fits used, and how well the time courses follow a line.

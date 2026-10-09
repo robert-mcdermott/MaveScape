@@ -1,4 +1,5 @@
-"""Reference scores from dms_variants for the validation suite `scoring` (validation/reference/dms_variants.json).
+"""Reference scores from dms_variants for the validation suite `scoring` (validation/reference/dms_variants.json
+and dms_variants-barcodes.json).
 
 Run from the repository root:
 
@@ -17,9 +18,20 @@ logarithms (logbase e). Its formula is Enrich2's wild-type ratio:
 
 A count the fixture does not give (NA) is passed as 0, which dms_variants cannot tell apart; those
 rows are written as null and not compared. Numbers rounded to 13 significant digits.
+
+The barcode fixture (validation/fixtures/barcodes.csv and barcodes.map.csv, made by
+make-barcodes.mjs; wave 2, slice 4) is scored as dms_variants is meant to be used: a
+CodonVariantTable of each library's barcodes and their codon substitutions (from the map, leaving
+out the barcodes it gives two variants and those it does not name, as MaveScape does), each
+library's counts before and after selection added as samples "pre" and "post", and func_scores run
+by barcode and by aa_substitutions (counts summed per substitution), pseudocount 0.5, natural
+logarithms, the wild type's barcodes (no codon substitution) summed as the normalizer. The table's
+variant_counts (dms_variants' own long layout) is written as validation/fixtures/
+barcodes.variant_counts.csv.gz, for MaveScape's import of that layout.
 """
 
 import csv
+import gzip
 import json
 import math
 import os
@@ -34,6 +46,8 @@ from dms_variants.codonvarianttable import CodonVariantTable
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FIXTURES = os.path.join(ROOT, "validation", "fixtures")
 OUT = os.path.join(ROOT, "validation", "reference", "dms_variants.json")
+OUT_BARCODES = os.path.join(ROOT, "validation", "reference", "dms_variants-barcodes.json")
+OUT_COUNTS = os.path.join(FIXTURES, "barcodes.variant_counts.csv.gz")
 
 
 def number(x):
@@ -112,5 +126,75 @@ def main():
     print(f"wrote {OUT}")
 
 
+def barcodes():
+    with open(os.path.join(FIXTURES, "barcodes.design.json")) as f:
+        design = json.load(f)
+    with open(os.path.join(FIXTURES, "barcodes.csv"), newline="") as f:
+        counts = list(csv.DictReader(f))
+    with open(os.path.join(FIXTURES, "barcodes.map.csv"), newline="") as f:
+        mapping = list(csv.DictReader(f))
+    geneseq = design["targets"][0]["sequence"]
+    replicates = design["replicates"]
+    # The map: barcodes it gives two different variants are left out.
+    variants = {}
+    conflicts = set()
+    for r in mapping:
+        b = r["barcode"]
+        if b in variants and variants[b] != r["codon_substitutions"]:
+            conflicts.add(b)
+        variants.setdefault(b, r["codon_substitutions"])
+    # Each counted barcode's library: the replicate whose samples count it.
+    library_of = {}
+    for r in counts:
+        for rep in replicates:
+            if r[rep["input"]] not in ("", "NA"):
+                library_of[r["barcode"]] = rep["id"]
+    work = tempfile.mkdtemp(prefix="mavescape-dmsv-barcodes-")
+    variant_file = os.path.join(work, "variants.csv")
+    kept = [r for r in counts if r["barcode"] in variants and r["barcode"] not in conflicts]
+    with open(variant_file, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["library", "barcode", "substitutions", "variant_call_support"])
+        for r in kept:
+            w.writerow([library_of[r["barcode"]], r["barcode"], variants[r["barcode"]], 1])
+    table = CodonVariantTable(barcode_variant_file=variant_file, geneseq=geneseq, substitutions_are_codon=True)
+    rows = []
+    for r in kept:
+        rep = next(x for x in replicates if x["id"] == library_of[r["barcode"]])
+        rows.append({"library": rep["id"], "sample": "pre", "barcode": r["barcode"], "count": int(r[rep["input"]])})
+        rows.append({"library": rep["id"], "sample": "post", "barcode": r["barcode"], "count": int(r[rep["output"]])})
+    table.add_sample_counts_df(pd.DataFrame(rows))
+    libraries = [rep["id"] for rep in replicates]
+    out = {
+        "about": "dms_variants func_scores (pseudocount 0.5, logbase e, the wild type's barcodes summed) of validation/fixtures/barcodes.csv with barcodes.map.csv applied, "
+                 "made by validation/reference/generate_dms_variants.py: per library (replicate), by barcode (each barcode's score and variance) and by aa_substitutions "
+                 "(counts summed per substitution; the empty substitution is the wild type with the synonymous variants). Numbers rounded to 13 significant digits.",
+        "generated": date.today().isoformat(),
+        "versions": {"dms_variants": metadata.version("dms_variants"), "pandas": metadata.version("pandas"), "python": platform.python_version()},
+        "left_out": {"conflicts": len(conflicts), "unmapped": sum(1 for r in counts if r["barcode"] not in variants)},
+        "barcode": {},
+        "substitution": {},
+    }
+    by_barcode = table.func_scores("pre", pseudocount=0.5, by="barcode", libraries=libraries, logbase=math.e)
+    by_aa = table.func_scores("pre", pseudocount=0.5, by="aa_substitutions", libraries=libraries, logbase=math.e)
+    for lib in libraries:
+        b = by_barcode[by_barcode["library"] == lib]
+        out["barcode"][lib] = {"barcode": list(b["barcode"]), "score": [number(x) for x in b["func_score"]], "var": [number(x) for x in b["func_score_var"]]}
+        a = by_aa[by_aa["library"] == lib]
+        out["substitution"][lib] = {"aa_substitutions": list(a["aa_substitutions"]), "score": [number(x) for x in a["func_score"]], "var": [number(x) for x in a["func_score_var"]],
+                                    "pre_count": [int(x) for x in a["pre_count"]], "post_count": [int(x) for x in a["post_count"]]}
+    with open(OUT_BARCODES, "w") as f:
+        json.dump(out, f, separators=(",", ":"))
+        f.write("\n")
+    print(f"wrote {OUT_BARCODES}")
+    # dms_variants' own layout of the counts, for MaveScape's import (mtime 0: the same bytes each time).
+    text = table.variant_count_df.to_csv(index=False, lineterminator="\n")
+    with open(OUT_COUNTS, "wb") as raw:
+        with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0, filename="") as f:
+            f.write(text.encode())
+    print(f"wrote {OUT_COUNTS}")
+
+
 if __name__ == "__main__":
     main()
+    barcodes()

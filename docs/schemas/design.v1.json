@@ -44,7 +44,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "level": { "enum": ["variant", "barcode"] },
+        "level": { "enum": ["variant", "barcode"], "description": "variant: one row per variant; barcode: one row per barcode, each naming the variant it carries (many barcodes per variant)." },
+        "barcodeColumn": { "type": "string", "minLength": 1, "description": "For a table of barcodes: the column of barcode identifiers (each on one row)." },
         "tiles": { "type": "array", "items": { "$ref": "#/$defs/tile" } }
       }
     },

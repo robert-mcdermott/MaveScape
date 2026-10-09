@@ -2,19 +2,21 @@
 // engine (web/lib/score.js) run as the Score view runs it, on tables read by web/lib/csv.js.
 
 import { readFileSync } from 'node:fs';
-import { parseTable } from '../web/lib/csv.js';
+import { columnText, parseTable } from '../web/lib/csv.js';
 import { scoreExperiment } from '../web/lib/score.js';
 import { REPLICATE_STATE, FLAG, STAGE_BY_ID } from '../web/lib/filters.js';
 
 export const fixtureTable = () => parseTable(new Uint8Array(readFileSync(new URL('./fixtures/two-population.csv', import.meta.url))));
 export const fixtureDesign = () => JSON.parse(readFileSync(new URL('./fixtures/two-population.design.json', import.meta.url), 'utf8'));
 
-// The engine's input from a parsed table: variant names and the design's count columns.
+// The engine's input from a parsed table: variant names, the design's count columns, and a
+// barcode table's barcodes.
 export function engineInput(table, design) {
   const byName = new Map(table.columns.map((c) => [c.name, c]));
   const columns = {};
   for (const sample of design.samples) for (const name of sample.columns) columns[name] = byName.get(name).numeric.slice();
-  return { names: byName.get(design.variants.column).values, columns, design };
+  const barcodes = design.library?.level === 'barcode' ? columnText(byName.get(design.library.barcodeColumn)) : null;
+  return { names: columnText(byName.get(design.variants.column)), barcodes, columns, design };
 }
 
 export function score(table, design, parameters, extra = {}) {
@@ -47,7 +49,7 @@ export function variantTable(table, { drop = [], divide = 1 } = {}) {
     lineOfRow: null,
     columns: table.columns.map((c) => ({
       ...c,
-      values: keep.map((i) => c.values[i]),
+      values: c.values ? keep.map((i) => c.values[i]) : null,
       numeric: c.numeric ? Float64Array.from(keep, (i) => (divide === 1 ? c.numeric[i] : Math.floor(c.numeric[i] / divide))) : null,
     })),
   };
@@ -60,7 +62,7 @@ export function shuffledTable(table, random) {
     const j = random.int(i + 1);
     [order[i], order[j]] = [order[j], order[i]];
   }
-  const columns = table.columns.map((c) => ({ ...c, values: order.map((i) => c.values[i]), numeric: c.numeric ? Float64Array.from(order, (i) => c.numeric[i]) : null }));
+  const columns = table.columns.map((c) => ({ ...c, values: c.values ? order.map((i) => c.values[i]) : null, numeric: c.numeric ? Float64Array.from(order, (i) => c.numeric[i]) : null }));
   for (let i = columns.length - 1; i > 0; i -= 1) {
     const j = random.int(i + 1);
     [columns[i], columns[j]] = [columns[j], columns[i]];

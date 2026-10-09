@@ -1,7 +1,7 @@
 ---
 title: Examples
-description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and simulated experiments, a time series and a sort, whose true effects are known.
-lede: Four examples come with MaveScape: a published experiment, and three simulated ones whose true effects are known: two populations, a time series and a sort. Each opens scored, with its question, guided steps and what to expect in the inspector.
+description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and simulated experiments, a time series, a sort and a barcoded library, whose true effects are known.
+lede: Five examples come with MaveScape: a published experiment, and four simulated ones whose true effects are known: two populations, a time series, a sort and a barcoded library. Each opens scored, with its question, guided steps and what to expect in the inspector.
 ---
       <h2 id="grb2">GRB2 SH3 domain (published)</h2>
       <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
@@ -41,6 +41,15 @@ lede: Four examples come with MaveScape: a published experiment, and three simul
         <li>Scored by the weighted average of the bins, scaled so that nonsense scores 0 and the wild type 1, the scores track the true shifts (r = 0.99).</li>
         <li>Quality control reviews the variance beyond counting, about 2–3×: about 300 cells per variant were sorted against about 320 reads, so the cells, not the reads, limit what is known.</li>
         <li>Scored by maximum likelihood, the scores follow the true shifts more closely, and their SEs account for the cells.</li>
+      </ul>
+
+      <h2 id="barcodes">A simulated barcoded library (known truth)</h2>
+      <p>Codon variants of a 30-codon gene in three independently made libraries, each variant carrying about five random barcodes, counted before and after selection, simulated by MaveScape (seed 20261014) with each variant's true effect known. The barcode-to-variant map misses 2% of the barcodes and gives another 2% two variants; 3% of the barcodes were made to be off from their variant by 1.5–3, as a barcode carrying a second mutation would be.</p>
+      <p><strong>The question:</strong> do a variant's barcodes agree, which barcodes are outliers, and does scoring each barcode before combining them beat summing them?</p>
+      <ul>
+        <li>The map names about 96% of the barcodes; those it gives two variants are left unmapped, and listed at import.</li>
+        <li>Quality control reviews the outlier barcodes, about 2% of those compared, and the variance between replicates beyond counting.</li>
+        <li>Summed per variant, the scores track the true effects with r = 0.985; each barcode scored and combined by REML, 0.996; summed with the outliers left out, 0.995.</li>
       </ul>
 
       <h2 id="layouts">Blank layouts</h2>

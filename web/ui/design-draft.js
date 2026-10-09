@@ -22,7 +22,7 @@ export async function draftFromColumns(app, s) {
   const target = store.ws.targets.find((t) => t.id === s.target);
   const columns = countColumnsOf(s);
   const roles = s.roleSuggestions?.length ? [...s.roleSuggestions, ...columns.filter((c) => !s.roleSuggestions.some((r) => r.column === c)).map((column) => ({ column, role: null, group: column }))] : columns.map((column) => ({ column, role: null, group: column }));
-  const { design, notes } = draftDesign(table, roles, { variantColumn: s.mapping.variantColumn, level: s.mapping.level, target, name: s.name.replace(/\.[^.]+$/, '') });
+  const { design, notes } = draftDesign(table, roles, { variantColumn: s.mapping.variantColumn, level: s.mapping.level, target, name: s.name.replace(/\.[^.]+$/, ''), barcodeColumn: s.mapping.barcodeColumn });
   if (!target) design.targets = [];
   const complete = setAsideOtherColumns(design, s.columns.map((c) => c.name), IDENTIFIER_COLUMNS);
   store.commit(setDesign(store.ws, complete, `Drafted the design of ${s.name} from its column names`, s.id), 'Draft the design from the column names');

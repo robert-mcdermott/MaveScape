@@ -3,12 +3,14 @@
 // and no fewer. Three seeds each, so that a pass is not luck.
 
 import { simulateExperiment } from '../web/lib/simulate.js';
-import { parseTable } from '../web/lib/csv.js';
+import { columnText, parseTable } from '../web/lib/csv.js';
+import { applyBarcodeMap } from '../web/lib/barcodes.js';
 import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, defaultThresholds } from '../web/lib/findings.js';
 import { scoreExperiment, defaultParameters } from '../web/lib/score.js';
 
 export const QC_SEEDS = [20261009, 20261010, 20261011];
+const CLEAN_BARCODES = { noise: 0, outliers: 0, conflicts: 0, unmapped: 0 };
 
 // [name, simulation options, the findings that must not pass (id: status)]
 export const QC_FIXTURES = [
@@ -25,18 +27,31 @@ export const QC_FIXTURES = [
   ['a clean sort-seq experiment (2,000 cells per variant)', { sort: { cellsPerVariant: 2000 }, readsPerVariant: 60, replicateNoise: 0.01 }, {}],
   ['a sort with too few cells (20 per variant)', { sort: { cellsPerVariant: 20 }, readsPerVariant: 60 }, { 'excess-variance': 'fail', 'cells-per-bin': 'fail' }],
   ['a sort with a nearly empty bin (its gate far below the library)', { sort: { gates: [-2.5, -0.45, -0.1], cellsPerVariant: 2000 }, readsPerVariant: 60, replicateNoise: 0.01 }, { 'bin-occupancy': 'fail', 'cells-per-bin': 'fail' }],
+  // Barcodes (wave 2, slice 4): libraries of barcoded codon variants, 3.5 barcodes per variant.
+  ['a clean barcoded experiment', { barcodes: CLEAN_BARCODES }, {}],
+  ['clones that differ (barcode noise SD 0.5)', { barcodes: { ...CLEAN_BARCODES, noise: 0.5 } }, { 'excess-variance': 'fail', 'barcode-agreement': 'fail' }],
+  ['outlier barcodes (12% off their variant by 1.5–3)', { barcodes: { ...CLEAN_BARCODES, outliers: 0.12 } }, { agreement: 'review', 'excess-variance': 'fail', 'barcode-agreement': 'review', 'outlier-barcodes': 'fail' }],
+  ['a barcode map missing a quarter of the barcodes', { barcodes: { ...CLEAN_BARCODES, unmapped: 0.25 } }, { 'barcode-map': 'fail' }],
+  ['one barcode per variant', { barcodes: { ...CLEAN_BARCODES, perVariant: 1 } }, { 'barcodes-per-variant': 'fail' }],
 ];
 
-// The simulation as the app reads it, scored with MaveScape's defaults for its design when it can
-// be (weighted regression for a time series), and its QC.
+// The simulation as the app reads it (a barcoded one with its map applied), scored with
+// MaveScape's defaults for its design when it can be (weighted regression for a time series), and
+// its QC.
 export function runFixture(options, seed, thresholds = defaultThresholds()) {
   const sim = simulateExperiment({ ...options, seed });
-  const table = parseTable(sim.csv);
-  const names = table.columns[0].values;
-  const columns = Object.fromEntries(table.columns.slice(1).map((c) => [c.name, c.numeric ?? new Float64Array(table.rows).fill(Number.NaN)]));
-  const scored = scoreExperiment({ names, columns, design: sim.design, parameters: defaultParameters(sim.design) });
-  const qc = computeQC({ names, columns, design: sim.design, results: scored.ok ? scored.results : null });
-  return { sim, table, names, columns, scored, qc, findings: findingsFrom(qc, thresholds) };
+  let table = parseTable(sim.csv);
+  let barcodes = null;
+  if (sim.map) {
+    table = applyBarcodeMap(table, 'barcode', parseTable(sim.map), 'barcode', 'hgvs_pro').table;
+    barcodes = columnText(table.columns[0]);
+  }
+  const variantColumn = table.columns.find((c) => c.name === sim.design.variants.column);
+  const names = columnText(variantColumn);
+  const columns = Object.fromEntries(table.columns.filter((c) => c.numeric || c.type === 'empty').map((c) => [c.name, c.numeric ?? new Float64Array(table.rows).fill(Number.NaN)]));
+  const scored = scoreExperiment({ names, barcodes, columns, design: sim.design, parameters: defaultParameters(sim.design) });
+  const qc = computeQC({ names, barcodes, columns, design: sim.design, results: scored.ok ? scored.results : null });
+  return { sim, table, names, barcodes, columns, scored, qc, findings: findingsFrom(qc, thresholds) };
 }
 
 // The findings that did not pass, as { id: status } ('na' left out).

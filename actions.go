@@ -95,7 +95,7 @@ var remoteActions = []remoteAction{
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
 	})},
 	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), QC per sample or per variant, provenance, the methods or their references, the map (SVG), the selection, or the whole workspace as an archive (.msz). Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, qc-samples, qc-variants, provenance, methods, references, map, selection or archive."),
+		"what":           textArg("scores, counts, qc-samples, qc-variants, barcodes (a table of barcodes), provenance, methods, references, map, selection or archive."),
 		"path":           textArg("The absolute path of the file to write."),
 		"overwrite":      flagArg("Replace the file if it exists."),
 		"run":            runArg,

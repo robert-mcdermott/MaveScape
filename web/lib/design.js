@@ -124,6 +124,13 @@ export function validateDesign(design, table = null) {
   const tiles = design.library?.tiles ?? [];
   const tileIds = new Set();
   if (design.library?.level && !['variant', 'barcode'].includes(design.library.level)) error('library.level', 'The library level must be variant or barcode.');
+  // A table of barcodes: one row per barcode, each naming its variant.
+  const barcodeColumn = design.library?.barcodeColumn;
+  if (design.library?.level === 'barcode') {
+    if (typeof barcodeColumn !== 'string' || !barcodeColumn) error('library.barcodeColumn', 'A table of barcodes names its column of barcodes (library.barcodeColumn).');
+    else if (barcodeColumn === design.variants?.column) error('library.barcodeColumn', 'The barcodes and the variants they carry are different columns.');
+    else if (columns && !columns.has(barcodeColumn)) error('library.barcodeColumn', `The table has no column "${barcodeColumn}".`);
+  } else if (barcodeColumn !== undefined) error('library.barcodeColumn', 'A column of barcodes belongs to a table of barcodes (library.level "barcode").');
   tiles.forEach((tile, i) => {
     const path = `library.tiles[${i}]`;
     if (!ID.test(tile.id ?? '')) error(`${path}.id`, 'A tile needs an id.');
@@ -289,7 +296,7 @@ export function validateDesign(design, table = null) {
     if (entry.copyOf !== undefined && !columnOwner.has(entry.copyOf)) error(`ignoredColumns[${i}].copyOf`, `Column "${entry.column}" is a copy of "${entry.copyOf}", which no sample uses.`);
   }
   if (columns) {
-    const accounted = new Set([design.variants?.column, ...IDENTIFIER_COLUMNS, ...columnOwner.keys(), ...ignored.keys(), ...Object.values(model === 'scores' ? design.scores ?? {} : {})]);
+    const accounted = new Set([design.variants?.column, design.library?.barcodeColumn, ...IDENTIFIER_COLUMNS, ...columnOwner.keys(), ...ignored.keys(), ...Object.values(model === 'scores' ? design.scores ?? {} : {})]);
     const unaccounted = table.columns.filter((c) => !accounted.has(c));
     if (unaccounted.length) {
       const shown = unaccounted.slice(0, 6).map((c) => `"${c}"`).join(', ');
@@ -358,6 +365,7 @@ export function summarizeDesign(design) {
   } else if (design.model === 'scores') {
     lines.push(`${MODEL_NAMES[design.model]}: column "${design.scores?.score}"${design.scores?.se ? ` with standard errors in "${design.scores.se}"` : ''}.`);
   }
+  if (design.library?.level === 'barcode') lines.push(`A table of barcodes (column "${design.library.barcodeColumn}"): each row a barcode carrying the variant in "${design.variants?.column}".`);
   if (shared.size) {
     const sizes = new Set([...shared.values()].map((ids) => ids.length));
     lines.push(`${plural(shared.size, 'sample is', 'samples are')} shared between replicates (${[...sizes].join(' or ')} each): replicates that share an input are not independent there.`);

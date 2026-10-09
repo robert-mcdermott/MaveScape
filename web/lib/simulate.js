@@ -22,12 +22,30 @@
 // per variant on average are sorted by gates into ordered bins (the outer bins open), and each
 // bin is sequenced to `readsPerVariant` reads per variant on average. The design records each
 // bin's gates and the cells sorted into it; the truth is the shift in μ.
+//
+// With `barcodes` (wave 2, slice 4), a barcoded two-population experiment instead: the target is
+// DNA (one codon per amino acid), each variant a codon substitution (and a few double mutants),
+// each replicate an independent library in which every variant carries 1 + Poisson(perVariant − 1)
+// random barcodes (the wild type `wildType`). A barcode's cells grow by its variant's effect, plus
+// the barcode's own noise (`noise`, the SD of a multiplicative factor: clonal variation), and a
+// fraction `outliers` of barcodes is off by 1.5–3 in either direction (a second mutation, a
+// misread barcode). The counts are a table of barcodes; which variant each carries is in a
+// separate barcode-to-variant map, in which a fraction `conflicts` of barcodes is given a second,
+// different variant (both are wrong to trust) and a fraction `unmapped` is missing.
 
 import { exp, log, normalCdf } from './dmath.js';
 import { createRandom, poisson } from './random.js';
 
 const THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val' };
 const AMINO_ACIDS = Object.keys(THREE);
+
+// One codon per amino acid, and a synonymous codon for those that have one (barcoded simulations).
+const CODON_OF = {
+  A: 'GCT', R: 'CGT', N: 'AAT', D: 'GAT', C: 'TGT', Q: 'CAA', E: 'GAA', G: 'GGT', H: 'CAT', I: 'ATT',
+  L: 'CTG', K: 'AAA', M: 'ATG', F: 'TTT', P: 'CCG', S: 'TCT', T: 'ACC', W: 'TGG', Y: 'TAT', V: 'GTT', '*': 'TAA',
+};
+const SYNONYMOUS_CODON = { A: 'GCC', R: 'CGC', N: 'AAC', D: 'GAC', C: 'TGC', Q: 'CAG', E: 'GAG', G: 'GGC', H: 'CAC', I: 'ATC', L: 'CTC', K: 'AAG', F: 'TTC', P: 'CCC', S: 'TCC', T: 'ACG', Y: 'TAC', V: 'GTC' };
+const ONE = Object.fromEntries(Object.entries(THREE).map(([one, three]) => [three, one]));
 
 export const DEFAULT_SIMULATION = {
   seed: 1,
@@ -44,6 +62,7 @@ export const DEFAULT_SIMULATION = {
   passageCells: Infinity, // cells per variant carried over at each later time point of a time series
   timeUnit: 'generation',
   sort: null, // { gates: [log offsets from the wild type's μ], sigma, effectScale, cellsPerVariant, wtFluorescence, values }
+  barcodes: null, // { perVariant, wildType, readsPerBarcode, noise, outliers, conflicts, unmapped, doubles, length }
 };
 
 // The variants of a protein: the wild type, then by position a synonymous variant, a nonsense
@@ -79,6 +98,7 @@ export function simulateExperiment(options = {}) {
   const outDepth = o.outputReadsPerVariant ?? o.readsPerVariant;
   if (o.times) return simulateTimeSeries(o, random, variants, f, noise);
   if (o.sort) return simulateSort(o, random, variants, f, noise);
+  if (o.barcodes) return simulateBarcodes(o, random, variants);
   const columns = [];
   for (let r = 0; r < o.replicates; r += 1) {
     const input = f.map((x) => poisson(random, o.readsPerVariant * V * x));
@@ -112,6 +132,116 @@ export function simulateExperiment(options = {}) {
     controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
   };
   return { csv: `${lines.join('\n')}\n`, design, variants, options: o };
+}
+
+const BARCODE_DEFAULTS = { perVariant: 3.5, wildType: 30, readsPerBarcode: 100, libraryLogSd: 0.6, noise: 0.1, outliers: 0.02, conflicts: 0.015, unmapped: 0.01, doubles: 20, length: 16 };
+
+// A codon variant for a protein variant of simulatedVariants: its codon substitutions as
+// dms_variants writes them (GCT2GTT), or null for one with no codon (a synonymous Met or Trp).
+function codonsOf(name, protein) {
+  if (name === 'p.=') return '';
+  const m = /^p\.([A-Z][a-z]{2})(\d+)(=|[A-Z][a-z]{2})$/.exec(name);
+  const pos = Number(m[2]);
+  const wt = CODON_OF[protein[pos - 1]];
+  const alt = m[3] === '=' ? SYNONYMOUS_CODON[protein[pos - 1]] : m[3] === 'Ter' ? CODON_OF['*'] : CODON_OF[ONE[m[3]]];
+  return alt ? `${wt}${pos}${alt}` : null;
+}
+
+function simulateBarcodes(o, random, singles) {
+  const bc = { ...BARCODE_DEFAULTS, ...o.barcodes };
+  const dna = [...o.protein].map((aa) => CODON_OF[aa]).join('');
+  const variants = singles.map((v) => ({ ...v, codons: codonsOf(v.name, o.protein) })).filter((v) => v.codons !== null);
+  // Double mutants: two missense substitutions at different positions, their effects added.
+  const missense = variants.filter((v) => v.kind === 'missense');
+  for (let d = 0; d < bc.doubles; d += 1) {
+    const a = missense[random.int(missense.length)];
+    const b = missense[random.int(missense.length)];
+    const position = (v) => Number(/^[ACGT]{3}(\d+)/.exec(v.codons)[1]);
+    if (position(a) === position(b)) continue;
+    const [first, second] = position(a) < position(b) ? [a, b] : [b, a];
+    if (variants.some((v) => v.name === `p.[${first.name.slice(2)};${second.name.slice(2)}]`)) continue;
+    variants.push({ name: `p.[${first.name.slice(2)};${second.name.slice(2)}]`, kind: 'multi-variant', effect: a.effect + b.effect, codons: `${first.codons} ${second.codons}` });
+  }
+  const used = new Set();
+  const newBarcode = () => {
+    for (;;) {
+      let s = '';
+      for (let k = 0; k < bc.length; k += 1) s += 'ACGT'[random.int(4)];
+      if (!used.has(s)) {
+        used.add(s);
+        return s;
+      }
+    }
+  };
+  // Each replicate's library: barcodes, their variants, frequencies and counts.
+  const rows = [];
+  for (let r = 0; r < o.replicates; r += 1) {
+    const library = [];
+    variants.forEach((v, i) => {
+      const k = v.kind === 'wild type' ? bc.wildType : 1 + poisson(random, bc.perVariant - 1);
+      for (let j = 0; j < k; j += 1) {
+        const outlier = random() < bc.outliers ? (random() < 0.5 ? -1 : 1) * (1.5 + 1.5 * random()) : 0;
+        library.push({ id: newBarcode(), replicate: r, variant: i, weight: exp(bc.libraryLogSd * random.gaussian()), outlier });
+      }
+    });
+    const B = library.length;
+    const total = library.reduce((a, x) => a + x.weight, 0);
+    const grown = library.map((x) => (x.weight / total) * exp(variants[x.variant].effect + bc.noise * random.gaussian() + x.outlier));
+    const grownTotal = grown.reduce((a, b) => a + b, 0);
+    library.forEach((x, j) => {
+      x.pre = poisson(random, (bc.readsPerBarcode * B * x.weight) / total);
+      x.post = poisson(random, (bc.readsPerBarcode * B * grown[j]) / grownTotal);
+    });
+    for (const x of library) rows.push(x);
+  }
+  // The barcode-to-variant map: unmapped barcodes left out, conflicting ones given a second variant.
+  const map = [];
+  for (const x of rows) {
+    x.unmapped = random() < bc.unmapped;
+    x.conflict = !x.unmapped && random() < bc.conflicts;
+    if (x.unmapped) continue;
+    map.push({ barcode: x.id, variant: variants[x.variant] });
+    if (x.conflict) {
+      let other = x.variant;
+      while (other === x.variant) other = random.int(variants.length);
+      map.push({ barcode: x.id, variant: variants[other] });
+    }
+  }
+  const shuffled = (list) => {
+    for (let i = list.length - 1; i > 0; i -= 1) {
+      const j = random.int(i + 1);
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
+  };
+  shuffled(rows);
+  shuffled(map);
+  const samples = [];
+  for (let r = 0; r < o.replicates; r += 1) samples.push(`pre_rep${r + 1}`, `post_rep${r + 1}`);
+  const lines = [['barcode', ...samples].join(',')];
+  for (const x of rows) lines.push([x.id, ...samples.map((s, k) => (Math.floor(k / 2) !== x.replicate ? 'NA' : String(k % 2 ? x.post : x.pre)))].join(','));
+  const mapLines = ['barcode,hgvs_pro,codon_substitutions', ...map.map((m) => `${m.barcode},${m.variant.name},${m.variant.codons}`)];
+  const design = {
+    format: 'mavescape-design',
+    version: 1,
+    name: 'Simulated barcoded experiment',
+    description: `Simulated by MaveScape (web/lib/simulate.js, seed ${o.seed}): not real data. ${o.replicates} libraries (replicates) of barcoded codon variants, ${bc.perVariant} barcodes per variant on average, ${bc.readsPerBarcode} reads per barcode; ${(100 * bc.outliers).toFixed(1)}% of barcodes off from their variant, ${(100 * bc.conflicts).toFixed(1)}% given two variants by the map and ${(100 * bc.unmapped).toFixed(1)}% missing from it.`,
+    model: 'two-population',
+    variants: { column: 'hgvs_pro', level: 'protein' },
+    targets: [{ id: 'simulated', name: 'Simulated gene', sequenceType: 'dna', sequence: dna }],
+    library: { level: 'barcode', barcodeColumn: 'barcode' },
+    samples: samples.map((s) => ({ id: s, name: s, columns: [s] })),
+    replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, input: `pre_rep${r + 1}`, output: `post_rep${r + 1}` })),
+    controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
+  };
+  return {
+    csv: `${lines.join('\n')}\n`,
+    map: `${mapLines.join('\n')}\n`,
+    design,
+    variants: variants.map(({ name, kind, effect, codons }) => ({ name, kind, effect, codons })),
+    barcodes: rows.map((x) => ({ id: x.id, replicate: x.replicate + 1, variant: variants[x.variant].name, outlier: x.outlier, unmapped: x.unmapped, conflict: x.conflict })),
+    options: o,
+  };
 }
 
 const SORT_DEFAULTS = { gates: [-0.9, -0.45, -0.1], sigma: 0.4, effectScale: 0.5, cellsPerVariant: 100, wtFluorescence: 1000, values: null };

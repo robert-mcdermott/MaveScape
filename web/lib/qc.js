@@ -11,6 +11,11 @@
 // of each replicate against the others (an outlier replicate); synonymous log ratios against
 // their Poisson expectation; missingness patterns.
 //
+// A table of barcodes (wave 2, slice 4) is summed per variant for all of these, and also gets its
+// own: barcodes per variant, the reads of barcodes the map does not name, and per replicate how
+// much a variant's barcodes disagree beyond counting (φ, score-barcodes.js, on raw log ratios),
+// the outlier barcodes, and the agreement of each variant's two halves of barcodes (split-half r).
+//
 // From a score run's results, when given: the controls' scores and their separation, the median
 // SE against the controls' gap (resolution), score uncertainty by input count, and the filter
 // flow. Findings (pass, review, fail) are drawn from these by findings.js.
@@ -20,6 +25,7 @@ import { buildVariants, KIND, STATUS } from './variants.js';
 import { replicateSamples, targetLength } from './design.js';
 import { sampleCounts } from './replicates.js';
 import { binAverages, binTotals } from './score-bins.js';
+import { barcodeDisagreement, groupBarcodes, OUTLIER_Z, sumByVariant } from './score-barcodes.js';
 import { auc, mad, mean, median, MEDIAN_CHI2_1, nonNegativeLine, pearson, quantileSorted, sorted, spearman, variance } from './stats.js';
 
 export const QC_VERSION = '1';
@@ -412,15 +418,19 @@ function timeSeriesMetrics(results) {
 
 // QC of an experiment. input: { names, columns: { name: Float64Array }, design, mode, results
 // (a score run's results, optional), measures: { lowCount, agreementInput } }.
-export function computeQC({ names, columns, design, mode = 'lenient', results = null, measures = {} }) {
+export function computeQC({ names, barcodes = null, columns, design, mode = 'lenient', results = null, measures = {} }) {
   const m = { ...DEFAULT_MEASURES, ...measures };
-  const variants = buildVariants(names, { level: design.variants.level, mode, target: design.targets?.length === 1 ? design.targets[0] : undefined });
-  const n = names.length;
-  const pooled = new Map();
+  const options = { level: design.variants.level, mode, target: design.targets?.length === 1 ? design.targets[0] : undefined };
+  // A table of barcodes: counts summed per variant (score-barcodes.js).
+  const groups = design.library?.level === 'barcode' && barcodes ? groupBarcodes(names, options, barcodes) : null;
+  const variants = groups ? groups.variants : buildVariants(names, options);
+  const n = variants.n;
+  const pooledRows = new Map();
   for (const s of design.samples) {
     const parts = s.columns.map((c) => columns[c]).filter(Boolean);
-    pooled.set(s.id, parts.length === s.columns.length ? sampleCounts(s, parts) : new Float64Array(n).fill(Number.NaN));
+    pooledRows.set(s.id, parts.length === s.columns.length ? sampleCounts(s, parts) : new Float64Array(names.length).fill(Number.NaN));
   }
+  const pooled = groups ? new Map([...pooledRows].map(([id, c]) => [id, sumByVariant(c, groups)])) : pooledRows;
   // The samples, with their roles.
   const roles = new Map(design.samples.map((s) => [s.id, []]));
   const firstSamples = new Set();
@@ -476,5 +486,91 @@ export function computeQC({ names, columns, design, mode = 'lenient', results = 
     scores: results ? scoreMetrics(results) : null,
     timeSeries: results && (results.parameters?.model === 'wls' || results.parameters?.model === 'ols') ? timeSeriesMetrics(results) : null,
     bins: design.model === 'bins' ? binMetrics(design, pooled) : null,
+    barcodes: groups ? barcodeMetrics(design, pooledRows, groups, m.agreementInput) : null,
   };
+}
+
+// A table of barcodes: how many barcodes each variant has (counted with reads in a replicate's
+// first sample, or any bin), the reads of the barcodes the map does not name, and per replicate
+// (not sorted bins) φ and the outliers from raw log ratios (first and last samples, pseudocount
+// 0.5, each sample's total as its normalizer), and the split-half agreement: each variant's
+// barcodes split alternately into two halves, their counts summed, and the halves' log ratios
+// correlated over variants with enough input reads in both.
+function barcodeMetrics(design, pooledRows, groups, agreementInput) {
+  const nv = groups.offsets.length - 1;
+  const nb = groups.rows;
+  // Reads of unmapped barcodes, over all samples.
+  let reads = 0;
+  let unmappedReads = 0;
+  for (const counts of pooledRows.values()) {
+    for (let b = 0; b < nb; b += 1) {
+      const c = counts[b];
+      if (!(c > 0)) continue;
+      reads += c;
+      if (groups.variantOf[b] < 0) unmappedReads += c;
+    }
+  }
+  const replicates = design.replicates.map((r) => {
+    const slots = replicateSamples(r);
+    const timed = slots.filter((s) => s.role !== 'bin').map((s) => ({ ...s, time: s.role === 'input' ? 0 : s.role === 'output' ? Infinity : s.time })).sort((a, b) => a.time - b.time);
+    const samples = (timed.length ? timed : slots).map((s) => pooledRows.get(s.sample));
+    if (samples.some((x) => !x)) return null;
+    // Barcodes per variant: counted, with reads before selection (in any bin, for sorted bins).
+    const perVariant = new Int32Array(nv);
+    const seen = new Uint8Array(nb);
+    for (let b = 0; b < nb; b += 1) {
+      const g = groups.variantOf[b];
+      if (g < 0) continue;
+      const before = timed.length ? samples[0][b] : samples.reduce((a, s) => a + s[b], 0);
+      if (before > 0 && samples.every((s) => !Number.isNaN(s[b]))) {
+        seen[b] = 1;
+        perVariant[g] += 1;
+      }
+    }
+    const measured = [];
+    for (let g = 0; g < nv; g += 1) if (perVariant[g] > 0) measured.push(perVariant[g]);
+    const histogram = new Array(11).fill(0);
+    for (const k of measured) histogram[Math.min(10, k)] += 1;
+    const out = {
+      id: r.id, name: r.name ?? r.id, tile: r.tile ?? null,
+      variants: measured.length, barcodes: measured.reduce((a, k) => a + k, 0),
+      perVariant: { median: median(measured), q25: quantileSorted(sorted(measured), 0.25), q75: quantileSorted(sorted(measured), 0.75), single: measured.filter((k) => k === 1).length, histogram },
+      phi: Number.NaN, outliers: 0, compared: 0, splitHalf: null,
+    };
+    if (!timed.length) return out;
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    let r0 = P;
+    let rT = P;
+    for (let b = 0; b < nb; b += 1) {
+      if (!seen[b]) continue;
+      r0 += first[b];
+      rT += last[b];
+    }
+    const score = new Float64Array(nb).fill(Number.NaN);
+    const se = new Float64Array(nb).fill(Number.NaN);
+    for (let b = 0; b < nb; b += 1) {
+      if (!seen[b]) continue;
+      score[b] = (log(last[b] + P) - log(rT)) - (log(first[b] + P) - log(r0));
+      se[b] = Math.sqrt(1 / (first[b] + P) + 1 / (last[b] + P));
+    }
+    const d = barcodeDisagreement(score, se, seen, groups, OUTLIER_Z);
+    // Split halves: alternate barcodes (in the order of their identifiers) to each half.
+    const halves = [[], []];
+    for (let g = 0; g < nv; g += 1) {
+      const sums = [[0, 0], [0, 0]];
+      let k = 0;
+      for (let j = groups.offsets[g]; j < groups.offsets[g + 1]; j += 1) {
+        const b = groups.members[j];
+        if (!seen[b]) continue;
+        sums[k % 2][0] += first[b];
+        sums[k % 2][1] += last[b];
+        k += 1;
+      }
+      if (k < 2 || sums[0][0] < agreementInput || sums[1][0] < agreementInput) continue;
+      for (const h of [0, 1]) halves[h].push(log(sums[h][1] + P) - log(sums[h][0] + P));
+    }
+    return { ...out, phi: d.phi, outliers: d.outliers, compared: d.compared, outlierShare: d.compared ? d.outliers / d.compared : Number.NaN, splitHalf: halves[0].length >= 10 ? { r: pearson(halves[0], halves[1]), n: halves[0].length } : null };
+  }).filter(Boolean);
+  return { rows: nb, unmapped: groups.unmapped, unmappedReadShare: reads > 0 ? unmappedReads / reads : 0, rewritten: groups.rewritten, replicates };
 }

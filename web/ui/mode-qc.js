@@ -67,8 +67,8 @@ export function computeQc(app, inputs, onProgress) {
     let next;
     try {
       const table = await app.sourceTable(inputs.source);
-      const { names, columns, transfer } = workerInput(table, inputs.design);
-      const job = app.worker('score').run('qc', { names, columns, design: inputs.design, mode: inputs.mode, parameters: inputs.parameters, measures: measuresOf(ws.qc?.thresholds) }, { transfer, onProgress });
+      const { names, barcodes, columns, transfer } = workerInput(table, inputs.design);
+      const job = app.worker('score').run('qc', { names, barcodes, columns, design: inputs.design, mode: inputs.mode, parameters: inputs.parameters, measures: measuresOf(ws.qc?.thresholds) }, { transfer, onProgress });
       next = { status: 'done', ...(await job.promise) };
     } catch (error) {
       next = { status: 'failed', message: error.message };
@@ -168,6 +168,25 @@ export function mountQcMode(app, container) {
         const items = bins.flatMap((r) => r.bins.map((b) => ({ label: `${r.name}, bin ${b.order}`, value: Math.max(b.cellsPerVariant, 0.1), status: b.cellsPerVariant < t.cellsPerVariant.fail ? 'fail' : b.cellsPerVariant < t.cellsPerVariant.review ? 'review' : '' })));
         return [barChart({ items, log: true, lines: lines('cellsPerVariant'), label: 'Cells sorted per variant into each bin (log scale), with the review and fail thresholds', format: (v) => fmt(v, 0) }),
           h('p.muted.plot-note', bins.map((r) => `${r.name}: ${r.bins.map((b) => fmt(b.readsPerCell, 1)).join(', ')} reads per cell`).join(' · '))];
+      }
+      case 'barcodes-per-variant': {
+        const bq = qc.barcodes;
+        if (!bq?.replicates.length) return [h('p.muted', 'Needs a table of barcodes.')];
+        return [
+          lineChart({ series: bq.replicates.map((r, i) => ({ label: r.name, color: categoricalColor(i), markers: true, points: r.perVariant.histogram.slice(1).map((n, k) => [k + 1, r.variants ? n / r.variants : 0]) })), xLabel: 'barcodes per variant (10: ten or more)', yLabel: 'share of variants', label: 'How many barcodes measure each variant, by replicate' }),
+          legend(bq.replicates.map((r, i) => ({ label: `${r.name}: median ${fmt(r.perVariant.median, 0)}, ${pct(r.variants ? r.perVariant.single / r.variants : 0)} with one`, color: categoricalColor(i) }))),
+          h('p.muted.plot-note', `${formatCount(bq.rows)} barcodes in the table; ${formatCount(bq.unmapped)} name no variant (${pct(bq.unmappedReadShare)} of the reads). A barcode counts for a variant here when it has reads before selection (in any bin, for sorted bins).`),
+        ];
+      }
+      case 'barcode-agreement': {
+        const reps = (qc.barcodes?.replicates ?? []).filter((r) => Number.isFinite(r.phi));
+        if (!reps.length) return [h('p.muted', 'Needs variants with two or more barcodes counted before and after selection.')];
+        return [
+          barChart({ items: reps.map((r) => ({ label: r.name, value: r.phi, status: r.phi > t.barcodeExcess.fail ? 'fail' : r.phi > t.barcodeExcess.review ? 'review' : '' })), lines: [{ value: 1, kind: 'reference' }, ...lines('barcodeExcess')], label: 'How much a variant\'s barcodes disagree beyond counting (φ), by replicate; 1 is counting alone', format: (v) => `${fmt(v, 2)}×` }),
+          h('table.data', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Barcodes compared'), h('th.r', 'φ'), h('th.r', 'Split-half r'), h('th.r', 'Outliers'))),
+            h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r', formatCount(r.compared)), h('td.r', `${fmt(r.phi, 2)}×`), h('td.r', r.splitHalf ? `${fmt(r.splitHalf.r, 3)} (${formatCount(r.splitHalf.n)})` : '—'), h('td.r', h(`span${r.outlierShare > t.outlierBarcodes.review ? '.warn-text' : ''}`, `${formatCount(r.outliers)} (${pct(r.outlierShare)})`)))))),
+          h('p.muted.plot-note', 'Each barcode against its variant\'s other barcodes: raw log ratios (each sample\'s reads as its normalizer), in units of their counting error together. φ is the median square of these over its value under counting alone; an outlier departs by more than 4 in z/√φ, found one at a time. Split-half r: each variant\'s barcodes in two alternating halves, summed and scored apart, correlated over variants. Open a variant on the map to see its barcodes.'),
+        ];
       }
       case 'time-points': {
         const ts = qc.timeSeries ?? [];

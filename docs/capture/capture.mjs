@@ -215,6 +215,30 @@ const scenes = {
     await act('set_mode', { mode: 'experiment' });
     await scrollTo('.experiment-split > div:last-child .pane:nth-child(2)');
   },
+  // A table of barcode counts and its barcode-to-variant map opened together: the map applied, the
+  // barcodes it gives two variants and those it misses listed.
+  async 'barcode-import'() {
+    await act('open_files', { paths: [join(ROOT, 'validation/fixtures/barcodes.fasta')] });
+    await act('open_files', { paths: [join(ROOT, 'validation/fixtures/barcodes.csv'), join(ROOT, 'validation/fixtures/barcodes.map.csv')], review: true });
+    await waitFor(`Boolean(document.querySelector('.import-wizard'))`);
+    await sleep(800);
+  },
+  // A barcoded library scored barcode by barcode: a variant's barcodes in each replicate, one an
+  // outlier.
+  async barcodes() {
+    await example('simulated-barcodes');
+    await act('score', { parameters: { aggregation: 'barcode' } });
+    await act('render_map', { color_by: 'score', rows: 'biochemical' });
+    await act('inspect_variant', { variant: 'p.Glu6Gln' });
+    await sleep(600);
+    await scrollTo('.barcode-block');
+  },
+  // A barcoded library's quality control: how a variant's barcodes agree, and the outliers.
+  async 'barcode-qc'() {
+    await example('simulated-barcodes');
+    await act('qc_findings', { finding: 'outlier-barcodes' });
+    await sleep(600);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

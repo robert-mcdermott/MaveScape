@@ -8,7 +8,7 @@ import { summarizeDesign } from './design.js';
 import { NORMALIZATIONS } from './score-ratio.js';
 import { RESCALINGS, withDefaults } from './score.js';
 import { describeFilters } from './filters.js';
-import { binSentence, regressionSentence } from './runs.js';
+import { barcodeSentence, binSentence, regressionSentence } from './runs.js';
 
 export const REFERENCES = {
   enrich2: { type: 'article', authors: ['Rubin, Alan F', 'Gelman, Hannah', 'Lucas, Nathan', 'Bajjalieh, Sandra M', 'Papenfuss, Anthony T', 'Speed, Terence P', 'Fowler, Douglas M'], title: 'A statistical framework for analyzing deep mutational scanning data', journal: 'Genome Biology', year: 2017, volume: 18, pages: '150', doi: '10.1186/s13059-017-1272-5' },
@@ -18,6 +18,7 @@ export const REFERENCES = {
   dimsum: { type: 'article', authors: ['Faure, Andre J', 'Schmiedel, J{\\"o}rn M', 'Baeza-Centurion, Pablo', 'Lehner, Ben'], title: 'DiMSum: an error model and pipeline for analyzing deep mutational scanning data and diagnosing common experimental pathologies', journal: 'Genome Biology', year: 2020, volume: 21, pages: '207', doi: '10.1186/s13059-020-02091-3' },
   vampseq: { type: 'article', authors: ['Matreyek, Kenneth A', 'Starita, Lea M', 'Stephany, Jason J', 'Martin, Beth', 'Chiasson, Melissa A', 'Gray, Vanessa E', 'Kircher, Martin', 'Khechaduri, Arineh', 'Dines, Jennifer N', 'Hause, Ronald J', 'Bhatia, Smita', 'Evans, William E', 'Relling, Mary V', 'Yang, Wenjian', 'Shendure, Jay', 'Fowler, Douglas M'], title: 'Multiplex assessment of protein variant abundance by massively parallel sequencing', journal: 'Nature Genetics', year: 2018, volume: 50, number: 6, pages: '874--882', doi: '10.1038/s41588-018-0122-z' },
   peterman: { type: 'article', authors: ['Peterman, Neil', 'Levine, Erel'], title: 'Sort-seq under the hood: implications of design choices on large-scale characterization of sequence-function relations', journal: 'BMC Genomics', year: 2016, volume: 17, pages: '206', doi: '10.1186/s12864-016-2533-5' },
+  dmsVariants: { type: 'software', authors: ['Bloom, Jesse D'], title: 'dms_variants', version: '1.6.0', year: 2024, url: 'https://github.com/jbloomlab/dms_variants' },
   mavedb: { type: 'article', authors: ['Esposito, Daniel', 'Weile, Jochen', 'Shendure, Jay', 'Starita, Lea M', 'Papenfuss, Anthony T', 'Roth, Frederick P', 'Fowler, Douglas M', 'Rubin, Alan F'], title: 'MaveDB: an open-source platform to distribute and interpret data from multiplexed assays of variant effect', journal: 'Genome Biology', year: 2019, volume: 20, pages: '223', doi: '10.1186/s13059-019-1845-6' },
 };
 
@@ -89,13 +90,14 @@ export function writeMethods(ws, run, options = {}) {
   if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
   else if (p.model === 'wls' || p.model === 'ols') scoring.push(regressionSentence(p, cite('enrich2')).replace(/ \((\[\d+\])\)/, ' $1'));
   else scoring.push(binSentence(p, { average: cite('vampseq'), mle: cite('peterman') }).replace(/ \((\[\d+\])\)/, ' $1'));
+  if (design.library?.level === 'barcode') scoring.push(barcodeSentence(p, p.aggregation === 'sum' ? { enrich2: cite('enrich2') } : { dmsVariants: cite('dmsVariants') }).replace(/ \((\[\d+\])\)/, ' $1'));
   scoring.push('Technical replicates were summed before scoring; biological replicates were scored separately.');
   if (p.combination === 'reml') scoring.push(`Replicate scores were combined by inverse-variance weighting with a between-replicate variance τ² estimated by restricted maximum likelihood ${cite('reml')}, by Fisher scoring as in metafor ${cite('metafor')}.`);
   else if (p.combination === 'fixed') scoring.push('Replicate scores were combined by inverse-variance weighting (fixed effects).');
   else if (p.combination === 'mean') scoring.push('Replicate scores were combined by their mean, with SE their standard deviation over the square root of their number.');
   else scoring.push(`Replicate scores were combined by Enrich2's random-effects estimator ${cite('enrich2')} as implemented in Enrich2 2.0.2 (50 iterations from its starting value).`);
   scoring.push(`Heterogeneity is reported as Cochran's Q and I² ${cite('higgins')}, with the largest change in a score when one replicate is left out.`);
-  scoring.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols').filter((x) => x.active !== false).map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join('; ')}. A filtered variant's score is reported as NA with the stage that removed it.`);
+  scoring.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols', design.library?.level === 'barcode').filter((x) => x.active !== false).map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join('; ')}. A filtered variant's score is reported as NA with the stage that removed it.`);
   if (p.rescale !== 'none') scoring.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}${run.output.conditions[0]?.rescale ? ` (${run.output.conditions[0].rescale.anchors.map((a) => `${a.what} ${Number(a.from.toFixed(4))} to ${a.to}`).join(', ')})` : ''}; the anchors' own uncertainty is not propagated.`);
   const conditions = run.output.conditions.map((c) => `${run.output.conditions.length > 1 ? `${c.name}: ` : ''}${c.scored} of ${run.output.variants} variants scored`).join('; ');
   scoring.push(`${conditions}.`);

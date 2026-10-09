@@ -61,7 +61,7 @@ jobs:
         run: node validation/fetch.mjs
       - name: Validation against reference values
         run: node validation/run.mjs --require-data
-      - name: Map and scoring performance budgets
+      - name: Performance budgets (scoring, the map, a million-row import)
         run: node validation/bench.mjs
       - name: The website builds, with every link, anchor and screenshot
         run: node docs/site/build.mjs "$RUNNER_TEMP/site"
@@ -79,6 +79,10 @@ jobs:
           node-version: 22
       - name: Every remote action, in the program and headless Chrome, against Node
         run: node validation/remote-session.mjs --verbose
+        env:
+          CHROME: /usr/bin/google-chrome
+      - name: A million barcodes imported and scored in the window
+        run: node validation/browser-bench.mjs
         env:
           CHROME: /usr/bin/google-chrome
 

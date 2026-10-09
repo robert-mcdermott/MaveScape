@@ -13,8 +13,8 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `enrich2` | Enrich2 2.0.2's scores of those data (`reference/enrich2.json`) against the formulas of `mavescape-spec/research.md` §2.1 computed independently, and the published BRCA1 scores against Enrich2 2.0.2 | MaveDB, external; `reference/enrich2.json` |
 | `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
-| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `fixtures/`; MaveDB, external |
-| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series and sorts) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
+| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales; barcodes (wave 2): every barcode and every variant's summed counts against dms_variants 1.6.0 by barcode and by substitution, the counts read with MaveScape's map, in dms_variants' `variant_counts` and in Enrich2's layout, the barcode fixture's truth and planted outliers, row order, refusals | `reference/enrich2.json`, `dms_variants.json`, `dms_variants-barcodes.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `fixtures/`; MaveDB, external |
+| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series, sorts and barcoded libraries) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
 | `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
 | `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked | `fixtures/`, `web/examples/` |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
@@ -29,8 +29,10 @@ a design that does not fit, parameters that cannot score) and forgiving names, t
 against the same analysis in Node: the window's runs have the output hash of `scoreExperiment` on
 the same table and design, a variant's evidence matches, and every export the hub writes is
 byte for byte the file Node makes from the exported archive (provenance but for its file names).
-It also checks that `web/lib/dmath.js` gives the same bits in the browser as in Node. 54 checks; in
-CI as the `remote` job.
+It also checks that `web/lib/dmath.js` gives the same bits in the browser as in Node, and (wave 2,
+slice 4) the barcoded example: its counts and map assembled in the window, scored barcode by
+barcode with Node's output hash, its barcodes exported byte for byte as Node writes them. 63
+checks; in CI as the `remote` job.
 
 ## Public data (`sources.json`)
 
@@ -262,6 +264,54 @@ Rscript validation/reference/generate_metafor.R
   residual-scaled SE (the rest is the replicate noise the simulation plants, which REML takes up
   only partly with three replicates).
 
+## The barcode fixture (`fixtures/barcodes.*`, wave 2 slice 4)
+
+`node validation/fixtures/make-barcodes.mjs` writes it, deterministically (seed 20261012): a
+simulated barcoded library (`web/lib/simulate.js`) of a 30-codon gene's 649 codon variants (every
+missense, synonymous and nonsense substitution and 20 double mutants), in two libraries (the
+replicates) in which each variant carries its own random 16-nt barcodes, 1 + Poisson(2.5) of them
+(the wild type 30), 4,608 in all, counted before and after selection at about 100 reads per
+barcode. Each barcode's cells grow by its variant's effect times a clonal factor (SD 0.1), and 2%
+of barcodes are off by 1.5–3 (a second mutation, a misassigned barcode). `barcodes.csv` holds the
+counts, one row per barcode (`NA` in the other library's columns); `barcodes.map.csv` the
+barcode-to-variant map (MAVE-HGVS and dms_variants' codon substitutions), which gives 63 barcodes
+(1.5%) a second, different variant and misses 42 (1%); `barcodes.design.json` the design of the
+counts with the map applied, `barcodes.fasta` the gene, `barcodes.truth.csv` each variant's true
+effect and `barcodes.barcode-truth.csv` each barcode's library, variant, planted shift and place in
+the map.
+
+## dms_variants on barcodes (`reference/dms_variants-barcodes.json`, wave 2 slice 4)
+
+The same generator as the fixture's dms_variants reference (above) builds a `CodonVariantTable` of
+each library's barcodes from the map, leaving out the barcodes it gives two variants and those it
+misses, as MaveScape does (dms_variants' tables cannot hold a conflict); adds each library's counts
+as samples `pre` and `post`; and runs `func_scores` by barcode and by `aa_substitutions`,
+pseudocount 0.5, natural logarithms, the wild type's barcodes (no codon substitution) summed as the
+normalizer. It also writes the table's `variant_counts` in dms_variants' own layout,
+`fixtures/barcodes.variant_counts.csv.gz` (gzip with no time stamp, so the same bytes each time).
+
+### What the comparisons showed (wave 2, slice 4)
+
+- **By barcode:** every one of the 4,503 barcodes' scores and variances equals `func_scores` by
+  barcode to 4.8 × 10⁻¹³, the barcodes scored on both sides the same: each barcode against its
+  replicate's normalizers from the summed counts (the wild type's barcodes summed).
+- **By substitution:** each variant's counts summed over its barcodes equal `func_scores`'
+  `pre_count` and `post_count` by `aa_substitutions` exactly, and its score and variance to
+  4.4 × 10⁻¹³ (1,236 variant measurements; the empty substitution, which dms_variants makes the wild
+  type and the synonymous variants together, is not compared).
+- **Three ways in:** the counts read with MaveScape's map, in dms_variants' `variant_counts` (made
+  one row per barcode) and in Enrich2's layout (a counts file per sample with its unnamed column of
+  elements, and a headerless map of whole variant sequences named against the gene) give the same
+  barcodes, the same 63 conflicts and the same combined scores to the last bit, summed and by
+  barcode.
+- **Against the truth:** scored barcode by barcode and combined by REML within each replicate, the
+  scores track the true effects (r = 0.990) more closely than the sums (0.977) or the sums without
+  the outliers (0.988), and their 95% intervals hold the truth 94% of the time (summed: 91%). Of the
+  88 planted outliers in variants with three or more barcodes, 67 are found (76%); 2 of the 3,717
+  other barcodes are called (0.05%). Most missed ones are off by 1.5 with few reads.
+- Shuffling the rows and columns changes no combined score by a bit: a variant's barcodes are
+  combined in the order of their identifiers.
+
 ## Quality control (wave 1, slice 6)
 
 `qc-cases.mjs` simulates (web/lib/simulate.js, seeds 20261009–11) a 40-residue protein's 839
@@ -288,6 +338,14 @@ What QC found in the feasibility data, with MaveScape's default scoring (locked 
   but differ about 2,000× more than counting predicts (about 10,000 reads per variant per bin far
   exceed the cells sorted, which MaveDB does not record); bin occupancy passes.
 
+Barcoded libraries (wave 2, slice 4; three libraries of a 40-residue protein's codon variants, 3.5
+barcodes per variant): clean (no clonal noise, outliers or map problems) raises nothing; clones that
+differ (SD 0.5) raise the barcodes' disagreement (φ about 7.8, fail) and the variance between
+replicates beyond counting; 12% of barcodes off their variant raise the outlier barcodes (about 6%
+found, fail), the barcodes' disagreement (review), replicate agreement and the variance beyond
+counting; a map missing a quarter of the barcodes raises the barcodes the map names (fail); one
+barcode per variant raises barcodes per variant (fail).
+
 ## The map (wave 1, slice 7)
 
 `golden/two-population.map.svg` is the synthetic fixture's map (minimum input count 10, so that
@@ -300,6 +358,40 @@ replicates), scores it, builds its map and draws 180 frames while panning on a s
 scoring 0.5 s, the model 26 ms, 0.6 ms of JavaScript per frame at the median (budgets 10 s, 1 s,
 16 ms). Drawn on a real canvas in Chrome (1,600 × 500 pixels at 2× resolution), a frame takes a
 median of 2.9, 3.9 and 8.1 ms at 14-, 6- and 2-pixel cells, against 33 ms for 30 frames per second.
+
+## Scale (wave 2, slice 4)
+
+`validation/bench.mjs` (in CI) also simulates a table of a million barcodes (1,004,914 in two
+libraries; 33,452 variants of a 1,600-codon gene, 15 barcodes each per library) and its
+million-line barcode-to-variant map, writes them (29 and 40 MB), and imports them in a process of
+their own as the window does: read in 16 MB parts, decoded as they come, the map applied, the
+review of the import wizard. Then it scores them both ways. On an Apple M4 laptop (Node 22.17):
+
+| Step | Time | Memory |
+| --- | --- | --- |
+| Import (read, map applied, reviewed) | 3.5 s (budget 15 s) | the process at most 830 MB (budget 1 GB); the table and its review then hold 102 MB |
+| Scored, barcodes summed | 1.3 s (budget 15 s) | |
+| Scored, each barcode then combined by REML | 1.3 s (budget 15 s) | |
+| 105,000 variants × 6 samples scored (S12) | 0.5 s (budget 10 s) | |
+
+A table is held column by column, a column of numbers as a Float64Array alone (its text is not
+kept): a million rows of a barcode and four counts take about 85 MB once read, where an array of
+strings per row and per cell took 500 MB (0.1.0). The map's million variant names are held as one
+string per variant.
+
+`node validation/browser-bench.mjs` (in CI, in the `remote` job) measures the same in the window:
+MaveScape built from source, driven by remote control in headless Chrome, the files opened together
+(served by the hub, read by the csv worker, assembled and reviewed, kept in the library), then
+scored both ways. The browser's memory is that of all its processes (the page, its workers, the GPU
+and the browser), sampled every 100 ms. On the same laptop (Chrome 154), over two runs:
+
+| Step | Time | The browser's memory |
+| --- | --- | --- |
+| Import | 3.2–4.3 s (budget 15 s) | +540 to +620 MB at most during it (budget 1 GB); +190 to +280 MB after it |
+| Scored, summed and by barcode | 1.5–2.3 s each | +390 to +420 MB after both runs (their results kept for the map and the inspector) |
+
+A worker ends when it has nothing more to do (`web/ui/workers.js`), so what a large table or run
+leaves in its memory goes with it; before that, the import held 750 MB after it was done.
 
 ## The record (wave 1, slice 8)
 

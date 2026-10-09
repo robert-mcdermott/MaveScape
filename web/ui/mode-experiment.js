@@ -8,7 +8,7 @@ import { confirmDialog, showDialog, toast } from './overlays.js';
 import { summarizeDesign, validateDesign, IDENTIFIER_COLUMNS } from '../lib/design.js';
 import {
   addCondition, addReplicate, addTile, assignColumn, columnAssignments, removeCondition, removeReplicate, removeTile,
-  setAsideOtherColumns, setBinGates, setBinValue, setControls, setField, setModel, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample, updateTile,
+  setAsideOtherColumns, setBarcodeColumn, setBinGates, setBinValue, setControls, setField, setModel, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample, updateTile,
 } from '../lib/design-edit.js';
 import { designFromSampleSheet } from '../lib/samplesheet.js';
 import { parseTable } from '../lib/csv.js';
@@ -50,7 +50,7 @@ export function mountExperimentMode(app, container) {
       if (!file) return;
       const sheet = parseTable(new Uint8Array(await file.arrayBuffer()), { fileName: file.name });
       const target = store.ws.targets.find((t) => t.id === s.target);
-      const { design, problems } = designFromSampleSheet(sheet, { countColumns: countColumns(s), variants: { column: s.mapping.variantColumn, level: s.mapping.level === 'nucleotide' ? 'nucleotide' : 'protein' }, targets: target ? [target] : [], name: store.ws.design?.name ?? s.name.replace(/\.[^.]+$/, '') });
+      const { design, problems } = designFromSampleSheet(sheet, { countColumns: countColumns(s), variants: { column: s.mapping.variantColumn, level: s.mapping.level === 'nucleotide' ? 'nucleotide' : 'protein' }, barcodeColumn: s.mapping.barcodeColumn, targets: target ? [target] : [], name: store.ws.design?.name ?? s.name.replace(/\.[^.]+$/, '') });
       const errors = problems.filter((p) => p.level === 'error');
       const apply = () => store.commit(setDesign(store.ws, setAsideOtherColumns(design, s.columns.map((c) => c.name), IDENTIFIER_COLUMNS), `Set the design from the sample sheet ${file.name}`, s.id), `Design from ${file.name}`);
       if (!problems.length && design) {
@@ -130,7 +130,7 @@ export function mountExperimentMode(app, container) {
       ...result.warnings.map((w) => h('div.callout.warn', { style: { marginTop: '6px' } }, icon('info'), h('span', w.message))));
   }
 
-  function settingsPane(design) {
+  function settingsPane(design, s) {
     const model = h('div.segmented', { role: 'group', 'aria-label': 'Kind of experiment' },
       ...MODELS.map(([id, label]) => h(`button${design.model === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': design.model === id ? 'true' : 'false', onclick: () => edit((d) => setModel(d, id), `Made the design ${label.toLowerCase()}`) }, label)));
     const extra = [];
@@ -153,7 +153,22 @@ export function mountExperimentMode(app, container) {
       ...extra,
       h('div.section-title', { style: { marginTop: '10px' } }, 'Controls'),
       h('div.form-grid', h('label.field', h('span', 'Wild-type row ("auto": p.=, c.= or _wt)'), wild), choice('synonymous', 'Synonymous controls'), choice('nonsense', 'Nonsense controls')),
-      conditionsBlock(design), tilesBlock(design));
+      barcodesBlock(design, s), conditionsBlock(design), tilesBlock(design));
+  }
+
+  // Whether each row is a variant or a barcode (wave 2, slice 4): a barcode table's column of
+  // barcodes, its variants summed or scored per barcode in the Score view.
+  function barcodesBlock(design, s) {
+    const text = (s?.columns ?? []).filter((c) => c.type === 'text' && c.name !== design.variants?.column);
+    const current = design.library?.level === 'barcode' ? design.library.barcodeColumn : '';
+    if (!text.length && !current) return null;
+    const select = h('select.input', { 'aria-label': 'Each row is', onchange: () => edit((d) => setBarcodeColumn(d, select.value || null), select.value ? `Made the rows barcodes (column ${select.value})` : 'Made the rows variants') },
+      h('option', { value: '', selected: !current }, 'a variant'),
+      ...text.map((c) => h('option', { value: c.name, selected: c.name === current }, `a barcode, in "${c.name}"`)));
+    return h('div',
+      h('div.section-title', { style: { marginTop: '10px' } }, 'Rows'),
+      h('label.field', h('span', 'Each row of the table is'), select),
+      current ? h('p.muted', { style: { fontSize: '12px', margin: '0 0 6px' } }, `Barcodes carrying the variant in "${design.variants?.column}": summed per variant, or scored one by one and combined, as the Score view says.`) : null);
   }
 
   function conditionsBlock(design) {
@@ -333,7 +348,7 @@ export function mountExperimentMode(app, container) {
       return;
     }
     root.append(h('div.view-body', h('div.split.experiment-split',
-      h('div', sourcePane(s), summaryPane(design, s), settingsPane(design), targetPane(s)),
+      h('div', sourcePane(s), summaryPane(design, s), settingsPane(design, s), targetPane(s)),
       h('div', replicatesPane(design), design.model === 'bins' ? gatesPane(design) : null, columnsPane(design, s),
         h('div.btn-row', { style: { marginTop: '12px' } }, h('button.btn', { type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Draft the design again?', message: 'The design is replaced by the draft from the column names. Undo (⌘Z) brings this one back.', confirm: 'Draft again' })) draftFromColumns(app, s); } }, icon('sparkles'), 'Draft again from the column names'))))));
   }

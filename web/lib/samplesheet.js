@@ -6,6 +6,8 @@
 // times) is listed once, with the replicates that share it ("1;2;3"), or with no replicate, when
 // every replicate of its condition and tile shares it.
 
+import { cellText } from './csv.js';
+
 const ALIASES = {
   column: ['column', 'count_column', 'counts_column', 'sample_name', 'sample', 'name', 'file'],
   role: ['role', 'type', 'sample_type', 'selection_id', 'selection'],
@@ -49,12 +51,13 @@ const number = (text) => (text === undefined || String(text).trim() === '' ? nul
 const numbers = (text) => String(text ?? '').split(/[;,\s]+/).filter(Boolean).map(Number);
 
 // The design a sample sheet describes. sheet: a parsed table (csv.js). options: { countColumns
-// (the count table's columns, to match the sheet's names against), variants, targets, name }.
+// (the count table's columns, to match the sheet's names against), variants, targets, name,
+// barcodeColumn (a table of barcodes) }.
 // Returns { design, problems: [{ level, message, line? }], found (the sheet's column for each field) }.
 export function designFromSampleSheet(sheet, options = {}) {
   const problems = [];
   const found = findColumns(sheet);
-  const value = (field, row) => (found[field] ? sheet.columns.find((c) => c.name === found[field]).values[row] : undefined);
+  const value = (field, row) => (found[field] ? cellText(sheet.columns.find((c) => c.name === found[field]), row) : undefined);
   const lineOf = (row) => sheet.lineOfRow?.[row] ?? row + 2;
   if (!found.column) {
     return { design: null, found, problems: [{ level: 'error', message: `The sheet names no column of counts: give a column called one of ${ALIASES.column.join(', ')}.` }] };
@@ -176,7 +179,7 @@ export function designFromSampleSheet(sheet, options = {}) {
     model,
     variants: options.variants ?? { column: 'hgvs_pro', level: 'protein' },
     targets: options.targets ?? [],
-    library: { level: 'variant' },
+    library: options.barcodeColumn ? { level: 'barcode', barcodeColumn: options.barcodeColumn } : { level: 'variant' },
     samples: [...samples.values()].map((s) => {
       const out = { id: s.id, name: s.name, columns: s.columns };
       if (s.batch) out.batch = s.batch;

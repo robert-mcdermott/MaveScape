@@ -11,14 +11,15 @@ import { validateDesign } from '../lib/design.js';
 import { checkParameters, defaultParameters, MODELS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
 import { REGRESSION_SE } from '../lib/score-regression.js';
 import { BIN_SCALES, BIN_SE, BIN_SIGMA } from '../lib/score-bins.js';
+import { AGGREGATIONS, BARCODE_COMBINATIONS, OUTLIER_Z } from '../lib/score-barcodes.js';
 import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
-import { addRun, describeMethod, describeParameters, makeRun, removeRun, runId, runInputs } from '../lib/runs.js';
+import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, removeRun, runId, runInputs } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { classHistogram, flowBars, scoreGroups } from './plots.js';
-import { workerInput } from './score-input.js';
+import { runScore, workerInput } from './score-input.js';
 import { ensureResults, forgetResults } from './run-results.js';
 import { runExportItems } from './record.js';
 
@@ -54,8 +55,10 @@ export function mountScoreMode(app, container) {
     view.refused = null;
     render();
   }
-  // The preset parameters match, whatever the model and normalization (each preset keeps them).
-  const presetOf = (p) => Object.entries(PRESETS).find(([, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, model: p.model, normalization: p.normalization })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
+  // The preset parameters match, whatever the model, normalization and handling of barcodes (each
+  // preset keeps them).
+  const kept = (p) => ({ model: p.model, normalization: p.normalization, aggregation: p.aggregation, barcodeCombination: p.barcodeCombination });
+  const presetOf = (p) => Object.entries(PRESETS).find(([, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, ...kept(p) })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
 
   // --- Readiness ------------------------------------------------------------------------------
   function readiness() {
@@ -74,8 +77,8 @@ export function mountScoreMode(app, container) {
 
   // --- Running ----------------------------------------------------------------------------------
   async function compute(table, design, parameters, mode) {
-    const { names, columns, transfer } = workerInput(table, design);
-    const job = app.worker('score').run('score', { names, columns, design, parameters, mode }, { transfer, onProgress: (fraction, message) => { view.progress = [fraction, message]; renderProgress(); } });
+    const { names, barcodes, columns, transfer } = workerInput(table, design);
+    const job = runScore(app, { names, barcodes, columns, design, parameters, mode }, { transfer, onProgress: (fraction, message) => { view.progress = [fraction, message]; renderProgress(); } });
     view.job = job;
     renderProgress();
     try {
@@ -157,12 +160,20 @@ export function mountScoreMode(app, container) {
     const designModel = store.ws.design?.model;
     const bins = designModel === 'bins';
     const options = (keys) => keys.map((k) => [k, MODELS[k][0].toUpperCase() + MODELS[k].slice(1)]);
+    const sentence = (text) => text[0].toUpperCase() + text.slice(1);
+    // A table of barcodes: summed per variant, or each barcode scored and a variant's combined
+    // (sorted bins are summed).
+    const barcodes = store.ws.design?.library?.level === 'barcode' ? h('div.form-grid',
+      bins ? h('div.field', h('span', 'Barcodes'), h('span', 'Summed per variant, then scored'))
+        : select('Barcodes', p.aggregation, Object.entries(AGGREGATIONS).map(([k, v]) => [k, sentence(v)]), (v) => setDraft({ aggregation: v })),
+      !bins && p.aggregation === 'barcode' ? select('A variant\'s barcodes combined by', p.barcodeCombination, Object.entries(BARCODE_COMBINATIONS).map(([k, v]) => [k, sentence(v)]), (v) => setDraft({ barcodeCombination: v })) : null) : null;
     const title = (id) => (id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios", "WLS" and "OLS": no count filter, every time point required, SEs scaled by the residuals alone, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : id === 'vampseq' ? 'Matreyek et al. 2018: the weighted average scaled to nonsense 0 and wild type 1, a summed bin frequency of at least 10^-4.75, two or more replicates, their mean with SE = SD/√k' : 'Variants with no input reads left out; a regression\'s SE never below counting\'s; REML random effects to convergence');
     if (bins) {
       return h('div.pane', h('h3', icon('settings'), 'Parameters'),
         h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
           ...Object.entries(PRESETS).filter(([id]) => id !== 'enrich2').map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...defaultParameters(store.ws.design, source(), id), model: p.model }) }, x.label))),
           preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
+        barcodes,
         select('Scored by', p.model, options(['bins', 'bins-mle']), (v) => setDraft({ model: v })),
         select('Scale of each replicate', p.binScale, Object.entries(BIN_SCALES).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ binScale: v })),
         p.model === 'bins'
@@ -181,8 +192,9 @@ export function mountScoreMode(app, container) {
     }
     return h('div.pane', h('h3', icon('settings'), 'Parameters'),
       h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
-        ...Object.entries(PRESETS).filter(([id]) => id !== 'vampseq').map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...x.parameters, model: p.model, normalization: p.normalization }) }, x.label))),
+        ...Object.entries(PRESETS).filter(([id]) => id !== 'vampseq').map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...x.parameters, ...kept(p) }) }, x.label))),
         preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
+      barcodes,
       designModel === 'time-series' ? select('Scored by', p.model, options(['ratio', 'wls', 'ols']), (v) => setDraft({ model: v })) : null,
       p.model === 'wls' || p.model === 'ols' ? select('Standard error of a slope', p.regressionSE, Object.entries(REGRESSION_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ regressionSE: v })) : null,
       select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v })),
@@ -192,7 +204,8 @@ export function mountScoreMode(app, container) {
       select('Rescaling', p.rescale, Object.entries(RESCALINGS).map(([k, v]) => [k, v.label[0].toUpperCase() + v.label.slice(1)]), (v) => setDraft({ rescale: v })),
       h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, p.model === 'ratio'
         ? 'Scores are natural-log ratios of frequencies after and before selection; technical replicates are summed first, biological replicates scored separately and then combined.'
-        : `Scores are the slopes of each variant's normalized log count on time scaled to 0–1, by ${p.model === 'wls' ? 'weighted (each point by its counting precision, as Enrich2)' : 'ordinary'} least squares; technical replicates are summed first, biological replicates scored separately and then combined.`));
+        : `Scores are the slopes of each variant's normalized log count on time scaled to 0–1, by ${p.model === 'wls' ? 'weighted (each point by its counting precision, as Enrich2)' : 'ordinary'} least squares; technical replicates are summed first, biological replicates scored separately and then combined.`,
+      barcodes ? (p.aggregation === 'sum' ? ' A variant\'s barcodes are summed in each sample first (as Enrich2, and dms_variants by substitution).' : ' Each barcode is scored against its replicate\'s normalizers (as dms_variants by barcode), and a variant\'s barcodes are combined within the replicate, their disagreement in its SE.') : null));
   }
 
   function filtersPane() {
@@ -204,6 +217,9 @@ export function mountScoreMode(app, container) {
     const all = f.minReplicates === 'all';
     const stage = (n, title, control, rule = false) => h('li.filter-stage', h('span.filter-step', String(n)), h('div', h('div.filter-title', title, rule ? h('span.badge', { style: { marginLeft: '6px' } }, 'always') : null), control));
     const binned = p.model === 'bins' || p.model === 'bins-mle';
+    // A table of barcodes adds a stage: barcodes measured per variant, outliers left out.
+    const barcodes = store.ws.design?.library?.level === 'barcode';
+    const n = (k) => (barcodes && k >= 7 ? k + 1 : k);
     return h('div.pane', h('h3', icon('filter'), 'Filters, in order'),
       h('ol.filter-bar',
         binned ? stage(1, 'Counted in every bin of a replicate', null, true)
@@ -220,11 +236,16 @@ export function mountScoreMode(app, container) {
         stage(5, binned ? 'Minimum reads across the bins, per replicate' : 'Minimum input count, per replicate', number(binned ? 'Minimum reads across the bins' : 'Minimum input count', f.minInputCount, (v) => setDraft({}, { minInputCount: v ?? 0 }), { min: 0, step: 1 })),
         stage(6, binned ? 'Minimum total count and summed bin frequency, per replicate' : 'Minimum total count, per replicate', h('div.form-grid', number('Minimum total count', f.minTotalCount, (v) => setDraft({}, { minTotalCount: v ?? 0 }), { min: 0, step: 1 }),
           binned ? number('Minimum summed bin frequency', f.minFrequency || null, (v) => setDraft({}, { minFrequency: v ?? 0 }), { min: 0, step: 0.000001, placeholder: 'none' }) : null)),
-        stage(7, 'Minimum usable replicates', h('div.btn-row',
+        barcodes ? stage(7, binned ? 'Minimum barcodes measured, per replicate' : 'Minimum barcodes measured, per replicate; outlier barcodes', h('div.form-grid',
+          number('Minimum barcodes measured', f.minBarcodes, (v) => setDraft({}, { minBarcodes: Math.max(1, Math.round(v ?? 1)) }), { min: 1, step: 1 }),
+          binned ? null : h('div.field', h('span', 'Outlier barcodes'), h('div.btn-row',
+            h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: f.maxBarcodeZ !== null, onchange: (e) => setDraft({}, { maxBarcodeZ: e.target.checked ? OUTLIER_Z : null }) }), f.maxBarcodeZ !== null ? ' outliers left out, beyond' : ' leave outliers out'),
+            f.maxBarcodeZ !== null ? h('input.input', { type: 'number', value: f.maxBarcodeZ, min: 2, step: 0.5, style: { width: '70px' }, 'aria-label': 'Maximum departure of a barcode (z/√φ)', onchange: (e) => setDraft({}, { maxBarcodeZ: Math.max(2, Number(e.target.value) || OUTLIER_Z) }) }) : null)))) : null,
+        stage(n(7), 'Minimum usable replicates', h('div.btn-row',
           all ? h('span', 'All the variant\'s replicates') : number('Minimum usable replicates', f.minReplicates, (v) => setDraft({}, { minReplicates: Math.max(1, Math.round(v ?? 1)) }), { min: 1, step: 1 }),
           h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: all, onchange: (e) => setDraft({}, { minReplicates: e.target.checked ? 'all' : 1 }) }), ' all'))),
-        stage(8, 'Maximum SE', number('Maximum SE (blank: none)', f.maxSE, (v) => setDraft({}, { maxSE: v }), { min: 0, step: 0.05, placeholder: 'none' }))),
-      h('p.muted', { style: { fontSize: '11.5px', margin: '6px 0 0' } }, 'A filtered variant keeps its counts and replicate scores; its score is NA with the stage that left it out. Count filters act per replicate.'));
+        stage(n(8), 'Maximum SE', number('Maximum SE (blank: none)', f.maxSE, (v) => setDraft({}, { maxSE: v }), { min: 0, step: 0.05, placeholder: 'none' }))),
+      h('p.muted', { style: { fontSize: '11.5px', margin: '6px 0 0' } }, `A filtered variant keeps its counts and replicate scores; its score is NA with the stage that left it out. Count filters act per replicate${barcodes ? (binned ? ', on the barcodes summed' : `, on the barcodes summed (or, scoring each barcode, on each); an outlier barcode departs from its variant's other barcodes by more than the maximum, in z over √φ (QC reports those beyond ${OUTLIER_Z} either way)`) : ''}.`));
   }
 
   const progressEl = h('div');
@@ -238,7 +259,7 @@ export function mountScoreMode(app, container) {
 
   function runPane(ready) {
     return h('div.pane', h('h3', icon('score'), 'Run'),
-      ready.ok ? h('p', { style: { margin: '0 0 8px' } }, describeParameters(draft())) : h('div', ...ready.problems.map((m) => h('div.callout.danger', { style: { marginBottom: '6px' } }, icon('warning'), h('span', m)))),
+      ready.ok ? h('p', { style: { margin: '0 0 8px' } }, describeParameters(draft(), store.ws.design?.library?.level === 'barcode')) : h('div', ...ready.problems.map((m) => h('div.callout.danger', { style: { marginBottom: '6px' } }, icon('warning'), h('span', m)))),
       ready.ok && ready.warnings?.length ? h('div', ...ready.warnings.map((m) => h('div.callout.warn', { style: { marginBottom: '6px' } }, icon('warning'), h('span', `The design: ${m}`)))) : null,
       view.refused ? h('div', ...view.refused.map((m) => h('div.callout.danger', { style: { marginBottom: '6px' } }, icon('warning'), h('span', m)))) : null,
       h('div.btn-row', h('button.btn.primary', { type: 'button', disabled: !ready.ok || !!view.job, onclick: runScoring }, icon('play'), 'Score'),
@@ -253,7 +274,7 @@ export function mountScoreMode(app, container) {
       const status = !r ? h('span.badge', 'not checked') : r.status === 'reproduced' ? h('span.badge.ok', { title: 'Recomputed from its inputs: the same output hash' }, 'reproduced') : r.status === 'computed' ? h('span.badge.ok', 'computed') : r.status === 'checking' ? h('span.badge', 'checking…') : h('span.badge.danger', { title: r.message }, r.status === 'differs' ? 'differs' : 'not checked');
       return h(`tr${run.id === selected?.id ? '.selected' : ''}`, { style: { cursor: 'pointer' }, onclick: () => app.focusItem({ kind: 'run', id: run.id }) },
         h('td', h('b', run.name), h('div.muted.mono', { style: { fontSize: '10.5px' } }, run.id)),
-        h('td', { style: { fontSize: '11.5px' } }, describeParameters(run.inputs.parameters)),
+        h('td', { style: { fontSize: '11.5px' } }, describeParameters(run.inputs.parameters, isBarcodeRun(run))),
         h('td.r', run.output.conditions.map((c) => formatCount(c.scored)).join(' / ')),
         h('td', run.warnings.length ? h('span.badge.warn', `${run.warnings.length} warning${run.warnings.length > 1 ? 's' : ''}`) : null, ' ', status),
         h('td.r', h('button.icon-button.small', { type: 'button', title: 'Remove the run', 'aria-label': `Remove ${run.name}`, onclick: async (event) => {
@@ -364,7 +385,7 @@ export function mountScoreMode(app, container) {
     if (!r) reproduce(run);
     const head = h('div.pane', h('h3', icon('score'), run.name, h('span.muted.mono', { style: { fontSize: '11px', fontWeight: 400 } }, run.id), h('span.spacer'),
       h('span.muted', { style: { fontSize: '11.5px', fontWeight: 400 } }, `${new Date(run.created).toLocaleString()} · MaveScape ${run.software.version}`)),
-      h('p', { style: { margin: '0 0 6px' } }, `${run.inputs.source.name} · ${run.inputs.design.name ?? 'design'} · ${describeParameters(run.inputs.parameters)}`),
+      h('p', { style: { margin: '0 0 6px' } }, `${run.inputs.source.name} · ${run.inputs.design.name ?? 'design'} · ${describeParameters(run.inputs.parameters, isBarcodeRun(run))}`),
       h('p.muted.mono', { style: { fontSize: '11px', margin: 0 } }, `Table SHA-256 ${run.inputs.source.sha256.slice(0, 16)}… · output SHA-256 ${run.output.sha256.slice(0, 16)}…`),
       r?.status === 'reproduced' ? h('div.callout.ok', { style: { marginTop: '8px' } }, icon('check'), h('span', 'Reproduced: the scores were recomputed from the run\'s recorded inputs and have its output hash.')) : null,
       r?.status === 'differs' || r?.status === 'failed' ? h('div.callout.danger', { style: { marginTop: '8px' } }, icon('warning'), h('span', r.status === 'differs' ? `Not reproduced. ${r.message}` : `Not checked: ${r.message}`),

@@ -11,16 +11,18 @@ import { SCORING_VERSION, withDefaults, RESCALINGS } from './score.js';
 import { NORMALIZATIONS } from './score-ratio.js';
 import { COMBINATIONS } from './replicates.js';
 import { describeFilters } from './filters.js';
+import { BARCODE_COMBINATIONS } from './score-barcodes.js';
 
 const encoder = new TextEncoder();
 const hash = (value) => sha256(encoder.encode(canonicalJSON(value)));
 
-// The canonical inputs of a run. source: the workspace source (its sha256, rows, mapping).
+// The canonical inputs of a run. source: the workspace source (its sha256, rows, mapping; how its
+// files were assembled, when a barcode map or another layout was, wave 2).
 export function runInputs({ source, design, parameters }) {
   const m = source.mapping ?? {};
   return {
     source: { sha256: source.sha256, rows: source.rows ?? null, files: (source.files ?? []).map((f) => f.sha256) },
-    mapping: { variantColumn: design.variants.column, level: design.variants.level, mode: m.mode ?? 'lenient', absentMeans: m.absentMeans ?? null, derivedNames: m.derivedNames ?? null },
+    mapping: { variantColumn: design.variants.column, level: design.variants.level, mode: m.mode ?? 'lenient', absentMeans: m.absentMeans ?? null, derivedNames: m.derivedNames ?? null, ...(m.assembly ? { assembly: m.assembly } : {}) },
     design,
     parameters: withDefaults(parameters),
     scoring: SCORING_VERSION,
@@ -76,7 +78,7 @@ export function recordedInputs(run) {
 export function addRun(ws, run) {
   if (ws.runs.some((r) => r.id === run.id)) return { ws, existing: true };
   const conditions = run.output.conditions.map((c) => `${run.output.conditions.length > 1 ? `${c.name}: ` : ''}${c.scored} of ${run.output.variants} scored`).join('; ');
-  const detail = `Scored ${run.inputs.source.name} (${run.id}): ${describeParameters(run.inputs.parameters)}; ${conditions}; output SHA-256 ${run.output.sha256.slice(0, 12)}…`;
+  const detail = `Scored ${run.inputs.source.name} (${run.id}): ${describeParameters(run.inputs.parameters, isBarcodeRun(run))}; ${conditions}; output SHA-256 ${run.output.sha256.slice(0, 12)}…`;
   return { ws: change(ws, { runs: [...ws.runs, run] }, 'score', detail), existing: false };
 }
 
@@ -86,8 +88,11 @@ export function removeRun(ws, id) {
   return change(ws, { runs: ws.runs.filter((r) => r.id !== id) }, 'remove-run', `Removed the score run ${run.name} (${run.id})`);
 }
 
-// One line of parameters, for lists and the history.
-export function describeParameters(parameters) {
+// Whether a run scored a table of barcodes.
+export const isBarcodeRun = (run) => run.inputs.design.library?.level === 'barcode';
+
+// One line of parameters, for lists and the history. barcodes: whether the table is of barcodes.
+export function describeParameters(parameters, barcodes = false) {
   const p = withDefaults(parameters);
   const f = p.filters;
   const regression = p.model === 'wls' || p.model === 'ols';
@@ -106,6 +111,11 @@ export function describeParameters(parameters) {
   if (regression) {
     parts.push(p.regressionSE === 'residual' ? 'residual-scaled SE' : 'SE at least counting\'s');
     parts.push(f.minTimePoints === 'all' ? 'every time point' : `time points ≥ ${f.minTimePoints}`);
+  }
+  if (barcodes) {
+    parts.unshift(p.aggregation === 'sum' ? 'barcodes summed' : `barcodes scored each, combined by ${p.barcodeCombination === 'reml' ? 'REML' : p.barcodeCombination === 'fixed' ? 'fixed effects' : 'their mean'}`);
+    if (f.minBarcodes > 1) parts.push(`barcodes ≥ ${f.minBarcodes}`);
+    if (f.maxBarcodeZ !== null) parts.push(`outlier barcodes (beyond ${f.maxBarcodeZ}) left out`);
   }
   if (f.minInputCount) parts.push(`input ≥ ${f.minInputCount}`);
   if (f.minTotalCount) parts.push(`total ≥ ${f.minTotalCount}`);
@@ -131,6 +141,16 @@ export function binSentence(p, cite) {
   return `Scores are the maximum-likelihood mean μ of each variant's log fluorescence under a log-normal censored by the bins' gates (${cite.mle}), its reads reweighted by the cells sorted into each bin, with ${p.binSigma === 'wild-type' ? 'the spread σ fitted to the wild type and shared' : 'its own spread σ'} and SEs from the observed information${scale}.`;
 }
 
+// A table of barcodes' aggregation in a sentence or two (also the methods paragraph's). cite: {
+// enrich2, dmsVariants }.
+export function barcodeSentence(p, cite) {
+  const f = p.filters;
+  const outliers = f.maxBarcodeZ === null ? '' : ` Barcodes departing from their variant's other barcodes by more than ${f.maxBarcodeZ} were left out: a barcode's departure is its difference from the others' inverse-variance mean in units of their counting error together, over the square root of the replicate's median dispersion φ, and outliers were set aside one at a time.`;
+  const minimum = f.minBarcodes > 1 ? ` A variant needed ${f.minBarcodes} barcodes measured in a replicate.` : '';
+  if (p.aggregation === 'sum') return `The counts of each variant's barcodes were summed in each sample before scoring (${cite.enrich2}).${outliers}${minimum}`;
+  return `Each barcode was scored on its own, against its replicate's normalizers from the summed counts (as dms_variants' func_scores by barcode, ${cite.dmsVariants}), and a variant's barcodes were combined within each replicate by ${BARCODE_COMBINATIONS[p.barcodeCombination]}${p.barcodeCombination === 'reml' ? ', the variance between barcodes estimated as between replicates' : ''}.${outliers}${minimum}`;
+}
+
 // The run's method in sentences (the methods paragraph of slice 8 builds on it).
 export function describeMethod(run) {
   const p = withDefaults(run.inputs.parameters);
@@ -139,8 +159,9 @@ export function describeMethod(run) {
   if (p.model === 'ratio') lines.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; each replicate's SE is the square root of the sum of the reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'} (Rubin et al. 2017).`);
   else if (p.model === 'wls' || p.model === 'ols') lines.push(regressionSentence(p, 'Rubin et al. 2017'));
   else lines.push(binSentence(p, { average: 'Matreyek et al. 2018', mle: 'Peterman and Levine 2016' }));
+  if (design.library?.level === 'barcode') lines.push(barcodeSentence(p, { enrich2: 'Rubin et al. 2017', dmsVariants: 'the Bloom lab\'s dms_variants' }));
   lines.push(`Biological replicates were scored separately and combined by ${COMBINATIONS[p.combination]}${p.combination === 'enrich2' ? ' (Enrich2 2.0.2\'s random-effects estimator, 50 iterations)' : p.combination === 'reml' ? ' (Fisher scoring as metafor\'s REML)' : ''}; technical replicates were summed before scoring.`);
-  lines.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols').filter((x) => x.active !== false).map((x) => x.text.toLowerCase()).join('; ')}.`);
+  lines.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols', design.library?.level === 'barcode').filter((x) => x.active !== false).map((x) => x.text.toLowerCase()).join('; ')}.`);
   if (p.rescale !== 'none') lines.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}.`);
   lines.push(`MaveScape ${run.software.version}${run.software.commit ? ` (${run.software.commit.slice(0, 7)})` : ''}, scoring version ${run.software.scoring}; run ${run.id}, output SHA-256 ${run.output.sha256}.`);
   return lines;

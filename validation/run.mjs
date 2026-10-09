@@ -24,7 +24,7 @@ import { checkSchema } from './json-schema.mjs';
 import { enrich2Combination, normalizers, ratioScores, regressionScores, replicateCounts } from './enrich2-formulas.mjs';
 import { summarizeDesign, validateDesign } from '../web/lib/design.js';
 import { parseHgvs, formatPosition } from '../web/lib/hgvs.js';
-import { createTableParser, parseTable } from '../web/lib/csv.js';
+import { cellText, createTableParser, parseTable } from '../web/lib/csv.js';
 import { detectLayout, draftDesign, namesFromSequences, reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { buildCountSet, joinCountTables } from '../web/lib/counts.js';
 import { KIND_NAMES } from '../web/lib/variants.js';
@@ -39,6 +39,8 @@ import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormap
 import { EDGE_EXPECTATIONS, byKey, engineInput, fixtureDesign, fixtureTable, score, shuffledTable, variantTable } from './scoring-cases.mjs';
 import { TIME_SERIES_EXPECTATIONS, edgeVariants, timeSeriesDesign, timeSeriesTable, timeSeriesTruth } from './time-series-cases.mjs';
 import { factor9Column, replicateBins, sortSeqDesign, sortSeqTable, sortSeqTruth } from './bins-cases.mjs';
+import { barcodeDesign, barcodeTable, barcodeTruth, dmsVariantsTable, enrich2Files } from './barcode-cases.mjs';
+import { dmsVariantsName } from '../web/lib/barcodes.js';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
 import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS } from '../web/lib/score.js';
@@ -57,7 +59,8 @@ import { EXPORT_THEME, mapSVG } from '../web/lib/map-svg.js';
 import { lab as labColor, deltaE2000 } from '../web/lib/colorvision.js';
 import { hexToRgb, rgbToHex } from '../web/lib/colormaps.js';
 import { writeFileSync } from 'node:fs';
-import { SOFTWARE, allExports, buildWorkspace, recompute, scoreTable } from './roundtrip-cases.mjs';
+import { SOFTWARE, allExports, buildWorkspace, inputFor, recompute, scoreTable } from './roundtrip-cases.mjs';
+import { assembleTable } from '../web/lib/assemble.js';
 import { readArchive, writeArchive } from '../web/lib/archive.js';
 import { createZip } from '../web/lib/zip.js';
 import { sha256 } from '../web/lib/sha256.js';
@@ -377,7 +380,9 @@ const suites = {
       const counts = review.countSet;
       const missing = counts.samples.reduce((a, x) => a + x.missing, 0);
       const zeros = counts.samples.reduce((a, x) => a + x.zeros, 0);
-      const naInFile = table.columns.filter((col) => layout.countColumns.includes(col.name)).reduce((a, col) => a + col.values.filter((v) => v === 'NA').length, 0);
+      // Columns of numbers keep no text: their missing cells, every one written NA.
+      const countColumns = table.columns.filter((col) => layout.countColumns.includes(col.name));
+      const naInFile = countColumns.every((col) => col.missingTokens.every((t) => t === 'NA')) ? countColumns.reduce((a, col) => a + col.missing, 0) : Number.NaN;
       check('import', `${c.name}: counts written NA are missing and explicit zeros stay 0`, `${missing} missing (${naInFile} NA in the file), ${zeros} zeros`, missing === naInFile, 'missing = NA cells');
     }
 
@@ -414,7 +419,7 @@ const suites = {
     const random = createRandom(11);
     const order = shuffle([...Array(grb2.columns.length).keys()], random);
     const rows = shuffle([...Array(grb2.rows).keys()], random);
-    const lines = [order.map((j) => grb2.columns[j].name).join(','), ...rows.map((r) => order.map((j) => grb2.columns[j].values[r]).join(','))];
+    const lines = [order.map((j) => grb2.columns[j].name).join(','), ...rows.map((r) => order.map((j) => cellText(grb2.columns[j], r)).join(','))];
     const shuffled = byVariant(parseTable(`${lines.join('\n')}\n`));
     const original = byVariant(grb2);
     const differing = [...original].filter(([k, v]) => shuffled.get(k) !== v);
@@ -423,14 +428,14 @@ const suites = {
     const text = dataset('mavedb-grb2-sh3').text('counts.csv');
     for (let i = 0; i < text.length; i += 997) parser.push(text.slice(i, i + 997));
     const parts = parser.finish();
-    check('import', 'GRB2 read in parts of 997 characters (a quote or CRLF across parts) equals GRB2 read at once', `${parts.rows} rows`, JSON.stringify(parts.columns.map((x) => x.values)) === JSON.stringify(grb2.columns.map((x) => x.values)), 'identical');
+    check('import', 'GRB2 read in parts of 997 characters (a quote or CRLF across parts) equals GRB2 read at once', `${parts.rows} rows`, JSON.stringify(parts.columns.map((x) => x.values ?? Array.from(x.numeric))) === JSON.stringify(grb2.columns.map((x) => x.values ?? Array.from(x.numeric))), 'identical');
 
     // Per-sample files: GRB2 split into one file per sample (each listing only the variants it
     // counts) and joined again.
     const files = ['input_count_rep1', 'output_count_rep1', 'input_count_rep2'].map((name) => {
       const variant = grb2.columns.find((x) => x.name === 'hgvs_pro').values;
-      const values = grb2.columns.find((x) => x.name === name).values;
-      const body = variant.map((v, i) => (values[i] === 'NA' ? null : `${v}\t${values[i]}`)).filter(Boolean);
+      const values = grb2.columns.find((x) => x.name === name).numeric;
+      const body = variant.map((v, i) => (Number.isNaN(values[i]) ? null : `${v}\t${values[i]}`)).filter(Boolean);
       return { name, variantColumn: 'variant', countColumns: ['count'], table: parseTable(`variant\tcount\n${body.join('\n')}\n`) };
     });
     const joined = joinCountTables(files);
@@ -865,6 +870,140 @@ const suites = {
         ['sorted bins scored as a selection', scoreExperiment({ ...engineInput(ss, ssDesign), parameters: DEFAULT_PARAMETERS }), /weighted average/],
         ['the maximum-likelihood fit without gates', scoreExperiment({ ...engineInput(ss, { ...ssDesign, replicates: ssDesign.replicates.map((r) => ({ ...r, bins: r.bins.map(({ lower, upper, ...b }) => b) })) }), parameters: { ...base, model: 'bins-mle' } }), /gates/],
         ['a weighted average of bins on a two-population design', scoreExperiment({ ...engineInput(fixture, design), parameters: { ...DEFAULT_PARAMETERS, model: 'bins' } }), /sorted bins/],
+      ];
+      for (const [what, out, pattern] of refusals) check('scoring', `refused: ${what}, with the reason`, out.ok ? 'scored anyway' : out.errors[0], !out.ok && pattern.test(out.errors.join(' ')), 'refused');
+    }
+
+    // Barcodes (wave 2, slice 4): the barcode fixture, its map applied, against dms_variants by
+    // barcode and by substitution, through MaveScape's own map and through dms_variants' layout;
+    // and against the fixture's truth.
+    {
+      const dmsb = JSON.parse(readFileSync(new URL('./reference/dms_variants-barcodes.json', import.meta.url), 'utf8'));
+      const { table: bt, applied } = barcodeTable();
+      const btDesign = barcodeDesign();
+      const schemaProblems = checkSchema(JSON.parse(readFileSync(new URL('../docs/schemas/design.v1.json', import.meta.url), 'utf8')), btDesign);
+      const btValid = validateDesign(btDesign, { columns: bt.columns.map((c) => c.name) });
+      check('scoring', 'barcode fixture: its design (a table of barcodes) satisfies the schema and fits the counts with the map applied', [...schemaProblems, ...btValid.errors.map((e) => `${e.path}: ${e.message}`)].slice(0, 3).join('; ') || 'yes', !schemaProblems.length && btValid.ok, 'no problems');
+      const truth = barcodeTruth();
+      const planted = [...truth.barcodes.values()];
+      const conflicts = planted.filter((b) => b.map === 'conflict').length;
+      const missing = planted.filter((b) => b.map === 'missing').length;
+      check('scoring', 'barcode fixture: the map applied, every barcode it gives two variants left unmapped and listed, every barcode it does not name unmapped', `${applied.mapped} mapped; ${applied.conflicts.length} in conflict, ${applied.unmapped.length} not in the map (dms_variants' table left out ${dmsb.left_out.conflicts} and ${dmsb.left_out.unmapped})`, applied.conflicts.length === conflicts && applied.unmapped.length === missing && conflicts === dmsb.left_out.conflicts && missing === dmsb.left_out.unmapped, `${conflicts} and ${missing}, as planted`);
+      // Each barcode's score and variance against func_scores by barcode, and each variant's summed
+      // counts against func_scores by aa_substitutions (the empty substitution, the wild type with
+      // the synonymous variants, is one group there and not here).
+      const againstDms = (table, design, label) => {
+        const byBarcode = score(table, design, { ...DEFAULT_PARAMETERS, aggregation: 'barcode' });
+        const summed = score(table, design, DEFAULT_PARAMETERS);
+        const rowOf = new Map(byBarcode.barcodes.ids.map((id, r) => [id, r]));
+        const pairs = [];
+        const sums = [];
+        let oneSide = 0;
+        let compared = 0;
+        for (const rep of byBarcode.replicates) {
+          const theirs = dmsb.barcode[rep.id];
+          const seen = new Set();
+          theirs.barcode.forEach((id, j) => {
+            const r = rowOf.get(id);
+            seen.add(r);
+            if (r === undefined || !Number.isFinite(rep.barcodes.score[r])) {
+              oneSide += 1;
+              return;
+            }
+            pairs.push([`${rep.id} ${id}`, rep.barcodes.score[r], theirs.score[j]], [`${rep.id} ${id} variance`, rep.barcodes.se[r] ** 2, theirs.var[j]]);
+          });
+          rep.barcodes.score.forEach((x, r) => {
+            if (Number.isFinite(x) && !seen.has(r)) oneSide += 1;
+          });
+          const sub = dmsb.substitution[rep.id];
+          const mine = summed.replicates.find((x) => x.id === rep.id);
+          const variantRow = new Map(summed.variants.original.map((name, i) => [name, i]));
+          sub.aa_substitutions.forEach((aa, j) => {
+            if (!aa) return;
+            const i = variantRow.get(dmsVariantsName(aa));
+            if (i === undefined || !Number.isFinite(mine.score[i])) {
+              oneSide += 1;
+              return;
+            }
+            compared += 1;
+            sums.push([`${rep.id} ${aa}`, mine.score[i], sub.score[j]], [`${rep.id} ${aa} variance`, mine.se[i] ** 2, sub.var[j]], [`${rep.id} ${aa} reads before`, mine.first[i], sub.pre_count[j]], [`${rep.id} ${aa} reads after`, mine.last[i], sub.post_count[j]]);
+          });
+        }
+        const d = worstDifference(pairs);
+        const s = worstDifference(sums);
+        check('scoring', `${label}: each barcode's score and variance equal dms_variants ${dmsb.versions.dms_variants} func_scores by barcode (${pairs.length / 2} barcodes in ${byBarcode.replicates.length} libraries)`, `${d.worst.toExponential(2)} (${d.where})${oneSide ? `; ${oneSide} by one side only` : ''}`, d.worst <= 1e-10 && !oneSide && pairs.length > 0, '≤ 1e-10 relative, the same barcodes');
+        check('scoring', `${label}: each variant's counts summed over its barcodes, and its score and variance from them, equal func_scores by aa_substitutions (${compared} variants)`, `${s.worst.toExponential(2)} (${s.where})`, s.worst <= 1e-10 && compared > 0 && !oneSide, '≤ 1e-10 relative');
+        return { byBarcode, summed };
+      };
+      const own = againstDms(bt, btDesign, 'barcode fixture with its map');
+      const dv = dmsVariantsTable();
+      check('scoring', 'dms_variants\' variant_counts imported: one row per library and barcode, a count column per library and sample, every substitution named in MAVE-HGVS', `${dv.long.rows} rows → ${dv.pivot.table.rows} barcodes × ${dv.pivot.samples.length} samples; ${dv.pivot.problems.filter((p) => p.level !== 'info').length} problems`, dv.pivot.table.rows === applied.mapped && dv.pivot.samples.length === 4 && !dv.pivot.problems.some((p) => p.level !== 'info'), `${applied.mapped} barcodes, 4 samples, no problems`);
+      const imported = againstDms(dv.pivot.table, dv.design, 'dms_variants\' variant_counts imported');
+      const sameScores = (a, b) => {
+        const index = new Map(b.variants.key.map((k, i) => [k, i]));
+        let differ = 0;
+        a.variants.key.forEach((k, i) => {
+          const j = index.get(k);
+          const x = a.conditions[0].score[i];
+          const y = b.conditions[0].score[j];
+          if (!(x === y || (Number.isNaN(x) && Number.isNaN(y)))) differ += 1;
+        });
+        return differ;
+      };
+      check('scoring', 'the same counts read through MaveScape\'s map and through dms_variants\' layout give the same combined scores, both aggregations', `${sameScores(own.summed, imported.summed)} and ${sameScores(own.byBarcode, imported.byBarcode)} variants differ`, sameScores(own.summed, imported.summed) === 0 && sameScores(own.byBarcode, imported.byBarcode) === 0, 'none');
+      // Enrich2's layout: a counts file per sample, and its map of variant sequences, named against
+      // the target.
+      const e2 = assembleTable(enrich2Files().map((f) => ({ name: f.name, table: parseTable(f.text, { fileName: f.name }), role: f.role })), { level: 'protein', target: btDesign.targets[0] });
+      const e2Layout = detectLayout(e2.table);
+      const e2Design = { ...btDesign, variants: { column: e2Layout.variantColumn, level: 'protein' } };
+      const e2Summed = score(e2.table, e2Design, DEFAULT_PARAMETERS);
+      const e2ByBarcode = score(e2.table, e2Design, { ...DEFAULT_PARAMETERS, aggregation: 'barcode' });
+      check('scoring', 'Enrich2\'s layout imported (a counts file per sample, its headerless map of variant sequences named against the target): the same barcodes, conflicts and combined scores, both aggregations', `${e2.kind}, ${e2.table.rows} barcodes, variants in "${e2Layout.variantColumn}", ${e2.map.conflicts.length} in conflict; ${sameScores(own.summed, e2Summed)} and ${sameScores(own.byBarcode, e2ByBarcode)} variants differ`, e2.kind === 'enrich2' && e2Layout.layout === 'barcodes' && e2.map.conflicts.length === applied.conflicts.length && sameScores(own.summed, e2Summed) === 0 && sameScores(own.byBarcode, e2ByBarcode) === 0 && e2Summed.rows === own.summed.rows, 'the same');
+      // Against the truth: the aggregations, the barcode filter, and the outliers planted.
+      const against = (results) => {
+        const c = results.conditions[0];
+        const a = [];
+        const b = [];
+        let covered = 0;
+        results.variants.original.forEach((name, i) => {
+          if (c.reason[i]) return;
+          a.push(c.score[i]);
+          b.push(truth.effects.get(name));
+          if (Math.abs(c.score[i] - truth.effects.get(name)) < 1.959964 * c.se[i]) covered += 1;
+        });
+        return { r: pearson(a, b), coverage: covered / a.length, n: a.length };
+      };
+      const sum = against(own.summed);
+      const reml = against(own.byBarcode);
+      const filtered = against(score(bt, btDesign, { ...DEFAULT_PARAMETERS, filters: { ...DEFAULT_PARAMETERS.filters, maxBarcodeZ: 4 } }));
+      check('scoring', 'barcode fixture against its truth: each barcode scored and combined by REML tracks the true effects more closely than the sums, and the barcode filter improves the sums', `by barcode r ${reml.r.toFixed(4)}; summed r ${sum.r.toFixed(4)}, ${filtered.r.toFixed(4)} with outliers left out (${reml.n} variants)`, reml.r >= 0.985 && reml.r > sum.r && filtered.r > sum.r, 'by barcode ≥ 0.985, above the sums; filtered above unfiltered');
+      check('scoring', 'barcode fixture: 95% intervals of the scores combined by barcode (REML) hold the true effects', `${(100 * reml.coverage).toFixed(1)}% (summed: ${(100 * sum.coverage).toFixed(1)}%)`, reml.coverage >= 0.92, '≥ 92%');
+      let found = 0;
+      let off = 0;
+      let falsePositives = 0;
+      let clean = 0;
+      for (const rep of own.byBarcode.replicates) {
+        own.byBarcode.barcodes.ids.forEach((id, r) => {
+          if (Number.isNaN(rep.barcodes.z[r])) return;
+          if (truth.barcodes.get(id).shift !== 0) {
+            off += 1;
+            if (rep.barcodes.outlier[r]) found += 1;
+          } else {
+            clean += 1;
+            if (rep.barcodes.outlier[r]) falsePositives += 1;
+          }
+        });
+      }
+      check('scoring', 'outlier barcodes (beyond 4 in z/√φ, set aside one at a time): the barcodes planted 1.5–3 off their variant found, few others', `${found} of ${off} planted found; ${falsePositives} of ${clean} others called (${(100 * falsePositives / clean).toFixed(2)}%)`, found / off >= 0.7 && falsePositives / clean <= 0.002, '≥ 70% found, ≤ 0.2% others');
+      // Row order: the same scores, bit for bit, both aggregations.
+      const shuffled = shuffledTable(bt, createRandom(41));
+      const reordered = [sameScores(own.summed, score(shuffled, btDesign, DEFAULT_PARAMETERS)), sameScores(own.byBarcode, score(shuffled, btDesign, { ...DEFAULT_PARAMETERS, aggregation: 'barcode' }))];
+      check('scoring', 'barcode fixture with its rows and columns shuffled: the same combined scores, bit for bit, summed and by barcode', `${reordered[0]} and ${reordered[1]} variants differ`, reordered[0] === 0 && reordered[1] === 0, 'none');
+      const ids = engineInput(bt, btDesign);
+      const refusals = [
+        ['a barcode on two rows', scoreExperiment({ ...ids, barcodes: ids.barcodes.map((x, i) => (i === 5 ? ids.barcodes[0] : x)), parameters: DEFAULT_PARAMETERS }), /more than one row/],
+        ['scoring each barcode of a table of variants', scoreExperiment({ ...engineInput(fixture, design), parameters: { ...DEFAULT_PARAMETERS, aggregation: 'barcode' } }), /table of barcodes/],
+        ['scoring each barcode of sorted bins', scoreExperiment({ ...ids, design: { ...btDesign, model: 'bins' }, parameters: { ...DEFAULT_PARAMETERS, model: 'bins', aggregation: 'barcode' } }), /summed/],
       ];
       for (const [what, out, pattern] of refusals) check('scoring', `refused: ${what}, with the reason`, out.ok ? 'scored anyway' : out.errors[0], !out.ok && pattern.test(out.errors.join(' ')), 'refused');
     }
@@ -1343,14 +1482,16 @@ const suites = {
     for (const example of EXAMPLES.filter((e) => e.simulated)) {
       const sim = simulatedExample(example);
       const simAgain = simulatedExample(example);
-      const simTable = parseTable(sim.csv);
+      // Its files assembled as the window assembles them (a barcoded library's map applied).
+      const simTable = assembleTable(sim.files.map((f) => ({ name: f.name, table: parseTable(f.text), role: f.role })), { level: sim.design.variants.level, target: sim.design.targets[0] }).table;
       const parameters = defaultParameters(sim.design);
       const simScored = scoreTable(simTable, sim.design, parameters);
       const simC = simScored.results.conditions[0];
       const a = [];
       const b = [];
       simScored.results.variants.key.forEach((k, i) => { if (!simC.reason[i] && k in sim.truth && k !== 'p.=') { a.push(simC.score[i]); b.push(sim.truth[k]); } });
-      const simQc = findingsFrom(computeQC({ names: simTable.columns[0].values, columns: Object.fromEntries(simTable.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design, results: simScored.results }), defaultThresholds());
+      if (sim.files.length > 1) check('roundtrip', `the example "${example.title}": its counts and barcode map assemble into a table its design fits`, `${simTable.rows} barcodes; ${simScored.results.barcodes?.unmapped ?? 0} unmapped`, validateDesign(sim.design, { columns: simTable.columns.map((c) => c.name) }).ok && simScored.results.barcodes?.unmapped > 0, 'valid; some unmapped, as planted');
+      const simQc = findingsFrom(computeQC({ ...inputFor(simTable, sim.design), design: sim.design, results: simScored.results }), defaultThresholds());
       const raisedSim = Object.fromEntries(simQc.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => [f.id, f.status]));
       const expectedQc = example.findings ?? {};
       check('roundtrip', `the example "${example.title}": the same data from its seed, labeled simulated, scored by ${MODELS[parameters.model]} close to the true effects, and QC raises exactly the findings it teaches (${simQc.length} findings)`, `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${Object.keys(raisedSim).length ? Object.entries(raisedSim).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > 0.98 && JSON.stringify(raisedSim) === JSON.stringify(expectedQc), `r > 0.98; ${Object.keys(expectedQc).length ? Object.entries(expectedQc).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`);

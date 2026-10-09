@@ -521,13 +521,59 @@ runs and the performance targets.
        limits its information by the scarcer of reads and cells (its intervals held the truth 57%
        of the time from reads alone, 78% per replicate with cells), and QC reports the cells per
        variant when the design records them.
-4. **Barcodes and scale (D8, D9, Q8, S8, S12).** Barcode count tables with a barcode-to-variant
-   map; barcodes per variant, within-variant agreement, outlier barcodes, a barcode-disagreement
-   filter; both aggregations (sum then score; score each barcode then combine). Templates for
-   dms_variants' `variant_counts` CSV and Enrich2's per-library count files (D12). Columnar memory
-   for a million rows; `validation/bench.mjs` gates the PRD's targets in CI.
-   - Validation: equal to dms_variants `func_scores` by barcode and by substitution; benchmark
-     numbers in `validation/README.md`.
+4. **Barcodes and scale (D8, D9, D12, Q8, S8, S12): done.** `web/lib/score-barcodes.js`: a barcode
+   table's rows grouped by variant (by MAVE-HGVS key, however written; blank names unmapped), counts
+   summed per variant (missing never 0), every barcode scored against its replicate's normalizers
+   from the summed counts, its departure from its variant's other barcodes over √φ (φ the median
+   squared departure over the median of χ²₁, at least 1), outliers beyond 4 (or the filter's
+   maximum) set aside one at a time, a variant's barcodes combined by REML, fixed effects or their
+   mean. `score.js`: aggregations `sum` and `barcode` (refused for sorted bins, which are summed),
+   the barcode filters (minimum barcodes; the departure beyond which outliers are left out), a
+   barcode stage and state, results with each barcode's score, SE, state, departure and outlier
+   mark. `web/lib/barcodes.js` (import): a barcode-to-variant map applied, a barcode given two
+   variants left unmapped and listed; dms_variants' `variant_counts` made one row per library and
+   barcode, its substitutions named in MAVE-HGVS; Enrich2's element names and headerless maps.
+   `web/lib/assemble.js`: a source's table assembled from its files (joined per-sample files,
+   dms_variants' layout, Enrich2's counts, DiMSum's and a map's sequences named, the map applied),
+   by the wizard and again whenever the source is read (which also fixed joined and DiMSum sources,
+   which could not be read again). The design's `library.barcodeColumn`; the Experiment view's
+   rows. `csv.js`: columns built as rows are read, a column of numbers kept as numbers only
+   (`cellText` gives the text back): a million rows in a second and 85 MB (500 before). QC (Q8):
+   "Barcodes the map names", "Barcodes per variant", "Agreement of a variant's barcodes" (φ and the
+   split-half r) and "Outlier barcodes", from the counts alone. The import wizard's file parts,
+   rows, barcode and map columns; the Score view's barcode parameters and filters; the inspector's
+   barcodes per replicate; the barcodes export; remote control's barcodes. Workers end when idle.
+   A fifth example, a simulated barcoded library with a map in conflict (moved here from slice 8);
+   three screenshot scenes; the site's opening-data, scoring, QC, examples, record and science
+   pages; FORMATS.md.
+   - Validation (suite `scoring`, 16 more checks, 111 in all): a simulated barcode fixture
+     (`fixtures/make-barcodes.mjs`, 4,608 barcodes in two libraries, a map with 63 conflicts and
+     42 gaps, 2% outlier barcodes) against dms_variants 1.6.0 `func_scores`
+     (`reference/generate_dms_variants.py`): every barcode by barcode to 4.8 × 10⁻¹³, every
+     variant's summed counts exactly and its score by `aa_substitutions` to 4.4 × 10⁻¹³; the same
+     scores through dms_variants' own `variant_counts` (written by it) and Enrich2's layout; the
+     truth (by barcode with REML r = 0.990 against the sums' 0.977, intervals holding 94%; 76% of
+     planted outliers found, 0.05% of the others called); row order; refusals. Suite `qc` (5 more,
+     26): clean, clonal, outlier, map and single-barcode libraries raise exactly theirs on three
+     seeds. Suite `roundtrip`: the barcoded example from its files. `remote-session.mjs` 4 more
+     (63): the example scored by barcode in the window with Node's hash, its barcodes exported
+     byte for byte. 15 more unit tests (161). `validation/bench.mjs` (CI): a million barcodes and
+     their map imported in 3.5 s, the process at most 830 MB (budgets 15 s, 1 GB), scored in 1.3 s
+     either way; 105,000 variants × 6 samples in 0.5 s. `validation/browser-bench.mjs` (CI): the
+     same in the window, 3–4 s and the browser's memory up by about 600 MB at most.
+   - Found by slice 4:
+     - **One outlier barcode makes its siblings look off** when each is compared with the others'
+       mean: the outlier pulls that mean. Set aside one at a time, worst first, the siblings
+       compare cleanly; φ comes first, from every barcode, by a median that the outliers barely
+       move.
+     - **Holding a table's text cost five times its numbers**: an array of strings per row and per
+       cell held 500 MB for a million rows; columns of numbers as Float64Arrays alone hold 85 MB.
+       In the window, a worker's heap kept a large parse's memory until the worker ended; workers
+       now end when idle (750 MB held after the import before, 190 MB after).
+     - **dms_variants groups synonymous variants with the wild type** by `aa_substitutions` (both
+       empty), and its wild-type normalizer is the codon-identical barcodes (without
+       `syn_as_wt`). MaveScape names synonymous variants by their codons (`p.Ala2=`), so the wild
+       type's barcodes, and every other substitution, compare exactly; the empty group does not.
 5. **DiMSum's error model (S9, Q4).** `web/lib/score-dimsum.js`: DiMSum fitness with its
    dropout pseudocount and count filters, per-replicate scale and shift, the multiplicative and
    additive error terms, inverse-variance merging. Its multiplicative terms feed the bottleneck
@@ -545,13 +591,13 @@ runs and the performance targets.
    `--from-workspace` reruns a saved run exactly) and `mavescape validate`.
    - Validation: `validation/headless-run.mjs` runs twice with identical outputs and once through
      the UI with the same results.
-8. **Examples (T4).** Three more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
+8. **Examples (T4).** Two more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
    growth time series; Factor IX MultiSTEP (one readout) as the FACS-bin assay; and a simulated
-   barcode map with conflicts plus a simulated problematic experiment (a bottleneck and a failing
-   replicate), both labeled simulated. (No barcode-level counts are on MaveDB; Enrich2's example
-   data are CC BY-SA, whose ShareAlike term should not enter an Apache-2.0 binary.) Each with its
-   question, source and license, expected findings, opening view and a guided workflow under ten
-   minutes.
+   problematic experiment (a bottleneck and a failing replicate), labeled simulated. (The simulated
+   barcode map with conflicts came with slice 4. No barcode-level counts are on MaveDB; Enrich2's
+   example data are CC BY-SA, whose ShareAlike term should not enter an Apache-2.0 binary.) Each
+   with its question, source and license, expected findings, opening view and a guided workflow
+   under ten minutes.
 
 ## 0.3.0: public data in and out (wave 3)
 

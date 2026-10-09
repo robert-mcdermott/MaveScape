@@ -36,6 +36,16 @@ lede: Scoring turns the counts into a functional score with a standard error for
       <shot name="sort-seq-score" alt="The Score view of the simulated sort-seq example scored by maximum likelihood with the wild type's spread, beside a run by the weighted average">Sorted bins in the Score view: the weighted average and maximum likelihood, the scale of each replicate, and σ.</shot>
       <p>On factor IX (MaveDB urn:mavedb:00001200-a-1), MaveScape reproduces every published replicate score from the counts, to 10<sup>−15</sup>, and the combined scores exactly. On a simulated sort, its maximum-likelihood fits equal fitdistrplus's <code>fitdistcens</code> to 3 × 10<sup>−7</sup>, and track the true shifts more closely than the weighted average.</p>
 
+      <h2 id="barcodes">Barcodes</h2>
+      <p>A table of barcodes (<a href="opening-data.html#barcodes">Opening your data</a>) is scored in either of two ways, chosen under <em>Barcodes</em>:</p>
+      <ul>
+        <li><strong>Sum, then score</strong> (the default): each variant's barcodes are summed in each sample, and the variant is scored from the sums, as Enrich2 scores a barcoded library and dms_variants' <code>func_scores</code> by substitution.</li>
+        <li><strong>Score each barcode, then combine:</strong> each barcode is scored on its own against its replicate's normalizers, which come from the summed counts (the wild type's barcodes summed), as dms_variants' <code>func_scores</code> by barcode; a variant's barcodes are then combined within the replicate by REML random effects, fixed effects or their mean. With REML, how much the barcodes disagree beyond counting goes into the variant's SE.</li>
+      </ul>
+      <p>Either way every barcode is scored and compared with its variant's other barcodes: its <em>departure</em> is its difference from their inverse-variance mean, in units of their counting error together, over √φ, where φ is how much more a replicate's barcodes disagree than counting explains (the median squared departure over its value under counting alone). A barcode departing by more than 4 is an <strong>outlier</strong>, found one at a time so that one outlier does not make its siblings look off; variants need three barcodes for this. The <strong>barcode filter</strong> leaves outliers out of the sums or the combination, and a minimum number of barcodes per variant can be required. The inspector lists a variant's barcodes in each replicate, with their counts, scores and departures.</p>
+      <shot name="barcodes" alt="The map of the simulated barcoded library scored barcode by barcode, with the inspector listing a missense variant's barcodes in three replicates: their reads before and after selection, scores and departures, one marked an outlier at 7.2">A variant's barcodes in each replicate; one departs from the others by 7.2 and is marked an outlier.</shot>
+      <p>On a simulated barcoded library with a map in conflict for 1.5% of its barcodes, MaveScape scores every barcode, and every variant from its summed barcodes, equal to dms_variants 1.6.0's <code>func_scores</code> by barcode and by substitution to 5 × 10<sup>−13</sup>, whether the counts come with MaveScape's map, in dms_variants' own <code>variant_counts</code> layout, or in Enrich2's layout. Against the library's true effects, the barcodes scored and combined by REML track them more closely (r = 0.990) than the sums (0.977), and their 95% intervals hold the true effect 94% of the time.</p>
+
       <h2 id="replicates">Replicates</h2>
       <p>Technical replicates (one library sequenced more than once) are summed first. Each biological replicate is scored on its own, and a variant's replicate scores are combined:</p>
       <ul>
@@ -47,7 +57,7 @@ lede: Scoring turns the counts into a functional score with a standard error for
       <p>Each variant also has Cochran's Q, I² and τ², and how far its score moves when one replicate is left out. The inspector shows them.</p>
 
       <h2 id="filters">Filters, in order</h2>
-      <p>Variants pass eight stages in order; a variant left out is left out at its first failing stage, with that stage as its reason. The filter flow shows how many each stage removed.</p>
+      <p>Variants pass eight stages in order (nine for a table of barcodes); a variant left out is left out at its first failing stage, with that stage as its reason. The filter flow shows how many each stage removed.</p>
       <ol>
         <li><strong>Counted in a replicate</strong> (always): counted in every sample of at least one replicate; for a regression, at the first time point and at the minimum of time points.</li>
         <li><strong>Valid identifier</strong> (always): a valid name that agrees with the target.</li>
@@ -55,6 +65,7 @@ lede: Scoring turns the counts into a functional score with a standard error for
         <li><strong>Exclusion list:</strong> identifiers you exclude.</li>
         <li><strong>Minimum input count,</strong> per replicate (default 1: a variant with no input reads was not in that library).</li>
         <li><strong>Minimum total count,</strong> per replicate.</li>
+        <li><strong>Minimum barcodes</strong> (a table of barcodes), per replicate: the barcodes measured, outliers left out by the barcode filter not counting.</li>
         <li><strong>Minimum usable replicates.</strong></li>
         <li><strong>Maximum SE.</strong></li>
       </ol>

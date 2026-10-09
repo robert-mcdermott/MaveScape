@@ -6,7 +6,7 @@
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
 import { readArchive, writeArchive } from '../lib/archive.js';
-import { countsCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
+import { barcodesCSV, countsCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
 import { writeMethods } from '../lib/methods.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../lib/findings.js';
 import { sha256 } from '../lib/sha256.js';
@@ -22,9 +22,9 @@ async function qcOf(app, run) {
   const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
   if (!source) return null;
   const table = await app.sourceTable(source);
-  const { names, columns, transfer } = workerInput(table, run.inputs.design);
+  const { names, barcodes, columns, transfer } = workerInput(table, run.inputs.design);
   const thresholds = withDefaultThresholds(app.store.ws.qc?.thresholds);
-  const result = await app.worker('score').run('qc', { names, columns, design: run.inputs.design, mode: run.inputs.mapping.mode, parameters: run.inputs.parameters, measures: measuresOf(thresholds) }, { transfer }).promise;
+  const result = await app.worker('score').run('qc', { names, barcodes, columns, design: run.inputs.design, mode: run.inputs.mapping.mode, parameters: run.inputs.parameters, measures: measuresOf(thresholds) }, { transfer }).promise;
   return { qc: result.qc, findings: findingsFrom(result.qc, thresholds), thresholds };
 }
 
@@ -36,7 +36,7 @@ export async function methodsOf(app, run) {
 
 // --- A run's files ------------------------------------------------------------------------------
 
-export const RUN_FILES = ['scores', 'counts', 'qc-samples', 'qc-variants', 'provenance', 'methods', 'references'];
+export const RUN_FILES = ['scores', 'counts', 'qc-samples', 'qc-variants', 'barcodes', 'provenance', 'methods', 'references'];
 
 // A run's file of one kind, made (not downloaded): { name, type, text }. Throws when the run's
 // scores cannot be recomputed.
@@ -54,6 +54,7 @@ export async function runFile(app, run, kind, condition = 0) {
     return csv('counts', countsCSV(await app.sourceTable(source), run.inputs.design));
   }
   if (kind === 'qc-variants') return csv('qc_variants', qcVariantsCSV(results, run, condition));
+  if (kind === 'barcodes') return csv('barcodes', barcodesCSV(results, run));
   if (kind === 'qc-samples') return csv('qc_samples', qcSamplesCSV((await qcOf(app, run)).qc));
   if (kind === 'provenance') {
     const q = await qcOf(app, run).catch(() => null);
@@ -89,6 +90,7 @@ export function runExportItems(app, run, condition = 0) {
     { section: 'Quality control' },
     { label: 'QC per sample (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'qc-samples', condition) },
     { label: 'QC per variant (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'qc-variants', condition) },
+    ...(run.inputs.design.library?.level === 'barcode' ? [{ label: 'Barcodes, one by one (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'barcodes', condition) }] : []),
     '-',
     { section: 'Record' },
     { label: 'Provenance (JSON)', icon: 'download', onSelect: () => exportRunFile(app, run, 'provenance', condition) },

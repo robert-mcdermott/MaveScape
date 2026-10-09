@@ -7,13 +7,14 @@ import { h, icon, downloadBlob } from './dom.js';
 import { progressToast, toast } from './overlays.js';
 import { EXAMPLES, exampleById, simulatedExample } from '../lib/examples.js';
 import { parseTable } from '../lib/csv.js';
+import { assembleTable } from '../lib/assemble.js';
 import { detectLayout, reviewImport, suggestRoles } from '../lib/importer.js';
 import { sha256 } from '../lib/sha256.js';
 import { addRun, makeRun, runInputs } from '../lib/runs.js';
 import { defaultParameters } from '../lib/score.js';
 import { addSource, addTarget, change, createWorkspace, setDesign } from '../lib/workspace.js';
 import { pearson } from '../lib/stats.js';
-import { workerInput } from './score-input.js';
+import { runScore, workerInput } from './score-input.js';
 import { runEntry } from './run-results.js';
 
 const fetchBytes = async (path) => {
@@ -28,55 +29,61 @@ export async function openExample(app, id) {
   if (!example) return { ok: false, message: `No example "${id}".` };
   const busy = progressToast(`Opening the example "${example.title}"…`);
   try {
-    let bytes;
+    // The example's files: its counts (and a barcoded library's barcode-to-variant map).
+    let parts;
     let design;
     let truth = null;
     if (example.simulated) {
       const sim = simulatedExample(example);
-      bytes = new TextEncoder().encode(sim.csv);
+      parts = sim.files.map((f) => ({ name: f.name, bytes: new TextEncoder().encode(f.text), role: f.role }));
       design = sim.design;
       truth = sim.truth;
     } else {
-      bytes = await fetchBytes(example.files.counts);
+      parts = [{ name: 'counts.csv', bytes: await fetchBytes(example.files.counts), role: 'counts' }];
       design = JSON.parse(new TextDecoder().decode(await fetchBytes(example.files.design)));
     }
-    const fileName = example.simulated ? 'simulated-counts.csv' : 'counts.csv';
-    const table = parseTable(bytes, { fileName });
+    const assembled = assembleTable(parts.map((p) => ({ name: p.name, table: parseTable(p.bytes, { fileName: p.name }), role: p.role })), { level: design.variants.level, target: design.targets[0] });
+    const table = assembled.table;
     const layout = detectLayout(table);
     const countColumns = design.samples.flatMap((s) => s.columns);
-    const review = reviewImport(table, { variantColumn: design.variants.column, level: design.variants.level, countColumns, target: design.targets[0] });
-    const hash = sha256(bytes);
-    await app.library.putFile(hash, bytes);
+    const barcodeColumn = design.library?.level === 'barcode' ? design.library.barcodeColumn : null;
+    const review = reviewImport(table, { variantColumn: design.variants.column, level: design.variants.level, countColumns, target: design.targets[0], barcodeColumn });
+    const stored = parts.map((p) => ({ fileName: p.name, sha256: sha256(p.bytes), size: p.bytes.length, ...(p.role === 'map' ? { role: 'map' } : {}) }));
+    for (const [i, p] of parts.entries()) await app.library.putFile(stored[i].sha256, p.bytes);
     await app.saveNow();
     let ws = createWorkspace(example.title);
     const target = addTarget(ws, design.targets[0]);
     ws = target.ws;
     const source = {
-      name: example.simulated ? 'Simulated counts (simulated data)' : `${example.title}: counts`,
-      fileName,
-      sha256: hash,
-      size: bytes.length,
-      files: [{ fileName, sha256: hash, size: bytes.length }],
+      name: example.simulated ? `Simulated counts${assembled.map ? ' with a barcode map' : ''} (simulated data)` : `${example.title}: counts`,
+      fileName: stored[0].fileName,
+      sha256: stored[0].sha256,
+      size: stored[0].size,
+      files: stored,
       rows: table.rows,
       columns: table.columns.map((c) => ({ name: c.name, type: c.type, missing: c.missing })),
       encoding: 'utf-8',
       delimiter: table.delimiter,
       lineEnd: table.lineEnd,
       layout: layout.layout,
-      mapping: { variantColumn: design.variants.column, level: design.variants.level, mode: 'lenient', countColumns, scoreColumns: {} },
+      mapping: {
+        variantColumn: design.variants.column, level: design.variants.level, mode: 'lenient', countColumns, scoreColumns: {},
+        ...(barcodeColumn ? { barcodeColumn } : {}),
+        ...(assembled.map ? { assembly: { kind: assembled.kind, map: { barcodeColumn: assembled.map.mapBarcodeColumn, variantColumn: assembled.map.mapVariantColumn } } } : {}),
+      },
       target: target.id,
       roleSuggestions: suggestRoles(countColumns).filter((r) => r.role),
       summary: review.summary,
-      problems: { blocking: review.blocking.map((p) => p.message), warnings: review.warnings.map((p) => p.message) },
+      problems: { blocking: review.blocking.map((p) => p.message), warnings: [...review.warnings, ...assembled.problems.filter((p) => p.level === 'warning')].map((p) => p.message) },
       imported: new Date().toISOString(),
     };
     const added = addSource(ws, source);
     ws = setDesign(added.ws, { ...design, targets: [{ ...design.targets[0], id: target.id }] }, `The design of the example "${example.title}"`, added.id);
     ws = change(ws, { example: { id: example.id, simulated: example.simulated, truth } }, 'example', `Opened the example "${example.title}"${example.simulated ? ' (simulated data)' : ` (${example.source}, ${example.license})`}`);
     // A first score run with MaveScape's defaults.
-    const { names, columns, transfer } = workerInput(table, ws.design);
+    const { names, barcodes, columns, transfer } = workerInput(table, ws.design);
     const parameters = defaultParameters(ws.design, ws.sources[0]);
-    const result = await app.worker('score').run('score', { names, columns, design: ws.design, parameters, mode: 'lenient' }, { transfer }).promise;
+    const result = await runScore(app, { names, barcodes, columns, design: ws.design, parameters, mode: 'lenient' }, { transfer }).promise;
     if (result.ok) {
       const run = makeRun({ inputs: runInputs({ source: ws.sources[0], design: ws.design, parameters }), source: ws.sources[0], results: result.results, software: { version: app.version, commit: app.commit }, name: 'Run 1' });
       ws = addRun(ws, run).ws;

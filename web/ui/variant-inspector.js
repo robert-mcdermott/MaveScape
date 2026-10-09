@@ -2,13 +2,14 @@
 // canonical), its score with SE and 95% interval or why it has none, its flags, the counts of
 // every sample, each replicate's score and whether it was used (for a regression on time, its time
 // course in each replicate with the fitted line), the sequence around it, where it falls among the
-// substitutions at its position, and the run it comes from. Focus:
+// substitutions at its position, and the run it comes from; for a table of barcodes, each of its
+// barcodes in each replicate (counts, score, departure from the others, outliers). Focus:
 // { kind: 'variant', id: MAVE-HGVS key, run, condition }.
 
 import { h, icon } from './dom.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
-import { describeParameters } from '../lib/runs.js';
+import { describeParameters, isBarcodeRun } from '../lib/runs.js';
 import { timeCourse } from '../lib/score-regression.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { ensureResults, runEntry } from './run-results.js';
@@ -74,6 +75,36 @@ function positionStrip(results, c, row, position, key) {
   add('text', { x: 8, y: 44, class: 'tick' }, fmt(lo, 1));
   add('text', { x: W - 8, y: 44, class: 'tick', 'text-anchor': 'end' }, fmt(hi, 1));
   return h('div', svg, h('p.muted', { style: { fontSize: '11px', margin: '2px 0 0' } }, `${points.length} scored at position ${position} (dots), on the run's 1st–99th percentile range${wt !== null ? '; the line is the wild type' : ''}.`));
+}
+
+// A table of barcodes: the variant's barcodes in each replicate that counts them, with their counts
+// (before and after; in each bin), score ± SE, departure from the variant's other barcodes (z/√φ)
+// and whether each is an outlier or left out.
+function barcodesBlock(results, reps, row, binned) {
+  const b = results.barcodes;
+  const members = Array.from(b.members.subarray(b.offsets[row], b.offsets[row + 1]));
+  const counts = new Map((results.samples ?? []).map((x) => [x.id, x.barcodeCounts]));
+  const blocks = [];
+  const LIMIT = 40;
+  for (const r of reps) {
+    const rb = r.barcodes;
+    const here = members.filter((m) => r.samples.some((id) => Number.isFinite(counts.get(id)?.[m])));
+    if (!here.length) continue;
+    const shown = here.slice(0, LIMIT);
+    const status = (m) => (!rb.state ? '' : rb.outlier?.[m] ? (rb.excluded ? 'left out' : 'outlier') : rb.state[m] ? 'no' : 'yes');
+    const why = (m) => (!rb.state ? '' : rb.outlier?.[m] ? `An outlier: departs from the variant's other barcodes by more than ${rb.limit} (z/√φ)${rb.excluded ? '; left out by the barcode filter' : ''}` : rb.state[m] ? REPLICATE_STATE_NAMES[rb.state[m]] : 'used');
+    const id = (m) => h('td.mono.barcode-id', { title: results.barcodes.ids[m] }, results.barcodes.ids[m]);
+    const head = binned ? [h('th', 'Barcode'), h('th.r', 'Reads by bin')] : [h('th', 'Barcode'), h('th.r', { title: 'Reads before → after selection' }, 'Reads'), h('th.r', 'Score ± SE'), h('th.r', h('abbr', { title: 'Departure from the variant\'s other barcodes, z/√φ' }, 'z')), h('th', 'Used')];
+    const line = (m) => (binned
+      ? [id(m), h('td.r.mono', r.samples.map((x) => fmt(counts.get(x)?.[m], 0)).join(' · '))]
+      : [id(m), h('td.r', `${fmt(counts.get(r.samples[0])?.[m], 0)} → ${fmt(counts.get(r.samples.at(-1))?.[m], 0)}`), h('td.r', Number.isFinite(rb.score?.[m]) ? `${fmt(rb.score[m], 2)} ± ${fmt(rb.se[m], 2)}` : '—'), h('td.r', fmt(rb.z?.[m], 1)), h('td', { title: why(m) }, rb.outlier?.[m] ? h('span.badge.warn', status(m)) : status(m))]);
+    blocks.push(h('div.barcode-block',
+      h('div.muted', { style: { fontSize: '11.5px', margin: '6px 0 2px' } }, `${r.name}: ${here.length} barcode${here.length > 1 ? 's' : ''}${rb.measured ? `, ${rb.measured[row]} measured` : ''}${Number.isFinite(rb.phi) ? `; the replicate's barcodes disagree ${fmt(rb.phi, 2)}× as counting explains (φ)` : ''}${Number.isFinite(rb.tau2?.[row]) ? `; τ² between them ${fmt(rb.tau2[row], 4)}` : ''}`),
+      h('table.data.compact.barcode-table', h('thead', h('tr', ...head)), h('tbody', ...shown.map((m) => h('tr', ...line(m))))),
+      here.length > LIMIT ? h('p.muted', { style: { fontSize: '11px', margin: '2px 0 0' } }, `…and ${here.length - LIMIT} more (all are in the barcode export).`) : null));
+  }
+  if (!blocks.length) return null;
+  return h('details.inspector-details', { open: members.length <= 30 }, h('summary', `Barcodes (${members.length})`), ...blocks);
 }
 
 export function variantSection(app, focus) {
@@ -148,6 +179,10 @@ export function variantSection(app, focus) {
       parts.push(h('h4.inspector-sub', 'Replicates'), h('table.data.compact', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Before'), h('th.r', 'After'), h('th.r', 'Score'), h('th', 'Used'))),
         h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r', fmt(r.first[row], 0)), h('td.r', fmt(r.last[row], 0)), h('td.r', Number.isFinite(r.score[row]) ? `${fmt(r.score[row], 2)} ± ${fmt(r.se[row], 2)}` : '—'), h('td', r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'yes'))))));
     }
+    if (results.barcodes) {
+      const block = barcodesBlock(results, reps, row, reps.some((r) => r.bins));
+      if (block) parts.push(block);
+    }
     // A regression's time courses: the normalized log counts at each time, and the fitted lines.
     const p = run.inputs.parameters;
     if (p.model === 'wls' || p.model === 'ols') {
@@ -185,7 +220,7 @@ export function variantSection(app, focus) {
     if (match && ONE[match[1]] && ONE[match[1]] !== protein[position - 1]) parts.push(h('div.callout.warn', { style: { fontSize: '12px' } }, `The name says ${match[1]} at ${position}; the target has ${protein[position - 1]}.`));
   }
   // The run.
-  parts.push(h('h4.inspector-sub', 'From'), h('p', { style: { fontSize: '12px', margin: 0 } }, `${run.name} (${run.id}): ${describeParameters(run.inputs.parameters)}. Output SHA-256 ${run.output.sha256.slice(0, 12)}…; ${entry.status === 'reproduced' ? 'reproduced from its inputs' : entry.status === 'computed' ? 'computed in this session' : entry.status}.`));
+  parts.push(h('h4.inspector-sub', 'From'), h('p', { style: { fontSize: '12px', margin: 0 } }, `${run.name} (${run.id}): ${describeParameters(run.inputs.parameters, isBarcodeRun(run))}. Output SHA-256 ${run.output.sha256.slice(0, 12)}…; ${entry.status === 'reproduced' ? 'reproduced from its inputs' : entry.status === 'computed' ? 'computed in this session' : entry.status}.`));
   return h('section.inspector-section.variant-inspector', ...parts);
 }
 

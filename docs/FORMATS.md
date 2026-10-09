@@ -7,7 +7,7 @@ Blank, annotated layouts of each are on the Start page and in
 
 | Kind | Read | Written |
 | --- | --- | --- |
-| Count tables | CSV, TSV, TXT, gzip of these; one table or one file per sample | the counts a run scored (CSV) |
+| Count tables | CSV, TSV, TXT, gzip of these; one table or one file per sample; tables of barcodes with their barcode-to-variant maps; dms_variants' `variant_counts`; Enrich2's counts files and barcode maps | the counts a run scored (CSV); a barcode table's barcodes, one by one (CSV) |
 | Score tables | MaveDB's score layout, recognized at import (shown on the map from 0.3) | a run's scores (CSV) |
 | Targets | FASTA, DNA or protein, one or several records | (in the workspace and its archive) |
 | Designs | `*.design.json`; sample sheets (CSV, TSV); DiMSum's experiment design file | `*.design.json` |
@@ -16,7 +16,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG) |
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 
-Coming later: Excel workbooks and GenBank files (0.3), barcode tables (0.2), structures (0.4).
+Coming later: Excel workbooks and GenBank files (0.3), structures (0.4).
 
 ## Count tables
 
@@ -62,6 +62,52 @@ Layouts recognized:
 | DiMSum | a `nt_seq` column of whole nucleotide sequences, named by comparing each with the wild type you give |
 | Generic | any column of variant names and numeric columns |
 | One file per sample | several files opened together, each a variant column and a count column; joined on the variants. A variant absent from one file is missing there (or 0, if you say so) |
+| A table of barcodes | a column of barcodes (named `barcode`, `bc`, `tag`…, or DNA of one length, six bases or more) and the variant each carries, in a column of its own or from a barcode-to-variant map opened with it (below) |
+| dms_variants' variant counts | `library`, `sample`, `barcode`, `count` and `aa_substitutions` or `codon_substitutions` (its `variant_counts` CSV) |
+| Enrich2's counts files | two columns, the elements (Enrich2 leaves their column unnamed) and `count`; one file per sample, joined. Elements that are variants are named in MAVE-HGVS; barcodes need Enrich2's barcode map |
+
+Large tables are held column by column, a column of numbers as numbers only: a million rows of
+counts and barcodes take about 100 MB once read (MaveScape 0.2; `validation/bench.mjs` checks a
+million-row table and its map imported in under 15 s and 1 GB).
+
+## Tables of barcodes
+
+In a barcoded library each variant is carried by several random barcodes, and a table of counts
+has one row per barcode. MaveScape 0.2 reads it with the barcode-to-variant map that names each
+barcode's variant, opened with it:
+
+```csv
+barcode,pre_rep1,post_rep1,pre_rep2,post_rep2
+ACACAATAGACTCCGA,253,40,NA,NA
+ATACCCAGCCCCGCCA,167,27,NA,NA
+GGCTCGAGCAACTTTG,NA,NA,187,38
+```
+
+```csv
+barcode,hgvs_pro
+ACACAATAGACTCCGA,p.Glu6Asp
+ATACCCAGCCCCGCCA,p.Glu6Asp
+GGCTCGAGCAACTTTG,p.Glu6Asp
+```
+
+- **The map** is a table with a column of barcodes and a column of variants, and no counts: MAVE-HGVS
+  or lab names; dms_variants' `aa_substitutions` (`A2V K3*`, with `codon_substitutions` naming
+  synonymous changes by codon) or `codon_substitutions` (`GCT2GTT`); or whole variant sequences,
+  named against the target's DNA (Enrich2's barcode map: two columns, `barcode sequence`, no
+  header). Its columns can be chosen in the import wizard.
+- **A barcode the map gives two different variants** is in conflict and left unmapped, with the
+  others the map does not name: listed at import, counted by quality control, never scored.
+- **A barcode in one library only** is missing (not 0) in the other libraries' samples: write its
+  other columns empty or `NA`, or let dms_variants' layout say it.
+- **The same barcode on two rows** blocks scoring; a variant written in two ways across its barcodes
+  (`A12V`, `p.Ala12Val`) is one variant.
+- The design names the column of barcodes: `library: { "level": "barcode", "barcodeColumn":
+  "barcode" }`. The source keeps the counts and the map, and how they were put together.
+
+dms_variants' `variant_counts` (one row per library, sample and barcode) is made one row per library
+and barcode, with a column of counts per library and sample, `pre (lib1)`; a barcode in two
+libraries is written `lib1/ACGT…`. Enrich2's counts files of barcodes are joined on the barcodes.
+
 
 ## Targets: FASTA
 
@@ -110,7 +156,8 @@ The design as data: format `mavescape-design`, version 1, described by
 its columns: several are technical replicates, summed), the replicates (each naming its samples:
 input and output, time points, or bins; its biological number, condition and tile), conditions,
 tiles, controls, and `ignoredColumns` (every other column of the table, with the reason, or the
-column it copies). A sample's `missingMeansZero: true` reads its missing counts as 0, for tables
+column it copies). For a table of barcodes, `library.level` is `barcode` and `library.barcodeColumn`
+names the column of barcodes (MaveScape 0.2). A sample's `missingMeansZero: true` reads its missing counts as 0, for tables
 that write variants that dropped out during selection as missing (MaveScape 0.2; "Missing = 0" in
 the Experiment view; warned about on a replicate's first sample). For sorted bins, each bin of a replicate
 may give its gates on the reporter, `lower` and `upper` (fluorescence; the lowest bin's lower and
@@ -121,7 +168,8 @@ bins can be scored by maximum likelihood, whose reads are reweighted by the cell
 ### Import templates, `*.import.json`
 
 A table's mapping (variant column, level, count columns, roles, strict or lenient reading, what
-absence means), applied when a table with the same columns is opened.
+absence means, and a table of barcodes' column of barcodes), applied when a table with the same
+columns is opened.
 
 ## Workspace archives, `*.msz`
 
@@ -172,7 +220,7 @@ MaveDB's score layout, one row per variant of the table, in the table's order:
 | `score`, `SE` | the combined score and its standard error; `NA` when not scored |
 | `ci95_lower`, `ci95_upper` | score ± 1.96 SE |
 | `replicates`, `replicates_expected` | biological replicates used, and that could have measured it |
-| `status` | `scored`, `low confidence`, `filtered: <stage>` (`identifier`, `class`, `excluded`, `input-count`, `total-count`, `replicates`, `se`) or `not measured` |
+| `status` | `scored`, `low confidence`, `filtered: <stage>` (`identifier`, `class`, `excluded`, `input-count`, `total-count`, `barcodes`, `replicates`, `se`) or `not measured` |
 | `flags` | why a score has low confidence |
 | `tau2`, `I2`, `leave_one_out` | between-replicate variance, I², and the largest change when one replicate is left out |
 | `variant_as_written`, `variant_class` | the name as in the table, and its class |
@@ -182,6 +230,10 @@ For sorted bins (MaveScape 0.2), a score is the weighted average of the bins' va
 maximum-likelihood mean of the variant's log fluorescence, scaled per replicate (by default so that
 nonsense scores 0 and the wild type 1); the run's methods say which.
 
+For a table of barcodes (MaveScape 0.2), a score is the variant's, from its barcodes summed or from
+each barcode scored and combined within the replicate; the run's methods say which, and whether
+outlier barcodes were left out.
+
 For a time series scored by regression (MaveScape 0.2), a score is the slope of the variant's
 normalized log count on time scaled to 0–1, and `score_<replicate>` is each replicate's slope; the
 provenance and methods say which model, standard error and minimum of time points the run used.
@@ -189,8 +241,19 @@ provenance and methods say which model, standard error and minimum of time point
 ### Counts (`*_counts.csv`)
 
 The run's variant column and every count column its design uses (copies of shared samples too),
-as the table has them, with MaveDB's identifier columns first. Imported again with the same design
-and parameters, it gives the run's output hash.
+as the table has them, with MaveDB's identifier columns first (a table of barcodes: its column of
+barcodes first, one row per barcode). Imported again with the same design and parameters, it gives
+the run's output hash.
+
+### Barcodes (`*_barcodes.csv`)
+
+A table of barcodes, one row per barcode: `barcode`, its variant (`hgvs_pro` or `hgvs_nt`, and
+`variant_as_written`; `NA` for a barcode that names none), and for each replicate `before_<r>`,
+`after_<r>`, `score_<r>`, `SE_<r>` (the barcode's own score, against the replicate's normalizers),
+`z_<r>` (its departure from its variant's other barcodes, over √φ; `NA` with fewer than three),
+`outlier_<r>` (`yes` beyond 4, or the barcode filter's maximum) and `used_<r>` (`yes`, `no
+(outlier)` when the filter left it out, or why not). For sorted bins, its reads in each bin.
+`NA` where a replicate does not count the barcode.
 
 ### Quality control
 

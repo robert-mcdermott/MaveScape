@@ -18,9 +18,12 @@ import { launch, sleep } from '../docs/capture/cdp.mjs';
 import { readArchive } from '../web/lib/archive.js';
 import { parseTable } from '../web/lib/csv.js';
 import { outputDigest } from '../web/lib/runs.js';
-import { DEFAULT_PARAMETERS, PRESETS } from '../web/lib/score.js';
+import { DEFAULT_PARAMETERS, PRESETS, defaultParameters } from '../web/lib/score.js';
 import { FINGERPRINT } from '../web/lib/dmath.js';
 import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
+import { exampleById, simulatedExample } from '../web/lib/examples.js';
+import { assembleTable } from '../web/lib/assemble.js';
+import { barcodesCSV } from '../web/lib/exports.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -257,6 +260,25 @@ try {
   const mle = await act('score', { parameters: { model: 'bins-mle' } });
   const sortedVariant = await act('inspect_variant', { variant: 'p.Ser2Ter', run: mle.data.name });
   check('score by maximum likelihood, then inspect_variant: each replicate\'s reads by bin, and the distribution drawn in the inspector', `${mle.message} ${sortedVariant.data.replicates.map((r) => `${r.name}: ${r.readsByBin.join('/')}`).join('; ')}`, mle.data.name === 'Run 2' && sortedVariant.data.replicates.every((r) => r.readsByBin.length === 4) && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Distribution over the bins')`)));
+
+  // The barcoded example: its counts and map assembled in the window, scored barcode by barcode,
+  // equal to the same in Node, and its barcodes exported equal to Node's export.
+  await act('open_example', { id: 'simulated-barcodes' });
+  const bcQc = await act('qc_findings');
+  const bcIds = bcQc.data.findings.map((f) => f.id);
+  check('open_example "simulated-barcodes": the four barcode findings, the outlier barcodes under review', bcQc.message, ['barcode-map', 'barcodes-per-variant', 'barcode-agreement', 'outlier-barcodes'].every((id) => bcIds.includes(id)) && bcQc.data.findings.find((f) => f.id === 'outlier-barcodes').status === 'review');
+  const byBarcode = await act('score', { parameters: { aggregation: 'barcode' } });
+  const sim = simulatedExample(exampleById('simulated-barcodes'));
+  const bcDesign = await browser.eval('window.mavescape.store.ws.design');
+  const bcTable = assembleTable(sim.files.map((f) => ({ name: f.name, table: parseTable(f.text, { fileName: f.name }), role: f.role })), { level: bcDesign.variants.level, target: bcDesign.targets[0] }).table;
+  const bcNode = scoreTable(bcTable, bcDesign, { ...defaultParameters(bcDesign), aggregation: 'barcode' }).results;
+  check('score each barcode, then combine: the run scored in the window has the output hash of the same in Node', `${byBarcode.data.outputSha256.slice(0, 16)}… and ${outputDigest(bcNode).slice(0, 16)}…`, byBarcode.data.outputSha256 === outputDigest(bcNode));
+  await act('export', { what: 'barcodes', run: byBarcode.data.name, path: join(out, 'barcodes.csv') });
+  const bcRun = await browser.eval(`window.mavescape.store.ws.runs.find((r) => r.name === ${JSON.stringify(byBarcode.data.name)})`);
+  const bcWritten = readFileSync(join(out, 'barcodes.csv'), 'utf8');
+  check('export barcodes.csv: the same bytes as Node\'s', `${bcWritten.length} bytes, ${bcWritten.split('\n').length - 2} barcodes`, bcWritten === barcodesCSV(bcNode, bcRun));
+  const outlying = await act('inspect_variant', { variant: 'p.Glu6Gln', run: byBarcode.data.name });
+  check('inspect_variant on a barcode run: each replicate\'s barcodes measured and its outliers, and the barcodes listed in the inspector', `${outlying.message} ${outlying.data.replicates.map((r) => `${r.name}: ${r.barcodesMeasured} measured, outliers ${r.outlierBarcodes.join(', ') || 'none'}`).join('; ')}`, outlying.data.replicates.every((r) => r.barcodesMeasured >= 3) && outlying.data.replicates.some((r) => r.outlierBarcodes.length === 1) && (await browser.eval(`Boolean(document.querySelector('#inspector .barcode-table'))`)));
 
   check('every action listed was exercised', `${[...called].length} of ${names.length}: missing ${names.filter((n) => !called.has(n)).join(', ') || 'none'}`, names.every((n) => called.has(n)));
   check('no uncaught errors in the page', errors.join(' | ') || 'none', errors.length === 0);

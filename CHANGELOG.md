@@ -62,15 +62,50 @@ each.
   averages, replicates compared within their tile. The inspector shows a variant's distribution
   over the bins beside the wild type's.
 - **A fourth example: a simulated sort-seq experiment** with gates, cells and known shifts.
+- **Tables of barcodes (wave 2, slice 4).** A count table whose rows are barcodes, opened with the
+  barcode-to-variant map that names each barcode's variant: MAVE-HGVS or lab names, dms_variants'
+  substitutions, or whole variant sequences (Enrich2's map) named against the target. A barcode the
+  map gives two different variants is left unmapped and listed, never resolved by guessing. The
+  design names the column of barcodes (`library.barcodeColumn`); the source keeps the counts, the
+  map and how they were put together, and assembles them again whenever it is read.
+- **Barcodes scored two ways:** summed per variant, then scored (Enrich2; dms_variants by
+  substitution), or each barcode scored against its replicate's normalizers (dms_variants by
+  barcode) and a variant's barcodes combined within the replicate by REML, fixed effects or their
+  mean. Every barcode is compared with its variant's others (its departure over √φ, φ being how much
+  more a replicate's barcodes disagree than counting explains), and outliers are found one at a
+  time. Two filters: a minimum of barcodes per variant, and the barcode filter, which leaves
+  outliers out. Equal to dms_variants 1.6.0's `func_scores` by barcode and by substitution to
+  5 × 10⁻¹³. The inspector lists a variant's barcodes in each replicate; a run's barcodes export
+  one by one (CSV).
+- **Barcode quality control:** "Barcodes the map names", "Barcodes per variant", "Agreement of a
+  variant's barcodes" (φ and the split-half r) and "Outlier barcodes", with plots.
+- **More layouts recognized at import (D12):** dms_variants' `variant_counts` (made one row per
+  library and barcode, a count column per library and sample) and Enrich2's counts files (one per
+  sample, its elements named in MAVE-HGVS, or barcodes with its map).
+- **A fifth example: a simulated barcoded library** with a map in conflict and outlier barcodes.
+- **A million rows (D9, S12).** `validation/bench.mjs` imports a million-barcode table and its
+  million-line map in 3.5 s (budget 15 s, the process at most 830 MB of a 1 GB budget) and scores
+  it in 1.3 s; `validation/browser-bench.mjs` does the same in the window in headless Chrome (3–4 s,
+  the browser's memory up by about 600 MB at most). Both run in CI.
 
 ### Changed
 
+- **Tables are held column by column, a column of numbers as numbers only** (its text is not kept;
+  `cellText` gives it back): a million rows take about 85 MB once read, not 500 MB, and are read in
+  about a second.
+- **Workers end when they have nothing more to do**, so that what a large table or run left in
+  their memory is released.
+- **Synonymous variants named from whole sequences** (DiMSum's, Enrich2's maps) are named by the
+  codons changed (`p.Ala2=`), not `p.(=)`.
 - **A time series is scored by weighted regression by default** (it was the log ratio of its first
   and last samples). Runs keep their parameters, so earlier runs are unchanged; score again to use
   every time point.
 
 ### Fixed
 
+- **A table joined from several files, or named from DiMSum's sequences, could not be read again
+  from the library** (it had to be opened again): the source's files are now assembled again as at
+  import.
 - **Scores depended on the browser.** JavaScript's `Math.log` and `Math.exp` differ in their last
   bit between engines and their versions (Chrome 154 and Node 22 on about 2% of logarithms), so a
   run's output hash depended on the browser that scored it, and a saved run could stop reproducing

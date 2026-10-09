@@ -1,10 +1,26 @@
-// The score worker's input from a parsed table: the variant names and copies of the design's
-// count columns (the table keeps its own). A column with no values at all (every cell missing) is
-// passed as missing counts, for QC to report; a column of text is refused.
+// The score worker's input from a parsed table: the variant names (and a table of barcodes' barcodes)
+// and copies of the design's count columns (the table keeps its own). A column with no values at
+// all (every cell missing) is passed as missing counts, for QC to report; a column of text is
+// refused.
+
+import { columnText } from '../lib/csv.js';
+
+// Scores in the score worker: { promise, cancel }. A table of barcodes' identifiers, which the
+// worker does not send back (the window has them: a million strings copied for nothing), are put
+// back on the results.
+export function runScore(app, payload, options = {}) {
+  const job = app.worker('score').run('score', payload, options);
+  const promise = job.promise.then((result) => {
+    if (result.ok && result.results.barcodes) result.results.barcodes.ids = payload.barcodes;
+    return result;
+  });
+  return { promise, cancel: job.cancel };
+}
 
 export function workerInput(table, design) {
   const byName = new Map(table.columns.map((c) => [c.name, c]));
-  const names = byName.get(design.variants.column)?.values;
+  const variantColumn = byName.get(design.variants.column);
+  const names = variantColumn ? columnText(variantColumn) : null;
   if (!names) throw new Error(`The table has no column "${design.variants.column}" of variant names.`);
   const columns = {};
   for (const sample of design.samples) {
@@ -16,5 +32,11 @@ export function workerInput(table, design) {
       else throw new Error(`Column "${name}" is not all numbers.`);
     }
   }
-  return { names, columns, transfer: Object.values(columns).map((c) => c.buffer) };
+  let barcodes = null;
+  if (design.library?.level === 'barcode') {
+    const column = byName.get(design.library.barcodeColumn);
+    if (!column) throw new Error(`The table has no column "${design.library.barcodeColumn}" of barcodes.`);
+    barcodes = columnText(column);
+  }
+  return { names, barcodes, columns, transfer: Object.values(columns).map((c) => c.buffer) };
 }

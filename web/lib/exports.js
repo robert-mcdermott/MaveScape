@@ -7,9 +7,10 @@
 
 import { KIND_NAMES, STATUS_NAMES } from './variants.js';
 import { STAGE_BY_CODE, flagNames, REPLICATE_STATE_NAMES } from './filters.js';
-import { describeParameters } from './runs.js';
+import { describeParameters, isBarcodeRun } from './runs.js';
 import { canonicalJSON } from './workspace.js';
 import { sha256 } from './sha256.js';
+import { columnText } from './csv.js';
 
 export const EXPORT_VERSION = 1;
 const Z = 1.959963984540054;
@@ -63,19 +64,56 @@ export function scoresCSV(results, run, condition = 0) {
   return csv(header, rows);
 }
 
-// The counts the run scored: the design's variant column and every count column it uses (copies
-// of shared samples too), as the table has them, NA where a count is missing.
+// The counts the run scored: the design's variant column (and a table of barcodes' barcodes) and
+// every count column it uses (copies of shared samples too), as the table has them, NA where a
+// count is missing.
 export function countsCSV(table, design) {
   const byName = new Map(table.columns.map((col) => [col.name, col]));
-  const names = byName.get(design.variants.column).values;
+  const names = columnText(byName.get(design.variants.column));
+  const barcodeColumn = design.library?.level === 'barcode' ? design.library.barcodeColumn : null;
+  const barcodes = barcodeColumn ? columnText(byName.get(barcodeColumn)) : null;
   const columns = [...design.samples.flatMap((s) => s.columns), ...(design.ignoredColumns ?? []).filter((x) => x.copyOf).map((x) => x.column)];
   const level = design.variants.level;
-  const header = [...['hgvs_nt', 'hgvs_splice', 'hgvs_pro'].filter((h) => h !== design.variants.column), design.variants.column, ...columns];
+  const header = [...(barcodeColumn ? [barcodeColumn] : []), ...['hgvs_nt', 'hgvs_splice', 'hgvs_pro'].filter((h) => h !== design.variants.column), design.variants.column, ...columns];
   const rows = names.map((name, i) => {
     const ids = hgvsColumns(level, name);
     const identity = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro'].map((h, k) => [h, ids[k]]).filter(([h]) => h !== design.variants.column).map(([, x]) => x);
-    return [...identity, name, ...columns.map((c) => num(byName.get(c).numeric ? byName.get(c).numeric[i] : Number.NaN))];
+    return [...(barcodes ? [barcodes[i]] : []), ...identity, name, ...columns.map((c) => num(byName.get(c).numeric ? byName.get(c).numeric[i] : Number.NaN))];
   });
+  return csv(header, rows);
+}
+
+// A table of barcodes, barcode by barcode: its variant (MAVE-HGVS, and as written), and in each
+// replicate its counts (before and after; for sorted bins, in each bin), its score and SE, its
+// departure from its variant's other barcodes (z over √φ), whether it is an outlier, and whether
+// it was used. NA where a replicate does not count it.
+export function barcodesCSV(results, run) {
+  const b = results.barcodes;
+  if (!b) throw new Error(`${run.name} scored a table of variants, not of barcodes.`);
+  const counts = new Map((results.samples ?? []).map((x) => [x.id, x.barcodeCounts]));
+  const reps = results.replicates;
+  const level = run.inputs.design.variants.level;
+  const header = ['barcode', level === 'protein' ? 'hgvs_pro' : 'hgvs_nt', 'variant_as_written', ...reps.flatMap((r) => (r.bins
+    ? r.samples.map((_, k) => `bin${k + 1}_${safe(r.id)}`)
+    : ['before', 'after', 'score', 'SE', 'z', 'outlier', 'used'].map((x) => `${x}_${safe(r.id)}`)))];
+  const v = results.variants;
+  const rows = [];
+  for (let m = 0; m < b.rows; m += 1) {
+    const i = b.variantOf[m];
+    const cells = [b.ids[m], i >= 0 ? v.key[i] || 'NA' : 'NA', i >= 0 ? v.original[i] : 'NA'];
+    for (const r of reps) {
+      const here = r.samples.map((id) => counts.get(id)?.[m] ?? Number.NaN);
+      if (r.bins) {
+        cells.push(...here.map(num));
+        continue;
+      }
+      const rb = r.barcodes;
+      const counted = here.every(Number.isFinite);
+      const used = !counted || i < 0 ? 'no' : rb.outlier[m] && rb.excluded ? 'no (outlier)' : rb.state[m] ? REPLICATE_STATE_NAMES[rb.state[m]] : 'yes';
+      cells.push(num(here[0]), num(here[here.length - 1]), num(rb.score[m]), num(rb.se[m]), num(rb.z[m]), counted ? (rb.outlier[m] ? 'yes' : 'no') : 'NA', used);
+    }
+    rows.push(cells);
+  }
   return csv(header, rows);
 }
 
@@ -127,7 +165,7 @@ export function provenanceJSON(run, ws, { qc = null, findings = null, thresholds
       created: run.created,
       software: run.software,
       parameters: run.inputs.parameters,
-      description: describeParameters(run.inputs.parameters),
+      description: describeParameters(run.inputs.parameters, isBarcodeRun(run)),
       output: run.output,
       warnings: run.warnings,
     },

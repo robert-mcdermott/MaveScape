@@ -101,15 +101,43 @@ export const EXAMPLES = [
       ['score', 'In Score, choose "Maximum likelihood" and score again; compare the runs in the inspector, and try the VAMP-seq preset.'],
     ],
   },
+  {
+    id: 'simulated-barcodes',
+    title: 'A simulated barcoded library (known truth)',
+    summary: 'Codon variants of a 30-codon gene in three independently made libraries, each variant carrying about five random barcodes, counted before and after selection, with a barcode-to-variant map that has gaps and conflicts, and a few barcodes that are off from their variant.',
+    question: 'Do a variant\'s barcodes agree, which barcodes are outliers, and does scoring each barcode before combining them beat summing them?',
+    source: 'Simulated by MaveScape (web/lib/simulate.js, seed 20261014): not real data',
+    license: 'Simulated: no license needed',
+    citation: null,
+    simulated: true,
+    simulation: { seed: 20261014, protein: 'MSKGEELFTGVVPILVELDGDVNGHKFSVS', replicates: 3, barcodes: { perVariant: 5, readsPerBarcode: 100, noise: 0.1, outliers: 0.03, conflicts: 0.02, unmapped: 0.02 } },
+    // The QC findings that do not pass, by design: the lesson.
+    findings: { 'excess-variance': 'review', 'outlier-barcodes': 'review' },
+    opens: 'qc',
+    expected: [
+      'The map names about 96% of the barcodes: a few are missing from it, and about 2% are given two variants by it, which leaves them unmapped (the import lists them).',
+      'Quality control reviews the outlier barcodes, about 2% of those compared (3% were planted 1.5–3 off their variant), and the variance between replicates beyond counting that they and the barcodes\' own noise add.',
+      'Summed per variant (the default), the scores track the true effects with r about 0.985; each barcode scored and combined by REML, about 0.996; summed with the outliers left out, about 0.995.',
+    ],
+    steps: [
+      ['qc', 'Read "Barcodes per variant", "Agreement of a variant\'s barcodes" and "Outlier barcodes", and their plots.'],
+      ['map', 'Click a dark cell: the inspector lists the variant\'s barcodes in each replicate, their counts, scores and departures from the others; outliers are marked.'],
+      ['score', 'In Score, choose "Score each barcode, then combine" and score again; then go back to summing, and leave the outlier barcodes out with the barcode filter. Compare the runs.'],
+      ['score', 'Export the barcodes, one by one, from the run\'s menu.'],
+    ],
+  },
 ];
 
 export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
 
-// The simulated example's files: { csv, design, truth: { key: effect } }.
+// The simulated example's files: { files: [{ name, text, role }] (the counts, and a barcoded
+// library's barcode-to-variant map), csv, design, truth: { key: effect } }.
 export function simulatedExample(example = exampleById('simulated')) {
   const sim = simulateExperiment(example.simulation);
   const design = { ...sim.design, name: `${sim.design.name} (simulated data)` };
   // The truth: each variant's effect (a sort-seq experiment's: its shift in log fluorescence).
   const truth = Object.fromEntries(sim.variants.map((v) => [v.name, v.shift ?? v.effect]));
-  return { csv: sim.csv, design, truth };
+  const files = [{ name: 'simulated-counts.csv', text: sim.csv, role: 'counts' }];
+  if (sim.map) files.push({ name: 'simulated-barcode-map.csv', text: sim.map, role: 'map' });
+  return { files, csv: sim.csv, design, truth };
 }

@@ -303,8 +303,29 @@ export function setField(design, patch) {
 // Columns of the table the design neither uses nor sets aside (columns left out of the count
 // columns at import, text columns), set aside with a reason, so that every column is accounted for
 // without any being dropped silently. identifiers: columns that name variants.
+// A table of barcodes (column: its column of barcodes, out of the columns set aside) or of variants
+// (null: the column of barcodes set aside, with the reason).
+export function setBarcodeColumn(design, column) {
+  const library = { ...(design.library ?? {}) };
+  let ignored = design.ignoredColumns ?? [];
+  const previous = library.barcodeColumn;
+  if (column) {
+    library.level = 'barcode';
+    library.barcodeColumn = column;
+    ignored = ignored.filter((x) => x.column !== column);
+  } else {
+    library.level = 'variant';
+    delete library.barcodeColumn;
+  }
+  if (previous && previous !== column) ignored = [...ignored, { column: previous, reason: 'barcodes (not used: the rows are scored as they are)' }];
+  const next = { ...design, library };
+  if (ignored.length) next.ignoredColumns = ignored;
+  else delete next.ignoredColumns;
+  return next;
+}
+
 export function setAsideOtherColumns(design, columns, identifiers = []) {
-  const accounted = new Set([design.variants?.column, ...identifiers, ...design.samples.flatMap((s) => s.columns), ...(design.ignoredColumns ?? []).map((x) => x.column)]);
+  const accounted = new Set([design.variants?.column, design.library?.barcodeColumn, ...identifiers, ...design.samples.flatMap((s) => s.columns), ...(design.ignoredColumns ?? []).map((x) => x.column)]);
   const others = columns.filter((c) => !accounted.has(c));
   if (!others.length) return design;
   return { ...design, ignoredColumns: [...(design.ignoredColumns ?? []), ...others.map((column) => ({ column, reason: 'not a count column (left out at import)' }))] };

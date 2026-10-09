@@ -20,7 +20,7 @@ import { KIND_NAMES } from '../lib/variants.js';
 import { openExample } from './examples.js';
 import { draftFromColumns } from './design-draft.js';
 import { ensureResults } from './run-results.js';
-import { workerInput } from './score-input.js';
+import { runScore, workerInput } from './score-input.js';
 import { computeQc, markQcSeen, qcInputsOf, qcSubjects } from './mode-qc.js';
 import { archiveFile, RUN_FILES, runFile, selectionFile } from './record.js';
 
@@ -298,8 +298,8 @@ export function installRemote(app) {
       let result;
       try {
         const table = await app.sourceTable(source);
-        const { names, columns, transfer } = workerInput(table, design);
-        result = await app.worker('score').run('score', { names, columns, design, parameters, mode: source.mapping?.mode ?? 'lenient' }, { transfer }).promise;
+        const { names, barcodes, columns, transfer } = workerInput(table, design);
+        result = await runScore(app, { names, barcodes, columns, design, parameters, mode: source.mapping?.mode ?? 'lenient' }, { transfer }).promise;
       } finally {
         store.setBusy?.('score', null);
       }
@@ -419,6 +419,8 @@ export function installRemote(app) {
         ...(r.points ? { timePoints: r.points[row], departure: round(r.fit[row]) } : {}),
         // Sorted bins: the reads in each bin.
         ...(r.bins ? { readsByBin: r.samples.map((id) => { const x = (results.samples ?? []).find((sm) => sm.id === id)?.counts[row]; return Number.isFinite(x) ? x : null; }) } : {}),
+        // A table of barcodes: the variant's barcodes measured in the replicate, and its outliers.
+        ...(r.barcodes ? { barcodesMeasured: r.barcodes.measured[row], outlierBarcodes: r.barcodes.outlier ? Array.from(results.barcodes.members.subarray(results.barcodes.offsets[row], results.barcodes.offsets[row + 1])).filter((m) => r.barcodes.outlier[m]).map((m) => results.barcodes.ids[m]) : [] } : {}),
       }));
       const data = {
         variant: v.key[row],

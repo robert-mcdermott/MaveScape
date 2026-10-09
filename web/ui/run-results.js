@@ -6,7 +6,7 @@
 
 import { outputDigest, recordedInputs } from '../lib/runs.js';
 import { SCORING_VERSION } from '../lib/score.js';
-import { workerInput } from './score-input.js';
+import { runScore, workerInput } from './score-input.js';
 
 export function runEntry(app, run) {
   app.runResults ??= new Map();
@@ -28,8 +28,8 @@ export async function ensureResults(app, run) {
     } else {
       try {
         const table = await app.sourceTable(source);
-        const { names, columns, transfer } = workerInput(table, recorded.design);
-        const result = await app.worker('score').run('score', { names, columns, design: recorded.design, parameters: recorded.parameters, mode: recorded.mapping.mode }, { transfer }).promise;
+        const { names, barcodes, columns, transfer } = workerInput(table, recorded.design);
+        const result = await runScore(app, { names, barcodes, columns, design: recorded.design, parameters: recorded.parameters, mode: recorded.mapping.mode }, { transfer }).promise;
         if (!result.ok) throw new Error(result.errors.join(' '));
         const digest = outputDigest(result.results);
         const same = digest === run.output.sha256;

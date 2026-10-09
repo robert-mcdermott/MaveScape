@@ -84,7 +84,9 @@ async function start() {
   const app = { store, library, info, version: VERSION, commit: info?.commit ?? '' };
   app.workers = {};
   app.worker = (name) => {
-    app.workers[name] ??= new WorkerClient(`../workers/${name}-worker.js`, { max: 1 });
+    // A worker ends when it has nothing more to do, so that what a large table or run left in its
+    // memory goes with it; starting the next costs a few milliseconds.
+    app.workers[name] ??= new WorkerClient(`../workers/${name}-worker.js`, { max: 1, retire: true });
     return app.workers[name];
   };
   // Readers of opened files by kind, registered by the slices that build them: kind → async

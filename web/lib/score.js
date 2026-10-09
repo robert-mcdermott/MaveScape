@@ -2,8 +2,12 @@
 // errors out, every variant accounted for. Pure: the score worker runs it, and the validation
 // suite `scoring` runs it in Node.
 //
-//   names, count columns ─ variants.js (keys, kinds, validity against the target)
-//     ─ technical replicates summed per sample (replicates.js, poolColumns)
+//   names, count columns ─ variants.js (keys, kinds, validity against the target); for a table of
+//       barcodes, the barcodes grouped by variant (score-barcodes.js)
+//     ─ technical replicates summed per sample (replicates.js, poolColumns); a barcode table's
+//       counts summed per variant, and every barcode scored, compared with its variant's others
+//       and, when they disagree beyond the filter, left out; a variant's score from its summed
+//       counts, or its barcodes' scores combined
 //     ─ per biological replicate: normalizers, and log ratios (score-ratio.js) or the slope of a
 //       regression on time (score-regression.js); or for sorted bins, the weighted average of the
 //       bins' values or the maximum-likelihood fit, scaled (score-bins.js); and whether each
@@ -21,6 +25,7 @@ import { parseHgvs } from './hgvs.js';
 import { median, normalizers, ratioScores, NORMALIZATIONS } from './score-ratio.js';
 import { MODELS as TIME_MODELS, REGRESSION_SE, regressionScores } from './score-regression.js';
 import { BIN_SCALES, BIN_SE, BIN_SIGMA, binAverages, binMLEScores, binTotals, scaleAnchors } from './score-bins.js';
+import { AGGREGATIONS, BARCODE_COMBINATIONS, OUTLIER_Z, barcodeDisagreement, barcodeProblems, combineBarcodes, groupBarcodes, sumByVariant } from './score-barcodes.js';
 import { createRandom } from './random.js';
 import { combine, COMBINATIONS, heterogeneity, leaveOneOut, sampleCounts } from './replicates.js';
 import {
@@ -57,6 +62,8 @@ export const DEFAULT_PARAMETERS = {
   binSigma: 'wild-type',
   bootstrapSamples: 200,
   seed: 20261009,
+  aggregation: 'sum',
+  barcodeCombination: 'reml',
   combination: 'reml',
   rescale: 'none',
   filters: DEFAULT_FILTERS,
@@ -114,6 +121,8 @@ export function checkParameters(parameters, design) {
   if (!(Number.isInteger(p.bootstrapSamples) && p.bootstrapSamples >= 20 && p.bootstrapSamples <= 100000)) errors.push('The bootstrap needs a whole number of samples, from 20 to 100,000.');
   if (!Number.isInteger(p.seed)) errors.push('The seed is a whole number.');
   if (!NORMALIZATIONS[p.normalization]) errors.push(`Unknown normalization "${p.normalization}".`);
+  if (!AGGREGATIONS[p.aggregation]) errors.push(`Unknown aggregation of barcodes "${p.aggregation}".`);
+  if (!BARCODE_COMBINATIONS[p.barcodeCombination]) errors.push(`Unknown combination of barcodes "${p.barcodeCombination}".`);
   if (!(Number.isFinite(p.pseudocount) && p.pseudocount >= 0)) errors.push('The pseudocount must be a number of 0 or more.');
   if (!COMBINATIONS[p.combination]) errors.push(`Unknown combination "${p.combination}".`);
   if (!RESCALINGS[p.rescale]) errors.push(`Unknown rescaling "${p.rescale}".`);
@@ -136,6 +145,10 @@ export function checkParameters(parameters, design) {
       }
     }
     if (design.model === 'scores') errors.push('This design holds precomputed scores: there are no counts to score.');
+    const barcodes = design.library?.level === 'barcode';
+    if (p.aggregation === 'barcode' && !barcodes) errors.push('Scoring each barcode needs a table of barcodes; this table\'s rows are variants: sum (there is nothing to sum) or describe the barcodes in the Experiment view.');
+    if (p.aggregation === 'barcode' && design.model === 'bins') errors.push('Sorted bins are scored from each variant\'s barcodes summed: a barcode\'s few cells spread over the bins give no estimate of their own. Choose "sum, then score".');
+    if (p.filters.maxBarcodeZ !== null && barcodes && design.model === 'bins') errors.push('The barcode filter compares barcodes\' scores, and sorted bins score variants only: set no maximum departure.');
     if (p.combination === 'enrich2' && p.filters.minReplicates !== 'all') errors.push('Enrich2\'s estimator combines only variants scored in every replicate: set the minimum usable replicates to "all", or choose another combination.');
   }
   if (p.pseudocount === 0) errors.push('A pseudocount of 0 leaves every variant with a zero count unscorable (log 0); use a positive pseudocount.');
@@ -276,6 +289,46 @@ function scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, w
   };
 }
 
+// A barcode table's rows grouped by variant (score-barcodes.js), refused when a barcode is missing
+// or written twice.
+function barcodeGroups(names, barcodes, design, mode, target) {
+  if (!barcodes || barcodes.length !== names.length) throw new Refused([`The design describes a table of barcodes, and the barcodes (column "${design.library.barcodeColumn}") were not given.`]);
+  const problems = barcodeProblems(barcodes);
+  if (problems.repeated.length) throw new Refused([`${problems.repeated.length} barcode${problems.repeated.length > 1 ? 's are' : ' is'} on more than one row (${problems.repeated.slice(0, 3).map((x) => x.id).join(', ')}): a barcode is counted once per sample; resolve them at import before scoring.`]);
+  if (problems.blank.length) throw new Refused([`${problems.blank.length} row${problems.blank.length > 1 ? 's have' : ' has'} no barcode (the first is row ${problems.blank[0] + 1}).`]);
+  return groupBarcodes(names, { level: design.variants.level, mode, target }, barcodes);
+}
+
+// The rows 0…n − 1 for which test(row) holds.
+function rowsWhere(n, test) {
+  const out = [];
+  for (let i = 0; i < n; i += 1) if (test(i)) out.push(i);
+  return out;
+}
+
+// Scored by barcode, each variant's state in a replicate from its barcodes': used with at least
+// `minimum` measured; too few barcodes when fewer (outliers left out not counting); else the
+// furthest any of its barcodes got (counted, then past the input count, then the total count).
+const STATE_RANK = [5, 1, 3, 4, 2, 0, 0, 4.5];
+function barcodeVariantStates(groups, barcodeState, measured, minimum) {
+  const nv = groups.offsets.length - 1;
+  const state = new Uint8Array(nv);
+  for (let g = 0; g < nv; g += 1) {
+    if (measured[g] >= minimum) {
+      state[g] = REPLICATE_STATE.USED;
+      continue;
+    }
+    let best = REPLICATE_STATE.NOT_COUNTED;
+    for (let m = groups.offsets[g]; m < groups.offsets[g + 1]; m += 1) {
+      const b = groups.members[m];
+      const s = barcodeState[b] === REPLICATE_STATE.USED ? REPLICATE_STATE.FEW_BARCODES : barcodeState[b];
+      if (STATE_RANK[s] > STATE_RANK[best]) best = s;
+    }
+    state[g] = best;
+  }
+  return state;
+}
+
 class Refused extends Error {
   constructor(errors) {
     super(errors.join(' '));
@@ -296,7 +349,7 @@ export function scoreExperiment(input) {
   }
 }
 
-function run({ names, columns, design, mode = 'lenient', parameters, onProgress = () => {} }) {
+function run({ names, barcodes = null, columns, design, mode = 'lenient', parameters, onProgress = () => {} }) {
   const p = withDefaults(parameters);
   const f = p.filters;
   const checked = checkParameters(p, design);
@@ -305,83 +358,171 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
   const validation = validateDesign(design);
   if (!validation.ok) throw new Refused(validation.errors.map((e) => `The design: ${e.message}`));
 
-  const n = names.length;
-  const variants = buildVariants(names, { level: design.variants.level, mode, target: design.targets?.length === 1 ? design.targets[0] : undefined });
-  const duplicates = duplicateKeys(variants);
-  if (duplicates.length) throw new Refused([`${duplicates.length} variant${duplicates.length > 1 ? 's are' : ' is'} on more than one row (${duplicates.slice(0, 3).map((d) => d.key).join(', ')}): resolve them at import before scoring.`]);
+  // A table of barcodes: its rows grouped by the variants they carry, each barcode on one row.
+  const target = design.targets?.length === 1 ? design.targets[0] : undefined;
+  const groups = design.library?.level === 'barcode' ? barcodeGroups(names, barcodes, design, mode, target) : null;
+  const variants = groups ? groups.variants : buildVariants(names, { level: design.variants.level, mode, target });
+  const n = variants.n;
+  if (!groups) {
+    const duplicates = duplicateKeys(variants);
+    if (duplicates.length) throw new Refused([`${duplicates.length} variant${duplicates.length > 1 ? 's are' : ' is'} on more than one row (${duplicates.slice(0, 3).map((d) => d.key).join(', ')}): resolve them at import before scoring.`]);
+  }
   const controls = controlRows(design, variants);
   const warnings = [];
   const info = [];
   if (p.normalization === 'wt' && controls.wtProblem) throw new Refused([controls.wtProblem]);
 
-  // Samples: technical replicates summed.
+  // Samples: technical replicates summed; a barcode table's counts also summed per variant.
   const missingColumns = [];
-  const pooled = new Map();
+  const pooledRows = new Map();
   for (const sample of design.samples) {
     const parts = sample.columns.map((c) => columns[c]);
     if (parts.some((c) => !c)) {
       missingColumns.push(...sample.columns.filter((c) => !columns[c]));
       continue;
     }
-    pooled.set(sample.id, sampleCounts(sample, parts));
+    pooledRows.set(sample.id, sampleCounts(sample, parts));
     if (sample.columns.length > 1) info.push(`Technical replicates summed: ${sample.name ?? sample.id} is ${sample.columns.join(' + ')} (one library sequenced more than once; not an independent replicate).`);
     if (sample.missingMeansZero) info.push(`Missing counts read as 0 in ${sample.name ?? sample.id}, as the design says (a table that writes variants that dropped out as missing).`);
   }
   if (missingColumns.length) throw new Refused([`The count table has no column ${missingColumns.map((c) => `"${c}"`).join(', ')}.`]);
+  const pooled = groups ? new Map([...pooledRows].map(([id, counts]) => [id, sumByVariant(counts, groups)])) : pooledRows;
+  if (groups) {
+    if (groups.unmapped) warnings.push({ code: 'unmapped-barcodes', message: `${groups.unmapped} barcode${groups.unmapped > 1 ? 's name' : ' names'} no variant (not in the barcode map, or given two variants by it): not scored.` });
+    if (groups.rewritten) info.push(`${groups.rewritten} variant${groups.rewritten > 1 ? 's are' : ' is'} written in more than one way across ${groups.rewritten > 1 ? 'their' : 'its'} barcodes (A12V and p.Ala12Val): grouped as one, named as first written.`);
+  }
 
   // Per biological replicate: counted rows, normalizers, log ratios, and each measurement's state.
   const replicates = [];
   const repById = new Map();
   const regression = p.model === 'wls' || p.model === 'ols';
   const sorted = BIN_MODELS.has(p.model);
+  const synonymousRow = new Uint8Array(n);
+  for (const i of controls.synonymous) synonymousRow[i] = 1;
   design.replicates.forEach((replicate, index) => {
     onProgress((index / design.replicates.length) * 0.6, `Scoring ${replicate.name ?? replicate.id}`);
     if (sorted) {
       const entry = scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings });
+      if (groups) {
+        // A variant's barcodes measured: those counted in every bin, with reads.
+        const rows = binSlots(replicate).map((x) => pooledRows.get(x.sample));
+        const measured = new Int32Array(n);
+        for (let b = 0; b < groups.rows; b += 1) {
+          const g = groups.variantOf[b];
+          if (g < 0) continue;
+          let reads = 0;
+          let counted = true;
+          for (const s of rows) {
+            if (Number.isNaN(s[b])) counted = false;
+            else reads += s[b];
+          }
+          if (counted && reads > 0) measured[g] += 1;
+        }
+        for (let i = 0; i < n; i += 1) if (entry.state[i] === REPLICATE_STATE.USED && measured[i] < f.minBarcodes) entry.state[i] = REPLICATE_STATE.FEW_BARCODES;
+        entry.barcodes = { measured, score: null, se: null, state: null, z: null, phi: Number.NaN, compared: 0, outlier: null, outliers: 0, excluded: 0, limit: null, tau2: null };
+      }
       replicates.push(entry);
       repById.set(replicate.id, entry);
       return;
     }
     const slots = orderedSlots(replicate);
-    const samples = slots.map((s) => pooled.get(s.sample));
     const label = `replicate ${replicate.name ?? replicate.id}`;
-    const T = samples.length;
+    const T = slots.length;
+    const times = slots.map((s) => s.time);
     // A regression fits a variant on the time points where it was counted: its first and at least
     // `need` in all. A ratio needs every sample.
     const need = regression ? (f.minTimePoints === 'all' ? T : Math.min(f.minTimePoints, T)) : T;
-    const counted = new Uint8Array(n);
-    const usable = new Uint8Array(n);
-    const state = new Uint8Array(n);
-    const total = new Float64Array(n);
-    for (let i = 0; i < n; i += 1) {
-      let points = 0;
-      let sum = 0;
-      for (const s of samples) {
-        if (Number.isNaN(s[i])) continue;
-        points += 1;
-        sum += s[i];
+    // Which rows (variants, or barcodes) a replicate's samples count, and whether each is used;
+    // and the replicate's normalizers, from variants' counts (given for barcodes).
+    const measure = (samples, given = null) => {
+      const m = samples[0].length;
+      const counted = new Uint8Array(m);
+      const usable = new Uint8Array(m);
+      const state = new Uint8Array(m);
+      for (let i = 0; i < m; i += 1) {
+        let points = 0;
+        let sum = 0;
+        for (const s of samples) {
+          if (Number.isNaN(s[i])) continue;
+          points += 1;
+          sum += s[i];
+        }
+        const first = !Number.isNaN(samples[0][i]);
+        counted[i] = points === T ? 1 : 0;
+        usable[i] = first && points >= need ? 1 : 0;
+        state[i] = replicateState(usable[i], samples[0][i], sum, f, regression && first && points > 1 && points < need);
       }
-      const first = !Number.isNaN(samples[0][i]);
-      counted[i] = points === T ? 1 : 0;
-      usable[i] = first && points >= need ? 1 : 0;
-      total[i] = sum;
-      state[i] = replicateState(usable[i], samples[0][i], sum, f, regression && first && points > 1 && points < need);
+      if (given) return { counted, usable, state, r: given };
+      try {
+        return { counted, usable, state, r: normalizers(p.normalization, samples, counted, { pseudocount: p.pseudocount, wtRow: controls.wt, label }) };
+      } catch (error) {
+        throw new Refused([error.message]);
+      }
+    };
+    const scoreRows = (samples, m, reference) => {
+      try {
+        return regression
+          ? regressionScores(samples, times, m.r, m.usable, { weighted: p.model === 'wls', pseudocount: p.pseudocount, method: p.normalization, se: p.regressionSE, reference, label })
+          : ratioScores(p.normalization, samples, m.counted, m.r, { pseudocount: p.pseudocount, reference, label });
+      } catch (error) {
+        throw new Refused([error.message]);
+      }
+    };
+    let samples = slots.map((s) => pooled.get(s.sample));
+    let m = measure(samples);
+    let scored = null;
+    let bc = null;
+    if (groups) {
+      // Every barcode scored against the replicate's normalizers, and compared with its variant's
+      // other barcodes.
+      const rows = slots.map((s) => pooledRows.get(s.sample));
+      const mb = measure(rows, m.r);
+      for (let b = 0; b < groups.rows; b += 1) {
+        if (groups.variantOf[b] >= 0) continue;
+        mb.counted[b] = 0;
+        mb.usable[b] = 0;
+        mb.state[b] = REPLICATE_STATE.NOT_COUNTED;
+      }
+      const reference = p.normalization === 'synonymous' ? rowsWhere(groups.rows, (b) => synonymousRow[groups.variantOf[b]] && mb.state[b] === REPLICATE_STATE.USED) : null;
+      const sb = scoreRows(rows, mb, reference);
+      const used = Uint8Array.from(mb.state, (s) => (s === REPLICATE_STATE.USED ? 1 : 0));
+      // Outliers: beyond the filter's maximum departure, and then left out; else beyond 4, and only
+      // reported.
+      const d = barcodeDisagreement(sb.score, sb.se, used, groups, f.maxBarcodeZ ?? OUTLIER_Z);
+      const filtering = f.maxBarcodeZ !== null;
+      const outlier = filtering ? d.outlier : new Uint8Array(groups.rows);
+      const outliers = filtering ? d.outliers : 0;
+      if (filtering) for (let b = 0; b < groups.rows; b += 1) if (outlier[b]) used[b] = 0;
+      const measured = new Int32Array(n);
+      for (let b = 0; b < groups.rows; b += 1) if (used[b]) measured[groups.variantOf[b]] += 1;
+      bc = { score: sb.score, se: sb.se, state: mb.state, z: d.z, phi: d.phi, compared: d.compared, outlier: d.outlier, outliers: d.outliers, excluded: outliers, limit: f.maxBarcodeZ ?? OUTLIER_Z, measured, tau2: null };
+      if (outliers) info.push(`${outliers} barcode${outliers > 1 ? 's' : ''} of ${label} departing from ${outliers > 1 ? 'their' : 'its'} variant's others by more than ${f.maxBarcodeZ} (z/√φ, φ = ${d.phi.toFixed(2)}) left out.`);
+      if (p.aggregation === 'sum') {
+        if (outliers) {
+          samples = slots.map((s) => sumByVariant(pooledRows.get(s.sample), groups, outlier));
+          m = measure(samples);
+        }
+        for (let i = 0; i < n; i += 1) if (m.state[i] === REPLICATE_STATE.USED && measured[i] < f.minBarcodes) m.state[i] = REPLICATE_STATE.FEW_BARCODES;
+      } else {
+        const c = combineBarcodes(p.barcodeCombination, sb.score, sb.se, used, groups);
+        scored = { score: c.score, se: c.se };
+        bc.tau2 = c.tau2;
+        m.state = barcodeVariantStates(groups, mb.state, measured, f.minBarcodes);
+        if (p.normalization === 'synonymous') {
+          // Synonymous variants center on 0, as when scored from their sums.
+          const values = rowsWhere(n, (i) => synonymousRow[i] && m.state[i] === REPLICATE_STATE.USED).map((i) => c.score[i]);
+          if (!values.length) throw new Refused([`No synonymous variant is scored in ${label}: synonymous normalization is not available there.`]);
+          const shift = median(values);
+          for (let i = 0; i < n; i += 1) c.score[i] -= shift;
+          for (let b = 0; b < groups.rows; b += 1) sb.score[b] -= shift;
+          scored.median = (sb.median ?? 0) + shift;
+          scored.references = values.length;
+        }
+      }
     }
-    let r;
-    try {
-      r = normalizers(p.normalization, samples, counted, { pseudocount: p.pseudocount, wtRow: controls.wt, label });
-    } catch (error) {
-      throw new Refused([error.message]);
-    }
-    let scored;
-    try {
-      const reference = p.normalization === 'synonymous' ? controls.synonymous.filter((i) => state[i] === REPLICATE_STATE.USED) : null;
-      scored = regression
-        ? regressionScores(samples, slots.map((s) => s.time), r, usable, { weighted: p.model === 'wls', pseudocount: p.pseudocount, method: p.normalization, se: p.regressionSE, reference, label })
-        : ratioScores(p.normalization, samples, counted, r, { pseudocount: p.pseudocount, reference, label });
-    } catch (error) {
-      throw new Refused([error.message]);
-    }
+    if (!scored) scored = scoreRows(samples, m, p.normalization === 'synonymous' ? controls.synonymous.filter((i) => m.state[i] === REPLICATE_STATE.USED) : null);
+    const r = m.r;
+    const state = m.state;
     if (p.normalization === 'synonymous' && scored.references < 10) warnings.push({ code: 'few-synonymous', message: `Only ${scored.references} synonymous variant${scored.references === 1 ? '' : 's'} set the center of ${label}: its normalization is uncertain.` });
     if (p.normalization === 'wt') {
       for (const [j, s] of [samples[0], samples[samples.length - 1]].entries()) {
@@ -399,6 +540,7 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       }
       if (variantsCounted && reads / variantsCounted < 10) warnings.push({ code: 'low-depth', message: `Sample ${slots[j].sample} of ${label} has ${reads} reads for ${variantsCounted} variants (${(reads / variantsCounted).toFixed(1)} per variant): its counts are mostly sampling noise.` });
     }
+    const byBarcode = groups && p.aggregation === 'barcode';
     const entry = {
       id: replicate.id,
       name: replicate.name ?? replicate.id,
@@ -406,7 +548,7 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       condition: replicate.condition ?? null,
       tile: replicate.tile ?? null,
       samples: slots.map((s) => s.sample),
-      times: slots.map((s) => s.time),
+      times,
       normalizers: r,
       synonymousMedian: scored.median,
       first: samples[0],
@@ -415,13 +557,34 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       se: scored.se,
       state,
       // A regression's time points used and its departure from a line against counting noise
-      // (χ²/(n − 2)), per variant.
-      points: scored.points ?? null,
-      fit: scored.fit ?? null,
+      // (χ²/(n − 2)), per variant (per barcode, in bc, when barcodes are scored each).
+      points: byBarcode ? null : scored.points ?? null,
+      fit: byBarcode ? null : scored.fit ?? null,
+      // A barcode table: each barcode's score, SE, state, departure from its variant's others (z,
+      // over √φ) and whether it is an outlier (beyond `limit`; `excluded` of them left out, when the
+      // filter is on); φ; each variant's barcodes measured; and, scored by barcode, the variance
+      // between a variant's barcodes (τ²).
+      barcodes: bc,
     };
     replicates.push(entry);
     repById.set(replicate.id, entry);
   });
+
+  // A table of barcodes: how many measure a variant in a replicate.
+  if (groups) {
+    const perReplicate = replicates.map((r) => {
+      let variantsMeasured = 0;
+      let barcodes = 0;
+      for (const k of r.barcodes.measured) {
+        if (!k) continue;
+        variantsMeasured += 1;
+        barcodes += k;
+      }
+      return variantsMeasured ? barcodes / variantsMeasured : 0;
+    });
+    const mean = perReplicate.reduce((a, x) => a + x, 0) / Math.max(1, perReplicate.length);
+    info.push(`${groups.rows - groups.unmapped} barcodes of ${n} variants, ${mean.toFixed(1)} measuring a variant in a replicate on average; ${p.aggregation === 'sum' ? 'their counts summed per variant before scoring' : `each scored, then combined per variant by ${BARCODE_COMBINATIONS[p.barcodeCombination]}`}.`);
+  }
 
   // Run-level notes on the design.
   if (design.model === 'time-series' && !regression) warnings.push({ code: 'time-series-ratio', message: 'A time series scored by the ratio of its first and last time points (as Enrich2\'s "ratios"): the time points between them are not used. Weighted regression uses every one.' });
@@ -466,12 +629,14 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       const these = [];
       let anyCounted = false;
       let anyPastInput = false;
+      let anyFewBarcodes = false;
       let exp = 0;
       for (const rep of reps) {
         if (coversRow(rep, i)) exp += 1;
         const s = rep.state[i];
         if (s !== REPLICATE_STATE.NOT_COUNTED && s !== REPLICATE_STATE.FEW_POINTS && s !== REPLICATE_STATE.NOT_ESTIMABLE) anyCounted = true;
-        if (s === REPLICATE_STATE.USED || s === REPLICATE_STATE.TOTAL_COUNT || s === REPLICATE_STATE.LOW_FREQUENCY) anyPastInput = true;
+        if (s === REPLICATE_STATE.USED || s === REPLICATE_STATE.TOTAL_COUNT || s === REPLICATE_STATE.LOW_FREQUENCY || s === REPLICATE_STATE.FEW_BARCODES) anyPastInput = true;
+        if (s === REPLICATE_STATE.FEW_BARCODES) anyFewBarcodes = true;
         if (s === REPLICATE_STATE.USED) these.push(rep);
       }
       expected[i] = exp;
@@ -480,7 +645,7 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       const stage = variantStage(i, variants, excludeKinds, excluded);
       if (!anyCounted) reason[i] = STAGE_BY_ID.get('measured').code;
       else if (stage) reason[i] = stage;
-      else if (!these.length) reason[i] = STAGE_BY_ID.get(anyPastInput ? 'total-count' : 'input-count').code;
+      else if (!these.length) reason[i] = STAGE_BY_ID.get(anyFewBarcodes ? 'barcodes' : anyPastInput ? 'total-count' : 'input-count').code;
       else if (these.length < minimum(i)) reason[i] = STAGE_BY_ID.get('replicates').code;
       used[i] = reason[i] ? null : these;
       if (!reason[i] && these.length === K) combinedFromAll += 1;
@@ -523,7 +688,7 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
         }
       }
       if (these.length < expected[i]) bits |= FLAG.FEWER_REPLICATES;
-      if (regression && these.some((rep) => rep.points[i] < rep.times.length)) bits |= FLAG.FEWER_POINTS;
+      if (regression && these.some((rep) => rep.points && rep.points[i] < rep.times.length)) bits |= FLAG.FEWER_POINTS;
       flags[i] = bits;
     }
     if (notConverged) warnings.push({ code: 'reml-not-converged', message: `REML did not converge for ${notConverged} variant${notConverged > 1 ? 's' : ''}${conditionList.length > 1 ? ` of ${condition.name}` : ''}.` });
@@ -566,7 +731,7 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       replicates: reps.map((r) => r.id),
       score, se, tau2, i2, q, loo, looReplicate, epsilon, k, expected, reason, flags,
       rescale,
-      flow: filterFlow(reason),
+      flow: filterFlow(reason, Boolean(groups)),
       scored: scoredCount,
       combinedFromAll,
     });
@@ -584,8 +749,12 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
     parameters: p,
     replicates,
     conditions,
-    // Each sample's counts (technical replicates summed), for the inspector.
-    samples: design.samples.filter((x) => pooled.has(x.id)).map((x) => ({ id: x.id, name: x.name ?? x.id, columns: x.columns, counts: pooled.get(x.id) })),
+    // Each sample's counts (technical replicates summed; a barcode table's summed per variant), for
+    // the inspector.
+    samples: design.samples.filter((x) => pooled.has(x.id)).map((x) => ({ id: x.id, name: x.name ?? x.id, columns: x.columns, counts: pooled.get(x.id), barcodeCounts: groups ? pooledRows.get(x.id) : null })),
+    // A barcode table: each barcode's identifier and variant (−1: none), the barcodes of each
+    // variant (members, from offsets[i] to offsets[i + 1]), and those that name no variant.
+    barcodes: groups ? { rows: groups.rows, ids: barcodes, variantOf: groups.variantOf, offsets: groups.offsets, members: groups.members, unmapped: groups.unmapped } : null,
     warnings,
     info,
   };

@@ -3,14 +3,15 @@
 // and every export of it, so that a saved, reopened workspace can be exported again and compared
 // byte for byte.
 
-import { parseTable } from '../web/lib/csv.js';
+import { columnText, parseTable } from '../web/lib/csv.js';
+import { assembleTable } from '../web/lib/assemble.js';
 import { reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { scoreExperiment, DEFAULT_PARAMETERS } from '../web/lib/score.js';
 import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../web/lib/findings.js';
 import { addRun, makeRun, recordedInputs, runInputs } from '../web/lib/runs.js';
 import { addSelection, addSource, addTarget, createWorkspace, setDesign, setQcThresholds } from '../web/lib/workspace.js';
-import { countsCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../web/lib/exports.js';
+import { barcodesCSV, countsCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../web/lib/exports.js';
 import { writeMethods } from '../web/lib/methods.js';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
@@ -24,9 +25,16 @@ const columnsFor = (table, design) => {
   return out;
 };
 
+// The engine's input, as the window's (web/ui/score-input.js): names, a table of barcodes'
+// barcodes, the count columns.
+export const inputFor = (table, design) => ({
+  names: columnText(table.columns.find((c) => c.name === design.variants.column)),
+  barcodes: design.library?.level === 'barcode' ? columnText(table.columns.find((c) => c.name === design.library.barcodeColumn)) : null,
+  columns: columnsFor(table, design),
+});
+
 export function scoreTable(table, design, parameters, mode = 'lenient') {
-  const names = table.columns.find((c) => c.name === design.variants.column).values;
-  return scoreExperiment({ names, columns: columnsFor(table, design), design, parameters, mode });
+  return scoreExperiment({ ...inputFor(table, design), design, parameters, mode });
 }
 
 // The workspace, built with fixed times so that it is the same every time.
@@ -61,8 +69,7 @@ export function buildWorkspace({ bytes, design, fileName, name }) {
 export function allExports(ws, table, results) {
   const run = ws.runs[0];
   const thresholds = withDefaultThresholds(ws.qc?.thresholds);
-  const names = table.columns.find((c) => c.name === run.inputs.design.variants.column).values;
-  const qc = computeQC({ names, columns: columnsFor(table, run.inputs.design), design: run.inputs.design, results, measures: measuresOf(thresholds) });
+  const qc = computeQC({ ...inputFor(table, run.inputs.design), design: run.inputs.design, results, measures: measuresOf(thresholds) });
   const findings = findingsFrom(qc, thresholds);
   const methods = writeMethods(ws, run, { findings, thresholds });
   const scores = scoresCSV(results, run);
@@ -78,14 +85,20 @@ export function allExports(ws, table, results) {
     'selection.csv': selectionCSV(selection.keys, results, run, selection.condition),
     'selection.json': selectionJSON(selection, run),
     'map.svg': mapSVG(buildMapModel(results, run.inputs.design), { results }),
+    ...(results.barcodes ? { 'barcodes.csv': barcodesCSV(results, run) } : {}),
     methods,
   };
 }
 
-// A run's scores recomputed from an archive's own table and the run's recorded inputs.
-export function recompute(ws, sources) {
-  const run = ws.runs[0];
+// A run's scores recomputed from an archive's own files (assembled as the window assembles them:
+// joined, named, a barcode map applied) and the run's recorded inputs.
+export function recompute(ws, sources, which = 0) {
+  const run = ws.runs[which];
   const recorded = recordedInputs(run);
-  const table = parseTable(sources.get(recorded.source.sha256), { fileName: run.inputs.source.fileName });
+  const source = ws.sources.find((s) => s.sha256 === recorded.source.sha256);
+  const files = source?.files?.length ? source.files : [{ fileName: run.inputs.source.fileName, sha256: recorded.source.sha256 }];
+  const m = source?.mapping ?? {};
+  const assembled = assembleTable(files.map((f) => ({ name: f.fileName, table: parseTable(sources.get(f.sha256), { fileName: f.fileName }), role: f.role ?? 'counts' })), { absentMeans: m.absentMeans ?? 'missing', level: m.level, target: ws.targets.find((t) => t.id === source?.target), barcodeColumn: m.barcodeColumn, map: m.assembly?.map });
+  const table = assembled.table;
   return { table, scored: scoreTable(table, recorded.design, recorded.parameters, recorded.mapping.mode) };
 }

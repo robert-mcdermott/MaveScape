@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { countsCSV, csv, num, scoresCSV, selectionCSV, statusOf } from './exports.js';
-import { parseTable } from './csv.js';
+import { columnText, parseTable } from './csv.js';
 import { scoreExperiment, DEFAULT_PARAMETERS } from './score.js';
 import { detectLayout } from './importer.js';
 
@@ -32,7 +32,7 @@ test('scores in MaveDB\'s columns: every variant, its state, the name as written
   assert.deepEqual(col('hgvs_pro'), ['p.=', 'p.Ser2Ala', 'p.Lys3Arg', 'p.Ser2Gly']);
   assert.deepEqual(col('status'), ['scored', 'scored', 'not measured', 'scored']);
   assert.equal(col('variant_as_written')[3], 'S2G');
-  assert.equal(col('score')[2], 'NA');
+  assert.ok(Number.isNaN(t.columns.find((c) => c.name === 'score').numeric[2]));
   assert.equal(detectLayout(t).layout, 'mavedb-scores');
   assert.equal(statusOf(results.conditions[0], 2), 'not measured');
 });
@@ -40,8 +40,9 @@ test('scores in MaveDB\'s columns: every variant, its state, the name as written
 test('counts as the table has them, the variant column kept; selections with scores', () => {
   const t = parseTable(countsCSV(table, design));
   assert.deepEqual(t.columns.map((c) => c.name), ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'v', 'in', 'out']);
-  assert.deepEqual(t.columns[4].values, ['100', '10', 'NA', '7']);
-  assert.equal(t.columns[5].values[3], '0.5');
+  assert.deepEqual(columnText(t.columns[4]), ['100', '10', '', '7']);
+  assert.deepEqual(t.columns[4].missingTokens, ['NA']);
+  assert.equal(t.columns[5].numeric[3], 0.5);
   assert.equal(detectLayout(t).layout, 'mavedb-counts');
   const sel = parseTable(selectionCSV(['p.Ser2Ala', 'p.Gly4Trp'], results, run));
   assert.deepEqual(sel.columns[3].values, ['scored', 'not in the table']);
