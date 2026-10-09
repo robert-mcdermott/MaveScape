@@ -18,6 +18,8 @@
 // "ratios" does. Library sizes count every row of the table, whatever the filters: they describe
 // the sequencing, not the analysis.
 
+import { log } from './dmath.js';
+
 export const NORMALIZATIONS = {
   wt: 'wild type',
   complete: 'complete cases (variants counted in every sample)',
@@ -74,7 +76,7 @@ export function ratioScores(method, samples, use, r, { pseudocount, reference = 
     const c0 = first[i] + pseudocount;
     const cT = last[i] + pseudocount;
     // In Enrich2's order of operations, so that the numbers agree to the last digits.
-    score[i] = method === 'synonymous' ? Math.log(cT) - Math.log(c0) : (Math.log(cT) - Math.log(r[1])) - (Math.log(c0) - Math.log(r[0]));
+    score[i] = method === 'synonymous' ? log(cT) - log(c0) : (log(cT) - log(r[1])) - (log(c0) - log(r[0]));
     se[i] = Math.sqrt(1 / c0 + 1 / cT + libraryTerm);
   }
   if (method === 'synonymous') {

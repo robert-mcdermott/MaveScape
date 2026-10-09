@@ -19,6 +19,19 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked | `fixtures/`, `web/examples/` |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 
+## The remote-control session (`remote-session.mjs`)
+
+`node validation/remote-session.mjs [--verbose]` builds MaveScape, starts it with
+`--remote-control` on an empty library, opens it in headless Chrome (`docs/capture/cdp.mjs`; set
+`CHROME` to choose the browser) and sends every action (`actions.go`) as a script would. It checks
+the connection file and its permissions, refusals (no page, no token, a relative or existing path,
+a design that does not fit, parameters that cannot score) and forgiving names, then the results
+against the same analysis in Node: the window's runs have the output hash of `scoreExperiment` on
+the same table and design, a variant's evidence matches, and every export the hub writes is
+byte for byte the file Node makes from the exported archive (provenance but for its file names).
+It also checks that `web/lib/dmath.js` gives the same bits in the browser as in Node. 54 checks; in
+CI as the `remote` job.
+
 ## Public data (`sources.json`)
 
 | Data set | Design | Why it is here |

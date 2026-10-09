@@ -49,7 +49,7 @@ jobs:
       - name: Syntax check
         run: |
           shopt -s nullglob
-          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs validation/fixtures/*.mjs; do node --check "$file"; done
+          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs validation/fixtures/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js; do node --check "$file"; done
       - name: node --test
         run: node --test "web/lib/*.test.mjs"
       - name: Cache external validation data
@@ -63,6 +63,24 @@ jobs:
         run: node validation/run.mjs --require-data
       - name: Map and scoring performance budgets
         run: node validation/bench.mjs
+      - name: The website builds, with every link, anchor and screenshot
+        run: node docs/site/build.mjs "$RUNNER_TEMP/site"
+
+  remote:
+    name: Remote control
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Every remote action, in the program and headless Chrome, against Node
+        run: node validation/remote-session.mjs --verbose
+        env:
+          CHROME: /usr/bin/google-chrome
 
   installers:
     name: Installer syntax

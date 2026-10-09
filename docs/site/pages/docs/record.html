@@ -1,0 +1,32 @@
+---
+title: Exports and the record
+description: Export MaveScape's scores and counts in MaveDB's columns, QC tables, provenance and a methods paragraph with references, and save the whole workspace as an archive that reopens identically.
+lede: What leaves MaveScape is meant to be checked: scores in MaveDB's columns, the counts they came from, quality control, provenance with every checksum, and the methods with their references. The workspace archive holds all of it, and reopens identically.
+---
+      <h2 id="run-files">A run's files</h2>
+      <shot name="record" alt="The Score view with the run's export menu open: scores and counts in MaveDB columns, QC per sample and per variant, provenance, and methods and references">A run's exports, from its <strong>Export…</strong> menu in the Score view (or the workflow strip's last step).</shot>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>File</th><th>What it holds</th></tr></thead>
+          <tbody>
+            <tr><td><code>*_scores.csv</code></td><td>Every variant's score, SE and 95% interval, the replicates used, its status (scored, low confidence, filtered at which stage, or not measured) and flags, τ², I², the leave-one-out change and each replicate's score, with MaveDB's identifier columns (<code>hgvs_nt</code>, <code>hgvs_splice</code>, <code>hgvs_pro</code>)</td></tr>
+            <tr><td><code>*_counts.csv</code></td><td>The counts the run scored, in the same columns; scored again they give the run's output hash</td></tr>
+            <tr><td><code>*_qc_samples.csv</code>, <code>*_qc_variants.csv</code></td><td>Quality control per sample and per variant</td></tr>
+            <tr><td><code>*_provenance.json</code></td><td>The inputs with their SHA-256 checksums, the parameters, the software and its commit, the QC findings and thresholds, and the files exported</td></tr>
+            <tr><td><code>*_methods.md</code>, <code>*_references.bib</code></td><td>A methods paragraph written from the run, with its references in order and as BibTeX</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Exported scores are read back to the last bit and open in MaveScape again as MaveDB score tables.</p>
+
+      <h2 id="archive">The workspace archive</h2>
+      <p><strong>Workspace archive (.msz)…</strong> in the workspace menu writes one file with everything needed to reopen the analysis on another computer: the workspace (targets, design, runs, selections, QC thresholds and the chained history), each run's scores, the methods with references, and the count tables (or, if you prefer, only their checksums). Opened again, each run is recomputed from the archived table and must reproduce its recorded output hash.</p>
+      <ul>
+        <li>Archives are deterministic: the same workspace gives the same bytes in every time zone.</li>
+        <li>A manifest lists every file's SHA-256; an edited run, table or history entry is reported on opening.</li>
+        <li>Archives from a newer MaveScape, without a manifest, with paths outside the archive, or inflating beyond their declared size are refused.</li>
+        <li>An archive whose workspace is already in the library opens as a copy, so neither overwrites the other.</li>
+      </ul>
+
+      <h2 id="formats">Formats</h2>
+      <p><a href="{{github}}/blob/main/docs/FORMATS.md">FORMATS.md</a> describes every column of every export and the archive's layout.</p>

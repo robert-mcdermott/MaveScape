@@ -15,6 +15,7 @@
 // SE against the controls' gap (resolution), score uncertainty by input count, and the filter
 // flow. Findings (pass, review, fail) are drawn from these by findings.js.
 
+import { log, log10, pow, square } from './dmath.js';
 import { buildVariants, KIND, STATUS } from './variants.js';
 import { replicateSamples, targetLength } from './design.js';
 import { poolColumns } from './replicates.js';
@@ -43,14 +44,14 @@ function sampleMetrics(sample, counts, lowCount) {
   }
   const s = sorted(values);
   // Count distribution: log10(count + 1) in quarter-decade bins, as fractions.
-  const top = s.length ? Math.log10(s[s.length - 1] + 1) : 0;
+  const top = s.length ? log10(s[s.length - 1] + 1) : 0;
   const bins = Math.max(1, Math.ceil(top * 4) + 1);
   const histogram = new Array(bins).fill(0);
-  for (const c of values) histogram[Math.min(bins - 1, Math.floor(Math.log10(c + 1) * 4))] += 1 / values.length;
+  for (const c of values) histogram[Math.min(bins - 1, Math.floor(log10(c + 1) * 4))] += 1 / values.length;
   // Rank-abundance: counts from the most to the least abundant, at about 64 ranks.
   const rankAbundance = [];
   for (let k = 0; k < 64 && s.length; k += 1) {
-    const rank = Math.min(s.length, Math.max(1, Math.round(s.length ** (k / 63))));
+    const rank = Math.min(s.length, Math.max(1, Math.round(pow(s.length, k / 63))));
     if (rankAbundance.length && rankAbundance.at(-1)[0] === rank) continue;
     rankAbundance.push([rank, s[s.length - rank]]);
   }
@@ -148,7 +149,7 @@ function rawRatios(replicate, pooled, variants, agreementInput) {
   const usable = new Uint8Array(n);
   for (let i = 0; i < n; i += 1) {
     if (samples.some((s) => !s || Number.isNaN(s[i]))) continue;
-    y[i] = Math.log(last[i] + P) - Math.log(first[i] + P);
+    y[i] = log(last[i] + P) - log(first[i] + P);
     v[i] = 1 / (first[i] + P) + 1 / (last[i] + P);
     usable[i] = first[i] >= agreementInput && variants.status[i] !== STATUS.INVALID ? 1 : 0;
   }
@@ -202,7 +203,7 @@ function pairMetrics(a, b) {
   const out = { a: a.id, b: b.id, n, pearson: pearson(ya, yb), spearman: spearman(ya, yb), multiplier: Number.NaN, additive: Number.NaN, ratio: Number.NaN, bins: [], points: [] };
   if (n < 20) return out;
   const offset = median(d);
-  const r2 = d.map((x) => (x - offset) ** 2);
+  const r2 = d.map((x) => square(x - offset));
   out.ratio = median(r2.map((x, i) => x / pv[i])) / MEDIAN_CHI2_1;
   // Bins of counting variance; the robust variance of the differences in each.
   const order = pv.map((_, i) => i).sort((i, j) => pv[i] - pv[j]);
@@ -211,7 +212,7 @@ function pairMetrics(a, b) {
     const idx = order.slice(Math.floor((b * n) / nb), Math.floor(((b + 1) * n) / nb));
     out.bins.push({ n: idx.length, counting: mean(idx.map((i) => pv[i])), observed: median(idx.map((i) => r2[i])) / MEDIAN_CHI2_1 });
   }
-  const fit = nonNegativeLine(out.bins.map((x) => x.counting), out.bins.map((x) => x.observed), out.bins.map((x) => x.n / x.counting ** 2));
+  const fit = nonNegativeLine(out.bins.map((x) => x.counting), out.bins.map((x) => x.observed), out.bins.map((x) => x.n / square(x.counting)));
   out.multiplier = fit.a;
   out.additive = fit.e;
   // A sample of points for the scatter plot (every k-th by row).
@@ -277,7 +278,7 @@ function scoreMetrics(results) {
     if (reference && nonsense.length >= 5) {
       const mRef = median(reference.scores);
       const mNon = median(nonsense);
-      const spread = reference.scores.length > 1 ? Math.sqrt((mad(reference.scores) ** 2 + mad(nonsense) ** 2) / 2) : mad(nonsense);
+      const spread = reference.scores.length > 1 ? Math.sqrt((square(mad(reference.scores)) + square(mad(nonsense))) / 2) : mad(nonsense);
       separation = {
         reference: reference.what,
         auc: auc(reference.scores, nonsense),

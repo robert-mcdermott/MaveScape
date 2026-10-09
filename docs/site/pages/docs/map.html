@@ -1,0 +1,36 @@
+---
+title: The map and the inspector
+description: MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, selections, SVG and PNG export, and the variant inspector's evidence.
+lede: The map shows a run's single substitutions, positions across and substitutions down, on a scale centered on the wild type. Click any cell for its evidence in the inspector.
+---
+      <h2 id="reading">Reading the map</h2>
+      <shot name="map" alt="The map of the GRB2 SH3 domain colored by score, with the legend of states and p.Trp36Ala's evidence in the inspector">GRB2's map colored by score: blue is loss of function, red gain, white like the wild type.</shot>
+      <ul>
+        <li><strong>Scored</strong> cells are colored by score on a diverging scale centered on the wild type and symmetric about it.</li>
+        <li><strong>Low confidence</strong> cells (fewer replicates than expected, or a zero count) are drawn paler, with a corner mark.</li>
+        <li><strong>Filtered</strong> cells are hatched; <strong>missing</strong> cells (not in the table) are gray with a dot; cells outside the designed tiles are left empty. None of them is ever drawn as "no effect": each is at least ΔE 10 from the neutral color in both themes and both palettes.</li>
+        <li>The <strong>reference residue</strong> at each position is outlined.</li>
+      </ul>
+      <p>Above the map, the median score of each position; at the right, of each substitution. Positions are numbered on the target and, with an offset, on the reference. The overview strip below shows where the view is.</p>
+
+      <h2 id="controls">Settings</h2>
+      <ul>
+        <li><strong>Color by</strong> score, standard error, replicates used or input count (log).</li>
+        <li><strong>Rows</strong> in biochemical order (charged, polar, aliphatic, aromatic, special, stop), by hydrophobicity or alphabetically.</li>
+        <li><strong>Colors:</strong> blue–red or purple–orange.</li>
+        <li>Zoom with <kbd>⌘</kbd> or <kbd>Ctrl</kbd> and the wheel, or the buttons; drag to pan; <strong>Fit</strong> shows the whole map.</li>
+      </ul>
+      <shot name="map-se" alt="The simulated example's map colored by standard error, with a variant's evidence in the inspector">Colored by standard error, the uncertain cells stand out: in the simulated example, the variants rare in the library.</shot>
+
+      <h2 id="selections">Selections</h2>
+      <p>Click a cell to select it and see it in the inspector; <kbd>⌘</kbd>-click adds to the selection; <kbd>⇧</kbd>-drag selects a rectangle. <strong>Save as…</strong> keeps the selection by name in the workspace, listed in the dataset tree and under the map; <strong>Export</strong> writes the selected variants with their scores (CSV) or the selection itself (JSON).</p>
+      <shot name="map-selection" alt="The map zoomed in on positions 35 to 37 of GRB2, selected and saved as WW motif">Positions 35–37 selected and saved as a named selection.</shot>
+
+      <h2 id="inspector">The variant inspector</h2>
+      <p>For a variant, the inspector shows its name as written and in MAVE-HGVS, its class and position; its score with standard error and 95% interval, or why it has none (the filter stage that left it out); its flags; each replicate's counts before and after selection, score and whether it was used; every sample's counts; the other substitutions at its position against the run's range; the sequence around it; and the run it comes from.</p>
+
+      <h2 id="export">Export</h2>
+      <p><strong>Export</strong> writes the map as SVG (vector, for figures) or PNG at three times the resolution, in the export theme, with its legend.</p>
+
+      <h2 id="accessible">In words and by keyboard</h2>
+      <p>Below the map, <strong>In words</strong> describes it: the cells in each state, the least and most tolerant positions, the scale. Every cell is also in a table. With the map focused, the arrow keys move between cells, each announced, and <kbd>Enter</kbd> selects. Color-vision-friendly colors are a setting in the appearance menu.</p>

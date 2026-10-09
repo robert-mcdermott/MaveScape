@@ -1,0 +1,48 @@
+---
+title: Scoring
+description: How MaveScape scores a deep mutational scan: log ratios with normalization, replicates combined by REML random effects, ordered filters with reasons, and runs that reproduce.
+lede: Scoring turns the counts into a functional score with a standard error for every variant, in a run that keeps everything needed to repeat it. The parameters and the filters are in plain view in the Score view.
+---
+      <h2 id="score">Scores</h2>
+      <p>A variant's score in one replicate is the natural logarithm of its frequency after selection over its frequency before, normalized so that the reference scores 0, with a pseudocount (0.5) added to every count and a standard error from the counts, as Enrich2 computes them. Normalizations:</p>
+      <ul>
+        <li><strong>Wild type</strong> (the default when the table counts it): scores relative to the wild type, which scores 0.</li>
+        <li><strong>Complete cases:</strong> relative to the variants counted in every sample.</li>
+        <li><strong>All reads</strong> of each sample.</li>
+        <li><strong>Synonymous median:</strong> relative to the median synonymous variant.</li>
+      </ul>
+      <p>Optional rescaling anchors the scale: nonsense median 0 and wild type 1, or synonymous median 0 and nonsense median −1.</p>
+      <shot name="score" alt="The Score view: parameters, two runs of the GRB2 counts, the run's warnings, filter flow and scores by class">Two runs of the GRB2 counts. Each run lists its parameters, warnings, filter flow and scores by class.</shot>
+
+      <h2 id="replicates">Replicates</h2>
+      <p>Technical replicates (one library sequenced more than once) are summed first. Each biological replicate is scored on its own, and a variant's replicate scores are combined:</p>
+      <ul>
+        <li><strong>REML random effects</strong> (the default), computed as metafor's <code>rma(method = "REML")</code>: the excess spread between replicates (τ²) widens the standard error.</li>
+        <li><strong>Fixed effects:</strong> the inverse-variance weighted mean.</li>
+        <li><strong>Enrich2's estimator,</strong> exactly as Enrich2 2.0.2 computes it, for comparison with published scores.</li>
+      </ul>
+      <p>Each variant also has Cochran's Q, I² and τ², and how far its score moves when one replicate is left out. The inspector shows them.</p>
+
+      <h2 id="filters">Filters, in order</h2>
+      <p>Variants pass eight stages in order; a variant left out is left out at its first failing stage, with that stage as its reason. The filter flow shows how many each stage removed.</p>
+      <ol>
+        <li><strong>Counted in a replicate</strong> (always): counted in every sample of at least one replicate.</li>
+        <li><strong>Valid identifier</strong> (always): a valid name that agrees with the target.</li>
+        <li><strong>Variant class:</strong> the classes scored.</li>
+        <li><strong>Exclusion list:</strong> identifiers you exclude.</li>
+        <li><strong>Minimum input count,</strong> per replicate (default 1: a variant with no input reads was not in that library).</li>
+        <li><strong>Minimum total count,</strong> per replicate.</li>
+        <li><strong>Minimum usable replicates.</strong></li>
+        <li><strong>Maximum SE.</strong></li>
+      </ol>
+      <p>Variants scored from fewer replicates than expected, or with a zero count, are kept but marked low confidence.</p>
+
+      <h2 id="presets">Presets</h2>
+      <p><strong>MaveScape defaults</strong> leave out a replicate measurement with no input reads and combine replicates by REML to convergence. <strong>Enrich2-compatible</strong> reproduces Enrich2 2.0.2's "ratios": no count filter, variants combined only when scored in every replicate, and its random-effects estimator. Any parameter can be changed from either.</p>
+
+      <h2 id="runs">Runs</h2>
+      <p>Each scoring is a run: immutable, named, with an id made from its table, design, parameters and the scoring engine's version. Scoring the same inputs again shows the existing run rather than computing it twice. A run keeps its inputs and the SHA-256 of its output, not the scores: when a workspace is reopened, each run is recomputed from its recorded inputs and must have its recorded hash, and the run says <strong>reproduced</strong> (or why not).</p>
+      <p>The scoring engine computes its logarithms with fdlibm's algorithms in plain arithmetic, so every browser gives the same bits (<a href="../science.html#same-everywhere">why</a>). Runs made by MaveScape 0.1.0, which used the browser's own logarithms, reopen with scores that differ only in their last digits, and say so.</p>
+
+      <h2 id="refusals">When scoring is refused</h2>
+      <p>A run that cannot be done as asked is refused with the reasons, never quietly done another way: a design with errors, a blocking problem in the table, a normalization whose reference is absent, a rescaling anchor missing, or parameters that cannot score (a pseudocount of 0, Enrich2's estimator without every replicate).</p>

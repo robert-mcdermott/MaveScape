@@ -5,6 +5,7 @@
 // inspector are told with the store topic 'results'.
 
 import { outputDigest, recordedInputs } from '../lib/runs.js';
+import { SCORING_VERSION } from '../lib/score.js';
 import { workerInput } from './score-input.js';
 
 export function runEntry(app, run) {
@@ -32,7 +33,11 @@ export async function ensureResults(app, run) {
         if (!result.ok) throw new Error(result.errors.join(' '));
         const digest = outputDigest(result.results);
         const same = digest === run.output.sha256;
-        next = { results: result.results, status: same ? 'reproduced' : 'differs', message: same ? '' : `The recomputed scores have output SHA-256 ${digest.slice(0, 12)}…, not ${run.output.sha256.slice(0, 12)}… as recorded (MaveScape ${run.software.version} made it; this is ${app.version}).` };
+        const older = recorded.scoring !== SCORING_VERSION;
+        const why = older
+          ? `MaveScape ${run.software.version} scored it with scoring engine ${recorded.scoring}, which took its logarithms from the browser (their last digit varies between browsers and their versions); this is engine ${SCORING_VERSION}, the same in every browser. The scores differ only in their last digits.`
+          : `MaveScape ${run.software.version} made it; this is ${app.version}.`;
+        next = { results: result.results, status: same ? 'reproduced' : 'differs', message: same ? '' : `The recomputed scores have output SHA-256 ${digest.slice(0, 12)}…, not ${run.output.sha256.slice(0, 12)}… as recorded. ${why}` };
         if (!same) app.log(`${run.name}: recomputed scores differ from the recorded ones (output SHA-256 ${digest} for ${run.output.sha256}).`);
       } catch (error) {
         next = { status: 'failed', message: error.message };

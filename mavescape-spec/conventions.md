@@ -21,8 +21,8 @@ main.go, security.go, local.go, store.go,      Go host (embeds web/), adapted fr
 records.go, window.go
 fetch.go, cache.go                             allowlisted public data, adapted from Proteoscope
 handoff.go                                     optional handoff to a running Proteoscope
-remote.go, output.go, connection.go,          automation (remote control, MCP, headless runs)
-mcp.go, run.go, verify.go
+remote.go, actions.go, output.go,             automation: the remote-control hub and its actions,
+connection.go, mcp.go, run.go, verify.go      remote.json, exports to paths; MCP; headless runs
 web/index.html, web/styles.css, web/app.js     app shell
 web/lib/*.js          pure modules: no DOM, no globals, importable by Node and by workers
                       (the structure viewer's modules are copied from Proteoscope)
@@ -32,7 +32,9 @@ web/workers/*.js      module workers wrapping heavy lib functions
 web/examples/         compact bundled example data (published, with license and citation)
 validation/           comparisons against reference tools and fixtures (numbers only)
 clients/              Python and R clients generated from the tool list
-docs/                 installation, file formats, MCP, network requests, the handoff, site
+docs/                 installation, file formats, MCP, network requests, the handoff
+docs/capture/         screenshots: scenes driven through remote control in headless Chrome
+docs/site/            the website (GitHub Pages, gh-pages branch), built by build.mjs
 mavescape-spec/       requirements, design, roadmap, research, these conventions
 ```
 
@@ -59,6 +61,13 @@ mavescape-spec/       requirements, design, roadmap, research, these conventions
 - **Missing is not zero.** A count that was not observed in a sample's table is `NaN`; an explicit
   0 is 0. Reference tools treat them differently (Enrich2 drops a variant absent from a time point
   but scores an explicit 0), so the distinction is kept from parsing to export.
+- **The same bits in every engine.** `Math.log`, `Math.exp`, `Math.pow` (and `**`) and the other
+  transcendental functions are implementation-approximated: engines and their versions differ in
+  the last bit (Chrome 154 and Node 22 on about 2% of logarithms; found by wave 2, slice 1). Code
+  whose numbers reach a run, QC, an export or an example uses `web/lib/dmath.js` (`log`, `exp`,
+  `log10`, `pow`, `square`: fdlibm in plain arithmetic); `Math.sqrt` is exact and allowed.
+  `determinism.test.mjs` fails on any other use outside the color modules. A change to `dmath.js`
+  changes results: bump `SCORING_VERSION`.
 - Every stochastic function (bootstraps, simulations, permutation tests) takes `options.seed`
   (default a fixed number) and uses `createRandom(seed)` from `web/lib/random.js`. Results must be
   deterministic for a seed, and the seed is recorded in the score run.

@@ -25,22 +25,86 @@ const STATUS = {
   na: { label: 'not assessed', badge: '', icon: 'info' },
 };
 
+// --- QC outside the view (also the remote control's qc_findings) ---------------------------------
+
+const sourceOf = (ws) => ws.sources.find((s) => s.id === (ws.designSource ?? ws.sources[0]?.id)) ?? null;
+
+// What QC can be of: each run (by id), and 'counts' (the current design, no scores).
+export function qcSubjects(ws) {
+  const options = ws.runs.slice().reverse().map((r) => ({ id: `run:${r.id}`, label: `${r.name} (${r.inputs.source.name})`, run: r }));
+  if (ws.design && sourceOf(ws)) options.push({ id: 'counts', label: 'The counts, with the current design (no scores)' });
+  return options;
+}
+
+// The inputs of QC for a subject: { source, design, parameters, mode } or { problem }.
+export function qcInputsOf(ws, sub) {
+  if (sub.run) {
+    const s = ws.sources.find((x) => x.sha256 === sub.run.inputs.source.sha256);
+    if (!s) return { problem: `The table ${sub.run.name} scored (SHA-256 ${sub.run.inputs.source.sha256.slice(0, 12)}…) is not in this workspace.` };
+    return { source: s, design: sub.run.inputs.design, parameters: sub.run.inputs.parameters, mode: sub.run.inputs.mapping.mode };
+  }
+  const s = sourceOf(ws);
+  const design = ws.design;
+  const result = validateDesign(design, { columns: s.columns.map((c) => c.name) });
+  if (!result.ok) return { problem: `The design has problems to fix first: ${result.errors.slice(0, 3).map((e) => e.message).join(' ')}`, experiment: true };
+  return { source: s, design, parameters: null, mode: s.mapping?.mode ?? 'lenient' };
+}
+
+export const qcKeyOf = (ws, inputs) => canonicalJSON({ sha256: inputs.source.sha256, design: inputs.design, parameters: inputs.parameters, measures: measuresOf(ws.qc?.thresholds) });
+
+// Computes QC in the score worker into app.qcCache (key → { status: 'computing' | 'done' |
+// 'failed', qc?, message? }), once per key; returns the finished entry.
+export function computeQc(app, inputs, onProgress) {
+  app.qcCache ??= new Map();
+  const ws = app.store.ws;
+  const key = qcKeyOf(ws, inputs);
+  const cached = app.qcCache.get(key);
+  if (cached?.pending) return cached.pending;
+  if (cached && cached.status !== 'computing') return Promise.resolve(cached);
+  const entry = { status: 'computing' };
+  app.qcCache.set(key, entry);
+  entry.pending = (async () => {
+    let next;
+    try {
+      const table = await app.sourceTable(inputs.source);
+      const { names, columns, transfer } = workerInput(table, inputs.design);
+      const job = app.worker('score').run('qc', { names, columns, design: inputs.design, mode: inputs.mode, parameters: inputs.parameters, measures: measuresOf(ws.qc?.thresholds) }, { transfer, onProgress });
+      next = { status: 'done', ...(await job.promise) };
+    } catch (error) {
+      next = { status: 'failed', message: error.message };
+    }
+    app.qcCache.set(key, next);
+    app.store.notify(['qc']);
+    return next;
+  })();
+  return entry.pending;
+}
+
+// Records that a run's QC was read, for the workflow strip.
+export function markQcSeen(app, run, o) {
+  app.seen ??= { qc: new Map(), map: new Set() };
+  const was = app.seen.qc.get(run.id);
+  if (was?.status !== o.status || was?.counts.fail !== o.counts.fail || was?.counts.review !== o.counts.review) {
+    app.seen.qc.set(run.id, o);
+    queueMicrotask(() => app.store.notify(['workflow']));
+  }
+}
+
 export function mountQcMode(app, container) {
   const { store } = app;
   const root = h('div.view');
   container.append(root);
   app.qcCache ??= new Map();
-  const view = { subject: null, finding: null, pair: 0, progress: [0, ''] };
+  // The view's state is the app's, so that remote control can show a subject and a finding.
+  app.qcView ??= { subject: null, finding: null, pair: 0 };
+  const view = app.qcView;
+  view.progress = [0, ''];
 
-  const source = () => store.ws.sources.find((s) => s.id === (store.ws.designSource ?? store.ws.sources[0]?.id)) ?? null;
+  const source = () => sourceOf(store.ws);
   const thresholds = () => withDefaultThresholds(store.ws.qc?.thresholds);
 
-  // What QC is of: a run (by id), or 'counts' (the current design, no scores).
   function subjectOptions() {
-    const ws = store.ws;
-    const options = ws.runs.slice().reverse().map((r) => ({ id: `run:${r.id}`, label: `${r.name} (${r.inputs.source.name})`, run: r }));
-    if (ws.design && source()) options.push({ id: 'counts', label: 'The counts, with the current design (no scores)' });
-    return options;
+    return qcSubjects(store.ws);
   }
   function subject() {
     const options = subjectOptions();
@@ -55,34 +119,13 @@ export function mountQcMode(app, container) {
     return current ?? options.find((o) => o.id === 'counts') ?? options[0] ?? null;
   }
 
-  // The inputs of QC for a subject: { table source, design, parameters, mode } or a problem.
-  function inputsOf(sub) {
-    if (sub.run) {
-      const s = store.ws.sources.find((x) => x.sha256 === sub.run.inputs.source.sha256);
-      if (!s) return { problem: `The table ${sub.run.name} scored (SHA-256 ${sub.run.inputs.source.sha256.slice(0, 12)}…) is not in this workspace.` };
-      return { source: s, design: sub.run.inputs.design, parameters: sub.run.inputs.parameters, mode: sub.run.inputs.mapping.mode };
-    }
-    const s = source();
-    const design = store.ws.design;
-    const result = validateDesign(design, { columns: s.columns.map((c) => c.name) });
-    if (!result.ok) return { problem: `The design has problems to fix first: ${result.errors.slice(0, 3).map((e) => e.message).join(' ')}`, experiment: true };
-    return { source: s, design, parameters: null, mode: s.mapping?.mode ?? 'lenient' };
-  }
-
-  const keyOf = (inputs) => canonicalJSON({ sha256: inputs.source.sha256, design: inputs.design, parameters: inputs.parameters, measures: measuresOf(store.ws.qc?.thresholds) });
+  const inputsOf = (sub) => qcInputsOf(store.ws, sub);
+  const keyOf = (inputs) => qcKeyOf(store.ws, inputs);
 
   async function compute(key, inputs) {
-    app.qcCache.set(key, { status: 'computing' });
+    const pending = computeQc(app, inputs, (f, m) => { view.progress = [f, m]; renderProgress(); });
     render();
-    try {
-      const table = await app.sourceTable(inputs.source);
-      const { names, columns, transfer } = workerInput(table, inputs.design);
-      const job = app.worker('score').run('qc', { names, columns, design: inputs.design, mode: inputs.mode, parameters: inputs.parameters, measures: measuresOf(store.ws.qc?.thresholds) }, { transfer, onProgress: (f, m) => { view.progress = [f, m]; renderProgress(); } });
-      const result = await job.promise;
-      app.qcCache.set(key, { status: 'done', ...result });
-    } catch (error) {
-      app.qcCache.set(key, { status: 'failed', message: error.message });
-    }
+    await pending;
     render();
   }
 
@@ -285,14 +328,7 @@ export function mountQcMode(app, container) {
       const findings = findingsFrom(cached.qc, t);
       const o = overall(findings);
       // The workflow strip: this run's QC has been read.
-      if (sub.run) {
-        app.seen ??= { qc: new Map(), map: new Set() };
-        const was = app.seen.qc.get(sub.run.id);
-        if (was?.status !== o.status || was?.counts.fail !== o.counts.fail || was?.counts.review !== o.counts.review) {
-          app.seen.qc.set(sub.run.id, o);
-          queueMicrotask(() => store.notify(['workflow']));
-        }
-      }
+      if (sub.run) markQcSeen(app, sub.run, o);
       head.append(h(`span.badge${STATUS[o.status].badge}.qc-overall`, { title: 'The worst finding' }, `${o.status === 'pass' ? 'All pass' : `${o.counts.fail} fail · ${o.counts.review} review`} · ${o.counts.pass} pass${o.counts.na ? ` · ${o.counts.na} not assessed` : ''}`),
         o.blocking.length ? h('span.badge.danger', { style: { marginLeft: '6px' } }, 'blocking') : null);
       if (!view.finding || !findings.some((f) => f.id === view.finding)) view.finding = (findings.find((f) => f.status === 'fail') ?? findings.find((f) => f.status === 'review') ?? findings[0]).id;
@@ -307,7 +343,7 @@ export function mountQcMode(app, container) {
   render();
   return {
     update(topics) {
-      if (topics.has('ws') || topics.has('focus') || topics.has('workspace-loaded') || topics.has('colors') || topics.has('theme')) render();
+      if (topics.has('ws') || topics.has('focus') || topics.has('workspace-loaded') || topics.has('colors') || topics.has('theme') || topics.has('qc')) render();
     },
     destroy() {
       root.remove();

@@ -1,0 +1,38 @@
+---
+title: Quality control
+description: MaveScape's quality-control findings for deep mutational scans: depth, coverage, missing counts, replicate agreement, bottlenecks, outlier replicates and the separation of the controls, each with its threshold and rationale.
+lede: Quality control says whether the experiment supports reliable scores. Each finding is pass, review or fail, with what was found, its threshold, why it matters and the plot behind it; the overall status sits beside the list, never instead of it.
+---
+      <h2 id="view">The QC view</h2>
+      <shot name="qc" alt="The QC view of the GRB2 example: the findings list with eleven passing, and the variance beyond counting failing at 11.4 times, with its explanation, threshold, rationale and plot">The GRB2 example: replicate differences vary 11× more than counting predicts, as a bottleneck makes them.</shot>
+      <p>Quality control is of a score run, or of the counts and the current design alone, before scoring. Choose which at the top left. The findings come from the counts first; the last three need scores.</p>
+
+      <h2 id="findings">The findings</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Finding</th><th>What it checks</th><th>Review / fail</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Every sample has counts</strong></td><td>A sample with no counts at all: a missing file or a misnamed column (blocks scoring)</td><td>fail</td></tr>
+            <tr><td><strong>Sequencing depth</strong></td><td>Reads per counted variant, per sample</td><td>below 30 / 10</td></tr>
+            <tr><td><strong>Low counts before selection</strong></td><td>Input variants below 10 reads</td><td>above 20% / 50%</td></tr>
+            <tr><td><strong>Missing counts</strong></td><td>Variants missing in a sample beyond the others</td><td>above 20% / 50%</td></tr>
+            <tr><td><strong>Missing after selection</strong></td><td>Variants that dropped out during selection but are written as missing rather than 0</td><td>review only</td></tr>
+            <tr><td><strong>Coverage of designed substitutions</strong></td><td>Substitutions observed, by position and class</td><td>below 90% / 50%</td></tr>
+            <tr><td><strong>Replicate agreement</strong></td><td>Pearson and Spearman correlation of the replicates' log ratios</td><td>below 0.8 / 0.5</td></tr>
+            <tr><td><strong>Variance beyond counting</strong></td><td>Replicate differences against the variance counting predicts: above 1, a bottleneck or noise between replicates</td><td>above 2× / 5×</td></tr>
+            <tr><td><strong>Outlier replicates</strong></td><td>A replicate's leave-one-out variance against the others'</td><td>above 2× / 4×</td></tr>
+            <tr><td><strong>Separation of controls</strong></td><td>How well scores tell nonsense from wild-type-like controls (AUC)</td><td>below 0.9 / 0.75</td></tr>
+            <tr><td><strong>Resolution of scores</strong></td><td>The median SE against the controls' gap</td><td>above 0.25 / 0.5</td></tr>
+            <tr><td><strong>Variants scored</strong></td><td>Measured variants that pass the filters</td><td>below 80% / 50%</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="bottleneck">Bottlenecks</h2>
+      <p>Under counting noise alone, the difference of two replicates' log ratios has a variance equal to the sum of the reciprocal counts. MaveScape fits the observed variance as <em>a</em> × counting + <em>e</em>: <em>a</em> above 1 points to too few cells somewhere (a bottleneck multiplies the counting variance), and <em>e</em> to noise between replicates (DiMSum's multiplicative and additive error terms). Standard errors from counts alone then understate the uncertainty; REML's τ² takes up the excess between replicates.</p>
+
+      <h2 id="thresholds">Thresholds</h2>
+      <p>Every threshold is editable in the QC view and kept in the workspace; each change goes into its history and the methods paragraph reports the thresholds used. <strong>Reset to the defaults</strong> restores MaveScape's.</p>
+
+      <h2 id="tested">How the findings are tested</h2>
+      <p>Simulated experiments with one problem each (poor replicate agreement, one failing replicate, a severe bottleneck, a low-count tail, a missing sample) raise exactly their finding, and a clean experiment none, on three seeds. The variance ratio follows a simulated bottleneck. <a href="../science.html#validation">Validation</a> has the details.</p>

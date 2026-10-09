@@ -1,0 +1,69 @@
+---
+title: Install
+layout: page
+heading: Install MaveScape
+description: Install MaveScape on macOS, Linux or Windows with one command. One self-contained program, checked against its SHA-256 checksum, with no administrator rights needed.
+lede: MaveScape is one executable. The browser application and the example experiments are inside it, so nothing else needs to be installed. One command downloads the release for your computer, checks it and installs it.
+---
+      <div class="install-card" style="max-width:none">
+        <div class="tablist" role="tablist" aria-label="Operating system" data-os>
+          <button class="tab" role="tab" id="tab-unix" aria-controls="panel-unix" aria-selected="true" data-os="macos linux">macOS and Linux</button>
+          <button class="tab" role="tab" id="tab-win" aria-controls="panel-win" aria-selected="false" tabindex="-1" data-os="windows">Windows</button>
+        </div>
+        <div class="tabpanel" role="tabpanel" id="panel-unix" aria-labelledby="tab-unix">
+          <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh | sh</code></pre></div>
+          <p class="note">Installs the latest release as <code>~/.local/bin/mavescape</code>. No <code>sudo</code>, and your <code>PATH</code> is left as it is; if <code>~/.local/bin</code> is not on it, the installer prints the full path to run.</p>
+        </div>
+        <div class="tabpanel" role="tabpanel" id="panel-win" aria-labelledby="tab-win" hidden>
+          <div class="code wrap"><pre><code><span class="prompt">PS&gt; </span>irm https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.ps1 | iex</code></pre></div>
+          <p class="note">Run in PowerShell. Installs to <code>%LocalAppData%\Programs\MaveScape</code> and adds it to your user <code>PATH</code>. No administrator rights and no change to the execution policy needed.</p>
+        </div>
+      </div>
+
+      <h2 id="start">Start it</h2>
+      <div class="code"><pre><code><span class="prompt">$ </span>mavescape</code></pre></div>
+      <p>MaveScape starts a local server on <code>http://127.0.0.1:8820</code> (or the next free port) and opens its window. If Chrome, Edge, Brave or Chromium is installed, the window is a desktop app window with its own profile; otherwise your default browser is used. Closing the window stops the program. On Windows, open a new terminal after installing so that it sees the updated <code>PATH</code>.</p>
+      <p>Files and folders named on the command line open directly, and running <code>mavescape &lt;files&gt;</code> again while it is open hands them to the open window:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>mavescape counts.csv target.fasta</code></pre></div>
+      <p>Then continue with <a href="docs/getting-started.html">Getting started</a>.</p>
+
+      <h2 id="requirements">Requirements</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Operating system</th><th>Architecture</th><th>Release file</th></tr></thead>
+          <tbody>
+            <tr><td><strong>macOS</strong></td><td>Apple silicon (ARM64)</td><td><code>mavescape-darwin-arm64</code></td></tr>
+            <tr><td><strong>macOS</strong></td><td>Intel (x64)</td><td><code>mavescape-darwin-amd64</code></td></tr>
+            <tr><td><strong>Linux</strong></td><td>x64</td><td><code>mavescape-linux-amd64</code></td></tr>
+            <tr><td><strong>Linux</strong></td><td>ARM64</td><td><code>mavescape-linux-arm64</code></td></tr>
+            <tr><td><strong>Windows</strong></td><td>x64</td><td><code>mavescape-windows-amd64.exe</code></td></tr>
+            <tr><td><strong>Windows</strong></td><td>ARM64</td><td><code>mavescape-windows-arm64.exe</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The window is a page in a current browser; MaveScape is tested in Chrome and the browsers built on Chromium. Each release has <code>SHA256SUMS</code>, the checksum of every file; the installers require exactly one matching checksum and run the downloaded program's <code>--version</code> before moving it into place, so a failed download never replaces a working copy.</p>
+
+      <h2 id="options">Options</h2>
+      <p>To install a particular release, or somewhere else:</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh | MAVESCAPE_VERSION=v{{version}} MAVESCAPE_INSTALL_DIR="$HOME/bin" sh</code></pre></div>
+      <p>In PowerShell, set <code>$env:MAVESCAPE_VERSION</code> and <code>$env:MAVESCAPE_INSTALL_DIR</code> before the same command. To read an installer before running it, download it first; <a href="{{github}}/blob/main/docs/INSTALLING.md">INSTALLING.md</a> describes every option, and how to install by hand.</p>
+
+      <h2 id="command-line">Command-line options</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Option</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>mavescape [files or folders]</code></td><td>Start and open the files: count and score tables, sequences, designs, workspace archives</td></tr>
+            <tr><td><code>--port N</code></td><td>Preferred port (default 8820; the next 19 are tried)</td></tr>
+            <tr><td><code>--window app|browser|none</code></td><td>A desktop window, the default browser, or none</td></tr>
+            <tr><td><code>--data-dir DIR</code></td><td>Where the workspace library is kept</td></tr>
+            <tr><td><code>--no-library</code></td><td>Keep workspaces in the browser's storage instead</td></tr>
+            <tr><td><code>--keep-running</code></td><td>Keep serving after the window is closed</td></tr>
+            <tr><td><code>--remote-control</code></td><td>Let programs on this computer drive the window (<a href="docs/scripting.html">Remote control</a>)</td></tr>
+            <tr><td><code>--version</code></td><td>Print the version</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="uninstall">Uninstall</h2>
+      <p>Delete the program (<code>~/.local/bin/mavescape</code>, or <code>%LocalAppData%\Programs\MaveScape</code> on Windows). Your workspaces are in the library folder the status bar names, <code>~/Library/Application Support/MaveScape</code> on macOS; keep or delete it as you like.</p>

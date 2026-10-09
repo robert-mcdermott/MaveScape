@@ -1,0 +1,27 @@
+---
+title: Examples
+description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and a simulated experiment whose true effects are known.
+lede: Two examples come with MaveScape: a published experiment and a simulated one whose true effects are known. Each opens scored, with its question, guided steps and what to expect in the inspector.
+---
+      <h2 id="grb2">GRB2 SH3 domain (published)</h2>
+      <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
+      <p><strong>The question:</strong> which positions does the domain need to fold and stay abundant, and how sure are the scores?</p>
+      <shot name="qc" alt="The QC view of the GRB2 example with the variance beyond counting failing at 11.4 times the counting variance">What to expect in QC: everything passes but the variance beyond counting, about 11×.</shot>
+      <ul>
+        <li>Quality control passes everything except the variance beyond counting, about 11×: a bottleneck, which the Domainome's own error model found at the input.</li>
+        <li>Nonsense variants score about −4.6 against the wild type's 0: the assay separates loss of function cleanly.</li>
+        <li>The least tolerant positions are buried hydrophobic and glycine residues of the fold: A163, G196, G203 and I183 on GRB2's numbering.</li>
+      </ul>
+
+      <h2 id="simulated">A simulated experiment (known truth)</h2>
+      <p>A two-population selection of a 40-residue protein in three replicates, simulated by MaveScape (seed 20261009) with every variant's true effect known. It is labeled simulated wherever it appears, and the true effects can be downloaded from its guide.</p>
+      <p><strong>The question:</strong> how close do the scores come to the true effects, and where are they least certain?</p>
+      <shot name="map-se" alt="The map of the simulated example colored by standard error, with one variant's evidence in the inspector">The simulated example's map colored by standard error: the uncertain cells are the variants rare in the library.</shot>
+      <ul>
+        <li>The scores track the true effects closely: the guide shows the correlation (r = 0.99) once the run is scored.</li>
+        <li>The least certain scores are the variants with the fewest reads before selection.</li>
+        <li>Quality control passes: the counts vary as counting predicts.</li>
+      </ul>
+
+      <h2 id="layouts">Blank layouts</h2>
+      <p>The start page also has three annotated files to fill in with your own data: a count table, a sample sheet and a target FASTA. <a href="{{github}}/blob/main/docs/FORMATS.md">FORMATS.md</a> describes them and every other file MaveScape reads and writes.</p>

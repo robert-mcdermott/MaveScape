@@ -1,0 +1,58 @@
+---
+title: Science
+layout: page
+heading: Methods, validation and citation
+description: How MaveScape's scores are validated against Enrich2, dms_variants, metafor and mavehgvs, how its quality control is tested on simulated experiments, how to cite it, and the methods it reimplements.
+lede: MaveScape reimplements published methods for scoring deep mutational scans. This page shows how its results are checked against the tools those methods come from and against experiments whose answers are known, how to cite it, and whose work it builds on.
+---
+      <h2 id="validation">Validation</h2>
+      <p>Unit tests check each function against hand-computed and published values. The validation suite runs the complete pipelines, the way they run in the app, and reports how closely MaveScape agrees with the reference, against a stated tolerance. It runs in continuous integration on every change, with the public data it needs fetched and checked against their SHA-256 checksums.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Area</th><th>Checked against</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Variant names</strong></td><td>mavehgvs 0.8.1 on 16,959 strings: its own tests, the feasibility data, generated variants and single-character edits</td><td>The same decision, reason and canonical form for every string</td></tr>
+            <tr><td><strong>Import</strong></td><td>The three feasibility tables from MaveDB and DiMSum's demo, shuffled, split and part-read, and a table with one problem of each kind</td><td>Every name valid against its target; missing never read as 0; each problem reported by line</td></tr>
+            <tr><td><strong>Designs</strong></td><td>Hand-written designs of three public experiments of different kinds, sample sheets and DiMSum's design file</td><td>Every column accounted for; the editor and the sample sheets rebuild each design</td></tr>
+            <tr><td><strong>Scores</strong></td><td>Enrich2 2.0.2 on GRB2, BRCA1 and a fixture with every edge case of the product requirements planted, all three normalizations</td><td>Within 5 × 10⁻¹³</td></tr>
+            <tr><td><strong>Scores</strong></td><td>dms_variants 1.6.0, <code>func_scores</code>, on the fixture</td><td>Within 4.6 × 10⁻¹³</td></tr>
+            <tr><td><strong>Replicates</strong></td><td>metafor 5.2-1 REML on 2,865 variants and six synthetic sets</td><td>Within 3.4 × 10⁻¹² (required 10⁻⁶)</td></tr>
+            <tr><td><strong>Determinism</strong></td><td>The same inputs in another row or column order, and in Chrome and Node</td><td>The same bits</td></tr>
+            <tr><td><strong>Quality control</strong></td><td>Simulated experiments with one problem each (poor agreement, a failing replicate, a bottleneck, a low-count tail, a missing sample), three seeds</td><td>Exactly their findings, and none for a clean experiment; the variance ratio follows a simulated bottleneck within 30%</td></tr>
+            <tr><td><strong>The map</strong></td><td>A golden SVG; each state where the fixture plants it; BRCA1's RING domain</td><td>Byte for byte; missing, filtered and low-confidence cells at least ΔE 10 from neutral; the zinc ligands least tolerant</td></tr>
+            <tr><td><strong>The record</strong></td><td>Workspaces with runs, selections and changed thresholds, saved as archives, reopened and saved again</td><td>The same bytes; every export identical; tampered and hostile archives caught</td></tr>
+            <tr><td><strong>Remote control</strong></td><td>Every action, in the program and a browser, against the same analysis in Node</td><td>Identical scores; every export identical to Node's</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The data are three MaveDB records under CC0, chosen to differ: GRB2's SH3 domain from the Human Domainome (two populations, three replicates), BRCA1's RING domain (a time series with shared inputs and a second assay in the same table), and factor IX (sorted bins over overlapping tiles). <a href="{{github}}/blob/main/validation/README.md">validation/README.md</a> lists every check and how the reference outputs were made.</p>
+
+      <h2 id="same-everywhere">The same bits in every browser</h2>
+      <p>JavaScript's <code>Math.log</code> and <code>Math.exp</code> may differ in their last bit between engines, and they do: Chrome 154 and Node 22 disagree on about 2% of logarithms. MaveScape computes its logarithms and exponentials with fdlibm's algorithms written in plain arithmetic, which every engine performs identically, so a run's output hash does not depend on the browser that scored it and a saved run reproduces after a browser update.</p>
+
+      <h2 id="methods">Methods it reimplements</h2>
+      <p>MaveScape's scores are reimplementations of published methods. Their authors are cited in the code and in the methods paragraph MaveScape writes for each run:</p>
+      <ul>
+        <li><strong>Scores:</strong> log ratios of frequencies before and after selection, with normalization to the wild type, as in Enrich2 (Rubin et al., Genome Biology 2017).</li>
+        <li><strong>Replicates:</strong> REML random effects (Viechtbauer, J Educ Behav Stat 2005), computed as metafor does (Viechtbauer, J Stat Softw 2010); Enrich2's own estimator; heterogeneity as Q and I² (Higgins and Thompson, Stat Med 2002).</li>
+        <li><strong>Quality control:</strong> variance beyond counting read as DiMSum's multiplicative and additive error terms (Faure et al., Genome Biology 2020).</li>
+        <li><strong>Variant names and exports:</strong> MAVE-HGVS and MaveDB's columns (Esposito et al., Genome Biology 2019).</li>
+      </ul>
+
+      <h2 id="cite">Cite MaveScape</h2>
+      <p>If you use MaveScape in published work, please cite it together with the methods its methods paragraph lists for your run. The repository's <a href="{{github}}/blob/main/CITATION.cff"><code>CITATION.cff</code></a> holds the citation, and GitHub's <strong>Cite this repository</strong> button formats it.</p>
+      <div class="code wrap" data-no-copy><pre><code>McDermott R. MaveScape, version {{version}}. https://github.com/robert-mcdermott/mavescape</code></pre></div>
+
+      <h2 id="privacy">Privacy and security</h2>
+      <p>MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and API calls from other web pages, and serves its page with a strict Content-Security-Policy. It makes no network requests of its own. Remote control is off unless MaveScape is started with <code>--remote-control</code>; even then only programs on this computer can use it, and reading or writing files needs a token that only you can read.</p>
+
+      <h2 id="scope">What MaveScape is not</h2>
+      <p>MaveScape reports experimental functional effects for research. It does not classify variants as pathogenic or benign, and its scores are not clinical evidence on their own.</p>
+
+      <h2 id="credits">Credits</h2>
+      <ul>
+        <li>The GRB2 example is MaveDB urn:mavedb:00000835-a-1, from Beltran A, et al. Site-saturation mutagenesis of 500 human protein domains. Nature 2025, published under CC0 1.0.</li>
+        <li>The validation data are from MaveDB (CC0 1.0) and DiMSum's demonstration data (MIT).</li>
+        <li><code>web/lib/dmath.js</code> is fdlibm 5.3's logarithm and exponential (Sun Microsystems, 1993), whose notice it keeps.</li>
+        <li>MaveScape's program, window and site come from its sibling, <a href="https://github.com/robert-mcdermott/cytoweave">CytoWeave</a>, noted in each file.</li>
+      </ul>

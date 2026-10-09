@@ -19,7 +19,7 @@ const DELIMITER_NAMES = { ',': 'comma-separated', '\t': 'tab-separated', ';': 's
 export function installImport(app) {
   // Parsed tables of this session, by source id.
   app.tables = new Map();
-  app.importers.set('table', (items) => openImportWizard(app, items));
+  app.importers.set('table', (items, options) => openImportWizard(app, items, options));
   app.importers.set('sequence', (items) => importSequences(app, items));
   app.importers.set('design', (items) => importDesigns(app, items));
   app.importers.set('json', (items) => importDesigns(app, items));
@@ -115,7 +115,9 @@ function pasteSequence() {
   });
 }
 
-async function openImportWizard(app, items) {
+// options.accept: import with the mapping MaveScape detected, without the dialog (remote control);
+// returns whether the table was imported.
+async function openImportWizard(app, items, options = {}) {
   const progress = progressToast(`Reading ${items.length === 1 ? items[0].name : `${items.length} tables`}…`);
   const files = [];
   try {
@@ -126,7 +128,8 @@ async function openImportWizard(app, items) {
     progress.done();
   } catch (error) {
     progress.fail(`The table could not be read: ${error.message}`);
-    return;
+    if (options.accept) throw new Error(`The table could not be read: ${error.message}`);
+    return false;
   }
   const opened = app.store.sameWorkspace();
   let templates = [];
@@ -327,7 +330,12 @@ async function openImportWizard(app, items) {
   }
 
   const update = debounce(() => render(applyDerivedNames()), 60);
-  render(applyDerivedNames());
+  const problem = applyDerivedNames();
+  render(problem);
+  if (options.accept) {
+    if (problem) throw new Error(problem);
+    return (await importNow()) === true;
+  }
 
   // --- Import ---------------------------------------------------------------------------------
   async function storeFile(file) {
@@ -347,6 +355,7 @@ async function openImportWizard(app, items) {
       return;
     }
     if (!mapping.variantColumn) {
+      if (options.accept) throw new Error(`${files[0].name}: MaveScape found no column of variant names; open it in the window to choose one.`);
       toast('Choose the column of variant names.', { kind: 'error' });
       return false;
     }
@@ -394,6 +403,7 @@ async function openImportWizard(app, items) {
       return true;
     } catch (error) {
       busy.fail(`The table could not be added: ${error.message}`);
+      if (options.accept) throw error;
       return false;
     }
   }
@@ -428,4 +438,5 @@ async function openImportWizard(app, items) {
       { label: 'Import', primary: true, onClick: importNow },
     ],
   });
+  return false;
 }

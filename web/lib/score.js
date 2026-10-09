@@ -22,7 +22,10 @@ import {
   checkFilters, DEFAULT_FILTERS, FLAG, filterFlow, kindCodes, REPLICATE_STATE, replicateState, STAGE_BY_ID, variantStage,
 } from './filters.js';
 
-export const SCORING_VERSION = '1';
+// The scoring engine's version, recorded in every run. 2 (MaveScape 0.2.0): logarithms from
+// dmath.js, the same in every browser; 1 (0.1.0) used the browser's own Math.log, whose last bit
+// varies between engines, so its runs reproduce only in the browser that scored them.
+export const SCORING_VERSION = '2';
 
 export const RESCALINGS = {
   none: { label: 'none (scores as computed)', anchors: null },
@@ -297,7 +300,7 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       const these = used[i];
       if (!these) continue;
       const y = these.map((rep) => rep.score[i]);
-      const v = these.map((rep) => rep.se[i] ** 2);
+      const v = these.map((rep) => rep.se[i] * rep.se[i]);
       if (p.combination === 'enrich2' && p.normalization === 'wt' && i === controls.wt) {
         // Enrich2 sets the wild type to 0 ± 0 in wild-type normalization.
         score[i] = 0;

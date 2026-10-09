@@ -1,0 +1,241 @@
+---
+title: MaveScape
+head: MaveScape: variant-effect scores you can check
+description: A workbench for multiplexed assays of variant effect (deep mutational scanning). Variant counts become scores with standard errors equal to Enrich2's, quality control that says when not to trust them, and an interactive variant-effect map, in one self-contained program on your own computer.
+---
+    <section class="hero">
+      <div class="container hero-grid">
+        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Counts to a trustworthy map: scoring, quality control, the map and a record that reopens identically</a>
+        <h1>Variant-effect scores <span class="accent">you can check</span></h1>
+        <p class="lede">MaveScape turns the variant count tables of a deep mutational scan into functional scores with standard errors, quality control that says when not to trust them, and an interactive variant-effect map, and keeps every analysis decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R. Files are analyzed in your browser and never leave your machine.</p>
+        <shot name="map" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from loss (blue) to gain (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" window eager>The GRB2 SH3 domain from the Human Domainome (MaveDB, CC0), one of the bundled examples, with one variant's evidence in the inspector.</shot>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="install.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            Install MaveScape
+          </a>
+          <a class="btn" href="docs/">Read the guide</a>
+        </div>
+
+        <div class="install-card">
+          <div class="tablist" role="tablist" aria-label="Operating system" data-os>
+            <button class="tab" role="tab" id="hero-tab-unix" aria-controls="hero-panel-unix" aria-selected="true" data-os="macos linux">macOS and Linux</button>
+            <button class="tab" role="tab" id="hero-tab-win" aria-controls="hero-panel-win" aria-selected="false" tabindex="-1" data-os="windows">Windows</button>
+          </div>
+          <div class="tabpanel" role="tabpanel" id="hero-panel-unix" aria-labelledby="hero-tab-unix">
+            <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh | sh</code></pre></div>
+            <p class="note">Installs the latest release in <code>~/.local/bin</code> after checking its SHA-256 checksum, then prints how to start it. <a href="install.html">Other options</a></p>
+          </div>
+          <div class="tabpanel" role="tabpanel" id="hero-panel-win" aria-labelledby="hero-tab-win" hidden>
+            <div class="code wrap"><pre><code><span class="prompt">PS&gt; </span>irm https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.ps1 | iex</code></pre></div>
+            <p class="note">Run in PowerShell. No administrator rights needed. Then open a new terminal and run <code>mavescape</code>. <a href="install.html">Other options</a></p>
+          </div>
+        </div>
+        <p class="hero-meta">Free and open source (Apache 2.0) · macOS, Linux and Windows · x64 and ARM64</p>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="why-title">
+      <div class="container">
+        <h2 id="why-title" class="visually-hidden" hidden>Why MaveScape</h2>
+        <div class="pillars">
+          <div class="pillar">
+            <h3><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6Z"/></svg>Numbers you can check</h3>
+            <p>Scores equal to Enrich2's to 5 × 10⁻¹³, replicates combined as metafor does, and the same bits in every browser. Each run is recomputed from its inputs when reopened and must match its recorded hash.</p>
+          </div>
+          <div class="pillar">
+            <h3><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>Says when not to trust them</h3>
+            <p>Quality control reads depth, coverage, replicate agreement, bottlenecks and the controls, and every finding says pass, review or fail with its threshold and why it matters.</p>
+          </div>
+          <div class="pillar">
+            <h3><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Private and self-contained</h3>
+            <p>One program for macOS, Linux and Windows. Count tables are read in your browser; nothing is uploaded, and MaveScape makes no network requests of its own.</p>
+          </div>
+          <div class="pillar">
+            <h3><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2Z"/><path d="M4 21V5M8 7h6M8 11h6"/></svg>On the record</h3>
+            <p>Scores in MaveDB's columns, a methods paragraph with references, provenance, and the whole workspace as one archive that reopens identically on another computer.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="features" aria-labelledby="features-title">
+      <div class="container">
+        <div class="section-head">
+          <span class="kicker">What it does</span>
+          <h2 id="features-title">From the count table to a map you can defend</h2>
+          <p>Open the counts and the target's sequence, say which column is which sample, score, read the quality control, explore the map, and leave with files a reviewer can repeat.</p>
+        </div>
+
+        <article class="feature">
+          <div class="feature-text">
+            <span class="kicker">Import</span>
+            <h3>Count tables as your tools write them</h3>
+            <p>MaveDB, Enrich2, DiMSum and dms_variants layouts are recognized, and a lab's own tables are mapped by hand once and saved as a template. Every variant name is checked against the target: lab forms such as <code>A12V</code> and <code>_wt</code> are read leniently and kept as written, and a missing count is never read as zero.</p>
+            <ul class="checklist">
+              <li>MAVE-HGVS checked against mavehgvs on 16,959 strings</li>
+              <li>Every problem that blocks scoring listed, by line</li>
+              <li>One file per sample joined into one table</li>
+            </ul>
+            <a class="more-link" href="docs/opening-data.html">Opening your data</a>
+          </div>
+          <shot name="import" alt="The import wizard for a MaveDB count table: the variant column, the six count columns with suggested roles, the GRB2 SH3 target, the checks (1,121 variants, none invalid) and the first rows">GRB2's MaveDB counts: six count columns with their roles suggested, every name valid against the target.</shot>
+        </article>
+
+        <article class="feature reverse">
+          <div class="feature-text">
+            <span class="kicker">The design</span>
+            <h3>Which column is which sample, said once</h3>
+            <p>MaveScape drafts the design from the column names: inputs and outputs, replicates, time points, shared inputs found in the data. Check it in the Experiment view, where every column is accounted for and the design is described in plain words.</p>
+            <ul class="checklist">
+              <li>Two populations, time series, sorted bins and tiles</li>
+              <li>From a sample sheet, or DiMSum's design file</li>
+              <li>Each change in a hash-chained history</li>
+            </ul>
+            <a class="more-link" href="docs/experiment.html">The design</a>
+          </div>
+          <shot name="experiment" alt="The Experiment view of the GRB2 example: the columns mapped to samples, three replicates with their input and output, and the design described in words">The GRB2 example's design: three replicates, each an input and an output.</shot>
+        </article>
+
+        <article class="feature">
+          <div class="feature-text">
+            <span class="kicker">Scoring</span>
+            <h3>Scores with standard errors, and the reasons for every gap</h3>
+            <p>Log ratios with wild-type, complete-case, all-read or synonymous normalization; replicates combined by REML random effects, fixed effects or Enrich2's own estimator; eight ordered filters, each variant left out with its reason. Every run is immutable and kept with everything needed to repeat it.</p>
+            <ul class="checklist">
+              <li>Equal to Enrich2 2.0.2 and dms_variants 1.6.0 to 5 × 10⁻¹³</li>
+              <li>REML equal to metafor 5.2 to 3.4 × 10⁻¹²</li>
+              <li>An Enrich2-compatible preset to compare with published scores</li>
+            </ul>
+            <a class="more-link" href="docs/scoring.html">Scoring</a>
+          </div>
+          <shot name="score" alt="The Score view: the run's parameters, two runs (MaveScape defaults and Enrich2-compatible), the filter flow and the scores by variant class">Two runs of the GRB2 counts: MaveScape's defaults and the Enrich2-compatible preset.</shot>
+        </article>
+
+        <article class="feature reverse">
+          <div class="feature-text">
+            <span class="kicker">Quality control</span>
+            <h3>Whether the experiment supports the scores</h3>
+            <p>Twelve findings, each pass, review or fail with what was found, its threshold, why it matters and the plot behind it. Variance beyond counting points to a bottleneck; dropouts, coverage, replicate agreement, outlier replicates and the separation of the controls are checked too.</p>
+            <ul class="checklist">
+              <li>Checked on simulated experiments with one planted problem each</li>
+              <li>Thresholds kept in the workspace, every change recorded</li>
+              <li>QC of the counts alone, before scoring</li>
+            </ul>
+            <a class="more-link" href="docs/qc.html">Quality control</a>
+          </div>
+          <shot name="qc" alt="The QC view of the GRB2 example: eleven findings pass, and the variance beyond counting fails at 11.4 times the counting variance, with its plot of observed against expected variance">GRB2's replicate differences vary 11× more than counting predicts: the bottleneck the Domainome's own analysis found.</shot>
+        </article>
+
+        <article class="feature">
+          <div class="feature-text">
+            <span class="kicker">The map</span>
+            <h3>Every substitution, and what is not there</h3>
+            <p>Positions across, substitutions down, colored on a scale centered on the wild type. Missing, filtered and low-confidence measurements are drawn their own way, never as "no effect". Click a cell for its evidence: the score with its interval, each replicate, every sample's counts and the sequence around it.</p>
+            <ul class="checklist">
+              <li>Selections saved by name, exported with their scores</li>
+              <li>SVG and PNG export; the map described in words</li>
+              <li>Keyboard operation, with each cell announced</li>
+            </ul>
+            <a class="more-link" href="docs/map.html">The map and the inspector</a>
+          </div>
+          <shot name="map-selection" alt="The map zoomed in on GRB2 positions 35 to 37, the WW motif, selected and saved as a named selection">Positions 35–37 selected on the zoomed map and saved as "WW motif".</shot>
+        </article>
+
+        <article class="feature reverse">
+          <div class="feature-text">
+            <span class="kicker">The record</span>
+            <h3>Files a reviewer can repeat</h3>
+            <p>Scores and counts in MaveDB's upload columns, QC per sample and per variant, provenance with every input's checksum, and a methods paragraph with its references in BibTeX. The workspace archive holds the tables, the design, the runs and the history, and reopens identically.</p>
+            <ul class="checklist">
+              <li>Archives written the same bytes in every time zone</li>
+              <li>Edited runs, tables and histories caught on reopening</li>
+              <li>Every file described in FORMATS.md</li>
+            </ul>
+            <a class="more-link" href="docs/record.html">Exports and the record</a>
+          </div>
+          <shot name="record" alt="The Score view's export menu: scores and counts in MaveDB columns, QC per sample and per variant, provenance, methods and references">A run's exports, from the Score view.</shot>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="more-title">
+      <div class="container">
+        <div class="section-head">
+          <span class="kicker">And</span>
+          <h2 id="more-title">Built to be checked, taught and automated</h2>
+        </div>
+        <div class="card-grid">
+          <a class="card" href="docs/examples.html">
+            <span class="icon-badge mint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 19l-6-10V3"/></svg></span>
+            <h3>Examples with known answers</h3>
+            <p>A published experiment from MaveDB and a simulated one whose true effects are known, each with its question, guided steps and what to expect.</p>
+          </a>
+          <a class="card" href="docs/scripting.html">
+            <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
+            <h3>Remote control</h3>
+            <p>Scripts on your computer drive the open window: open files, score, read the QC, select variants and export, each step visible and undoable.</p>
+          </a>
+          <a class="card" href="docs/map.html#accessible">
+            <span class="icon-badge pink"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <h3>Accessible</h3>
+            <p>Color-vision-friendly colors as a setting, WCAG AA contrast in both themes, and the map described in words and as a table.</p>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt" id="validation" aria-labelledby="validation-title">
+      <div class="container">
+        <div class="section-head">
+          <span class="kicker">Validated</span>
+          <h2 id="validation-title">The same answers as the reference tools</h2>
+          <p>A validation suite runs the complete pipelines, as the app does, against the tools the methods come from, published data and simulated experiments whose answers are known.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Area</th><th>Checked against</th><th>Agreement</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Scores</strong></td><td>Enrich2 2.0.2 on GRB2, BRCA1 and a fixture with every edge case</td><td class="agree">within 5 × 10⁻¹³</td></tr>
+              <tr><td><strong>Scores</strong></td><td>dms_variants 1.6.0, <code>func_scores</code></td><td class="agree">within 4.6 × 10⁻¹³</td></tr>
+              <tr><td><strong>Replicates</strong></td><td>metafor 5.2 REML on 2,865 variants</td><td class="agree">within 3.4 × 10⁻¹²</td></tr>
+              <tr><td><strong>Variant names</strong></td><td>mavehgvs 0.8.1 on 16,959 strings</td><td class="agree">every decision and canonical form</td></tr>
+              <tr><td><strong>Quality control</strong></td><td>Simulated experiments with one planted problem each</td><td class="agree">exactly their findings, three seeds</td></tr>
+              <tr><td><strong>The map</strong></td><td>BRCA1's RING domain</td><td class="agree">the zinc ligands least tolerant</td></tr>
+              <tr><td><strong>The record</strong></td><td>Workspaces saved, reopened and saved again</td><td class="agree">the same bytes; every export identical</td></tr>
+              <tr><td><strong>Remote control</strong></td><td>Every action in the browser against the same analysis in Node</td><td class="agree">identical scores and exports</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="text-align:center"><a class="more-link" href="science.html">Methods, validation and citation</a></p>
+      </div>
+    </section>
+
+    <section class="section" id="get" aria-labelledby="get-title">
+      <div class="container">
+        <div class="cta">
+          <div>
+            <h2 id="get-title">Get started in a minute</h2>
+            <p>Install with one command, then run <code>mavescape</code>. It opens its own window, with a published and a simulated experiment ready to explore.</p>
+            <div class="btn-row">
+              <a class="btn btn-primary" href="docs/getting-started.html">Getting started</a>
+              <a class="btn" href="{{github}}/releases/latest">All downloads</a>
+            </div>
+          </div>
+          <div class="install-card">
+            <div class="tablist" role="tablist" aria-label="Operating system" data-os>
+              <button class="tab" role="tab" id="cta-tab-unix" aria-controls="cta-panel-unix" aria-selected="true" data-os="macos linux">macOS and Linux</button>
+              <button class="tab" role="tab" id="cta-tab-win" aria-controls="cta-panel-win" aria-selected="false" tabindex="-1" data-os="windows">Windows</button>
+            </div>
+            <div class="tabpanel" role="tabpanel" id="cta-panel-unix" aria-labelledby="cta-tab-unix">
+              <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh | sh</code></pre></div>
+              <div class="code"><pre><code><span class="prompt">$ </span>mavescape</code></pre></div>
+            </div>
+            <div class="tabpanel" role="tabpanel" id="cta-panel-win" aria-labelledby="cta-tab-win" hidden>
+              <div class="code wrap"><pre><code><span class="prompt">PS&gt; </span>irm https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.ps1 | iex</code></pre></div>
+              <div class="code"><pre><code><span class="prompt">PS&gt; </span>mavescape</code></pre></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

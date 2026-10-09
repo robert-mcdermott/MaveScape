@@ -11,6 +11,7 @@
 // D/N times the counting variance; replicate noise adds a constant variance (DiMSum's
 // multiplicative and additive error terms).
 
+import { exp } from './dmath.js';
 import { createRandom } from './random.js';
 
 const THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val' };
@@ -32,7 +33,7 @@ export const DEFAULT_SIMULATION = {
 function poisson(random, lambda) {
   if (!(lambda > 0)) return 0;
   if (lambda < 30) {
-    const limit = Math.exp(-lambda);
+    const limit = exp(-lambda);
     let k = 0;
     let p = random();
     while (p > limit) {
@@ -70,7 +71,7 @@ export function simulateExperiment(options = {}) {
   const random = createRandom(o.seed);
   const variants = simulatedVariants(o.protein, random);
   const V = variants.length;
-  const weights = variants.map((v) => (v.kind === 'wild type' ? 20 : Math.exp(o.libraryLogSd * random.gaussian())));
+  const weights = variants.map((v) => (v.kind === 'wild type' ? 20 : exp(o.libraryLogSd * random.gaussian())));
   const total = weights.reduce((a, b) => a + b, 0);
   const f = weights.map((w) => w / total);
   const noise = (r) => (Array.isArray(o.replicateNoise) ? o.replicateNoise[r] : o.replicateNoise);
@@ -79,7 +80,7 @@ export function simulateExperiment(options = {}) {
   for (let r = 0; r < o.replicates; r += 1) {
     const input = f.map((x) => poisson(random, o.readsPerVariant * V * x));
     const cells = Number.isFinite(o.inputCells) ? f.map((x) => poisson(random, o.inputCells * V * x)) : f.map((x) => x);
-    const grown = cells.map((c, i) => c * Math.exp(variants[i].effect + noise(r) * random.gaussian()));
+    const grown = cells.map((c, i) => c * exp(variants[i].effect + noise(r) * random.gaussian()));
     const grownTotal = grown.reduce((a, b) => a + b, 0);
     let after = grown.map((g) => g / grownTotal);
     if (Number.isFinite(o.outputCells)) {

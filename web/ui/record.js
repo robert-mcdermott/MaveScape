@@ -36,35 +36,43 @@ export async function methodsOf(app, run) {
 
 // --- A run's files ------------------------------------------------------------------------------
 
-export async function exportRunFile(app, run, kind, condition = 0) {
+export const RUN_FILES = ['scores', 'counts', 'qc-samples', 'qc-variants', 'provenance', 'methods', 'references'];
+
+// A run's file of one kind, made (not downloaded): { name, type, text }. Throws when the run's
+// scores cannot be recomputed.
+export async function runFile(app, run, kind, condition = 0) {
   const entry = await ensureResults(app, run);
-  if (!entry?.results) {
-    toast(`${run.name}'s scores could not be recomputed: ${entry?.message ?? 'unknown'}`, { kind: 'error' });
-    return;
-  }
+  if (!entry?.results) throw new Error(`${run.name}'s scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
   const results = entry.results;
+  if (!results.conditions[condition]) throw new Error(`${run.name} has ${results.conditions.length} condition${results.conditions.length === 1 ? '' : 's'}.`);
   const base = `${safe(app.store.ws.name)}_${safe(run.name)}${results.conditions.length > 1 ? `_${safe(results.conditions[condition].name)}` : ''}`;
+  const csv = (name, text) => ({ name: `${base}_${name}.csv`, type: 'text/csv', text });
+  if (kind === 'scores') return csv('scores', scoresCSV(results, run, condition));
+  if (kind === 'counts') {
+    const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
+    if (!source) throw new Error(`The table ${run.name} scored is not in this workspace.`);
+    return csv('counts', countsCSV(await app.sourceTable(source), run.inputs.design));
+  }
+  if (kind === 'qc-variants') return csv('qc_variants', qcVariantsCSV(results, run, condition));
+  if (kind === 'qc-samples') return csv('qc_samples', qcSamplesCSV((await qcOf(app, run)).qc));
+  if (kind === 'provenance') {
+    const q = await qcOf(app, run).catch(() => null);
+    const scores = scoresCSV(results, run, condition);
+    const doc = provenanceJSON(run, app.store.ws, { qc: q?.qc, findings: q?.findings, thresholds: q?.thresholds, files: [{ path: `${base}_scores.csv`, sha256: sha256(encoder.encode(scores)) }] });
+    return { name: `${base}_provenance.json`, type: 'application/json', text: provenanceText(doc) };
+  }
+  if (kind === 'methods') return { name: `${base}_methods.md`, type: 'text/markdown', text: (await methodsOf(app, run)).markdown };
+  if (kind === 'references') return { name: `${base}_references.bib`, type: 'application/x-bibtex', text: (await methodsOf(app, run)).bibtex };
+  throw new Error(`No export "${kind}". Exports of a run: ${RUN_FILES.join(', ')}.`);
+}
+
+export async function exportRunFile(app, run, kind, condition = 0) {
   const busy = progressToast('Preparing the export…');
   try {
-    if (kind === 'scores') downloadBlob(new Blob([scoresCSV(results, run, condition)], { type: 'text/csv' }), `${base}_scores.csv`);
-    else if (kind === 'counts') {
-      const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
-      downloadBlob(new Blob([countsCSV(await app.sourceTable(source), run.inputs.design)], { type: 'text/csv' }), `${base}_counts.csv`);
-    } else if (kind === 'qc-samples' || kind === 'qc-variants') {
-      if (kind === 'qc-variants') downloadBlob(new Blob([qcVariantsCSV(results, run, condition)], { type: 'text/csv' }), `${base}_qc_variants.csv`);
-      else {
-        const q = await qcOf(app, run);
-        downloadBlob(new Blob([qcSamplesCSV(q.qc)], { type: 'text/csv' }), `${base}_qc_samples.csv`);
-      }
-    } else if (kind === 'provenance') {
-      const q = await qcOf(app, run).catch(() => null);
-      const scores = scoresCSV(results, run, condition);
-      const doc = provenanceJSON(run, app.store.ws, { qc: q?.qc, findings: q?.findings, thresholds: q?.thresholds, files: [{ path: `${base}_scores.csv`, sha256: sha256(encoder.encode(scores)) }] });
-      downloadBlob(new Blob([provenanceText(doc)], { type: 'application/json' }), `${base}_provenance.json`);
-    } else if (kind === 'methods') {
-      const m = await methodsOf(app, run);
-      downloadBlob(new Blob([m.markdown], { type: 'text/markdown' }), `${base}_methods.md`);
-      downloadBlob(new Blob([m.bibtex], { type: 'application/x-bibtex' }), `${base}_references.bib`);
+    // The methods go with their references.
+    for (const k of kind === 'methods' ? ['methods', 'references'] : [kind]) {
+      const file = await runFile(app, run, k, condition);
+      downloadBlob(new Blob([file.text], { type: file.type }), file.name);
     }
     busy.done('Exported.');
   } catch (error) {
@@ -88,47 +96,58 @@ export function runExportItems(app, run, condition = 0) {
   ];
 }
 
-export async function exportSelection(app, selection, format) {
+// A selection's file: { name, type, text }, its variants with their scores (CSV) or the selection
+// itself (JSON).
+export async function selectionFile(app, selection, format) {
   const run = app.store.ws.runs.find((r) => r.id === selection.run);
-  if (format === 'json') {
-    downloadBlob(new Blob([selectionJSON(selection, run)], { type: 'application/json' }), `${safe(selection.name ?? 'selection')}.json`);
-    return;
-  }
+  if (format === 'json') return { name: `${safe(selection.name ?? 'selection')}.json`, type: 'application/json', text: selectionJSON(selection, run) };
   const entry = run ? await ensureResults(app, run) : null;
-  if (!entry?.results) {
-    toast('The selection\'s run could not be recomputed, so its scores cannot be exported.', { kind: 'error' });
-    return;
+  if (!entry?.results) throw new Error('The selection\'s run could not be recomputed, so its scores cannot be exported.');
+  return { name: `${safe(selection.name ?? 'selection')}.csv`, type: 'text/csv', text: selectionCSV(selection.keys, entry.results, run, selection.condition ?? 0) };
+}
+
+export async function exportSelection(app, selection, format) {
+  try {
+    const file = await selectionFile(app, selection, format);
+    downloadBlob(new Blob([file.text], { type: file.type }), file.name);
+  } catch (error) {
+    toast(error.message, { kind: 'error' });
   }
-  downloadBlob(new Blob([selectionCSV(selection.keys, entry.results, run, selection.condition ?? 0)], { type: 'text/csv' }), `${safe(selection.name ?? 'selection')}.csv`);
 }
 
 // --- The archive ---------------------------------------------------------------------------------
 
-export async function exportArchive(app, { includeTables = true } = {}) {
+// The workspace archive, made (not downloaded): { name, bytes }.
+export async function archiveFile(app, { includeTables = true } = {}) {
   const ws = app.store.ws;
-  const busy = progressToast('Writing the workspace archive…');
-  try {
-    let sources = null;
-    if (includeTables) {
-      sources = new Map();
-      for (const s of ws.sources) {
-        for (const f of s.files?.length ? s.files : [s]) {
-          const bytes = await app.library.getFile(f.sha256);
-          if (!bytes) throw new Error(`${f.fileName ?? s.name} is not in the library; export with checksums only.`);
-          sources.set(f.sha256, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));
-        }
+  let sources = null;
+  if (includeTables) {
+    sources = new Map();
+    for (const s of ws.sources) {
+      for (const f of s.files?.length ? s.files : [s]) {
+        const bytes = await app.library.getFile(f.sha256);
+        if (!bytes) throw new Error(`${f.fileName ?? s.name} is not in the library; export with checksums only.`);
+        sources.set(f.sha256, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));
       }
     }
-    const results = new Map();
-    for (const run of ws.runs) {
-      const entry = await ensureResults(app, run);
-      if (entry?.results) results.set(run.id, entry.results);
-    }
-    const last = ws.runs.at(-1);
-    const methods = last ? await methodsOf(app, last) : null;
-    const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, results, methods });
-    downloadBlob(new Blob([bytes], { type: 'application/zip' }), `${safe(ws.name)}.msz`);
-    busy.done(`Wrote ${safe(ws.name)}.msz${includeTables ? '' : ' (tables by checksum only)'}.`);
+  }
+  const results = new Map();
+  for (const run of ws.runs) {
+    const entry = await ensureResults(app, run);
+    if (entry?.results) results.set(run.id, entry.results);
+  }
+  const last = ws.runs.at(-1);
+  const methods = last ? await methodsOf(app, last) : null;
+  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, results, methods });
+  return { name: `${safe(ws.name)}.msz`, bytes };
+}
+
+export async function exportArchive(app, { includeTables = true } = {}) {
+  const busy = progressToast('Writing the workspace archive…');
+  try {
+    const { name, bytes } = await archiveFile(app, { includeTables });
+    downloadBlob(new Blob([bytes], { type: 'application/zip' }), name);
+    busy.done(`Wrote ${name}${includeTables ? '' : ' (tables by checksum only)'}.`);
   } catch (error) {
     busy.fail(`The archive could not be written: ${error.message}`);
   }

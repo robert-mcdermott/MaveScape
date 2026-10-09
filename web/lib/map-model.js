@@ -9,6 +9,7 @@
 // no cell); the reference residue (outlined; it holds the synonymous variant's score when there is
 // one). Multi-variants, insertions and deletions are not on the map; the model counts them.
 
+import { log10 } from './dmath.js';
 import { KIND, STATUS } from './variants.js';
 import { targetLength } from './design.js';
 import { median, quantileSorted, sorted } from './stats.js';
@@ -117,7 +118,7 @@ export function buildMapModel(results, design, options = {}) {
   for (let k = 0; k < cells.length; k += 1) {
     const i = cells[k];
     if (i < 0 || (state[k] !== STATE.SCORED && state[k] !== STATE.LOW && !(state[k] === STATE.REFERENCE && !c.reason[i]))) continue;
-    value[k] = colorBy === 'score' ? c.score[i] : colorBy === 'se' ? c.se[i] : colorBy === 'replicates' ? c.k[i] : Math.log10(inputOf(i) + 1);
+    value[k] = colorBy === 'score' ? c.score[i] : colorBy === 'se' ? c.se[i] : colorBy === 'replicates' ? c.k[i] : log10(inputOf(i) + 1);
   }
   // The color domain: scores diverge from the wild type's score, symmetrically (the same color
   // distance is the same score distance on both sides); the others run from their low to high end.

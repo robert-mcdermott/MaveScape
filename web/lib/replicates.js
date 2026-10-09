@@ -14,6 +14,8 @@
 // Each combination reports Cochran's Q, I² and τ², and leave-one-replicate-out sensitivity.
 // Variances (v = SE²), not SEs, are passed in.
 
+import { log, square } from './dmath.js';
+
 // Sums the columns of technical replicates: a count missing (NaN) in any column is missing in
 // the sum, never read as 0.
 export function poolColumns(columns) {
@@ -53,7 +55,7 @@ export function heterogeneity(y, v) {
   if (k < 2 || v.some((x) => x === 0)) return { q: Number.NaN, df: k - 1, i2: Number.NaN };
   const { estimate } = combineFixed(y, v);
   let q = 0;
-  for (let j = 0; j < k; j += 1) q += (y[j] - estimate) ** 2 / v[j];
+  for (let j = 0; j < k; j += 1) q += square(y[j] - estimate) / v[j];
   return { q, df: k - 1, i2: q > 0 ? Math.max(0, (q - (k - 1)) / q) : 0 };
 }
 
@@ -67,12 +69,12 @@ function remlLogLikelihood(y, v, tau2) {
     const w = 1 / (v[j] + tau2);
     sw += w;
     swy += w * y[j];
-    logs += Math.log(v[j] + tau2);
+    logs += log(v[j] + tau2);
   }
   const beta = swy / sw;
   let rss = 0;
-  for (let j = 0; j < y.length; j += 1) rss += (y[j] - beta) ** 2 / (v[j] + tau2);
-  return -0.5 * logs - 0.5 * Math.log(sw) - 0.5 * rss;
+  for (let j = 0; j < y.length; j += 1) rss += square(y[j] - beta) / (v[j] + tau2);
+  return -0.5 * logs - 0.5 * log(sw) - 0.5 * rss;
 }
 
 export const REML_DEFAULTS = { threshold: 1e-12, maxIterations: 1000, tolerance: 1.220703125e-4 };
@@ -97,7 +99,7 @@ export function combineREML(y, v, options = {}) {
   mean /= k;
   meanV /= k;
   let spread = 0;
-  for (let j = 0; j < k; j += 1) spread += (y[j] - mean) ** 2;
+  for (let j = 0; j < k; j += 1) spread += square(y[j] - mean);
   let tau2 = Math.max(0, spread / (k - 1) - meanV);
   let iterations = 0;
   let converged = true;
@@ -121,10 +123,10 @@ export function combineREML(y, v, options = {}) {
     let yPPy = 0;
     for (let j = 0; j < k; j += 1) {
       const w = 1 / (v[j] + tau2);
-      yPPy += (w * (y[j] - beta)) ** 2;
+      yPPy += square(w * (y[j] - beta));
     }
     const trP = sw - sw2 / sw;
-    const trPP = sw2 - (2 * sw3) / sw + (sw2 / sw) ** 2;
+    const trPP = sw2 - (2 * sw3) / sw + square(sw2 / sw);
     let adj = (yPPy - trP) / trPP;
     if (!Number.isFinite(adj)) adj = 0;
     while (tau2 + adj < 0) adj /= 2;
@@ -156,7 +158,7 @@ export function combineEnrich2(y, v, V, iterations = 50) {
   for (let j = 0; j < k; j += 1) mean += y[j];
   mean /= k;
   let tau2 = 0;
-  for (let j = 0; j < k; j += 1) tau2 += (y[j] - mean) ** 2 / (V - 1);
+  for (let j = 0; j < k; j += 1) tau2 += square(y[j] - mean) / (V - 1);
   let beta = Number.NaN;
   let epsilon = 0;
   for (let it = 0; it < iterations; it += 1) {
@@ -173,7 +175,7 @@ export function combineEnrich2(y, v, V, iterations = 50) {
     let num = 0;
     for (let j = 0; j < k; j += 1) {
       const w = 1 / (v[j] + tau2);
-      num += (y[j] - beta) ** 2 * w * w;
+      num += square(y[j] - beta) * w * w;
     }
     const next = (tau2 * num) / (sw - sw2 / sw);
     epsilon = Math.abs(tau2 - next);

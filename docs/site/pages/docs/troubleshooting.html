@@ -1,0 +1,36 @@
+---
+title: Troubleshooting
+description: Answers to common problems with MaveScape: the window and the program, opening tables, scoring, runs that do not reproduce, and where workspaces are kept.
+lede: Common problems and what to do about them. If yours is not here, the drawer's log (⌘J) often says more, and an issue on GitHub is welcome.
+---
+      <h2 id="window">The window closes, or MaveScape says it is already running</h2>
+      <ul>
+        <li><strong>"MaveScape is already running at …":</strong> a MaveScape is open; the files you named were handed to it. Switch to its window. Stop it with <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal that started it.</li>
+        <li><strong>On macOS, MaveScape keeps serving after you close its window:</strong> Chrome (and Edge, Brave) keeps running after its last window closes. If it was already running when MaveScape started, the window opened in it, and MaveScape keeps serving until <kbd>Ctrl</kbd>+<kbd>C</kbd>. Quit that browser with <kbd>⌘Q</kbd> to have the window's closing stop MaveScape again.</li>
+        <li><strong>Another program uses port 8820:</strong> MaveScape takes the next free one of the following 19 and prints its address; <code>--port</code> chooses another.</li>
+        <li><strong>No window opens:</strong> start with <code>--window browser</code> to use the default browser, or <code>--window none</code> and open the printed address yourself.</li>
+      </ul>
+
+      <h2 id="tables">A table does not open as expected</h2>
+      <ul>
+        <li><strong>No column of variant names is found:</strong> choose it in the import wizard. Names must be MAVE-HGVS or a lab form MaveScape reads leniently (<a href="opening-data.html#names">Variant names</a>).</li>
+        <li><strong>Many names are not valid against the target:</strong> check the target and its numbering. A variant named on a reference (residue 159 onward) needs the target's offset, set in the Experiment view.</li>
+        <li><strong>A score table, not counts:</strong> MaveScape scores from counts. MaveDB offers the counts beside the scores when the authors provided them; showing imported scores on the map comes in 0.3.</li>
+        <li><strong>Problems block scoring:</strong> the inspector lists them by line (a duplicated variant, a count that is not a number). Fix the table and open it again.</li>
+      </ul>
+
+      <h2 id="scoring">Scoring is refused</h2>
+      <p>The Score view lists every reason. Most often the design has an error (fix it in Experiment), the wild type is not in the table for wild-type normalization (choose another normalization), or the experiment is a sorted-bin design, which is scored from 0.2.</p>
+
+      <h2 id="differs">A run says its scores differ</h2>
+      <p>When a workspace is reopened, each run is recomputed from its recorded inputs and compared with its recorded output hash. Runs made by MaveScape 0.1.0 used the browser's own logarithms, whose last bit varies between browsers and their versions; recomputed by a later MaveScape, their scores differ only in their last digits, and the run says so. Score again to make a run that reproduces everywhere. A run whose table is not in the workspace cannot be recomputed: open the table again.</p>
+
+      <h2 id="library">Where are my workspaces?</h2>
+      <p>In the library folder the status bar names: <code>~/Library/Application Support/MaveScape</code> on macOS, <code>~/.config/MaveScape</code> on Linux and <code>%AppData%\MaveScape</code> on Windows, unless MaveScape was started with <code>--data-dir</code>. Deleted workspaces go to the library's trash folder. To move an analysis to another computer, export the workspace archive (<a href="record.html#archive">The workspace archive</a>).</p>
+
+      <h2 id="remote">Remote control does not answer</h2>
+      <ul>
+        <li><strong>"No MaveScape page is connected":</strong> the program is running but no window is open; open the printed address.</li>
+        <li><strong>Forbidden:</strong> address MaveScape as <code>127.0.0.1</code> or <code>localhost</code>, from this computer.</li>
+        <li><strong>Unauthorized:</strong> <code>open_files</code> and <code>export</code> need the <code>X-MaveScape-Token</code> header with the token from <code>remote.json</code> (<a href="scripting.html#files">Reading and writing files</a>).</li>
+      </ul>

@@ -2,6 +2,8 @@
 // permutation tests) takes a seed and records it, so a result can be reproduced exactly.
 // Adapted from CytoWeave 0.8.0 web/lib/random.js.
 
+import { log } from './dmath.js';
+
 // xoshiro128** (Blackman & Vigna), seeded through splitmix32. Returns floats in [0, 1).
 export function createRandom(seed = 1) {
   let s = (Number(seed) >>> 0) || 0x9e3779b9;
@@ -36,7 +38,7 @@ export function createRandom(seed = 1) {
       v = random() * 2 - 1;
       r = u * u + v * v;
     } while (r === 0 || r >= 1);
-    const factor = Math.sqrt((-2 * Math.log(r)) / r);
+    const factor = Math.sqrt((-2 * log(r)) / r);
     spare = v * factor;
     return u * factor;
   };

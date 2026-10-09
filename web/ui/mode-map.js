@@ -249,6 +249,8 @@ export function mountMapMode(app, container) {
       destroyMap();
       map = mountVariantMap({ model, palette: view.palette, selected: [], describe: describeCell, onSelect });
       mapKey = key;
+      // Remote control zooms the map shown (ui/remote.js, render_map).
+      app.mapControl = map;
     } else {
       map.setModel(model);
     }
@@ -265,6 +267,7 @@ export function mountMapMode(app, container) {
   }
   function destroyMap() {
     map?.destroy();
+    if (app.mapControl === map) app.mapControl = null;
     map = null;
     mapKey = '';
   }

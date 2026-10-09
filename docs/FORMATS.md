@@ -1,6 +1,6 @@
 # File formats
 
-Every file MaveScape 0.1 reads and writes. Researchers whose counts come from their own pipeline
+Every file MaveScape 0.1 and 0.2 read and write. Researchers whose counts come from their own pipeline
 need only a count table, the target's sequence, and the design: which column is which sample.
 Blank, annotated layouts of each are on the Start page and in
 [`web/examples/layouts/`](../web/examples/layouts/). The Start page also opens two worked examples.
@@ -14,6 +14,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Import templates | `*.import.json` | `*.import.json` |
 | Workspaces | `*.msz` archives | `*.msz` archives; the workspace document (JSON) |
 | Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG) |
+| Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 
 Coming later: Excel workbooks and GenBank files (0.3), barcode tables (0.2), structures (0.4).
 
@@ -210,6 +211,28 @@ The whole map at a fixed cell size on a light background, with the position and 
 numberings, the color scale and a key to the states; the SVG carries the map's description as its
 `<desc>`, and each cell its variant as a `<title>`. The PNG is the SVG drawn at three times its
 size.
+
+## Remote control: `remote.json`
+
+Started with `--remote-control`, MaveScape writes `remote.json` to its data folder
+(`~/Library/Application Support/MaveScape` on macOS, `~/.config/MaveScape` on Linux,
+`%AppData%\MaveScape` on Windows, or `--data-dir`), readable by its owner only, and removes it when
+it stops:
+
+```json
+{
+  "url": "http://127.0.0.1:8820",
+  "token": "…",
+  "version": "0.2.0",
+  "pid": 41237
+}
+```
+
+Actions are posted to `<url>/api/remote/action` as `{"action": "…", "args": {…}, "client": "…"}`
+and answered with `{"ok": true|false, "message": "…", "data": …}`; `open_files` and `export` need
+the header `X-MaveScape-Token: <token>`. `GET <url>/api/remote/tools` lists every action with its
+arguments as JSON Schema. The site's guide describes each action
+([Remote control and scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)).
 
 MaveScape reports experimental functional effects for research; nothing it writes classifies a
 variant as pathogenic or benign.

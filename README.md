@@ -1,5 +1,10 @@
 # MaveScape
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/map-dark.webp">
+  <img alt="MaveScape's Map view: the variant-effect map of the GRB2 SH3 domain, with one variant's evidence in the inspector" src="docs/images/map-light.webp">
+</picture>
+
 MaveScape is a free, open-source (Apache 2.0) workbench for multiplexed assays of variant effect
 (MAVEs), starting with protein deep mutational scanning. It turns variant count tables into
 checked, uncertainty-aware variant-effect scores and maps, with quality control, comparison and
@@ -9,13 +14,17 @@ It runs on your own computer as one self-contained program, with no account, Pyt
 are analyzed in the browser and never leave your machine. MaveScape reports experimental
 functional effects for research; it does not classify variants as pathogenic or benign.
 
-> **Status: 0.1.0 is ready for release.** Count tables import, designs are set in the Experiment
-> view, two-population experiments (and time series, by their first and last samples) are scored
-> with numbers checked against Enrich2, dms_variants and metafor, quality control reports its
-> findings, the variant-effect map shows each run, and a workspace saves to one archive that
-> reopens identically. Two examples are on the Start page; [`docs/FORMATS.md`](docs/FORMATS.md)
-> describes every file. The [roadmap](mavescape-spec/roadmap.md) continues with time series, bins,
-> barcodes and DiMSum's error model in 0.2.
+**[Website and user guide](https://robert-mcdermott.github.io/mavescape/)**: getting started,
+opening your data, scoring, quality control, the map, the record and scripting, with screenshots.
+
+> **Status: 0.1.0 released; 0.2.0 in progress.** Count tables import, designs are set in the
+> Experiment view, two-population experiments (and time series, by their first and last samples)
+> are scored with numbers checked against Enrich2, dms_variants and metafor, quality control
+> reports its findings, the variant-effect map shows each run, and a workspace saves to one
+> archive that reopens identically. Scripts can drive the window (`--remote-control`). Two
+> examples are on the Start page; [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
+> [roadmap](mavescape-spec/roadmap.md) continues with time series, bins, barcodes and DiMSum's
+> error model in 0.2.
 
 ## Install
 
@@ -57,6 +66,7 @@ MaveScape starts from counts; reads (FASTQ) are counted by those upstream tools.
 | `--data-dir DIR` | Where the workspace library is kept |
 | `--no-library` | Keep workspaces in the browser's storage instead |
 | `--keep-running` | Keep serving after the window is closed |
+| `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)) |
 | `--version` | Print the version |
 
 A second `mavescape <files>` hands its files to the window already open.
@@ -65,11 +75,28 @@ MaveScape stops when its window closes. On macOS, Chrome (and Edge, Brave) keeps
 last window is closed: quit it with ⌘Q to stop MaveScape too. If that browser is still running
 when MaveScape starts, the new window opens in it and MaveScape keeps serving until Ctrl+C.
 
+## Scripting
+
+With `--remote-control`, programs on this computer can drive the open window: open an example or
+files, draft the design, score, read the QC findings, select variants, render the map and export,
+each step visible in the window and undoable. MaveScape writes its address and a token (needed to
+read or write files) to `remote.json` in its data folder:
+
+```sh
+mavescape --remote-control
+curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "open_example", "args": {"id": "grb2"}}'
+curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "qc_findings"}'
+```
+
+`GET /api/remote/tools` lists the actions with their arguments. The documentation's screenshots
+are made this way (`docs/capture/capture.mjs`).
+
 ## Privacy and security
 
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
 API calls from other web pages, and serves its page with a strict Content-Security-Policy. It
-makes no network requests of its own; public-data fetching (MaveDB, UniProt, PDB, AlphaFold) will
+makes no network requests of its own; remote control is off unless asked for, and then answers
+only programs on this computer; public-data fetching (MaveDB, UniProt, PDB, AlphaFold) will
 come through a fixed list of services and can be switched off (`--offline`).
 
 ## Development
@@ -82,6 +109,9 @@ go run . --dev                    # serve web/ from disk, edits show on reload
 go test -race ./...               # the host
 node --test "web/lib/*.test.mjs"  # the browser modules
 node validation/run.mjs           # the validation suites
+node validation/remote-session.mjs  # every remote action in the program and headless Chrome
+node docs/capture/capture.mjs     # the screenshots (docs/images/), through remote control
+node docs/site/build.mjs /tmp/site  # the website, with every link and screenshot checked
 ```
 
 The web app also runs from any static web server (`python3 -m http.server --directory web`),
@@ -91,10 +121,12 @@ with the workspace library in the browser.
 
 ```
 main.go, security.go, local.go, store.go, records.go, window.go   the Go host
+remote.go, actions.go, connection.go, output.go                   remote control
 web/index.html, web/styles.css, web/app.js                        the app shell
 web/lib/       pure modules (no DOM): parsing, scoring, QC; run in Node, workers and the page
 web/ui/        views and components
 validation/    comparisons with reference tools and fixtures
+docs/          file formats, installation; capture/ (screenshots) and site/ (the website)
 mavescape-spec/  requirements, design, roadmap, research and conventions
 ```
 

@@ -1,0 +1,47 @@
+---
+title: Opening your data
+description: What MaveScape needs (a variant count table, the target sequence and the design), the layouts it recognizes, how variant names are checked, and how missing counts are read.
+lede: An analysis needs three things: the counts, the sequence the variants are named against, and the design that says which column is which sample. This page covers the first two; the next, the design.
+---
+      <h2 id="what-to-bring">What to bring</h2>
+      <ul>
+        <li><strong>Variant counts:</strong> a table with one row per variant and one column per sequenced sample (CSV, TSV or Excel), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per sample.</li>
+        <li><strong>The target sequence</strong> the variants are named against: a FASTA file, protein or DNA.</li>
+        <li><strong>The design:</strong> which column is which sample, replicate and time point. MaveScape drafts it from the column names, or reads it from a sample sheet (<a href="experiment.html">The design</a>).</li>
+      </ul>
+      <p>Open the files from the start page, the workspace menu (<kbd>⌘O</kbd>), by dropping them on the window, or by naming them on the command line. Open the table and its FASTA together: sequences are read first, so the table finds its target.</p>
+      <div class="code"><pre><code>hgvs_pro,input_rep1,output_rep1,input_rep2,output_rep2
+p.=,52011,61873,48320,57112
+p.Ser2Val,812,640,775,591
+p.Ser2Ter,905,12,880,9
+p.Lys3Pro,488,NA,502,33</code></pre></div>
+
+      <h2 id="import">The import wizard</h2>
+      <shot name="import" alt="The import wizard for GRB2's MaveDB count table: the variant column hgvs_pro at the protein level, six count columns with suggested roles, the target, the checks with 1,121 valid variants, and the first rows">The wizard for a MaveDB count table: the mapping on the left, the checks and the first rows on the right.</shot>
+      <p>The wizard shows what MaveScape found: the layout, the column of variant names and its level, the columns of counts with the roles their names suggest, the target, and the checks. Correct anything it got wrong, then <strong>Import</strong>; <strong>Save as template</strong> remembers the mapping for the next table with the same columns. Nothing is coerced silently: problems that block scoring (the same variant on two rows, counts that are not numbers or are negative, rows of the wrong width) are listed by line.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Layout</th><th>How it is recognized</th></tr></thead>
+          <tbody>
+            <tr><td><strong>MaveDB count table</strong></td><td><code>accession</code> (MaveDB's downloads), or all of <code>hgvs_nt</code>, <code>hgvs_splice</code> and <code>hgvs_pro</code> (its upload layout, and MaveScape's own exports), with sample columns</td></tr>
+            <tr><td><strong>MaveDB score table</strong></td><td>The same identifier columns and <code>score</code></td></tr>
+            <tr><td><strong>DiMSum</strong></td><td>A <code>nt_seq</code> column of whole nucleotide sequences, named by comparing each with the wild-type DNA you give as the target</td></tr>
+            <tr><td><strong>Generic</strong></td><td>Any column of variant names, and numeric columns</td></tr>
+            <tr><td><strong>One file per sample</strong></td><td>Several files opened together, each a variant column and a count column, joined on the variants</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="names">Variant names</h2>
+      <p>Names are MAVE-HGVS, MaveDB's nomenclature: <code>p.Ala12Val</code>, <code>p.Ala12Ter</code>, <code>p.Ala12=</code> (synonymous), <code>p.=</code> (the wild type), <code>p.[Ala12Val;Lys14Arg]</code>, and <code>c.34C&gt;T</code> at the nucleotide level. Lenient reading, the default, also takes lab and legacy forms (<code>A12V</code>, <code>p.A12V</code>, <code>p.Ala12*</code>, <code>_wt</code>, <code>_sy</code>) and keeps each as written beside its MAVE-HGVS form. Every name is checked against the target: one that disagrees with it (another residue at that position, or a position beyond the target) is not scored, and says why.</p>
+
+      <h2 id="missing">Missing is not zero</h2>
+      <p>An empty cell or <code>NA</code> (also <code>N/A</code>, <code>NaN</code>, <code>null</code>, <code>None</code>) is <strong>missing</strong>: the variant was not counted in that sample, and is not scored in that replicate. Write 0 only for a variant counted zero times. Some tables write variants that dropped out during selection as missing; quality control's "Missing after selection" finding says when that happens.</p>
+
+      <h2 id="target">The target</h2>
+      <p>A FASTA file of the protein or DNA sequence the variants are named against. Positions are numbered from 1 on the target; an <strong>offset</strong>, set in the Experiment view, numbers them on the reference too (an offset of 158 makes position 1 residue 159), and the map shows both. For DNA named at the protein level, the coding start can be set.</p>
+      <div class="code"><pre><code>&gt;grb2-sh3 GRB2 SH3 domain, UniProt P62993 residues 159-214
+TYVQALFDFDPQEDGELGFRRGDFIHVMDNSDPNWWKGACHGQTGMFPRNYVTPVN</code></pre></div>
+
+      <h2 id="formats">Every file</h2>
+      <p><a href="{{github}}/blob/main/docs/FORMATS.md">FORMATS.md</a> describes every file MaveScape reads and writes, and the start page has blank layouts to fill in.</p>

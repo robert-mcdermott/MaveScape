@@ -1,0 +1,27 @@
+---
+title: Overview
+description: The MaveScape user guide: from variant counts to checked scores, quality control, the variant-effect map and a record of the analysis.
+lede: MaveScape takes the count tables of a deep mutational scan to functional scores with standard errors, quality control, an interactive map and a record a reviewer can repeat. This guide follows that path.
+---
+      <h2 id="path">The path through an analysis</h2>
+      <p>The workflow strip above every view shows the steps, which are done, and the one to take next:</p>
+      <ol>
+        <li><strong>Counts:</strong> a table with one row per variant and one column per sequenced sample (<a href="opening-data.html">Opening your data</a>).</li>
+        <li><strong>Target:</strong> the sequence the variants are named against, from a FASTA file.</li>
+        <li><strong>Design:</strong> which column is which sample, replicate and time point (<a href="experiment.html">The design</a>).</li>
+        <li><strong>Score:</strong> functional scores with standard errors, a run kept with everything needed to repeat it (<a href="scoring.html">Scoring</a>).</li>
+        <li><strong>QC:</strong> whether the experiment supports the scores (<a href="qc.html">Quality control</a>).</li>
+        <li><strong>Map:</strong> every substitution by position, and each variant's evidence (<a href="map.html">The map and the inspector</a>).</li>
+        <li><strong>Record:</strong> scores in MaveDB's columns, the methods with references, and the workspace as one archive (<a href="record.html">Exports and the record</a>).</li>
+      </ol>
+      <shot name="experiment" alt="The MaveScape window: the workflow strip with each step's state above the Experiment view, the dataset tree on the left and the inspector on the right">The workflow strip above the Experiment view of the GRB2 example.</shot>
+
+      <h2 id="start-here">Where to start</h2>
+      <ul>
+        <li>New to MaveScape: <a href="getting-started.html">Getting started</a>, then an <a href="examples.html">example</a>.</li>
+        <li>Bringing your own data: <a href="opening-data.html">Opening your data</a> says what to bring and how MaveScape reads it.</li>
+        <li>Automating MaveScape, or capturing its screens: <a href="scripting.html">Remote control and scripting</a>.</li>
+      </ul>
+
+      <h2 id="what-it-is-not">What MaveScape is not</h2>
+      <p>MaveScape starts from counts: reads (FASTQ) are counted by the tools upstream of it, such as Enrich2, DiMSum or dms_variants. It reports experimental functional effects for research and does not classify variants as pathogenic or benign. Sorted-bin (FACS) experiments, barcodes, DiMSum's error model and comparisons between conditions arrive in 0.2; the <a href="{{github}}/blob/main/mavescape-spec/roadmap.md">roadmap</a> lists what comes when.</p>

@@ -45,6 +45,7 @@ type config struct {
 	noStore     bool
 	dev         bool
 	showVersion bool
+	remote      bool
 	files       []string
 }
 
@@ -55,6 +56,8 @@ type app struct {
 	assets   fs.FS
 	files    *localFiles
 	store    *store
+	// control: the remote-control hub (remote.go), with --remote-control.
+	control *remoteHub
 }
 
 func init() {
@@ -81,8 +84,9 @@ func main() {
 		return
 	}
 	// A MaveScape already running on the preferred port gets the files and a new window, so the
-	// workspace library (kept per origin by the browser) stays in one place.
-	if existing := findRunning(cfg.host, cfg.port); existing != "" {
+	// workspace library (kept per origin by the browser) stays in one place. One started for
+	// remote control starts on its own port, so that scripts reach a page they can drive.
+	if existing := findRunning(cfg.host, cfg.port); existing != "" && !cfg.remote {
 		handed := false
 		if len(cfg.files) > 0 {
 			if err := forwardFiles(existing, cfg.files); err != nil {
@@ -161,9 +165,14 @@ type runningServer struct {
 	url          string
 	cancel       context.CancelFunc
 	windowClosed <-chan struct{}
+	// connection: the remote.json scripts read (connection.go), removed on stop.
+	connection string
 }
 
 func (s *runningServer) stop(timeout time.Duration) {
+	if s.connection != "" {
+		removeConnectionFile(s.connection, s.app.control.token)
+	}
 	s.cancel()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -192,14 +201,21 @@ func start(cfg config, out io.Writer) (*runningServer, error) {
 		return nil, fmt.Errorf("failed to listen: %w", err)
 	}
 	url := "http://" + net.JoinHostPort(cfg.host, strconv.Itoa(actualPort))
-	a.printBanner(out, url)
+	connection := ""
+	if a.control != nil && cfg.dataDir != "" {
+		if connection, err = writeConnectionFile(cfg.dataDir, url, a.control.token); err != nil {
+			log.Printf("could not write the connection file for scripts: %v", err)
+			connection = ""
+		}
+	}
+	a.printBanner(out, url, connection)
 	base, cancel := context.WithCancel(context.Background())
 	server := &http.Server{
 		Handler:           protect(handler, cfg.host, actualPort),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return base },
 	}
-	running := &runningServer{app: a, server: server, listener: listener, url: url, cancel: cancel}
+	running := &runningServer{app: a, server: server, listener: listener, url: url, cancel: cancel, connection: connection}
 	if cfg.window != "none" {
 		closed := make(chan struct{})
 		running.windowClosed = closed
@@ -243,6 +259,7 @@ func parseConfig(args []string) (config, error) {
 	flags.BoolVar(&cfg.noStore, "no-library", false, "do not keep a workspace library on disk (the browser's own storage is used)")
 	flags.BoolVar(&cfg.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
 	flags.BoolVar(&cfg.showVersion, "version", false, "print the version and exit")
+	flags.BoolVar(&cfg.remote, "remote-control", false, "accept actions from programs on this computer at /api/remote/action (scripts, the documentation's screenshots)")
 	noOpen := flags.Bool("no-open", false, "same as --window none")
 	flags.Usage = func() {
 		fmt.Fprintln(flags.Output(), "Usage: mavescape [flags] [count or score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif), workspaces (.msz) or folders of them...]")
@@ -298,6 +315,10 @@ func newApp(cfg config) (*app, error) {
 			log.Print(problem)
 		}
 	}
+	if cfg.remote {
+		a.control = newRemoteHub()
+		a.control.open = a.files.register
+	}
 	if !cfg.noStore {
 		s, err := openStore(cfg.dataDir)
 		if err != nil {
@@ -321,7 +342,7 @@ func newApp(cfg config) (*app, error) {
 	return a, nil
 }
 
-func (a *app) printBanner(out io.Writer, url string) {
+func (a *app) printBanner(out io.Writer, url, connection string) {
 	fmt.Fprintf(out, "MaveScape %s is running at %s\n", version, url)
 	if a.dev {
 		fmt.Fprintf(out, "Dev mode: serving web/ from disk in %s (no-store)\n", a.assetDir)
@@ -333,6 +354,13 @@ func (a *app) printBanner(out io.Writer, url string) {
 	}
 	if n := len(a.files.list()); n > 0 {
 		fmt.Fprintf(out, "Opening %d file(s) named on the command line\n", n)
+	}
+	if a.control != nil {
+		fmt.Fprintf(out, "Remote control: POST {\"action\": ..., \"args\": {...}} to %s/api/remote/action (the actions: %s/api/remote/tools)\n", url, url)
+		fmt.Fprintf(out, "Reading and writing files (open_files, export) need the header %s: %s\n", remoteTokenHeader, a.control.token)
+		if connection != "" {
+			fmt.Fprintln(out, connectionNotice(connection))
+		}
 	}
 	fmt.Fprintln(out, "Press Ctrl+C to stop.")
 }
@@ -362,11 +390,13 @@ type info struct {
 	DataDir  string      `json:"dataDir,omitempty"`
 	Files    []localFile `json:"files"`
 	Platform string      `json:"platform"`
+	// RemoteControl: the page connects to the hub (web/ui/remote.js).
+	RemoteControl bool `json:"remoteControl"`
 }
 
 func (a *app) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
-		body := info{Name: "MaveScape", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", Files: a.files.list(), Platform: platformName()}
+		body := info{Name: "MaveScape", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", Files: a.files.list(), Platform: platformName(), RemoteControl: a.control != nil}
 		if a.store != nil {
 			body.Library = true
 			body.DataDir = a.store.dir
@@ -375,6 +405,9 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/local/{index}", a.files.serve)
 	mux.HandleFunc("POST /api/open", a.openPaths)
+	if a.control != nil {
+		a.control.register(mux)
+	}
 	if a.store != nil {
 		a.store.register(mux)
 		mux.HandleFunc("POST /api/library/local/{index}", func(w http.ResponseWriter, r *http.Request) {

@@ -160,7 +160,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | --- | --- | --- |
 | M1 | `mavescape run`: a versioned design, validation before execution, deterministic outputs (scores, QC, figures, methods, provenance), structured JSON logs, non-zero exit on blocking errors, exact reruns from a workspace run | planned (wave 2) |
 | M2 | `mavescape validate` (a score or count table, a design) and `mavescape export` (an archive to MaveDB or tables) | planned (wave 2 validate; wave 3 export) |
-| M3 | Remote-control API with per-session tokens | planned (wave 2) |
+| M3 | Remote-control API with per-session tokens | done (wave 2, slice 1: `--remote-control`, 14 actions, a per-run token for files in `remote.json`; the MCP server on it in wave 7) |
 | M4 | MCP server with the PRD's tools; changes to design, filters, scoring, calibration or exports arrive as reviewable proposals; read-only queries run directly | planned (wave 7) |
 | M5 | Python and R clients generated from the tool list | planned (wave 7) |
 | M6 | A public agent benchmark of graded tasks on the examples | planned (wave 9) |

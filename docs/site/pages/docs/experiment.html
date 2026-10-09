@@ -1,0 +1,34 @@
+---
+title: The design
+description: Say which column of the count table is which sample, replicate and time point in MaveScape's Experiment view, from a draft, a sample sheet or by hand.
+lede: The design says what each column of the count table is: which sample, its role, its replicate and time point. MaveScape drafts it from the column names; you check it in the Experiment view.
+---
+      <h2 id="draft">Drafting the design</h2>
+      <p>Once a table is open, the workflow strip offers <strong>Draft the design</strong>. MaveScape reads the column names (<code>input</code>, <code>pre</code>, <code>lib</code>; <code>output</code>, <code>post</code>, <code>sel</code>; <code>rep1</code>; <code>t0</code>, <code>gen3</code>; <code>bin1</code>; <code>tile2</code>), finds shared samples by comparing the columns' values, and sets aside every column it does not use, with the reason. The number of time points tells conditions apart: two assays in one table become two conditions.</p>
+      <shot name="draft-design" alt="The Experiment view after drafting the design of GRB2's counts from the column names: six columns mapped to three replicates of an input and an output, and the design in words">A design drafted from GRB2's column names: three replicates, each with an input and an output.</shot>
+
+      <h2 id="editor">The Experiment view</h2>
+      <p>The design is two tables. <strong>Columns → samples:</strong> each column is a sample of its own, a technical replicate of another (summed), a copy of a shared sample's column, or not used, with why. <strong>Replicates × slots:</strong> each replicate's input and output, its time points (edited in the column heads) or its bins, with its condition and tile. Beside them: the kind of experiment, the controls, the time unit, and the target's name, offset, coding start and identifiers.</p>
+      <p>Every change is checked as you make it. The design is described in plain words, and each error and warning is listed: a column that is neither a sample's nor set aside is an error, so nothing is dropped silently.</p>
+
+      <h2 id="kinds">Kinds of experiment</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Kind</th><th>Samples per replicate</th><th>Scored</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Two populations</strong></td><td>An input and an output</td><td>Yes</td></tr>
+            <tr><td><strong>Time series</strong></td><td>Time points, with their times</td><td>By the first and last time points now; by regression in 0.2</td></tr>
+            <tr><td><strong>Sorted bins</strong></td><td>Bins, each with its value</td><td>In 0.2; quality control reads their counts now</td></tr>
+            <tr><td><strong>Scores</strong></td><td>Precomputed scores</td><td>Nothing to score; shown on the map in 0.3</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="sample-sheets">Sample sheets</h2>
+      <p>A sample sheet is a table with one row per sequenced sample: its column, role, replicate and, as needed, technical replicate, condition, time, bin, value and tile. Columns are recognized under many names, and DiMSum's experiment design file reads as a sample sheet. A sample shared by several replicates lists them (<code>1;2;3</code>).</p>
+      <div class="code"><pre><code>column,role,replicate,technical_replicate,condition,time,bin,value,tile
+input_rep1,input,1,1,,,,,
+output_rep1,output,1,1,,,,,</code></pre></div>
+
+      <h2 id="files">Design files and history</h2>
+      <p>A design is saved and opened as <code>*.design.json</code>, described by a JSON schema in the repository. Every material change to the workspace (an import, a target, the design) goes into its history, each entry chained to the one before by its hash, so that an entry edited afterward is caught. The drawer (<kbd>⌘J</kbd>) shows it.</p>

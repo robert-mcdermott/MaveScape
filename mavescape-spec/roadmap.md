@@ -25,8 +25,11 @@ The order follows CytoWeave's principle, adapted:
 
 The PRD puts MaveDB import in phase 2 and the MCP server in phase 3. This plan keeps that, with two
 changes:
-- the remote-control hub arrives in wave 2, because headless runs need it (as in CytoWeave,
-  `mavescape run` drives the same page agents will);
+- the remote-control hub arrives first in wave 2, because the documentation's screenshots, headless
+  runs and later agents all drive the page through it (as in CytoWeave, `mavescape run` and the
+  capture script drive the same page agents will);
+- the product site (GitHub Pages) and its screenshot capture start in wave 2 and grow with every
+  wave, rather than arriving in wave 9;
 - structure viewing is a full part of MaveScape (wave 4), not the PRD's "lightweight view", because
   MaveScape must stand on its own. The viewer is copied from Proteoscope; Proteoscope is never
   required. The PRD's first milestone ends with "open selected residues in Proteoscope"; here wave 1
@@ -47,6 +50,20 @@ The PRD lists decisions to make before implementation. Proposed answers, to conf
 | MAVE-HGVS | Port `mavehgvs` 0.8.1's regular-expression grammar to JavaScript (BSD-3; no JS implementation exists; keep its notice) with a **strict** mode (the spec, for export) and a **lenient** mode (legacy MaveDB data and lab tables: `_wt`/`_sy`, duplicated components, `p.A12V`, `A12V`, `*`), always keeping the original string. Validate against `mavehgvs`'s own test cases and outputs, committed as a reference. |
 | Terminology | "Functional score", "WT-like / intermediate / abnormal-like", "evidence strength (research use)"; never pathogenic or benign (`conventions.md`). |
 | Default port | 8820 (8820–8839), clear of CytoWeave (8770–8789) and Proteoscope (8765–8814). |
+
+## In every wave, from wave 2
+
+- **Examples.** Each new capability arrives with an example that uses it: published data where
+  MaveDB has it under CC0 (small tables embedded, as GRB2's; larger ones downloaded on request with
+  their checksums, so the program stays small), otherwise simulated (`web/lib/simulate.js`, seeded,
+  the truth kept beside the data, labeled simulated), especially for planted problems a learner
+  should find. Each with its question, source and license, what to expect, the view it opens and
+  its guided steps, checked by the validation suites as GRB2's and the simulated one are.
+- **Documentation.** A feature's guide page on the site, its tutorial on an example, and the
+  capture scenes that make its screenshots are part of the slice that builds it; `docs/FORMATS.md`
+  grows with every file read or written.
+- **Release.** Screenshots re-captured, the site built (no broken link, anchor or image) and
+  published with the release.
 
 ## 0.1.0: counts to a trustworthy map (wave 1)
 
@@ -78,7 +95,7 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
      macOS one served the embedded app with its commit in `/api/info`, refused a foreign Host,
      and printed `mavescape 0.1.0` for the installers' check. The page is cross-origin isolated
      under the program and runs from a static server with the library in the browser.
-   - Moved to the slices that use them: `connection.go` (remote control, wave 2, slice 6),
+   - Moved to the slices that use them: `connection.go` (remote control, wave 2, slice 1),
      `png.js` (it needs `pdf.js`'s deflate; wave 6), `stats.js` (CytoWeave's is tied to its event
      sets; MaveScape's own, with order statistics, correlations and intervals, comes with QC in
      slice 6).
@@ -369,7 +386,48 @@ runs and the performance targets.
 
 ### Wave 2
 
-1. **Time series (S6, Q10, E2).** `web/lib/score-regression.js`: WLS and OLS of normalized log
+1. **Remote control, screenshots and the product site (M3; T4): done.** From CytoWeave 0.8.0:
+   `remote.go` (actions posted to `/api/remote/action`, sent to the open page over server-sent
+   events, one at a time, with timeouts; loopback peers and Host only; other web pages refused by
+   the same-origin guard), `connection.go` (`<data-dir>/remote.json`, mode 0600, the address and a
+   token, removed on exit), `output.go` (exports written to an absolute path through a temporary
+   file, never replacing one unless asked), behind `--remote-control`; `actions.go`, the actions
+   with their argument schemas (`GET /api/remote/tools`; the MCP tool list of wave 7), deciding
+   which are long and which need the token. The page's `web/ui/remote.js` performs the 14 actions
+   (`get_state`, `new_workspace`, `open_example`, `open_files`, `set_mode`, `focus`,
+   `draft_design`, `set_design`, `score`, `qc_findings`, `select_variants`, `inspect_variant`,
+   `render_map`, `export` of ten kinds) with forgiving names and errors that list the choices,
+   logging each with its sender. To serve them, the views' work moved where scripts reach it: the
+   record's exports make files without downloading them (`runFile`, `selectionFile`,
+   `archiveFile`), QC computes outside its view into a shared cache (`computeQc`), the import wizard
+   can accept what it detected, and `openExample` reports failure. `docs/capture/` (`cdp.mjs` from
+   CytoWeave; `capture.mjs`: ten scenes driven by remote actions, each on a fresh library, light
+   and dark `.webp` in `docs/images/`, optional axe-core audit). `docs/site/` (`build.mjs` from
+   CytoWeave: Home, Install, Science and an eleven-page guide, with `<shot>` figures in both
+   themes; every link, anchor and screenshot checked); published with `--publish` into a checkout
+   of `gh-pages` (`../mavescape-site`). The README shows the map's screenshot.
+   - Validation: 14 Go tests of the hub (an action and its answer, no page, one action at a time,
+     a silent page and one that leaves, loopback and Host only, other web pages refused, the
+     token for reading and writing files, paths checked before the page is asked, one upload per
+     slot, the connection file private and removed, the action list served, and the page's
+     action table and the hub's naming the same actions); `validation/remote-session.mjs` (54
+     checks, CI job `remote`): every action in the built program and headless Chrome, the
+     window's runs equal to Node's scoring by output hash, every export written by the hub byte
+     for byte Node's from the exported archive, refusals and forgiving names; the site built in
+     CI with no broken link, anchor or missing screenshot. 4 more unit tests (134 in all).
+   - Found by slice 1:
+     - **Scores depended on the browser.** The remote session's first run found the window's
+       scores differing from Node's in the last bits: `Math.log`, `exp` and `pow` are
+       implementation-approximated, and Chrome 154 and Node 22 disagree on about 2% of logarithms
+       and 10% of exponentials. A run's output hash therefore depended on the browser, and a saved
+       run could stop reproducing after a browser update; the simulated example's counts could
+       differ by engine too. `web/lib/dmath.js` (fdlibm's logarithm and exponential in plain
+       arithmetic, within one ulp, the same bits everywhere) replaces them in scoring, QC,
+       statistics and simulation; `determinism.test.mjs` forbids the engine's functions there; the
+       session checks a fingerprint in the browser; `SCORING_VERSION` is 2, and 0.1.0's runs
+       reopen saying why their hash differs. The validation suites, all to 10⁻¹⁰ or tighter, pass
+       unchanged.
+2. **Time series (S6, Q10, E2).** `web/lib/score-regression.js`: WLS and OLS of normalized log
    frequency on scaled time (Enrich2's weights and residual-scaled SE), non-uniform spacing,
    usable points, residual diagnostics, "insufficient support" without assuming non-monotonic
    means invalid. The design editor gains times and units. An import option to read a variant
@@ -377,39 +435,38 @@ runs and the performance targets.
    missing (BRCA1's; found by wave 1, slice 6), recorded in the run.
    - Validation: equal to Enrich2 2.0.2 and statsmodels WLS within 1e-10; the feasibility time
      series.
-2. **FACS bins (S7, Q10).** `web/lib/score-bins.js`: weighted average of bin values (rank,
+3. **FACS bins (S7, Q10).** `web/lib/score-bins.js`: weighted average of bin values (rank,
    fluorescence or other, recorded), the VAMP-seq procedure (frequency filter, nonsense = 0, WT
    = 1, replicates required), analytic SE and a seeded bootstrap, and the censored log-normal
    maximum-likelihood estimate (Peterman & Levine 2016) when cells sorted per bin and gate bounds
    are given. Bin occupancy and cells-per-bin diagnostics.
    - Validation: the VAMP-seq procedure equal to a reference script and CountESS's plugin; the
      MLE within 1e-4 of `fitdistrplus::fitdistcens`; the feasibility FACS dataset.
-3. **Barcodes and scale (D8, D9, Q8, S8, S12).** Barcode count tables with a barcode-to-variant
+4. **Barcodes and scale (D8, D9, Q8, S8, S12).** Barcode count tables with a barcode-to-variant
    map; barcodes per variant, within-variant agreement, outlier barcodes, a barcode-disagreement
    filter; both aggregations (sum then score; score each barcode then combine). Templates for
    dms_variants' `variant_counts` CSV and Enrich2's per-library count files (D12). Columnar memory
    for a million rows; `validation/bench.mjs` gates the PRD's targets in CI.
    - Validation: equal to dms_variants `func_scores` by barcode and by substitution; benchmark
      numbers in `validation/README.md`.
-4. **DiMSum's error model (S9, Q4).** `web/lib/score-dimsum.js`: DiMSum fitness with its
+5. **DiMSum's error model (S9, Q4).** `web/lib/score-dimsum.js`: DiMSum fitness with its
    dropout pseudocount and count filters, per-replicate scale and shift, the multiplicative and
    additive error terms, inverse-variance merging. Its multiplicative terms feed the bottleneck
    finding ("about m-fold more variance than counting alone").
    - Validation: exact against DiMSum 1.4's own functions with fixed parameters; the fitted
      parameters loosely against a full DiMSum run (`numCores = 1`).
-5. **Two conditions (S10, E2).** Conditions in the design; per-condition runs; differential
+6. **Two conditions (S10, E2).** Conditions in the design; per-condition runs; differential
    scores with a shared-input model (the naive SE overstates uncertainty when the input is
    shared), and limma contrasts (from CytoWeave's `limma.js`) as mutscan computes them.
    - Validation: Enrich2's between-condition z; mutscan `calculateRelativeFC` (limma) within
      1e-8.
-6. **Headless runs and remote control (M1, M2, M3).** Port `remote.go`, `output.go` and the
-   `run.go` pattern: `mavescape run --design design.json --counts counts.csv --out results/`
-   (validate first, deterministic outputs, `run.json` with input and output hashes, structured
-   JSON logs, non-zero exit on blocking errors, `--from-workspace` reruns a saved run exactly) and
-   `mavescape validate`. `--remote-control` and `--no-remote-control`.
+7. **Headless runs (M2, M3).** On slice 1's hub, the `run.go` pattern: `mavescape run --design
+   design.json --counts counts.csv --out results/` (validate first, deterministic outputs,
+   `run.json` with input and output hashes, structured JSON logs, non-zero exit on blocking errors,
+   `--from-workspace` reruns a saved run exactly) and `mavescape validate`.
    - Validation: `validation/headless-run.mjs` runs twice with identical outputs and once through
      the UI with the same results.
-7. **Examples (T4).** Three more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
+8. **Examples (T4).** Three more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
    growth time series; Factor IX MultiSTEP (one readout) as the FACS-bin assay; and a simulated
    barcode map with conflicts plus a simulated problematic experiment (a bottleneck and a failing
    replicate), both labeled simulated. (No barcode-level counts are on MaveDB; Enrich2's example
@@ -602,8 +659,10 @@ The 1.0 candidate: what the PRD's phase 3 asks for beyond features.
 3. **Security review (T5, D11).** Fuzzing of CSV, FASTA, GenBank, HGVS, PDB/mmCIF, ZIP and design
    parsing (CytoWeave's `fuzz.mjs` pattern), request-forgery and token tests, path handling, a
    written review.
-4. **Documentation and tutorials.** A full workflow for each experiment type on the docs site
-   (CytoWeave's `docs/site` and `docs/capture`), with screenshots captured from the examples.
+4. **Documentation complete, and teaching mode.** The site (begun in wave 2) reviewed as a whole:
+   a full tutorial for each experiment type, every page's screenshots current. Exercises on the
+   examples, as CytoWeave's: a question, hints, answers checked against the simulated truth (which
+   the workspace never stores: it is regenerated from the exercise's seed), class codes.
 5. **Agent benchmark (M6).** Graded tasks on the examples (CytoWeave's `benchmark/` harness).
 
 ## Toward 1.0
@@ -630,7 +689,6 @@ they hit reorder the waves.
   screens; continuous phenotypes from many bins; Rosace's Bayesian time-series model.
 - Protein-language-model-assisted interpolation of missing variants (a non-goal for version 1).
 - Raw FASTQ processing (a non-goal: MaveScape starts from counts).
-- A teaching mode with exercises on the examples, as CytoWeave's.
 
 ## Risks
 
@@ -646,5 +704,5 @@ they hit reorder the waves.
 | Barcode-scale tables in the browser | Memory and speed | Streaming parse, columnar arrays, workers, a million-row benchmark gated in CI |
 | Public APIs change | Broken imports and tracks | Provider adapters, cached records with retrieval metadata, recorded fixtures, graceful degradation |
 | Color maps overstate certainty | Misinterpretation | Separate state patterns and uncertainty channels; missing never neutral |
-| Licensing of reference code | GPL tools (dms_variants, dms_tools2) in an Apache-2.0 project; CytoWeave's `limma.js` follows GPL limma closely (an open decision there) | GPL tools used only as external references in validation; no code ported from GPL sources; the limma question settled before wave 2, slice 5 reuses `limma.js` (reimplement from the publications if needed) |
+| Licensing of reference code | GPL tools (dms_variants, dms_tools2) in an Apache-2.0 project; CytoWeave's `limma.js` follows GPL limma closely (an open decision there) | GPL tools used only as external references in validation; no code ported from GPL sources; the limma question settled before wave 2, slice 6 reuses `limma.js` (reimplement from the publications if needed) |
 | One developer | Adoption and continuity | Validation and documentation that let others check and continue; external labs from wave 2 |

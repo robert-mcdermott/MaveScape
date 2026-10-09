@@ -1,0 +1,79 @@
+---
+title: Remote control and scripting
+description: Drive the open MaveScape window from scripts on your computer with --remote-control: open files, score, read the QC, select variants and export, through a small HTTP interface with a token for files.
+lede: Started with --remote-control, MaveScape accepts actions from programs on your computer: open an example or your files, score, read the quality control, select variants, export. Each action happens in the open window, where you see it; its changes go into the history and can be undone.
+---
+      <h2 id="start">Turn it on</h2>
+      <div class="code"><pre><code><span class="prompt">$ </span>mavescape --remote-control</code></pre></div>
+      <p>MaveScape prints the address actions go to and the token that reading and writing files need, and writes both to <code>remote.json</code> in its data folder, readable only by you (<code>~/Library/Application Support/MaveScape/remote.json</code> on macOS), so scripts can find a running MaveScape without being told. The file is removed when MaveScape stops.</p>
+      <div class="code" data-no-copy><pre><code>{
+  "url": "http://127.0.0.1:8820",
+  "token": "…",
+  "version": "{{version}}",
+  "pid": 41237
+}</code></pre></div>
+      <p>Only programs on this computer can use remote control, addressing it as <code>127.0.0.1</code> or <code>localhost</code>, and web pages on other sites cannot. A MaveScape started with <code>--remote-control</code> while another is running starts on the next free port rather than handing its files over, so the script reaches a window it can drive.</p>
+
+      <h2 id="actions">Sending an action</h2>
+      <p>POST <code>{"action": …, "args": {…}}</code> to <code>/api/remote/action</code>. The answer is <code>{"ok", "message", "data"}</code>: the message in words, the data for scripts.</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "open_example", "args": {"id": "grb2-sh3"}}'</code></pre></div>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "qc_findings"}'</code></pre></div>
+      <p>Names are forgiving: <code>"grb2"</code> finds the GRB2 example, <code>"Run 2"</code> or <code>"2"</code> a run, <code>W36A</code> the variant <code>p.Trp36Ala</code>. A wrong name is answered with the choices. Actions run one at a time, in the most recently opened window; <code>GET /api/remote/tools</code> lists every action with its arguments as JSON Schema.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Action</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>get_state</code></td><td>The workspace: tables, targets, design, runs, selections, the view, and the analysis steps with the next one</td></tr>
+            <tr><td><code>new_workspace</code></td><td>Starts a new workspace (<code>name</code>)</td></tr>
+            <tr><td><code>open_example</code></td><td>Opens an example, scored (<code>id</code>)</td></tr>
+            <tr><td><code>open_files</code></td><td>Opens files by path, importing tables with the mapping MaveScape detects (<code>paths</code>, <code>new_workspace</code>; <code>review</code> leaves the import wizard open). Needs the token</td></tr>
+            <tr><td><code>set_mode</code></td><td>Shows a view: start, experiment, qc, score or map</td></tr>
+            <tr><td><code>focus</code></td><td>Shows a table, target, run, selection or variant in the inspector</td></tr>
+            <tr><td><code>draft_design</code></td><td>Drafts the design from the column names and reports its problems</td></tr>
+            <tr><td><code>set_design</code></td><td>Sets a <code>mavescape-design</code> document, refused with every problem when it does not fit the table</td></tr>
+            <tr><td><code>score</code></td><td>Scores with a preset (<code>mavescape</code> or <code>enrich2</code>) and changed <code>parameters</code>; the existing run when the inputs are the same</td></tr>
+            <tr><td><code>qc_findings</code></td><td>Each finding of a run (or of the counts) with its status, value, threshold and rationale; <code>finding</code> shows one in the QC view</td></tr>
+            <tr><td><code>select_variants</code></td><td>Selects <code>variants</code> or <code>positions</code> on the map, optionally only those scored, low, filtered or missing, and saves the selection (<code>save_as</code>)</td></tr>
+            <tr><td><code>inspect_variant</code></td><td>A variant's score, SE and interval, flags, replicates and counts</td></tr>
+            <tr><td><code>render_map</code></td><td>Shows the map with the given coloring, row order, palette and zoom, and returns it in words</td></tr>
+            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG), <code>selection</code> or <code>archive</code> to <code>path</code>. Needs the token</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="files">Reading and writing files</h2>
+      <p><code>open_files</code> and <code>export</code> need the header <code>X-MaveScape-Token</code> with the token from <code>remote.json</code>: another user of a shared computer can reach the loopback port, but not your files. Exports take an absolute path whose folder exists, and never replace a file unless the call says <code>"overwrite": true</code>. The file is written through a temporary file renamed into place, so a reader never sees half of it.</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>TOKEN=$(python3 -c 'import json, os; print(json.load(open(os.path.expanduser("~/Library/Application Support/MaveScape/remote.json")))["token"])')
+<span class="prompt">$ </span>curl -s http://127.0.0.1:8820/api/remote/action -H "X-MaveScape-Token: $TOKEN" -d '{"action": "export", "args": {"what": "scores", "path": "/tmp/grb2_scores.csv"}}'</code></pre></div>
+
+      <h2 id="python">From Python</h2>
+      <p>No client library is needed; the standard library is enough:</p>
+      <div class="code"><pre><code>import json, os, urllib.request
+
+connection = json.load(open(os.path.expanduser("~/Library/Application Support/MaveScape/remote.json")))
+
+def act(action, **args):
+    request = urllib.request.Request(
+        connection["url"] + "/api/remote/action",
+        data=json.dumps({"action": action, "args": args, "client": "my notebook"}).encode(),
+        headers={"Content-Type": "application/json", "X-MaveScape-Token": connection["token"]},
+    )
+    answer = json.load(urllib.request.urlopen(request))
+    if not answer["ok"]:
+        raise RuntimeError(answer["message"])
+    return answer
+
+act("open_files", paths=["/data/counts.csv", "/data/target.fasta"], new_workspace=True)
+act("draft_design")
+run = act("score")["data"]
+findings = act("qc_findings")["data"]["findings"]
+print(run["name"], [(f["title"], f["status"]) for f in findings])
+act("export", what="scores", path="/data/scores.csv")</code></pre></div>
+      <p>On Linux the data folder is <code>~/.config/MaveScape</code>, on Windows <code>%AppData%\MaveScape</code>, unless MaveScape was started with <code>--data-dir</code>. The <code>client</code> name appears in the window's log beside each action.</p>
+
+      <h2 id="screenshots">The documentation's screenshots</h2>
+      <p>The pictures on this site are captured the same way: <code>docs/capture/capture.mjs</code> builds MaveScape, starts it with <code>--remote-control</code> on an empty library, drives each scene through these actions in headless Chrome, and writes each scene in the light and dark themes. <code>validation/remote-session.mjs</code> runs every action and checks the results against the same analysis in Node, and runs in continuous integration.</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>node docs/capture/capture.mjs map qc --theme dark</code></pre></div>
+
+      <h2 id="later">Coming</h2>
+      <p>Headless runs (<code>mavescape run</code>, scoring a design and a table into a folder with no window) come in 0.2, and an MCP server for AI agents on the same actions later (<a href="{{github}}/blob/main/mavescape-spec/roadmap.md">roadmap</a>).</p>

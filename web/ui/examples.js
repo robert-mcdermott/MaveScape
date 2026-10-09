@@ -22,9 +22,10 @@ const fetchBytes = async (path) => {
   return new Uint8Array(await response.arrayBuffer());
 };
 
+// Returns { ok, message }.
 export async function openExample(app, id) {
   const example = exampleById(id);
-  if (!example) return;
+  if (!example) return { ok: false, message: `No example "${id}".` };
   const busy = progressToast(`Opening the example "${example.title}"…`);
   try {
     let bytes;
@@ -86,10 +87,12 @@ export async function openExample(app, id) {
     // A new workspace: not in the library until it is saved.
     app.store.markSaved(null);
     await app.saveNow();
-    app.setMode(example.opens);
+    await app.setMode(example.opens);
     busy.done(`Opened the example "${example.title}". Its guide is in the inspector.`);
+    return { ok: true, message: `Opened the example "${example.title}"${result.ok ? ', scored with MaveScape\'s defaults' : ''}.` };
   } catch (error) {
     busy.fail(`The example could not be opened: ${error.message}`);
+    return { ok: false, message: `The example could not be opened: ${error.message}` };
   }
 }
 

@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+Wave 2 of the [roadmap](mavescape-spec/roadmap.md): every common experiment design, each checked
+against an independent reference, plus headless runs. Built slice by slice; this section grows with
+each.
+
+### Added
+
+- **Remote control (wave 2, slice 1).** `mavescape --remote-control` lets programs on this computer
+  drive the open window through `/api/remote/action`: `get_state`, `new_workspace`,
+  `open_example`, `open_files`, `set_mode`, `focus`, `draft_design`, `set_design`, `score`,
+  `qc_findings`, `select_variants`, `inspect_variant`, `render_map` and `export` (scores, counts,
+  QC, provenance, methods, references, the map, a selection or the workspace archive). Each action
+  happens in the window, its changes go into the history and can be undone; names are forgiving, and a wrong
+  one is answered with the choices. `GET /api/remote/tools` lists the actions with their arguments.
+  MaveScape writes its address and a token to `remote.json` in its data folder (readable by its
+  owner only, removed on exit); reading and writing files needs the token. Only programs on this
+  computer, never other web pages, can send actions. The hub, the connection file and the export
+  writer are ported from CytoWeave 0.8.0.
+- **Screenshots captured through remote control.** `docs/capture/capture.mjs` builds MaveScape,
+  runs each scene on an empty library in headless Chrome by remote actions, and writes it in the
+  light and dark themes to `docs/images/` (optionally auditing each with axe-core). Ten scenes: the
+  start page, import, the design and its draft, scoring, QC, the map, a saved selection, the map by
+  standard error, and the exports.
+- **The website** (`docs/site/`, published on GitHub Pages from the `gh-pages` branch): home,
+  install, science (the validation, with its numbers) and a guide of eleven pages (getting started,
+  the examples, opening your data, the design, scoring, QC, the map and the inspector, the record,
+  scripting, troubleshooting), with the screenshots in both themes. The build checks every link,
+  anchor and screenshot. The README shows the map's screenshot.
+- **The import wizard accepts what it detected** when asked (remote control's `open_files`), and
+  leaves the wizard open for review otherwise.
+
+### Fixed
+
+- **Scores depended on the browser.** JavaScript's `Math.log` and `Math.exp` differ in their last
+  bit between engines and their versions (Chrome 154 and Node 22 on about 2% of logarithms), so a
+  run's output hash depended on the browser that scored it, and a saved run could stop reproducing
+  after a browser update. Scoring, QC, statistics and simulation now use `web/lib/dmath.js`
+  (fdlibm's logarithm and exponential in plain arithmetic): within one unit in the last place of
+  the engines' functions, and the same bits everywhere. The scoring engine's version is now 2; runs
+  made by 0.1.0 reopen with scores that differ only in their last digits, and say why.
+
 ## 0.1.0 (2026-10-09)
 
 MaveScape's first release, wave 1 of the [roadmap](mavescape-spec/roadmap.md): from a
