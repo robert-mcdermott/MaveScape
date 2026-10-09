@@ -59,6 +59,10 @@ MaveScape starts from counts; reads (FASTQ) are counted by those upstream tools.
 
 A second `mavescape <files>` hands its files to the window already open.
 
+MaveScape stops when its window closes. On macOS, Chrome (and Edge, Brave) keeps running after its
+last window is closed: quit it with ⌘Q to stop MaveScape too. If that browser is still running
+when MaveScape starts, the new window opens in it and MaveScape keeps serving until Ctrl+C.
+
 ## Privacy and security
 
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
