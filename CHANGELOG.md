@@ -1,10 +1,10 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-10-09)
 
 MaveScape's first release, wave 1 of the [roadmap](mavescape-spec/roadmap.md): from a
 two-population count table to QC, scores checked against Enrich2, an interactive variant-effect
-map and a saved, reproducible record. Built slice by slice; this section grows with each.
+map and a saved, reproducible record.
 
 ### Added
 
