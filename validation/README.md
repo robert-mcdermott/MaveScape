@@ -16,6 +16,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `fixtures/`; MaveDB, external |
 | `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`) raise exactly their findings, a clean one none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
 | `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
+| `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked | `fixtures/`, `web/examples/` |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 
 ## Public data (`sources.json`)
@@ -204,4 +205,21 @@ replicates), scores it, builds its map and draws 180 frames while panning on a s
 scoring 0.5 s, the model 26 ms, 0.6 ms of JavaScript per frame at the median (budgets 10 s, 1 s,
 16 ms). Drawn on a real canvas in Chrome (1,600 × 500 pixels at 2× resolution), a frame takes a
 median of 2.9, 3.9 and 8.1 ms at 14-, 6- and 2-pixel cells, against 33 ms for 30 frames per second.
+
+## The record (wave 1, slice 8)
+
+`roundtrip-cases.mjs` builds a workspace as the window does (a table imported, its target and
+design, a score run with MaveScape's defaults, a saved selection, a changed QC threshold, all at
+fixed times) and writes every export of it. The suite saves it as a `.msz` archive, reads the
+archive back, recomputes the run's scores from the archived table (they must have the run's
+recorded output hash), saves again and compares the archives and every export byte for byte. It
+reads the exported scores back (every score and SE to the last bit, NA where none) and scores the
+exported counts again (the run's output hash). Then it damages archives on purpose: an edited
+run, a history entry rewritten with the manifest made to match, an altered table, an entry named
+`../escape.txt`, a missing file (each reported), and archives from a newer version, without a
+manifest, or with an entry that inflates beyond its declared size (each refused).
+
+The GRB2 example's counts (`web/examples/grb2-sh3/counts.csv`) must be MaveDB's file byte for byte
+(the SHA-256 in `sources.json`); the simulated example must be the same from its seed, labeled
+simulated, its scores within r > 0.98 of the true effects, and pass every QC finding.
 

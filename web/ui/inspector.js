@@ -111,7 +111,8 @@ export function mountInspector(app) {
     root.append(focusSection());
     for (const build of contributed.values()) {
       try {
-        root.append(build(app));
+        const section = build(app);
+        if (section) root.append(section);
       } catch (error) {
         root.append(h('section.inspector-section', h('p.muted', `This section could not be shown: ${error.message}`)));
       }

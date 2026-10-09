@@ -6,7 +6,7 @@
 // every variant with its evidence.
 
 import { h, icon, clear, formatCount } from './dom.js';
-import { confirmDialog, toast } from './overlays.js';
+import { confirmDialog, showMenu, toast } from './overlays.js';
 import { validateDesign } from '../lib/design.js';
 import { checkParameters, DEFAULT_PARAMETERS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
 import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
@@ -18,6 +18,7 @@ import { KIND_NAMES } from '../lib/variants.js';
 import { classHistogram, flowBars, scoreGroups } from './plots.js';
 import { workerInput } from './score-input.js';
 import { ensureResults, forgetResults } from './run-results.js';
+import { runExportItems } from './record.js';
 
 const PAGE = 50;
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
@@ -335,7 +336,8 @@ export function mountScoreMode(app, container) {
       ...run.warnings.map((w) => h('div.callout.warn', { style: { marginTop: '6px' } }, icon('warning'), h('span', w.message))),
       run.info?.length ? h('ul.summary-lines', { style: { marginTop: '8px', fontSize: '12px' } }, ...run.info.map((x) => h('li', x))) : null,
       h('details', { style: { marginTop: '8px' } }, h('summary', 'Method, as it would be written'), h('p', { style: { fontSize: '12.5px' } }, describeMethod(run).join(' '))),
-      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => { app.focusItem({ kind: 'run', id: run.id }); app.setMode('qc'); } }, icon('qc'), 'Quality control of this run')));
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => { app.focusItem({ kind: 'run', id: run.id }); app.setMode('qc'); } }, icon('qc'), 'Quality control of this run'),
+        h('button.btn.small', { type: 'button', onclick: (event) => showMenu(event.currentTarget, runExportItems(app, run, view.condition)) }, icon('download'), 'Export…')));
     if (!r?.results) return [head, h('div.pane', h('p.muted', { style: { margin: 0 } }, r?.status === 'checking' ? 'Recomputing the scores from the run\'s inputs…' : 'The scores are recomputed from the run\'s inputs when it is shown.'), progressEl)];
     const results = r.results;
     view.condition = Math.min(view.condition, results.conditions.length - 1);

@@ -99,6 +99,24 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   none), its flags, each replicate's counts and score, every sample's counts, the other
   substitutions at its position, the sequence around it and the run it comes from.
 
+- **The workspace archive (`.msz`, wave 1, slice 8).** One file with everything needed to reopen
+  an analysis on another computer: the workspace (targets, design, score runs, selections, QC
+  thresholds, the chained history), each run's scores, the methods with references, and the
+  tables (or only their checksums). Saved, reopened and saved again it has the same bytes; opened,
+  every file is checked against the manifest's SHA-256 and the history's chain, and anything that
+  does not hold is reported. Workspace menu → Export.
+- **Exports.** From a run's Export menu: scores and the counts it scored, in MaveDB's columns (they
+  import again without loss, and MaveDB's upload layout is now recognized at import); QC per
+  sample and per variant; the run's provenance as JSON; the methods paragraph, written from what
+  the run did, with numbered references and their BibTeX. From the map: the selected variants as
+  CSV or JSON.
+- **Examples.** Two on the Start page, each opened as a new workspace with a first score run and a
+  guide in the inspector (its question, steps, what to expect, source and license): the **GRB2
+  SH3 domain** (the Human Domainome's CC0 counts from MaveDB) and **a simulated experiment** whose
+  true effects are known (and compared with its scores). Simulated data are labeled as such.
+- **Blank layouts and `docs/FORMATS.md`.** Annotated count table, sample sheet and target FASTA to
+  fill in, from the Start page; every file MaveScape reads and writes, described.
+
 ### Validation
 
 - Go tests of the host: security headers, foreign Host headers and cross-origin requests refused,
@@ -145,3 +163,7 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   it is planted, state colors apart from the neutral color in every theme, the scale centered on
   the wild type, and on BRCA1 the zinc ligands as the least tolerant positions (9 checks).
   `validation/bench.mjs`: 105,000 variants scored, mapped and drawn within budget.
+- `validation/run.mjs roundtrip` (wave 1, slice 8): workspaces saved as archives, reopened and
+  saved again give the same bytes, and every export the same bytes; exported scores and counts
+  import again without loss; tampered, hostile and foreign archives are caught; the examples and
+  layouts are what they say (25 checks).

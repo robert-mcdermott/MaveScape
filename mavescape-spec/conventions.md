@@ -223,17 +223,23 @@ design, designSource /* the source the design describes */, runs, selections, hi
 previous entry's hash and the entry (canonical JSON); `verifyHistory` checks the chain. Exported, it is a `.msz` ZIP archive:
 
 ```
-manifest.json            format 'mavescape-archive', version, created, software, contents with SHA-256
-workspace.json           targets, design, import templates, runs (parameters and summaries),
-                         selections, figures, calibration, history (hash-chained), checkpoints
-sources/<sha256>.csv     the imported tables, unless exported with checksums only
-results/<run-id>.csv     each run's per-variant results
-annotations/<source>.json cached public records with retrieval metadata
-methods.md, references.bib
+manifest.json            format 'mavescape-archive', version, created, software, sources
+                         ('included' | 'checksums'), every other file with its SHA-256 and size
+workspace.json           the workspace document: targets, design, runs (inputs, parameters,
+                         output hash), selections, QC thresholds, example, the hash-chained history
+sources/<sha256>.<ext>   the imported tables, byte for byte, unless exported with checksums only
+results/<run-id>.csv     each run's scores (results/<run-id>.<condition>.csv for further conditions)
+methods.md, references.bib   the latest run's methods
+annotations/…            cached public records with retrieval metadata (from 0.3)
 ```
 
-Archives are written atomically, read with path-traversal and decompression limits, and migrated
-explicitly (`web/lib/migrate.js`); MaveScape opens at least the two previous schema versions.
+Archives (`web/lib/archive.js`, wave 1 slice 8) are written deterministically (the entries are
+dated with the workspace's modification time; the same workspace gives the same bytes) and read
+defensively: only these names, nothing outside the archive's folders, each file's size limited
+and enforced while decompressing, every file's SHA-256 against the manifest, every table's against
+its name, the history's chain verified; problems are reported, never hidden. Version 1 is the
+first; migrations (`web/lib/migrate.js`) arrive with version 2, and MaveScape will open at least
+the two previous versions. A workspace whose id is already in the library opens as a copy.
 
 ## Workers
 

@@ -844,3 +844,9 @@ table.data.compact th { position: static; }
 .position-strip .other { fill: var(--text-3); opacity: 0.7; }
 .position-strip .me { fill: none; stroke: var(--accent); stroke-width: 2.5; }
 .position-strip .tick { fill: var(--text-3); font-size: 9px; }
+
+/* ---------- MaveScape: examples (ui/examples.js) ---------- */
+
+.example-guide h3 { flex-wrap: wrap; }
+ol.example-steps { margin: 6px 0 8px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-2); }
+ol.example-steps li span { display: block; margin-bottom: 3px; }

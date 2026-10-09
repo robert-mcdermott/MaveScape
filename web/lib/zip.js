@@ -28,19 +28,22 @@ async function deflateRaw(bytes) {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-function dosDateTime(date) {
-  const year = Math.min(2107, Math.max(1980, date.getFullYear()));
-  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
-  const day = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+// The DOS date and time of a ZIP entry; in UTC when asked, so that the same date gives the same
+// bytes in every time zone.
+function dosDateTime(date, utc = false) {
+  const get = (local, universal) => (utc ? universal.call(date) : local.call(date));
+  const year = Math.min(2107, Math.max(1980, get(date.getFullYear, date.getUTCFullYear)));
+  const time = (get(date.getHours, date.getUTCHours) << 11) | (get(date.getMinutes, date.getUTCMinutes) << 5) | Math.floor(get(date.getSeconds, date.getUTCSeconds) / 2);
+  const day = ((year - 1980) << 9) | ((get(date.getMonth, date.getUTCMonth) + 1) << 5) | get(date.getDate, date.getUTCDate);
   return { time, day };
 }
 
 // files: [{ name, data: Uint8Array | string, compress?: boolean }]. Returns the archive as a
-// Uint8Array. options: { compress = true, date = new Date() }.
+// Uint8Array. options: { compress = true, date = new Date(), utc = false }.
 export async function createZip(files, options = {}) {
   if (files.length > 0xffff) throw new Error('A ZIP archive without ZIP64 holds at most 65,535 files.');
   const encoder = new TextEncoder();
-  const { time, day } = dosDateTime(options.date ?? new Date());
+  const { time, day } = dosDateTime(options.date ?? new Date(), options.utc);
   const locals = [];
   const centrals = [];
   const seen = new Set();

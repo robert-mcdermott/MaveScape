@@ -312,23 +312,50 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
        stay ΔE ≥ 10 from the neutral color.
      - BRCA1's table holds 7,682 multi-variants (error-prone PCR), which a substitution map cannot
        show; the map counts them and says so, and the Score view lists them.
-8. **Record and examples (R1–R4, T4, D13).** The `.msz` archive (manifest,
-   sources or checksums, design, runs, history, methods) and the library; exports of scores and
-   counts (MaveDB column conventions), QC tables, design JSON, provenance JSON, selections; the
-   methods paragraph with references and BibTeX (`web/lib/methods.js` framework from CytoWeave).
-   Two examples: GRB2 SH3 from the Domainome (published, CC0, 1,121 variants, structure 2VWF),
-   and a simulated two-population experiment with known true effects (`web/lib/simulate.js`, written
-   in slice 6 for the QC fixtures:
-   library composition, bottleneck, selection, sequencing noise; clearly labeled simulated),
-   which later waves extend to time series, bins, barcodes and planted faults. The Start page
-   offers blank, annotated layouts (count table, sample sheet, target FASTA) and
-   `docs/FORMATS.md` describes every file MaveScape reads and writes, so researchers whose data
-   come from their own pipeline know what to prepare.
-   - Validation (suite `roundtrip`): save, reopen and re-export give identical bytes for every
-     export; import → export → import of scores and counts loses nothing.
+8. **Record and examples (R1–R4, T4, D13): done.** `web/lib/archive.js` (the `.msz` archive:
+   manifest with every file's SHA-256, the workspace, the tables or their checksums only, each
+   run's scores, the methods; written deterministically, in any time zone; read defensively:
+   known names only, sizes enforced while decompressing, every checksum and the history's chain
+   checked, problems reported; an archive of a workspace already in the library opens as a copy),
+   `web/lib/exports.js` (scores and counts in MaveDB's column layout, QC per sample and per
+   variant, selections as CSV and JSON, provenance JSON; numbers in their shortest exact form),
+   `web/lib/methods.js` (the methods paragraph from what the run did, with numbered references
+   and BibTeX; CytoWeave's framework, MaveScape's text), `web/lib/examples.js` and
+   `web/ui/examples.js` (two examples opened as new workspaces with a first run, and their guide in
+   the inspector), `web/ui/record.js` (the archive and the run's exports in the window: the
+   workspace menu, the Score view's Export menu, the Map view's selection export), the Start
+   page's examples and blank layouts (`web/examples/layouts/`: count table, sample sheet, target
+   FASTA, annotated), `docs/FORMATS.md`. Examples: **GRB2 SH3** (MaveDB's CC0 counts, unchanged,
+   with its notice; opens in QC) and **a simulated experiment** (40 residues, three replicates,
+   seed 20261009, labeled simulated; its true effects downloadable and compared with the scores in
+   the guide; opens in the map). Structure 2VWF joins GRB2's example with wave 4.
+   - Validation (suite `roundtrip`, 25 checks): the fixture and GRB2, as workspaces with a run, a
+     selection and changed QC thresholds, saved as `.msz`, reopened (scores recomputed from the
+     archived table, with the recorded output hash) and saved again: the same bytes; every export
+     again byte for byte (scores, counts, QC per sample and per variant, provenance, methods,
+     references, selection, map); checksums-only archives; exported scores read back to the last
+     bit and import as MaveDB score tables; exported counts scored again give the run's output
+     hash; an edited run, a rewritten history entry (with the manifest made to match), an altered
+     table, a path out of the archive and a missing file are reported, and archives from a newer
+     version, without a manifest, or inflating beyond their declared size are refused; the methods
+     cite in order with a BibTeX entry each; the GRB2 example is MaveDB's file byte for byte and
+     its design fits; the simulated example is deterministic, its scores correlate with the truth
+     at r = 0.993 and its QC passes; the blank layouts make a valid design. 8 more unit tests (126
+     in all). The built program serves the examples from its embedded files; in the window, both
+     examples open and save, and an archive reopens as a copy whose map draws from the archived
+     table.
+   - Found by slice 8:
+     - **MaveDB's upload layout was not recognized**: the importer knew MaveDB's downloads (with
+       `accession`) only, so MaveScape's own exports, which follow MaveDB's upload layout
+       (`hgvs_nt`, `hgvs_splice`, `hgvs_pro`), read as generic tables. Both are recognized now.
+     - **ZIP dates are local times**: the same workspace archived in two time zones differed by a
+       few bytes. Archives are dated in UTC; the same SHA-256 in UTC, Tokyo and Los Angeles.
+     - The suite caught a blank layout whose example rows named residues its own example target
+       does not have: layouts are checked as a whole, as a researcher would use them.
 
 Release 0.1.0 when the PRD's phase-1 exit holds: the whole workflow needs no command line, golden
-and reference tests run in CI, and round trips lose no material data.
+and reference tests run in CI, and round trips lose no material data. **All three hold at the end
+of slice 8** (validation suites `roundtrip`, `map`, `scoring`, `enrich2`; 211 checks in CI).
 
 ## 0.2.0: every design, checked (wave 2)
 

@@ -13,6 +13,7 @@ import { flagNames, STAGE_BY_CODE } from '../lib/filters.js';
 import { addSelection, removeSelection } from '../lib/workspace.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { mountVariantMap } from './variant-map.js';
+import { exportSelection } from './record.js';
 
 const PALETTES = [['rdbu', 'Blue (loss) – red (gain)'], ['puor', 'Purple (loss) – orange (gain)']];
 const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
@@ -159,6 +160,10 @@ export function mountMapMode(app, container) {
             const added = addSelection(store.ws, { name, run: run.id, condition: view.condition, keys });
             store.commit(added.ws, `Save the selection "${name}"`);
           } }, icon('save'), 'Save as…'),
+          h('button.btn.small', { type: 'button', onclick: (event) => showMenu(event.currentTarget, [
+            { label: 'Selected variants with scores (CSV)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: view.condition, keys }, 'csv') },
+            { label: 'Selected variants (JSON)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: view.condition, keys, created: new Date().toISOString() }, 'json') },
+          ]) }, icon('download'), 'Export'),
           h('button.btn.small', { type: 'button', onclick: () => { store.setUI({ selection: null }, ['selection']); map?.setSelection([]); renderSelectionBar(); } }, 'Clear'))
         : h('p.muted', { style: { margin: 0, fontSize: '12px' } }, 'Click a cell to inspect it; ⌘- or Ctrl-click adds to the selection, Shift-drag selects a rectangle. Drag to pan; ⌘ or Ctrl and the wheel (or a pinch) zooms. With the map focused, arrow keys move and Enter selects.'),
       saved.length ? h('div.btn-row', { style: { marginTop: '6px' } }, h('span.muted', { style: { fontSize: '12px' } }, 'Saved:'),

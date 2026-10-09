@@ -13,6 +13,8 @@ import { WorkerClient } from './ui/workers.js';
 import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js';
 import { createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWorkspace } from './lib/workspace.js';
 import { installImport } from './ui/import.js';
+import { chooseArchiveExport, openArchives } from './ui/record.js';
+import { exampleGuide } from './ui/examples.js';
 
 const VERSION = '0.1.0';
 
@@ -93,6 +95,8 @@ async function start() {
   app.drawer = mountDrawer(app);
   app.log = (message) => app.drawer.log(message);
   installImport(app);
+  app.importers.set('workspace', (items) => openArchives(app, items));
+  app.inspector.setSection('example', exampleGuide);
 
   // --- Views -------------------------------------------------------------------------------------
 
@@ -321,6 +325,7 @@ async function start() {
       { label: 'A folder…', icon: 'folder', onSelect: () => app.pickFolder() },
       '-',
       { section: 'Export' },
+      { label: 'Workspace archive (.msz)…', icon: 'download', onSelect: () => chooseArchiveExport(app) },
       { label: 'Workspace document (JSON)', icon: 'download', onSelect: exportWorkspaceJSON },
       '-',
       { label: 'Start page', icon: 'grid', onSelect: () => app.setMode('welcome') },
@@ -336,6 +341,7 @@ async function start() {
     { label: 'New workspace', icon: 'plus', run: () => app.newWorkspace() },
     { label: 'Open a saved workspace', icon: 'library', hint: `${modKey}⇧O`, run: openLibraryDialog },
     { label: 'Save workspace now', icon: 'save', hint: `${modKey}S`, run: saveNow },
+    { label: 'Export the workspace archive (.msz)', icon: 'download', run: () => chooseArchiveExport(app), keywords: 'save zip record share' },
     { label: 'Export the workspace document', icon: 'download', run: exportWorkspaceJSON },
     { label: 'Show or hide the drawer (history, log)', icon: 'drawer', hint: `${modKey}J`, run: () => app.toggleDrawer(), keywords: 'history log undo' },
     { label: 'Toggle dark theme', icon: 'moon', run: () => toggleTheme() },

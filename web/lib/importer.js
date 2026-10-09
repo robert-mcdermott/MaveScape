@@ -51,7 +51,10 @@ export function detectLayout(table) {
   if (names.includes('nt_seq')) {
     return { layout: 'dimsum', variantColumn: 'nt_seq', level: 'nucleotide-sequence', countColumns: numeric, scoreColumns: {}, notes: ['DiMSum\'s variant count table: each row is a whole nucleotide sequence, named by comparing it with the wild type.'] };
   }
-  if (names.includes('accession') && (names.includes('hgvs_pro') || names.includes('hgvs_nt'))) {
+  // MaveDB's downloads have an accession column; its upload layout (and MaveScape's exports) the
+  // three identifier columns alone.
+  const mavedb = names.includes('accession') || ['hgvs_nt', 'hgvs_splice', 'hgvs_pro'].every((n) => names.includes(n));
+  if (mavedb && (names.includes('hgvs_pro') || names.includes('hgvs_nt'))) {
     // MaveDB indexes a table by hgvs_nt when it is given (several nucleotide variants may share
     // one protein name), else by hgvs_pro.
     const filled = (name) => (column(table, name)?.values ?? []).filter((v) => v && v !== 'NA').length;

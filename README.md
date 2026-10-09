@@ -9,12 +9,13 @@ It runs on your own computer as one self-contained program, with no account, Pyt
 are analyzed in the browser and never leave your machine. MaveScape reports experimental
 functional effects for research; it does not classify variants as pathogenic or benign.
 
-> **Status: in development.** Wave 1 (release 0.1.0) is being built. Count tables import, designs
-> are set in the Experiment view, and two-population experiments (and time series, by their first
-> and last samples) are scored, with numbers checked against Enrich2, dms_variants and metafor.
-> Quality control reports findings from the counts and from each score run, and the
-> variant-effect map shows each run with an inspector for every variant. Exports of scores and
-> the record arrive next ([roadmap](mavescape-spec/roadmap.md)).
+> **Status: 0.1.0 is ready for release.** Count tables import, designs are set in the Experiment
+> view, two-population experiments (and time series, by their first and last samples) are scored
+> with numbers checked against Enrich2, dms_variants and metafor, quality control reports its
+> findings, the variant-effect map shows each run, and a workspace saves to one archive that
+> reopens identically. Two examples are on the Start page; [`docs/FORMATS.md`](docs/FORMATS.md)
+> describes every file. The [roadmap](mavescape-spec/roadmap.md) continues with time series, bins,
+> barcodes and DiMSum's error model in 0.2.
 
 ## Install
 

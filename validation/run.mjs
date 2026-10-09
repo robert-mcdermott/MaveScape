@@ -6,8 +6,8 @@
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
-// data), experiment (external data), scoring, qc and map (their last checks need external data);
-// all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// data), experiment (external data), scoring, qc, map and roundtrip (their last checks need
+// external data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -53,6 +53,11 @@ import { EXPORT_THEME, mapSVG } from '../web/lib/map-svg.js';
 import { lab as labColor, deltaE2000 } from '../web/lib/colorvision.js';
 import { hexToRgb, rgbToHex } from '../web/lib/colormaps.js';
 import { writeFileSync } from 'node:fs';
+import { SOFTWARE, allExports, buildWorkspace, recompute, scoreTable } from './roundtrip-cases.mjs';
+import { readArchive, writeArchive } from '../web/lib/archive.js';
+import { createZip } from '../web/lib/zip.js';
+import { sha256 } from '../web/lib/sha256.js';
+import { EXAMPLES, exampleById, simulatedExample } from '../web/lib/examples.js';
 
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
@@ -957,6 +962,143 @@ const suites = {
     const least = positions.slice(0, 5);
     const ligands = least.filter(([p]) => zinc.has(p)).length;
     check('map', 'BRCA1 RING (E2 binding): the positions least tolerant of substitution are the RING domain\'s zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64)', `${least.map(([p, m, aa]) => `${aa}${p} ${m.toFixed(2)}`).join(', ')}; ${ligands} of 5 are zinc ligands; ${b.offMap} multi-variants off the map`, ligands >= 4, '≥ 4 of the 5');
+  },
+  // The record (wave 1, slice 8): a workspace saved as a .msz archive, reopened and exported again
+  // gives the same bytes, for the archive and for every export; exported scores and counts import
+  // again without loss; damaged, hostile and foreign archives are caught; the examples and the
+  // blank layouts are what they say.
+  async roundtrip() {
+    const fixtureBytes = new Uint8Array(readFileSync(new URL('./fixtures/two-population.csv', import.meta.url)));
+    const cases = [['the synthetic fixture', { bytes: fixtureBytes, design: fixtureDesign(), fileName: 'two-population.csv', name: 'Fixture' }]];
+    const grb2Bytes = new Uint8Array(readFileSync(new URL('../web/examples/grb2-sh3/counts.csv', import.meta.url)));
+    const grb2Design = JSON.parse(readFileSync(new URL('../web/examples/grb2-sh3/design.json', import.meta.url), 'utf8'));
+    cases.push(['the GRB2 SH3 example', { bytes: grb2Bytes, design: grb2Design, fileName: 'counts.csv', name: 'GRB2 SH3' }]);
+    for (const [label, input] of cases) {
+      const built = buildWorkspace(input);
+      const exports = allExports(built.ws, built.table, built.results);
+      const sources = new Map([[built.ws.sources[0].sha256, built.bytes]]);
+      const first = await writeArchive(built.ws, { software: SOFTWARE, sources, results: new Map([[built.run.id, built.results]]), methods: exports.methods });
+      const reopened = await readArchive(first.bytes);
+      const again = recompute(reopened.ws, reopened.sources);
+      const second = await writeArchive(reopened.ws, { software: SOFTWARE, sources: reopened.sources, results: new Map([[reopened.ws.runs[0].id, again.scored.results]]), methods: reopened.methods });
+      const same = Buffer.compare(Buffer.from(first.bytes), Buffer.from(second.bytes)) === 0;
+      check('roundtrip', `${label}: saved as .msz, reopened (scores recomputed from the archived table) and saved again: the same bytes`, `${(first.bytes.length / 1024).toFixed(0)} KB, ${first.manifest.contents.length + 1} files; ${same ? 'identical' : 'different'}; ${reopened.problems.length} problems`, same && !reopened.problems.length, 'identical, no problems');
+      check('roundtrip', `${label}: the reopened workspace is the saved one (history chained, run reproduced)`, `${reopened.ws.history.length} history entries, ${verifyHistory(reopened.ws).ok ? 'unbroken' : 'broken'}; output SHA-256 ${outputDigest(again.scored.results) === reopened.ws.runs[0].output.sha256 ? 'as recorded' : 'different'}`, serializeWorkspace(reopened.ws) === serializeWorkspace(built.ws) && verifyHistory(reopened.ws).ok && outputDigest(again.scored.results) === reopened.ws.runs[0].output.sha256, 'the same');
+      const exportsAgain = allExports(reopened.ws, again.table, again.scored.results);
+      const differing = Object.keys(exports).filter((k) => k !== 'methods' && exports[k] !== exportsAgain[k]);
+      check('roundtrip', `${label}: every export again after reopening, byte for byte (${Object.keys(exports).length - 1} files: scores, counts, QC per sample and per variant, provenance, methods, references, selection, map)`, differing.length ? `differ: ${differing.join(', ')}` : 'all identical', !differing.length, 'identical');
+      const light = await writeArchive(built.ws, { software: SOFTWARE, sources: null, results: new Map([[built.run.id, built.results]]), methods: exports.methods });
+      const lightRead = await readArchive(light.bytes);
+      check('roundtrip', `${label}: with checksums only, the archive names the table by its SHA-256 and holds no table`, `${(light.bytes.length / 1024).toFixed(0)} KB; manifest sources "${lightRead.manifest.sources}"; ${lightRead.sources.size} tables; ${lightRead.problems.length} problems`, lightRead.sources.size === 0 && lightRead.manifest.sources === 'checksums' && !lightRead.problems.length && lightRead.ws.sources[0].sha256 === built.ws.sources[0].sha256, 'no table, no problems');
+
+      // Scores out and in: every number back exactly, every NA as NA.
+      const scoresTable = parseTable(exports['scores.csv']);
+      const col = (n) => scoresTable.columns.find((c) => c.name === n);
+      const c0 = built.results.conditions[0];
+      let mismatches = 0;
+      for (let i = 0; i < built.results.rows; i += 1) {
+        const want = c0.reason[i] ? [Number.NaN, Number.NaN] : [c0.score[i], c0.se[i]];
+        const got = [col('score').numeric[i], col('SE').numeric[i]];
+        if (!want.every((w, j) => Object.is(w, got[j]))) mismatches += 1;
+        if ((col('hgvs_pro').values[i] === 'NA' ? '' : col('hgvs_pro').values[i]) !== built.results.variants.key[i]) mismatches += 1;
+      }
+      const layout = detectLayout(scoresTable);
+      check('roundtrip', `${label}: the exported scores read back exactly (every score and SE to the last bit, NA where none), and import as a MaveDB score table`, `${mismatches} differences over ${built.results.rows} variants; layout ${layout.layout}, variants in ${layout.variantColumn}`, !mismatches && layout.layout === 'mavedb-scores' && layout.variantColumn === 'hgvs_pro', '0; mavedb-scores');
+      // Counts out and in: scored again, the same output.
+      const countsTable = parseTable(exports['counts.csv']);
+      const rescored = scoreTable(countsTable, built.run.inputs.design, built.run.inputs.parameters);
+      check('roundtrip', `${label}: the exported counts, imported and scored again with the same design and parameters, give the run's output hash`, rescored.ok ? (outputDigest(rescored.results) === built.run.output.sha256 ? 'the same output' : 'a different output') : rescored.errors[0], rescored.ok && outputDigest(rescored.results) === built.run.output.sha256, 'the same');
+    }
+
+    // Damaged, hostile and foreign archives.
+    const built = buildWorkspace(cases[0][1]);
+    const exports = allExports(built.ws, built.table, built.results);
+    const good = await writeArchive(built.ws, { software: SOFTWARE, sources: new Map([[built.ws.sources[0].sha256, built.bytes]]), results: new Map([[built.run.id, built.results]]), methods: exports.methods });
+    const files = new Map();
+    for (const entry of (await import('../web/lib/zip.js')).listZip(good.bytes)) files.set(entry.name, await (await import('../web/lib/zip.js')).readZipEntry(good.bytes, entry));
+    const rezip = (changes) => createZip([...files].map(([name, data]) => ({ name, data })).filter((f) => !(f.name in changes) || changes[f.name] !== null).map((f) => (f.name in changes ? { name: f.name, data: changes[f.name] } : f)).concat(changes.extra ?? []), { date: new Date(built.ws.modified) });
+    const text = (bytes) => new TextDecoder().decode(bytes);
+    const editedWs = JSON.parse(text(files.get('workspace.json')));
+    editedWs.runs[0].inputs.parameters.pseudocount = 0.25;
+    const historyEdited = JSON.parse(text(files.get('workspace.json')));
+    historyEdited.history[2].detail = 'Imported something else';
+    const manifestNewer = JSON.parse(text(files.get('manifest.json')));
+    manifestNewer.version = 99;
+    const tests = [
+      ['a run\'s parameters edited inside workspace.json', { 'workspace.json': JSON.stringify(editedWs) }, /does not have the SHA-256 the manifest records/],
+      ['a history entry rewritten (and the manifest made to match)', { 'workspace.json': JSON.stringify(historyEdited), 'manifest.json': JSON.stringify({ ...JSON.parse(text(files.get('manifest.json'))), contents: JSON.parse(text(files.get('manifest.json'))).contents.map((c) => (c.path === 'workspace.json' ? { ...c, sha256: sha256(new TextEncoder().encode(JSON.stringify(historyEdited))) } : c)) }) }, /history does not hold together/],
+      ['a table altered', { [`sources/${built.ws.sources[0].sha256}.csv`]: new TextEncoder().encode(`${text(built.bytes)}p.Ala2Val,1,1,1,1,1,1,1\n`) }, /does not have the SHA-256/],
+      ['an entry that climbs out of the archive (../escape.txt)', { extra: [{ name: '../escape.txt', data: 'x' }] }, /not part of a MaveScape archive/],
+      ['a file missing', { 'methods.md': null }, /missing from the archive/],
+    ];
+    for (const [what, changes, pattern] of tests) {
+      const bytes = await rezip(changes);
+      let message;
+      try {
+        const r = await readArchive(bytes);
+        message = r.problems.join(' ') || 'no problem reported';
+      } catch (error) {
+        message = `refused: ${error.message}`;
+      }
+      check('roundtrip', `an archive with ${what} is reported`, message.slice(0, 180), pattern.test(message), String(pattern).slice(1, -1));
+    }
+    for (const [what, bytesOf, pattern] of [
+      ['written by a newer MaveScape', async () => rezip({ 'manifest.json': JSON.stringify(manifestNewer) }), /newer MaveScape/],
+      ['not from MaveScape (no manifest)', async () => createZip([{ name: 'data.csv', data: 'a,b\n' }]), /no manifest/],
+      ['whose entry inflates beyond its declared size (a decompression bomb)', async () => {
+        const bytes = await createZip([{ name: 'manifest.json', data: '{}' }, { name: 'methods.md', data: 'x'.repeat(100000) }]);
+        // Declare 1,000 bytes for methods.md in its central-directory record.
+        const view = new DataView(bytes.buffer);
+        for (let i = bytes.length - 22; i >= 0; i -= 1) {
+          if (view.getUint32(i, true) !== 0x02014b50) continue;
+          const nameLength = view.getUint16(i + 28, true);
+          if (new TextDecoder().decode(bytes.subarray(i + 46, i + 46 + nameLength)) === 'methods.md') view.setUint32(i + 24, 1000, true);
+        }
+        return bytes;
+      }, /more than its declared/],
+    ]) {
+      let message = 'opened';
+      try {
+        await readArchive(await bytesOf());
+      } catch (error) {
+        message = error.message;
+      }
+      check('roundtrip', `an archive ${what} is refused, saying why`, message.slice(0, 160), pattern.test(message), String(pattern).slice(1, -1));
+    }
+
+    // The methods: every parameter, the checksum, numbered references with their BibTeX.
+    const m = exports.methods;
+    const numbered = [...m.markdown.matchAll(/\[(\d+)\]/g)].map((x) => Number(x[1]));
+    const firstUse = [...new Set(numbered)];
+    check('roundtrip', 'the methods name the table\'s SHA-256, every scoring parameter and the run\'s output hash; references numbered in order of first use, each with a BibTeX entry', `${m.references.length} references (${m.references.map((r) => r.key).join(', ')}); first cited in the order ${firstUse.join(', ')}; ${(m.bibtex.match(/^@/gm) ?? []).length} BibTeX entries`,
+      m.markdown.includes(built.ws.sources[0].sha256) && m.markdown.includes('pseudocount of 0.5') && m.markdown.includes('restricted maximum likelihood') && m.markdown.includes(built.run.output.sha256) && JSON.stringify(firstUse) === JSON.stringify(firstUse.slice().sort((a, b) => a - b)) && (m.bibtex.match(/^@/gm) ?? []).length === m.references.length, 'all');
+
+    // The examples.
+    const bundled = sources.datasets['mavedb-grb2-sh3'].files.find((f) => f.path === 'counts.csv');
+    const grb2Table = parseTable(grb2Bytes);
+    const grb2Result = validateDesign(grb2Design, { columns: grb2Table.columns.map((c) => c.name) });
+    check('roundtrip', 'the GRB2 SH3 example: its counts are MaveDB\'s, unchanged (SHA-256 as fetched for validation), and its design fits them', `${sha256(grb2Bytes).slice(0, 16)}… against ${bundled.sha256.slice(0, 16)}…; design ${grb2Result.ok ? 'valid' : grb2Result.errors[0].message}`, sha256(grb2Bytes) === bundled.sha256 && grb2Result.ok, 'the same; valid');
+    const sim = simulatedExample();
+    const simAgain = simulatedExample();
+    const simTable = parseTable(sim.csv);
+    const simScored = scoreTable(simTable, sim.design, DEFAULT_PARAMETERS);
+    const simC = simScored.results.conditions[0];
+    const a = [];
+    const b = [];
+    simScored.results.variants.key.forEach((k, i) => { if (!simC.reason[i] && k in sim.truth && k !== 'p.=') { a.push(simC.score[i]); b.push(sim.truth[k]); } });
+    const simQc = findingsFrom(computeQC({ names: simTable.columns[0].values, columns: Object.fromEntries(simTable.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design, results: simScored.results }), defaultThresholds());
+    const raisedSim = simQc.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => f.id);
+    check('roundtrip', 'the simulated example: the same data from its seed, labeled simulated, its scores close to the true effects, and every QC finding passes', `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${raisedSim.length ? raisedSim.join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > 0.98 && !raisedSim.length, 'r > 0.98; all pass');
+    check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
+    // The blank layouts: filled in as they say, they make a valid design.
+    const layoutTable = parseTable(new Uint8Array(readFileSync(new URL('../web/examples/layouts/count-table.csv', import.meta.url))));
+    const sheet = parseTable(new Uint8Array(readFileSync(new URL('../web/examples/layouts/sample-sheet.csv', import.meta.url))));
+    const fasta = parseFasta(readFileSync(new URL('../web/examples/layouts/target.fasta', import.meta.url), 'utf8'))[0];
+    const layoutTarget = targetFromSequence(fasta).target;
+    const layoutDesign = designFromSampleSheet(sheet, { countColumns: detectLayout(layoutTable).countColumns, variants: { column: 'hgvs_pro', level: 'protein' }, targets: [layoutTarget] });
+    const layoutReview = reviewImport(layoutTable, { variantColumn: 'hgvs_pro', level: 'protein', countColumns: detectLayout(layoutTable).countColumns, target: layoutTarget });
+    const layoutValid = validateDesign(layoutDesign.design, { columns: layoutTable.columns.map((c) => c.name) });
+    check('roundtrip', 'the blank layouts (count table, sample sheet, target FASTA) read as they say and make a valid design', `${layoutTable.rows} example rows, ${layoutReview.summary.valid} valid names, ${layoutReview.summary.invalid} invalid; design ${layoutValid.ok ? 'valid' : layoutValid.errors[0].message}; ${layoutTable.diagnostics.map((d) => d.code).join(', ')}`, layoutValid.ok && layoutReview.summary.invalid === 0 && !layoutReview.blocking.length, 'valid');
   },
 };
 
