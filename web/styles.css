@@ -479,6 +479,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: 12px; }
 table.data th { text-align: left; font-weight: 650; color: var(--text-3); font-size: 11px; padding: 5px 6px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
 table.data td { padding: 5px 6px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 table.data td.r, table.data th.r { text-align: right; }
+table.data td.c, table.data th.c { text-align: center; }
 table.data tr:hover td { background: var(--hover); }
 table.data tr.selected td { background: var(--active); }
 
@@ -763,6 +764,7 @@ svg.plot .bar-value { fill: var(--text-2); font-size: 10.5px; font-variant-numer
 svg.plot .threshold { stroke-width: 1.5; stroke-dasharray: 4 3; }
 svg.plot .threshold.review { stroke: var(--warn); }
 svg.plot .threshold.fail { stroke: var(--danger); }
+svg.plot .threshold.reference { stroke: var(--text-3); }
 .plot-canvas canvas { display: block; max-width: 100%; }
 .plot-note { font-size: 11.5px; margin: 6px 0 0; }
 .swatch.dashed { height: 0; background: none; border-top: 2px dashed; }

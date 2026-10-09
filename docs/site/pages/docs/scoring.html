@@ -1,6 +1,6 @@
 ---
 title: Scoring
-description: How MaveScape scores a deep mutational scan: log ratios with normalization, replicates combined by REML random effects, ordered filters with reasons, and runs that reproduce.
+description: How MaveScape scores a deep mutational scan: log ratios with normalization, weighted regression on every time point of a time series, replicates combined by REML random effects, ordered filters with reasons, and runs that reproduce.
 lede: Scoring turns the counts into a functional score with a standard error for every variant, in a run that keeps everything needed to repeat it. The parameters and the filters are in plain view in the Score view.
 ---
       <h2 id="score">Scores</h2>
@@ -14,6 +14,17 @@ lede: Scoring turns the counts into a functional score with a standard error for
       <p>Optional rescaling anchors the scale: nonsense median 0 and wild type 1, or synonymous median 0 and nonsense median −1.</p>
       <shot name="score" alt="The Score view: parameters, two runs of the GRB2 counts, the run's warnings, filter flow and scores by class">Two runs of the GRB2 counts. Each run lists its parameters, warnings, filter flow and scores by class.</shot>
 
+      <h2 id="time-series">Time series</h2>
+      <p>A time series (the same library sampled at three or more times) is scored by default from every time point: each variant's score is the slope of its normalized log count against time scaled to 0–1, fitted by <strong>weighted least squares</strong>, each point weighted by its counting precision, as Enrich2 computes it. <strong>Ordinary least squares</strong> and the <strong>log ratio of the first and last samples</strong> are the other choices under <em>Scored by</em>. Times need not be evenly spaced.</p>
+      <shot name="time-course" alt="The map of the simulated time series with p.Ser2Ter selected; the inspector shows its time course in three replicates, the points and dashed fitted lines falling over eight generations">A nonsense variant's time course in each replicate: the points, the fitted lines, and each slope, the replicate's score.</shot>
+      <ul>
+        <li><strong>Missing points.</strong> A variant is fitted on the time points where it was counted: its first is required, and by default at least three in all. A fit on fewer points than the replicate has is flagged low confidence. The Enrich2-compatible preset requires every time point, as Enrich2 does.</li>
+        <li><strong>The standard error.</strong> Enrich2 scales the slope's standard error by the residuals alone, so three points that happen to fall on a line get an SE near 0 and dominate the combination of replicates. MaveScape's default scales by the residuals but never goes below what counting alone predicts. On a simulated time series with known effects, the 95% intervals then hold the true slope 90% of the time against 81% with Enrich2's SE (the rest is replicate noise in the simulation, which REML takes up only partly with three replicates).</li>
+        <li><strong>Departure from a line.</strong> Each fit reports how far its points scatter about the line, against counting noise. A time course that is not a line (a variant that rises and then falls) is scored and reported, never removed; quality control summarizes the departures.</li>
+      </ul>
+      <p>The inspector draws a variant's time course in each replicate. <a href="qc.html#time-series">Quality control</a> reads the time points used and the fit of the time courses.</p>
+      <shot name="time-series-score" alt="The Score view of the simulated time series: scored by weighted least squares on every time point, with the standard error of a slope at least what counting predicts">A time series in the Score view: <em>Scored by</em> and <em>Standard error of a slope</em> appear when the design is a time series.</shot>
+
       <h2 id="replicates">Replicates</h2>
       <p>Technical replicates (one library sequenced more than once) are summed first. Each biological replicate is scored on its own, and a variant's replicate scores are combined:</p>
       <ul>
@@ -26,7 +37,7 @@ lede: Scoring turns the counts into a functional score with a standard error for
       <h2 id="filters">Filters, in order</h2>
       <p>Variants pass eight stages in order; a variant left out is left out at its first failing stage, with that stage as its reason. The filter flow shows how many each stage removed.</p>
       <ol>
-        <li><strong>Counted in a replicate</strong> (always): counted in every sample of at least one replicate.</li>
+        <li><strong>Counted in a replicate</strong> (always): counted in every sample of at least one replicate; for a regression, at the first time point and at the minimum of time points.</li>
         <li><strong>Valid identifier</strong> (always): a valid name that agrees with the target.</li>
         <li><strong>Variant class:</strong> the classes scored.</li>
         <li><strong>Exclusion list:</strong> identifiers you exclude.</li>
@@ -38,7 +49,7 @@ lede: Scoring turns the counts into a functional score with a standard error for
       <p>Variants scored from fewer replicates than expected, or with a zero count, are kept but marked low confidence.</p>
 
       <h2 id="presets">Presets</h2>
-      <p><strong>MaveScape defaults</strong> leave out a replicate measurement with no input reads and combine replicates by REML to convergence. <strong>Enrich2-compatible</strong> reproduces Enrich2 2.0.2's "ratios": no count filter, variants combined only when scored in every replicate, and its random-effects estimator. Any parameter can be changed from either.</p>
+      <p><strong>MaveScape defaults</strong> leave out a replicate measurement with no input reads, floor a regression's SE at counting's, and combine replicates by REML to convergence. <strong>Enrich2-compatible</strong> reproduces Enrich2 2.0.2's "ratios", "WLS" and "OLS": no count filter, every time point required, SEs scaled by the residuals alone, variants combined only when scored in every replicate, and its random-effects estimator. Either keeps the model and normalization chosen, and any parameter can be changed from either.</p>
 
       <h2 id="runs">Runs</h2>
       <p>Each scoring is a run: immutable, named, with an id made from its table, design, parameters and the scoring engine's version. Scoring the same inputs again shows the existing run rather than computing it twice. A run keeps its inputs and the SHA-256 of its output, not the scores: when a workspace is reopened, each run is recomputed from its recorded inputs and must have its recorded hash, and the run says <strong>reproduced</strong> (or why not).</p>

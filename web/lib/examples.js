@@ -53,6 +53,29 @@ export const EXAMPLES = [
       ['map', 'Color the map by standard error: the uncertain cells are the variants rare in the library.'],
     ],
   },
+  {
+    id: 'simulated-time-series',
+    title: 'A simulated time series (known truth)',
+    summary: 'A simulated growth selection of a 40-residue protein sampled at five times over 8 generations, in three replicates, where every variant\'s true effect is known.',
+    question: 'What does a regression on every time point add over the ratio of the first and last, and how linear are the time courses?',
+    source: 'Simulated by MaveScape (web/lib/simulate.js, seed 20261012): not real data',
+    license: 'Simulated: no license needed',
+    citation: null,
+    simulated: true,
+    simulation: { seed: 20261012, times: [0, 2, 4, 6, 8], readsPerVariant: 100, libraryLogSd: 0.7, replicateNoise: 0.08 },
+    opens: 'map',
+    expected: [
+      'Scored by weighted regression on every time point, the scores track the true effects (r about 0.99; the guide shows it).',
+      'Quality control passes, including the two time-series findings: every fit uses every time point, and the time courses scatter about their lines as counting predicts.',
+      'Scored again by the log ratio of the first and last samples, the scores are a little noisier and their SEs larger: the middle time points carry information.',
+    ],
+    steps: [
+      ['map', 'Click a dark cell: the inspector draws its time course in each replicate, the points and the fitted line whose slope is the score.'],
+      ['qc', 'In QC, read "Time points used" and "Fit of the time courses": both pass for a clean experiment.'],
+      ['score', 'In Score, choose "Log ratio of the first and last samples" and score again; compare the runs\' scores and SEs in the inspector.'],
+      ['score', 'Choose the Enrich2-compatible preset: its SEs are scaled by the residuals alone, and some are smaller than counting allows.'],
+    ],
+  },
 ];
 
 export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
@@ -60,7 +83,7 @@ export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
 // The simulated example's files: { csv, design, truth: { key: effect } }.
 export function simulatedExample(example = exampleById('simulated')) {
   const sim = simulateExperiment(example.simulation);
-  const design = { ...sim.design, name: 'Simulated two-population experiment (simulated data)' };
+  const design = { ...sim.design, name: `${sim.design.name} (simulated data)` };
   const truth = Object.fromEntries(sim.variants.map((v) => [v.name, v.effect]));
   return { csv: sim.csv, design, truth };
 }

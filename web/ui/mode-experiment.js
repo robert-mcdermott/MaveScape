@@ -204,11 +204,14 @@ export function mountExperimentMode(app, container) {
         : a.kind === 'ignored' ? h('input.input', { value: a.reason ?? '', 'aria-label': `Why ${column} is not used`, placeholder: 'why', onchange: (e) => edit((d) => assignColumn(d, column, { kind: 'ignored', reason: e.target.value.trim() || 'not used' }).design, `Column ${column} not used: ${e.target.value.trim()}`) })
           : a.kind === 'copy' ? h('span.muted', `copy of ${a.copyOf}`) : sample ? h('span.muted', `with ${sample.columns[0]}`) : null;
       const batch = first ? h('input.input', { value: sample.batch ?? '', placeholder: '—', 'aria-label': `Batch of sample ${sample.id}`, style: { width: '90px' }, onchange: (e) => edit((d) => updateSample(d, sample.id, { batch: e.target.value.trim() }), `Set the batch of ${sample.id}`) }) : null;
-      return h(`tr${a.kind === 'unassigned' ? '.unset' : ''}`, h('td.mono', column), h('td', select), h('td', detail), h('td', batch));
+      // Missing read as 0: for tables that write variants that dropped out during selection as
+      // missing (the QC finding "Missing after selection" says when).
+      const zero = first ? h('input', { type: 'checkbox', checked: Boolean(sample.missingMeansZero), 'aria-label': `Read missing counts as 0 in ${sample.name ?? sample.id}`, title: 'Read this sample\'s missing counts as 0: for tables that write variants that dropped out during selection as missing. Not for a replicate\'s first sample.', onchange: (e) => edit((d) => updateSample(d, sample.id, { missingMeansZero: e.target.checked }), `${e.target.checked ? 'Read' : 'Stopped reading'} missing counts as 0 in ${sample.name ?? sample.id}`) }) : null;
+      return h(`tr${a.kind === 'unassigned' ? '.unset' : ''}`, h('td.mono', column), h('td', select), h('td', detail), h('td', batch), h('td.c', zero));
     });
     return h('div.pane', h('h3', icon('table'), 'Columns', h('span.spacer'), h('span.muted', { style: { fontWeight: 400, fontSize: '12px' } }, `${columns.length} count columns, ${design.samples.length} samples`)),
-      h('p.muted', { style: { fontSize: '12px', margin: '0 0 8px' } }, 'Each column of counts is a sample, a technical replicate of one (its counts are summed), a copy of another column (a sample shared by replicates, written once per replicate), or not used.'),
-      h('div', { style: { maxHeight: '420px', overflow: 'auto' } }, h('table.data.design-columns', h('thead', h('tr', h('th', 'Column'), h('th', 'Is'), h('th', 'Sample name or note'), h('th', 'Batch'))), h('tbody', ...rows))));
+      h('p.muted', { style: { fontSize: '12px', margin: '0 0 8px' } }, 'Each column of counts is a sample, a technical replicate of one (its counts are summed), a copy of another column (a sample shared by replicates, written once per replicate), or not used. "Missing = 0" reads a sample\'s missing counts as 0, for tables that write variants that dropped out during selection as missing.'),
+      h('div', { style: { maxHeight: '420px', overflow: 'auto' } }, h('table.data.design-columns', h('thead', h('tr', h('th', 'Column'), h('th', 'Is'), h('th', 'Sample name or note'), h('th', 'Batch'), h('th.c', { title: 'Read this sample\'s missing counts as 0 (variants that dropped out, written as missing)' }, 'Missing = 0'))), h('tbody', ...rows))));
   }
 
   function replicatesPane(design) {

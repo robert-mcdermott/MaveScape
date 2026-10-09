@@ -101,9 +101,10 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
           <div class="feature-text">
             <span class="kicker">Scoring</span>
             <h3>Scores with standard errors, and the reasons for every gap</h3>
-            <p>Log ratios with wild-type, complete-case, all-read or synonymous normalization; replicates combined by REML random effects, fixed effects or Enrich2's own estimator; eight ordered filters, each variant left out with its reason. Every run is immutable and kept with everything needed to repeat it.</p>
+            <p>Log ratios with wild-type, complete-case, all-read or synonymous normalization, and for a time series the slope of a weighted regression on every time point; replicates combined by REML random effects, fixed effects or Enrich2's own estimator; eight ordered filters, each variant left out with its reason. Every run is immutable and kept with everything needed to repeat it.</p>
             <ul class="checklist">
               <li>Equal to Enrich2 2.0.2 and dms_variants 1.6.0 to 5 × 10⁻¹³</li>
+              <li>Time series by weighted regression on every time point</li>
               <li>REML equal to metafor 5.2 to 3.4 × 10⁻¹²</li>
               <li>An Enrich2-compatible preset to compare with published scores</li>
             </ul>
@@ -198,6 +199,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
             <tbody>
               <tr><td><strong>Scores</strong></td><td>Enrich2 2.0.2 on GRB2, BRCA1 and a fixture with every edge case</td><td class="agree">within 5 × 10⁻¹³</td></tr>
               <tr><td><strong>Scores</strong></td><td>dms_variants 1.6.0, <code>func_scores</code></td><td class="agree">within 4.6 × 10⁻¹³</td></tr>
+              <tr><td><strong>Time series</strong></td><td>Enrich2's WLS and OLS on BRCA1; statsmodels on unevenly spaced times</td><td class="agree">within 5 × 10⁻¹³</td></tr>
               <tr><td><strong>Replicates</strong></td><td>metafor 5.2 REML on 2,865 variants</td><td class="agree">within 3.4 × 10⁻¹²</td></tr>
               <tr><td><strong>Variant names</strong></td><td>mavehgvs 0.8.1 on 16,959 strings</td><td class="agree">every decision and canonical form</td></tr>
               <tr><td><strong>Quality control</strong></td><td>Simulated experiments with one planted problem each</td><td class="agree">exactly their findings, three seeds</td></tr>
@@ -216,7 +218,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
         <div class="cta">
           <div>
             <h2 id="get-title">Get started in a minute</h2>
-            <p>Install with one command, then run <code>mavescape</code>. It opens its own window, with a published and a simulated experiment ready to explore.</p>
+            <p>Install with one command, then run <code>mavescape</code>. It opens its own window, with a published experiment and two simulated ones ready to explore.</p>
             <div class="btn-row">
               <a class="btn btn-primary" href="docs/getting-started.html">Getting started</a>
               <a class="btn" href="{{github}}/releases/latest">All downloads</a>

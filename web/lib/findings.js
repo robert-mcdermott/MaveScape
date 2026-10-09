@@ -24,6 +24,8 @@ export const THRESHOLDS = [
   { key: 'separation', label: 'Separation of controls (AUC)', bad: 'below', review: 0.9, fail: 0.75, unit: 'AUC' },
   { key: 'resolution', label: 'Median SE ÷ the controls\' gap', bad: 'above', review: 0.25, fail: 0.5, unit: '×' },
   { key: 'scoredFraction', label: 'Measured variants scored', bad: 'below', review: 0.8, fail: 0.5, unit: 'fraction' },
+  { key: 'fewerPoints', label: 'Time-series fits on fewer time points than the replicate has', bad: 'above', review: 0.1, fail: 0.3, unit: 'fraction' },
+  { key: 'timeFit', label: 'Departure of time courses from a line ÷ counting noise (median)', bad: 'above', review: 2, fail: 5, unit: '×' },
 ];
 
 export function defaultThresholds() {
@@ -244,6 +246,37 @@ export function findingsFrom(qc, thresholds) {
     threshold: thresholdText(sf, 'below', pct),
     rationale: 'Filters should remove the few variants that cannot be scored; when they remove many, the parameters or the experiment need a look.',
   });
+
+  // Time series (Q10): the time points the fits used, and how well the time courses follow a line.
+  if (qc.model === 'time-series') {
+    const ts = qc.timeSeries;
+    const regression = ts && ts.length;
+    const noRegression = qc.scores ? 'not assessed: the run scores by the log ratio of the first and last samples' : 'not assessed: needs a score run by regression';
+    const fp = levels(t, 'fewerPoints');
+    const fewer = regression ? ts.map((r) => ({ ...r, share: r.fits ? r.fewer / r.fits : Number.NaN })) : [];
+    const fewerStatus = fewer.map((r) => statusOf(r.share, fp, 'above'));
+    add({
+      id: 'time-points', title: 'Time points used', plot: 'time-points', level: 'scores',
+      status: regression ? worst(fewerStatus) : 'na',
+      value: regression ? `${pct(Math.max(...fewer.map((r) => r.share).filter(Number.isFinite), 0))} of fits at most on fewer points; ${fewer.reduce((a, r) => a + r.excluded, 0)} replicate measurements with too few` : noRegression,
+      explanation: regression ? `${fewer.map((r) => `${r.name}: ${r.fewer} of ${r.fits} fits on fewer than its ${r.times} time points${r.excluded ? `, ${r.excluded} measurements left out with too few` : ''}`).join('; ')}. A variant is fitted on the time points where it was counted; missing points are usually variants that dropped out and were written as missing, which the "Missing after selection" finding looks for.` : 'Needs a run scored by weighted or ordinary regression on time.',
+      threshold: thresholdText(fp, 'above', pct),
+      rationale: 'A slope fitted on fewer points is less certain, and points missing at the end of a time course bias it toward the wild type: the variants that dropped out are the most depleted.',
+      affected: { samples: [], replicates: fewer.filter((r, i) => fewerStatus[i] !== 'pass').map((r) => r.id) },
+    });
+    const tf = levels(t, 'timeFit');
+    const fit = regression ? ts.filter((r) => r.assessed) : [];
+    const fitStatus = fit.map((r) => statusOf(r.departure, tf, 'above'));
+    add({
+      id: 'time-fit', title: 'Fit of the time courses', plot: 'time-fit', level: 'scores',
+      status: fit.length ? worst(fitStatus) : 'na',
+      value: fit.length ? `median ${num(Math.max(...fit.map((r) => r.departure)), 1)}× what counting predicts; up to ${pct(Math.max(...fit.map((r) => r.beyond)))} of fits beyond its 99.9th percentile` : regression ? 'not assessed: no fit has three or more points' : noRegression,
+      explanation: fit.length ? `${fit.map((r) => `${r.name}: ${num(r.departure, 1)}×, ${pct(r.beyond)} far from a line`).join('; ')}. ${worst(fitStatus) === 'pass' ? 'The time courses scatter about their lines as counting predicts.' : 'The time courses scatter about their lines more than counting predicts: variation between time points (bottlenecks at each passage, growth that is not exponential, saturation) adds to the counting noise. The SEs are scaled by the residuals, so they include it.'} Trajectories far from a line are reported, never removed: a variant can rise and then fall for real.` : 'Needs fits of three or more time points.',
+      threshold: thresholdText(tf, 'above', (x) => `${x}×`),
+      rationale: 'Each fit\'s weighted residuals are compared with counting noise (χ² per degree of freedom over its median under counting alone, so 1 is typical). Departures well above 1 for most variants point to noise in the experiment at each time point; for a few, to time courses that are not exponential.',
+      affected: { samples: [], replicates: fit.filter((r, i) => fitStatus[i] !== 'pass').map((r) => r.id) },
+    });
+  }
   return out;
 }
 

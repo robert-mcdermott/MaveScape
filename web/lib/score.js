@@ -4,8 +4,9 @@
 //
 //   names, count columns ─ variants.js (keys, kinds, validity against the target)
 //     ─ technical replicates summed per sample (replicates.js, poolColumns)
-//     ─ per biological replicate: normalizers and log ratios (score-ratio.js), and whether each
-//       variant's measurement is used (filters.js: counted, input and total counts)
+//     ─ per biological replicate: normalizers, and log ratios (score-ratio.js) or the slope of a
+//       regression on time (score-regression.js), and whether each variant's measurement is used
+//       (filters.js: counted, time points, input and total counts)
 //     ─ per condition: variant-level stages (identifier, class, exclusions, usable replicates),
 //       the replicates combined (replicates.js) with heterogeneity and leave-one-out sensitivity
 //     ─ rescaling (S11) ─ the maximum-SE stage ─ the filter flow, run warnings.
@@ -17,7 +18,8 @@ import { buildVariants, duplicateKeys, KIND, STATUS } from './variants.js';
 import { replicateSamples, sharedSamples, validateDesign } from './design.js';
 import { parseHgvs } from './hgvs.js';
 import { median, normalizers, ratioScores, NORMALIZATIONS } from './score-ratio.js';
-import { combine, COMBINATIONS, heterogeneity, leaveOneOut, poolColumns } from './replicates.js';
+import { MODELS, REGRESSION_SE, regressionScores } from './score-regression.js';
+import { combine, COMBINATIONS, heterogeneity, leaveOneOut, sampleCounts } from './replicates.js';
 import {
   checkFilters, DEFAULT_FILTERS, FLAG, filterFlow, kindCodes, REPLICATE_STATE, replicateState, STAGE_BY_ID, variantStage,
 } from './filters.js';
@@ -37,21 +39,32 @@ export const DEFAULT_PARAMETERS = {
   model: 'ratio',
   normalization: 'wt',
   pseudocount: 0.5,
+  regressionSE: 'counting-floor',
   combination: 'reml',
   rescale: 'none',
   filters: DEFAULT_FILTERS,
 };
 
-// Named sets of parameters. "Enrich2-compatible" reproduces Enrich2 2.0.2's "ratios" with
-// wild-type normalization and its random-effects estimator: no count filter, variants combined
-// only when scored in every replicate, the wild type 0 ± 0.
+// Named sets of parameters. "Enrich2-compatible" reproduces Enrich2 2.0.2's "ratios", "WLS" and
+// "OLS" with its random-effects estimator: no count filter, every time point required, the SE of a
+// regression scaled by its residuals alone, variants combined only when scored in every
+// replicate, the wild type 0 ± 0. A preset keeps the model and normalization chosen.
 export const PRESETS = {
   mavescape: { label: 'MaveScape defaults', parameters: DEFAULT_PARAMETERS },
   enrich2: {
     label: 'Enrich2-compatible',
-    parameters: { ...DEFAULT_PARAMETERS, combination: 'enrich2', filters: { ...DEFAULT_FILTERS, minInputCount: 0, minReplicates: 'all' } },
+    parameters: { ...DEFAULT_PARAMETERS, regressionSE: 'residual', combination: 'enrich2', filters: { ...DEFAULT_FILTERS, minInputCount: 0, minTimePoints: 'all', minReplicates: 'all' } },
   },
 };
+
+// The parameters to start from for a design and its table: the wild type's normalization when the
+// table counts it (else complete cases), and for a time series of three or more time points in
+// every replicate, weighted regression.
+export function defaultParameters(design, source = null, preset = 'mavescape') {
+  const hasWildType = source ? (source.summary?.byKind?.['wild type'] ?? 0) > 0 : true;
+  const model = design?.model === 'time-series' && design.replicates?.length && design.replicates.every((r) => orderedSlots(r).length >= 3) ? 'wls' : 'ratio';
+  return withDefaults({ ...PRESETS[preset].parameters, model, normalization: hasWildType ? 'wt' : 'complete' });
+}
 
 export function withDefaults(parameters = {}) {
   return { ...DEFAULT_PARAMETERS, ...parameters, filters: { ...DEFAULT_FILTERS, ...(parameters.filters ?? {}) } };
@@ -61,14 +74,22 @@ export function withDefaults(parameters = {}) {
 export function checkParameters(parameters, design) {
   const p = withDefaults(parameters);
   const errors = [];
-  if (p.model !== 'ratio') errors.push(`Unknown scoring model "${p.model}".`);
+  if (!MODELS[p.model]) errors.push(`Unknown scoring model "${p.model}".`);
+  if (!REGRESSION_SE[p.regressionSE]) errors.push(`Unknown standard error "${p.regressionSE}" for a regression.`);
   if (!NORMALIZATIONS[p.normalization]) errors.push(`Unknown normalization "${p.normalization}".`);
   if (!(Number.isFinite(p.pseudocount) && p.pseudocount >= 0)) errors.push('The pseudocount must be a number of 0 or more.');
   if (!COMBINATIONS[p.combination]) errors.push(`Unknown combination "${p.combination}".`);
   if (!RESCALINGS[p.rescale]) errors.push(`Unknown rescaling "${p.rescale}".`);
   errors.push(...checkFilters(p.filters));
   if (design) {
-    if (design.model === 'bins') errors.push('FACS-bin experiments are scored from MaveScape 0.2.0 (weighted bin averages and the maximum-likelihood fit). This build scores two-population experiments and time series by the ratio of their first and last samples.');
+    if (design.model === 'bins') errors.push('FACS-bin experiments are scored from MaveScape 0.2.0 (weighted bin averages and the maximum-likelihood fit). This build scores two-population experiments and time series.');
+    if (p.model !== 'ratio') {
+      if (design.model !== 'time-series') errors.push(`A regression on time needs a time series; this design is ${design.model === 'two-population' ? 'a two-population experiment' : `of kind "${design.model}"`}: score it by the log ratio.`);
+      else {
+        const short = (design.replicates ?? []).filter((r) => orderedSlots(r).length < 3);
+        if (short.length) errors.push(`A regression on time needs three or more time points in every replicate; ${short.map((r) => r.name ?? r.id).slice(0, 4).join(', ')} ${short.length > 1 ? 'have' : 'has'} fewer: score by the log ratio of the first and last samples.`);
+      }
+    }
     if (design.model === 'scores') errors.push('This design holds precomputed scores: there are no counts to score.');
     if (p.combination === 'enrich2' && p.filters.minReplicates !== 'all') errors.push('Enrich2\'s estimator combines only variants scored in every replicate: set the minimum usable replicates to "all", or choose another combination.');
   }
@@ -154,32 +175,42 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       missingColumns.push(...sample.columns.filter((c) => !columns[c]));
       continue;
     }
-    pooled.set(sample.id, poolColumns(parts));
+    pooled.set(sample.id, sampleCounts(sample, parts));
     if (sample.columns.length > 1) info.push(`Technical replicates summed: ${sample.name ?? sample.id} is ${sample.columns.join(' + ')} (one library sequenced more than once; not an independent replicate).`);
+    if (sample.missingMeansZero) info.push(`Missing counts read as 0 in ${sample.name ?? sample.id}, as the design says (a table that writes variants that dropped out as missing).`);
   }
   if (missingColumns.length) throw new Refused([`The count table has no column ${missingColumns.map((c) => `"${c}"`).join(', ')}.`]);
 
   // Per biological replicate: counted rows, normalizers, log ratios, and each measurement's state.
   const replicates = [];
   const repById = new Map();
+  const regression = p.model !== 'ratio';
   design.replicates.forEach((replicate, index) => {
     onProgress((index / design.replicates.length) * 0.6, `Scoring ${replicate.name ?? replicate.id}`);
     const slots = orderedSlots(replicate);
     const samples = slots.map((s) => pooled.get(s.sample));
     const label = `replicate ${replicate.name ?? replicate.id}`;
+    const T = samples.length;
+    // A regression fits a variant on the time points where it was counted: its first and at least
+    // `need` in all. A ratio needs every sample.
+    const need = regression ? (f.minTimePoints === 'all' ? T : Math.min(f.minTimePoints, T)) : T;
     const counted = new Uint8Array(n);
+    const usable = new Uint8Array(n);
     const state = new Uint8Array(n);
     const total = new Float64Array(n);
     for (let i = 0; i < n; i += 1) {
-      let ok = 1;
+      let points = 0;
       let sum = 0;
       for (const s of samples) {
-        if (Number.isNaN(s[i])) ok = 0;
-        else sum += s[i];
+        if (Number.isNaN(s[i])) continue;
+        points += 1;
+        sum += s[i];
       }
-      counted[i] = ok;
+      const first = !Number.isNaN(samples[0][i]);
+      counted[i] = points === T ? 1 : 0;
+      usable[i] = first && points >= need ? 1 : 0;
       total[i] = sum;
-      state[i] = replicateState(ok, samples[0][i], sum, f);
+      state[i] = replicateState(usable[i], samples[0][i], sum, f, regression && first && points > 1 && points < need);
     }
     let r;
     try {
@@ -190,7 +221,9 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
     let scored;
     try {
       const reference = p.normalization === 'synonymous' ? controls.synonymous.filter((i) => state[i] === REPLICATE_STATE.USED) : null;
-      scored = ratioScores(p.normalization, samples, counted, r, { pseudocount: p.pseudocount, reference, label });
+      scored = regression
+        ? regressionScores(samples, slots.map((s) => s.time), r, usable, { weighted: p.model === 'wls', pseudocount: p.pseudocount, method: p.normalization, se: p.regressionSE, reference, label })
+        : ratioScores(p.normalization, samples, counted, r, { pseudocount: p.pseudocount, reference, label });
     } catch (error) {
       throw new Refused([error.message]);
     }
@@ -226,13 +259,17 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       score: scored.score,
       se: scored.se,
       state,
+      // A regression's time points used and its departure from a line against counting noise
+      // (χ²/(n − 2)), per variant.
+      points: scored.points ?? null,
+      fit: scored.fit ?? null,
     };
     replicates.push(entry);
     repById.set(replicate.id, entry);
   });
 
   // Run-level notes on the design.
-  if (design.model === 'time-series') warnings.push({ code: 'time-series-ratio', message: 'A time series scored by the ratio of its first and last time points (as Enrich2\'s "ratios"); regression on every time point comes in MaveScape 0.2.0.' });
+  if (design.model === 'time-series' && !regression) warnings.push({ code: 'time-series-ratio', message: 'A time series scored by the ratio of its first and last time points (as Enrich2\'s "ratios"): the time points between them are not used. Weighted regression uses every one.' });
   const shared = sharedSamples(design);
   if (shared.size) warnings.push({ code: 'shared-samples', message: `${shared.size} sample${shared.size > 1 ? 's are' : ' is'} shared between replicates (${[...shared.keys()].join(', ')}): those replicates' scores are not independent, so the combined SE is likely too small.` });
 
@@ -278,7 +315,7 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       for (const rep of reps) {
         if (coversRow(rep, i)) exp += 1;
         const s = rep.state[i];
-        if (s !== REPLICATE_STATE.NOT_COUNTED) anyCounted = true;
+        if (s !== REPLICATE_STATE.NOT_COUNTED && s !== REPLICATE_STATE.FEW_POINTS) anyCounted = true;
         if (s === REPLICATE_STATE.USED || s === REPLICATE_STATE.TOTAL_COUNT) anyPastInput = true;
         if (s === REPLICATE_STATE.USED) these.push(rep);
       }
@@ -329,6 +366,7 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
         if (rep.first[i] === 0) bits |= FLAG.INPUT_ZERO;
       }
       if (these.length < expected[i]) bits |= FLAG.FEWER_REPLICATES;
+      if (regression && these.some((rep) => rep.points[i] < rep.times.length)) bits |= FLAG.FEWER_POINTS;
       flags[i] = bits;
     }
     if (notConverged) warnings.push({ code: 'reml-not-converged', message: `REML did not converge for ${notConverged} variant${notConverged > 1 ? 's' : ''}${conditionList.length > 1 ? ` of ${condition.name}` : ''}.` });

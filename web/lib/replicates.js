@@ -30,6 +30,15 @@ export function poolColumns(columns) {
   return out;
 }
 
+// A design sample's counts from its columns: technical replicates summed, and, when the design
+// says its missing counts mean 0 (a table that writes variants that dropped out during selection
+// as missing), missing read as 0. Never the caller's array itself.
+export function sampleCounts(sample, columns) {
+  const pooled = columns.length === 1 ? Float64Array.from(columns[0]) : poolColumns(columns);
+  if (sample.missingMeansZero) for (let i = 0; i < pooled.length; i += 1) if (Number.isNaN(pooled[i])) pooled[i] = 0;
+  return pooled;
+}
+
 // Inverse-variance weighted mean: { estimate, se, tau2: 0 }. A variance of 0 (a score known
 // exactly, as the wild type's in some modes) takes all the weight: the mean of those scores, SE 0.
 export function combineFixed(y, v) {

@@ -155,6 +155,18 @@ export function mountQcMode(app, container) {
           lineChart({ series: shown.map((s, i) => ({ label: s.name, color: categoricalColor(i), points: s.rankAbundance.filter((p) => p[1] > 0) })), xLog: true, yLog: true, xLabel: 'rank', yLabel: 'count', label: 'Counts from the most to the least abundant variant' }),
         ];
       }
+      case 'time-points': {
+        const ts = qc.timeSeries ?? [];
+        if (!ts.length) return [h('p.muted', 'Needs a run scored by regression on time.')];
+        return [barChart({ items: ts.map((r) => ({ label: r.name, value: r.fits ? r.fewer / r.fits : 0, status: r.fits && r.fewer / r.fits > t.fewerPoints.fail ? 'fail' : r.fits && r.fewer / r.fits > t.fewerPoints.review ? 'review' : '' })), lines: lines('fewerPoints'), label: 'Fits on fewer time points than the replicate has, by replicate', format: pct }),
+          h('p.muted.plot-note', ts.map((r) => `${r.name}: ${formatCount(r.fewer)} of ${formatCount(r.fits)} fits on fewer than ${r.times} points; ${formatCount(r.excluded)} measurements with too few`).join(' · '))];
+      }
+      case 'time-fit': {
+        const ts = (qc.timeSeries ?? []).filter((r) => r.assessed);
+        if (!ts.length) return [h('p.muted', 'Needs fits of three or more time points.')];
+        return [barChart({ items: ts.map((r) => ({ label: r.name, value: r.departure, status: r.departure > t.timeFit.fail ? 'fail' : r.departure > t.timeFit.review ? 'review' : '' })), log: true, lines: [{ value: 1, kind: 'reference' }, ...lines('timeFit')], label: 'Median departure of the time courses from their lines, over what counting predicts, by replicate (log scale; 1 is counting alone)', format: (v) => `${fmt(v, 1)}×` }),
+          h('p.muted.plot-note', `Fits far from a line (beyond the 99.9th percentile of counting noise): ${ts.map((r) => `${r.name} ${pct(r.beyond)}`).join(' · ')}. Open a variant on the map to see its time course.`)];
+      }
       case 'dropout': {
         const drops = qc.conditions.flatMap((c) => c.dropout ?? []);
         if (!drops.length) return [h('p.muted', 'Needs replicates with samples before and after selection.')];

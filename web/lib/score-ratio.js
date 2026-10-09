@@ -27,37 +27,31 @@ export const NORMALIZATIONS = {
   synonymous: 'median of synonymous variants',
 };
 
-// The normalizers [r₀, r_T] of a replicate. samples: [Float64Array] (counts of its samples, in
-// order); counted: Uint8Array (1 where a row is counted in every sample); wtRow: the wild type's
-// row (for 'wt'). Throws, saying why, when the reference is not available.
+// The normalizers of a replicate, one per sample (time point). samples: [Float64Array] (counts of
+// its samples, in order); counted: Uint8Array (1 where a row is counted in every sample); wtRow:
+// the wild type's row (for 'wt'). Throws, saying why, when the reference is not available.
 export function normalizers(method, samples, counted, { pseudocount, wtRow = -1, label = 'this replicate' }) {
-  const first = samples[0];
-  const last = samples[samples.length - 1];
   if (method === 'wt') {
     if (wtRow < 0) throw new Error('Wild-type normalization needs the wild type\'s row, and the table has none: choose another normalization, or name the wild type in the design\'s controls.');
     if (!counted[wtRow]) throw new Error(`The wild type is not counted in every sample of ${label}: its normalization is not available there.`);
-    if (first[wtRow] <= 0 || last[wtRow] <= 0) throw new Error(`The wild type has no reads in a sample of ${label}: scores cannot be normalized to it.`);
-    return [first[wtRow] + pseudocount, last[wtRow] + pseudocount];
+    if (samples.some((s) => s[wtRow] <= 0)) throw new Error(`The wild type has no reads in a sample of ${label}: scores cannot be normalized to it.`);
+    return samples.map((s) => s[wtRow] + pseudocount);
   }
   if (method === 'complete') {
-    let a = 0;
-    let b = 0;
-    for (let i = 0; i < first.length; i += 1) {
-      if (!counted[i]) continue;
-      a += first[i];
-      b += last[i];
-    }
-    return [a + pseudocount, b + pseudocount];
+    return samples.map((s) => {
+      let sum = 0;
+      for (let i = 0; i < s.length; i += 1) if (counted[i]) sum += s[i];
+      return sum + pseudocount;
+    });
   }
   if (method === 'full') {
-    const sum = (c) => {
-      let s = 0;
-      for (let i = 0; i < c.length; i += 1) if (!Number.isNaN(c[i])) s += c[i];
-      return s;
-    };
-    return [sum(first) + pseudocount, sum(last) + pseudocount];
+    return samples.map((s) => {
+      let sum = 0;
+      for (let i = 0; i < s.length; i += 1) if (!Number.isNaN(s[i])) sum += s[i];
+      return sum + pseudocount;
+    });
   }
-  if (method === 'synonymous') return [1, 1];
+  if (method === 'synonymous') return samples.map(() => 1);
   throw new Error(`Unknown normalization "${method}".`);
 }
 
@@ -70,13 +64,15 @@ export function ratioScores(method, samples, use, r, { pseudocount, reference = 
   const n = first.length;
   const score = new Float64Array(n).fill(Number.NaN);
   const se = new Float64Array(n).fill(Number.NaN);
-  const libraryTerm = method === 'synonymous' ? 0 : 1 / r[0] + 1 / r[1];
+  const r0 = r[0];
+  const rT = r[r.length - 1];
+  const libraryTerm = method === 'synonymous' ? 0 : 1 / r0 + 1 / rT;
   for (let i = 0; i < n; i += 1) {
     if (!use[i]) continue;
     const c0 = first[i] + pseudocount;
     const cT = last[i] + pseudocount;
     // In Enrich2's order of operations, so that the numbers agree to the last digits.
-    score[i] = method === 'synonymous' ? log(cT) - log(c0) : (log(cT) - log(r[1])) - (log(c0) - log(r[0]));
+    score[i] = method === 'synonymous' ? log(cT) - log(c0) : (log(cT) - log(rT)) - (log(c0) - log(r0));
     se[i] = Math.sqrt(1 / c0 + 1 / cT + libraryTerm);
   }
   if (method === 'synonymous') {

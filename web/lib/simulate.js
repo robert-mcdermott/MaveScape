@@ -10,6 +10,12 @@
 // is sequenced. Reads are Poisson. A bottleneck of N cells against D reads per variant adds about
 // D/N times the counting variance; replicate noise adds a constant variance (DiMSum's
 // multiplicative and additive error terms).
+//
+// With `times` (wave 2, slice 2), a time series instead: the library grows from time 0, each
+// variant's log frequency relative to the wild type changing by its true effect over the whole
+// course (so the effect is the slope on time scaled to 0–1, what regression scores), sequenced at
+// every time; `passageCells` per variant sampled at each later time is a bottleneck at every
+// passage, which scatters the time courses about their lines.
 
 import { exp } from './dmath.js';
 import { createRandom } from './random.js';
@@ -28,6 +34,9 @@ export const DEFAULT_SIMULATION = {
   outputCells: Infinity, // cells per variant sampled after selection
   replicateNoise: 0.05, // SD of the per-variant noise of selection, per replicate (a number or one per replicate)
   missing: [], // [{ replicate: 1, sample: 'output' }]: samples written as missing
+  times: null, // [0, …]: a time series sampled at these times
+  passageCells: Infinity, // cells per variant carried over at each later time point of a time series
+  timeUnit: 'generation',
 };
 
 function poisson(random, lambda) {
@@ -76,6 +85,7 @@ export function simulateExperiment(options = {}) {
   const f = weights.map((w) => w / total);
   const noise = (r) => (Array.isArray(o.replicateNoise) ? o.replicateNoise[r] : o.replicateNoise);
   const outDepth = o.outputReadsPerVariant ?? o.readsPerVariant;
+  if (o.times) return simulateTimeSeries(o, random, variants, f, noise);
   const columns = [];
   for (let r = 0; r < o.replicates; r += 1) {
     const input = f.map((x) => poisson(random, o.readsPerVariant * V * x));
@@ -106,6 +116,50 @@ export function simulateExperiment(options = {}) {
     library: { level: 'variant' },
     samples: columns.map((c) => ({ id: c.name, name: c.name, columns: [c.name] })),
     replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, input: `input_rep${r + 1}`, output: `output_rep${r + 1}` })),
+    controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
+  };
+  return { csv: `${lines.join('\n')}\n`, design, variants, options: o };
+}
+
+function simulateTimeSeries(o, random, variants, f, noise) {
+  const V = variants.length;
+  const tMax = Math.max(...o.times);
+  const columns = [];
+  for (let r = 0; r < o.replicates; r += 1) {
+    const rate = variants.map((v) => v.effect + noise(r) * random.gaussian());
+    let frequency = f.slice();
+    let previous = o.times[0];
+    for (const t of o.times) {
+      if (t > previous) {
+        const grown = frequency.map((x, i) => x * exp((rate[i] * (t - previous)) / tMax));
+        const total = grown.reduce((a, b) => a + b, 0);
+        frequency = grown.map((g) => g / total);
+        if (Number.isFinite(o.passageCells)) {
+          const sampled = frequency.map((x) => poisson(random, o.passageCells * V * x));
+          const s = sampled.reduce((a, b) => a + b, 0);
+          frequency = sampled.map((x) => x / s);
+        }
+      }
+      previous = t;
+      const name = `rep${r + 1}_t${t}`;
+      const missing = o.missing.some((m) => m.replicate === r + 1 && m.time === t);
+      columns.push({ name, values: missing ? null : frequency.map((x) => poisson(random, o.readsPerVariant * V * x)) });
+    }
+  }
+  const lines = [['hgvs_pro', ...columns.map((c) => c.name)].join(',')];
+  variants.forEach((v, i) => lines.push([v.name, ...columns.map((c) => (c.values ? String(c.values[i]) : 'NA'))].join(',')));
+  const design = {
+    format: 'mavescape-design',
+    version: 1,
+    name: 'Simulated time series',
+    description: `Simulated by MaveScape (web/lib/simulate.js, seed ${o.seed}): not real data. ${o.replicates} replicates sampled at ${o.times.join(', ')} ${o.timeUnit}s, ${o.readsPerVariant} reads per variant${Number.isFinite(o.passageCells) ? `, ${o.passageCells} cells per variant at each passage` : ''}.`,
+    model: 'time-series',
+    variants: { column: 'hgvs_pro', level: 'protein' },
+    targets: [{ id: 'simulated', name: 'Simulated protein', sequenceType: 'protein', sequence: o.protein }],
+    library: { level: 'variant' },
+    time: { unit: o.timeUnit },
+    samples: columns.map((c) => ({ id: c.name, name: c.name, columns: [c.name] })),
+    replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, timepoints: o.times.map((t) => ({ sample: `rep${r + 1}_t${t}`, time: t })) })),
     controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
   };
   return { csv: `${lines.join('\n')}\n`, design, variants, options: o };

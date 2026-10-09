@@ -37,9 +37,10 @@ const formatCount = (n) => n.toLocaleString('en-US');
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
 import { EDGE_EXPECTATIONS, byKey, engineInput, fixtureDesign, fixtureTable, score, shuffledTable, variantTable } from './scoring-cases.mjs';
-import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS } from '../web/lib/score.js';
+import { TIME_SERIES_EXPECTATIONS, edgeVariants, timeSeriesDesign, timeSeriesTable, timeSeriesTruth } from './time-series-cases.mjs';
+import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters } from '../web/lib/score.js';
 import { combineFixed, combineREML, heterogeneity } from '../web/lib/replicates.js';
-import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE } from '../web/lib/filters.js';
+import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE, REPLICATE_STATE_NAMES } from '../web/lib/filters.js';
 import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs } from '../web/lib/runs.js';
 import { median } from '../web/lib/score-ratio.js';
 import { QC_FIXTURES, QC_SEEDS, matches, raised, runFixture } from './qc-cases.mjs';
@@ -550,9 +551,9 @@ const suites = {
       const row = new Map(names.map((n, i) => [n, i]));
       for (const [method, values] of Object.entries(entry.methods)) {
         const [scoring, normalization] = method.split('/');
-        if (scoring !== 'ratios') continue;
+        const model = scoring === 'ratios' ? 'ratio' : scoring.toLowerCase();
         const t0 = performance.now();
-        const results = score(table, caseDesign, { ...PRESETS.enrich2.parameters, normalization });
+        const results = score(table, caseDesign, { ...PRESETS.enrich2.parameters, model, normalization });
         const ms = performance.now() - t0;
         const pairs = [];
         let oneSide = 0;
@@ -587,6 +588,128 @@ const suites = {
       }
     };
     againstEnrich2('two-population', fixture, design);
+
+    // Time series (wave 2, slice 2): weighted and ordinary regression on time.
+    {
+      const ts = timeSeriesTable();
+      const tsDesign = timeSeriesDesign();
+      againstEnrich2('time-series', ts, tsDesign);
+      const tsNames = ts.columns.find((c) => c.name === 'hgvs_pro').values;
+      const tsRow = new Map(tsNames.map((n, i) => [n, i]));
+      // statsmodels: slope, residual-scaled SE, SE from counting alone, departure from a line.
+      const statsmodels = JSON.parse(readFileSync(new URL('./reference/statsmodels.json', import.meta.url), 'utf8'));
+      for (const [method, perReplicate] of Object.entries(statsmodels.methods)) {
+        const [scoring, normalization] = method.split('/');
+        const base = { ...DEFAULT_PARAMETERS, model: scoring.toLowerCase(), normalization, filters: { ...DEFAULT_PARAMETERS.filters, minInputCount: 0 } };
+        const residual = score(ts, tsDesign, { ...base, regressionSE: 'residual' });
+        const floored = score(ts, tsDesign, base);
+        const pairs = [];
+        const floorPairs = [];
+        let oneSide = 0;
+        let pointsWrong = 0;
+        let raised = 0;
+        for (const [r, rep] of residual.replicates.entries()) {
+          const theirs = perReplicate[rep.id];
+          tsNames.forEach((name, i) => {
+            const mine = rep.state[i] === REPLICATE_STATE.USED;
+            if (mine !== (name in theirs)) {
+              oneSide += 1;
+              return;
+            }
+            if (!mine) return;
+            const [slope, bse, seCounting, chi2, n] = theirs[name];
+            pairs.push([`${rep.id} ${name}`, rep.score[i], slope], [`${rep.id} ${name} SE`, rep.se[i], bse], [`${rep.id} ${name} χ²`, rep.fit[i], chi2]);
+            floorPairs.push([`${rep.id} ${name} SE`, floored.replicates[r].se[i], Math.max(bse, seCounting)]);
+            if (seCounting > bse) raised += 1;
+            if (rep.points[i] !== n) pointsWrong += 1;
+          });
+        }
+        const d = worstDifference(pairs);
+        const df = worstDifference(floorPairs);
+        check('scoring', `time series ${method}: each replicate's slope, residual-scaled SE and departure from a line equal statsmodels ${statsmodels.versions.statsmodels} (${pairs.length / 3} fits on 3–5 unevenly spaced times)`, `${d.worst.toExponential(2)} (${d.where})${oneSide ? `; ${oneSide} by one side only` : ''}${pointsWrong ? `; ${pointsWrong} with other time points` : ''}`, d.worst <= 1e-10 && !oneSide && !pointsWrong && pairs.length > 0, '≤ 1e-10 relative, the same variants and points');
+        check('scoring', `time series ${method}: the counting floor's SE equals the larger of statsmodels' and counting's (numpy), raised in ${raised} of ${floorPairs.length} fits`, `${df.worst.toExponential(2)} (${df.where})`, df.worst <= 1e-10 && raised > 0, '≤ 1e-10 relative');
+      }
+      // The edge cases under MaveScape's defaults (weighted regression).
+      const edge = edgeVariants(tsDesign);
+      const defaultsTs = score(ts, tsDesign, { ...DEFAULT_PARAMETERS, model: 'wls' });
+      const ct = defaultsTs.conditions[0];
+      for (const [key, what, states, points, flags] of TIME_SERIES_EXPECTATIONS) {
+        const name = edge[key];
+        const i = tsRow.get(name);
+        const got = { states: defaultsTs.replicates.map((r) => r.state[i]), points: defaultsTs.replicates.map((r) => r.points[i]), flags: ct.flags[i] };
+        const ok = JSON.stringify(got) === JSON.stringify({ states, points, flags }) && !ct.reason[i] && Number.isFinite(ct.score[i]);
+        check('scoring', `time-series edge case: ${what} (${name})`, `scored ${fmt(ct.score[i])} ± ${fmt(ct.se[i])}; states ${got.states.join(',')}; points ${got.points.join(',')}; flags ${got.flags}`, ok, `states ${states.join(',')}, points ${points.join(',')}, flags ${flags}`);
+      }
+      {
+        const i = tsRow.get(edge.notALine);
+        const fits = defaultsTs.replicates.map((r) => r.fit[i]);
+        const typical = median(defaultsTs.replicates.flatMap((r) => [...r.fit].filter((x, j) => Number.isFinite(x) && j !== i)));
+        check('scoring', `time-series edge case: a trajectory that rises then falls (${edge.notALine}) is scored, not flagged, and its departure from a line reported`, `χ²/(n − 2) ${fits.map((x) => fmt(x, 0)).join(', ')} (typical variant ${fmt(typical, 2)}); flags ${ct.flags[i]}`, fits.every((x) => x > 50 * typical) && !ct.reason[i] && ct.flags[i] === 0, 'scored; departure ≫ typical');
+      }
+      {
+        // A table that writes dropouts as missing: with the later samples' missing read as 0, the
+        // dropout variant uses every time point. Weighted regression gives zero counts little
+        // weight, so its score moves little; the log ratio, which needs the last sample, cannot
+        // score it at all until its missing counts are read as 0.
+        const zeroDesign = { ...tsDesign, samples: tsDesign.samples.map((x) => (/gen(6|10)$/.test(x.id) ? { ...x, missingMeansZero: true } : x)) };
+        const zero = score(ts, zeroDesign, { ...DEFAULT_PARAMETERS, model: 'wls' });
+        const i = tsRow.get(edge.dropout);
+        const ratioMissing = score(ts, tsDesign, DEFAULT_PARAMETERS).conditions[0];
+        const ratioZero = score(ts, zeroDesign, DEFAULT_PARAMETERS).conditions[0];
+        check('scoring', `missing read as 0 in the samples after selection (the design's missingMeansZero), for the dropout ${edge.dropout}: regression uses every time point; the log ratio scores it instead of leaving it out`, `WLS ${fmt(ct.score[i])} on 3 points → ${fmt(zero.conditions[0].score[i])} on ${zero.replicates.map((r) => r.points[i]).join(',')}; ratio ${ratioMissing.reason[i] ? STAGE_BY_CODE.get(ratioMissing.reason[i]).id : fmt(ratioMissing.score[i])} → ${fmt(ratioZero.score[i])}; ${zero.info.filter((x) => /read as 0/.test(x)).length} notes in the run`, zero.replicates.every((r) => r.points[i] === 5) && zero.conditions[0].score[i] < ct.score[i] && ratioMissing.reason[i] === STAGE_BY_ID.get('measured').code && Number.isFinite(ratioZero.score[i]) && zero.info.some((x) => /read as 0/.test(x)), 'every point, lower; measured → scored');
+      }
+      {
+        // Enrich2's conventions: every time point required.
+        const e = score(ts, tsDesign, { ...PRESETS.enrich2.parameters, model: 'wls' });
+        const at = (key) => tsRow.get(edge[key]);
+        const states = ['laterMissing', 'dropout'].map((key) => e.replicates[0].state[at(key)]);
+        check('scoring', 'Enrich2-compatible regression: a variant missing at any time point is not scored in that replicate', `replicate 1: ${states.map((x) => REPLICATE_STATE_NAMES[x]).join('; ')}`, states.every((x) => x === REPLICATE_STATE.FEW_POINTS), 'counted at too few time points');
+      }
+      {
+        // Against the simulated truth: the slopes, and how often their 95% intervals hold it.
+        const truth = timeSeriesTruth();
+        const planted = new Set(Object.values(edge));
+        const coverage = (results) => {
+          let replicate = 0;
+          let replicateN = 0;
+          for (const rep of results.replicates) {
+            results.variants.key.forEach((key, i) => {
+              if (rep.state[i] || planted.has(key) || !truth.has(key)) return;
+              replicateN += 1;
+              if (Math.abs(rep.score[i] - truth.get(key)) < 1.959964 * rep.se[i]) replicate += 1;
+            });
+          }
+          const c = results.conditions[0];
+          let combined = 0;
+          let combinedN = 0;
+          const a = [];
+          const b = [];
+          results.variants.key.forEach((key, i) => {
+            if (c.reason[i] || planted.has(key) || !truth.has(key) || key === 'p.=') return;
+            combinedN += 1;
+            a.push(c.score[i]);
+            b.push(truth.get(key));
+            if (Math.abs(c.score[i] - truth.get(key)) < 1.959964 * c.se[i]) combined += 1;
+          });
+          return { replicate: replicate / replicateN, combined: combined / combinedN, r: pearson(a, b) };
+        };
+        const floor = coverage(defaultsTs);
+        const resid = coverage(score(ts, tsDesign, { ...DEFAULT_PARAMETERS, model: 'wls', regressionSE: 'residual' }));
+        check('scoring', 'time series against the simulated truth: weighted-regression slopes track the true effects', `Pearson r ${floor.r.toFixed(4)}`, floor.r >= 0.995, '≥ 0.995');
+        check('scoring', 'time series against the simulated truth: 95% intervals with the counting floor hold the true slope more often than with Enrich2\'s residual-scaled SE (the rest of the gap is the replicate noise planted)', `replicates ${(100 * floor.replicate).toFixed(0)}% against ${(100 * resid.replicate).toFixed(0)}%; combined by REML ${(100 * floor.combined).toFixed(0)}% against ${(100 * resid.combined).toFixed(0)}%`, floor.replicate >= resid.replicate + 0.1 && floor.combined >= 0.85 && floor.combined >= resid.combined + 0.05, 'floor higher by ≥ 10 points per replicate; combined ≥ 85%');
+      }
+      {
+        // Refusals: regression where it cannot be done, said why.
+        const refusals = [
+          ['a regression on a two-population design', scoreExperiment({ ...engineInput(fixture, design), parameters: { ...DEFAULT_PARAMETERS, model: 'wls' } }), /time series/],
+          ['a regression with a replicate of two time points', scoreExperiment({ ...engineInput(ts, { ...tsDesign, replicates: tsDesign.replicates.map((r, k) => (k ? r : { ...r, timepoints: r.timepoints.slice(0, 2) })) }), parameters: { ...DEFAULT_PARAMETERS, model: 'wls' } }), /three or more time points/],
+          ['a minimum of two time points', scoreExperiment({ ...engineInput(ts, tsDesign), parameters: { ...DEFAULT_PARAMETERS, model: 'wls', filters: { ...DEFAULT_PARAMETERS.filters, minTimePoints: 2 } } }), /3 or more/],
+        ];
+        for (const [what, out, pattern] of refusals) check('scoring', `refused: ${what}, with the reason`, out.ok ? 'scored anyway' : out.errors[0], !out.ok && pattern.test(out.errors.join(' ')), 'refused');
+        const defaults = defaultParameters(tsDesign);
+        check('scoring', 'a time series of three or more time points starts from weighted regression; a two-population experiment from the log ratio', `${defaults.model}; ${defaultParameters(design).model}`, defaults.model === 'wls' && defaultParameters(design).model === 'ratio', 'wls; ratio');
+      }
+    }
 
     // dms_variants' func_scores (natural logarithms) on the fixture, replicate by replicate.
     {
@@ -759,7 +882,7 @@ const suites = {
     }
 
     // The feasibility data (external).
-    for (const c of DESIGN_CASES.filter((x) => ['grb2-sh3', 'brca1-ring-e2'].includes(x.name))) {
+    for (const c of DESIGN_CASES.filter((x) => ['grb2-sh3', 'brca1-ring-e2', 'brca1-ring-y2h'].includes(x.name))) {
       const table = parseTable(dataset(c.dataset).bytes(c.counts));
       againstEnrich2(c.name, table, readDesign(c.design));
     }
@@ -857,25 +980,28 @@ const suites = {
       check('qc', 'thresholds whose fail level is on the wrong side of the review level are refused', bad[0] ?? 'accepted', bad.length === 1, 'refused');
     }
 
-    // The feasibility data (external): findings as found, with MaveScape's default scoring.
+    // The feasibility data (external): findings as found, with MaveScape's default scoring for each
+    // design (weighted regression for BRCA1's time series, from wave 2).
     const expectations = [
       ['grb2-sh3', 'mavedb-grb2-sh3', 'counts.csv', { 'excess-variance': 'fail' }, 'replicate differences vary about 11× more than counting predicts: the input bottleneck DiMSum\'s error model found in these data'],
-      ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { dropout: 'review', coverage: 'review', agreement: 'review', 'excess-variance': 'fail' }, 'an error-prone-PCR library (76% of single substitutions), replicates of a time series scored by its ends, and variants that dropped out in the last round written as missing (no 0 in the table)'],
-      ['brca1-ring-y2h', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'outlier-replicate': 'review', separation: 'fail', resolution: 'review' }, 'nonsense variants are not separated from the wild type in the Y2H assay: those before residue 61 score about −3.7, those after residue 110 about +0.5 (truncations that keep the RING domain keep binding BARD1), so most are not loss-of-function controls here'],
+      ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { dropout: 'review', coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'time-points': 'review', 'time-fit': 'fail' }, 'an error-prone-PCR library (76% of single substitutions); variants that dropped out in the last round written as missing (no 0 in the table), so a quarter of the weighted-regression fits miss their last points; time courses that scatter about their lines about 10× more than counting predicts (noise at each round of selection)'],
+      ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'time-fit': 'fail' }, 'with the later rounds\' missing counts read as 0 (the design\'s missingMeansZero): the dropouts are counted, every fit uses every round, and the time courses scatter about 7× more than counting predicts', (design) => ({ ...design, samples: design.samples.map((x) => (design.replicates.some((r) => r.timepoints.slice(1).some((t) => t.sample === x.id)) ? { ...x, missingMeansZero: true } : x)) })],
+      ['brca1-ring-y2h', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'outlier-replicate': 'review', separation: 'fail', resolution: 'review', 'time-fit': 'fail' }, 'nonsense variants are not separated from the wild type in the Y2H assay: those before residue 61 score about −3.7, those after residue 110 about +0.5 (truncations that keep the RING domain keep binding BARD1), so most are not loss-of-function controls here; its time courses scatter about 30× more than counting predicts'],
       ['factor9', 'mavedb-factor9', 'counts.csv', {}, 'FACS bins: counts-level findings only until bins are scored (wave 2)'],
     ];
-    for (const [name, data, path, expected, note] of expectations) {
-      const design = readDesign(`${name}.design.json`);
+    for (const [name, data, path, expected, note, transform] of expectations) {
+      const design = (transform ?? ((d) => d))(readDesign(`${name}.design.json`));
       const table = parseTable(dataset(data).bytes(path));
       const names = table.columns.find((c) => c.name === design.variants.column).values;
       const columns = {};
       for (const s of design.samples) for (const c of s.columns) columns[c] = table.columns.find((x) => x.name === c).numeric;
       const t0 = performance.now();
-      const scored = scoreExperiment({ names, columns, design, parameters: DEFAULT_PARAMETERS });
+      const parameters = defaultParameters(design);
+      const scored = scoreExperiment({ names, columns, design, parameters });
       const qc = computeQC({ names, columns, design, results: scored.ok ? scored.results : null });
       const ms = performance.now() - t0;
       const got = raised(findingsFrom(qc, defaultThresholds()));
-      check('qc', `${name} (scored and checked in ${ms.toFixed(0)} ms): ${note}`, show(got), matches(got, expected), show(expected));
+      check('qc', `${name} (${parameters.model === 'ratio' ? 'log ratio' : parameters.model.toUpperCase()}, scored and checked in ${ms.toFixed(0)} ms): ${note}`, show(got), matches(got, expected), show(expected));
     }
   },
   // The variant-effect map (wave 1, slice 7): its SVG against a golden file, every state where the
@@ -1078,17 +1204,20 @@ const suites = {
     const grb2Table = parseTable(grb2Bytes);
     const grb2Result = validateDesign(grb2Design, { columns: grb2Table.columns.map((c) => c.name) });
     check('roundtrip', 'the GRB2 SH3 example: its counts are MaveDB\'s, unchanged (SHA-256 as fetched for validation), and its design fits them', `${sha256(grb2Bytes).slice(0, 16)}… against ${bundled.sha256.slice(0, 16)}…; design ${grb2Result.ok ? 'valid' : grb2Result.errors[0].message}`, sha256(grb2Bytes) === bundled.sha256 && grb2Result.ok, 'the same; valid');
-    const sim = simulatedExample();
-    const simAgain = simulatedExample();
-    const simTable = parseTable(sim.csv);
-    const simScored = scoreTable(simTable, sim.design, DEFAULT_PARAMETERS);
-    const simC = simScored.results.conditions[0];
-    const a = [];
-    const b = [];
-    simScored.results.variants.key.forEach((k, i) => { if (!simC.reason[i] && k in sim.truth && k !== 'p.=') { a.push(simC.score[i]); b.push(sim.truth[k]); } });
-    const simQc = findingsFrom(computeQC({ names: simTable.columns[0].values, columns: Object.fromEntries(simTable.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design, results: simScored.results }), defaultThresholds());
-    const raisedSim = simQc.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => f.id);
-    check('roundtrip', 'the simulated example: the same data from its seed, labeled simulated, its scores close to the true effects, and every QC finding passes', `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${raisedSim.length ? raisedSim.join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > 0.98 && !raisedSim.length, 'r > 0.98; all pass');
+    for (const example of EXAMPLES.filter((e) => e.simulated)) {
+      const sim = simulatedExample(example);
+      const simAgain = simulatedExample(example);
+      const simTable = parseTable(sim.csv);
+      const parameters = defaultParameters(sim.design);
+      const simScored = scoreTable(simTable, sim.design, parameters);
+      const simC = simScored.results.conditions[0];
+      const a = [];
+      const b = [];
+      simScored.results.variants.key.forEach((k, i) => { if (!simC.reason[i] && k in sim.truth && k !== 'p.=') { a.push(simC.score[i]); b.push(sim.truth[k]); } });
+      const simQc = findingsFrom(computeQC({ names: simTable.columns[0].values, columns: Object.fromEntries(simTable.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design, results: simScored.results }), defaultThresholds());
+      const raisedSim = simQc.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => f.id);
+      check('roundtrip', `the example "${example.title}": the same data from its seed, labeled simulated, scored by ${parameters.model === 'ratio' ? 'the log ratio' : parameters.model.toUpperCase()} close to the true effects, and every QC finding passes (${simQc.length} findings)`, `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${raisedSim.length ? raisedSim.join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > 0.98 && !raisedSim.length, 'r > 0.98; all pass');
+    }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
     // The blank layouts: filled in as they say, they make a valid design.
     const layoutTable = parseTable(new Uint8Array(readFileSync(new URL('../web/examples/layouts/count-table.csv', import.meta.url))));

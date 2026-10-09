@@ -18,13 +18,13 @@ functional effects for research; it does not classify variants as pathogenic or 
 opening your data, scoring, quality control, the map, the record and scripting, with screenshots.
 
 > **Status: 0.1.0 released; 0.2.0 in progress.** Count tables import, designs are set in the
-> Experiment view, two-population experiments (and time series, by their first and last samples)
-> are scored with numbers checked against Enrich2, dms_variants and metafor, quality control
-> reports its findings, the variant-effect map shows each run, and a workspace saves to one
-> archive that reopens identically. Scripts can drive the window (`--remote-control`). Two
-> examples are on the Start page; [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md) continues with time series, bins, barcodes and DiMSum's
-> error model in 0.2.
+> Experiment view, two-population experiments and time series (by weighted regression on every
+> time point) are scored with numbers checked against Enrich2, dms_variants, statsmodels and
+> metafor, quality control reports its findings, the variant-effect map shows each run, and a
+> workspace saves to one archive that reopens identically. Scripts can drive the window
+> (`--remote-control`). Three examples are on the Start page; [`docs/FORMATS.md`](docs/FORMATS.md)
+> describes every file. The [roadmap](mavescape-spec/roadmap.md) continues with sorted bins,
+> barcodes and DiMSum's error model in 0.2.
 
 ## Install
 

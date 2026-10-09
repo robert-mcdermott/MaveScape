@@ -18,7 +18,7 @@
 import { log, log10, pow, square } from './dmath.js';
 import { buildVariants, KIND, STATUS } from './variants.js';
 import { replicateSamples, targetLength } from './design.js';
-import { poolColumns } from './replicates.js';
+import { sampleCounts } from './replicates.js';
 import { auc, mad, mean, median, MEDIAN_CHI2_1, nonNegativeLine, pearson, quantileSorted, sorted, spearman, variance } from './stats.js';
 
 export const QC_VERSION = '1';
@@ -331,6 +331,40 @@ function scoreMetrics(results) {
   });
 }
 
+// The χ² quantile at probability p for df degrees of freedom, by Wilson and Hilferty (1931), with
+// z the standard normal quantile: within a few percent from df = 1, which is enough to read fits.
+function chi2Quantile(z, df) {
+  const a = 2 / (9 * df);
+  const c = 1 - a + z * Math.sqrt(a);
+  return df * c * c * c;
+}
+
+// From a regression run (score-regression.js), per replicate: the fits made, those on fewer time
+// points than the replicate has, the measurements left out with too few points, and how far the
+// fits depart from a line against counting noise: each fit's χ²/df over its median under counting
+// noise alone (so 1 is typical), and the share beyond the 99.9th percentile (z = 3.0902).
+function timeSeriesMetrics(results) {
+  return results.replicates.filter((r) => r.points && r.fit).map((r) => {
+    const T = r.times.length;
+    let fits = 0;
+    let fewer = 0;
+    let excluded = 0;
+    let beyond = 0;
+    const ratios = [];
+    for (let i = 0; i < results.rows; i += 1) {
+      if (r.state[i] === 4) excluded += 1;
+      if (r.state[i] !== 0) continue;
+      fits += 1;
+      if (r.points[i] < T) fewer += 1;
+      const df = r.points[i] - 2;
+      if (df < 1 || !Number.isFinite(r.fit[i])) continue;
+      ratios.push(r.fit[i] / (chi2Quantile(0, df) / df));
+      if (r.fit[i] > chi2Quantile(3.0902, df) / df) beyond += 1;
+    }
+    return { id: r.id, name: r.name, times: T, fits, fewer, excluded, departure: ratios.length ? median(ratios) : Number.NaN, beyond: ratios.length ? beyond / ratios.length : Number.NaN, assessed: ratios.length };
+  });
+}
+
 // QC of an experiment. input: { names, columns: { name: Float64Array }, design, mode, results
 // (a score run's results, optional), measures: { lowCount, agreementInput } }.
 export function computeQC({ names, columns, design, mode = 'lenient', results = null, measures = {} }) {
@@ -340,7 +374,7 @@ export function computeQC({ names, columns, design, mode = 'lenient', results = 
   const pooled = new Map();
   for (const s of design.samples) {
     const parts = s.columns.map((c) => columns[c]).filter(Boolean);
-    pooled.set(s.id, parts.length === s.columns.length ? poolColumns(parts) : new Float64Array(n).fill(Number.NaN));
+    pooled.set(s.id, parts.length === s.columns.length ? sampleCounts(s, parts) : new Float64Array(n).fill(Number.NaN));
   }
   // The samples, with their roles.
   const roles = new Map(design.samples.map((s) => [s.id, []]));
@@ -391,5 +425,6 @@ export function computeQC({ names, columns, design, mode = 'lenient', results = 
     conditions,
     missingness: { samples: design.samples.map((s) => s.id), patterns: [...patterns].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pattern, count]) => ({ pattern, count })) },
     scores: results ? scoreMetrics(results) : null,
+    timeSeries: results && results.parameters?.model && results.parameters.model !== 'ratio' ? timeSeriesMetrics(results) : null,
   };
 }

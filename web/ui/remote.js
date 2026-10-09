@@ -8,7 +8,7 @@
 import { toast } from './overlays.js';
 import { EXAMPLES } from '../lib/examples.js';
 import { validateDesign, summarizeDesign } from '../lib/design.js';
-import { checkParameters, PRESETS, withDefaults } from '../lib/score.js';
+import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
 import { addRun, makeRun, runId, runInputs } from '../lib/runs.js';
 import { addSelection, createWorkspace, rename, setDesign } from '../lib/workspace.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
@@ -278,8 +278,7 @@ export function installRemote(app) {
       const design = ws().design;
       if (!design) throw new ActionError('There is no design yet: draft it (draft_design) or set it (set_design) first.');
       const presetId = choose(args.preset ?? 'mavescape', Object.keys(PRESETS), 'preset');
-      const hasWildType = (source.summary?.byKind?.['wild type'] ?? 0) > 0;
-      const base = { ...PRESETS[presetId].parameters, normalization: hasWildType ? 'wt' : 'complete' };
+      const base = defaultParameters(design, source, presetId);
       const extra = args.parameters ?? {};
       const parameters = withDefaults({ ...base, ...extra, filters: { ...base.filters, ...(extra.filters ?? {}) } });
       const problems = [];
@@ -414,7 +413,11 @@ export function installRemote(app) {
       await settle();
       if (row < 0) return { message: `${name} is not in ${run.name}'s table: it was not measured (missing on the map, not "no effect").`, data: { variant: name, measured: false } };
       const reasons = c.reason[row] ? STAGE_BY_CODE.get(c.reason[row]) : null;
-      const replicates = results.replicates.filter((r) => c.replicates.includes(r.id)).map((r) => ({ name: r.name, before: round(r.first[row]), after: round(r.last[row]), score: round(r.score[row]), se: round(r.se[row]), used: !r.state[row], state: r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'used' }));
+      const replicates = results.replicates.filter((r) => c.replicates.includes(r.id)).map((r) => ({
+        name: r.name, before: round(r.first[row]), after: round(r.last[row]), score: round(r.score[row]), se: round(r.se[row]), used: !r.state[row], state: r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'used',
+        // A regression's time points used and departure from a line (χ²/df against counting).
+        ...(r.points ? { timePoints: r.points[row], departure: round(r.fit[row]) } : {}),
+      }));
       const data = {
         variant: v.key[row],
         asWritten: v.original[row],

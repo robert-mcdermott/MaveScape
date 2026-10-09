@@ -13,7 +13,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `enrich2` | Enrich2 2.0.2's scores of those data (`reference/enrich2.json`) against the formulas of `mavescape-spec/research.md` §2.1 computed independently, and the published BRCA1 scores against Enrich2 2.0.2 | MaveDB, external; `reference/enrich2.json` |
 | `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
-| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `fixtures/`; MaveDB, external |
+| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0" | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `statsmodels.json`, `fixtures/`; MaveDB, external |
 | `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`) raise exactly their findings, a clean one none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
 | `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
 | `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked | `fixtures/`, `web/examples/` |
@@ -146,6 +146,33 @@ reads) and not counted at all (p.Gly10Ala). Each variant is also written as a co
 (column `codon`), so that dms_variants can score the same table. The suite derives the other edge
 cases from it: the wild-type row removed, controls declared absent, counts divided by 2,000.
 
+## The time-series fixture (`fixtures/time-series.*`, wave 2 slice 2)
+
+`node validation/fixtures/make-time-series.mjs` writes it, deterministically (seed 20261010): a
+20-residue protein target in its design (`time-series.design.json`), a count table
+(`time-series.csv`) of 199 variants grown in three replicates and sequenced at generations 0, 1,
+3, 6 and 10 (unevenly spaced), and each variant's true effect per generation
+(`time-series.truth.csv`; ten times it is the true slope on time scaled to 0–1). Seven edge cases
+are planted on the first variant of a kind at a position, named in the design's description:
+missing at one later time (replicate 1), at two middle times (replicate 2), a dropout written as
+missing at the last two times (every replicate), missing at time 0 (replicate 3), counted at only
+two times (replicate 1), a time course that rises then falls, and counts of 0 at the last two times.
+Enrich2 scores it too (`generate_enrich2.py`, case `time-series`: WLS and OLS with wild-type
+normalization, WLS with complete cases, and ratios).
+
+## statsmodels (`reference/statsmodels.json`, wave 2 slice 2)
+
+```sh
+uv run --python 3.12 --with statsmodels==0.15.0 --with scipy==1.18.1 --with numpy==2.5.3 --with pandas==3.0.6 python validation/reference/generate_statsmodels.py
+```
+
+For the time-series fixture, per replicate and variant, fitted on the time points where it was
+counted (its first among them, three or more), with research.md §2.1's definitions written anew in
+Python: `sm.WLS` (and OLS) with an intercept, its slope and residual-scaled `bse`, the slope's SE
+from counting alone computed with numpy ((A diag(v) Aᵀ)[1,1]^½), and the departure from a line
+(Σe²/v over n − 2). The same versions as the Enrich2 reference (statsmodels 0.14.4 does not import
+with SciPy 1.18).
+
 ## Scoring references (`reference/dms_variants.json`, `reference/metafor.json`)
 
 ```sh
@@ -181,6 +208,21 @@ Rscript validation/reference/generate_metafor.R
   counts and replicate scores with its score NA and its stage; a missing reference class (no
   wild-type row, no synonymous or nonsense controls when needed) refuses the run with the reason;
   very low depth is warned about sample by sample.
+
+### What the comparisons showed (wave 2, slice 2)
+
+- **The engine's WLS and OLS equal Enrich2 2.0.2's** with the Enrich2-compatible parameters, to
+  5 × 10⁻¹³: BRCA1 E2 (six rounds; 9,279 replicate scores each), BRCA1 Y2H (four unevenly spaced
+  times in two libraries sampled at different times; 11,932) and the fixture (WLS and OLS with
+  wild-type normalization, WLS with complete cases, and the ratio), scoring exactly the variants
+  Enrich2 scores; the combined scores to 5 × 10⁻¹³.
+- **They equal statsmodels** on the fixture's 595 fits per method (3 to 5 points), slope,
+  residual-scaled SE and departure, to 5 × 10⁻¹⁴, and the counting floor equals the larger of
+  statsmodels' SE and numpy's counting SE (raised in 245 to 414 of 595 fits).
+- **The counting floor holds the truth more often**: the fixture's 95% intervals hold the true
+  slope 83% of the time per replicate and 90% combined, against 69% and 81% with Enrich2's
+  residual-scaled SE (the rest is the replicate noise the simulation plants, which REML takes up
+  only partly with three replicates).
 
 ## Quality control (wave 1, slice 6)
 

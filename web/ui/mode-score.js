@@ -8,7 +8,8 @@
 import { h, icon, clear, formatCount } from './dom.js';
 import { confirmDialog, showMenu, toast } from './overlays.js';
 import { validateDesign } from '../lib/design.js';
-import { checkParameters, DEFAULT_PARAMETERS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
+import { checkParameters, defaultParameters, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
+import { MODELS, REGRESSION_SE } from '../lib/score-regression.js';
 import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
@@ -39,8 +40,7 @@ export function mountScoreMode(app, container) {
     const ws = store.ws;
     if (!app.scoreDrafts.has(ws.id)) {
       const last = ws.runs.at(-1)?.inputs.parameters;
-      const hasWildType = (source()?.summary?.byKind?.['wild type'] ?? 0) > 0;
-      app.scoreDrafts.set(ws.id, withDefaults(last ?? { ...DEFAULT_PARAMETERS, normalization: hasWildType ? 'wt' : 'complete' }));
+      app.scoreDrafts.set(ws.id, withDefaults(last ?? defaultParameters(ws.design, source())));
     }
     return app.scoreDrafts.get(ws.id);
   }
@@ -53,8 +53,8 @@ export function mountScoreMode(app, container) {
     view.refused = null;
     render();
   }
-  // The preset parameters match, whatever the normalization (each preset keeps the one chosen).
-  const presetOf = (p) => Object.entries(PRESETS).find(([, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, normalization: p.normalization })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
+  // The preset parameters match, whatever the model and normalization (each preset keeps them).
+  const presetOf = (p) => Object.entries(PRESETS).find(([, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, model: p.model, normalization: p.normalization })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
 
   // --- Readiness ------------------------------------------------------------------------------
   function readiness() {
@@ -155,14 +155,18 @@ export function mountScoreMode(app, container) {
     const preset = presetOf(p);
     return h('div.pane', h('h3', icon('settings'), 'Parameters'),
       h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
-        ...Object.entries(PRESETS).map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios": no count filter, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : 'Variants with no input reads left out; REML random effects to convergence', onclick: () => replaceDraft({ ...x.parameters, normalization: p.normalization }) }, x.label))),
+        ...Object.entries(PRESETS).map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios", "WLS" and "OLS": no count filter, every time point required, SEs scaled by the residuals alone, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : 'Variants with no input reads left out; a regression\'s SE never below counting\'s; REML random effects to convergence', onclick: () => replaceDraft({ ...x.parameters, model: p.model, normalization: p.normalization }) }, x.label))),
         preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
+      store.ws.design?.model === 'time-series' ? select('Scored by', p.model, Object.entries(MODELS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ model: v })) : null,
+      p.model !== 'ratio' ? select('Standard error of a slope', p.regressionSE, Object.entries(REGRESSION_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ regressionSE: v })) : null,
       select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v })),
       h('div.form-grid',
         number('Pseudocount', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }),
         select('Replicates combined by', p.combination, Object.entries(COMBINATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ combination: v }, v === 'enrich2' ? { minReplicates: 'all' } : null))),
       select('Rescaling', p.rescale, Object.entries(RESCALINGS).map(([k, v]) => [k, v.label[0].toUpperCase() + v.label.slice(1)]), (v) => setDraft({ rescale: v })),
-      h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, 'Scores are natural-log ratios of frequencies after and before selection; technical replicates are summed first, biological replicates scored separately and then combined.'));
+      h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, p.model === 'ratio'
+        ? 'Scores are natural-log ratios of frequencies after and before selection; technical replicates are summed first, biological replicates scored separately and then combined.'
+        : `Scores are the slopes of each variant's normalized log count on time scaled to 0–1, by ${p.model === 'wls' ? 'weighted (each point by its counting precision, as Enrich2)' : 'ordinary'} least squares; technical replicates are summed first, biological replicates scored separately and then combined.`));
   }
 
   function filtersPane() {
@@ -175,7 +179,10 @@ export function mountScoreMode(app, container) {
     const stage = (n, title, control, rule = false) => h('li.filter-stage', h('span.filter-step', String(n)), h('div', h('div.filter-title', title, rule ? h('span.badge', { style: { marginLeft: '6px' } }, 'always') : null), control));
     return h('div.pane', h('h3', icon('filter'), 'Filters, in order'),
       h('ol.filter-bar',
-        stage(1, 'Counted in every sample of a replicate', null, true),
+        p.model === 'ratio' ? stage(1, 'Counted in every sample of a replicate', null, true)
+          : stage(1, 'Counted at the first time point and enough others', h('div.btn-row',
+            f.minTimePoints === 'all' ? h('span', 'Every time point') : number('Minimum time points', f.minTimePoints, (v) => setDraft({}, { minTimePoints: Math.max(3, Math.round(v ?? 3)) }), { min: 3, step: 1 }),
+            h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: f.minTimePoints === 'all', onchange: (e) => setDraft({}, { minTimePoints: e.target.checked ? 'all' : 3 }) }), ' all'))),
         stage(2, 'Identifier valid against the target', null, true),
         stage(3, 'Variant classes scored', h('div.btn-row', { style: { marginTop: '4px' } }, ...kinds.map((k) => {
           const out = f.excludeKinds.includes(k);

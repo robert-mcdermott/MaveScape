@@ -44,7 +44,7 @@ var remoteActions = []remoteAction{
 		"name": textArg("A name for it."),
 	})},
 	{Name: "open_example", Description: "Opens a bundled example as a new workspace, scored with MaveScape's defaults, in the view it opens in. Without an id, the error lists the examples.", InputSchema: schema(map[string]any{
-		"id": textArg("The example's id or part of its title: \"grb2-sh3\" (GRB2 SH3, MaveDB counts) or \"simulated\" (a simulated experiment with known effects)."),
+		"id": textArg("The example's id or part of its title: \"grb2-sh3\" (GRB2 SH3, MaveDB counts), \"simulated\" (a simulated experiment with known effects) or \"simulated-time-series\" (a simulated time series)."),
 	}, "id"), long: true},
 	{Name: "open_files", Description: "Opens files on this computer, as dropping them on the window does: count or score tables (.csv, .tsv), the target's sequence (.fasta), designs (.design.json) and workspace archives (.msz), or folders of them. Needs the token.", InputSchema: schema(map[string]any{
 		"paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths of files or folders."},
@@ -67,7 +67,7 @@ var remoteActions = []remoteAction{
 	}, "design")},
 	{Name: "score", Description: "Scores the counts with the current design: functional scores with standard errors, a new immutable run (or the existing one, when a run already has the same table, design and parameters). Shows it in the Score view.", InputSchema: schema(map[string]any{
 		"preset":     textArg("mavescape (the default) or enrich2 (Enrich2 2.0.2's ratios, for comparison)."),
-		"parameters": map[string]any{"type": "object", "description": "Parameters to change from the preset: normalization (wt, complete, full, synonymous), combination (reml, fixed, enrich2), rescaling, pseudocount, filters {minInputCount, …}."},
+		"parameters": map[string]any{"type": "object", "description": "Parameters to change from the preset: model (ratio, wls, ols: a time series starts from wls), regressionSE (counting-floor, residual), normalization (wt, complete, full, synonymous), combination (reml, fixed, enrich2), rescale, pseudocount, filters {minInputCount, minTimePoints, …}."},
 	}), long: true},
 	{Name: "qc_findings", Description: "Quality control of a score run (or of the counts alone, before scoring): each finding's status (pass, review, fail or not assessed), what was found, its threshold and why it matters, and the overall status. Shows them in the QC view.", InputSchema: schema(map[string]any{
 		"run":     textArg("A score run by name or id, or \"counts\" for the counts with the current design; the latest run of the current design if not given."),

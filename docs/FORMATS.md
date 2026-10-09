@@ -110,7 +110,9 @@ The design as data: format `mavescape-design`, version 1, described by
 its columns: several are technical replicates, summed), the replicates (each naming its samples:
 input and output, time points, or bins; its biological number, condition and tile), conditions,
 tiles, controls, and `ignoredColumns` (every other column of the table, with the reason, or the
-column it copies). Written by the Experiment view; the validation designs are examples
+column it copies). A sample's `missingMeansZero: true` reads its missing counts as 0, for tables
+that write variants that dropped out during selection as missing (MaveScape 0.2; "Missing = 0" in
+the Experiment view; warned about on a replicate's first sample). Written by the Experiment view; the validation designs are examples
 ([`validation/designs/`](../validation/designs/)).
 
 ### Import templates, `*.import.json`
@@ -172,6 +174,10 @@ MaveDB's score layout, one row per variant of the table, in the table's order:
 | `tau2`, `I2`, `leave_one_out` | between-replicate variance, I², and the largest change when one replicate is left out |
 | `variant_as_written`, `variant_class` | the name as in the table, and its class |
 | `score_<replicate>`, `SE_<replicate>` | each replicate's score and SE (kept for filtered variants too) |
+
+For a time series scored by regression (MaveScape 0.2), a score is the slope of the variant's
+normalized log count on time scaled to 0–1, and `score_<replicate>` is each replicate's slope; the
+provenance and methods say which model, standard error and minimum of time points the run used.
 
 ### Counts (`*_counts.csv`)
 

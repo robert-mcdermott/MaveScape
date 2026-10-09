@@ -90,11 +90,16 @@ export function removeRun(ws, id) {
 export function describeParameters(parameters) {
   const p = withDefaults(parameters);
   const f = p.filters;
+  const regression = p.model !== 'ratio';
   const parts = [
-    `log ratio, ${p.normalization === 'wt' ? 'wild-type' : p.normalization === 'synonymous' ? 'synonymous-median' : `${p.normalization}-library`} normalization`,
+    `${regression ? `${p.model.toUpperCase()} on time` : 'log ratio'}, ${p.normalization === 'wt' ? 'wild-type' : p.normalization === 'synonymous' ? 'synonymous-median' : `${p.normalization}-library`} normalization`,
     `pseudocount ${p.pseudocount}`,
     p.combination === 'reml' ? 'REML' : p.combination === 'fixed' ? 'fixed effects' : 'Enrich2\'s estimator',
   ];
+  if (regression) {
+    parts.push(p.regressionSE === 'residual' ? 'residual-scaled SE' : 'SE at least counting\'s');
+    parts.push(f.minTimePoints === 'all' ? 'every time point' : `time points ≥ ${f.minTimePoints}`);
+  }
   if (f.minInputCount) parts.push(`input ≥ ${f.minInputCount}`);
   if (f.minTotalCount) parts.push(`total ≥ ${f.minTotalCount}`);
   if (f.minReplicates !== 1) parts.push(f.minReplicates === 'all' ? 'scored in every replicate' : `replicates ≥ ${f.minReplicates}`);
@@ -105,14 +110,21 @@ export function describeParameters(parameters) {
   return parts.join(', ');
 }
 
+// A regression's method in one sentence (also the methods paragraph's).
+export function regressionSentence(p, citation) {
+  const f = p.filters;
+  return `Scores are the slopes of ${p.model === 'wls' ? 'a weighted' : 'an ordinary'} least-squares regression of each variant's natural-log count, normalized by the ${NORMALIZATIONS[p.normalization]}, on time scaled to 0–1 (${citation}), with a pseudocount of ${p.pseudocount}${p.model === 'wls' ? ' and weights 1/(1/(c + p) + 1/r) for a count c, the pseudocount p and the sample\'s normalizer r' : ''}; a variant was fitted on the time points where it was counted, ${f.minTimePoints === 'all' ? 'all of them required' : `its first and at least ${f.minTimePoints} in all`}; each replicate's SE is the slope's standard error scaled by the residuals${p.regressionSE === 'residual' ? '' : ', and never below what counting alone predicts'}.`;
+}
+
 // The run's method in sentences (the methods paragraph of slice 8 builds on it).
 export function describeMethod(run) {
   const p = withDefaults(run.inputs.parameters);
   const design = run.inputs.design;
   const lines = [];
-  lines.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; each replicate's SE is the square root of the sum of the reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'} (Rubin et al. 2017).`);
+  if (p.model === 'ratio') lines.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; each replicate's SE is the square root of the sum of the reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'} (Rubin et al. 2017).`);
+  else lines.push(regressionSentence(p, 'Rubin et al. 2017'));
   lines.push(`Biological replicates were scored separately and combined by ${COMBINATIONS[p.combination]}${p.combination === 'enrich2' ? ' (Enrich2 2.0.2\'s random-effects estimator, 50 iterations)' : p.combination === 'reml' ? ' (Fisher scoring as metafor\'s REML)' : ''}; technical replicates were summed before scoring.`);
-  lines.push(`Filters, in order: ${describeFilters(p.filters).filter((x) => x.active !== false).map((x) => x.text.toLowerCase()).join('; ')}.`);
+  lines.push(`Filters, in order: ${describeFilters(p.filters, null, p.model !== 'ratio').filter((x) => x.active !== false).map((x) => x.text.toLowerCase()).join('; ')}.`);
   if (p.rescale !== 'none') lines.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}.`);
   lines.push(`MaveScape ${run.software.version}${run.software.commit ? ` (${run.software.commit.slice(0, 7)})` : ''}, scoring version ${run.software.scoring}; run ${run.id}, output SHA-256 ${run.output.sha256}.`);
   return lines;

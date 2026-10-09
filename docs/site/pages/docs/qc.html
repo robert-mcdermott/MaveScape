@@ -24,6 +24,8 @@ lede: Quality control says whether the experiment supports reliable scores. Each
             <tr><td><strong>Separation of controls</strong></td><td>How well scores tell nonsense from wild-type-like controls (AUC)</td><td>below 0.9 / 0.75</td></tr>
             <tr><td><strong>Resolution of scores</strong></td><td>The median SE against the controls' gap</td><td>above 0.25 / 0.5</td></tr>
             <tr><td><strong>Variants scored</strong></td><td>Measured variants that pass the filters</td><td>below 80% / 50%</td></tr>
+            <tr><td><strong>Time points used</strong> (time series)</td><td>Fits on fewer time points than the replicate has</td><td>above 10% / 30%</td></tr>
+            <tr><td><strong>Fit of the time courses</strong> (time series)</td><td>How far the time courses scatter about their lines, over what counting predicts (median; 1 is typical)</td><td>above 2× / 5×</td></tr>
           </tbody>
         </table>
       </div>
@@ -31,8 +33,13 @@ lede: Quality control says whether the experiment supports reliable scores. Each
       <h2 id="bottleneck">Bottlenecks</h2>
       <p>Under counting noise alone, the difference of two replicates' log ratios has a variance equal to the sum of the reciprocal counts. MaveScape fits the observed variance as <em>a</em> × counting + <em>e</em>: <em>a</em> above 1 points to too few cells somewhere (a bottleneck multiplies the counting variance), and <em>e</em> to noise between replicates (DiMSum's multiplicative and additive error terms). Standard errors from counts alone then understate the uncertainty; REML's τ² takes up the excess between replicates.</p>
 
+      <h2 id="time-series">Time series</h2>
+      <p>For a time series scored by regression, two more findings. <strong>Time points used</strong>: a variant is fitted on the time points where it was counted, and points missing at the end of a time course are usually variants that dropped out and were written as missing; the slope then leans toward the wild type. <strong>Fit of the time courses</strong>: each fit's weighted residuals against counting noise, so that 1 is typical; well above 1 for most variants points to noise at each time point (a bottleneck at each passage), and the SEs, scaled by the residuals, include it.</p>
+      <shot name="time-series-qc" alt="The QC view of the simulated time series: every finding passes, and the fit of the time courses is 1.0 times what counting predicts in each replicate">A clean simulated time series: the time courses scatter about their lines as counting predicts.</shot>
+      <p>On real data: BRCA1's E2-binding time series (MaveDB urn:mavedb:00000003-a-1) writes variants that dropped out in the last round as missing, so a quarter of its fits miss their last points; with its later samples' missing counts read as 0 ("Missing = 0" in the Experiment view), every fit uses every round and 595 more variants are scored. Its time courses scatter about 7× more than counting predicts, and those of its yeast two-hybrid assay about 30×.</p>
+
       <h2 id="thresholds">Thresholds</h2>
       <p>Every threshold is editable in the QC view and kept in the workspace; each change goes into its history and the methods paragraph reports the thresholds used. <strong>Reset to the defaults</strong> restores MaveScape's.</p>
 
       <h2 id="tested">How the findings are tested</h2>
-      <p>Simulated experiments with one problem each (poor replicate agreement, one failing replicate, a severe bottleneck, a low-count tail, a missing sample) raise exactly their finding, and a clean experiment none, on three seeds. The variance ratio follows a simulated bottleneck. <a href="../science.html#validation">Validation</a> has the details.</p>
+      <p>Simulated experiments with one problem each (poor replicate agreement, one failing replicate, a severe bottleneck, a low-count tail, a missing sample, and for time series a bottleneck at every passage) raise exactly their findings, and clean experiments (two populations and a time series) none, on three seeds. The variance ratio follows a simulated bottleneck. <a href="../science.html#validation">Validation</a> has the details.</p>

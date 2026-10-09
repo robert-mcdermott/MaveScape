@@ -8,6 +8,7 @@ import { summarizeDesign } from './design.js';
 import { NORMALIZATIONS } from './score-ratio.js';
 import { RESCALINGS, withDefaults } from './score.js';
 import { describeFilters } from './filters.js';
+import { regressionSentence } from './runs.js';
 
 export const REFERENCES = {
   enrich2: { type: 'article', authors: ['Rubin, Alan F', 'Gelman, Hannah', 'Lucas, Nathan', 'Bajjalieh, Sandra M', 'Papenfuss, Anthony T', 'Speed, Terence P', 'Fowler, Douglas M'], title: 'A statistical framework for analyzing deep mutational scanning data', journal: 'Genome Biology', year: 2017, volume: 18, pages: '150', doi: '10.1186/s13059-017-1272-5' },
@@ -83,13 +84,14 @@ export function writeMethods(ws, run, options = {}) {
 
   // Scoring.
   const scoring = [];
-  scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
+  if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
+  else scoring.push(regressionSentence(p, cite('enrich2')).replace(/ \((\[\d+\])\)/, ' $1'));
   scoring.push('Technical replicates were summed before scoring; biological replicates were scored separately.');
   if (p.combination === 'reml') scoring.push(`Replicate scores were combined by inverse-variance weighting with a between-replicate variance τ² estimated by restricted maximum likelihood ${cite('reml')}, by Fisher scoring as in metafor ${cite('metafor')}.`);
   else if (p.combination === 'fixed') scoring.push('Replicate scores were combined by inverse-variance weighting (fixed effects).');
   else scoring.push(`Replicate scores were combined by Enrich2's random-effects estimator ${cite('enrich2')} as implemented in Enrich2 2.0.2 (50 iterations from its starting value).`);
   scoring.push(`Heterogeneity is reported as Cochran's Q and I² ${cite('higgins')}, with the largest change in a score when one replicate is left out.`);
-  scoring.push(`Filters, in order: ${describeFilters(p.filters).filter((x) => x.active !== false).map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join('; ')}. A filtered variant's score is reported as NA with the stage that removed it.`);
+  scoring.push(`Filters, in order: ${describeFilters(p.filters, null, p.model !== 'ratio').filter((x) => x.active !== false).map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join('; ')}. A filtered variant's score is reported as NA with the stage that removed it.`);
   if (p.rescale !== 'none') scoring.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}${run.output.conditions[0]?.rescale ? ` (${run.output.conditions[0].rescale.anchors.map((a) => `${a.what} ${Number(a.from.toFixed(4))} to ${a.to}`).join(', ')})` : ''}; the anchors' own uncertainty is not propagated.`);
   const conditions = run.output.conditions.map((c) => `${run.output.conditions.length > 1 ? `${c.name}: ` : ''}${c.scored} of ${run.output.variants} variants scored`).join('; ');
   scoring.push(`${conditions}.`);

@@ -235,6 +235,20 @@ try {
   const simulated = await act('open_example', { id: 'simulated' });
   check('open_example "simulated": opens in the map', simulated.message, simulated.data.simulated && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'map');
 
+  // The time-series example: weighted regression by default, the ratio on request.
+  const ts = await act('open_example', { id: 'simulated-time-series' });
+  const tsState = await act('get_state');
+  const tsQc = await act('qc_findings');
+  const ids = tsQc.data.findings.map((f) => f.id);
+  check('open_example "simulated-time-series": scored by weighted regression, with the two time-series findings passing', `${tsState.data.runs[0]?.name}; ${tsQc.message}`, ts.data.simulated && tsState.data.design.model === 'time-series' && ids.includes('time-points') && ids.includes('time-fit') && tsQc.data.findings.filter((f) => /^time-/.test(f.id)).every((f) => f.status === 'pass'));
+  const tsMap = await act('render_map', {});
+  const nonsense = (await browser.eval(`window.mavescape.store.ws.runs[0] && (() => { const e = window.mavescape.runResults.get(window.mavescape.store.ws.runs[0].id); const v = e.results.variants; const i = [...v.kind].findIndex((k, j) => k === 4 && !e.results.conditions[0].reason[j]); return v.key[i]; })()`));
+  const course = await act('inspect_variant', { variant: nonsense });
+  check('inspect_variant on a regression run: each replicate\'s time points and departure from a line, and the time course drawn in the inspector', `${course.message} ${course.data.replicates.map((r) => `${r.name}: ${r.timePoints} points, departure ${r.departure}`).join('; ')}`, course.data.replicates.every((r) => r.timePoints === 5 && Number.isFinite(r.departure)) && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Time course')`)) && /map/.test(tsMap.message.toLowerCase()));
+  const ratio = await act('score', { parameters: { model: 'ratio' } });
+  const wlsDigest = tsState.data.runs[0].outputSha256;
+  check('score with the model "ratio": a second run, by the first and last samples', ratio.message, ratio.data.name === 'Run 2' && ratio.data.outputSha256 !== wlsDigest);
+
   check('every action listed was exercised', `${[...called].length} of ${names.length}: missing ${names.filter((n) => !called.has(n)).join(', ') || 'none'}`, names.every((n) => called.has(n)));
   check('no uncaught errors in the page', errors.join(' | ') || 'none', errors.length === 0);
 } catch (error) {

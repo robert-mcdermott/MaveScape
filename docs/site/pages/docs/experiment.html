@@ -17,12 +17,16 @@ lede: The design says what each column of the count table is: which sample, its 
           <thead><tr><th>Kind</th><th>Samples per replicate</th><th>Scored</th></tr></thead>
           <tbody>
             <tr><td><strong>Two populations</strong></td><td>An input and an output</td><td>Yes</td></tr>
-            <tr><td><strong>Time series</strong></td><td>Time points, with their times</td><td>By the first and last time points now; by regression in 0.2</td></tr>
+            <tr><td><strong>Time series</strong></td><td>Time points, with their times</td><td>By weighted regression on every time point (three or more), or by the log ratio of the first and last</td></tr>
             <tr><td><strong>Sorted bins</strong></td><td>Bins, each with its value</td><td>In 0.2; quality control reads their counts now</td></tr>
             <tr><td><strong>Scores</strong></td><td>Precomputed scores</td><td>Nothing to score; shown on the map in 0.3</td></tr>
           </tbody>
         </table>
       </div>
+
+      <h2 id="missing-zero">Missing = 0</h2>
+      <p>Missing is not zero: an empty or <code>NA</code> count means the variant was not counted. But some pipelines write a variant that dropped out during selection, counted zero times, as missing. Quality control's "Missing after selection" finding notices when the missing variants are the ones that had been most depleted. Tick <strong>Missing = 0</strong> for those samples after selection, never for a replicate's first sample (a variant missing there was not in the library), and score again: the run records the design, setting included.</p>
+      <shot name="time-series-design" alt="The Experiment view of the simulated time series: three replicates of five time points, and the columns table with a Missing = 0 checkbox for each sample">A time series' design: each replicate's sample at each time, and Missing = 0 per sample.</shot>
 
       <h2 id="sample-sheets">Sample sheets</h2>
       <p>A sample sheet is a table with one row per sequenced sample: its column, role, replicate and, as needed, technical replicate, condition, time, bin, value and tile. Columns are recognized under many names, and DiMSum's experiment design file reads as a sample sheet. A sample shared by several replicates lists them (<code>1;2;3</code>).</p>

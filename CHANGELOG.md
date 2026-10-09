@@ -31,6 +31,29 @@ each.
   anchor and screenshot. The README shows the map's screenshot.
 - **The import wizard accepts what it detected** when asked (remote control's `open_files`), and
   leaves the wizard open for review otherwise.
+- **Time series scored by regression (wave 2, slice 2).** A time series of three or more time
+  points is scored by default from every time point: each variant's score is the slope of its
+  normalized log count on time scaled to 0–1, by weighted least squares as Enrich2 computes it
+  (ordinary least squares and the log ratio of the first and last samples are the other choices),
+  on unevenly spaced times. A variant is fitted on the time points where it was counted, at least
+  three with the first among them; fewer than the replicate has are flagged low confidence. The
+  slope's SE is scaled by the residuals and, by default, never below what counting alone predicts;
+  the Enrich2-compatible preset keeps Enrich2's. Equal to Enrich2 2.0.2's WLS and OLS to
+  5 × 10⁻¹³ on BRCA1's two assays and a new time-series fixture, and to statsmodels to 5 × 10⁻¹⁴.
+- **Time-series quality control:** "Time points used" and "Fit of the time courses" (how far the
+  time courses scatter about their lines against counting noise), with plots; the variant inspector
+  draws each replicate's time course and its fitted line.
+- **"Missing = 0"** per sample in the Experiment view (`missingMeansZero` in the design), for tables
+  that write variants that dropped out during selection as missing; scoring and QC read the counts
+  the same way, and the run records it.
+- **A third example: a simulated time series** with known effects (five times over eight
+  generations), and time series in the simulator, with an optional bottleneck at every passage.
+
+### Changed
+
+- **A time series is scored by weighted regression by default** (it was the log ratio of its first
+  and last samples). Runs keep their parameters, so earlier runs are unchanged; score again to use
+  every time point.
 
 ### Fixed
 

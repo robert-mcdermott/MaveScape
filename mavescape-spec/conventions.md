@@ -208,6 +208,7 @@ run = {
   software: { name: 'MaveScape', version, commit, engine },
   inputs: { countSets: [sha256], design: sha256, importTemplates: [sha256] },  // the design's SHA-256
   params: { pseudocount: 0.5, normalization: 'wt' | 'complete' | 'full' | 'synonymous',
+            regressionSE: 'counting-floor' | 'residual',   // wls and ols (wave 2)
             combination: 'fixed' | 'reml' | 'enrich2', filters: [{ id, kind, params }], seed },
   warnings: [{ code, message, variants? }],
   results: { score, se, ciLow, ciHigh: Float64Array, replicates: Uint8Array,
@@ -219,8 +220,14 @@ run = {
 ```
 
 A run is immutable: changing a parameter makes a new run. Identical inputs and parameters give the
-same id and bit-identical results in one JavaScript engine (across engines, equal to 12
-significant digits; see CytoWeave's wave 8 finding).
+same id and bit-identical results in every JavaScript engine (from scoring version 2, wave 2
+slice 1: `web/lib/dmath.js`; before it, equal to about 15 significant digits across engines).
+
+As built (wave 1 slice 5, wave 2 slice 2), parameters are `{ model, normalization, pseudocount,
+regressionSE, combination, rescale, filters: { excludeKinds, exclude, minInputCount,
+minTotalCount, minTimePoints, minReplicates, maxSE } }`; a time series of three or more time points
+starts from `wls` (`defaultParameters`). A regression replicate also carries, per variant, the time
+points it used and its departure from a line (χ²/df against counting).
 
 ### Workspace
 

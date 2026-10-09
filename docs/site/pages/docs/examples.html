@@ -1,7 +1,7 @@
 ---
 title: Examples
-description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and a simulated experiment whose true effects are known.
-lede: Two examples come with MaveScape: a published experiment and a simulated one whose true effects are known. Each opens scored, with its question, guided steps and what to expect in the inspector.
+description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and a simulated experiment and time series whose true effects are known.
+lede: Three examples come with MaveScape: a published experiment, and a simulated two-population experiment and time series whose true effects are known. Each opens scored, with its question, guided steps and what to expect in the inspector.
 ---
       <h2 id="grb2">GRB2 SH3 domain (published)</h2>
       <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
@@ -21,6 +21,16 @@ lede: Two examples come with MaveScape: a published experiment and a simulated o
         <li>The scores track the true effects closely: the guide shows the correlation (r = 0.99) once the run is scored.</li>
         <li>The least certain scores are the variants with the fewest reads before selection.</li>
         <li>Quality control passes: the counts vary as counting predicts.</li>
+      </ul>
+
+      <h2 id="time-series">A simulated time series (known truth)</h2>
+      <p>A growth selection of a 40-residue protein in three replicates, sampled at five times over eight generations, simulated by MaveScape (seed 20261012) with every variant's true effect known. It opens scored by weighted regression on every time point.</p>
+      <p><strong>The question:</strong> what does a regression on every time point add over the ratio of the first and last, and how linear are the time courses?</p>
+      <shot name="time-course" alt="The map of the simulated time series with a nonsense variant selected and its time course in three replicates in the inspector">Click a cell: the inspector draws the variant's time course in each replicate, with the fitted lines.</shot>
+      <ul>
+        <li>The scores track the true effects (r = 0.99).</li>
+        <li>Quality control passes, including the two time-series findings: every fit uses every time point, and the time courses scatter about their lines as counting predicts.</li>
+        <li>Scored again by the log ratio of the first and last samples, the scores are a little noisier and their SEs larger: the middle time points carry information.</li>
       </ul>
 
       <h2 id="layouts">Blank layouts</h2>

@@ -10,7 +10,7 @@ import { parseTable } from '../lib/csv.js';
 import { detectLayout, reviewImport, suggestRoles } from '../lib/importer.js';
 import { sha256 } from '../lib/sha256.js';
 import { addRun, makeRun, runInputs } from '../lib/runs.js';
-import { DEFAULT_PARAMETERS } from '../lib/score.js';
+import { defaultParameters } from '../lib/score.js';
 import { addSource, addTarget, change, createWorkspace, setDesign } from '../lib/workspace.js';
 import { pearson } from '../lib/stats.js';
 import { workerInput } from './score-input.js';
@@ -75,9 +75,10 @@ export async function openExample(app, id) {
     ws = change(ws, { example: { id: example.id, simulated: example.simulated, truth } }, 'example', `Opened the example "${example.title}"${example.simulated ? ' (simulated data)' : ` (${example.source}, ${example.license})`}`);
     // A first score run with MaveScape's defaults.
     const { names, columns, transfer } = workerInput(table, ws.design);
-    const result = await app.worker('score').run('score', { names, columns, design: ws.design, parameters: DEFAULT_PARAMETERS, mode: 'lenient' }, { transfer }).promise;
+    const parameters = defaultParameters(ws.design, ws.sources[0]);
+    const result = await app.worker('score').run('score', { names, columns, design: ws.design, parameters, mode: 'lenient' }, { transfer }).promise;
     if (result.ok) {
-      const run = makeRun({ inputs: runInputs({ source: ws.sources[0], design: ws.design, parameters: DEFAULT_PARAMETERS }), source: ws.sources[0], results: result.results, software: { version: app.version, commit: app.commit }, name: 'Run 1' });
+      const run = makeRun({ inputs: runInputs({ source: ws.sources[0], design: ws.design, parameters }), source: ws.sources[0], results: result.results, software: { version: app.version, commit: app.commit }, name: 'Run 1' });
       ws = addRun(ws, run).ws;
       app.runResults ??= new Map();
       app.runResults.set(run.id, { results: result.results, status: 'computed' });

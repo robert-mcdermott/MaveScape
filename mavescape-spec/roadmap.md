@@ -427,14 +427,53 @@ runs and the performance targets.
        session checks a fingerprint in the browser; `SCORING_VERSION` is 2, and 0.1.0's runs
        reopen saying why their hash differs. The validation suites, all to 10⁻¹⁰ or tighter, pass
        unchanged.
-2. **Time series (S6, Q10, E2).** `web/lib/score-regression.js`: WLS and OLS of normalized log
-   frequency on scaled time (Enrich2's weights and residual-scaled SE), non-uniform spacing,
-   usable points, residual diagnostics, "insufficient support" without assuming non-monotonic
-   means invalid. The design editor gains times and units. An import option to read a variant
-   missing from a sample after selection as 0, per sample, for tables that write dropouts as
-   missing (BRCA1's; found by wave 1, slice 6), recorded in the run.
-   - Validation: equal to Enrich2 2.0.2 and statsmodels WLS within 1e-10; the feasibility time
-     series.
+2. **Time series (S6, Q10, E2): done.** `web/lib/score-regression.js`: weighted and ordinary least
+   squares of each variant's normalized log count on time scaled to 0–1 (Enrich2's weights), on
+   unevenly spaced times, fitted on the time points where the variant was counted (its first
+   required, at least `minTimePoints`, default 3; fewer flagged low confidence, too few left out
+   as "counted at too few time points"); the SE residual-scaled as Enrich2's, by default never
+   below what counting alone predicts (`regressionSE: 'counting-floor'`); each fit's departure from
+   a line against counting (χ²/df), reported, never used to remove a variant. `score.js`: `model`
+   `ratio`, `wls` or `ols`, normalizers at every time point, `defaultParameters` (a time series of
+   three or more times starts from WLS), refusals where a regression cannot be done; the
+   Enrich2-compatible preset requires every time point and scales SEs by the residuals alone.
+   "Missing = 0" is a per-sample setting of the design (`samples[].missingMeansZero`, the Experiment
+   view), not an import option as planned: the run records the design, so the setting is recorded
+   and QC reads the counts as scoring does (`replicates.js`, `sampleCounts`). QC (Q10): "Time points
+   used" and "Fit of the time courses" (`qc.js`, `findings.js`), with plots. The Score view chooses
+   the model and the SE; the variant inspector draws each replicate's time course with its fitted
+   line; the run's description and methods paragraph say how it was fitted. `simulate.js` makes
+   time series (growth, and an optional bottleneck at every passage), and a third example, a
+   simulated time series with known truth. Remote control: `score` takes the model,
+   `inspect_variant` reports each fit's time points and departure. Four new screenshot scenes; the
+   site's scoring, QC, design and examples pages.
+   - Validation (suite `scoring`, 37 more checks, 83 in all): the engine equal to Enrich2 2.0.2's
+     WLS and OLS on BRCA1's E2 (six rounds) and Y2H (four unevenly spaced times) assays and on a
+     new time-series fixture (`fixtures/make-time-series.mjs`: five unevenly spaced times, seven
+     edge cases planted), to 5 × 10⁻¹³ over 32,000 replicate scores, and Enrich2's combination to
+     5 × 10⁻¹³; to statsmodels 0.15 (`reference/generate_statsmodels.py`) on the fixture, slope,
+     residual-scaled SE, departure and the counting SE (numpy), to 5 × 10⁻¹⁴; each edge case's
+     points, state and flags; the simulated truth tracked (r = 0.999) and held by the 95% intervals
+     more often with the counting floor; refusals; the defaults. `enrich2.json` regenerated with
+     the fixture added, its other cases byte for byte unchanged. Suite `qc` (3 more, 18): a clean
+     simulated time series raises nothing and one with a bottleneck at every passage raises the
+     fit finding, on three seeds; BRCA1 E2 and Y2H by WLS, and E2 with "Missing = 0", as found.
+     Suite `roundtrip`: the new example deterministic, r = 0.993 to its truth, QC passes.
+     `remote-session.mjs`: 3 more (57). 5 more unit tests (139 in all).
+   - Found by slice 2:
+     - **Enrich2's residual-scaled SE is overconfident.** On the fixture's true effects, its 95%
+       intervals hold the truth 69% of the time per replicate and 81% after combining, against
+       83% and 90% with the counting floor: with three to five points, the residuals often
+       understate the scatter, and the SE of a replicate that happens to fall on a line nears 0.
+       The floor is MaveScape's default; the Enrich2-compatible preset keeps Enrich2's SE.
+     - **BRCA1's E2 time courses scatter 7–10× more than counting predicts**, and the Y2H assay's
+       about 30×: noise at each round of selection, consistent with wave 1's bottleneck finding.
+       A quarter of the E2 fits miss their last rounds because dropouts are written as missing;
+       with "Missing = 0" on its later samples every fit uses every round and 595 more variants are
+       scored.
+     - **Weighted regression gives zero counts little weight**, so reading dropouts as 0 changes a
+       WLS score little; it matters most for the log ratio, which cannot score a variant missing
+       from its last sample at all.
 3. **FACS bins (S7, Q10).** `web/lib/score-bins.js`: weighted average of bin values (rank,
    fluorescence or other, recorded), the VAMP-seq procedure (frequency filter, nonsense = 0, WT
    = 1, replicates required), analytic SE and a seeded bootstrap, and the censored log-normal

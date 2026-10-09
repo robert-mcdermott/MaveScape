@@ -54,7 +54,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | done (wave 1, slice 2: three MaveDB data sets of different designs, four designs, no data-set code; validation `designs`). Barcode libraries are planned (wave 2) |
-| E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | done (wave 1, slice 4: every model, conditions and tiles; validation `experiment`). Barcode libraries planned (wave 2); named control classes planned (wave 6) |
+| E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | done (wave 1, slice 4: every model, conditions and tiles; validation `experiment`; wave 2 slice 2: "Missing = 0" per sample). Barcode libraries planned (wave 2); named control classes planned (wave 6) |
 | E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | done (wave 1, slices 3–4: from FASTA files or pasted; name, offset, coding start and identifiers edited in the Experiment view). Offsets found from UniProt: wave 3 |
 | E4 | Role suggestions shown as suggestions, never applied silently | done (wave 1, slice 3: suggested from column names, drafts equal the hand-written designs' shape on all four feasibility designs) |
 | E5 | A human-readable design summary and validation before scoring | done (wave 1, slice 4) |
@@ -73,18 +73,18 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | Q7 | Filter flow: retained and excluded variants at each stage, by reason | done (wave 1: Score view, slice 5; QC, slice 6) |
 | Q8 | Barcode agreement within variants and outlier barcodes | planned (wave 2) |
 | Q9 | Findings with status (pass/review/fail), explanation, affected samples or variants, threshold and rationale, link to the visual, advisory or blocking; thresholds configurable and recorded | done (wave 1, slice 6: thresholds in the workspace and its history; validation `qc`) |
-| Q10 | Time-series fit diagnostics (usable points, residuals) and bin diagnostics (cells per bin, bin occupancy) | planned (wave 2) |
+| Q10 | Time-series fit diagnostics (usable points, residuals) and bin diagnostics (cells per bin, bin occupancy) | time series done (wave 2, slice 2: "Time points used" and "Fit of the time courses", each time course in the inspector; checked on simulated passage bottlenecks and BRCA1); bins planned (wave 2, slice 3) |
 
 ## Scoring
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| S1 | Two-population log ratio with WT, complete-case, all-read or synonymous normalization and a configurable pseudocount; SE per variant | done (wave 1, slice 5: equal to Enrich2 2.0.2 and dms_variants 1.6.0 to 5 × 10⁻¹³, validation `scoring`; time series scored by their first and last samples until wave 2) |
+| S1 | Two-population log ratio with WT, complete-case, all-read or synonymous normalization and a configurable pseudocount; SE per variant | done (wave 1, slice 5: equal to Enrich2 2.0.2 and dms_variants 1.6.0 to 5 × 10⁻¹³, validation `scoring`; time series scored by their first and last samples until wave 2, by regression from wave 2 slice 2) |
 | S2 | Technical replicates pooled; biological replicates scored separately and combined by fixed effects or REML random effects, with an Enrich2-compatible estimator; heterogeneity and leave-one-replicate-out sensitivity | done (wave 1, slice 5: REML equal to metafor 5.2-1 to 3.4 × 10⁻¹², Enrich2's estimator to Enrich2; Q, I², τ², leave-one-out per variant) |
 | S3 | Ordered, visible filters with reason codes and stage; filtered variants keep their measurements; explicit NA for unscored variants | done (wave 1, slice 5: eight stages, count filters per replicate, the filter flow; barcode disagreement comes with barcodes, wave 2) |
 | S4 | Immutable score runs: input and output hashes, import mapping, design, software and algorithm versions, parameters, filters, seeds, warnings | done (wave 1, slice 5: ids from the canonical inputs; scores recomputed when a run is reopened and checked against its output hash) |
 | S5 | The PRD's two-population edge cases (zero in both, in input only, in output only; missing replicate; very low depth; absent from one replicate; observed but filtered; reference class unavailable) specified and tested | done (wave 1, slice 5: planted in `fixtures/two-population.csv`, each checked, Enrich2 and dms_variants scoring the same table) |
-| S6 | Time series: weighted (and ordinary) regression of normalized log frequency on time, non-uniform spacing, slope, SE, usable points; insufficient support flagged | planned (wave 2; equal to Enrich2) |
+| S6 | Time series: weighted (and ordinary) regression of normalized log frequency on time, non-uniform spacing, slope, SE, usable points; insufficient support flagged | done (wave 2, slice 2: equal to Enrich2 2.0.2's WLS and OLS to 5 × 10⁻¹³ and statsmodels to 5 × 10⁻¹⁴; fits on the counted time points, too few left out and fewer flagged; SE floored at counting's by default) |
 | S7 | Bin scores: weighted average from ordered bins with explicit values and weight type; uncertainty analytically or by seeded bootstrap; optional maximum-likelihood estimate | planned (wave 2) |
 | S8 | Barcode aggregation: sum-then-score and score-then-combine | planned (wave 2; equal to dms_variants) |
 | S9 | DiMSum's error model as an alternative uncertainty model | planned (wave 2) |

@@ -165,6 +165,7 @@ export function validateDesign(design, table = null) {
       columnOwner.set(column, sample.id);
       if (columns && !columns.has(column)) error(`${path}.columns`, `The table has no column "${column}" (sample "${sample.id}").`);
     }
+    if (sample.missingMeansZero !== undefined && typeof sample.missingMeansZero !== 'boolean') error(`${path}.missingMeansZero`, 'missingMeansZero is true or false.');
   });
   if (model === 'scores' && samples.length) warn('samples', 'A score-only design does not use samples.');
 
@@ -237,6 +238,13 @@ export function validateDesign(design, table = null) {
   });
   for (const id of sampleIds) {
     if (!used.has(id) && model !== 'scores') warn('samples', `Sample "${id}" is in no replicate and is not scored.`);
+  }
+  // Missing read as 0 is for samples after selection: in a replicate's first sample it would
+  // count a variant that was never in the library as present with no reads.
+  for (const replicate of replicates) {
+    const first = replicateSamples(replicate).filter((p) => p.role !== 'bin').map((p) => ({ ...p, time: p.role === 'input' ? 0 : p.role === 'output' ? 1 : p.time })).sort((a, b) => a.time - b.time)[0];
+    const sample = first && samples.find((x) => x.id === first.sample);
+    if (sample?.missingMeansZero) warn(`samples`, `Sample "${sample.id}" is the first of replicate "${replicate.id}" and its missing counts are read as 0: a variant that was never in the library would count as present with no reads. Read missing as 0 only in samples after selection.`);
   }
   // Replicates of one condition and tile should use the same kind of experiment: the same times
   // or the same bins, so that their scores can be combined.
@@ -348,6 +356,8 @@ export function summarizeDesign(design) {
   }
   const technical = (design.samples ?? []).filter((s) => s.columns.length > 1);
   if (technical.length) lines.push(`${plural(technical.length, 'sample has', 'samples have')} technical replicates (several columns), summed before scoring.`);
+  const zero = (design.samples ?? []).filter((s) => s.missingMeansZero);
+  if (zero.length) lines.push(`Missing counts are read as 0 in ${zero.length > 3 ? plural(zero.length, 'sample') : zero.map((s) => s.name ?? s.id).join(', ')} (variants that dropped out during selection, written as missing).`);
   if (counts.ignoredColumns) {
     const reasons = new Map();
     for (const entry of design.ignoredColumns) {

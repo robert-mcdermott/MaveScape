@@ -58,6 +58,10 @@ CASES = [
     # The synthetic fixture with the PRD's edge cases (fixtures/make-two-population.mjs).
     ("two-population", "fixtures/two-population.design.json", "fixtures/two-population.csv",
      [("ratios", "wt"), ("ratios", "complete"), ("ratios", "full")]),
+    # The synthetic time series: five unevenly spaced times, its edge cases planted
+    # (fixtures/make-time-series.mjs).
+    ("time-series", "fixtures/time-series.design.json", "fixtures/time-series.csv",
+     [("WLS", "wt"), ("OLS", "wt"), ("WLS", "complete"), ("ratios", "wt")]),
 ]
 
 WT = "_wt"
@@ -65,7 +69,7 @@ WT = "_wt"
 # Which variants a case keeps: "all", or every n-th variant by name plus the wild-type and
 # synonymous rows and the first `partial` variants (by name) missing from some replicates but not
 # all (how missing counts are handled).
-KEEP = {"grb2-sh3": "all", "two-population": "all", "brca1-ring-e2": {"every": 6, "partial": 300}, "brca1-ring-y2h": {"every": 6, "partial": 300}}
+KEEP = {"grb2-sh3": "all", "two-population": "all", "time-series": "all", "brca1-ring-e2": {"every": 6, "partial": 300}, "brca1-ring-y2h": {"every": 6, "partial": 300}}
 
 
 def sha256(path):

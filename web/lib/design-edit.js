@@ -150,6 +150,7 @@ export function updateSample(design, id, patch) {
     const next = { ...s, ...clean };
     for (const key of ['batch', 'notes', 'name']) if (next[key] === '') delete next[key];
     if (next.cells === null || Number.isNaN(next.cells)) delete next.cells;
+    if (next.missingMeansZero === false) delete next.missingMeansZero;
     return next;
   }) };
 }

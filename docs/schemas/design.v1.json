@@ -201,6 +201,7 @@
         "columns": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
         "batch": { "type": "string" },
         "cells": { "type": "number", "minimum": 0, "description": "Cells sorted into or grown from this sample, when known." },
+        "missingMeansZero": { "type": "boolean", "description": "Read this sample's missing counts as 0: for tables that write variants that dropped out during selection as missing rather than 0 (MaveScape 0.2)." },
         "notes": { "type": "string" }
       }
     },

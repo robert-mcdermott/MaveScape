@@ -166,6 +166,30 @@ const scenes = {
     await act('render_map', { color_by: 'se' });
     await act('inspect_variant', { variant: 'p.Gly10Trp' });
   },
+  // A time series: a nonsense variant's time course in each replicate, with its fitted lines.
+  async 'time-course'() {
+    await example('simulated-time-series');
+    await act('select_variants', { variants: ['p.Ser2Ter'] });
+    await act('inspect_variant', { variant: 'p.Ser2Ter' });
+    await sleep(600);
+  },
+  // A time series in the Score view: scored by weighted regression on every time point.
+  async 'time-series-score'() {
+    await example('simulated-time-series');
+    await act('set_mode', { mode: 'score' });
+    await act('focus', { kind: 'run', name: 'Run 1' });
+  },
+  // A time series' quality control: the fit of the time courses.
+  async 'time-series-qc'() {
+    await example('simulated-time-series');
+    await act('qc_findings', { finding: 'time-fit' });
+    await sleep(600);
+  },
+  // The design of a time series: samples at each time, "Missing = 0" per sample.
+  async 'time-series-design'() {
+    await example('simulated-time-series');
+    await act('set_mode', { mode: 'experiment' });
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

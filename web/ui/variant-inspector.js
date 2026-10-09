@@ -1,14 +1,18 @@
 // The inspector's account of one variant (requirement V4): its identifiers (as written and
 // canonical), its score with SE and 95% interval or why it has none, its flags, the counts of
-// every sample, each replicate's score and whether it was used, the sequence around it, where it
-// falls among the substitutions at its position, and the run it comes from. Focus:
+// every sample, each replicate's score and whether it was used (for a regression on time, its time
+// course in each replicate with the fitted line), the sequence around it, where it falls among the
+// substitutions at its position, and the run it comes from. Focus:
 // { kind: 'variant', id: MAVE-HGVS key, run, condition }.
 
 import { h, icon } from './dom.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { describeParameters } from '../lib/runs.js';
+import { timeCourse } from '../lib/score-regression.js';
+import { categoricalColor } from '../lib/colormaps.js';
 import { ensureResults, runEntry } from './run-results.js';
+import { legend, lineChart } from './plots.js';
 
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const Z = 1.959963984540054;
@@ -115,6 +119,25 @@ export function variantSection(app, focus) {
     const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
     parts.push(h('h4.inspector-sub', 'Replicates'), h('table.data.compact', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Before'), h('th.r', 'After'), h('th.r', 'Score'), h('th', 'Used'))),
       h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r', fmt(r.first[row], 0)), h('td.r', fmt(r.last[row], 0)), h('td.r', Number.isFinite(r.score[row]) ? `${fmt(r.score[row], 2)} ± ${fmt(r.se[row], 2)}` : '—'), h('td', r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'yes'))))));
+    // A regression's time courses: the normalized log counts at each time, and the fitted lines.
+    const p = run.inputs.parameters;
+    if (p.model && p.model !== 'ratio') {
+      const counts = new Map((results.samples ?? []).map((x) => [x.id, x.counts]));
+      const series = [];
+      const items = [];
+      reps.forEach((r, k) => {
+        const color = categoricalColor(k);
+        const course = timeCourse(r.samples.map((id) => counts.get(id)?.[row] ?? Number.NaN), r.times, r.normalizers, { weighted: p.model === 'wls', pseudocount: p.pseudocount, method: p.normalization });
+        series.push({ points: course.points, color, markers: true, width: 0 });
+        if (course.line.length && !r.state[row]) series.push({ points: course.line, color, dash: true, width: 1.5 });
+        items.push([color, `${r.name}: ${r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : `slope ${fmt(course.slope, 2)}, ${r.points?.[row] ?? '—'} points, departure ${fmt(course.fit, 1)}×`}`]);
+      });
+      const unit = run.inputs.design.time?.unit;
+      parts.push(h('h4.inspector-sub', 'Time course'),
+        lineChart({ series, xLabel: `time${unit && unit !== 'other' ? ` (${unit}s)` : ''}`, yLabel: 'normalized ln count', label: `${focus.id}: its normalized log count at each time in each replicate, with the fitted lines`, width: 300, height: 170 }),
+        legend(items.map(([color, label]) => ({ color, label }))),
+        h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, 'Points: ln(count + pseudocount) − ln(normalizer) at each time; dashed: the fitted line, whose slope on time scaled to 0–1 is the replicate\'s score. Departure: scatter about the line over what counting predicts (1 is typical).'));
+    }
     // Every sample's counts.
     if (results.samples?.length) {
       parts.push(h('details.inspector-details', h('summary', `Counts in all ${results.samples.length} samples`),
