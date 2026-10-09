@@ -1,0 +1,9 @@
+/dist/
+/mavescape
+/product_research/
+*.exe
+*.test
+.DS_Store
+/validation/cache/
+/.claude/
+__pycache__/

@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use MaveScape in your research, please cite it as below."
+title: "MaveScape"
+abstract: "A workbench for multiplexed assays of variant effect (MAVEs) and deep mutational scanning: import of variant counts and published scores, experiment design, quality control, uncertainty-aware variant-effect scores, maps, comparison and protein structure, with every analysis decision recorded. It runs locally as one self-contained program, needs no other software, and keeps the user's files on their computer."
+type: software
+authors:
+  - family-names: McDermott
+    given-names: Robert
+repository-code: "https://github.com/robert-mcdermott/mavescape"
+license: Apache-2.0
+version: 0.1.0
+keywords:
+  - deep mutational scanning
+  - multiplexed assays of variant effect
+  - MAVE
+  - variant effect
+  - functional genomics
+  - protein structure
