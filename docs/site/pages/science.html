@@ -19,6 +19,9 @@ lede: MaveScape reimplements published methods for scoring deep mutational scans
             <tr><td><strong>Time series</strong></td><td>Enrich2 2.0.2's WLS and OLS on BRCA1's E2 (six rounds) and Y2H (four unevenly spaced times) assays and a time-series fixture with its edge cases planted</td><td>Within 5 × 10⁻¹³ (32,000 replicate scores, each with its SE)</td></tr>
             <tr><td><strong>Time series</strong></td><td>statsmodels 0.15 WLS and OLS on the fixture: slopes, residual-scaled SEs, the SE from counting alone (numpy) and the departure from a line</td><td>Within 5 × 10⁻¹⁴</td></tr>
             <tr><td><strong>Time-series SEs</strong></td><td>The fixture's true effects</td><td>95% intervals hold them 90% of the time, against 81% with Enrich2's residual-scaled SE</td></tr>
+            <tr><td><strong>Sorted bins</strong></td><td>Factor IX's published MultiSTEP scores (MaveDB urn:mavedb:00001200-a-1): 29,325 replicate scores in 9 replicates of 3 tiles, and the combined scores</td><td>Every replicate score reproduced from the counts within 1.3 × 10⁻¹⁵ (on the variants the authors kept); combined scores and SEs exactly</td></tr>
+            <tr><td><strong>Sorted bins</strong></td><td>fitdistrplus 1.2.6 <code>fitdistcens</code> on a simulated sort: the censored log-normal, σ free and σ the wild type's</td><td>μ and σ within 3 × 10⁻⁷ over 4,800 fits; SE of μ within 0.07%</td></tr>
+            <tr><td><strong>Sorted bins</strong></td><td>The simulated sort's true shifts</td><td>Maximum likelihood r = 0.996, weighted average 0.989; bootstrap SEs equal the analytic ones (median ratio 1.003)</td></tr>
             <tr><td><strong>Replicates</strong></td><td>metafor 5.2-1 REML on 2,865 variants and six synthetic sets</td><td>Within 3.4 × 10⁻¹² (required 10⁻⁶)</td></tr>
             <tr><td><strong>Determinism</strong></td><td>The same inputs in another row or column order, and in Chrome and Node</td><td>The same bits</td></tr>
             <tr><td><strong>Quality control</strong></td><td>Simulated experiments with one problem each (poor agreement, a failing replicate, a bottleneck, a low-count tail, a missing sample, a time series with a bottleneck at every passage), three seeds</td><td>Exactly their findings, and none for a clean experiment; the variance ratio follows a simulated bottleneck within 30%</td></tr>
@@ -38,6 +41,7 @@ lede: MaveScape reimplements published methods for scoring deep mutational scans
       <ul>
         <li><strong>Scores:</strong> log ratios of frequencies before and after selection, with normalization to the wild type, and for time series the slope of a weighted regression on time, as in Enrich2 (Rubin et al., Genome Biology 2017).</li>
         <li><strong>Replicates:</strong> REML random effects (Viechtbauer, J Educ Behav Stat 2005), computed as metafor does (Viechtbauer, J Stat Softw 2010); Enrich2's own estimator; heterogeneity as Q and I² (Higgins and Thompson, Stat Med 2002).</li>
+        <li><strong>Sorted bins:</strong> the weighted average of the bins' values and its scaling (Matreyek et al., Nature Genetics 2018), and the censored log-normal maximum-likelihood estimate (Peterman and Levine, BMC Genomics 2016).</li>
         <li><strong>Quality control:</strong> variance beyond counting read as DiMSum's multiplicative and additive error terms (Faure et al., Genome Biology 2020).</li>
         <li><strong>Variant names and exports:</strong> MAVE-HGVS and MaveDB's columns (Esposito et al., Genome Biology 2019).</li>
       </ul>

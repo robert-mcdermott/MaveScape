@@ -235,7 +235,9 @@
             "properties": {
               "sample": { "$ref": "#/$defs/id" },
               "order": { "type": "integer", "minimum": 1 },
-              "value": { "type": "number" }
+              "value": { "type": "number" },
+              "lower": { "type": "number", "exclusiveMinimum": 0, "description": "The bin's lower gate on the reporter (fluorescence, linear units); none for the lowest bin (open). With upper, for the maximum-likelihood estimate (MaveScape 0.2)." },
+              "upper": { "type": "number", "exclusiveMinimum": 0, "description": "The bin's upper gate; none for the highest bin (open)." }
             }
           }
         }

@@ -8,7 +8,7 @@ import { confirmDialog, showDialog, toast } from './overlays.js';
 import { summarizeDesign, validateDesign, IDENTIFIER_COLUMNS } from '../lib/design.js';
 import {
   addCondition, addReplicate, addTile, assignColumn, columnAssignments, removeCondition, removeReplicate, removeTile,
-  setAsideOtherColumns, setBinValue, setControls, setField, setModel, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample, updateTile,
+  setAsideOtherColumns, setBinGates, setBinValue, setControls, setField, setModel, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample, updateTile,
 } from '../lib/design-edit.js';
 import { designFromSampleSheet } from '../lib/samplesheet.js';
 import { parseTable } from '../lib/csv.js';
@@ -206,12 +206,33 @@ export function mountExperimentMode(app, container) {
       const batch = first ? h('input.input', { value: sample.batch ?? '', placeholder: '—', 'aria-label': `Batch of sample ${sample.id}`, style: { width: '90px' }, onchange: (e) => edit((d) => updateSample(d, sample.id, { batch: e.target.value.trim() }), `Set the batch of ${sample.id}`) }) : null;
       // Missing read as 0: for tables that write variants that dropped out during selection as
       // missing (the QC finding "Missing after selection" says when).
+      const cellsInput = first && design.model === 'bins' ? h('input.input', { value: sample.cells ?? '', inputmode: 'numeric', placeholder: '—', style: { width: '90px' }, 'aria-label': `Cells sorted into ${sample.name ?? sample.id}`, onchange: (e) => edit((d) => updateSample(d, sample.id, { cells: e.target.value.trim() === '' ? null : Number(e.target.value) }), `Set the cells sorted into ${sample.name ?? sample.id}`) }) : null;
       const zero = first ? h('input', { type: 'checkbox', checked: Boolean(sample.missingMeansZero), 'aria-label': `Read missing counts as 0 in ${sample.name ?? sample.id}`, title: 'Read this sample\'s missing counts as 0: for tables that write variants that dropped out during selection as missing. Not for a replicate\'s first sample.', onchange: (e) => edit((d) => updateSample(d, sample.id, { missingMeansZero: e.target.checked }), `${e.target.checked ? 'Read' : 'Stopped reading'} missing counts as 0 in ${sample.name ?? sample.id}`) }) : null;
-      return h(`tr${a.kind === 'unassigned' ? '.unset' : ''}`, h('td.mono', column), h('td', select), h('td', detail), h('td', batch), h('td.c', zero));
+      return h(`tr${a.kind === 'unassigned' ? '.unset' : ''}`, h('td.mono', column), h('td', select), h('td', detail), h('td', batch), design.model === 'bins' ? h('td', cellsInput) : null, h('td.c', zero));
     });
     return h('div.pane', h('h3', icon('table'), 'Columns', h('span.spacer'), h('span.muted', { style: { fontWeight: 400, fontSize: '12px' } }, `${columns.length} count columns, ${design.samples.length} samples`)),
       h('p.muted', { style: { fontSize: '12px', margin: '0 0 8px' } }, 'Each column of counts is a sample, a technical replicate of one (its counts are summed), a copy of another column (a sample shared by replicates, written once per replicate), or not used. "Missing = 0" reads a sample\'s missing counts as 0, for tables that write variants that dropped out during selection as missing.'),
-      h('div', { style: { maxHeight: '420px', overflow: 'auto' } }, h('table.data.design-columns', h('thead', h('tr', h('th', 'Column'), h('th', 'Is'), h('th', 'Sample name or note'), h('th', 'Batch'), h('th.c', { title: 'Read this sample\'s missing counts as 0 (variants that dropped out, written as missing)' }, 'Missing = 0'))), h('tbody', ...rows))));
+      h('div', { style: { maxHeight: '420px', overflow: 'auto' } }, h('table.data.design-columns', h('thead', h('tr', h('th', 'Column'), h('th', 'Is'), h('th', 'Sample name or note'), h('th', 'Batch'), design.model === 'bins' ? h('th', { title: 'Cells sorted into the bin, when known: the maximum-likelihood fit reweights reads by them, and QC reads the cells per variant' }, 'Cells') : null, h('th.c', { title: 'Read this sample\'s missing counts as 0 (variants that dropped out, written as missing)' }, 'Missing = 0'))), h('tbody', ...rows))));
+  }
+
+  // Sorted bins: each bin's value and gates (the same in every replicate; a design file can give
+  // each replicate its own), for the maximum-likelihood fit.
+  function gatesPane(design) {
+    const orders = [...new Set(design.replicates.flatMap((r) => (r.bins ?? []).map((b) => b.order)))].sort((a, b) => a - b);
+    if (!orders.length) return null;
+    const of = (order, key) => {
+      const values = new Set(design.replicates.map((r) => (r.bins ?? []).find((b) => b.order === order)?.[key]).filter((x) => x !== undefined));
+      return values.size > 1 ? 'varies' : [...values][0] ?? '';
+    };
+    const gate = (order, key, label) => {
+      const value = of(order, key);
+      const input = h('input.input', { value, inputmode: 'decimal', placeholder: 'open', style: { width: '96px' }, disabled: value === 'varies', 'aria-label': `${label} gate of bin ${order}`, onchange: () => edit((d) => setBinGates(d, order, { [key]: input.value.trim() === '' ? null : Number(input.value) }), `Set bin ${order}'s ${label.toLowerCase()} gate to ${input.value.trim() || 'open'}`) });
+      return h('td', input);
+    };
+    return h('div.pane', h('h3', icon('filter'), 'Bins and gates'),
+      h('p.muted', { style: { fontSize: '12px', margin: '0 0 8px' } }, 'Each bin\'s value (its weight in the weighted average) and the gates it was sorted between, on the reporter\'s fluorescence; leave the lowest bin\'s lower gate and the highest bin\'s upper gate open. With the gates, sorted bins can also be scored by maximum likelihood; with the cells sorted into each bin (in the columns below), its reads are reweighted by them.'),
+      h('table.data', h('thead', h('tr', h('th', 'Bin'), h('th.r', 'Value'), h('th', 'Lower gate'), h('th', 'Upper gate'))),
+        h('tbody', ...orders.map((order) => h('tr', h('td', `Bin ${order}`), h('td.r', String(of(order, 'value'))), gate(order, 'lower', 'Lower'), gate(order, 'upper', 'Upper'))))));
   }
 
   function replicatesPane(design) {
@@ -313,7 +334,7 @@ export function mountExperimentMode(app, container) {
     }
     root.append(h('div.view-body', h('div.split.experiment-split',
       h('div', sourcePane(s), summaryPane(design, s), settingsPane(design), targetPane(s)),
-      h('div', replicatesPane(design), columnsPane(design, s),
+      h('div', replicatesPane(design), design.model === 'bins' ? gatesPane(design) : null, columnsPane(design, s),
         h('div.btn-row', { style: { marginTop: '12px' } }, h('button.btn', { type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Draft the design again?', message: 'The design is replaced by the draft from the column names. Undo (⌘Z) brings this one back.', confirm: 'Draft again' })) draftFromColumns(app, s); } }, icon('sparkles'), 'Draft again from the column names'))))));
   }
 

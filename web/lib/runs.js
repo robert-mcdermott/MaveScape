@@ -90,18 +90,26 @@ export function removeRun(ws, id) {
 export function describeParameters(parameters) {
   const p = withDefaults(parameters);
   const f = p.filters;
-  const regression = p.model !== 'ratio';
-  const parts = [
-    `${regression ? `${p.model.toUpperCase()} on time` : 'log ratio'}, ${p.normalization === 'wt' ? 'wild-type' : p.normalization === 'synonymous' ? 'synonymous-median' : `${p.normalization}-library`} normalization`,
-    `pseudocount ${p.pseudocount}`,
-    p.combination === 'reml' ? 'REML' : p.combination === 'fixed' ? 'fixed effects' : 'Enrich2\'s estimator',
-  ];
+  const regression = p.model === 'wls' || p.model === 'ols';
+  const bins = p.model === 'bins' || p.model === 'bins-mle';
+  const parts = bins
+    ? [
+      p.model === 'bins' ? `weighted bin average, ${p.binSE === 'bootstrap' ? `bootstrap SE (${p.bootstrapSamples}, seed ${p.seed})` : 'analytic SE'}` : `maximum likelihood, σ ${p.binSigma === 'wild-type' ? 'the wild type\'s' : 'per variant'}`,
+      p.binScale === 'none' ? 'unscaled' : p.binScale === 'nonsense-wt' ? 'nonsense 0, wild type 1' : 'lowest 5% 0, wild type 1',
+      p.combination === 'reml' ? 'REML' : p.combination === 'fixed' ? 'fixed effects' : p.combination === 'mean' ? 'mean of replicates' : 'Enrich2\'s estimator',
+    ]
+    : [
+      `${regression ? `${p.model.toUpperCase()} on time` : 'log ratio'}, ${p.normalization === 'wt' ? 'wild-type' : p.normalization === 'synonymous' ? 'synonymous-median' : `${p.normalization}-library`} normalization`,
+      `pseudocount ${p.pseudocount}`,
+      p.combination === 'reml' ? 'REML' : p.combination === 'fixed' ? 'fixed effects' : p.combination === 'mean' ? 'mean of replicates' : 'Enrich2\'s estimator',
+    ];
   if (regression) {
     parts.push(p.regressionSE === 'residual' ? 'residual-scaled SE' : 'SE at least counting\'s');
     parts.push(f.minTimePoints === 'all' ? 'every time point' : `time points ≥ ${f.minTimePoints}`);
   }
   if (f.minInputCount) parts.push(`input ≥ ${f.minInputCount}`);
   if (f.minTotalCount) parts.push(`total ≥ ${f.minTotalCount}`);
+  if (f.minFrequency) parts.push(`bin frequency ≥ ${f.minFrequency.toPrecision(3)}`);
   if (f.minReplicates !== 1) parts.push(f.minReplicates === 'all' ? 'scored in every replicate' : `replicates ≥ ${f.minReplicates}`);
   if (f.maxSE !== null) parts.push(`SE ≤ ${f.maxSE}`);
   if (f.excludeKinds.length) parts.push(`without ${f.excludeKinds.join(', ')}`);
@@ -116,15 +124,23 @@ export function regressionSentence(p, citation) {
   return `Scores are the slopes of ${p.model === 'wls' ? 'a weighted' : 'an ordinary'} least-squares regression of each variant's natural-log count, normalized by the ${NORMALIZATIONS[p.normalization]}, on time scaled to 0–1 (${citation}), with a pseudocount of ${p.pseudocount}${p.model === 'wls' ? ' and weights 1/(1/(c + p) + 1/r) for a count c, the pseudocount p and the sample\'s normalizer r' : ''}; a variant was fitted on the time points where it was counted, ${f.minTimePoints === 'all' ? 'all of them required' : `its first and at least ${f.minTimePoints} in all`}; each replicate's SE is the slope's standard error scaled by the residuals${p.regressionSE === 'residual' ? '' : ', and never below what counting alone predicts'}.`;
 }
 
+// Sorted bins' method in one sentence (also the methods paragraph's).
+export function binSentence(p, cite) {
+  const scale = p.binScale === 'none' ? '' : p.binScale === 'nonsense-wt' ? '; each replicate was then scaled so that its median nonsense variant scores 0 and the wild type 1' : '; each replicate was then scaled so that the median of its lowest 5% of scores is 0 and the wild type 1';
+  if (p.model === 'bins') return `Scores are the weighted average of the sorted bins' values over each variant's frequency in each bin (its reads over the bin's) (${cite.average}), with SEs ${p.binSE === 'bootstrap' ? `from a parametric bootstrap of the counts (${p.bootstrapSamples} samples, seed ${p.seed})` : 'from Poisson counting by the delta method'}, a pseudocount of ${p.pseudocount} in the SE${scale}.`;
+  return `Scores are the maximum-likelihood mean μ of each variant's log fluorescence under a log-normal censored by the bins' gates (${cite.mle}), its reads reweighted by the cells sorted into each bin, with ${p.binSigma === 'wild-type' ? 'the spread σ fitted to the wild type and shared' : 'its own spread σ'} and SEs from the observed information${scale}.`;
+}
+
 // The run's method in sentences (the methods paragraph of slice 8 builds on it).
 export function describeMethod(run) {
   const p = withDefaults(run.inputs.parameters);
   const design = run.inputs.design;
   const lines = [];
   if (p.model === 'ratio') lines.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; each replicate's SE is the square root of the sum of the reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'} (Rubin et al. 2017).`);
-  else lines.push(regressionSentence(p, 'Rubin et al. 2017'));
+  else if (p.model === 'wls' || p.model === 'ols') lines.push(regressionSentence(p, 'Rubin et al. 2017'));
+  else lines.push(binSentence(p, { average: 'Matreyek et al. 2018', mle: 'Peterman and Levine 2016' }));
   lines.push(`Biological replicates were scored separately and combined by ${COMBINATIONS[p.combination]}${p.combination === 'enrich2' ? ' (Enrich2 2.0.2\'s random-effects estimator, 50 iterations)' : p.combination === 'reml' ? ' (Fisher scoring as metafor\'s REML)' : ''}; technical replicates were summed before scoring.`);
-  lines.push(`Filters, in order: ${describeFilters(p.filters, null, p.model !== 'ratio').filter((x) => x.active !== false).map((x) => x.text.toLowerCase()).join('; ')}.`);
+  lines.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols').filter((x) => x.active !== false).map((x) => x.text.toLowerCase()).join('; ')}.`);
   if (p.rescale !== 'none') lines.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}.`);
   lines.push(`MaveScape ${run.software.version}${run.software.commit ? ` (${run.software.commit.slice(0, 7)})` : ''}, scoring version ${run.software.scoring}; run ${run.id}, output SHA-256 ${run.output.sha256}.`);
   return lines;

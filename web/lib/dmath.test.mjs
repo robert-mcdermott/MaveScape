@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { exp, fingerprint, FINGERPRINT, log, log10, pow, square } from './dmath.js';
+import { erfc, exp, fingerprint, FINGERPRINT, log, log10, normalCdf, normalPdf, normalUpper, pow, square } from './dmath.js';
 
 // Units in the last place between two doubles.
 const ulps = (a, b) => {
@@ -40,6 +40,16 @@ test('special values as IEEE 754 and Math define them', () => {
   assert.equal(pow(7, 0), 1);
   assert.equal(pow(1, 1e300), 1);
   assert.equal(square(1.1), 1.1 * 1.1);
+});
+
+test('the normal distribution: Φ to 1e-13 against Python\'s math.erfc, in the body and both tails', () => {
+  // 0.5 · erfc(−z/√2) from Python 3.12's math.erfc (libm).
+  const values = [[0, 0.5], [1, 0.8413447460685429], [-1, 0.15865525393145707], [-1.5, 0.06680720126885809], [-2.82, 0.0024011824741892547], [-2.83, 0.0023274002067315545], [-2.9, 0.0018658133003840378], [-3, 0.0013498980316301035], [-5, 2.866515718791939e-7], [-8, 6.22096057427178e-16], [2.5, 0.9937903346742238]];
+  for (const [z, want] of values) assert.ok(Math.abs(normalCdf(z) - want) <= 1e-13 * want, `Φ(${z}) = ${normalCdf(z)}, not ${want}`);
+  assert.ok(Math.abs(normalUpper(5) - 2.866515718791939e-7) <= 1e-13 * 2.866515718791939e-7);
+  assert.equal(erfc(0), 1);
+  assert.equal(normalCdf(-40), 0);
+  assert.ok(Math.abs(normalPdf(0) - 0.3989422804014327) < 1e-16);
 });
 
 // A change here means results change in their last bits: bump SCORING_VERSION.

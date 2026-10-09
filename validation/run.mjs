@@ -38,7 +38,10 @@ import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/color
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
 import { EDGE_EXPECTATIONS, byKey, engineInput, fixtureDesign, fixtureTable, score, shuffledTable, variantTable } from './scoring-cases.mjs';
 import { TIME_SERIES_EXPECTATIONS, edgeVariants, timeSeriesDesign, timeSeriesTable, timeSeriesTruth } from './time-series-cases.mjs';
-import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters } from '../web/lib/score.js';
+import { factor9Column, replicateBins, sortSeqDesign, sortSeqTable, sortSeqTruth } from './bins-cases.mjs';
+import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
+import { combineMean } from '../web/lib/replicates.js';
+import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS } from '../web/lib/score.js';
 import { combineFixed, combineREML, heterogeneity } from '../web/lib/replicates.js';
 import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE, REPLICATE_STATE_NAMES } from '../web/lib/filters.js';
 import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs } from '../web/lib/runs.js';
@@ -788,6 +791,84 @@ const suites = {
       check('scoring', `GRB2: Enrich2's combined scores where its estimator converged (epsilon 0) equal metafor's REML (${pairs.length} variants)`, `${d.worst.toExponential(2)} (${d.where})`, d.worst <= 1e-8 && pairs.length > 0, '≤ 1e-8 relative');
     }
 
+    // Sorted bins (wave 2, slice 3): the sort-seq fixture against fitdistrplus and its truth.
+    {
+      const ss = sortSeqTable();
+      const ssDesign = sortSeqDesign();
+      const ssNames = ss.columns[0].values;
+      const fitdist = JSON.parse(readFileSync(new URL('./reference/fitdistcens.json', import.meta.url), 'utf8'));
+      for (const kind of ['free', 'fixed']) {
+        const pairs = [];
+        const sePairs = [];
+        let oneSide = 0;
+        for (const replicate of ssDesign.replicates) {
+          const { counts, lo, hi } = replicateBins(ss, ssDesign, replicate);
+          const ref = fitdist.replicates[replicate.id];
+          ssNames.forEach((name, i) => {
+            const fit = binMLE(counts.map((c) => c[i]), lo, hi, kind === 'free' ? null : ref.wildTypeSdlog);
+            const theirs = ref[kind][name];
+            if (fit.estimable !== Boolean(theirs)) {
+              if (counts.some((c) => c[i] > 0)) oneSide += 1;
+              return;
+            }
+            if (!theirs) return;
+            pairs.push([`${replicate.id} ${name} μ`, fit.mu, theirs[0]], [`${replicate.id} ${name} σ`, fit.sigma, theirs[1]]);
+            sePairs.push([`${replicate.id} ${name} SE`, fit.se, theirs[2]]);
+          });
+        }
+        const d = worstDifference(pairs);
+        const dse = sePairs.reduce((a, [, x, y]) => Math.max(a, Math.abs(x - y) / y), 0);
+        check('scoring', `sorted bins, maximum likelihood ${kind === 'free' ? 'with each variant\'s own σ' : 'with the wild type\'s σ'}: μ and σ equal fitdistrplus ${fitdist.versions.fitdistrplus} fitdistcens on the sort-seq fixture (${pairs.length / 2} fits)`, `${d.worst.toExponential(2)} (${d.where}); SE of μ within ${dse.toExponential(2)} relative${oneSide ? `; ${oneSide} estimable by one side only` : ''}`, d.worst <= 1e-5 && dse <= 2e-3 && !oneSide && pairs.length > 0, '≤ 1e-5 (μ, σ), ≤ 2e-3 relative (SE), the same variants');
+      }
+      const truth = sortSeqTruth();
+      const base = defaultParameters(ssDesign);
+      const against = (results) => {
+        const c = results.conditions[0];
+        const wt = results.variants.original.indexOf('p.=');
+        const a = [];
+        const b = [];
+        let covered = 0;
+        results.variants.original.forEach((name, i) => {
+          if (c.reason[i] || name === 'p.=') return;
+          a.push(c.score[i]);
+          b.push(truth.get(name));
+          if (Math.abs(c.score[i] - c.score[wt] - truth.get(name)) < 1.959964 * c.se[i]) covered += 1;
+        });
+        return { r: pearson(a, b), coverage: covered / a.length, n: a.length };
+      };
+      const average = against(score(ss, ssDesign, { ...base, binScale: 'none' }));
+      const mle = against(score(ss, ssDesign, { ...base, model: 'bins-mle', binScale: 'none' }));
+      check('scoring', 'sorted bins against the simulated truth: the maximum-likelihood μ tracks the true shifts in log fluorescence more closely than the weighted average does', `MLE r ${mle.r.toFixed(4)}, weighted average r ${average.r.toFixed(4)} (${mle.n} variants)`, mle.r >= 0.99 && average.r >= 0.98 && mle.r > average.r, 'MLE ≥ 0.99 > average ≥ 0.98');
+      check('scoring', 'sorted bins against the simulated truth: the MLE\'s 95% intervals, its information limited by the cells sorted (fewer than the reads here), hold the true shift', `${(100 * mle.coverage).toFixed(0)}% after combining replicates (the rest: the replicate noise planted)`, mle.coverage >= 0.85, '≥ 85%');
+      const analytic = score(ss, ssDesign, base);
+      const boot = score(ss, ssDesign, { ...base, binSE: 'bootstrap' });
+      const bootAgain = score(ss, ssDesign, { ...base, binSE: 'bootstrap' });
+      const bootOther = score(ss, ssDesign, { ...base, binSE: 'bootstrap', seed: 7 });
+      const ratios = [];
+      analytic.replicates.forEach((r, k) => r.se.forEach((x, i) => {
+        const y = boot.replicates[k].se[i];
+        if (r.state[i] === REPLICATE_STATE.USED && x > 0 && Number.isFinite(y)) ratios.push(y / x);
+      }));
+      const mid = median(ratios);
+      check('scoring', 'sorted bins: the seeded bootstrap\'s SEs equal the analytic (delta-method) SEs, the same for a seed and not for another', `median bootstrap ÷ analytic ${mid.toFixed(3)} over ${ratios.length} measurements; ${outputDigest(boot) === outputDigest(bootAgain) ? 'repeatable' : 'NOT repeatable'}; seed 7 ${outputDigest(bootOther) === outputDigest(boot) ? 'the same' : 'differs'}`, Math.abs(mid - 1) < 0.03 && outputDigest(boot) === outputDigest(bootAgain) && outputDigest(bootOther) !== outputDigest(boot), 'within 3%; repeatable');
+      // Each replicate's scale: nonsense median 0 and wild type 1 (VAMP-seq).
+      const scaled = score(ss, ssDesign, base);
+      const kinds = scaled.variants.kind;
+      const worstAnchor = scaled.replicates.reduce((a, r) => {
+        const non = [];
+        r.score.forEach((x, i) => { if (r.state[i] === REPLICATE_STATE.USED && kinds[i] === 4) non.push(x); });
+        return Math.max(a, Math.abs(median(non)), Math.abs(r.score[scaled.controls.wt] - 1));
+      }, 0);
+      check('scoring', 'sorted bins scaled as VAMP-seq: in every replicate the nonsense median scores 0 and the wild type 1', `largest departure ${worstAnchor.toExponential(2)}`, worstAnchor <= 1e-12, '≤ 1e-12');
+      // Refusals: bins where they cannot be scored as asked.
+      const refusals = [
+        ['sorted bins scored as a selection', scoreExperiment({ ...engineInput(ss, ssDesign), parameters: DEFAULT_PARAMETERS }), /weighted average/],
+        ['the maximum-likelihood fit without gates', scoreExperiment({ ...engineInput(ss, { ...ssDesign, replicates: ssDesign.replicates.map((r) => ({ ...r, bins: r.bins.map(({ lower, upper, ...b }) => b) })) }), parameters: { ...base, model: 'bins-mle' } }), /gates/],
+        ['a weighted average of bins on a two-population design', scoreExperiment({ ...engineInput(fixture, design), parameters: { ...DEFAULT_PARAMETERS, model: 'bins' } }), /sorted bins/],
+      ];
+      for (const [what, out, pattern] of refusals) check('scoring', `refused: ${what}, with the reason`, out.ok ? 'scored anyway' : out.errors[0], !out.ok && pattern.test(out.errors.join(' ')), 'refused');
+    }
+
     // The PRD's edge cases, as planted in the fixture, under MaveScape's defaults.
     const defaults = score(fixture, design, DEFAULT_PARAMETERS);
     const names = fixture.columns.find((c) => c.name === 'hgvs_pro').values;
@@ -910,8 +991,63 @@ const suites = {
       }
       const dd = worstDifference(pairs);
       check('scoring', 'BRCA1, the whole table drafted from its column names: E2 binding (6 time points) and Y2H (4) become two conditions, scored apart; the E2 condition scores as the hand-written E2 design does', `${both.conditions.map((c) => `${c.name}: ${c.replicates.length} replicates, ${formatCount(c.scored)} scored`).join('; ')}; E2 against the hand-written design ${dd.worst.toExponential(2)} over ${pairs.length / 2} variants`, both.conditions.length === 2 && !!e2Condition && dd.worst <= 1e-12 && pairs.length > 0, 'two conditions; ≤ 1e-12');
-      const f9 = scoreExperiment({ ...engineInput(parseTable(dataset('mavedb-factor9').bytes('counts.csv')), readDesign('factor9.design.json')), parameters: DEFAULT_PARAMETERS });
-      check('scoring', 'factor IX (FACS bins): refused, saying bins are scored from 0.2.0 (not scored some other way)', f9.ok ? 'scored' : f9.errors[0], !f9.ok && /0\.2\.0/.test(f9.errors[0]), 'refused');
+      // Factor IX (MultiSTEP): its published replicate and combined scores from its counts.
+      const f9Table = parseTable(dataset('mavedb-factor9').bytes('counts.csv'));
+      const f9Design = readDesign('factor9.design.json');
+      const published = parseTable(dataset('mavedb-factor9').bytes('scores.csv'));
+      const pubColumn = (name) => published.columns.find((c) => c.name === name).numeric;
+      const pubRow = new Map(published.columns.find((c) => c.name === 'hgvs_pro').values.map((x, i) => [x, i]));
+      const f9Names = f9Table.columns.find((c) => c.name === 'hgvs_pro').values;
+      const wtRow = f9Names.indexOf('p.=');
+      const exact = [];
+      for (const replicate of f9Design.replicates) {
+        const { counts, values } = replicateBins(f9Table, f9Design, replicate);
+        const pub = pubColumn(factor9Column(replicate.id));
+        const kept = Uint8Array.from(f9Names, (x) => (Number.isFinite(pub[pubRow.get(x)]) ? 1 : 0));
+        // Frequencies over the variants the authors kept, as they computed them.
+        const totals = binTotals(counts.map((c) => c.map((x, i) => (kept[i] ? x : Number.NaN))));
+        const avg = binAverages(counts, values, kept, { totals });
+        const { zero, one } = scaleAnchors('low5-wt', avg.score, kept, { wt: wtRow });
+        f9Names.forEach((x, i) => { if (kept[i]) exact.push([`${replicate.id} ${x}`, (avg.score[i] - zero) / (one - zero), pub[pubRow.get(x)]]); });
+      }
+      const de = worstDifference(exact);
+      check('scoring', `factor IX (MultiSTEP): every published replicate score reproduced from the counts, on the variants the authors kept: rank-weighted bin average, wild type 1, the lowest 5% median 0 (${exact.length} scores in 9 replicates)`, `${de.worst.toExponential(2)} (${de.where})`, de.worst <= 1e-12, '≤ 1e-12');
+      const reps = f9Design.replicates.map((r) => pubColumn(factor9Column(r.id)));
+      const pubScore = pubColumn('score');
+      const pubSE = pubColumn('SE_score');
+      const combined = [];
+      pubScore.forEach((x, i) => {
+        const y = reps.map((r) => r[i]).filter(Number.isFinite);
+        if (!y.length || !Number.isFinite(x)) return;
+        const c = combineMean(y, y.map(() => 0));
+        combined.push([`${i} score`, c.estimate, x]);
+        if (y.length > 1) combined.push([`${i} SE`, c.se, pubSE[i]]);
+      });
+      const dc = worstDifference(combined);
+      check('scoring', 'factor IX: the published combined scores and SEs are the mean of the replicate scores and their SD over √k, as MaveScape\'s "mean" combination computes them', `${dc.worst.toExponential(2)} over ${combined.length} values`, dc.worst <= 1e-12, '≤ 1e-12');
+      const multistep = { ...defaultParameters(f9Design), binScale: 'low5-wt', combination: 'mean', filters: { ...DEFAULT_PARAMETERS.filters, minInputCount: 0 } };
+      const f9Start = performance.now();
+      const engine = score(f9Table, f9Design, multistep);
+      const f9Ms = performance.now() - f9Start;
+      let worstRep = 0;
+      let extra = 0;
+      let missingThere = 0;
+      engine.replicates.forEach((r) => {
+        const pub = pubColumn(factor9Column(r.id));
+        f9Names.forEach((x, i) => {
+          const theirs = pub[pubRow.get(x)];
+          const mine = r.state[i] === REPLICATE_STATE.USED;
+          if (mine && Number.isFinite(theirs)) worstRep = Math.max(worstRep, Math.abs(r.score[i] - theirs));
+          else if (mine) extra += 1;
+          else if (Number.isFinite(theirs)) missingThere += 1;
+        });
+      });
+      const a = [];
+      const b = [];
+      f9Names.forEach((x, i) => { const p = pubScore[pubRow.get(x)]; if (!engine.conditions[0].reason[i] && Number.isFinite(p)) { a.push(engine.conditions[0].score[i]); b.push(p); } });
+      check('scoring', `factor IX through the engine with MultiSTEP's settings (weighted average, lowest-5% scale, mean; ${f9Ms.toFixed(0)} ms): replicate scores within 2e-3 of the published where both score; the few more variants scored are those the authors' filter (on data not in the table) left out, which move the lowest-5% anchor`, `replicate scores within ${worstRep.toExponential(2)}; ${extra} more measurements scored here (of ${engine.replicates.length * 3000}+), ${missingThere} fewer; combined Pearson r ${pearson(a, b).toFixed(5)} over ${a.length}`, worstRep <= 2e-3 && missingThere === 0 && extra <= 100 && pearson(a, b) >= 0.999, '≤ 2e-3; none missing; r ≥ 0.999');
+      const ungated = scoreExperiment({ ...engineInput(f9Table, f9Design), parameters: { ...defaultParameters(f9Design), model: 'bins-mle' } });
+      check('scoring', 'factor IX: the maximum-likelihood fit is refused, as MaveDB records no gates for its bins', ungated.ok ? 'scored' : ungated.errors[0], !ungated.ok && /gates/.test(ungated.errors[0]), 'refused');
     }
   },
   // Quality control (wave 1, slice 6): simulated experiments with one problem each raise exactly
@@ -987,7 +1123,7 @@ const suites = {
       ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { dropout: 'review', coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'time-points': 'review', 'time-fit': 'fail' }, 'an error-prone-PCR library (76% of single substitutions); variants that dropped out in the last round written as missing (no 0 in the table), so a quarter of the weighted-regression fits miss their last points; time courses that scatter about their lines about 10× more than counting predicts (noise at each round of selection)'],
       ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'time-fit': 'fail' }, 'with the later rounds\' missing counts read as 0 (the design\'s missingMeansZero): the dropouts are counted, every fit uses every round, and the time courses scatter about 7× more than counting predicts', (design) => ({ ...design, samples: design.samples.map((x) => (design.replicates.some((r) => r.timepoints.slice(1).some((t) => t.sample === x.id)) ? { ...x, missingMeansZero: true } : x)) })],
       ['brca1-ring-y2h', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'outlier-replicate': 'review', separation: 'fail', resolution: 'review', 'time-fit': 'fail' }, 'nonsense variants are not separated from the wild type in the Y2H assay: those before residue 61 score about −3.7, those after residue 110 about +0.5 (truncations that keep the RING domain keep binding BARD1), so most are not loss-of-function controls here; its time courses scatter about 30× more than counting predicts'],
-      ['factor9', 'mavedb-factor9', 'counts.csv', {}, 'FACS bins: counts-level findings only until bins are scored (wave 2)'],
+      ['factor9', 'mavedb-factor9', 'counts.csv', { 'excess-variance': 'fail' }, 'sorted bins, scored by their weighted average (wave 2): replicates of a tile agree, but differ about 2,000× more than counting predicts, since about 10,000 reads per variant per bin far exceed the cells sorted; bin occupancy passes, and the cells per bin are not recorded'],
     ];
     for (const [name, data, path, expected, note, transform] of expectations) {
       const design = (transform ?? ((d) => d))(readDesign(`${name}.design.json`));
@@ -1215,8 +1351,9 @@ const suites = {
       const b = [];
       simScored.results.variants.key.forEach((k, i) => { if (!simC.reason[i] && k in sim.truth && k !== 'p.=') { a.push(simC.score[i]); b.push(sim.truth[k]); } });
       const simQc = findingsFrom(computeQC({ names: simTable.columns[0].values, columns: Object.fromEntries(simTable.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design, results: simScored.results }), defaultThresholds());
-      const raisedSim = simQc.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => f.id);
-      check('roundtrip', `the example "${example.title}": the same data from its seed, labeled simulated, scored by ${parameters.model === 'ratio' ? 'the log ratio' : parameters.model.toUpperCase()} close to the true effects, and every QC finding passes (${simQc.length} findings)`, `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${raisedSim.length ? raisedSim.join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > 0.98 && !raisedSim.length, 'r > 0.98; all pass');
+      const raisedSim = Object.fromEntries(simQc.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => [f.id, f.status]));
+      const expectedQc = example.findings ?? {};
+      check('roundtrip', `the example "${example.title}": the same data from its seed, labeled simulated, scored by ${MODELS[parameters.model]} close to the true effects, and QC raises exactly the findings it teaches (${simQc.length} findings)`, `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${Object.keys(raisedSim).length ? Object.entries(raisedSim).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > 0.98 && JSON.stringify(raisedSim) === JSON.stringify(expectedQc), `r > 0.98; ${Object.keys(expectedQc).length ? Object.entries(expectedQc).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`);
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
     // The blank layouts: filled in as they say, they make a valid design.

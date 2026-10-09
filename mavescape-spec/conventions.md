@@ -223,10 +223,12 @@ A run is immutable: changing a parameter makes a new run. Identical inputs and p
 same id and bit-identical results in every JavaScript engine (from scoring version 2, wave 2
 slice 1: `web/lib/dmath.js`; before it, equal to about 15 significant digits across engines).
 
-As built (wave 1 slice 5, wave 2 slice 2), parameters are `{ model, normalization, pseudocount,
-regressionSE, combination, rescale, filters: { excludeKinds, exclude, minInputCount,
-minTotalCount, minTimePoints, minReplicates, maxSE } }`; a time series of three or more time points
-starts from `wls` (`defaultParameters`). A regression replicate also carries, per variant, the time
+As built (wave 1 slice 5, wave 2 slices 2–3), parameters are `{ model ('ratio', 'wls', 'ols',
+'bins', 'bins-mle'), normalization, pseudocount, regressionSE, binScale, binSE, binSigma,
+bootstrapSamples, seed, combination ('reml', 'fixed', 'enrich2', 'mean'), rescale, filters: {
+excludeKinds, exclude, minInputCount, minTotalCount, minTimePoints, minFrequency, minReplicates,
+maxSE } }`; a time series of three or more time points starts from `wls`, sorted bins from `bins`
+(`defaultParameters`). A regression replicate also carries, per variant, the time
 points it used and its departure from a line (χ²/df against counting).
 
 ### Workspace

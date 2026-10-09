@@ -24,6 +24,8 @@ lede: Quality control says whether the experiment supports reliable scores. Each
             <tr><td><strong>Separation of controls</strong></td><td>How well scores tell nonsense from wild-type-like controls (AUC)</td><td>below 0.9 / 0.75</td></tr>
             <tr><td><strong>Resolution of scores</strong></td><td>The median SE against the controls' gap</td><td>above 0.25 / 0.5</td></tr>
             <tr><td><strong>Variants scored</strong></td><td>Measured variants that pass the filters</td><td>below 80% / 50%</td></tr>
+            <tr><td><strong>Occupancy of the bins</strong> (sorted bins)</td><td>Each bin's share of its replicate's cells, or of its reads when the cells are not recorded</td><td>below 5% / 1%</td></tr>
+            <tr><td><strong>Cells sorted per variant</strong> (sorted bins)</td><td>The cells sorted into each bin per variant, when the design records them</td><td>below 20 / 5</td></tr>
             <tr><td><strong>Time points used</strong> (time series)</td><td>Fits on fewer time points than the replicate has</td><td>above 10% / 30%</td></tr>
             <tr><td><strong>Fit of the time courses</strong> (time series)</td><td>How far the time courses scatter about their lines, over what counting predicts (median; 1 is typical)</td><td>above 2× / 5×</td></tr>
           </tbody>
@@ -32,6 +34,11 @@ lede: Quality control says whether the experiment supports reliable scores. Each
 
       <h2 id="bottleneck">Bottlenecks</h2>
       <p>Under counting noise alone, the difference of two replicates' log ratios has a variance equal to the sum of the reciprocal counts. MaveScape fits the observed variance as <em>a</em> × counting + <em>e</em>: <em>a</em> above 1 points to too few cells somewhere (a bottleneck multiplies the counting variance), and <em>e</em> to noise between replicates (DiMSum's multiplicative and additive error terms). Standard errors from counts alone then understate the uncertainty; REML's τ² takes up the excess between replicates.</p>
+
+      <h2 id="bins">Sorted bins</h2>
+      <p>For sorted bins, replicate agreement, the variance beyond counting and outlier replicates compare each replicate's weighted average of the bins' values (with its variance from counting) in place of a log ratio, within each tile. Two more findings: <strong>Occupancy of the bins</strong>, since a nearly empty bin samples its variants coarsely, and <strong>Cells sorted per variant</strong>, since a variant's distribution over the bins is sampled twice, by the cells and then by the reads, and the scarcer limits what is known.</p>
+      <shot name="sort-seq-qc" alt="The QC view of the simulated sort-seq example: the cells sorted per variant in each bin of each replicate, between 54 and 119, and the variance beyond counting under review">The simulated sort: about 300 cells per variant against 320 reads, so the variance beyond counting is under review: the cells limit.</shot>
+      <p>On factor IX, the replicates of each tile agree, but differ about 2,000× more than counting predicts: about 10,000 reads per variant per bin far exceed the cells sorted, which MaveDB does not record.</p>
 
       <h2 id="time-series">Time series</h2>
       <p>For a time series scored by regression, two more findings. <strong>Time points used</strong>: a variant is fitted on the time points where it was counted, and points missing at the end of a time course are usually variants that dropped out and were written as missing; the slope then leans toward the wild type. <strong>Fit of the time courses</strong>: each fit's weighted residuals against counting noise, so that 1 is typical; well above 1 for most variants points to noise at each time point (a bottleneck at each passage), and the SEs, scaled by the residuals, include it.</p>
@@ -42,4 +49,4 @@ lede: Quality control says whether the experiment supports reliable scores. Each
       <p>Every threshold is editable in the QC view and kept in the workspace; each change goes into its history and the methods paragraph reports the thresholds used. <strong>Reset to the defaults</strong> restores MaveScape's.</p>
 
       <h2 id="tested">How the findings are tested</h2>
-      <p>Simulated experiments with one problem each (poor replicate agreement, one failing replicate, a severe bottleneck, a low-count tail, a missing sample, and for time series a bottleneck at every passage) raise exactly their findings, and clean experiments (two populations and a time series) none, on three seeds. The variance ratio follows a simulated bottleneck. <a href="../science.html#validation">Validation</a> has the details.</p>
+      <p>Simulated experiments with one problem each (poor replicate agreement, one failing replicate, a severe bottleneck, a low-count tail, a missing sample, and for time series a bottleneck at every passage) raise exactly their findings, and clean experiments (two populations, a time series and a sort) none, on three seeds; sorts with too few cells or a nearly empty bin raise theirs. The variance ratio follows a simulated bottleneck. <a href="../science.html#validation">Validation</a> has the details.</p>

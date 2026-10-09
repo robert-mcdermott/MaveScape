@@ -76,6 +76,31 @@ export const EXAMPLES = [
       ['score', 'Choose the Enrich2-compatible preset: its SEs are scaled by the residuals alone, and some are smaller than counting allows.'],
     ],
   },
+  {
+    id: 'simulated-sort-seq',
+    title: 'A simulated sort-seq experiment (known truth)',
+    summary: 'Cells displaying every variant of a 40-residue protein sorted by a fluorescent reporter into four gated bins, in three replicates, with the true shift of each variant known.',
+    question: 'How do the weighted average of the bins and the maximum-likelihood fit compare, and what limits the measurement: the cells or the reads?',
+    source: 'Simulated by MaveScape (web/lib/simulate.js, seed 20261013): not real data',
+    license: 'Simulated: no license needed',
+    citation: null,
+    simulated: true,
+    simulation: { seed: 20261013, sort: { cellsPerVariant: 300 }, readsPerVariant: 80, replicateNoise: 0.02 },
+    // The QC findings that do not pass, by design: the lesson.
+    findings: { 'excess-variance': 'review' },
+    opens: 'map',
+    expected: [
+      'Scored by the weighted average of the bins (VAMP-seq\'s), scaled so that nonsense scores 0 and the wild type 1; the scores track the true shifts.',
+      'Quality control reviews the variance beyond counting, about 2–3×: about 300 cells per variant were sorted against about 320 reads, so the cells, not the reads, limit what is known. The bins hold even shares of the cells.',
+      'Scored by maximum likelihood (the design records the gates and the cells sorted into each bin), the scores follow the true shifts more closely, and their SEs account for the cells.',
+    ],
+    steps: [
+      ['map', 'Click a dark cell: the inspector shows the variant\'s distribution over the four bins in each replicate, beside the wild type\'s.'],
+      ['qc', 'In QC, read "Occupancy of the bins", "Cells sorted per variant" and "Variance beyond counting".'],
+      ['experiment', 'In Experiment, see each bin\'s gates and the cells sorted into it.'],
+      ['score', 'In Score, choose "Maximum likelihood" and score again; compare the runs in the inspector, and try the VAMP-seq preset.'],
+    ],
+  },
 ];
 
 export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
@@ -84,6 +109,7 @@ export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
 export function simulatedExample(example = exampleById('simulated')) {
   const sim = simulateExperiment(example.simulation);
   const design = { ...sim.design, name: `${sim.design.name} (simulated data)` };
-  const truth = Object.fromEntries(sim.variants.map((v) => [v.name, v.effect]));
+  // The truth: each variant's effect (a sort-seq experiment's: its shift in log fluorescence).
+  const truth = Object.fromEntries(sim.variants.map((v) => [v.name, v.shift ?? v.effect]));
   return { csv: sim.csv, design, truth };
 }

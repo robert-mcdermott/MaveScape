@@ -112,7 +112,10 @@ input and output, time points, or bins; its biological number, condition and til
 tiles, controls, and `ignoredColumns` (every other column of the table, with the reason, or the
 column it copies). A sample's `missingMeansZero: true` reads its missing counts as 0, for tables
 that write variants that dropped out during selection as missing (MaveScape 0.2; "Missing = 0" in
-the Experiment view; warned about on a replicate's first sample). Written by the Experiment view; the validation designs are examples
+the Experiment view; warned about on a replicate's first sample). For sorted bins, each bin of a replicate
+may give its gates on the reporter, `lower` and `upper` (fluorescence; the lowest bin's lower and
+the highest bin's upper left open), and each sample the `cells` sorted into it: with the gates the
+bins can be scored by maximum likelihood, whose reads are reweighted by the cells (MaveScape 0.2). Written by the Experiment view; the validation designs are examples
 ([`validation/designs/`](../validation/designs/)).
 
 ### Import templates, `*.import.json`
@@ -174,6 +177,10 @@ MaveDB's score layout, one row per variant of the table, in the table's order:
 | `tau2`, `I2`, `leave_one_out` | between-replicate variance, I², and the largest change when one replicate is left out |
 | `variant_as_written`, `variant_class` | the name as in the table, and its class |
 | `score_<replicate>`, `SE_<replicate>` | each replicate's score and SE (kept for filtered variants too) |
+
+For sorted bins (MaveScape 0.2), a score is the weighted average of the bins' values, or the
+maximum-likelihood mean of the variant's log fluorescence, scaled per replicate (by default so that
+nonsense scores 0 and the wild type 1); the run's methods say which.
 
 For a time series scored by regression (MaveScape 0.2), a score is the slope of the variant's
 normalized log count on time scaled to 0–1, and `score_<replicate>` is each replicate's slope; the

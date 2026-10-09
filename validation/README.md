@@ -13,8 +13,8 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `enrich2` | Enrich2 2.0.2's scores of those data (`reference/enrich2.json`) against the formulas of `mavescape-spec/research.md` §2.1 computed independently, and the published BRCA1 scores against Enrich2 2.0.2 | MaveDB, external; `reference/enrich2.json` |
 | `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
-| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0" | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `statsmodels.json`, `fixtures/`; MaveDB, external |
-| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`) raise exactly their findings, a clean one none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
+| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `fixtures/`; MaveDB, external |
+| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series and sorts) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
 | `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
 | `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked | `fixtures/`, `web/examples/` |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
@@ -160,6 +160,44 @@ two times (replicate 1), a time course that rises then falls, and counts of 0 at
 Enrich2 scores it too (`generate_enrich2.py`, case `time-series`: WLS and OLS with wild-type
 normalization, WLS with complete cases, and ratios).
 
+## The sort-seq fixture (`fixtures/sort-seq.*`, wave 2 slice 3)
+
+`node validation/fixtures/make-sort-seq.mjs` writes it, deterministically (seed 20261011): a
+simulated sort (`web/lib/simulate.js`) of 839 variants of a 40-residue protein, cells sorted by
+gates on a reporter into four bins in three replicates, each bin sequenced to the same depth
+(`sort-seq.csv`); its design records each bin's gates and the cells sorted into it
+(`sort-seq.design.json`), and `sort-seq.truth.csv` each variant's true shift in log fluorescence.
+
+## fitdistrplus (`reference/fitdistcens.json`, wave 2 slice 3)
+
+```sh
+Rscript validation/reference/generate_fitdistcens.R
+```
+
+fitdistrplus 1.2.6 (R 4.6.1) fits each replicate's variants of the sort-seq fixture as
+interval-censored observations between the gates, weighted by their reads: `fitdistcens(…,
+"lnorm")` with meanlog and sdlog free (variants with reads in three or more bins) and with sdlog
+fixed at the wild type's own fit, optim's tolerance tightened. It starts from the weighted mean and
+SD of the bins' log midpoints: its default start ignores the weights, and from it Nelder–Mead
+stopped far from the maximum for variants with nearly all reads in an outer bin.
+
+### What the comparisons showed (wave 2, slice 3)
+
+- **Factor IX's published scores** (MultiSTEP, Popp et al. 2025) are VAMP-seq's arithmetic with
+  another scale: bin frequencies over the variants kept, the weighted average with rank weights
+  0.25–1, then per replicate the wild type 1 and the median of the lowest ⌈5%⌉ of the kept variants
+  0; combined by the mean, SE = SD/√k. Every one of 29,325 replicate scores is reproduced from the
+  counts to 1.3 × 10⁻¹⁵ on the variants the authors kept, and the combined scores and SEs exactly.
+  Which variants they kept is not recoverable from the table (no count or frequency threshold on
+  it separates them; most likely the unsorted library, not on MaveDB): through the engine,
+  MaveScape scores 3 to 13 more per replicate, which moves the lowest-5% anchor by up to 2 × 10⁻³.
+- **The maximum-likelihood fit equals fitdistcens'** μ and σ to 3 × 10⁻⁷ over 4,800 fits, σ free
+  and fixed, and the SE of μ to 0.07% (both from finite-difference Hessians).
+- **Against the simulated truth**, the MLE's μ tracks the true shifts (r = 0.996) more closely than
+  the weighted average (0.989), and its 95% intervals hold the truth 87% of the time after
+  combining (78% per replicate; 57% if its information were scaled to the reads rather than the
+  scarcer cells). The bootstrap's SEs equal the analytic ones (median ratio 1.003).
+
 ## statsmodels (`reference/statsmodels.json`, wave 2 slice 2)
 
 ```sh
@@ -246,7 +284,9 @@ What QC found in the feasibility data, with MaveScape's default scoring (locked 
 - **BRCA1 Y2H**: the controls do not separate (AUC 0.39): nonsense variants before residue 61
   score about −3.7, after residue 110 about +0.5. Truncations that keep the RING domain keep
   binding BARD1, so most nonsense variants are not loss-of-function controls in this assay.
-- **Factor IX**: counts-level findings pass; bins are scored from wave 2.
+- **Factor IX**: scored by the weighted average from wave 2 slice 3. Replicates of each tile agree,
+  but differ about 2,000× more than counting predicts (about 10,000 reads per variant per bin far
+  exceed the cells sorted, which MaveDB does not record); bin occupancy passes.
 
 ## The map (wave 1, slice 7)
 

@@ -73,7 +73,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | Q7 | Filter flow: retained and excluded variants at each stage, by reason | done (wave 1: Score view, slice 5; QC, slice 6) |
 | Q8 | Barcode agreement within variants and outlier barcodes | planned (wave 2) |
 | Q9 | Findings with status (pass/review/fail), explanation, affected samples or variants, threshold and rationale, link to the visual, advisory or blocking; thresholds configurable and recorded | done (wave 1, slice 6: thresholds in the workspace and its history; validation `qc`) |
-| Q10 | Time-series fit diagnostics (usable points, residuals) and bin diagnostics (cells per bin, bin occupancy) | time series done (wave 2, slice 2: "Time points used" and "Fit of the time courses", each time course in the inspector; checked on simulated passage bottlenecks and BRCA1); bins planned (wave 2, slice 3) |
+| Q10 | Time-series fit diagnostics (usable points, residuals) and bin diagnostics (cells per bin, bin occupancy) | time series done (wave 2, slice 2: "Time points used" and "Fit of the time courses", each time course in the inspector; checked on simulated passage bottlenecks and BRCA1); bins done (wave 2, slice 3: "Occupancy of the bins" and "Cells sorted per variant"; replicate agreement, variance beyond counting and outlier replicates from the bins' weighted averages within each tile) |
 
 ## Scoring
 
@@ -85,7 +85,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | S4 | Immutable score runs: input and output hashes, import mapping, design, software and algorithm versions, parameters, filters, seeds, warnings | done (wave 1, slice 5: ids from the canonical inputs; scores recomputed when a run is reopened and checked against its output hash) |
 | S5 | The PRD's two-population edge cases (zero in both, in input only, in output only; missing replicate; very low depth; absent from one replicate; observed but filtered; reference class unavailable) specified and tested | done (wave 1, slice 5: planted in `fixtures/two-population.csv`, each checked, Enrich2 and dms_variants scoring the same table) |
 | S6 | Time series: weighted (and ordinary) regression of normalized log frequency on time, non-uniform spacing, slope, SE, usable points; insufficient support flagged | done (wave 2, slice 2: equal to Enrich2 2.0.2's WLS and OLS to 5 × 10⁻¹³ and statsmodels to 5 × 10⁻¹⁴; fits on the counted time points, too few left out and fewer flagged; SE floored at counting's by default) |
-| S7 | Bin scores: weighted average from ordered bins with explicit values and weight type; uncertainty analytically or by seeded bootstrap; optional maximum-likelihood estimate | planned (wave 2) |
+| S7 | Bin scores: weighted average from ordered bins with explicit values and weight type; uncertainty analytically or by seeded bootstrap; optional maximum-likelihood estimate | done (wave 2, slice 3: factor IX's published MultiSTEP scores reproduced to 1.3 × 10⁻¹⁵; the censored log-normal MLE equal to fitdistrplus `fitdistcens` to 3 × 10⁻⁷; the bootstrap equal to the analytic SE; VAMP-seq and MultiSTEP scales, the mean combination) |
 | S8 | Barcode aggregation: sum-then-score and score-then-combine | planned (wave 2; equal to dms_variants) |
 | S9 | DiMSum's error model as an alternative uncertainty model | planned (wave 2) |
 | S10 | Differential scores between compatible conditions, with a model that accounts for a shared input | planned (wave 2; against Enrich2's z and mutscan's limma contrasts) |

@@ -48,6 +48,20 @@ each.
   the same way, and the run records it.
 - **A third example: a simulated time series** with known effects (five times over eight
   generations), and time series in the simulator, with an optional bottleneck at every passage.
+- **Sorted bins (FACS) scored (wave 2, slice 3)** by the weighted average of the bins' values
+  (VAMP-seq), with an analytic or seeded-bootstrap SE, or by the censored log-normal
+  maximum-likelihood fit from the bins' gates (Peterman and Levine 2016), reads reweighted by the
+  cells sorted into each bin. Each replicate is scaled so that nonsense scores 0 and the wild type 1
+  (VAMP-seq), or the median of its lowest 5% 0 (MultiSTEP). A VAMP-seq preset and the mean of
+  replicates (SE = SD/√k). Factor IX's published scores are reproduced from its counts to
+  10⁻¹⁵, and the maximum-likelihood fits equal fitdistrplus's to 3 × 10⁻⁷.
+- **The design records each bin's gates and the cells sorted into it**, edited in the Experiment
+  view.
+- **Sorted-bin quality control:** "Occupancy of the bins" and "Cells sorted per variant", and
+  replicate agreement, variance beyond counting and outlier replicates from the bins' weighted
+  averages, replicates compared within their tile. The inspector shows a variant's distribution
+  over the bins beside the wild type's.
+- **A fourth example: a simulated sort-seq experiment** with gates, cells and known shifts.
 
 ### Changed
 

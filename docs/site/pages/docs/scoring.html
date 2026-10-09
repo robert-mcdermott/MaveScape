@@ -1,6 +1,6 @@
 ---
 title: Scoring
-description: How MaveScape scores a deep mutational scan: log ratios with normalization, weighted regression on every time point of a time series, replicates combined by REML random effects, ordered filters with reasons, and runs that reproduce.
+description: How MaveScape scores a deep mutational scan: log ratios with normalization, weighted regression on every time point of a time series, sorted bins by their weighted average or maximum likelihood, replicates combined by REML random effects, ordered filters with reasons, and runs that reproduce.
 lede: Scoring turns the counts into a functional score with a standard error for every variant, in a run that keeps everything needed to repeat it. The parameters and the filters are in plain view in the Score view.
 ---
       <h2 id="score">Scores</h2>
@@ -25,9 +25,21 @@ lede: Scoring turns the counts into a functional score with a standard error for
       <p>The inspector draws a variant's time course in each replicate. <a href="qc.html#time-series">Quality control</a> reads the time points used and the fit of the time courses.</p>
       <shot name="time-series-score" alt="The Score view of the simulated time series: scored by weighted least squares on every time point, with the standard error of a slope at least what counting predicts">A time series in the Score view: <em>Scored by</em> and <em>Standard error of a slope</em> appear when the design is a time series.</shot>
 
+      <h2 id="bins">Sorted bins</h2>
+      <p>When cells are sorted by a reporter (abundance, binding, expression) into ordered bins and each bin is sequenced, a variant's score comes from its distribution over the bins:</p>
+      <ul>
+        <li><strong>The weighted average of the bins' values</strong> (the default, VAMP-seq's): each bin's value, a rank such as 0.25, 0.5, 0.75, 1 or a fluorescence, weighted by the variant's frequency in the bin (its reads there over the bin's reads). Its SE comes from counting by the delta method, or from a seeded bootstrap of the counts; the two agree.</li>
+        <li><strong>Maximum likelihood</strong>, when the design records each bin's gates: the variant's cells are taken to have log-normally distributed fluorescence, seen only as counts between the gates (Peterman and Levine 2016), and the score is the fitted mean μ of the log fluorescence. The spread σ is the wild type's, shared by every variant, or each variant's own (which needs reads in three bins). With the cells sorted into each bin recorded, reads are reweighted by them, and the information is limited by the smaller of a variant's reads and its cells.</li>
+      </ul>
+      <shot name="sort-seq" alt="The map of the simulated sort-seq example with a nonsense variant selected; the inspector shows its reads in each bin and its distribution over the four bins in three replicates, falling from bin 1, beside the wild type's rising toward bin 4">A nonsense variant's distribution over the bins in each replicate, beside the wild type's (dashed).</shot>
+      <p>Each replicate's scores are then <strong>scaled</strong>: by default so that its median nonsense variant scores 0 and the wild type 1 (VAMP-seq); or so that the median of its lowest 5% scores 0 (MultiSTEP, for libraries without nonsense variants); or not at all. The <strong>VAMP-seq</strong> preset also leaves out variants whose summed bin frequency is below 10<sup>−4.75</sup>, keeps variants seen in two or more replicates, and combines replicates by their mean with SE their SD over √k.</p>
+      <shot name="sort-seq-score" alt="The Score view of the simulated sort-seq example scored by maximum likelihood with the wild type's spread, beside a run by the weighted average">Sorted bins in the Score view: the weighted average and maximum likelihood, the scale of each replicate, and σ.</shot>
+      <p>On factor IX (MaveDB urn:mavedb:00001200-a-1), MaveScape reproduces every published replicate score from the counts, to 10<sup>−15</sup>, and the combined scores exactly. On a simulated sort, its maximum-likelihood fits equal fitdistrplus's <code>fitdistcens</code> to 3 × 10<sup>−7</sup>, and track the true shifts more closely than the weighted average.</p>
+
       <h2 id="replicates">Replicates</h2>
       <p>Technical replicates (one library sequenced more than once) are summed first. Each biological replicate is scored on its own, and a variant's replicate scores are combined:</p>
       <ul>
+        <li><strong>The mean</strong> of the replicates, with SE their SD over √k (VAMP-seq, MultiSTEP): only the spread between replicates, whatever each one's own SE.</li>
         <li><strong>REML random effects</strong> (the default), computed as metafor's <code>rma(method = "REML")</code>: the excess spread between replicates (τ²) widens the standard error.</li>
         <li><strong>Fixed effects:</strong> the inverse-variance weighted mean.</li>
         <li><strong>Enrich2's estimator,</strong> exactly as Enrich2 2.0.2 computes it, for comparison with published scores.</li>

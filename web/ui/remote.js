@@ -417,6 +417,8 @@ export function installRemote(app) {
         name: r.name, before: round(r.first[row]), after: round(r.last[row]), score: round(r.score[row]), se: round(r.se[row]), used: !r.state[row], state: r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'used',
         // A regression's time points used and departure from a line (χ²/df against counting).
         ...(r.points ? { timePoints: r.points[row], departure: round(r.fit[row]) } : {}),
+        // Sorted bins: the reads in each bin.
+        ...(r.bins ? { readsByBin: r.samples.map((id) => { const x = (results.samples ?? []).find((sm) => sm.id === id)?.counts[row]; return Number.isFinite(x) ? x : null; }) } : {}),
       }));
       const data = {
         variant: v.key[row],

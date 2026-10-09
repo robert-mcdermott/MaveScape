@@ -1,0 +1,229 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "Synthetic sort-seq fixture (simulated)",
+  "description": "Simulated by MaveScape (web/lib/simulate.js, seed 20261011): not real data. 3 replicates, cells sorted into 4 bins by gates on a reporter (log fluorescence SD 0.4), 100 cells and 60 reads per variant on average in each bin.",
+  "model": "bins",
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "simulated",
+      "name": "Simulated protein",
+      "sequenceType": "protein",
+      "sequence": "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYG"
+    }
+  ],
+  "library": {
+    "level": "variant"
+  },
+  "bins": {
+    "weight": "rank"
+  },
+  "samples": [
+    {
+      "id": "rep1_bin1",
+      "name": "rep1_bin1",
+      "columns": [
+        "rep1_bin1"
+      ],
+      "cells": 16756
+    },
+    {
+      "id": "rep1_bin2",
+      "name": "rep1_bin2",
+      "columns": [
+        "rep1_bin2"
+      ],
+      "cells": 15125
+    },
+    {
+      "id": "rep1_bin3",
+      "name": "rep1_bin3",
+      "columns": [
+        "rep1_bin3"
+      ],
+      "cells": 18823
+    },
+    {
+      "id": "rep1_bin4",
+      "name": "rep1_bin4",
+      "columns": [
+        "rep1_bin4"
+      ],
+      "cells": 33694
+    },
+    {
+      "id": "rep2_bin1",
+      "name": "rep2_bin1",
+      "columns": [
+        "rep2_bin1"
+      ],
+      "cells": 16788
+    },
+    {
+      "id": "rep2_bin2",
+      "name": "rep2_bin2",
+      "columns": [
+        "rep2_bin2"
+      ],
+      "cells": 15043
+    },
+    {
+      "id": "rep2_bin3",
+      "name": "rep2_bin3",
+      "columns": [
+        "rep2_bin3"
+      ],
+      "cells": 18652
+    },
+    {
+      "id": "rep2_bin4",
+      "name": "rep2_bin4",
+      "columns": [
+        "rep2_bin4"
+      ],
+      "cells": 33733
+    },
+    {
+      "id": "rep3_bin1",
+      "name": "rep3_bin1",
+      "columns": [
+        "rep3_bin1"
+      ],
+      "cells": 16785
+    },
+    {
+      "id": "rep3_bin2",
+      "name": "rep3_bin2",
+      "columns": [
+        "rep3_bin2"
+      ],
+      "cells": 14893
+    },
+    {
+      "id": "rep3_bin3",
+      "name": "rep3_bin3",
+      "columns": [
+        "rep3_bin3"
+      ],
+      "cells": 18347
+    },
+    {
+      "id": "rep3_bin4",
+      "name": "rep3_bin4",
+      "columns": [
+        "rep3_bin4"
+      ],
+      "cells": 33537
+    }
+  ],
+  "replicates": [
+    {
+      "id": "rep1",
+      "name": "Replicate 1",
+      "biological": 1,
+      "bins": [
+        {
+          "sample": "rep1_bin1",
+          "order": 1,
+          "value": 0.25,
+          "upper": 407
+        },
+        {
+          "sample": "rep1_bin2",
+          "order": 2,
+          "value": 0.5,
+          "lower": 407,
+          "upper": 638
+        },
+        {
+          "sample": "rep1_bin3",
+          "order": 3,
+          "value": 0.75,
+          "lower": 638,
+          "upper": 905
+        },
+        {
+          "sample": "rep1_bin4",
+          "order": 4,
+          "value": 1,
+          "lower": 905
+        }
+      ]
+    },
+    {
+      "id": "rep2",
+      "name": "Replicate 2",
+      "biological": 2,
+      "bins": [
+        {
+          "sample": "rep2_bin1",
+          "order": 1,
+          "value": 0.25,
+          "upper": 407
+        },
+        {
+          "sample": "rep2_bin2",
+          "order": 2,
+          "value": 0.5,
+          "lower": 407,
+          "upper": 638
+        },
+        {
+          "sample": "rep2_bin3",
+          "order": 3,
+          "value": 0.75,
+          "lower": 638,
+          "upper": 905
+        },
+        {
+          "sample": "rep2_bin4",
+          "order": 4,
+          "value": 1,
+          "lower": 905
+        }
+      ]
+    },
+    {
+      "id": "rep3",
+      "name": "Replicate 3",
+      "biological": 3,
+      "bins": [
+        {
+          "sample": "rep3_bin1",
+          "order": 1,
+          "value": 0.25,
+          "upper": 407
+        },
+        {
+          "sample": "rep3_bin2",
+          "order": 2,
+          "value": 0.5,
+          "lower": 407,
+          "upper": 638
+        },
+        {
+          "sample": "rep3_bin3",
+          "order": 3,
+          "value": 0.75,
+          "lower": 638,
+          "upper": 905
+        },
+        {
+          "sample": "rep3_bin4",
+          "order": 4,
+          "value": 1,
+          "lower": 905
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "wildType": "p.=",
+    "synonymous": "auto",
+    "nonsense": "auto"
+  }
+}

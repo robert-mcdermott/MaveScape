@@ -195,15 +195,31 @@ export function combineEnrich2(y, v, V, iterations = 50) {
   return { estimate: beta, se: Math.sqrt(1 / inv), tau2, epsilon };
 }
 
+// The mean of the replicates' scores, its SE their SD over √k (VAMP-seq, MultiSTEP): the spread
+// between replicates alone, whatever each replicate's own SE. One replicate keeps its own SE.
+export function combineMean(y, v) {
+  const k = y.length;
+  if (!k) return { estimate: Number.NaN, se: Number.NaN, tau2: Number.NaN };
+  let m = 0;
+  for (const x of y) m += x;
+  m /= k;
+  if (k === 1) return { estimate: m, se: Math.sqrt(v[0]), tau2: Number.NaN };
+  let ss = 0;
+  for (const x of y) ss += (x - m) * (x - m);
+  return { estimate: m, se: Math.sqrt(ss / (k - 1) / k), tau2: Number.NaN };
+}
+
 export const COMBINATIONS = {
   reml: 'REML random effects',
   fixed: 'fixed effects (inverse variance)',
   enrich2: 'Enrich2\'s estimator (compatible)',
+  mean: 'the mean of the replicates, SE their SD over √k (VAMP-seq)',
 };
 
-// One variant's combination by method ('reml', 'fixed' or 'enrich2', which needs V).
+// One variant's combination by method ('reml', 'fixed', 'mean' or 'enrich2', which needs V).
 export function combine(method, y, v, V) {
   if (method === 'fixed') return combineFixed(y, v);
+  if (method === 'mean') return combineMean(y, v);
   if (method === 'enrich2') return combineEnrich2(y, v, V);
   return combineREML(y, v);
 }
@@ -215,7 +231,7 @@ export function combine(method, y, v, V) {
 export function leaveOneOut(method, y, v, full) {
   const k = y.length;
   if (k < 2) return { shift: Number.NaN, which: -1 };
-  const how = method === 'fixed' ? 'fixed' : 'reml';
+  const how = method === 'fixed' || method === 'mean' ? method : 'reml';
   let shift = -1;
   let which = -1;
   for (let j = 0; j < k; j += 1) {

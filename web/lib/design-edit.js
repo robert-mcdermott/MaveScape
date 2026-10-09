@@ -87,6 +87,21 @@ export function setBinValue(design, order, value) {
   return { ...design, replicates: design.replicates.map((r) => ({ ...r, bins: (r.bins ?? []).map((b) => (b.order === order ? { ...b, value } : b)) })) };
 }
 
+// A bin's gates on the reporter (fluorescence; null leaves that side open), in every replicate.
+export function setBinGates(design, order, { lower, upper }) {
+  const clean = (x) => (x === null || x === '' || !(Number(x) > 0) ? undefined : Number(x));
+  return { ...design, replicates: design.replicates.map((r) => ({ ...r, bins: (r.bins ?? []).map((b) => {
+    if (b.order !== order) return b;
+    const { lower: oldLower, upper: oldUpper, ...rest } = b;
+    const next = { ...rest };
+    const lo = lower === undefined ? oldLower : clean(lower);
+    const hi = upper === undefined ? oldUpper : clean(upper);
+    if (lo !== undefined) next.lower = lo;
+    if (hi !== undefined) next.upper = hi;
+    return next;
+  }) })) };
+}
+
 // --- Columns and samples -----------------------------------------------------------------------
 
 // How each column of a table is used: Map(column → { kind: 'sample', sample } | { kind: 'copy',

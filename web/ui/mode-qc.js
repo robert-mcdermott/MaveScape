@@ -155,6 +155,20 @@ export function mountQcMode(app, container) {
           lineChart({ series: shown.map((s, i) => ({ label: s.name, color: categoricalColor(i), points: s.rankAbundance.filter((p) => p[1] > 0) })), xLog: true, yLog: true, xLabel: 'rank', yLabel: 'count', label: 'Counts from the most to the least abundant variant' }),
         ];
       }
+      case 'bin-occupancy': {
+        const bins = qc.bins ?? [];
+        if (!bins.length) return [h('p.muted', 'Needs sorted bins.')];
+        const items = bins.flatMap((r) => r.bins.map((b) => ({ label: `${r.name}, bin ${b.order}`, value: b.share, status: b.share < t.binShare.fail ? 'fail' : b.share < t.binShare.review ? 'review' : '' })));
+        return [barChart({ items, lines: lines('binShare'), label: `Each bin's share of its replicate's ${bins[0].shareOf}`, format: pct }),
+          h('p.muted.plot-note', `Shares of the ${bins[0].shareOf}${bins[0].shareOf === 'reads' ? ' (record the cells sorted into each bin, in the Experiment view, to see the cells)' : ''}.`)];
+      }
+      case 'cells-per-bin': {
+        const bins = (qc.bins ?? []).filter((r) => r.bins.every((b) => b.cellsPerVariant !== null));
+        if (!bins.length) return [h('p.muted', 'Record the cells sorted into each bin with each sample (the Experiment view) to see them.')];
+        const items = bins.flatMap((r) => r.bins.map((b) => ({ label: `${r.name}, bin ${b.order}`, value: Math.max(b.cellsPerVariant, 0.1), status: b.cellsPerVariant < t.cellsPerVariant.fail ? 'fail' : b.cellsPerVariant < t.cellsPerVariant.review ? 'review' : '' })));
+        return [barChart({ items, log: true, lines: lines('cellsPerVariant'), label: 'Cells sorted per variant into each bin (log scale), with the review and fail thresholds', format: (v) => fmt(v, 0) }),
+          h('p.muted.plot-note', bins.map((r) => `${r.name}: ${r.bins.map((b) => fmt(b.readsPerCell, 1)).join(', ')} reads per cell`).join(' · '))];
+      }
       case 'time-points': {
         const ts = qc.timeSeries ?? [];
         if (!ts.length) return [h('p.muted', 'Needs a run scored by regression on time.')];

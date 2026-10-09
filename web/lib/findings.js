@@ -26,6 +26,8 @@ export const THRESHOLDS = [
   { key: 'scoredFraction', label: 'Measured variants scored', bad: 'below', review: 0.8, fail: 0.5, unit: 'fraction' },
   { key: 'fewerPoints', label: 'Time-series fits on fewer time points than the replicate has', bad: 'above', review: 0.1, fail: 0.3, unit: 'fraction' },
   { key: 'timeFit', label: 'Departure of time courses from a line ÷ counting noise (median)', bad: 'above', review: 2, fail: 5, unit: '×' },
+  { key: 'binShare', label: 'A bin\'s share of a replicate\'s cells (or reads)', bad: 'below', review: 0.05, fail: 0.01, unit: 'fraction' },
+  { key: 'cellsPerVariant', label: 'Cells sorted per variant into a bin', bad: 'below', review: 20, fail: 5, unit: 'cells' },
 ];
 
 export function defaultThresholds() {
@@ -170,9 +172,9 @@ export function findingsFrom(qc, thresholds) {
   add({
     id: 'agreement', title: 'Replicate agreement', plot: 'agreement', status: pairs.length ? worst(agStatus) : 'na',
     value: pairs.length ? `lowest Pearson r ${num(minR)} (${pairs.length} pair${pairs.length > 1 ? 's' : ''}; Spearman ${num(pairs.find((p) => p.pearson === minR)?.spearman)})` : 'not assessed: fewer than two replicates with shared variants',
-    explanation: weak.length ? `Replicates disagree: ${weak.map((p) => `${p.a} and ${p.b} r = ${num(p.pearson)} on ${p.n} variants`).join('; ')}. Scores combined from them carry the disagreement in their SEs (REML's τ²), but check the replicates.` : pairs.length ? 'The replicates\' log ratios agree.' : 'Agreement needs two replicates measuring the same variants.',
+    explanation: weak.length ? `Replicates disagree: ${weak.map((p) => `${p.a} and ${p.b} r = ${num(p.pearson)} on ${p.n} variants`).join('; ')}. Scores combined from them carry the disagreement in their SEs (REML's τ²), but check the replicates.` : pairs.length ? `The replicates' ${qc.model === 'bins' ? 'weighted bin values' : 'log ratios'} agree.` : 'Agreement needs two replicates measuring the same variants.',
     threshold: `${thresholdText(ag, 'below')}, on variants with at least ${t.agreementInput} input reads in both replicates`,
-    rationale: 'Pearson correlation of replicates\' log ratios, on variants counted well enough to be compared; Spearman is reported beside it. Normalization shifts a replicate as a whole, which correlation ignores, so this is assessed from the counts before any scoring.',
+    rationale: 'Pearson correlation of replicates\' log ratios (for sorted bins, their weighted averages of the bins\' values), on variants counted well enough to be compared; Spearman is reported beside it. Normalization shifts a replicate as a whole, which correlation ignores, so this is assessed from the counts before any scoring.',
     affected: { samples: [], replicates: [...new Set(weak.flatMap((p) => [p.a, p.b]))] },
   });
 
@@ -246,6 +248,34 @@ export function findingsFrom(qc, thresholds) {
     threshold: thresholdText(sf, 'below', pct),
     rationale: 'Filters should remove the few variants that cannot be scored; when they remove many, the parameters or the experiment need a look.',
   });
+
+  // Sorted bins (Q10): how the reads spread over the bins, and how many cells each variant had.
+  if (qc.model === 'bins' && qc.bins?.length) {
+    const bs = levels(t, 'binShare');
+    const shares = qc.bins.map((r) => ({ ...r, smallest: Math.min(...r.bins.map((b) => b.share)) }));
+    const shareStatus = shares.map((r) => statusOf(r.smallest, bs, 'below'));
+    add({
+      id: 'bin-occupancy', title: 'Occupancy of the bins', plot: 'bin-occupancy',
+      status: worst(shareStatus),
+      value: `smallest bin ${pct(Math.min(...shares.map((r) => r.smallest)))} of a replicate's ${shares[0].shareOf}`,
+      explanation: `${shares.filter((r, i) => shareStatus[i] !== 'pass').map((r) => `${r.name}: bin ${r.bins.find((b) => b.share === r.smallest).order} holds ${pct(r.smallest)} of its ${r.shareOf}`).join('; ') || `Every bin holds a fair share of each replicate's ${shares[0].shareOf}.`}${shareStatus.some((x) => x !== 'pass') ? '. A nearly empty bin samples its variants coarsely, and the weighted average leans on the other bins.' : ''}`,
+      threshold: thresholdText(bs, 'below', pct),
+      rationale: 'Bins are usually gated to hold similar numbers of cells and sequenced to similar depths; a bin with a small share of the cells (or, when the cells are not recorded, of the reads) is nearly empty or undersequenced.',
+      affected: { samples: [], replicates: shares.filter((r, i) => shareStatus[i] !== 'pass').map((r) => r.id) },
+    });
+    const cv = levels(t, 'cellsPerVariant');
+    const known = qc.bins.filter((r) => r.bins.every((b) => b.cellsPerVariant !== null));
+    const cellStatus = known.map((r) => statusOf(Math.min(...r.bins.map((b) => b.cellsPerVariant)), cv, 'below'));
+    add({
+      id: 'cells-per-bin', title: 'Cells sorted per variant', plot: 'cells-per-bin',
+      status: known.length ? worst(cellStatus) : 'na',
+      value: known.length ? `fewest ${num(Math.min(...known.flatMap((r) => r.bins.map((b) => b.cellsPerVariant))), 0)} cells per variant in a bin` : 'not assessed: the design does not record the cells sorted into each bin',
+      explanation: known.length ? `${known.map((r) => `${r.name}: ${r.bins.map((b) => num(b.cellsPerVariant, 0)).join(', ')} cells per variant, ${r.bins.map((b) => num(b.readsPerCell, 1)).join(', ')} reads per cell`).join('; ')}. ${worst(cellStatus) === 'pass' ? 'Enough cells were sorted for each variant\'s distribution over the bins.' : 'Few cells per variant: a variant\'s distribution over the bins is sampled coarsely, whatever the depth of sequencing.'}` : 'Record the cells sorted into each bin with each sample (the Experiment view) to assess it; the maximum-likelihood fit uses them too.',
+      threshold: thresholdText(cv, 'below', (x) => `${x} cells`),
+      rationale: 'A variant\'s distribution over the bins is sampled twice: by the cells sorted, then by the reads. Fewer cells than reads per variant means the cells limit what is known.',
+      affected: { samples: [], replicates: known.filter((r, i) => cellStatus[i] !== 'pass').map((r) => r.id) },
+    });
+  }
 
   // Time series (Q10): the time points the fits used, and how well the time courses follow a line.
   if (qc.model === 'time-series') {

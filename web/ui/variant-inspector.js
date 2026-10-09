@@ -12,7 +12,7 @@ import { describeParameters } from '../lib/runs.js';
 import { timeCourse } from '../lib/score-regression.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { ensureResults, runEntry } from './run-results.js';
-import { legend, lineChart } from './plots.js';
+import { cssVar, legend, lineChart } from './plots.js';
 
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const Z = 1.959963984540054;
@@ -107,7 +107,7 @@ export function variantSection(app, focus) {
     parts.push(h('dl.kv', ...kv.flatMap(([k, val]) => [h('dt', k), h('dd', { title: String(val) }, String(val))])));
     if (c.reason[row]) {
       const stage = STAGE_BY_CODE.get(c.reason[row]);
-      parts.push(h(`div.callout.${stage.id === 'measured' ? 'accent' : 'warn'}`, { style: { margin: '8px 0', fontSize: '12px' } }, stage.id === 'measured' ? 'Not measured: not counted in every sample of any replicate. Its score is NA.' : `Filtered at "${stage.label}": ${stage.reason}. Its score is NA; its measurements are below.`));
+      parts.push(h(`div.callout.${stage.id === 'measured' ? 'accent' : 'warn'}`, { style: { margin: '8px 0', fontSize: '12px' } }, stage.id === 'measured' ? `Not measured: ${stage.reason}. Its score is NA.` : `Filtered at "${stage.label}": ${stage.reason}. Its score is NA; its measurements are below.`));
     } else {
       const lo = c.score[row] - Z * c.se[row];
       const hi = c.score[row] + Z * c.se[row];
@@ -117,11 +117,40 @@ export function variantSection(app, focus) {
     }
     // Replicates.
     const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
-    parts.push(h('h4.inspector-sub', 'Replicates'), h('table.data.compact', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Before'), h('th.r', 'After'), h('th.r', 'Score'), h('th', 'Used'))),
-      h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r', fmt(r.first[row], 0)), h('td.r', fmt(r.last[row], 0)), h('td.r', Number.isFinite(r.score[row]) ? `${fmt(r.score[row], 2)} ± ${fmt(r.se[row], 2)}` : '—'), h('td', r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'yes'))))));
+    const sampleCounts = new Map((results.samples ?? []).map((x) => [x.id, x.counts]));
+    if (reps.some((r) => r.bins)) {
+      // Sorted bins: each replicate's reads in each bin, and the variant's distribution over the bins
+      // (its frequency in each bin over its summed frequency) beside the wild type's.
+      parts.push(h('h4.inspector-sub', 'Replicates'), h('table.data.compact', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Reads by bin'), h('th.r', 'Score'), h('th', 'Used'))),
+        h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r.mono', r.samples.map((id) => fmt(sampleCounts.get(id)?.[row], 0)).join(' · ')), h('td.r', Number.isFinite(r.score[row]) ? `${fmt(r.score[row], 2)} ± ${fmt(r.se[row], 2)}` : '—'), h('td', r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'yes'))))));
+      const share = (r, i) => {
+        const f = r.samples.map((id, b) => (sampleCounts.get(id)?.[i] ?? Number.NaN) / r.normalizers[b]);
+        const total = f.reduce((a, x) => a + x, 0);
+        return f.map((x, b) => [b + 1, total > 0 ? x / total : Number.NaN]);
+      };
+      const series = [];
+      const items = [];
+      reps.forEach((r, k) => {
+        const color = categoricalColor(k);
+        series.push({ points: share(r, row), color, markers: true, width: 1.5 });
+        items.push({ color, label: r.name });
+      });
+      const wt = results.controls?.wt ?? -1;
+      if (wt >= 0 && wt !== row) {
+        series.push({ points: share(reps[0], wt), color: cssVar('--text-3'), dash: true, width: 1.5 });
+        items.push({ color: cssVar('--text-3'), label: `the wild type (${reps[0].name})`, dash: true });
+      }
+      parts.push(h('h4.inspector-sub', 'Distribution over the bins'),
+        lineChart({ series, xLabel: 'bin', yLabel: 'share of the variant', label: `${focus.id}: its share in each bin, by replicate, with the wild type's`, width: 300, height: 160 }),
+        legend(items),
+        h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, `Each bin's share of the variant: its reads there over the bin's reads, as a fraction of their sum.${reps[0].bins?.sigma ? ` The maximum-likelihood fit shares the wild type's spread σ = ${fmt(reps[0].bins.sigma, 2)} (log fluorescence).` : ''}`));
+    } else {
+      parts.push(h('h4.inspector-sub', 'Replicates'), h('table.data.compact', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Before'), h('th.r', 'After'), h('th.r', 'Score'), h('th', 'Used'))),
+        h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r', fmt(r.first[row], 0)), h('td.r', fmt(r.last[row], 0)), h('td.r', Number.isFinite(r.score[row]) ? `${fmt(r.score[row], 2)} ± ${fmt(r.se[row], 2)}` : '—'), h('td', r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'yes'))))));
+    }
     // A regression's time courses: the normalized log counts at each time, and the fitted lines.
     const p = run.inputs.parameters;
-    if (p.model && p.model !== 'ratio') {
+    if (p.model === 'wls' || p.model === 'ols') {
       const counts = new Map((results.samples ?? []).map((x) => [x.id, x.counts]));
       const series = [];
       const items = [];

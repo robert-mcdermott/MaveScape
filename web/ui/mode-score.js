@@ -8,8 +8,9 @@
 import { h, icon, clear, formatCount } from './dom.js';
 import { confirmDialog, showMenu, toast } from './overlays.js';
 import { validateDesign } from '../lib/design.js';
-import { checkParameters, defaultParameters, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
-import { MODELS, REGRESSION_SE } from '../lib/score-regression.js';
+import { checkParameters, defaultParameters, MODELS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
+import { REGRESSION_SE } from '../lib/score-regression.js';
+import { BIN_SCALES, BIN_SE, BIN_SIGMA } from '../lib/score-bins.js';
 import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
@@ -153,12 +154,37 @@ export function mountScoreMode(app, container) {
   function parametersPane() {
     const p = draft();
     const preset = presetOf(p);
+    const designModel = store.ws.design?.model;
+    const bins = designModel === 'bins';
+    const options = (keys) => keys.map((k) => [k, MODELS[k][0].toUpperCase() + MODELS[k].slice(1)]);
+    const title = (id) => (id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios", "WLS" and "OLS": no count filter, every time point required, SEs scaled by the residuals alone, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : id === 'vampseq' ? 'Matreyek et al. 2018: the weighted average scaled to nonsense 0 and wild type 1, a summed bin frequency of at least 10^-4.75, two or more replicates, their mean with SE = SD/√k' : 'Variants with no input reads left out; a regression\'s SE never below counting\'s; REML random effects to convergence');
+    if (bins) {
+      return h('div.pane', h('h3', icon('settings'), 'Parameters'),
+        h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
+          ...Object.entries(PRESETS).filter(([id]) => id !== 'enrich2').map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...defaultParameters(store.ws.design, source(), id), model: p.model }) }, x.label))),
+          preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
+        select('Scored by', p.model, options(['bins', 'bins-mle']), (v) => setDraft({ model: v })),
+        select('Scale of each replicate', p.binScale, Object.entries(BIN_SCALES).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ binScale: v })),
+        p.model === 'bins'
+          ? h('div.form-grid',
+            select('Standard error', p.binSE, Object.entries(BIN_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ binSE: v })),
+            number('Pseudocount (in the SE)', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }))
+          : select('Spread σ of log fluorescence', p.binSigma, Object.entries(BIN_SIGMA).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ binSigma: v })),
+        p.model === 'bins' && p.binSE === 'bootstrap' ? h('div.form-grid',
+          number('Bootstrap samples', p.bootstrapSamples, (v) => setDraft({ bootstrapSamples: Math.max(20, Math.round(v ?? 200)) }), { min: 20, step: 50 }),
+          number('Seed', p.seed, (v) => setDraft({ seed: Math.round(v ?? 20261009) }), { step: 1 })) : null,
+        select('Replicates combined by', p.combination, Object.entries(COMBINATIONS).filter(([k]) => k !== 'enrich2').map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ combination: v })),
+        select('Rescaling', p.rescale, Object.entries(RESCALINGS).map(([k, v]) => [k, v.label[0].toUpperCase() + v.label.slice(1)]), (v) => setDraft({ rescale: v })),
+        h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, p.model === 'bins'
+          ? 'Scores are the weighted average of the bins\' values over each variant\'s frequency in each bin (VAMP-seq); technical replicates are summed first, biological replicates scored separately, scaled, and then combined.'
+          : 'Scores are the mean μ of each variant\'s log fluorescence, fitted by maximum likelihood to its distribution over the gated bins (Peterman and Levine 2016); its reads are reweighted by the cells sorted into each bin when the design records them.'));
+    }
     return h('div.pane', h('h3', icon('settings'), 'Parameters'),
       h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
-        ...Object.entries(PRESETS).map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios", "WLS" and "OLS": no count filter, every time point required, SEs scaled by the residuals alone, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : 'Variants with no input reads left out; a regression\'s SE never below counting\'s; REML random effects to convergence', onclick: () => replaceDraft({ ...x.parameters, model: p.model, normalization: p.normalization }) }, x.label))),
+        ...Object.entries(PRESETS).filter(([id]) => id !== 'vampseq').map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...x.parameters, model: p.model, normalization: p.normalization }) }, x.label))),
         preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
-      store.ws.design?.model === 'time-series' ? select('Scored by', p.model, Object.entries(MODELS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ model: v })) : null,
-      p.model !== 'ratio' ? select('Standard error of a slope', p.regressionSE, Object.entries(REGRESSION_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ regressionSE: v })) : null,
+      designModel === 'time-series' ? select('Scored by', p.model, options(['ratio', 'wls', 'ols']), (v) => setDraft({ model: v })) : null,
+      p.model === 'wls' || p.model === 'ols' ? select('Standard error of a slope', p.regressionSE, Object.entries(REGRESSION_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ regressionSE: v })) : null,
       select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v })),
       h('div.form-grid',
         number('Pseudocount', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }),
@@ -177,9 +203,11 @@ export function mountScoreMode(app, container) {
     const exclude = h('textarea.input', { rows: 2, placeholder: 'One identifier per line', 'aria-label': 'Variants excluded by name', onchange: () => setDraft({}, { exclude: exclude.value.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean) }) }, f.exclude.join('\n'));
     const all = f.minReplicates === 'all';
     const stage = (n, title, control, rule = false) => h('li.filter-stage', h('span.filter-step', String(n)), h('div', h('div.filter-title', title, rule ? h('span.badge', { style: { marginLeft: '6px' } }, 'always') : null), control));
+    const binned = p.model === 'bins' || p.model === 'bins-mle';
     return h('div.pane', h('h3', icon('filter'), 'Filters, in order'),
       h('ol.filter-bar',
-        p.model === 'ratio' ? stage(1, 'Counted in every sample of a replicate', null, true)
+        binned ? stage(1, 'Counted in every bin of a replicate', null, true)
+          : p.model === 'ratio' ? stage(1, 'Counted in every sample of a replicate', null, true)
           : stage(1, 'Counted at the first time point and enough others', h('div.btn-row',
             f.minTimePoints === 'all' ? h('span', 'Every time point') : number('Minimum time points', f.minTimePoints, (v) => setDraft({}, { minTimePoints: Math.max(3, Math.round(v ?? 3)) }), { min: 3, step: 1 }),
             h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: f.minTimePoints === 'all', onchange: (e) => setDraft({}, { minTimePoints: e.target.checked ? 'all' : 3 }) }), ' all'))),
@@ -189,8 +217,9 @@ export function mountScoreMode(app, container) {
           return h(`button.chip${out ? '' : '.active'}`, { type: 'button', 'aria-pressed': out ? 'false' : 'true', title: out ? `${k}: left out` : `${k}: scored`, onclick: () => setDraft({}, { excludeKinds: out ? f.excludeKinds.filter((x) => x !== k) : [...f.excludeKinds, k] }) }, k);
         }))),
         stage(4, 'Exclusion list', exclude),
-        stage(5, 'Minimum input count, per replicate', number('Minimum input count', f.minInputCount, (v) => setDraft({}, { minInputCount: v ?? 0 }), { min: 0, step: 1 })),
-        stage(6, 'Minimum total count, per replicate', number('Minimum total count', f.minTotalCount, (v) => setDraft({}, { minTotalCount: v ?? 0 }), { min: 0, step: 1 })),
+        stage(5, binned ? 'Minimum reads across the bins, per replicate' : 'Minimum input count, per replicate', number(binned ? 'Minimum reads across the bins' : 'Minimum input count', f.minInputCount, (v) => setDraft({}, { minInputCount: v ?? 0 }), { min: 0, step: 1 })),
+        stage(6, binned ? 'Minimum total count and summed bin frequency, per replicate' : 'Minimum total count, per replicate', h('div.form-grid', number('Minimum total count', f.minTotalCount, (v) => setDraft({}, { minTotalCount: v ?? 0 }), { min: 0, step: 1 }),
+          binned ? number('Minimum summed bin frequency', f.minFrequency || null, (v) => setDraft({}, { minFrequency: v ?? 0 }), { min: 0, step: 0.000001, placeholder: 'none' }) : null)),
         stage(7, 'Minimum usable replicates', h('div.btn-row',
           all ? h('span', 'All the variant\'s replicates') : number('Minimum usable replicates', f.minReplicates, (v) => setDraft({}, { minReplicates: Math.max(1, Math.round(v ?? 1)) }), { min: 1, step: 1 }),
           h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: all, onchange: (e) => setDraft({}, { minReplicates: e.target.checked ? 'all' : 1 }) }), ' all'))),

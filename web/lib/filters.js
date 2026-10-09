@@ -8,7 +8,7 @@ import { KIND, KIND_NAMES } from './variants.js';
 
 // The stages in the order they apply. `rule`: always on (not a parameter).
 export const STAGES = [
-  { id: 'measured', code: 1, label: 'Counted in a replicate', rule: true, reason: 'not counted in enough samples of any replicate' },
+  { id: 'measured', code: 1, label: 'Counted in a replicate', rule: true, reason: 'not measured in any replicate (not counted in enough of its samples, or, from sorted bins, no estimate)' },
   { id: 'identifier', code: 2, label: 'Valid identifier', rule: true, reason: 'the identifier is not valid or does not agree with the target' },
   { id: 'class', code: 3, label: 'Variant class', reason: 'its class is not scored' },
   { id: 'excluded', code: 4, label: 'Exclusion list', reason: 'excluded by the user' },
@@ -22,9 +22,11 @@ export const STAGE_BY_ID = new Map(STAGES.map((s) => [s.id, s]));
 
 // Why a replicate's measurement of a variant is not used (per replicate, per variant).
 // FEW_POINTS: a time series counted at its first time point but at fewer later ones than the
-// regression needs.
-export const REPLICATE_STATE = { USED: 0, NOT_COUNTED: 1, INPUT_COUNT: 2, TOTAL_COUNT: 3, FEW_POINTS: 4 };
-export const REPLICATE_STATE_NAMES = ['used', 'not counted in every sample', 'input count below the minimum', 'total count below the minimum', 'counted at too few time points'];
+// regression needs. LOW_FREQUENCY: sorted bins whose summed bin frequency is below the minimum
+// (VAMP-seq's filter). NOT_ESTIMABLE: no maximum-likelihood estimate from the bins (all reads in an
+// open outer bin, or in fewer than three bins with σ fitted).
+export const REPLICATE_STATE = { USED: 0, NOT_COUNTED: 1, INPUT_COUNT: 2, TOTAL_COUNT: 3, FEW_POINTS: 4, LOW_FREQUENCY: 5, NOT_ESTIMABLE: 6 };
+export const REPLICATE_STATE_NAMES = ['used', 'not counted in every sample', 'input count below the minimum', 'total count below the minimum', 'counted at too few time points', 'summed bin frequency below the minimum', 'no estimate from the bins'];
 
 // Flags on a scored variant (bits): measurements to read with care, shown as low confidence.
 export const FLAG = { OUTPUT_ZERO: 1, INPUT_ZERO: 2, FEWER_REPLICATES: 4, FEWER_POINTS: 8 };
@@ -46,6 +48,7 @@ export const DEFAULT_FILTERS = {
   minInputCount: 1,
   minTotalCount: 0,
   minTimePoints: 3,
+  minFrequency: 0,
   minReplicates: 1,
   maxSE: null,
 };
@@ -59,6 +62,7 @@ export function checkFilters(filters) {
   };
   count('minInputCount', 'The minimum input count');
   count('minTotalCount', 'The minimum total count');
+  count('minFrequency', 'The minimum summed bin frequency');
   if (!(f.minReplicates === 'all' || (Number.isInteger(f.minReplicates) && f.minReplicates >= 1))) problems.push('The minimum number of replicates must be a whole number of 1 or more, or "all".');
   if (!(f.minTimePoints === 'all' || (Number.isInteger(f.minTimePoints) && f.minTimePoints >= 3))) problems.push('The minimum number of time points must be a whole number of 3 or more (a line through two points has no error to estimate), or "all".');
   if (!(f.maxSE === null || (Number.isFinite(f.maxSE) && f.maxSE > 0))) problems.push('The maximum SE must be a positive number, or none.');
@@ -77,7 +81,7 @@ export function describeFilters(filters, replicates = null, regression = false) 
     { stage: 'class', text: f.excludeKinds.length ? `Classes left out: ${f.excludeKinds.join(', ')}` : 'Every variant class', active: f.excludeKinds.length > 0 },
     { stage: 'excluded', text: f.exclude.length ? `${f.exclude.length} variant${f.exclude.length > 1 ? 's' : ''} excluded by name` : 'No exclusion list', active: f.exclude.length > 0 },
     { stage: 'input-count', text: `Input count ≥ ${f.minInputCount} per replicate`, active: f.minInputCount > 0 },
-    { stage: 'total-count', text: `Total count ≥ ${f.minTotalCount} per replicate`, active: f.minTotalCount > 0 },
+    { stage: 'total-count', text: `Total count ≥ ${f.minTotalCount} per replicate${f.minFrequency > 0 ? `; summed bin frequency ≥ ${f.minFrequency.toPrecision(3)}` : ''}`, active: f.minTotalCount > 0 || f.minFrequency > 0 },
     { stage: 'replicates', text: `Usable replicates ≥ ${minReplicates}`, active: f.minReplicates !== 1 },
     { stage: 'se', text: f.maxSE === null ? 'No maximum SE' : `SE ≤ ${f.maxSE}`, active: f.maxSE !== null },
   ];

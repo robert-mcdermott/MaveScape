@@ -249,6 +249,15 @@ try {
   const wlsDigest = tsState.data.runs[0].outputSha256;
   check('score with the model "ratio": a second run, by the first and last samples', ratio.message, ratio.data.name === 'Run 2' && ratio.data.outputSha256 !== wlsDigest);
 
+  // The sort-seq example: the weighted average by default, the maximum-likelihood fit on request.
+  await act('open_example', { id: 'simulated-sort-seq' });
+  const binQc = await act('qc_findings');
+  const binIds = binQc.data.findings.map((f) => f.id);
+  check('open_example "simulated-sort-seq": the bin findings, and the variance beyond counting under review (the cells limit)', binQc.message, binIds.includes('bin-occupancy') && binIds.includes('cells-per-bin') && binQc.data.findings.find((f) => f.id === 'excess-variance').status === 'review');
+  const mle = await act('score', { parameters: { model: 'bins-mle' } });
+  const sortedVariant = await act('inspect_variant', { variant: 'p.Ser2Ter', run: mle.data.name });
+  check('score by maximum likelihood, then inspect_variant: each replicate\'s reads by bin, and the distribution drawn in the inspector', `${mle.message} ${sortedVariant.data.replicates.map((r) => `${r.name}: ${r.readsByBin.join('/')}`).join('; ')}`, mle.data.name === 'Run 2' && sortedVariant.data.replicates.every((r) => r.readsByBin.length === 4) && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Distribution over the bins')`)));
+
   check('every action listed was exercised', `${[...called].length} of ${names.length}: missing ${names.filter((n) => !called.has(n)).join(', ') || 'none'}`, names.every((n) => called.has(n)));
   check('no uncaught errors in the page', errors.join(' | ') || 'none', errors.length === 0);
 } catch (error) {

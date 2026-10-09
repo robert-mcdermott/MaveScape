@@ -5,8 +5,9 @@
 //   names, count columns ─ variants.js (keys, kinds, validity against the target)
 //     ─ technical replicates summed per sample (replicates.js, poolColumns)
 //     ─ per biological replicate: normalizers, and log ratios (score-ratio.js) or the slope of a
-//       regression on time (score-regression.js), and whether each variant's measurement is used
-//       (filters.js: counted, time points, input and total counts)
+//       regression on time (score-regression.js); or for sorted bins, the weighted average of the
+//       bins' values or the maximum-likelihood fit, scaled (score-bins.js); and whether each
+//       variant's measurement is used (filters.js: counted, time points, counts, bin frequency)
 //     ─ per condition: variant-level stages (identifier, class, exclusions, usable replicates),
 //       the replicates combined (replicates.js) with heterogeneity and leave-one-out sensitivity
 //     ─ rescaling (S11) ─ the maximum-SE stage ─ the filter flow, run warnings.
@@ -18,7 +19,9 @@ import { buildVariants, duplicateKeys, KIND, STATUS } from './variants.js';
 import { replicateSamples, sharedSamples, validateDesign } from './design.js';
 import { parseHgvs } from './hgvs.js';
 import { median, normalizers, ratioScores, NORMALIZATIONS } from './score-ratio.js';
-import { MODELS, REGRESSION_SE, regressionScores } from './score-regression.js';
+import { MODELS as TIME_MODELS, REGRESSION_SE, regressionScores } from './score-regression.js';
+import { BIN_SCALES, BIN_SE, BIN_SIGMA, binAverages, binMLEScores, binTotals, scaleAnchors } from './score-bins.js';
+import { createRandom } from './random.js';
 import { combine, COMBINATIONS, heterogeneity, leaveOneOut, sampleCounts } from './replicates.js';
 import {
   checkFilters, DEFAULT_FILTERS, FLAG, filterFlow, kindCodes, REPLICATE_STATE, replicateState, STAGE_BY_ID, variantStage,
@@ -35,11 +38,25 @@ export const RESCALINGS = {
   'synonymous-nonsense': { label: 'synonymous median 0, nonsense median −1', anchors: [['synonymous', 0], ['nonsense', -1]] },
 };
 
+// How a run scores: the ratio or a regression on time (two populations, time series), or sorted
+// bins' weighted average or maximum-likelihood fit.
+export const MODELS = {
+  ...TIME_MODELS,
+  bins: 'weighted average of the bins\' values',
+  'bins-mle': 'maximum likelihood (censored log-normal, from the gates)',
+};
+const BIN_MODELS = new Set(['bins', 'bins-mle']);
+
 export const DEFAULT_PARAMETERS = {
   model: 'ratio',
   normalization: 'wt',
   pseudocount: 0.5,
   regressionSE: 'counting-floor',
+  binScale: 'nonsense-wt',
+  binSE: 'analytic',
+  binSigma: 'wild-type',
+  bootstrapSamples: 200,
+  seed: 20261009,
   combination: 'reml',
   rescale: 'none',
   filters: DEFAULT_FILTERS,
@@ -49,19 +66,34 @@ export const DEFAULT_PARAMETERS = {
 // "OLS" with its random-effects estimator: no count filter, every time point required, the SE of a
 // regression scaled by its residuals alone, variants combined only when scored in every
 // replicate, the wild type 0 ± 0. A preset keeps the model and normalization chosen.
+// "VAMP-seq" reproduces Matreyek et al. 2018's scoring of sorted bins: the weighted average scaled
+// to nonsense 0 and wild type 1 per replicate, variants below a summed bin frequency of 10^-4.75 left
+// out, variants seen in two or more replicates, combined by their mean with SE = SD/√k.
 export const PRESETS = {
   mavescape: { label: 'MaveScape defaults', parameters: DEFAULT_PARAMETERS },
   enrich2: {
     label: 'Enrich2-compatible',
     parameters: { ...DEFAULT_PARAMETERS, regressionSE: 'residual', combination: 'enrich2', filters: { ...DEFAULT_FILTERS, minInputCount: 0, minTimePoints: 'all', minReplicates: 'all' } },
   },
+  vampseq: {
+    label: 'VAMP-seq',
+    bins: true,
+    parameters: { ...DEFAULT_PARAMETERS, model: 'bins', binScale: 'nonsense-wt', binSE: 'analytic', combination: 'mean', filters: { ...DEFAULT_FILTERS, minInputCount: 0, minFrequency: 1.7782794100389228e-5 /* 10^-4.75 */, minReplicates: 2 } },
+  },
 };
 
 // The parameters to start from for a design and its table: the wild type's normalization when the
 // table counts it (else complete cases), and for a time series of three or more time points in
 // every replicate, weighted regression.
+// For sorted bins: the weighted average, scaled to nonsense 0 and wild type 1 when the table has
+// nonsense variants (else to the lowest 5%).
 export function defaultParameters(design, source = null, preset = 'mavescape') {
   const hasWildType = source ? (source.summary?.byKind?.['wild type'] ?? 0) > 0 : true;
+  if (design?.model === 'bins') {
+    const hasNonsense = source ? (source.summary?.byKind?.nonsense ?? 0) > 0 : true;
+    const base = PRESETS[preset].bins ? PRESETS[preset].parameters : { ...PRESETS[preset].parameters, model: 'bins' };
+    return withDefaults({ ...base, binScale: base.binScale === 'nonsense-wt' && !hasNonsense ? 'low5-wt' : base.binScale });
+  }
   const model = design?.model === 'time-series' && design.replicates?.length && design.replicates.every((r) => orderedSlots(r).length >= 3) ? 'wls' : 'ratio';
   return withDefaults({ ...PRESETS[preset].parameters, model, normalization: hasWildType ? 'wt' : 'complete' });
 }
@@ -76,14 +108,27 @@ export function checkParameters(parameters, design) {
   const errors = [];
   if (!MODELS[p.model]) errors.push(`Unknown scoring model "${p.model}".`);
   if (!REGRESSION_SE[p.regressionSE]) errors.push(`Unknown standard error "${p.regressionSE}" for a regression.`);
+  if (!BIN_SCALES[p.binScale]) errors.push(`Unknown scale "${p.binScale}" for sorted bins.`);
+  if (!BIN_SE[p.binSE]) errors.push(`Unknown standard error "${p.binSE}" for sorted bins.`);
+  if (!BIN_SIGMA[p.binSigma]) errors.push(`Unknown spread "${p.binSigma}" for the maximum-likelihood fit.`);
+  if (!(Number.isInteger(p.bootstrapSamples) && p.bootstrapSamples >= 20 && p.bootstrapSamples <= 100000)) errors.push('The bootstrap needs a whole number of samples, from 20 to 100,000.');
+  if (!Number.isInteger(p.seed)) errors.push('The seed is a whole number.');
   if (!NORMALIZATIONS[p.normalization]) errors.push(`Unknown normalization "${p.normalization}".`);
   if (!(Number.isFinite(p.pseudocount) && p.pseudocount >= 0)) errors.push('The pseudocount must be a number of 0 or more.');
   if (!COMBINATIONS[p.combination]) errors.push(`Unknown combination "${p.combination}".`);
   if (!RESCALINGS[p.rescale]) errors.push(`Unknown rescaling "${p.rescale}".`);
   errors.push(...checkFilters(p.filters));
   if (design) {
-    if (design.model === 'bins') errors.push('FACS-bin experiments are scored from MaveScape 0.2.0 (weighted bin averages and the maximum-likelihood fit). This build scores two-population experiments and time series.');
-    if (p.model !== 'ratio') {
+    if (design.model === 'bins' && !BIN_MODELS.has(p.model)) errors.push('Sorted bins are scored by the weighted average of their values or by the maximum-likelihood fit, not as a selection: choose one under "Scored by".');
+    if (design.model !== 'bins' && BIN_MODELS.has(p.model)) errors.push(`${MODELS[p.model][0].toUpperCase()}${MODELS[p.model].slice(1)} scores sorted bins; this design is not one.`);
+    if (design.model === 'bins' && p.model === 'bins-mle') {
+      const ungated = (design.replicates ?? []).filter((r) => {
+        const bins = [...(r.bins ?? [])].sort((a, b) => a.order - b.order);
+        return bins.some((b, k) => (k > 0 && !(b.lower > 0)) || (k < bins.length - 1 && !(b.upper > 0)));
+      });
+      if (ungated.length) errors.push(`The maximum-likelihood fit needs each bin's gates, and ${ungated.map((r) => r.name ?? r.id).slice(0, 4).join(', ')} ${ungated.length > 1 ? 'lack' : 'lacks'} some: give them in the Experiment view, or score by the weighted average.`);
+    }
+    if (p.model === 'wls' || p.model === 'ols') {
       if (design.model !== 'time-series') errors.push(`A regression on time needs a time series; this design is ${design.model === 'two-population' ? 'a two-population experiment' : `of kind "${design.model}"`}: score it by the log ratio.`);
       else {
         const short = (design.replicates ?? []).filter((r) => orderedSlots(r).length < 3);
@@ -126,6 +171,109 @@ export function controlRows(design, variants) {
 function orderedSlots(replicate) {
   const parts = replicateSamples(replicate).filter((p) => p.role !== 'bin');
   return parts.map((p) => ({ ...p, time: p.role === 'input' ? 0 : p.role === 'output' ? 1 : p.time })).sort((a, b) => a.time - b.time);
+}
+
+// The bins of a replicate in order, with their values and gates.
+function binSlots(replicate) {
+  return [...(replicate.bins ?? [])].sort((a, b) => a.order - b.order);
+}
+
+// One replicate of sorted bins (score-bins.js): its variants' states, scores and SEs, scaled.
+function scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings }) {
+  const f = p.filters;
+  const slots = binSlots(replicate);
+  const samples = slots.map((x) => pooled.get(x.sample));
+  const label = `replicate ${replicate.name ?? replicate.id}`;
+  const B = samples.length;
+  const totals = binTotals(samples);
+  const counted = new Uint8Array(n);
+  const state = new Uint8Array(n);
+  const frequency = new Float64Array(n).fill(Number.NaN);
+  for (let i = 0; i < n; i += 1) {
+    let points = 0;
+    let sum = 0;
+    let freq = 0;
+    for (let b = 0; b < B; b += 1) {
+      const c = samples[b][i];
+      if (Number.isNaN(c)) continue;
+      points += 1;
+      sum += c;
+      freq += c / totals[b];
+    }
+    counted[i] = points === B ? 1 : 0;
+    if (counted[i]) frequency[i] = freq;
+    // The reads across the bins stand for the input's: a variant not seen in the sort is not measured.
+    state[i] = replicateState(counted[i], sum, sum, f);
+    if (state[i] === REPLICATE_STATE.USED && f.minFrequency > 0 && freq < f.minFrequency) state[i] = REPLICATE_STATE.LOW_FREQUENCY;
+  }
+  let scored;
+  let sigma = null;
+  if (p.model === 'bins') {
+    scored = binAverages(samples, slots.map((x) => x.value), counted, { pseudocount: p.pseudocount, totals, se: p.binSE, samples: p.bootstrapSamples, random: p.binSE === 'bootstrap' ? createRandom(p.seed + index) : null });
+  } else {
+    const lower = slots.map((x) => x.lower ?? null);
+    const upper = slots.map((x) => x.upper ?? null);
+    const cellsOf = slots.map((x) => design.samples.find((s) => s.id === x.sample)?.cells);
+    const cells = cellsOf.every((c) => c > 0) ? cellsOf : null;
+    if (p.binSigma === 'wild-type') {
+      if (controls.wt < 0 || !counted[controls.wt]) throw new Refused([`The maximum-likelihood fit with the wild type's spread needs the wild type counted in every bin of ${label}: fit each variant's own spread instead.`]);
+      const only = new Uint8Array(n);
+      only[controls.wt] = 1;
+      const wt = binMLEScores(samples, lower, upper, cells, only, { sigma: null, totals });
+      sigma = wt.sigma[controls.wt];
+      if (!(sigma > 0)) throw new Refused([`The wild type's spread could not be fitted in ${label} (${wt.reason[controls.wt]}): fit each variant's own spread instead.`]);
+    }
+    scored = binMLEScores(samples, lower, upper, cells, counted, { sigma, totals });
+    for (let i = 0; i < n; i += 1) if (counted[i] && scored.reason[i] && state[i] === REPLICATE_STATE.USED) state[i] = REPLICATE_STATE.NOT_ESTIMABLE;
+  }
+  // No reads in any bin (with no minimum count): nothing to estimate.
+  for (let i = 0; i < n; i += 1) if (state[i] === REPLICATE_STATE.USED && !Number.isFinite(scored.score[i])) state[i] = REPLICATE_STATE.NOT_ESTIMABLE;
+  // The replicate's scale (VAMP-seq: nonsense 0, wild type 1), from the variants used.
+  let anchors = null;
+  if (p.binScale !== 'none') {
+    const used = Uint8Array.from(state, (x) => (x === REPLICATE_STATE.USED ? 1 : 0));
+    try {
+      anchors = scaleAnchors(p.binScale, scored.score, used, { wt: controls.wt, nonsense: controls.nonsense, label });
+    } catch (error) {
+      throw new Refused([error.message]);
+    }
+    const span = anchors.one - anchors.zero;
+    for (let i = 0; i < n; i += 1) {
+      scored.score[i] = (scored.score[i] - anchors.zero) / span;
+      scored.se[i] /= Math.abs(span);
+    }
+  }
+  for (const [b, s] of samples.entries()) {
+    let reads = 0;
+    let variantsCounted = 0;
+    for (let i = 0; i < n; i += 1) {
+      if (Number.isNaN(s[i])) continue;
+      reads += s[i];
+      variantsCounted += 1;
+    }
+    if (variantsCounted && reads / variantsCounted < 10) warnings.push({ code: 'low-depth', message: `Bin ${slots[b].order} (sample ${slots[b].sample}) of ${label} has ${reads} reads for ${variantsCounted} variants (${(reads / variantsCounted).toFixed(1)} per variant): its counts are mostly sampling noise.` });
+  }
+  return {
+    id: replicate.id,
+    name: replicate.name ?? replicate.id,
+    biological: replicate.biological,
+    condition: replicate.condition ?? null,
+    tile: replicate.tile ?? null,
+    samples: slots.map((x) => x.sample),
+    times: [],
+    normalizers: totals,
+    synonymousMedian: undefined,
+    first: samples[0],
+    last: samples[B - 1],
+    score: scored.score,
+    se: scored.se,
+    state,
+    points: null,
+    fit: null,
+    // Sorted bins: each bin's value and gates, the variant's summed bin frequency, the fitted spread
+    // (MLE; the wild type's when shared), and the scale's anchors.
+    bins: { values: slots.map((x) => x.value), lower: slots.map((x) => x.lower ?? null), upper: slots.map((x) => x.upper ?? null), frequency, sigma: p.model === 'bins-mle' ? (sigma ?? null) : null, sigmas: scored.sigma ?? null, scale: anchors },
+  };
 }
 
 class Refused extends Error {
@@ -184,9 +332,16 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
   // Per biological replicate: counted rows, normalizers, log ratios, and each measurement's state.
   const replicates = [];
   const repById = new Map();
-  const regression = p.model !== 'ratio';
+  const regression = p.model === 'wls' || p.model === 'ols';
+  const sorted = BIN_MODELS.has(p.model);
   design.replicates.forEach((replicate, index) => {
     onProgress((index / design.replicates.length) * 0.6, `Scoring ${replicate.name ?? replicate.id}`);
+    if (sorted) {
+      const entry = scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings });
+      replicates.push(entry);
+      repById.set(replicate.id, entry);
+      return;
+    }
     const slots = orderedSlots(replicate);
     const samples = slots.map((s) => pooled.get(s.sample));
     const label = `replicate ${replicate.name ?? replicate.id}`;
@@ -315,8 +470,8 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       for (const rep of reps) {
         if (coversRow(rep, i)) exp += 1;
         const s = rep.state[i];
-        if (s !== REPLICATE_STATE.NOT_COUNTED && s !== REPLICATE_STATE.FEW_POINTS) anyCounted = true;
-        if (s === REPLICATE_STATE.USED || s === REPLICATE_STATE.TOTAL_COUNT) anyPastInput = true;
+        if (s !== REPLICATE_STATE.NOT_COUNTED && s !== REPLICATE_STATE.FEW_POINTS && s !== REPLICATE_STATE.NOT_ESTIMABLE) anyCounted = true;
+        if (s === REPLICATE_STATE.USED || s === REPLICATE_STATE.TOTAL_COUNT || s === REPLICATE_STATE.LOW_FREQUENCY) anyPastInput = true;
         if (s === REPLICATE_STATE.USED) these.push(rep);
       }
       expected[i] = exp;
@@ -361,9 +516,11 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
       loo[i] = l.shift;
       looReplicate[i] = l.which >= 0 ? reps.indexOf(these[l.which]) : -1;
       let bits = 0;
-      for (const rep of these) {
-        if (rep.last[i] === 0) bits |= FLAG.OUTPUT_ZERO;
-        if (rep.first[i] === 0) bits |= FLAG.INPUT_ZERO;
+      if (!sorted) {
+        for (const rep of these) {
+          if (rep.last[i] === 0) bits |= FLAG.OUTPUT_ZERO;
+          if (rep.first[i] === 0) bits |= FLAG.INPUT_ZERO;
+        }
       }
       if (these.length < expected[i]) bits |= FLAG.FEWER_REPLICATES;
       if (regression && these.some((rep) => rep.points[i] < rep.times.length)) bits |= FLAG.FEWER_POINTS;

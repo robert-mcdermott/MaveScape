@@ -19,6 +19,7 @@ import { log, log10, pow, square } from './dmath.js';
 import { buildVariants, KIND, STATUS } from './variants.js';
 import { replicateSamples, targetLength } from './design.js';
 import { sampleCounts } from './replicates.js';
+import { binAverages, binTotals } from './score-bins.js';
 import { auc, mad, mean, median, MEDIAN_CHI2_1, nonNegativeLine, pearson, quantileSorted, sorted, spearman, variance } from './stats.js';
 
 export const QC_VERSION = '1';
@@ -154,6 +155,50 @@ function rawRatios(replicate, pooled, variants, agreementInput) {
     usable[i] = first[i] >= agreementInput && variants.status[i] !== STATUS.INVALID ? 1 : 0;
   }
   return { id: replicate.id, name: replicate.name ?? replicate.id, condition: replicate.condition ?? null, first, y, v, usable, firstSample: slots[0]?.sample, dropout: dropout(slots, samples, variants, agreementInput) };
+}
+
+// Sorted bins: a replicate's weighted average of the bins' values (score-bins.js), and its variance
+// from counting, standing in for the log ratio in the comparisons of replicates.
+function binRatios(replicate, pooled, variants, agreementInput) {
+  const slots = [...(replicate.bins ?? [])].sort((a, b) => a.order - b.order);
+  const samples = slots.map((s) => pooled.get(s.sample));
+  const n = variants.n;
+  const y = new Float64Array(n).fill(Number.NaN);
+  const v = new Float64Array(n).fill(Number.NaN);
+  const usable = new Uint8Array(n);
+  const total = new Float64Array(n).fill(Number.NaN);
+  if (samples.some((x) => !x)) return { id: replicate.id, name: replicate.name ?? replicate.id, condition: replicate.condition ?? null, first: total, y, v, usable, dropout: {} };
+  const counted = Uint8Array.from({ length: n }, (_, i) => (samples.every((x) => !Number.isNaN(x[i])) ? 1 : 0));
+  const avg = binAverages(samples, slots.map((x) => x.value), counted, { pseudocount: P });
+  for (let i = 0; i < n; i += 1) {
+    if (!counted[i] || !Number.isFinite(avg.score[i])) continue;
+    y[i] = avg.score[i];
+    v[i] = avg.se[i] * avg.se[i];
+    total[i] = avg.reads[i];
+    usable[i] = avg.reads[i] >= agreementInput && variants.status[i] !== STATUS.INVALID ? 1 : 0;
+  }
+  return { id: replicate.id, name: replicate.name ?? replicate.id, condition: replicate.condition ?? null, first: total, y, v, usable, dropout: {} };
+}
+
+// Each bin's share of a replicate's cells (when the design records the cells sorted into each bin)
+// or else of its reads, and the cells per variant and reads per cell.
+function binMetrics(design, pooled) {
+  return design.replicates.map((r) => {
+    const slots = [...(r.bins ?? [])].sort((a, b) => a.order - b.order);
+    const samples = slots.map((s) => pooled.get(s.sample));
+    if (samples.some((x) => !x)) return null;
+    const totals = binTotals(samples);
+    const all = totals.reduce((a, b) => a + b, 0);
+    let variants = 0;
+    for (let i = 0; i < samples[0].length; i += 1) if (samples.some((x) => x[i] > 0)) variants += 1;
+    const cells = slots.map((s) => design.samples.find((x) => x.id === s.sample)?.cells ?? null);
+    const known = cells.every((c) => c >= 0 && c !== null) && cells.some((c) => c > 0);
+    const allCells = known ? cells.reduce((x, y) => x + y, 0) : 0;
+    return {
+      id: r.id, name: r.name ?? r.id, tile: r.tile ?? null, variants, shareOf: known ? 'cells' : 'reads',
+      bins: slots.map((s, b) => ({ order: s.order, value: s.value, reads: totals[b], share: known ? cells[b] / allCells : all > 0 ? totals[b] / all : Number.NaN, cells: known ? cells[b] : null, cellsPerVariant: known && variants ? cells[b] / variants : null, readsPerCell: known && cells[b] > 0 ? totals[b] / cells[b] : null })),
+    };
+  }).filter(Boolean);
 }
 
 // Missing after selection: of the variants counted well before selection, how many have no count
@@ -400,13 +445,17 @@ export function computeQC({ names, columns, design, mode = 'lenient', results = 
     for (let i = 0; i < n; i += 1) if (c[i] > 0) observed[i] = 1;
   }
   // Replicates, by condition.
-  const replicates = design.model === 'bins' ? [] : design.replicates.map((r) => rawRatios(r, pooled, variants, m.agreementInput));
+  const replicates = design.replicates.map((r) => ({ ...(design.model === 'bins' ? binRatios(r, pooled, variants, m.agreementInput) : rawRatios(r, pooled, variants, m.agreementInput)), tile: r.tile ?? null }));
   const conditionList = design.conditions?.length ? design.conditions : [{ id: null, name: 'All replicates' }];
   const conditions = conditionList.map((c) => {
     const reps = replicates.filter((r) => (c.id === null ? true : r.condition === c.id));
+    // Replicates are compared within a tile: those of different tiles measure different variants
+    // (but where tiles overlap) from different libraries.
+    const groups = [...new Set(reps.map((r) => r.tile))].map((tile) => reps.filter((r) => r.tile === tile));
     const pairs = [];
-    for (let j = 0; j < reps.length; j += 1) for (let k = j + 1; k < reps.length; k += 1) pairs.push(pairMetrics(reps[j], reps[k]));
-    return { id: c.id ?? 'all', name: c.name, replicates: reps.map((r) => r.id), dropout: reps.map((r) => ({ replicate: r.id, ...r.dropout })).filter((d) => d.sample), pairs, leaveOneOut: reps.length >= 3 ? leaveOneOut(reps) : null, synonymous: reps.map((r) => synonymousCheck(r, variants)) };
+    for (const g of groups) for (let j = 0; j < g.length; j += 1) for (let k = j + 1; k < g.length; k += 1) pairs.push(pairMetrics(g[j], g[k]));
+    const loo = groups.filter((g) => g.length >= 3).flatMap((g) => leaveOneOut(g) ?? []);
+    return { id: c.id ?? 'all', name: c.name, replicates: reps.map((r) => r.id), dropout: reps.map((r) => ({ replicate: r.id, ...r.dropout })).filter((d) => d.sample), pairs, leaveOneOut: loo.length ? loo : null, synonymous: reps.map((r) => synonymousCheck(r, variants)) };
   });
   // Missingness: rows by their pattern of missing samples.
   const patterns = new Map();
@@ -425,6 +474,7 @@ export function computeQC({ names, columns, design, mode = 'lenient', results = 
     conditions,
     missingness: { samples: design.samples.map((s) => s.id), patterns: [...patterns].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pattern, count]) => ({ pattern, count })) },
     scores: results ? scoreMetrics(results) : null,
-    timeSeries: results && results.parameters?.model && results.parameters.model !== 'ratio' ? timeSeriesMetrics(results) : null,
+    timeSeries: results && (results.parameters?.model === 'wls' || results.parameters?.model === 'ols') ? timeSeriesMetrics(results) : null,
+    bins: design.model === 'bins' ? binMetrics(design, pooled) : null,
   };
 }

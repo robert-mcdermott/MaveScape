@@ -150,6 +150,54 @@ export function pow(x, y) {
 // x², exactly as x × x (the ** operator is Math.pow, which is implementation-approximated).
 export const square = (x) => x * x;
 
+const INV_SQRT_PI = 0.5641895835477563; // 1 / √π
+const SQRT1_2 = 0.7071067811865476; // 1 / √2
+
+// erfc(x), the complementary error function: by its Maclaurin series for |x| < 1 (erf, about 20
+// terms), and beyond by its continued fraction (Lentz's method), which avoids the cancellation of
+// 1 − erf in the tail. Relative error about 1e-15; only arithmetic and exp, so the same everywhere.
+export function erfc(x) {
+  if (Number.isNaN(x)) return x;
+  if (x < 0) return 2 - erfc(-x);
+  if (x < 1) {
+    // erf(x) = 2/√π Σ (−1)ⁿ x^(2n+1) / (n! (2n + 1))
+    const x2 = x * x;
+    let term = x;
+    let sum = x;
+    for (let n = 1; n < 200; n += 1) {
+      term *= -x2 / n;
+      const add = term / (2 * n + 1);
+      sum += add;
+      if (Math.abs(add) < 1e-17 * Math.abs(sum)) break;
+    }
+    return 1 - 2 * INV_SQRT_PI * sum;
+  }
+  if (x > 27) return 0;
+  // erfc(x) = exp(−x²)/√π · 1/(x + (1/2)/(x + 1/(x + (3/2)/(x + 2/(x + …)))))
+  const tiny = 1e-300;
+  let f = x;
+  let c = x;
+  let d = 0;
+  for (let k = 1; k < 5000; k += 1) {
+    const a = k / 2;
+    d = x + a * d;
+    d = Math.abs(d) < tiny ? tiny : d;
+    c = x + a / c;
+    c = Math.abs(c) < tiny ? tiny : c;
+    d = 1 / d;
+    const delta = c * d;
+    f *= delta;
+    if (Math.abs(delta - 1) < 1e-16) break;
+  }
+  return (exp(-x * x) * INV_SQRT_PI) / f;
+}
+
+// The standard normal distribution function Φ(z), and its upper tail 1 − Φ(z) without cancellation.
+export const normalCdf = (z) => 0.5 * erfc(-z * SQRT1_2);
+export const normalUpper = (z) => 0.5 * erfc(z * SQRT1_2);
+// The standard normal density φ(z).
+export const normalPdf = (z) => 0.3989422804014327 * exp(-0.5 * z * z);
+
 // A checksum of log, exp and pow over 30,000 fixed arguments (FNV-1a of their bits): FINGERPRINT in
 // every engine, which the tests check in Node and validation/remote-session.mjs in the browser.
 export const FINGERPRINT = '7bf3fe17';

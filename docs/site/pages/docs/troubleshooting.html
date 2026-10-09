@@ -20,7 +20,7 @@ lede: Common problems and what to do about them. If yours is not here, the drawe
       </ul>
 
       <h2 id="scoring">Scoring is refused</h2>
-      <p>The Score view lists every reason. Most often the design has an error (fix it in Experiment), the wild type is not in the table for wild-type normalization (choose another normalization), or the experiment is a sorted-bin design, which is scored from 0.2.</p>
+      <p>The Score view lists every reason. Most often the design has an error (fix it in Experiment), the wild type is not in the table for wild-type normalization (choose another normalization), the wild type or nonsense variants a scale needs are not scored (choose another scale), or the maximum-likelihood fit lacks the bins' gates (give them in Experiment, or score by the weighted average).</p>
 
       <h2 id="differs">A run says its scores differ</h2>
       <p>When a workspace is reopened, each run is recomputed from its recorded inputs and compared with its recorded output hash. Runs made by MaveScape 0.1.0 used the browser's own logarithms, whose last bit varies between browsers and their versions; recomputed by a later MaveScape, their scores differ only in their last digits, and the run says so. Score again to make a run that reproduces everywhere. A run whose table is not in the workspace cannot be recomputed: open the table again.</p>

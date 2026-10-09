@@ -21,6 +21,10 @@ export const QC_FIXTURES = [
   // Time series (wave 2, slice 2), scored by weighted regression.
   ['a clean time series (5 times)', { times: [0, 2, 4, 6, 8] }, {}],
   ['a time series with a bottleneck at every passage (8 cells per variant)', { times: [0, 2, 4, 6, 8], passageCells: 8 }, { agreement: ['review', 'fail'], 'excess-variance': 'fail', 'time-fit': 'fail' }],
+  // Sort-seq (wave 2, slice 3), scored by the weighted average of the bins' values.
+  ['a clean sort-seq experiment (2,000 cells per variant)', { sort: { cellsPerVariant: 2000 }, readsPerVariant: 60, replicateNoise: 0.01 }, {}],
+  ['a sort with too few cells (20 per variant)', { sort: { cellsPerVariant: 20 }, readsPerVariant: 60 }, { 'excess-variance': 'fail', 'cells-per-bin': 'fail' }],
+  ['a sort with a nearly empty bin (its gate far below the library)', { sort: { gates: [-2.5, -0.45, -0.1], cellsPerVariant: 2000 }, readsPerVariant: 60, replicateNoise: 0.01 }, { 'bin-occupancy': 'fail', 'cells-per-bin': 'fail' }],
 ];
 
 // The simulation as the app reads it, scored with MaveScape's defaults for its design when it can

@@ -2,7 +2,7 @@
 // permutation tests) takes a seed and records it, so a result can be reproduced exactly.
 // Adapted from CytoWeave 0.8.0 web/lib/random.js.
 
-import { log } from './dmath.js';
+import { exp, log } from './dmath.js';
 
 // xoshiro128** (Blackman & Vigna), seeded through splitmix32. Returns floats in [0, 1).
 export function createRandom(seed = 1) {
@@ -52,6 +52,23 @@ function rotl(x, k) {
 }
 
 // Fisher–Yates shuffle in place.
+// A Poisson count with mean lambda: Knuth's product of uniforms below 30, a rounded normal above
+// (counts in MaveScape's simulations and bootstraps are large enough there).
+export function poisson(random, lambda) {
+  if (!(lambda > 0)) return 0;
+  if (lambda < 30) {
+    const limit = exp(-lambda);
+    let k = 0;
+    let p = random();
+    while (p > limit) {
+      k += 1;
+      p *= random();
+    }
+    return k;
+  }
+  return Math.max(0, Math.round(lambda + Math.sqrt(lambda) * random.gaussian()));
+}
+
 export function shuffle(array, random) {
   for (let i = array.length - 1; i > 0; i -= 1) {
     const j = random.int(i + 1);

@@ -224,6 +224,14 @@ export function validateDesign(design, table = null) {
       const orders = bins.map((b) => b.order);
       if (new Set(orders).size !== orders.length) error(`${path}.bins`, `Replicate "${replicate.id}" has two bins with the same order.`);
       if (bins.some((b) => !Number.isFinite(b.value))) error(`${path}.bins`, 'Every bin needs a numeric value (its weight, rank or fluorescence).');
+      // Gates, for the maximum-likelihood estimate: positive, each bin's below its upper, and the
+      // bins in order without overlap (the outer bins open).
+      const gated = [...bins].sort((x, y) => x.order - y.order);
+      if (gated.some((b) => b.lower !== undefined || b.upper !== undefined)) {
+        if (gated.some((b) => (b.lower !== undefined && !(b.lower > 0)) || (b.upper !== undefined && !(b.upper > 0)))) error(`${path}.bins`, 'Gates are positive fluorescence values.');
+        else if (gated.some((b) => b.lower !== undefined && b.upper !== undefined && !(b.lower < b.upper))) error(`${path}.bins`, `A bin of replicate "${replicate.id}" has its lower gate at or above its upper.`);
+        else if (gated.some((b, k) => k > 0 && (gated[k - 1].upper === undefined || b.lower === undefined || b.lower < gated[k - 1].upper))) warn(`${path}.bins`, `The gates of replicate "${replicate.id}" leave gaps or overlaps, or an inner bin open: the maximum-likelihood estimate needs each bin's lower gate at or above the bin below's upper.`);
+      }
       const byOrder = [...bins].sort((a, b) => a.order - b.order);
       for (let j = 1; j < byOrder.length; j += 1) {
         if (byOrder[j].value <= byOrder[j - 1].value) {

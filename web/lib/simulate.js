@@ -16,9 +16,15 @@
 // course (so the effect is the slope on time scaled to 0–1, what regression scores), sequenced at
 // every time; `passageCells` per variant sampled at each later time is a bottleneck at every
 // passage, which scatters the time courses about their lines.
+//
+// With `sort` (wave 2, slice 3), a sort-seq experiment instead: each variant's cells have log
+// fluorescence N(μ_wt + scale × effect, σ²) (plus the replicate's noise), `cellsPerVariant` cells
+// per variant on average are sorted by gates into ordered bins (the outer bins open), and each
+// bin is sequenced to `readsPerVariant` reads per variant on average. The design records each
+// bin's gates and the cells sorted into it; the truth is the shift in μ.
 
-import { exp } from './dmath.js';
-import { createRandom } from './random.js';
+import { exp, log, normalCdf } from './dmath.js';
+import { createRandom, poisson } from './random.js';
 
 const THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val' };
 const AMINO_ACIDS = Object.keys(THREE);
@@ -37,22 +43,8 @@ export const DEFAULT_SIMULATION = {
   times: null, // [0, …]: a time series sampled at these times
   passageCells: Infinity, // cells per variant carried over at each later time point of a time series
   timeUnit: 'generation',
+  sort: null, // { gates: [log offsets from the wild type's μ], sigma, effectScale, cellsPerVariant, wtFluorescence, values }
 };
-
-function poisson(random, lambda) {
-  if (!(lambda > 0)) return 0;
-  if (lambda < 30) {
-    const limit = exp(-lambda);
-    let k = 0;
-    let p = random();
-    while (p > limit) {
-      k += 1;
-      p *= random();
-    }
-    return k;
-  }
-  return Math.max(0, Math.round(lambda + Math.sqrt(lambda) * random.gaussian()));
-}
 
 // The variants of a protein: the wild type, then by position a synonymous variant, a nonsense
 // variant and every missense substitution, with true effects (natural-log fitness, WT = 0).
@@ -86,6 +78,7 @@ export function simulateExperiment(options = {}) {
   const noise = (r) => (Array.isArray(o.replicateNoise) ? o.replicateNoise[r] : o.replicateNoise);
   const outDepth = o.outputReadsPerVariant ?? o.readsPerVariant;
   if (o.times) return simulateTimeSeries(o, random, variants, f, noise);
+  if (o.sort) return simulateSort(o, random, variants, f, noise);
   const columns = [];
   for (let r = 0; r < o.replicates; r += 1) {
     const input = f.map((x) => poisson(random, o.readsPerVariant * V * x));
@@ -119,6 +112,57 @@ export function simulateExperiment(options = {}) {
     controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
   };
   return { csv: `${lines.join('\n')}\n`, design, variants, options: o };
+}
+
+const SORT_DEFAULTS = { gates: [-0.9, -0.45, -0.1], sigma: 0.4, effectScale: 0.5, cellsPerVariant: 100, wtFluorescence: 1000, values: null };
+
+function simulateSort(o, random, variants, f, noise) {
+  const sort = { ...SORT_DEFAULTS, ...o.sort };
+  const V = variants.length;
+  const B = sort.gates.length + 1;
+  const muWt = log(sort.wtFluorescence);
+  // Gates as an instrument records them: rounded to whole fluorescence units.
+  const gate = (k) => Math.round(exp(muWt + sort.gates[k]));
+  const bounds = Array.from({ length: B }, (_, b) => ({ lower: b === 0 ? null : gate(b - 1), upper: b === B - 1 ? null : gate(b) }));
+  const values = sort.values ?? Array.from({ length: B }, (_, b) => (b + 1) / B);
+  const truth = variants.map((v) => sort.effectScale * v.effect);
+  const columns = [];
+  const cellsSorted = [];
+  for (let r = 0; r < o.replicates; r += 1) {
+    // Cells of each variant in each bin.
+    const cells = variants.map((v, i) => {
+      const mu = muWt + truth[i] + noise(r) * random.gaussian();
+      const k = poisson(random, sort.cellsPerVariant * V * f[i]);
+      return bounds.map((g) => {
+        const lo = g.lower === null ? 0 : normalCdf((log(g.lower) - mu) / sort.sigma);
+        const hi = g.upper === null ? 1 : normalCdf((log(g.upper) - mu) / sort.sigma);
+        return poisson(random, k * (hi - lo));
+      });
+    });
+    for (let b = 0; b < B; b += 1) {
+      const inBin = cells.reduce((a, c) => a + c[b], 0);
+      cellsSorted.push(inBin);
+      const name = `rep${r + 1}_bin${b + 1}`;
+      columns.push({ name, cells: inBin, values: cells.map((c) => poisson(random, (o.readsPerVariant * V * c[b]) / Math.max(1, inBin))) });
+    }
+  }
+  const lines = [['hgvs_pro', ...columns.map((c) => c.name)].join(',')];
+  variants.forEach((v, i) => lines.push([v.name, ...columns.map((c) => String(c.values[i]))].join(',')));
+  const design = {
+    format: 'mavescape-design',
+    version: 1,
+    name: 'Simulated sort-seq experiment',
+    description: `Simulated by MaveScape (web/lib/simulate.js, seed ${o.seed}): not real data. ${o.replicates} replicates, cells sorted into ${B} bins by gates on a reporter (log fluorescence SD ${sort.sigma}), ${sort.cellsPerVariant} cells and ${o.readsPerVariant} reads per variant on average in each bin.`,
+    model: 'bins',
+    variants: { column: 'hgvs_pro', level: 'protein' },
+    targets: [{ id: 'simulated', name: 'Simulated protein', sequenceType: 'protein', sequence: o.protein }],
+    library: { level: 'variant' },
+    bins: { weight: 'rank' },
+    samples: columns.map((c) => ({ id: c.name, name: c.name, columns: [c.name], cells: c.cells })),
+    replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, bins: bounds.map((g, b) => ({ sample: `rep${r + 1}_bin${b + 1}`, order: b + 1, value: values[b], ...(g.lower === null ? {} : { lower: g.lower }), ...(g.upper === null ? {} : { upper: g.upper }) })) })),
+    controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
+  };
+  return { csv: `${lines.join('\n')}\n`, design, variants: variants.map((v, i) => ({ ...v, shift: truth[i] })), options: o, bounds, values };
 }
 
 function simulateTimeSeries(o, random, variants, f, noise) {

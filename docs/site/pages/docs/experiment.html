@@ -18,11 +18,15 @@ lede: The design says what each column of the count table is: which sample, its 
           <tbody>
             <tr><td><strong>Two populations</strong></td><td>An input and an output</td><td>Yes</td></tr>
             <tr><td><strong>Time series</strong></td><td>Time points, with their times</td><td>By weighted regression on every time point (three or more), or by the log ratio of the first and last</td></tr>
-            <tr><td><strong>Sorted bins</strong></td><td>Bins, each with its value</td><td>In 0.2; quality control reads their counts now</td></tr>
+            <tr><td><strong>Sorted bins</strong></td><td>Bins, each with its value, and optionally its gates and the cells sorted</td><td>By the weighted average of the bins' values, or by maximum likelihood from the gates</td></tr>
             <tr><td><strong>Scores</strong></td><td>Precomputed scores</td><td>Nothing to score; shown on the map in 0.3</td></tr>
           </tbody>
         </table>
       </div>
+
+      <h2 id="bins">Bins, gates and cells</h2>
+      <p>For sorted bins, each bin's value (its weight in the weighted average: a rank or a fluorescence) is edited in the replicates table's heads. <strong>Bins and gates</strong> records the gates each bin was sorted between, on the reporter's fluorescence (the lowest bin's lower gate and the highest bin's upper gate open), and the <strong>Cells</strong> column the cells sorted into each bin. With the gates, the bins can be scored by maximum likelihood; with the cells, its reads are reweighted by them, and QC reads the cells per variant.</p>
+      <shot name="sort-seq-design" alt="The Experiment view of the simulated sort-seq example: the bins and gates table with each bin's value and gates, and the columns with the cells sorted into each bin">A sort's design: each bin's value and gates, and the cells sorted into it.</shot>
 
       <h2 id="missing-zero">Missing = 0</h2>
       <p>Missing is not zero: an empty or <code>NA</code> count means the variant was not counted. But some pipelines write a variant that dropped out during selection, counted zero times, as missing. Quality control's "Missing after selection" finding notices when the missing variants are the ones that had been most depleted. Tick <strong>Missing = 0</strong> for those samples after selection, never for a replicate's first sample (a variant missing there was not in the library), and score again: the run records the design, setting included.</p>

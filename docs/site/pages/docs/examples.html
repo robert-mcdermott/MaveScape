@@ -1,7 +1,7 @@
 ---
 title: Examples
-description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and a simulated experiment and time series whose true effects are known.
-lede: Three examples come with MaveScape: a published experiment, and a simulated two-population experiment and time series whose true effects are known. Each opens scored, with its question, guided steps and what to expect in the inspector.
+description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and simulated experiments, a time series and a sort, whose true effects are known.
+lede: Four examples come with MaveScape: a published experiment, and three simulated ones whose true effects are known: two populations, a time series and a sort. Each opens scored, with its question, guided steps and what to expect in the inspector.
 ---
       <h2 id="grb2">GRB2 SH3 domain (published)</h2>
       <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
@@ -31,6 +31,16 @@ lede: Three examples come with MaveScape: a published experiment, and a simulate
         <li>The scores track the true effects (r = 0.99).</li>
         <li>Quality control passes, including the two time-series findings: every fit uses every time point, and the time courses scatter about their lines as counting predicts.</li>
         <li>Scored again by the log ratio of the first and last samples, the scores are a little noisier and their SEs larger: the middle time points carry information.</li>
+      </ul>
+
+      <h2 id="sort-seq">A simulated sort-seq experiment (known truth)</h2>
+      <p>Cells displaying every variant of a 40-residue protein sorted by a fluorescent reporter into four gated bins, in three replicates, simulated by MaveScape (seed 20261013) with each variant's true shift in log fluorescence known. The design records the gates and the cells sorted into each bin.</p>
+      <p><strong>The question:</strong> how do the weighted average of the bins and the maximum-likelihood fit compare, and what limits the measurement: the cells or the reads?</p>
+      <shot name="sort-seq" alt="A nonsense variant's distribution over the four bins in each replicate beside the wild type's, in the inspector">Click a cell: the inspector shows the variant's distribution over the bins beside the wild type's.</shot>
+      <ul>
+        <li>Scored by the weighted average of the bins, scaled so that nonsense scores 0 and the wild type 1, the scores track the true shifts (r = 0.99).</li>
+        <li>Quality control reviews the variance beyond counting, about 2–3×: about 300 cells per variant were sorted against about 320 reads, so the cells, not the reads, limit what is known.</li>
+        <li>Scored by maximum likelihood, the scores follow the true shifts more closely, and their SEs account for the cells.</li>
       </ul>
 
       <h2 id="layouts">Blank layouts</h2>

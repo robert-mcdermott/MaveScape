@@ -474,13 +474,53 @@ runs and the performance targets.
      - **Weighted regression gives zero counts little weight**, so reading dropouts as 0 changes a
        WLS score little; it matters most for the log ratio, which cannot score a variant missing
        from its last sample at all.
-3. **FACS bins (S7, Q10).** `web/lib/score-bins.js`: weighted average of bin values (rank,
-   fluorescence or other, recorded), the VAMP-seq procedure (frequency filter, nonsense = 0, WT
-   = 1, replicates required), analytic SE and a seeded bootstrap, and the censored log-normal
-   maximum-likelihood estimate (Peterman & Levine 2016) when cells sorted per bin and gate bounds
-   are given. Bin occupancy and cells-per-bin diagnostics.
-   - Validation: the VAMP-seq procedure equal to a reference script and CountESS's plugin; the
-     MLE within 1e-4 of `fitdistrplus::fitdistcens`; the feasibility FACS dataset.
+3. **FACS bins (S7, Q10): done.** `web/lib/score-bins.js`: the weighted average of the bins' values
+   over each variant's bin frequencies (VAMP-seq), its SE by the delta method from counting (a
+   pseudocount in the SE only) or a seeded parametric bootstrap; the censored log-normal
+   maximum-likelihood estimate (Peterman & Levine 2016) from the bins' gates, σ the wild type's or
+   each variant's own, reads reweighted by the cells sorted into each bin and the information
+   limited by the scarcer of reads and cells, the SE from the observed information; each
+   replicate's scale (nonsense median 0 and wild type 1, VAMP-seq; the lowest 5% median 0 and wild
+   type 1, MultiSTEP; none). `score.js`: models `bins` and `bins-mle`, the VAMP-seq preset (summed
+   bin frequency ≥ 10^-4.75, two replicates, the mean), refusals. `replicates.js`: the mean
+   combination (SE = SD/√k). `dmath.js` gains erfc and the normal distribution (the same bits
+   everywhere), `random.js` the Poisson sampler. Filters: the minimum summed bin frequency, and
+   states for bins with too low a frequency or no estimate. The design: each bin's gates
+   (`lower`, `upper`), the cells sorted per sample; the Experiment view edits both. QC (Q10):
+   "Occupancy of the bins" and "Cells sorted per variant"; replicate agreement, variance beyond
+   counting and outlier replicates from the bins' weighted averages; replicates compared within
+   their tile. The Score view's bin parameters; the inspector's distribution over the bins; the run's
+   description and methods (two references, checked against Crossref). `simulate.js` sorts cells
+   by gates into bins; a fourth example, a simulated sort with gates and cells. Four screenshot
+   scenes; the site's scoring, QC, design and examples pages.
+   - Validation (suite `scoring`, 12 more checks, 95 in all): factor IX's published MultiSTEP
+     scores (urn:mavedb:00001200-a-1) reproduced from its counts, every replicate score of 9
+     replicates on the variants the authors kept to 1.3 × 10⁻¹⁵ (29,325) and the combined scores
+     and SEs exactly; through the engine with MultiSTEP's settings within 2 × 10⁻³ (the authors'
+     filter used data not in the table); the MLE against fitdistrplus 1.2.6 `fitdistcens`
+     (`reference/generate_fitdistcens.R`) on a simulated sort (`fixtures/make-sort-seq.mjs`), σ
+     free and fixed, μ and σ to 3 × 10⁻⁷ over 4,800 fits, the SE to 0.07%; the simulated truth
+     (MLE r = 0.996, weighted average 0.989; the MLE's intervals hold it 87% after combining); the
+     bootstrap equal to the analytic SE and repeatable; the scales exact; refusals. Suite `qc`
+     (3 more, 21): a clean sort raises nothing, too few cells and a nearly empty bin raise theirs,
+     on three seeds; factor IX as found. Suite `roundtrip`: the sort-seq example as it teaches.
+     `remote-session.mjs` 2 more (59). 7 more unit tests (146 in all). Not done as planned: a
+     comparison with CountESS's VAMP-seq plugin; reproducing a laboratory's own published scores
+     checks the same arithmetic against real outputs instead.
+   - Found by slice 3:
+     - **Factor IX's published scores are VAMP-seq's arithmetic with another scale**: frequencies
+       over the variants kept, the rank-weighted average, then wild type 1 and the median of the
+       lowest 5% (not nonsense) 0, per replicate; combined by the mean, SE = SD/√k. Reproduced
+       exactly; the authors' filter used data MaveDB does not carry (most likely the unsorted
+       library).
+     - **fitdistcens' default start ignores the weights**: from it, Nelder–Mead stopped far from
+       the maximum (μ 3.06 against 5.31) for variants with nearly all reads in an outer bin. The
+       reference starts from the weighted bins' midpoints, as MaveScape does.
+     - **The cells, not the reads, limit a sort**: factor IX was sequenced to about 10,000 reads per
+       variant per bin, and its replicates differ about 2,000× more than counting predicts. The MLE
+       limits its information by the scarcer of reads and cells (its intervals held the truth 57%
+       of the time from reads alone, 78% per replicate with cells), and QC reports the cells per
+       variant when the design records them.
 4. **Barcodes and scale (D8, D9, Q8, S8, S12).** Barcode count tables with a barcode-to-variant
    map; barcodes per variant, within-variant agreement, outlier barcodes, a barcode-disagreement
    filter; both aggregations (sum then score; score each barcode then combine). Templates for

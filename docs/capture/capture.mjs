@@ -190,6 +190,31 @@ const scenes = {
     await example('simulated-time-series');
     await act('set_mode', { mode: 'experiment' });
   },
+  // Sorted bins: a nonsense variant's distribution over the bins in each replicate, beside the
+  // wild type's.
+  async 'sort-seq'() {
+    await example('simulated-sort-seq');
+    await act('select_variants', { variants: ['p.Ser2Ter'] });
+    await act('inspect_variant', { variant: 'p.Ser2Ter' });
+    await sleep(600);
+  },
+  // Sorted bins in the Score view, scored by maximum likelihood.
+  async 'sort-seq-score'() {
+    await example('simulated-sort-seq');
+    await act('score', { parameters: { model: 'bins-mle' } });
+  },
+  // Sorted bins' quality control: the cells sorted per variant.
+  async 'sort-seq-qc'() {
+    await example('simulated-sort-seq');
+    await act('qc_findings', { finding: 'cells-per-bin' });
+    await sleep(600);
+  },
+  // The design of sorted bins: each bin's value and gates, the cells sorted into it.
+  async 'sort-seq-design'() {
+    await example('simulated-sort-seq');
+    await act('set_mode', { mode: 'experiment' });
+    await scrollTo('.experiment-split > div:last-child .pane:nth-child(2)');
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');
