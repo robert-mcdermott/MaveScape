@@ -26,6 +26,10 @@
   --panel: #ffffff;
   --panel-2: #f8f9fc;
   --hover: #f1f3f8;
+  /* The map's states (lib/map-render.js): apart from the neutral score color (ΔE ≥ 10, suite map). */
+  --map-empty: #c8c6c2;
+  --map-hatch: #6e6c68;
+  --map-low: 110, 110, 110;
   --active: #eceefe;
   --line: #e3e7ef;
   --line-strong: #d0d6e2;
@@ -60,6 +64,9 @@
   --panel: #111620;
   --panel-2: #151b26;
   --hover: #1a2130;
+  --map-empty: #3b3e45;
+  --map-hatch: #9a9ca3;
+  --map-low: 70, 74, 82;
   --active: #232a45;
   --line: #222a38;
   --line-strong: #2e3849;
@@ -787,3 +794,53 @@ input.qc-threshold { width: 74px; text-align: right; padding: 3px 6px; }
 .coverage-rows span { height: 8px; }
 .coverage-tip, .coverage-grid .legend { grid-column: 1 / -1; }
 .coverage-tip { font-size: 11.5px; color: var(--text-2); min-height: 16px; }
+
+/* ---------- MaveScape: the Map view (ui/mode-map.js, ui/variant-map.js) ---------- */
+
+.map-body { display: flex; flex-direction: column; gap: 14px; }
+.map-body .pane + .pane { margin-top: 0; }
+.map-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.map-controls .spacer { flex: 1; }
+select.input.small { padding: 4px 8px; font-size: 12px; width: auto; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 11.5px; color: var(--text-2); margin-bottom: 8px; }
+.map-scale { display: grid; grid-template-columns: 180px; gap: 2px; }
+.map-scale-bar { height: 10px; border-radius: 2px; border: 1px solid var(--line); }
+.map-scale-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.map-scale-title { font-size: 10.5px; color: var(--text-3); }
+.map-state { display: inline-flex; align-items: center; gap: 6px; }
+.map-swatch { width: 14px; height: 12px; display: inline-block; position: relative; border-radius: 1px; background: var(--map-empty); }
+.map-swatch.low::after { content: ""; position: absolute; top: 0; right: 0; border-top: 5px solid var(--text); border-left: 5px solid transparent; }
+.map-swatch.filtered { background: repeating-linear-gradient(-45deg, var(--map-empty) 0 2px, var(--map-hatch) 2px 3px); }
+.map-swatch.missing::after { content: ""; position: absolute; left: 6px; top: 5px; width: 2px; height: 2px; background: var(--map-hatch); }
+.map-swatch.reference { outline: 1px solid var(--text); outline-offset: -1px; }
+.map-swatch.none { background: none; border: 1px dashed var(--line-strong); }
+.variant-map { position: relative; outline: none; border-radius: var(--radius-sm); user-select: none; touch-action: none; }
+.variant-map:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.variant-map-canvas { display: block; cursor: crosshair; }
+.map-tip { position: absolute; z-index: 5; max-width: 260px; padding: 5px 8px; border-radius: var(--radius-sm); background: var(--bg-elev); border: 1px solid var(--line-strong); box-shadow: var(--shadow); font-size: 11.5px; color: var(--text); pointer-events: none; }
+.map-band { position: absolute; border: 1px solid var(--accent); background: var(--accent-soft); pointer-events: none; }
+.map-selection { margin-top: 10px; font-size: 12px; }
+.map-selection .spacer { flex: 1; }
+.map-selection-keys { font-family: var(--mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46ch; }
+.chip-button { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.chip-x { background: none; border: 0; padding: 0 0 0 6px; font: inherit; color: var(--text-3); cursor: pointer; }
+.chip-x:hover { color: var(--danger-text); }
+.map-description { margin: 0 0 6px; font-size: 12.5px; color: var(--text-2); }
+
+/* The variant inspector (ui/variant-inspector.js). */
+.variant-inspector h3 { text-transform: none; letter-spacing: 0; }
+.variant-inspector h3 .mono { font-size: 12.5px; }
+.inspector-sub { margin: 12px 0 6px; font-size: 11.5px; font-weight: 650; color: var(--text-3); text-transform: none; }
+.variant-score { margin: 8px 0 2px; font-size: 12px; }
+.variant-score-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+table.data.compact td, table.data.compact th { padding: 3px 5px; font-size: 11.5px; }
+table.data.compact th { position: static; }
+.inspector-details summary { cursor: pointer; font-size: 12px; color: var(--text-2); margin-top: 8px; }
+.sequence-context { font-size: 12px; letter-spacing: 0.06em; word-break: break-all; margin: 0; }
+.sequence-context .here { color: var(--accent-text); background: var(--accent-soft); border-radius: 2px; padding: 0 1px; }
+.position-strip { width: 100%; height: auto; display: block; }
+.position-strip .axis { stroke: var(--line-strong); }
+.position-strip .wt-mark { stroke: var(--text); stroke-dasharray: 3 2; }
+.position-strip .other { fill: var(--text-3); opacity: 0.7; }
+.position-strip .me { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.position-strip .tick { fill: var(--text-3); font-size: 9px; }

@@ -6,8 +6,9 @@
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
-// data), experiment (external data), scoring and qc (their last checks need external data); all by
-// default.
+// data), experiment (external data), scoring, qc and map (their last checks need external data);
+// all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// comparing with them.
 // Exits with status 1 when a check fails.
 //
 // Suites marked "external data" need files that node validation/fetch.mjs downloads into
@@ -46,6 +47,12 @@ import { computeQC } from '../web/lib/qc.js';
 import { checkThresholds, defaultThresholds, findingsFrom, overall } from '../web/lib/findings.js';
 import { simulateExperiment } from '../web/lib/simulate.js';
 import { setQcThresholds } from '../web/lib/workspace.js';
+import { buildMapModel, cellAt, cellName, colorPosition, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../web/lib/map-model.js';
+import { mapPalette } from '../web/lib/map-render.js';
+import { EXPORT_THEME, mapSVG } from '../web/lib/map-svg.js';
+import { lab as labColor, deltaE2000 } from '../web/lib/colorvision.js';
+import { hexToRgb, rgbToHex } from '../web/lib/colormaps.js';
+import { writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
@@ -865,6 +872,91 @@ const suites = {
       const got = raised(findingsFrom(qc, defaultThresholds()));
       check('qc', `${name} (scored and checked in ${ms.toFixed(0)} ms): ${note}`, show(got), matches(got, expected), show(expected));
     }
+  },
+  // The variant-effect map (wave 1, slice 7): its SVG against a golden file, every state where the
+  // fixture plants it, the states' colors apart from the neutral score color in every theme, the
+  // color scale centered on the wild type, the row orders, and on real data the numbering and the
+  // positions that must not tolerate substitution.
+  map() {
+    const fixture = fixtureTable();
+    const design = fixtureDesign();
+    const parameters = { ...DEFAULT_PARAMETERS, filters: { ...DEFAULT_PARAMETERS.filters, minInputCount: 10 } };
+    const results = score(fixture, design, parameters);
+    const model = buildMapModel(results, design);
+    const svg = mapSVG(model, { results });
+    const goldenPath = new URL('./golden/two-population.map.svg', import.meta.url);
+    if (process.env.UPDATE_GOLDEN) writeFileSync(goldenPath, svg);
+    const golden = existsSync(goldenPath) ? readFileSync(goldenPath, 'utf8') : '';
+    check('map', 'the fixture\'s map as SVG equals the golden file (golden/two-population.map.svg)', golden ? (svg === golden ? `identical, ${(svg.length / 1024).toFixed(0)} KB` : `differs (${svg.length} bytes against ${golden.length})`) : 'no golden file: run with UPDATE_GOLDEN=1', svg === golden, 'byte for byte');
+
+    // Each planted state, on its cell.
+    const at = (name) => {
+      const m = /^p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|=)$/.exec(name);
+      const one = { Ala: 'A', Arg: 'R', Asn: 'N', Asp: 'D', Cys: 'C', Gln: 'Q', Glu: 'E', Gly: 'G', His: 'H', Ile: 'I', Leu: 'L', Lys: 'K', Met: 'M', Phe: 'F', Pro: 'P', Ser: 'S', Thr: 'T', Trp: 'W', Tyr: 'Y', Val: 'V', Ter: '*' };
+      const p = Number(m[2]);
+      const letter = m[3] === '=' ? one[m[1]] : one[m[3]];
+      return cellAt(model, p, model.rows.indexOf(letter));
+    };
+    const expected = [
+      ['p.Thr9Ala', STATE.FILTERED, '3 input reads, below the minimum of 10'],
+      ['p.Gly10Ala', STATE.MISSING, 'not counted in any replicate'],
+      ['p.Lys3Arg', STATE.LOW, 'scored from 2 of 3 replicates'],
+      ['p.Glu5Ter', STATE.LOW, 'no reads after selection'],
+      ['p.Ser2Val', STATE.SCORED, 'measured in every replicate'],
+      ['p.Ser2Ala', STATE.MISSING, 'designed, not in the table'],
+      ['p.Ser2=', STATE.SCORED, 'the synonymous variant, in the reference residue\'s cell'],
+    ];
+    const got = expected.map(([name, state, why]) => {
+      const cell = at(name);
+      return { name, why, state: cell?.state, want: state, ok: cell?.state === state && cellName(model, cell) === name };
+    });
+    check('map', 'each state where the fixture plants it, and each cell named as MAVE-HGVS', got.map((g) => `${g.name} ${STATE_NAMES[g.state] ?? 'none'} (${g.why})`).join('; '), got.every((g) => g.ok), got.map((g) => `${g.name} ${STATE_NAMES[g.want]}`).join(', '));
+    const designed = model.length * model.rows.length;
+    const counted = Object.values(model.counts).reduce((a, b) => a + b, 0);
+    const references = [...model.reference].filter(Boolean).length;
+    check('map', 'every cell has one state; one reference residue per position; nothing off the map in the fixture', `${Object.entries(model.counts).map(([k, v]) => `${STATE_NAMES[k]} ${v}`).join(', ')}; ${references} reference cells; ${model.offMap} off the map`, counted === designed && references === model.length && model.offMap === 0, `${designed} cells, ${model.length} references`);
+
+    // The states never share the neutral score color (PRD), in the light, dark and export themes.
+    const css = readFileSync(new URL('../web/styles.css', import.meta.url), 'utf8');
+    const tokens = themeTokens(css);
+    const mix = (hex, gray) => rgbToHex(hexToRgb(hex).map((v, i) => (v + gray[i]) / 2));
+    const rows = [];
+    let worst = Infinity;
+    for (const [name, theme] of [['light', { empty: tokens.light['map-empty'], hatch: tokens.light['map-hatch'], gray: tokens.light['map-low'].split(',').map(Number) }], ['dark', { empty: tokens.dark['map-empty'], hatch: tokens.dark['map-hatch'], gray: tokens.dark['map-low'].split(',').map(Number) }], ['export', EXPORT_THEME]]) {
+      for (const palette of ['rdbu', 'puor']) {
+        const neutral = colormapColor(palette, 0.5);
+        const d = (a, b) => deltaE2000(labColor(a), labColor(b));
+        const missing = d(theme.empty, neutral);
+        const hatch = d(mix(theme.empty, hexToRgb(theme.hatch)), neutral);
+        const low = d(mix(neutral, theme.gray), neutral);
+        worst = Math.min(worst, missing, hatch, low);
+        rows.push(`${name} ${palette}: missing ${missing.toFixed(1)}, filtered ${hatch.toFixed(1)}, low confidence ${low.toFixed(1)}`);
+      }
+    }
+    check('map', 'missing, filtered and low-confidence cells are apart from the neutral (wild-type-like) color, CIEDE2000, in every theme and diverging palette', rows.join('; '), worst >= 10, '≥ 10');
+
+    // The scale.
+    const wt = results.conditions[0].score[results.controls.wt];
+    check('map', 'the score scale is centered on the wild type and symmetric', `wild type ${fmt(wt, 3)} at ${colorPosition(model, wt)}; domain ${fmt(model.domain.min, 2)} to ${fmt(model.domain.max, 2)}`, colorPosition(model, wt) === 0.5 && Math.abs((model.domain.max - model.domain.center) - (model.domain.center - model.domain.min)) < 1e-12, '0.5; symmetric');
+    const orders = Object.entries(ROW_ORDERS).map(([k, o]) => [k, [...o.rows].sort().join('') === [...'ACDEFGHIKLMNPQRSTVWY*'].sort().join('')]);
+    check('map', 'every row order has the 20 amino acids and stop once', orders.map(([k, ok]) => `${k} ${ok ? 'complete' : 'wrong'}`).join(', '), orders.every(([, ok]) => ok), 'complete');
+    const description = describeMap(model, results);
+    check('map', 'the map described in words (for screen readers)', description[0], /419 designed/.test(description[0]) && description.length >= 3, 'counts, positions, scale');
+
+    // Real data (external).
+    const grb2 = readDesign('grb2-sh3.design.json');
+    const g = buildMapModel(score(parseTable(dataset('mavedb-grb2-sh3').bytes('counts.csv')), grb2, DEFAULT_PARAMETERS), grb2);
+    check('map', 'GRB2 SH3: 56 positions numbered 1–56 on the target and 159–214 on GRB2 (UniProt P62993)', `${g.length} positions, offset ${g.target.offset}; ${g.counts[STATE.SCORED] + g.counts[STATE.LOW]} scored cells, ${g.counts[STATE.MISSING]} missing`, g.length === 56 && g.target.offset === 158, '56, offset 158');
+    const e2 = readDesign('brca1-ring-e2.design.json');
+    const e2Results = score(parseTable(dataset('mavedb-brca1-ring').bytes('aa/counts.csv')), e2, DEFAULT_PARAMETERS);
+    const b = buildMapModel(e2Results, e2);
+    const positions = [];
+    for (let p = 1; p <= b.length; p += 1) if (b.columnCount[p - 1] >= 5) positions.push([p + b.target.offset, b.columnMedian[p - 1], b.protein[p - 1]]);
+    positions.sort((x, y) => x[1] - y[1]);
+    const zinc = new Set([24, 27, 39, 41, 44, 47, 61, 64]);
+    const least = positions.slice(0, 5);
+    const ligands = least.filter(([p]) => zinc.has(p)).length;
+    check('map', 'BRCA1 RING (E2 binding): the positions least tolerant of substitution are the RING domain\'s zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64)', `${least.map(([p, m, aa]) => `${aa}${p} ${m.toFixed(2)}`).join(', ')}; ${ligands} of 5 are zinc ligands; ${b.offMap} multi-variants off the map`, ligands >= 4, '≥ 4 of the 5');
   },
 };
 

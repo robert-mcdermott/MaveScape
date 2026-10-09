@@ -61,6 +61,8 @@ jobs:
         run: node validation/fetch.mjs
       - name: Validation against reference values
         run: node validation/run.mjs --require-data
+      - name: Map and scoring performance budgets
+        run: node validation/bench.mjs
 
   installers:
     name: Installer syntax

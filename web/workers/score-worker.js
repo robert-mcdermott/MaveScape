@@ -16,7 +16,8 @@ function buffers(results) {
   };
   for (const r of results.replicates) [r.first, r.last, r.score, r.se, r.state].forEach(add);
   for (const c of results.conditions) [c.score, c.se, c.tau2, c.i2, c.q, c.loo, c.looReplicate, c.epsilon, c.k, c.expected, c.reason, c.flags].forEach(add);
-  for (const x of [results.variants.kind, results.variants.position, results.variants.status]) add(x);
+  for (const x of [results.variants.kind, results.variants.position, results.variants.ref, results.variants.alt, results.variants.status]) add(x);
+  for (const x of results.samples ?? []) add(x.counts);
   return out;
 }
 

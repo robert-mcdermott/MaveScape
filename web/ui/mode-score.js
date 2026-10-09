@@ -12,11 +12,12 @@ import { checkParameters, DEFAULT_PARAMETERS, PRESETS, RESCALINGS, withDefaults 
 import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
-import { addRun, describeMethod, describeParameters, makeRun, outputDigest, recordedInputs, removeRun, runId, runInputs } from '../lib/runs.js';
+import { addRun, describeMethod, describeParameters, makeRun, removeRun, runId, runInputs } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { classHistogram, flowBars, scoreGroups } from './plots.js';
 import { workerInput } from './score-input.js';
+import { ensureResults, forgetResults } from './run-results.js';
 
 const PAGE = 50;
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
@@ -132,31 +133,10 @@ export function mountScoreMode(app, container) {
     toast(`${run.name}: ${formatCount(c[0].scored)} of ${formatCount(result.results.rows)} variants scored.`, { kind: 'ok' });
   }
 
-  // A saved run's scores, recomputed from its own recorded inputs, and checked against its output
-  // hash.
-  async function reproduce(run) {
-    if (app.runResults.has(run.id)) return;
-    app.runResults.set(run.id, { status: 'checking' });
-    render();
-    const recorded = recordedInputs(run);
-    const s = store.ws.sources.find((x) => x.sha256 === recorded.source.sha256);
-    if (!s) {
-      app.runResults.set(run.id, { status: 'failed', message: `The table it scored (SHA-256 ${recorded.source.sha256.slice(0, 12)}…) is not in this workspace.` });
-      render();
-      return;
-    }
-    try {
-      const table = await app.sourceTable(s);
-      const result = await compute(table, recorded.design, recorded.parameters, recorded.mapping.mode);
-      if (!result.ok) throw new Error(result.errors.join(' '));
-      const digest = outputDigest(result.results);
-      const same = digest === run.output.sha256;
-      app.runResults.set(run.id, { results: result.results, status: same ? 'reproduced' : 'differs', message: same ? '' : `The recomputed scores have output SHA-256 ${digest.slice(0, 12)}…, not ${run.output.sha256.slice(0, 12)}… as recorded (MaveScape ${run.software.version} made it; this is ${app.version}).` });
-      if (!same) app.log(`${run.name}: recomputed scores differ from the recorded ones (output SHA-256 ${digest} for ${run.output.sha256}).`);
-    } catch (error) {
-      app.runResults.set(run.id, { status: 'failed', message: error.message });
-    }
-    if (store.ws.runs.some((r) => r.id === run.id)) render();
+  // A saved run's scores, recomputed from its own recorded inputs and checked against its output
+  // hash (ui/run-results.js).
+  function reproduce(run) {
+    ensureResults(app, run);
   }
 
   // --- Panes ------------------------------------------------------------------------------------
@@ -285,7 +265,7 @@ export function mountScoreMode(app, container) {
     return h('span.badge.ok', 'scored');
   }
 
-  function variantsTable(results, c) {
+  function variantsTable(results, c, run) {
     const v = results.variants;
     const search = view.search.trim().toLowerCase();
     let rows = [];
@@ -314,7 +294,7 @@ export function mountScoreMode(app, container) {
     const body = h('tbody');
     for (const i of shown) {
       const z = 1.959963984540054;
-      body.append(h(`tr${view.open === i ? '.selected' : ''}`, { style: { cursor: 'pointer' }, onclick: () => { view.open = view.open === i ? -1 : i; render(); } },
+      body.append(h(`tr${view.open === i ? '.selected' : ''}`, { style: { cursor: 'pointer' }, onclick: () => { view.open = view.open === i ? -1 : i; if (v.key[i]) app.focusItem({ kind: 'variant', id: v.key[i], run: run.id, condition: view.condition }); render(); } },
         h('td', h('span.mono', v.key[i] || v.original[i]), v.original[i] !== v.key[i] && v.key[i] ? h('div.muted', { style: { fontSize: '10.5px' } }, `as written: ${v.original[i]}`) : null),
         h('td', KIND_NAMES[v.kind[i]] ?? ''),
         h('td.r', fmt(c.score[i])), h('td.r', fmt(c.se[i])),
@@ -351,7 +331,7 @@ export function mountScoreMode(app, container) {
       h('p.muted.mono', { style: { fontSize: '11px', margin: 0 } }, `Table SHA-256 ${run.inputs.source.sha256.slice(0, 16)}… · output SHA-256 ${run.output.sha256.slice(0, 16)}…`),
       r?.status === 'reproduced' ? h('div.callout.ok', { style: { marginTop: '8px' } }, icon('check'), h('span', 'Reproduced: the scores were recomputed from the run\'s recorded inputs and have its output hash.')) : null,
       r?.status === 'differs' || r?.status === 'failed' ? h('div.callout.danger', { style: { marginTop: '8px' } }, icon('warning'), h('span', r.status === 'differs' ? `Not reproduced. ${r.message}` : `Not checked: ${r.message}`),
-        h('span.spacer'), h('button.btn.small', { type: 'button', onclick: () => { app.runResults.delete(run.id); render(); } }, 'Check again')) : null,
+        h('span.spacer'), h('button.btn.small', { type: 'button', onclick: () => forgetResults(app, run) }, 'Check again')) : null,
       ...run.warnings.map((w) => h('div.callout.warn', { style: { marginTop: '6px' } }, icon('warning'), h('span', w.message))),
       run.info?.length ? h('ul.summary-lines', { style: { marginTop: '8px', fontSize: '12px' } }, ...run.info.map((x) => h('li', x))) : null,
       h('details', { style: { marginTop: '8px' } }, h('summary', 'Method, as it would be written'), h('p', { style: { fontSize: '12.5px' } }, describeMethod(run).join(' '))),
@@ -369,7 +349,7 @@ export function mountScoreMode(app, container) {
           h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, `${formatCount(c.scored)} scored${lowConfidence ? `, ${formatCount(lowConfidence)} with low confidence` : ''}; NA for the rest, each with its stage.${c.rescale ? ` Rescaled: ${c.rescale.anchors.map((a) => `${a.what} ${fmt(a.from)} → ${a.to}`).join(', ')}.` : ''}`)),
         h('div.pane', h('h3', icon('histogram'), 'Scores by class'), histogram(c, results))),
       h('div.pane', h('h3', icon('experiment'), 'Replicates'), replicatesTable(results, c, p)),
-      h('div.pane', h('h3', icon('table'), 'Variants'), variantsTable(results, c))];
+      h('div.pane', h('h3', icon('table'), 'Variants'), variantsTable(results, c, run))];
   }
 
   // --- The view ---------------------------------------------------------------------------------
@@ -387,7 +367,9 @@ export function mountScoreMode(app, container) {
     clear(root);
     const ws = store.ws;
     const focus = store.ui.focus;
-    const selected = (focus?.kind === 'run' ? ws.runs.find((r) => r.id === focus.id) : null) ?? ws.runs.at(-1) ?? null;
+    const focusRun = focus?.kind === 'run' ? focus.id : focus?.kind === 'variant' ? focus.run : null;
+    const selected = ws.runs.find((r) => r.id === focusRun) ?? ws.runs.find((r) => r.id === view.shown) ?? ws.runs.at(-1) ?? null;
+    view.shown = selected?.id;
     root.append(h('div.workbench-head', h('h1', icon('score'), 'Score', selected ? h('span.crumbs', ` · ${selected.name}`) : null), h('span.spacer')));
     const s = source();
     if (!s) {
@@ -406,7 +388,7 @@ export function mountScoreMode(app, container) {
   render();
   return {
     update(topics) {
-      if (topics.has('ws') || topics.has('focus') || topics.has('workspace-loaded') || topics.has('colors') || topics.has('theme')) render();
+      if (topics.has('ws') || topics.has('focus') || topics.has('results') || topics.has('workspace-loaded') || topics.has('colors') || topics.has('theme')) render();
     },
     destroy() {
       clearTimeout(renderTimer);

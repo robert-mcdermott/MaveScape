@@ -273,16 +273,45 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
        rests its verdict on the ratio.
      - A sample with every count missing is read by the importer as an empty column; scoring and QC
        now take it as missing counts (QC's blocking "every sample has counts"), not as text.
-7. **The map and the inspector (V2, V3, V4, R3, T6).** `web/ui/variant-map.js` (canvas; overview
-   and viewport; pan, zoom, hover; click and rectangle selection; row orders; WT marks; the
-   state patterns for missing, filtered, low-confidence and not designed; score color and state
-   on separate color-vision-safe palettes; row and column summaries; position-level track), the
-   inspector (identifiers original and canonical, score and CI, counts by sample, replicate
-   scores, filters and warnings, sequence context, the position's distribution, the run's
-   provenance), a table alternative and a text description, SVG and PNG export
-   (`web/lib/map-svg.js`).
-   - Validation: SVG output of the map compared with a golden file for a fixture; a 20 × 5,000
-     map timed in `validation/bench.mjs` (target 30 frames per second while panning).
+7. **The map and the inspector (V2, V3, V4, R3, T6): done.** `web/lib/map-model.js` (a run's
+   single substitutions as positions × the 20 amino acids and stop; each cell's state: scored, low
+   confidence, filtered, missing, not designed, reference residue; values by score, SE,
+   replicates or input count; a scale centered on the wild type and symmetric; row orders
+   biochemical, by hydrophobicity or alphabetical; position and row medians; the map in words),
+   `web/lib/map-render.js` (the drawing, on any 2D context: states as their own marks, the
+   summaries, target and reference numbering, the overview strip, selection, hover and focus;
+   hit testing), `web/lib/map-svg.js` (SVG export, deterministic), `web/ui/variant-map.js` (the
+   canvas: pan, zoom, hover, click and rectangle selection, the overview, full keyboard operation
+   with each focused cell announced), the Map view (`web/ui/mode-map.js`: run and condition,
+   color, rows, palette, legend with each state's count, saved selections, SVG and PNG export,
+   the description and every cell as a table), the variant inspector (`web/ui/variant-inspector.js`:
+   identifiers as written and canonical, score with SE and 95% CI or why it has none, flags, each
+   replicate and every sample's counts, the position's other substitutions, the sequence around
+   it, the run), opened from the map, its table and the Score view; named selections in the
+   workspace and its history (`addSelection`, `removeSelection`). Runs' results are shared by the
+   views (`web/ui/run-results.js`); results carry each sample's counts and each variant's
+   residues.
+   - Validation (suite `map`, 9 checks; `validation/bench.mjs` in CI): the fixture's map as SVG
+     byte for byte against `golden/two-population.map.svg`; each state where the fixture plants
+     it; one state per cell; missing, filtered and low-confidence cells at least ΔE 10 (CIEDE2000)
+     from the neutral color in the light, dark and export themes and both palettes; the scale
+     centered on the wild type; the row orders; GRB2's numbering (1–56 and 159–214); BRCA1's least
+     tolerant positions. The benchmark: a simulated 5,000-residue target (105,000 variants) scored
+     in 0.5 s, its map model in 26 ms, 0.6 ms of JavaScript per frame while panning (budgets 10 s,
+     1 s, 16 ms); in the window, a frame of that map draws in 3–8 ms at the median (at 14- to
+     2-pixel cells). 15 more unit tests (118 in all). In the window: BRCA1's two conditions, zoom,
+     keyboard, rectangle selection, saved selections restored from the dataset tree, PNG export
+     (7,464 × 954) under the page's security policy, light and dark.
+   - Found by slice 7:
+     - **The map agrees with the biology**: BRCA1's least tolerant RING positions (E2 binding) are
+       C27, C47, C64 and H41, zinc ligands, and D96; the suite checks it.
+     - **Missing cells looked like "no effect"**: drawn in the panel's hover gray, they were ΔE 2.7
+       from the white of a wild-type-like score, and low-confidence cells near 0 ΔE 5, so a zoomed-
+       out map (cells too small for their dot or mark) showed unmeasured variants as neutral. The
+       map now has state colors of its own (`--map-empty`, `--map-hatch`, `--map-low`), checked to
+       stay ΔE ≥ 10 from the neutral color.
+     - BRCA1's table holds 7,682 multi-variants (error-prone PCR), which a substitution map cannot
+       show; the map counts them and says so, and the Score view lists them.
 8. **Record and examples (R1–R4, T4, D13).** The `.msz` archive (manifest,
    sources or checksums, design, runs, history, methods) and the library; exports of scores and
    counts (MaveDB column conventions), QC tables, design JSON, provenance JSON, selections; the

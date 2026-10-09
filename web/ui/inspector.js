@@ -3,6 +3,7 @@
 // something is in focus it describes the workspace and says how to begin.
 
 import { h, icon, clear, relativeTime, formatBytes, formatCount } from './dom.js';
+import { variantSection } from './variant-inspector.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -67,6 +68,14 @@ export function mountInspector(app) {
       h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => app.setMode('score') }, icon('score'), 'Open in Score')));
   }
 
+  function selectionSection(selection) {
+    const run = app.store.ws.runs.find((r) => r.id === selection.run);
+    return h('section.inspector-section', h('h3', icon('target'), selection.name),
+      h('dl.kv', h('dt', 'Variants'), h('dd', formatCount(selection.keys.length)), h('dt', 'On the map of'), h('dd', run ? run.name : 'a run no longer here'), h('dt', 'Saved'), h('dd', relativeTime(selection.created))),
+      h('p.mono', { style: { fontSize: '11px', margin: '8px 0 0', wordBreak: 'break-word', color: 'var(--text-2)' } }, selection.keys.slice(0, 40).join(', '), selection.keys.length > 40 ? ', …' : ''),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => app.setMode('map') }, icon('heatmap'), 'Show on the map')));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
     if (focus?.kind === 'source') {
@@ -76,6 +85,14 @@ export function mountInspector(app) {
     if (focus?.kind === 'target') {
       const target = app.store.ws.targets.find((x) => x.id === focus.id);
       if (target) return targetSection(target);
+    }
+    if (focus?.kind === 'selection') {
+      const selection = app.store.ws.selections.find((x) => x.id === focus.id);
+      if (selection) return selectionSection(selection);
+    }
+    if (focus?.kind === 'variant') {
+      const section = variantSection(app, focus);
+      if (section) return section;
     }
     if (focus?.kind === 'run') {
       const run = app.store.ws.runs.find((x) => x.id === focus.id);
@@ -112,7 +129,7 @@ export function mountInspector(app) {
       render();
     },
     update(topics) {
-      if (topics.has('ws') || topics.has('focus') || topics.has('selection') || topics.has('workspace-loaded')) render();
+      if (topics.has('ws') || topics.has('focus') || topics.has('selection') || topics.has('results') || topics.has('workspace-loaded')) render();
     },
   };
 }

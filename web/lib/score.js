@@ -381,11 +381,13 @@ function run({ names, columns, design, mode = 'lenient', parameters, onProgress 
     format: 'mavescape-scores',
     version: 1,
     rows: n,
-    variants: { key: variants.key, original: variants.original, kind: variants.kind, position: variants.position, status: variants.status },
+    variants: { key: variants.key, original: variants.original, kind: variants.kind, position: variants.position, ref: variants.ref, alt: variants.alt, status: variants.status },
     controls: { wt: controls.wt, synonymous: controls.synonymous.length, nonsense: controls.nonsense.length },
     parameters: p,
     replicates,
     conditions,
+    // Each sample's counts (technical replicates summed), for the inspector.
+    samples: design.samples.filter((x) => pooled.has(x.id)).map((x) => ({ id: x.id, name: x.name ?? x.id, columns: x.columns, counts: pooled.get(x.id) })),
     warnings,
     info,
   };

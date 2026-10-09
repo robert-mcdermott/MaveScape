@@ -8,7 +8,6 @@ import { createLibrary, detectBackend, prefs } from './ui/storage.js';
 import { mountSidebar } from './ui/sidebar.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountDrawer } from './ui/drawer.js';
-import { plannedMode } from './ui/mode-planned.js';
 import { openPalette } from './ui/palette.js';
 import { WorkerClient } from './ui/workers.js';
 import { colorVisionFriendly, setColorVisionFriendly } from './lib/colormaps.js';
@@ -16,8 +15,6 @@ import { createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWor
 import { installImport } from './ui/import.js';
 
 const VERSION = '0.1.0';
-
-const toImport = { label: 'Open files', icon: 'table', run: (app) => app.pickFiles() };
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
 // show what they are for (mode-planned.js); Compare, Structure, Calibrate, Figures and Report join
@@ -28,15 +25,7 @@ const MODES = [
   { id: 'qc', label: 'QC', icon: 'qc', load: () => import('./ui/mode-qc.js').then((m) => m.mountQcMode) },
   { id: 'score', label: 'Score', icon: 'score', load: () => import('./ui/mode-score.js').then((m) => m.mountScoreMode) },
   'sep',
-  {
-    id: 'map', label: 'Map', icon: 'heatmap',
-    load: async () => plannedMode({
-      title: 'Variant-effect map', icon: 'heatmap',
-      purpose: 'Positions across, substitutions down, colored by score; missing, filtered and low-confidence measurements each drawn their own way, never as "no effect". Select variants to follow them back to their counts.',
-      steps: ['Score the counts, or open a published score table.', 'Pan, zoom and select; the inspector shows each variant\'s evidence.'],
-      actions: [toImport],
-    }),
-  },
+  { id: 'map', label: 'Map', icon: 'heatmap', load: () => import('./ui/mode-map.js').then((m) => m.mountMapMode) },
 ];
 
 // --- Theme ---------------------------------------------------------------------------------------

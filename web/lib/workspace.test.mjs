@@ -89,3 +89,15 @@ test('the history is hash-chained: any entry changed, removed, inserted or reord
   assert.equal(verifyHistory(long).ok, true);
   assert.equal(long.history[0].detail, '#3');
 });
+
+test('named selections: saved and removed, each in the history', async () => {
+  const { addSelection, removeSelection, createWorkspace, verifyHistory } = await import('./workspace.js');
+  let ws = createWorkspace('s');
+  const added = addSelection(ws, { name: 'Hot spot', run: 'run-x', condition: 0, keys: ['p.Ala2Val', 'p.Ala2Ter'] });
+  ws = added.ws;
+  assert.equal(added.id, 'Hot-spot');
+  assert.equal(addSelection(ws, { name: 'Hot spot', run: 'run-x', keys: [] }).id, 'Hot-spot-2');
+  ws = removeSelection(ws, added.id);
+  assert.deepEqual(ws.history.map((e) => e.action), ['create', 'selection', 'remove-selection']);
+  assert.ok(verifyHistory(ws).ok);
+});

@@ -85,6 +85,20 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
 - **Simulated experiments** (`web/lib/simulate.js`): a library, bottlenecks, selection with
   replicate noise and sequencing, seeded and labeled simulated.
 
+- **The variant-effect map (wave 1, slice 7).** Positions across, the 20 amino acids and stop
+  down, colored by score (blue for loss, red for gain, or purple and orange; white is the wild
+  type), or by SE, replicates used or input count. Missing, filtered, low-confidence and
+  not-designed cells are each drawn their own way, never in the wild type's color; reference
+  residues are outlined and hold the synonymous variant. The median of each position is shown
+  above and of each substitution at the right, with target and reference numbering and an
+  overview of the whole target. Pan, zoom, hover; click, ⌘-click and Shift-drag to select; the
+  keyboard moves through the cells and announces each. Selections can be saved by name. The map
+  exports as SVG and PNG, is described in words, and lists every cell in a table.
+- **The variant inspector.** A variant chosen on the map, in its table or in the Score view shows
+  its identifiers as written and canonical, its score with SE and 95% interval (or why it has
+  none), its flags, each replicate's counts and score, every sample's counts, the other
+  substitutions at its position, the sequence around it and the run it comes from.
+
 ### Validation
 
 - Go tests of the host: security headers, foreign Host headers and cross-origin requests refused,
@@ -127,3 +141,7 @@ map and a saved, reproducible record. Built slice by slice; this section grows w
   sample) raise exactly their findings on three seeds, and a clean one none; the variance check
   follows a simulated bottleneck; findings do not depend on row order or on a run; the
   feasibility data's findings as found (15 checks).
+- `validation/run.mjs map` (wave 1, slice 7): the map's SVG against a golden file, each state where
+  it is planted, state colors apart from the neutral color in every theme, the scale centered on
+  the wild type, and on BRCA1 the zinc ligands as the least tolerant positions (9 checks).
+  `validation/bench.mjs`: 105,000 variants scored, mapped and drawn within budget.

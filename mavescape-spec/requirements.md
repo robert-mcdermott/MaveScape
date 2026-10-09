@@ -97,9 +97,9 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | V1 | Shell: Start, Experiment, QC, Score, Map, Compare, Structure, Calibrate, Figures, Report; left dataset tree, right inspector, bottom drawer, top command bar | planned (wave 1, views added by later waves) |
-| V2 | Variant-effect map: pan and zoom, color by score, differential, uncertainty, missingness, depth or QC status; distinct missing, filtered, low-confidence and not-designed states; WT marks; row orders; row and column summaries | planned (wave 1) |
-| V3 | Selection by click, rectangle, freeform and query; named selection sets that propagate across views | planned (wave 1: click and rectangle; wave 5: freeform and query) |
-| V4 | Variant inspector: identifiers, score and CI, counts by sample, replicate scores, filters and warnings, sequence context, position distribution, provenance; later barcodes, conditions, annotations, structure | planned (wave 1, extended by waves 2–4) |
+| V2 | Variant-effect map: pan and zoom, color by score, differential, uncertainty, missingness, depth or QC status; distinct missing, filtered, low-confidence and not-designed states; WT marks; row orders; row and column summaries | done (wave 1, slice 7: score, SE, replicates, input count; differential with wave 2) |
+| V3 | Selection by click, rectangle, freeform and query; named selection sets that propagate across views | partial (wave 1, slice 7: click, rectangle and keyboard; named selections in the workspace; wave 5: freeform and query) |
+| V4 | Variant inspector: identifiers, score and CI, counts by sample, replicate scores, filters and warnings, sequence context, position distribution, provenance; later barcodes, conditions, annotations, structure | done for wave 1 (slice 7); extended by waves 2–4 |
 | V5 | Sequence tracks synchronized with the map: reference, coverage, position effect and uncertainty, domains and motifs, secondary structure, conservation, ClinVar, population frequency, custom tracks, structure availability; show, hide, reorder, filter, export | planned (wave 3) |
 | V6 | Undo, history and a visible filter bar; analysis-changing actions distinct from view-only actions | done (wave 1: undo and the history, slice 4; the filter bar in the Score view, slice 5) |
 | V7 | Long operations in workers with progress and cancel | done (wave 1: reading tables, slice 3; scoring, slice 5) |
@@ -139,7 +139,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | --- | --- | --- |
 | R1 | Exports: variant scores CSV, variant counts CSV, per-variant and per-sample QC tables, design JSON, provenance JSON, selected variants CSV/JSON | planned (wave 1) |
 | R2 | Workspace archive (`.msz`): manifest, targets, sources or checksums, design, runs, annotation cache, selections, figures, history, methods and citations; save and reopen with identical results | planned (wave 1) |
-| R3 | Map and plot export as SVG and PNG | planned (wave 1) |
+| R3 | Map and plot export as SVG and PNG | done for the map (wave 1, slice 7; golden-file test); other plots with figures, wave 6 |
 | R4 | Methods text from the operations actually performed, with numbered references and BibTeX, parameter tables, input checksums, software version and commit, research-use statement; regenerated when a setting changes | planned (wave 1: scoring and QC; wave 6: complete) |
 | R5 | Figure builder: multi-panel figures from live views; SVG, high-resolution PNG, vector PDF, clipboard; embedded analysis metadata and a figure manifest; reopened figures rebuilt with differences reported | planned (wave 6) |
 | R6 | Analysis decision log, checkpoints and semantic diff of analyses | planned (wave 6) |
@@ -174,6 +174,6 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | T3 | Fixtures: clean two-population, poor replicate agreement, severe bottleneck, low-count tail, barcode conflicts, missing samples, malformed variants, time series, bins, two conditions, a published MaveDB record | planned (waves 1–3) |
 | T4 | Bundled examples (five to seven), each with a question, source and license, expected findings, opening view, known QC outcomes, reference scores, citation and a guided workflow under ten minutes; simulated data labeled as such | planned (wave 1: two; wave 2: five; wave 3: seven) |
 | T5 | Security: loopback binding, Host check, tokens, file-access restriction, response and decompression limits, archive path traversal, CSP, no remote code, escaped labels; `--offline` and `--no-remote-control`; tested | planned (wave 1; reviewed in wave 9) |
-| T6 | WCAG AA contrast in both themes, color-vision-safe palettes, patterns besides colors, full keyboard operation, screen-reader descriptions and tabular alternatives for every chart, adjustable scale | planned (wave 1 foundations; wave 9 audit) |
+| T6 | WCAG AA contrast in both themes, color-vision-safe palettes, patterns besides colors, full keyboard operation, screen-reader descriptions and tabular alternatives for every chart, adjustable scale | partial (wave 1: contrast and palettes, slice 1; the map's states as marks, keyboard, description and table, slice 7; wave 9 audit) |
 | T7 | Workspace migrations, opening at least two previous schema versions | planned (wave 9) |
 | T8 | Crash-safe writes; network failure cannot corrupt local work | planned (wave 1) |

@@ -182,6 +182,19 @@ export function updateTarget(ws, id, patch, detail = null) {
   return change(ws, { targets: next, design }, 'target', detail ?? `Changed the target ${target.name}: ${fields.join(', ')}`);
 }
 
+// Adds a named selection of variants (by their MAVE-HGVS keys), made on the map of a run.
+export function addSelection(ws, selection) {
+  const id = uniqueId(selection.name ?? 'selection', ws.selections);
+  const entry = { ...selection, id, created: selection.created ?? new Date().toISOString() };
+  return { ws: change(ws, { selections: [...ws.selections, entry] }, 'selection', `Saved the selection "${entry.name}": ${entry.keys.length} variant${entry.keys.length === 1 ? '' : 's'}`), id };
+}
+
+export function removeSelection(ws, id) {
+  const selection = ws.selections.find((s) => s.id === id);
+  if (!selection) return ws;
+  return change(ws, { selections: ws.selections.filter((s) => s.id !== id) }, 'remove-selection', `Removed the selection "${selection.name}"`);
+}
+
 // Sets the QC thresholds (null: the defaults), with what changed in the history.
 export function setQcThresholds(ws, thresholds, detail) {
   if (JSON.stringify(thresholds ?? null) === JSON.stringify(ws.qc?.thresholds ?? null)) return ws;

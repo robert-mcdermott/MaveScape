@@ -179,6 +179,13 @@ come from a run, recomputed with its recorded inputs in the score worker.
 - Selections (click, rectangle, freeform, by query) are named `SelectionSet`s that propagate to
   tracks, tables, plots, structure and exports.
 - Every map has a tabular alternative and a generated text description for screen readers.
+- Built in wave 1, slice 7: the model (`lib/map-model.js`), the renderer on any 2D context
+  (`lib/map-render.js`, which the benchmark runs in Node) and the SVG export (`lib/map-svg.js`) are
+  pure; the canvas component (`ui/variant-map.js`) adds pointer and keyboard. The score scale is
+  symmetric about the wild type, so equal color distances are equal score distances on both
+  sides. States have colors of their own (`--map-*`), kept ΔE ≥ 10 from the neutral score color,
+  because at small zoom a cell is too small for its mark. Selections are kept by MAVE-HGVS key, so
+  they hold for any row order and for variants not in the table.
 
 ### Workspace state, undo and provenance
 

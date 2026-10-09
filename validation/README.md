@@ -15,6 +15,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
 | `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions | `reference/enrich2.json`, `dms_variants.json`, `metafor.json`, `fixtures/`; MaveDB, external |
 | `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`) raise exactly their findings, a clean one none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
+| `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 
 ## Public data (`sources.json`)
@@ -190,4 +191,17 @@ What QC found in the feasibility data, with MaveScape's default scoring (locked 
   score about −3.7, after residue 110 about +0.5. Truncations that keep the RING domain keep
   binding BARD1, so most nonsense variants are not loss-of-function controls in this assay.
 - **Factor IX**: counts-level findings pass; bins are scored from wave 2.
+
+## The map (wave 1, slice 7)
+
+`golden/two-population.map.svg` is the synthetic fixture's map (minimum input count 10, so that
+every state appears: p.Thr9Ala and p.Phe8Ser filtered, p.Gly10Ala missing, p.Lys3Arg and p.Glu5Ter
+low confidence). A change to the map's drawing shows up as a difference from it; when the change is
+meant, `UPDATE_GOLDEN=1 node validation/run.mjs map` writes the new file, to review and commit.
+
+`node validation/bench.mjs` (in CI) simulates a 5,000-residue target (105,000 variants, three
+replicates), scores it, builds its map and draws 180 frames while panning on a stand-in context:
+scoring 0.5 s, the model 26 ms, 0.6 ms of JavaScript per frame at the median (budgets 10 s, 1 s,
+16 ms). Drawn on a real canvas in Chrome (1,600 × 500 pixels at 2× resolution), a frame takes a
+median of 2.9, 3.9 and 8.1 ms at 14-, 6- and 2-pixel cells, against 33 ms for 30 frames per second.
 
