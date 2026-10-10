@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The design · MaveScape</title>
-  <meta name="description" content="Say which column of the count table is which sample, replicate and time point in MaveScape's Experiment view, from a draft, a sample sheet or by hand." />
+  <meta name="description" content="Say which column of the count table is which sample, replicate and time point in MaveScape's Experiment view, from a draft, a sample sheet or by hand; see what each analysis can do with what is there, and write the analysis package." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/experiment.html" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="The design" />
-  <meta property="og:description" content="Say which column of the count table is which sample, replicate and time point in MaveScape's Experiment view, from a draft, a sample sheet or by hand." />
+  <meta property="og:description" content="Say which column of the count table is which sample, replicate and time point in MaveScape's Experiment view, from a draft, a sample sheet or by hand; see what each analysis can do with what is there, and write the analysis package." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/experiment.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -69,7 +69,7 @@
         </ul>
         <h4>Automate</h4>
         <ul>
-          <li><a href="scripting.html">Remote control and scripting</a></li>
+          <li><a href="scripting.html">Remote control, headless runs and scripting</a></li>
         </ul>
         <h4>Reference</h4>
         <ul>
@@ -80,7 +80,7 @@
 
     <main id="main" class="doc">
       <h1>The design</h1>
-      <p class="doc-lede">The design says what each column of the count table is: which sample, its role, its replicate and time point. MaveScape drafts it from the column names; you check it in the Experiment view.</p>
+      <p class="doc-lede">The design says what each column of the count table is (which sample, its role, its replicate and time point) and what the assay measures. MaveScape drafts the columns from their names; you check them and say what the scores mean in the Experiment view.</p>
 
       <h2 id="draft">Drafting the design</h2>
       <p>Once a table is open, the workflow strip offers <strong>Draft the design</strong>. MaveScape reads the column names (<code>input</code>, <code>pre</code>, <code>lib</code>; <code>output</code>, <code>post</code>, <code>sel</code>; <code>rep1</code>; <code>t0</code>, <code>gen3</code>; <code>bin1</code>; <code>tile2</code>), finds shared samples by comparing the columns' values, and sets aside every column it does not use, with the reason. The number of time points tells conditions apart: two assays in one table become two conditions.</p>
@@ -90,8 +90,25 @@
       </figure>
 
       <h2 id="editor">The Experiment view</h2>
-      <p>The design is two tables. <strong>Columns → samples:</strong> each column is a sample of its own, a technical replicate of another (summed), a copy of a shared sample's column, or not used, with why. <strong>Replicates × slots:</strong> each replicate's input and output, its time points (edited in the column heads) or its bins, with its condition and tile. Beside them: the kind of experiment, the controls, the time unit, and the target's name, offset, coding start and identifiers.</p>
+      <p>The design is two tables. <strong>Columns → samples:</strong> each column is a sample of its own, a technical replicate of another (summed), a copy of a shared sample's column, or not used, with why. <strong>Replicates × slots:</strong> each replicate's input and output, its time points (edited in the column heads) or its bins, with its condition and tile. With two or more conditions, one is the reference the others are compared with (<a href="scoring.html#conditions">Scoring</a>); an input selected under several conditions is one sample named by each of their replicates. Beside them: the kind of experiment, the time unit, <a href="#readout">what the assay measures and its controls</a>, and the target's name, offset, coding start and identifiers.</p>
       <p>Every change is checked as you make it. The design is described in plain words, and each error and warning is listed: a column that is neither a sample's nor set aside is an error, so nothing is dropped silently.</p>
+
+      <h2 id="readiness">What the analysis can do</h2>
+      <p>The hardest part of an analysis is often gathering what the experiment was, not scoring it: which sample is which, what the assay selects for, and numbers kept at the bench that never reach the count table. <strong>What the analysis can do</strong>, in the Experiment view, goes through every analysis MaveScape offers for the design (each way of scoring, normalizing and rescaling, combining replicates, differential scores, each quality-control finding, the record) and says whether it is ready, partial (it runs, and something missing would make it more complete) or not possible, and why.</p>
+      <p>Below it, <strong>what is missing</strong>: each gap with why it matters, where it is usually found, and <em>Give it</em>, which takes you to where it goes in the view. Some are in the counts (the wild type's reads, synonymous or nonsense variants), some in the protocol (what the assay measures, how the library was made), some kept at the bench:</p>
+      <ul>
+        <li>the <strong>cells carried into selection</strong> (and recovered after it), on each input and output sample: quality control checks the bottleneck it infers from the replicates against them (<a href="qc.html#bottleneck">Bottlenecks</a>);</li>
+        <li>the <strong>gates</strong> each bin was sorted between, and the <strong>cells sorted</strong> into each bin, for the maximum-likelihood fit (<a href="#bins">below</a>);</li>
+        <li>the <strong>times in generations</strong>, for scores per generation (<a href="scoring.html#time-series">Scoring</a>);</li>
+        <li>the target's <strong>UniProt or RefSeq identifier</strong>, and the assay in MaveDB's terms, which a deposit needs.</li>
+      </ul>
+      <p>What would take another experiment (a second or third replicate, a second condition, more time points) is listed apart. Nothing is filled in by guessing: a gap stays visible until it is given, and the methods paragraph names what was not recorded and what that meant. The workflow strip shows how many analyses are possible and how many gaps the bench or the protocol could fill; the Start page lists what is worth bringing; <code>mavescape validate</code> prints the same account (<a href="scripting.html#validate">Scripting</a>).</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/readiness-dark.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view of the GRB2 example: What the analysis can do, 19 of 25 analyses ready, 2 partial and 4 not possible, and what is missing: synonymous variants, how the library was made and the cells carried into selection, each with why it matters, where it is usually found and a Give it button" /><img class="shot-light" src="../assets/img/readiness-light.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view of the GRB2 example: What the analysis can do, 19 of 25 analyses ready, 2 partial and 4 not possible, and what is missing: synonymous variants, how the library was made and the cells carried into selection, each with why it matters, where it is usually found and a Give it button" /></div>
+        <figcaption>GRB2's readiness: what each analysis can do with the published counts, and the three things that would unlock or improve more.</figcaption>
+      </figure>
+      <h3 id="package">The analysis package</h3>
+      <p><strong>Write the analysis package</strong> (here, or a run's export menu) writes one ZIP of what the analysis needs: the count table as imported, the target as FASTA, the design (with what the assay measures, the gates and the cells recorded), the design again as a <a href="#sample-sheets">sample sheet</a>, the parameters (a run's, or MaveScape's defaults), the readiness as data, and a README with what each file is, the <code>mavescape run</code> command that scores it, and what is missing. These are the files <code>mavescape run</code> reads, and what the MAVE minimum information asks of an experiment, so the package that analyzes an experiment is the one that will deposit it (MaveScape 0.3). Scored from a run's package alone, <code>mavescape run</code> gives that run's output hash.</p>
 
       <h2 id="kinds">Kinds of experiment</h2>
       <div class="table-wrap">
@@ -99,21 +116,50 @@
           <thead><tr><th>Kind</th><th>Samples per replicate</th><th>Scored</th></tr></thead>
           <tbody>
             <tr><td><strong>Two populations</strong></td><td>An input and an output</td><td>Yes</td></tr>
-            <tr><td><strong>Time series</strong></td><td>Time points, with their times</td><td>By the first and last time points now; by regression in 0.2</td></tr>
-            <tr><td><strong>Sorted bins</strong></td><td>Bins, each with its value</td><td>In 0.2; quality control reads their counts now</td></tr>
+            <tr><td><strong>Time series</strong></td><td>Time points, with their times</td><td>By weighted regression on every time point (three or more), or by the log ratio of the first and last</td></tr>
+            <tr><td><strong>Sorted bins</strong></td><td>Bins, each with its value, and optionally its gates and the cells sorted</td><td>By the weighted average of the bins' values, or by maximum likelihood from the gates</td></tr>
             <tr><td><strong>Scores</strong></td><td>Precomputed scores</td><td>Nothing to score; shown on the map in 0.3</td></tr>
           </tbody>
         </table>
       </div>
 
+      <h2 id="readout">What the assay measures</h2>
+      <p>A score's sign means nothing without the selection. In a selection for function, a variant that becomes rarer has lost some of it, and scores low. But an assay can just as well enrich the variants that lose function: a toxic protein, a sort for a dim reporter. <strong>What the assay measures</strong> records which, in MaveDB's terms (the MAVE minimum information's vocabulary):</p>
+      <ul>
+        <li><strong>What was measured</strong>, in words, and <strong>a higher score means</strong>: more of the function, less of it, or a larger change either way (a score with no sign).</li>
+        <li>The <strong>assay method</strong>, what <strong>it detects</strong> (loss of function, gain of function…) and the <strong>model system</strong>.</li>
+        <li>How <strong>the library was made</strong>. A library of single-base changes (error-prone PCR, doped oligos) reaches about a third of the substitutions, and with a DNA target quality control judges coverage against those (<a href="qc.html#context">Quality control</a>).</li>
+      </ul>
+      <p>The direction is used wherever the scores' meaning matters. The map's legend reads "blue is less function, red more function" only when the direction is stated, and plain "lower" and "higher" otherwise. The separation of the controls expects loss of function on the stated side. The design's summary, the methods and the exports carry the readout. Until the direction is stated, MaveScape takes a higher score to mean more of the function, and says so rather than guessing quietly.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/readout-dark.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view of the GRB2 example: What the assay measures, with the cellular abundance of the domain measured by a reporter in yeast, a higher score meaning more of the function, and the controls with the positions where they serve" /><img class="shot-light" src="../assets/img/readout-light.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view of the GRB2 example: What the assay measures, with the cellular abundance of the domain measured by a reporter in yeast, a higher score meaning more of the function, and the controls with the positions where they serve" /></div>
+        <figcaption>GRB2's readout: abundance, in yeast, a higher score meaning more of it; and its controls.</figcaption>
+      </figure>
+      <h3 id="controls">Controls that fit the assay</h3>
+      <p>The wild type, synonymous and nonsense variants are found from their names, or listed, or set to none. Each class can be limited to the <strong>positions</strong> where it serves, with <strong>why</strong> it is a control. Nonsense variants are loss-of-function controls only where a stop loses the function assayed: in BRCA1's yeast two-hybrid assay, stops after the RING domain keep binding BARD1 and score like the wild type. Quality control finds such a position and suggests it. The limits apply to everything that uses the controls (normalization to synonymous variants, rescaling, the separation of the controls), and the reasons go into the design's summary and the methods.</p>
+
+      <h2 id="bins">Bins, gates and cells</h2>
+      <p>For two populations, the <strong>Cells</strong> column records the cells carried into selection from each input (from the transformation's titer, or the cells plated) and, when known, those recovered after it in each output; quality control checks the bottleneck it infers from the replicates against them. For sorted bins, each bin's value (its weight in the weighted average: a rank or a fluorescence) is edited in the replicates table's heads. <strong>Bins and gates</strong> records the gates each bin was sorted between, on the reporter's fluorescence (the lowest bin's lower gate and the highest bin's upper gate open), and the <strong>Cells</strong> column the cells sorted into each bin. With the gates, the bins can be scored by maximum likelihood; with the cells, its reads are reweighted by them, and QC reads the cells per variant.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/sort-seq-design-dark.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view of the simulated sort-seq example: the bins and gates table with each bin's value and gates, and the columns with the cells sorted into each bin" /><img class="shot-light" src="../assets/img/sort-seq-design-light.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view of the simulated sort-seq example: the bins and gates table with each bin's value and gates, and the columns with the cells sorted into each bin" /></div>
+        <figcaption>A sort's design: each bin's value and gates, and the cells sorted into it.</figcaption>
+      </figure>
+
+      <h2 id="missing-zero">Missing = 0</h2>
+      <p>Missing is not zero: an empty or <code>NA</code> count means the variant was not counted. But some pipelines write a variant that dropped out during selection, counted zero times, as missing. Quality control's "Missing after selection" finding notices when the missing variants are the ones that had been most depleted. Tick <strong>Missing = 0</strong> for those samples after selection, never for a replicate's first sample (a variant missing there was not in the library), and score again: the run records the design, setting included.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/time-series-design-dark.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view of the simulated time series: three replicates of five time points, and the columns table with a Missing = 0 checkbox for each sample" /><img class="shot-light" src="../assets/img/time-series-design-light.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view of the simulated time series: three replicates of five time points, and the columns table with a Missing = 0 checkbox for each sample" /></div>
+        <figcaption>A time series' design: each replicate's sample at each time, and Missing = 0 per sample.</figcaption>
+      </figure>
+
       <h2 id="sample-sheets">Sample sheets</h2>
-      <p>A sample sheet is a table with one row per sequenced sample: its column, role, replicate and, as needed, technical replicate, condition, time, bin, value and tile. Columns are recognized under many names, and DiMSum's experiment design file reads as a sample sheet. A sample shared by several replicates lists them (<code>1;2;3</code>).</p>
+      <p>A sample sheet is a table with one row per sequenced sample: its column, role, replicate and, as needed, technical replicate, condition, time, bin, value and tile. Columns are recognized under many names, and DiMSum's experiment design file reads as a sample sheet. A sample shared by several replicates lists them (<code>1;2;3</code>), and one selected under several conditions lists those too (<code>Without ligand;With ligand</code>). The analysis package writes the design back as a sheet, one row per column of counts, which reads as the same design; the gates, the readout and the controls are the design file's alone.</p>
       <div class="code"><pre><code>column,role,replicate,technical_replicate,condition,time,bin,value,tile
 input_rep1,input,1,1,,,,,
 output_rep1,output,1,1,,,,,</code></pre></div>
 
       <h2 id="files">Design files and history</h2>
-      <p>A design is saved and opened as <code>*.design.json</code>, described by a JSON schema in the repository. Every material change to the workspace (an import, a target, the design) goes into its history, each entry chained to the one before by its hash, so that an entry edited afterward is caught. The drawer (<kbd>⌘J</kbd>) shows it.</p>
+      <p>A design is saved and opened as <code>*.design.json</code>, described by a JSON schema in the repository; <code>mavescape run</code> reads the same file, readout included. Every material change to the workspace (an import, a target, the design) goes into its history, each entry chained to the one before by its hash, so that an entry edited afterward is caught. The drawer (<kbd>⌘J</kbd>) shows it.</p>
 
       <nav class="doc-pager" aria-label="Pages">
         <a class="prev" href="opening-data.html"><span>Previous</span>Opening your data</a>

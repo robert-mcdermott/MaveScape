@@ -69,7 +69,7 @@
         </ul>
         <h4>Automate</h4>
         <ul>
-          <li><a href="scripting.html">Remote control and scripting</a></li>
+          <li><a href="scripting.html">Remote control, headless runs and scripting</a></li>
         </ul>
         <h4>Reference</h4>
         <ul>
@@ -85,10 +85,10 @@
       <h2 id="reading">Reading the map</h2>
       <figure>
         <div class="shot"><img class="shot-dark" src="../assets/img/map-dark.webp" width="2000" height="1250" loading="lazy" alt="The map of the GRB2 SH3 domain colored by score, with the legend of states and p.Trp36Ala's evidence in the inspector" /><img class="shot-light" src="../assets/img/map-light.webp" width="2000" height="1250" loading="lazy" alt="The map of the GRB2 SH3 domain colored by score, with the legend of states and p.Trp36Ala's evidence in the inspector" /></div>
-        <figcaption>GRB2's map colored by score: blue is loss of function, red gain, white like the wild type.</figcaption>
+        <figcaption>GRB2's map colored by score: in this abundance assay blue is less function, red more, white like the wild type.</figcaption>
       </figure>
       <ul>
-        <li><strong>Scored</strong> cells are colored by score on a diverging scale centered on the wild type and symmetric about it.</li>
+        <li><strong>Scored</strong> cells are colored by score on a diverging scale centered on the wild type and symmetric about it. Low scores are blue and high scores red. Which end is loss of function depends on the assay, so the legend names the ends from the readout ("less function", "more function") when the design states its direction, and says only "lower" and "higher" otherwise (<a href="experiment.html#readout">What the assay measures</a>).</li>
         <li><strong>Low confidence</strong> cells (fewer replicates than expected, or a zero count) are drawn paler, with a corner mark.</li>
         <li><strong>Filtered</strong> cells are hatched; <strong>missing</strong> cells (not in the table) are gray with a dot; cells outside the designed tiles are left empty. None of them is ever drawn as "no effect": each is at least ΔE 10 from the neutral color in both themes and both palettes.</li>
         <li>The <strong>reference residue</strong> at each position is outlined.</li>
@@ -97,7 +97,7 @@
 
       <h2 id="controls">Settings</h2>
       <ul>
-        <li><strong>Color by</strong> score, standard error, replicates used or input count (log).</li>
+        <li><strong>Color by</strong> score, standard error, replicates used, input count (log), or for a run that compares conditions the <strong>differential score</strong>: each condition against the reference, centered on no difference, a variant with no difference shown filtered with why (<a href="scoring.html#conditions">Scoring</a>).</li>
         <li><strong>Rows</strong> in biochemical order (charged, polar, aliphatic, aromatic, special, stop), by hydrophobicity or alphabetically.</li>
         <li><strong>Colors:</strong> blue–red or purple–orange.</li>
         <li>Zoom with <kbd>⌘</kbd> or <kbd>Ctrl</kbd> and the wheel, or the buttons; drag to pan; <strong>Fit</strong> shows the whole map.</li>
@@ -105,6 +105,10 @@
       <figure>
         <div class="shot"><img class="shot-dark" src="../assets/img/map-se-dark.webp" width="2000" height="1250" loading="lazy" alt="The simulated example's map colored by standard error, with a variant's evidence in the inspector" /><img class="shot-light" src="../assets/img/map-se-light.webp" width="2000" height="1250" loading="lazy" alt="The simulated example's map colored by standard error, with a variant's evidence in the inspector" /></div>
         <figcaption>Colored by standard error, the uncertain cells stand out: in the simulated example, the variants rare in the library.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/differential-map-dark.webp" width="2000" height="1250" loading="lazy" alt="The map of the simulated two-condition example colored by the difference With ligand vs Without ligand: pale except a blue band at positions 12 to 16; the inspector shows p.Pro13Ala's score in each condition and the difference, −2.28 with its interval and q" /><img class="shot-light" src="../assets/img/differential-map-light.webp" width="2000" height="1250" loading="lazy" alt="The map of the simulated two-condition example colored by the difference With ligand vs Without ligand: pale except a blue band at positions 12 to 16; the inspector shows p.Pro13Ala's score in each condition and the difference, −2.28 with its interval and q" /></div>
+        <figcaption>Colored by the differential score: the binding site's variants lose fitness only with the ligand. The inspector gives the variant's score in each condition and the difference.</figcaption>
       </figure>
 
       <h2 id="selections">Selections</h2>
@@ -115,7 +119,7 @@
       </figure>
 
       <h2 id="inspector">The variant inspector</h2>
-      <p>For a variant, the inspector shows its name as written and in MAVE-HGVS, its class and position; its score with standard error and 95% interval, or why it has none (the filter stage that left it out); its flags; each replicate's counts before and after selection, score and whether it was used; every sample's counts; the other substitutions at its position against the run's range; the sequence around it; and the run it comes from.</p>
+      <p>For a variant, the inspector shows its name as written and in MAVE-HGVS, its class and position; its score with standard error and 95% interval (with the <a href="scoring.html#moderated">moderated combination</a>, by t at the degrees of freedom shown; for rescaled scores, the anchors' uncertainty, SE_scale, beside it), or why it has none (the filter stage that left it out); its flags; each replicate's counts before and after selection, score and whether it was used; with conditions compared, its score in each and each difference with its interval and q (paired, each pair's difference too); every sample's counts; the other substitutions at its position against the run's range; the sequence around it; and the run it comes from.</p>
 
       <h2 id="export">Export</h2>
       <p><strong>Export</strong> writes the map as SVG (vector, for figures) or PNG at three times the resolution, in the export theme, with its legend.</p>

@@ -69,7 +69,7 @@
         </ul>
         <h4>Automate</h4>
         <ul>
-          <li><a href="scripting.html">Remote control and scripting</a></li>
+          <li><a href="scripting.html">Remote control, headless runs and scripting</a></li>
         </ul>
         <h4>Reference</h4>
         <ul>
@@ -84,7 +84,7 @@
 
       <h2 id="run-files">A run's files</h2>
       <figure>
-        <div class="shot"><img class="shot-dark" src="../assets/img/record-dark.webp" width="2000" height="1250" loading="lazy" alt="The Score view with the run's export menu open: scores and counts in MaveDB columns, QC per sample and per variant, provenance, and methods and references" /><img class="shot-light" src="../assets/img/record-light.webp" width="2000" height="1250" loading="lazy" alt="The Score view with the run's export menu open: scores and counts in MaveDB columns, QC per sample and per variant, provenance, and methods and references" /></div>
+        <div class="shot"><img class="shot-dark" src="../assets/img/record-dark.webp" width="2000" height="1250" loading="lazy" alt="The Score view with the run's export menu open: scores and counts in MaveDB columns, QC per sample, per variant and its findings, provenance, methods and references, and the analysis package" /><img class="shot-light" src="../assets/img/record-light.webp" width="2000" height="1250" loading="lazy" alt="The Score view with the run's export menu open: scores and counts in MaveDB columns, QC per sample, per variant and its findings, provenance, methods and references, and the analysis package" /></div>
         <figcaption>A run's exports, from its <strong>Export…</strong> menu in the Score view (or the workflow strip's last step).</figcaption>
       </figure>
       <div class="table-wrap">
@@ -92,22 +92,27 @@
           <thead><tr><th>File</th><th>What it holds</th></tr></thead>
           <tbody>
             <tr><td><code>*_scores.csv</code></td><td>Every variant's score, SE and 95% interval, the replicates used, its status (scored, low confidence, filtered at which stage, or not measured) and flags, τ², I², the leave-one-out change and each replicate's score, with MaveDB's identifier columns (<code>hgvs_nt</code>, <code>hgvs_splice</code>, <code>hgvs_pro</code>)</td></tr>
-            <tr><td><code>*_counts.csv</code></td><td>The counts the run scored, in the same columns; scored again they give the run's output hash</td></tr>
+            <tr><td><code>*_counts.csv</code></td><td>The counts the run scored, in the same columns (a table of barcodes: each barcode with its variant); scored again they give the run's output hash</td></tr>
             <tr><td><code>*_qc_samples.csv</code>, <code>*_qc_variants.csv</code></td><td>Quality control per sample and per variant</td></tr>
-            <tr><td><code>*_provenance.json</code></td><td>The inputs with their SHA-256 checksums, the parameters, the software and its commit, the QC findings and thresholds, and the files exported</td></tr>
-            <tr><td><code>*_methods.md</code>, <code>*_references.bib</code></td><td>A methods paragraph written from the run, with its references in order and as BibTeX</td></tr>
+            <tr><td><code>*_qc_findings.csv</code></td><td>The QC findings: each with its status, value and threshold, what could cause it, what to do next, and its acknowledgement with the reason</td></tr>
+            <tr><td><code>*_barcodes.csv</code></td><td>A table of barcodes, barcode by barcode: its variant, and in each replicate its counts, score and SE, departure from its variant's other barcodes, whether it is an outlier and whether it was used</td></tr>
+            <tr><td><code>*_differential.csv</code></td><td>With conditions compared: every variant's difference against the reference condition, its SE, 95% interval, z or t, p and q, the pairs or replicates behind it, and why there is none</td></tr>
+            <tr><td><code>*_provenance.json</code></td><td>The inputs with their SHA-256 checksums, the parameters, the software and its commit, the QC findings (with any acknowledgement) and thresholds, and the files exported</td></tr>
+            <tr><td><code>*_methods.md</code>, <code>*_references.bib</code></td><td>A methods paragraph written from the run (the design, what the assay measures and what was not recorded, the scoring, the QC with any acknowledged finding and its reason), with its references in order and as BibTeX</td></tr>
+            <tr><td><code>*_package.zip</code></td><td>The analysis package: the count table as imported, the target, the design, the design as a sample sheet, the parameters, the readiness, and a README with the <code>mavescape run</code> command and what is missing (<a href="experiment.html#package">The design</a>). Scored from its own files, it gives the run's output hash</td></tr>
           </tbody>
         </table>
       </div>
       <p>Exported scores are read back to the last bit and open in MaveScape again as MaveDB score tables.</p>
 
       <h2 id="archive">The workspace archive</h2>
-      <p><strong>Workspace archive (.msz)…</strong> in the workspace menu writes one file with everything needed to reopen the analysis on another computer: the workspace (targets, design, runs, selections, QC thresholds and the chained history), each run's scores, the methods with references, and the count tables (or, if you prefer, only their checksums). Opened again, each run is recomputed from the archived table and must reproduce its recorded output hash.</p>
+      <p><strong>Workspace archive (.msz)…</strong> in the workspace menu writes one file with everything needed to reopen the analysis on another computer: the workspace (targets, design, runs, selections, QC thresholds and acknowledgements, and the chained history), each run's scores, the methods with references, and the count tables (or, if you prefer, only their checksums). Opened again, each run is recomputed from the archived table and must reproduce its recorded output hash.</p>
       <ul>
         <li>Archives are deterministic: the same workspace gives the same bytes in every time zone.</li>
         <li>A manifest lists every file's SHA-256; an edited run, table or history entry is reported on opening.</li>
         <li>Archives from a newer MaveScape, without a manifest, with paths outside the archive, or inflating beyond their declared size are refused.</li>
         <li>An archive whose workspace is already in the library opens as a copy, so neither overwrites the other.</li>
+        <li>Archives saved by earlier releases keep opening: the validation keeps one from each release (0.1.0's, and 0.2.0's with every kind of source and run it brought) and checks that this MaveScape opens it and reproduces its runs.</li>
       </ul>
 
       <h2 id="formats">Formats</h2>
@@ -115,7 +120,7 @@
 
       <nav class="doc-pager" aria-label="Pages">
         <a class="prev" href="map.html"><span>Previous</span>The map and the inspector</a>
-        <a class="next" href="scripting.html"><span>Next</span>Remote control and scripting</a>
+        <a class="next" href="scripting.html"><span>Next</span>Remote control, headless runs and scripting</a>
       </nav>
     </main>
 

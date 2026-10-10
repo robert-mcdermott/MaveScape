@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Remote control and scripting · MaveScape</title>
-  <meta name="description" content="Drive the open MaveScape window from scripts on your computer with --remote-control: open files, score, read the QC, select variants and export, through a small HTTP interface with a token for files." />
+  <title>Remote control, headless runs and scripting · MaveScape</title>
+  <meta name="description" content="Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), and check them before scoring (mavescape validate)." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/scripting.html" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Remote control and scripting" />
-  <meta property="og:description" content="Drive the open MaveScape window from scripts on your computer with --remote-control: open files, score, read the QC, select variants and export, through a small HTTP interface with a token for files." />
+  <meta property="og:title" content="Remote control, headless runs and scripting" />
+  <meta property="og:description" content="Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), and check them before scoring (mavescape validate)." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/scripting.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -69,7 +69,7 @@
         </ul>
         <h4>Automate</h4>
         <ul>
-          <li><a href="scripting.html" aria-current="page">Remote control and scripting</a></li>
+          <li><a href="scripting.html" aria-current="page">Remote control, headless runs and scripting</a></li>
         </ul>
         <h4>Reference</h4>
         <ul>
@@ -79,8 +79,8 @@
     </aside>
 
     <main id="main" class="doc">
-      <h1>Remote control and scripting</h1>
-      <p class="doc-lede">Started with --remote-control, MaveScape accepts actions from programs on your computer: open an example or your files, score, read the quality control, select variants, export. Each action happens in the open window, where you see it; its changes go into the history and can be undone.</p>
+      <h1>Remote control, headless runs and scripting</h1>
+      <p class="doc-lede">Started with --remote-control, MaveScape accepts actions from programs on your computer: open an example or your files, score, read the quality control, select variants, export. Each action happens in the open window, where you see it; its changes go into the history and can be undone. For pipelines, mavescape run does a whole analysis without a window, and mavescape validate checks the files first.</p>
 
       <h2 id="start">Turn it on</h2>
       <div class="code"><pre><code><span class="prompt">$ </span>mavescape --remote-control</code></pre></div>
@@ -88,7 +88,7 @@
       <div class="code" data-no-copy><pre><code>{
   "url": "http://127.0.0.1:8820",
   "token": "…",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "pid": 41237
 }</code></pre></div>
       <p>Only programs on this computer can use remote control, addressing it as <code>127.0.0.1</code> or <code>localhost</code>, and web pages on other sites cannot. A MaveScape started with <code>--remote-control</code> while another is running starts on the next free port rather than handing its files over, so the script reaches a window it can drive.</p>
@@ -110,12 +110,15 @@
             <tr><td><code>focus</code></td><td>Shows a table, target, run, selection or variant in the inspector</td></tr>
             <tr><td><code>draft_design</code></td><td>Drafts the design from the column names and reports its problems</td></tr>
             <tr><td><code>set_design</code></td><td>Sets a <code>mavescape-design</code> document, refused with every problem when it does not fit the table</td></tr>
-            <tr><td><code>score</code></td><td>Scores with a preset (<code>mavescape</code> or <code>enrich2</code>) and changed <code>parameters</code>; the existing run when the inputs are the same</td></tr>
-            <tr><td><code>qc_findings</code></td><td>Each finding of a run (or of the counts) with its status, value, threshold and rationale; <code>finding</code> shows one in the QC view</td></tr>
+            <tr><td><code>check</code></td><td>Checks a table as scoring would, without scoring: its names against the design's target, the design against its columns, the parameters against the design; says what blocks scoring (<code>design</code>, <code>preset</code>, <code>parameters</code>)</td></tr>
+            <tr><td><code>reproduce_run</code></td><td>Recomputes a saved run from its recorded inputs and checks its output hash; refused, saying why, when it differs</td></tr>
+            <tr><td><code>score</code></td><td>Scores with a preset (<code>mavescape</code>, <code>enrich2</code> or <code>dimsum</code>, which returns each replicate's fitted scale, shift and error terms) and changed <code>parameters</code>, such as <code>{"model": "ratio"}</code> for a time series by its ends, <code>{"model": "bins-mle"}</code> for sorted bins by maximum likelihood or <code>{"differential": "paired"}</code> to compare conditions by pairs of replicates; with conditions compared, how many variants differ; the existing run when the inputs are the same</td></tr>
+            <tr><td><code>qc_findings</code></td><td>Each finding of a run (or of the counts) with its status, value, threshold and rationale, what could cause it and what to do next, and its acknowledgement; <code>finding</code> shows one in the QC view</td></tr>
+            <tr><td><code>acknowledge_finding</code></td><td>Acknowledges a finding to review or failing with the <code>reason</code> it is expected (an empty reason withdraws it). Its status stays; the reason goes into the history, the methods and the QC exports. A finding that passes needs none, and is left as it is</td></tr>
             <tr><td><code>select_variants</code></td><td>Selects <code>variants</code> or <code>positions</code> on the map, optionally only those scored, low, filtered or missing, and saves the selection (<code>save_as</code>)</td></tr>
-            <tr><td><code>inspect_variant</code></td><td>A variant's score, SE and interval, flags, replicates and counts</td></tr>
-            <tr><td><code>render_map</code></td><td>Shows the map with the given coloring, row order, palette and zoom, and returns it in words</td></tr>
-            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG), <code>selection</code> or <code>archive</code> to <code>path</code>. Needs the token</td></tr>
+            <tr><td><code>inspect_variant</code></td><td>A variant's score, SE and interval (with the moderated combination, its degrees of freedom, <code>df</code>; rescaled, the anchors' uncertainty, <code>seScale</code>), flags, replicates and counts (for a regression, each replicate's time points and departure from a line; with conditions compared, each difference with its SE, interval and q)</td></tr>
+            <tr><td><code>render_map</code></td><td>Shows the map with the given coloring (<code>differential</code> for a comparison of conditions, and <code>contrast</code> to choose one), row order, palette and zoom, and returns it in words</td></tr>
+            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>qc-findings</code>, <code>barcodes</code> (a table of barcodes), <code>differential</code> (conditions compared), <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG), <code>selection</code>, <code>archive</code> or <code>package</code> (the analysis package of a run, or of the design with the default parameters) to <code>path</code>. Needs the token</td></tr>
           </tbody>
         </table>
       </div>
@@ -154,8 +157,53 @@ act("export", what="scores", path="/data/scores.csv")</code></pre></div>
       <p>The pictures on this site are captured the same way: <code>docs/capture/capture.mjs</code> builds MaveScape, starts it with <code>--remote-control</code> on an empty library, drives each scene through these actions in headless Chrome, and writes each scene in the light and dark themes. <code>validation/remote-session.mjs</code> runs every action and checks the results against the same analysis in Node, and runs in continuous integration.</p>
       <div class="code"><pre><code><span class="prompt">$ </span>node docs/capture/capture.mjs map qc --theme dark</code></pre></div>
 
+      <h2 id="headless">Headless runs</h2>
+      <p><code>mavescape run</code> scores a count table with its design without a window, for pipelines and continuous integration. It starts MaveScape on a private port with a temporary library, opens it in a headless Chrome (or Chromium, Edge or Brave: <code>--chrome</code>, or the <code>CHROME</code> variable), performs the analysis through the actions above, writes the files to a folder and stops.</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>mavescape run --design design.json --out results/ counts.csv</code></pre></div>
+      <div class="code wrap" data-no-copy><pre><code>MaveScape 0.2.0: running in Google Chrome
+[1] new_workspace: ok (0.0 s) Started a new workspace, "GRB2 SH3 domain, Domainome abundance (aPCA)".
+[2] open_files: ok (0.1 s) Opened the table counts.csv.
+[3] set_design: ok (0.0 s) Set the design of counts.csv: two-population, 3 replicates.
+[4] check: ok (0.0 s) Valid: counts.csv, 1121 rows (1121 names valid), with the design (two-population, 3 replicates of 6 samples).
+[5] score: ok (0.1 s) Run 1: 1118 of 1121 variants scored (MaveScape defaults).
+[6] qc_findings: ok (0.1 s) Quality control of Run 1: 1 fail, 0 to review, 11 pass.
+[7] export: ok (0.0 s) Wrote results/scores.csv (341969 bytes).
+…
+Done in 1.2 s: 9 files written to results (run.json lists them).</code></pre></div>
+      <p>It checks first: the table's variant names against the design's target, the design against the table's columns, and the parameters against the design. When anything blocks scoring it scores nothing. Then it scores, with MaveScape's defaults or <code>--preset enrich2</code>, <code>dimsum</code> or <code>vampseq</code>, and <code>--parameters params.json</code> for the parameters to change (as the <code>score</code> action takes them). It runs the quality control and writes the run's files. A table of barcodes is named with its barcode-to-variant map (<code>counts.csv map.csv</code>); a target not in the design is given with <code>--target</code>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>File</th><th>What it holds</th></tr></thead>
+          <tbody>
+            <tr><td><code>scores.csv</code></td><td>The scores in MaveDB's columns; with several conditions, <code>scores_&lt;condition&gt;.csv</code> for each</td></tr>
+            <tr><td><code>counts.csv</code>, <code>qc_samples.csv</code>, <code>qc_variants.csv</code>, <code>qc_findings.csv</code></td><td>The counts scored; quality control per sample and per variant; and the findings, each with what to do and its acknowledgement</td></tr>
+            <tr><td><code>differential.csv</code>, <code>barcodes.csv</code></td><td>With conditions compared, the differential scores; for a table of barcodes, each barcode</td></tr>
+            <tr><td><code>map.svg</code></td><td>The variant-effect map (protein-level variants)</td></tr>
+            <tr><td><code>provenance.json</code>, <code>methods.md</code>, <code>references.bib</code></td><td>The record and the methods paragraph with its references</td></tr>
+            <tr><td><code>workspace.msz</code></td><td>The analysis as a workspace archive, to open in the window or run again</td></tr>
+            <tr><td><code>run.json</code></td><td>The command, the inputs and every output with their SHA-256, each step with its outcome and time, the run's id and output hash, and its QC (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md">FORMATS.md</a>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>The same bytes again.</strong> The scores, counts, QC, map, methods and references are the same bytes for the same inputs. The provenance and the workspace archive also record when they were made: give <code>--time 2026-10-09T12:00:00Z</code>, or set <code>SOURCE_DATE_EPOCH</code>, and every record carries that time, so every file is the same bytes. <code>--from-workspace analysis.msz</code> (with <code>--run "Run 2"</code>, else the latest) reruns a saved run. Its scores are recomputed from its recorded table, design and parameters and must have its recorded output hash; otherwise the run stops.</p>
+      <p><strong>Exit status:</strong> 0 when done. 1 when the run was not done or found a blocking problem: a design that does not fit the table, parameters that cannot score, a run that did not reproduce, a QC finding that blocks (a sample with no counts), or with <code>--strict</code> any failing finding not acknowledged (the files are still written). 2 for a wrong command line, a missing input, an output folder that is not empty (unless <code>--overwrite</code>), or no browser. <code>run.json</code> says why. <code>--log json</code> prints the progress as one JSON object per line, for a pipeline's logs.</p>
+      <p><strong>Findings expected here.</strong> <code>--acknowledge id=reason</code> (repeatable) acknowledges a QC finding before the QC is read, as the QC view's <strong>Acknowledge…</strong> does (<a href="qc.html#acknowledge">Quality control</a>). The finding keeps its status and <code>--strict</code> reports it, but does not fail on it. The reason is in <code>run.json</code>, <code>qc_findings.csv</code> and the methods. A finding that passes needs no acknowledgement and is left alone, so a pipeline can name what it expects on every data set.</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>mavescape run --design design.json --out results/ --strict --acknowledge "coverage=an error-prone PCR library" counts.csv</code></pre></div>
+
+      <h2 id="validate">Checking before scoring</h2>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>mavescape validate --design design.json counts.csv</code></pre></div>
+      <div class="code wrap" data-no-copy><pre><code>Valid: counts.csv, 1121 rows (1121 names valid), with the design (two-population, 3 replicates of 6 samples).</code></pre></div>
+      <p><code>mavescape validate</code> checks tables, a design and parameters as scoring would, without scoring, and lists what blocks scoring and the warnings. It then says what each analysis can do with these files: the analyses that are partial or not possible and why, and what is missing, why it matters and where it is usually found (<a href="experiment.html#readiness">What the analysis can do</a>). It exits 0 when they are valid and 1 when not; <code>--json</code> prints the report as JSON, the readiness as data in <code>readiness</code>. A design alone is checked without its table, and a score table against its target (<code>--target</code>).</p>
+      <div class="code wrap" data-no-copy><pre><code>  19 of 25 analyses ready, 2 partial, 4 not possible
+  …
+  Quality control:
+  - partial: Variance beyond counting (bottleneck) (better with cells carried into selection)
+  …
+  What is missing:
+  - Cells carried into selection: QC infers a bottleneck from how much replicates disagree; …</code></pre></div>
+
       <h2 id="later">Coming</h2>
-      <p>Headless runs (<code>mavescape run</code>, scoring a design and a table into a folder with no window) come in 0.2, and an MCP server for AI agents on the same actions later (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/mavescape-spec/roadmap.md">roadmap</a>).</p>
+      <p>An MCP server for AI agents on the same actions (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/mavescape-spec/roadmap.md">roadmap</a>).</p>
 
       <nav class="doc-pager" aria-label="Pages">
         <a class="prev" href="record.html"><span>Previous</span>Exports and the record</a>

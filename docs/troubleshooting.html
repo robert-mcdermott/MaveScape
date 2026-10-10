@@ -69,7 +69,7 @@
         </ul>
         <h4>Automate</h4>
         <ul>
-          <li><a href="scripting.html">Remote control and scripting</a></li>
+          <li><a href="scripting.html">Remote control, headless runs and scripting</a></li>
         </ul>
         <h4>Reference</h4>
         <ul>
@@ -99,7 +99,7 @@
       </ul>
 
       <h2 id="scoring">Scoring is refused</h2>
-      <p>The Score view lists every reason. Most often the design has an error (fix it in Experiment), the wild type is not in the table for wild-type normalization (choose another normalization), or the experiment is a sorted-bin design, which is scored from 0.2.</p>
+      <p>The Score view lists every reason. Most often the design has an error (fix it in Experiment), the wild type is not in the table for wild-type normalization (choose another normalization), the wild type or nonsense variants a scale needs are not scored (choose another scale), or the maximum-likelihood fit lacks the bins' gates (give them in Experiment, or score by the weighted average).</p>
 
       <h2 id="differs">A run says its scores differ</h2>
       <p>When a workspace is reopened, each run is recomputed from its recorded inputs and compared with its recorded output hash. Runs made by MaveScape 0.1.0 used the browser's own logarithms, whose last bit varies between browsers and their versions; recomputed by a later MaveScape, their scores differ only in their last digits, and the run says so. Score again to make a run that reproduces everywhere. A run whose table is not in the workspace cannot be recomputed: open the table again.</p>
@@ -114,8 +114,15 @@
         <li><strong>Unauthorized:</strong> <code>open_files</code> and <code>export</code> need the <code>X-MaveScape-Token</code> header with the token from <code>remote.json</code> (<a href="scripting.html#files">Reading and writing files</a>).</li>
       </ul>
 
+      <h2 id="headless">mavescape run stops</h2>
+      <ul>
+        <li><strong>Exit 2, "none was found":</strong> it runs in Chrome, Chromium, Edge or Brave; name one with <code>--chrome PATH</code> or the <code>CHROME</code> variable.</li>
+        <li><strong>Exit 2, "is not empty":</strong> the output folder holds files; give another <code>--out</code>, or <code>--overwrite</code>.</li>
+        <li><strong>Exit 1:</strong> <code>run.json</code> in the output folder lists the problems and each step's outcome: a design that does not fit the table, parameters that cannot score, a quality-control finding that blocks, a run that did not reproduce. <code>mavescape validate</code> shows the same checks without scoring.</li>
+      </ul>
+
       <nav class="doc-pager" aria-label="Pages">
-        <a class="prev" href="scripting.html"><span>Previous</span>Remote control and scripting</a>
+        <a class="prev" href="scripting.html"><span>Previous</span>Remote control, headless runs and scripting</a>
         
       </nav>
     </main>

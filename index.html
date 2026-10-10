@@ -48,11 +48,11 @@
   <main id="main">
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="https://github.com/robert-mcdermott/mavescape/releases/tag/v0.1.0"><span class="pill">v0.1.0</span> Counts to a trustworthy map: scoring, quality control, the map and a record that reopens identically</a>
+        <a class="eyebrow" href="https://github.com/robert-mcdermott/mavescape/releases/tag/v0.2.0"><span class="pill">v0.2.0</span> Counts to a trustworthy map: scoring, quality control, the map and a record that reopens identically</a>
         <h1>Variant-effect scores <span class="accent">you can check</span></h1>
         <p class="lede">MaveScape turns the variant count tables of a deep mutational scan into functional scores with standard errors, quality control that says when not to trust them, and an interactive variant-effect map, and keeps every analysis decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R. Files are analyzed in your browser and never leave your machine.</p>
         <figure class="hero-shot">
-        <div class="shot shot-window" data-url="127.0.0.1:8820"><img class="shot-dark" src="assets/img/map-dark.webp" width="2000" height="1250" fetchpriority="high" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from loss (blue) to gain (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" /><img class="shot-light" src="assets/img/map-light.webp" width="2000" height="1250" fetchpriority="high" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from loss (blue) to gain (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" /></div>
+        <div class="shot shot-window" data-url="127.0.0.1:8820"><img class="shot-dark" src="assets/img/map-dark.webp" width="2000" height="1250" fetchpriority="high" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from less abundant (blue) to more (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" /><img class="shot-light" src="assets/img/map-light.webp" width="2000" height="1250" fetchpriority="high" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from less abundant (blue) to more (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" /></div>
         <figcaption>The GRB2 SH3 domain from the Human Domainome (MaveDB, CC0), one of the bundled examples, with one variant's evidence in the inspector.</figcaption>
       </figure>
         <div class="btn-row">
@@ -105,6 +105,16 @@
       </div>
     </section>
 
+    <section class="section" id="mave" aria-labelledby="mave-title">
+      <div class="container">
+        <div class="section-head">
+          <span class="kicker">New to MAVEs?</span>
+          <h2 id="mave-title">Thousands of variants, one experiment</h2>
+          <p>A multiplexed assay of variant effect (MAVE) puts a library of variants of a gene or protein through a selection, such as growth, binding or a cell sort, and sequencing counts each variant before and after. Protein deep mutational scanning is the most common kind. MaveScape starts from those counts, after tools such as Enrich2 or DiMSum have read the sequencing. It needs no MaveDB account, though MaveDB is where MAVE data are published. <a href="docs/#mave">MAVEs in brief</a></p>
+        </div>
+      </div>
+    </section>
+
     <section class="section section-alt" id="features" aria-labelledby="features-title">
       <div class="container">
         <div class="section-head">
@@ -137,8 +147,10 @@
             <h3>Which column is which sample, said once</h3>
             <p>MaveScape drafts the design from the column names: inputs and outputs, replicates, time points, shared inputs found in the data. Check it in the Experiment view, where every column is accounted for and the design is described in plain words.</p>
             <ul class="checklist">
-              <li>Two populations, time series, sorted bins and tiles</li>
+              <li>Two populations, time series, sorted bins and tiles; tables of barcodes with their barcode-to-variant maps</li>
               <li>From a sample sheet, or DiMSum's design file</li>
+              <li>What each analysis can do with what is there, and what the bench or the protocol would add</li>
+              <li>The analysis package: counts, target, design and parameters, as <code>mavescape run</code> reads them</li>
               <li>Each change in a hash-chained history</li>
             </ul>
             <a class="more-link" href="docs/experiment.html">The design</a>
@@ -153,9 +165,13 @@
           <div class="feature-text">
             <span class="kicker">Scoring</span>
             <h3>Scores with standard errors, and the reasons for every gap</h3>
-            <p>Log ratios with wild-type, complete-case, all-read or synonymous normalization; replicates combined by REML random effects, fixed effects or Enrich2's own estimator; eight ordered filters, each variant left out with its reason. Every run is immutable and kept with everything needed to repeat it.</p>
+            <p>Log ratios with wild-type, complete-case, all-read or synonymous normalization, for a time series the slope of a weighted regression on every time point, and for sorted bins their weighted average or a maximum-likelihood fit; replicates combined under a shared error model whose 95% intervals hold the truth, or by REML, fixed effects or Enrich2's own estimator; eight ordered filters, each variant left out with its reason. Every run is immutable and kept with everything needed to repeat it.</p>
             <ul class="checklist">
               <li>Equal to Enrich2 2.0.2 and dms_variants 1.6.0 to 5 × 10⁻¹³</li>
+              <li>Time series by weighted regression on every time point</li>
+              <li>Sorted bins (FACS) by their weighted average or by maximum likelihood</li>
+              <li>Barcodes summed per variant, or each scored and combined, outlier barcodes found</li>
+              <li>95% intervals that hold the truth 94–97% of the time, in 26 kinds of simulated experiment</li>
               <li>REML equal to metafor 5.2 to 3.4 × 10⁻¹²</li>
               <li>An Enrich2-compatible preset to compare with published scores</li>
             </ul>
@@ -233,12 +249,12 @@
           <a class="card" href="docs/examples.html">
             <span class="icon-badge mint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 19l-6-10V3"/></svg></span>
             <h3>Examples with known answers</h3>
-            <p>A published experiment from MaveDB and a simulated one whose true effects are known, each with its question, guided steps and what to expect.</p>
+            <p>Three published experiments from MaveDB (two populations, a growth time series, sorted bins) and six simulated ones whose true effects are known, one with problems to find; each with its question, guided steps and what to expect.</p>
           </a>
           <a class="card" href="docs/scripting.html">
             <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
-            <h3>Remote control</h3>
-            <p>Scripts on your computer drive the open window: open files, score, read the QC, select variants and export, each step visible and undoable.</p>
+            <h3>Remote control and headless runs</h3>
+            <p>Scripts on your computer drive the open window, each step visible and undoable; <code>mavescape run</code> does a whole analysis without one, the same bytes every time.</p>
           </a>
           <a class="card" href="docs/map.html#accessible">
             <span class="icon-badge pink"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></span>
@@ -262,7 +278,13 @@
             <tbody>
               <tr><td><strong>Scores</strong></td><td>Enrich2 2.0.2 on GRB2, BRCA1 and a fixture with every edge case</td><td class="agree">within 5 × 10⁻¹³</td></tr>
               <tr><td><strong>Scores</strong></td><td>dms_variants 1.6.0, <code>func_scores</code></td><td class="agree">within 4.6 × 10⁻¹³</td></tr>
+              <tr><td><strong>Time series</strong></td><td>Enrich2's WLS and OLS on BRCA1; statsmodels on unevenly spaced times</td><td class="agree">within 5 × 10⁻¹³</td></tr>
+              <tr><td><strong>Sorted bins</strong></td><td>Factor IX's published scores (MaveDB); fitdistrplus on a simulated sort</td><td class="agree">within 1.3 × 10⁻¹⁵; 3 × 10⁻⁷</td></tr>
+              <tr><td><strong>Barcodes</strong></td><td>dms_variants' <code>func_scores</code> by barcode and by substitution, on a simulated library read three ways</td><td class="agree">within 5 × 10⁻¹³</td></tr>
               <tr><td><strong>Replicates</strong></td><td>metafor 5.2 REML on 2,865 variants</td><td class="agree">within 3.4 × 10⁻¹²</td></tr>
+              <tr><td><strong>Examples</strong></td><td>Nine, three of them published experiments from MaveDB</td><td class="agree">exactly the findings each teaches; Hsp90's published fitness, r 0.95</td></tr>
+              <tr><td><strong>Readiness</strong></td><td>Every example and fixture with a part taken away: 74 workspaces</td><td class="agree">names what is missing; agrees with the engine on every analysis</td></tr>
+              <tr><td><strong>Intervals</strong></td><td>1,040 simulated experiments of 26 kinds, and dms_variants' simulated libraries</td><td class="agree">hold the truth 94–97% of the time</td></tr>
               <tr><td><strong>Variant names</strong></td><td>mavehgvs 0.8.1 on 16,959 strings</td><td class="agree">every decision and canonical form</td></tr>
               <tr><td><strong>Quality control</strong></td><td>Simulated experiments with one planted problem each</td><td class="agree">exactly their findings, three seeds</td></tr>
               <tr><td><strong>The map</strong></td><td>BRCA1's RING domain</td><td class="agree">the zinc ligands least tolerant</td></tr>
@@ -280,7 +302,7 @@
         <div class="cta">
           <div>
             <h2 id="get-title">Get started in a minute</h2>
-            <p>Install with one command, then run <code>mavescape</code>. It opens its own window, with a published and a simulated experiment ready to explore.</p>
+            <p>Install with one command, then run <code>mavescape</code>. It opens its own window, with a published experiment and three simulated ones ready to explore.</p>
             <div class="btn-row">
               <a class="btn btn-primary" href="docs/getting-started.html">Getting started</a>
               <a class="btn" href="https://github.com/robert-mcdermott/mavescape/releases/latest">All downloads</a>

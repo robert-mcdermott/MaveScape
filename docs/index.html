@@ -69,7 +69,7 @@
         </ul>
         <h4>Automate</h4>
         <ul>
-          <li><a href="scripting.html">Remote control and scripting</a></li>
+          <li><a href="scripting.html">Remote control, headless runs and scripting</a></li>
         </ul>
         <h4>Reference</h4>
         <ul>
@@ -82,12 +82,17 @@
       <h1>Overview</h1>
       <p class="doc-lede">MaveScape takes the count tables of a deep mutational scan to functional scores with standard errors, quality control, an interactive map and a record a reviewer can repeat. This guide follows that path.</p>
 
+      <h2 id="mave">MAVEs in brief</h2>
+      <p>A <strong>multiplexed assay of variant effect</strong> (MAVE) measures what thousands of variants of a gene or protein do, in one experiment. A library of variants is put through a selection (cells grow, a protein binds, or cells are sorted by a fluorescent reporter), and sequencing counts every variant before and after. In a selection for function, a variant that becomes rarer has probably lost some of it; what a score means always depends on what the assay selects for. Protein <strong>deep mutational scanning</strong> (DMS) is the most common MAVE, and the one MaveScape starts with; other MAVEs test regulatory sequences or edit variants into the genome.</p>
+      <p class="callout"><strong>experiment → sequencing reads → variant counts → MaveScape → (optionally) MaveDB</strong></p>
+      <p>Tools such as Enrich2, DiMSum or dms_variants turn the reads into counts; MaveScape starts there. <a href="https://www.mavedb.org">MaveDB</a> is the public repository of MAVE data. MaveScape is a separate program that needs no MaveDB account, and it writes scores in MaveDB's columns. Published scores without their counts can be explored, but they cannot be rescored or checked by count-based quality control.</p>
+
       <h2 id="path">The path through an analysis</h2>
       <p>The workflow strip above every view shows the steps, which are done, and the one to take next:</p>
       <ol>
         <li><strong>Counts:</strong> a table with one row per variant and one column per sequenced sample (<a href="opening-data.html">Opening your data</a>).</li>
         <li><strong>Target:</strong> the sequence the variants are named against, from a FASTA file.</li>
-        <li><strong>Design:</strong> which column is which sample, replicate and time point (<a href="experiment.html">The design</a>).</li>
+        <li><strong>Design:</strong> which column is which sample, replicate and time point, and what the assay measures (<a href="experiment.html">The design</a>).</li>
         <li><strong>Score:</strong> functional scores with standard errors, a run kept with everything needed to repeat it (<a href="scoring.html">Scoring</a>).</li>
         <li><strong>QC:</strong> whether the experiment supports the scores (<a href="qc.html">Quality control</a>).</li>
         <li><strong>Map:</strong> every substitution by position, and each variant's evidence (<a href="map.html">The map and the inspector</a>).</li>
@@ -102,11 +107,11 @@
       <ul>
         <li>New to MaveScape: <a href="getting-started.html">Getting started</a>, then an <a href="examples.html">example</a>.</li>
         <li>Bringing your own data: <a href="opening-data.html">Opening your data</a> says what to bring and how MaveScape reads it.</li>
-        <li>Automating MaveScape, or capturing its screens: <a href="scripting.html">Remote control and scripting</a>.</li>
+        <li>Automating MaveScape, running it in a pipeline, or capturing its screens: <a href="scripting.html">Remote control, headless runs and scripting</a>.</li>
       </ul>
 
       <h2 id="what-it-is-not">What MaveScape is not</h2>
-      <p>MaveScape starts from counts: reads (FASTQ) are counted by the tools upstream of it, such as Enrich2, DiMSum or dms_variants. It reports experimental functional effects for research and does not classify variants as pathogenic or benign. Sorted-bin (FACS) experiments, barcodes, DiMSum's error model and comparisons between conditions arrive in 0.2; the <a href="https://github.com/robert-mcdermott/mavescape/blob/main/mavescape-spec/roadmap.md">roadmap</a> lists what comes when.</p>
+      <p>MaveScape starts from counts: reads (FASTQ) are counted by the tools upstream of it, such as Enrich2, DiMSum or dms_variants. It reports experimental functional effects for research and does not classify variants as pathogenic or benign. Barcodes, DiMSum's error model and comparisons between conditions arrive in 0.2; the <a href="https://github.com/robert-mcdermott/mavescape/blob/main/mavescape-spec/roadmap.md">roadmap</a> lists what comes when.</p>
 
       <nav class="doc-pager" aria-label="Pages">
         <span></span>

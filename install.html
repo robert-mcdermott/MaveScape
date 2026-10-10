@@ -90,7 +90,7 @@
 
       <h2 id="options">Options</h2>
       <p>To install a particular release, or somewhere else:</p>
-      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh | MAVESCAPE_VERSION=v0.1.0 MAVESCAPE_INSTALL_DIR="$HOME/bin" sh</code></pre></div>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh | MAVESCAPE_VERSION=v0.2.0 MAVESCAPE_INSTALL_DIR="$HOME/bin" sh</code></pre></div>
       <p>In PowerShell, set <code>$env:MAVESCAPE_VERSION</code> and <code>$env:MAVESCAPE_INSTALL_DIR</code> before the same command. To read an installer before running it, download it first; <a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/INSTALLING.md">INSTALLING.md</a> describes every option, and how to install by hand.</p>
 
       <h2 id="command-line">Command-line options</h2>
@@ -106,6 +106,8 @@
             <tr><td><code>--keep-running</code></td><td>Keep serving after the window is closed</td></tr>
             <tr><td><code>--remote-control</code></td><td>Let programs on this computer drive the window (<a href="docs/scripting.html">Remote control</a>)</td></tr>
             <tr><td><code>--version</code></td><td>Print the version</td></tr>
+            <tr><td><code>mavescape run …</code></td><td>Score a table with its design without a window (<a href="docs/scripting.html#headless">Headless runs</a>; <code>mavescape run -h</code>)</td></tr>
+            <tr><td><code>mavescape validate …</code></td><td>Check tables and a design as scoring would (<a href="docs/scripting.html#validate">Checking before scoring</a>)</td></tr>
           </tbody>
         </table>
       </div>
