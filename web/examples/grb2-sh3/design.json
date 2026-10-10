@@ -9,6 +9,13 @@
     "license": "CC0"
   },
   "model": "two-population",
+  "readout": {
+    "phenotype": "Cellular abundance of the GRB2 SH3 domain (abundancePCA)",
+    "method": "Reporter",
+    "mechanism": "Loss of function",
+    "modelSystem": "Yeast",
+    "direction": "higher-more"
+  },
   "variants": {
     "column": "hgvs_pro",
     "level": "protein"

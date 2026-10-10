@@ -8,15 +8,20 @@
 import { h, icon, clear, formatCount } from './dom.js';
 import { confirmDialog, showMenu, toast } from './overlays.js';
 import { validateDesign } from '../lib/design.js';
-import { checkParameters, DEFAULT_PARAMETERS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
+import { checkParameters, defaultDifferential, defaultParameters, MODELS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
+import { DIFFERENTIAL_METHODS } from '../lib/differential.js';
+import { REGRESSION_SE } from '../lib/score-regression.js';
+import { BIN_SCALES, BIN_SE, BIN_SIGMA } from '../lib/score-bins.js';
+import { AGGREGATIONS, BARCODE_COMBINATIONS, OUTLIER_Z } from '../lib/score-barcodes.js';
 import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
+import { intervalOf } from '../lib/exports.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
-import { addRun, describeMethod, describeParameters, makeRun, removeRun, runId, runInputs } from '../lib/runs.js';
+import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, removeRun, runId, runInputs, unitOf } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
 import { KIND_NAMES } from '../lib/variants.js';
-import { classHistogram, flowBars, scoreGroups } from './plots.js';
-import { workerInput } from './score-input.js';
+import { classHistogram, cssVar, flowBars, legend, scatter, scoreGroups } from './plots.js';
+import { runScore, workerInput } from './score-input.js';
 import { ensureResults, forgetResults } from './run-results.js';
 import { runExportItems } from './record.js';
 
@@ -39,8 +44,7 @@ export function mountScoreMode(app, container) {
     const ws = store.ws;
     if (!app.scoreDrafts.has(ws.id)) {
       const last = ws.runs.at(-1)?.inputs.parameters;
-      const hasWildType = (source()?.summary?.byKind?.['wild type'] ?? 0) > 0;
-      app.scoreDrafts.set(ws.id, withDefaults(last ?? { ...DEFAULT_PARAMETERS, normalization: hasWildType ? 'wt' : 'complete' }));
+      app.scoreDrafts.set(ws.id, withDefaults(last ?? defaultParameters(ws.design, source())));
     }
     return app.scoreDrafts.get(ws.id);
   }
@@ -53,8 +57,16 @@ export function mountScoreMode(app, container) {
     view.refused = null;
     render();
   }
-  // The preset parameters match, whatever the normalization (each preset keeps the one chosen).
-  const presetOf = (p) => Object.entries(PRESETS).find(([, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, normalization: p.normalization })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
+  // The preset parameters match, whatever the model, normalization and handling of barcodes (each
+  // preset keeps them).
+  // (DiMSum's preset sets its model; the others keep the model, leaving DiMSum's for the ratio.)
+  // Each preset compares conditions its own way (lib/score.js, defaultDifferential).
+  const kept = (p, preset, id) => ({
+    ...(preset.parameters.model === 'dimsum' ? {} : { model: p.model === 'dimsum' ? 'ratio' : p.model }),
+    normalization: p.normalization, aggregation: p.aggregation, barcodeCombination: p.barcodeCombination,
+    differential: defaultDifferential(store.ws.design, id, p.normalization),
+  });
+  const presetOf = (p) => Object.entries(PRESETS).find(([id, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, ...kept(p, preset, id) })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
 
   // --- Readiness ------------------------------------------------------------------------------
   function readiness() {
@@ -73,8 +85,8 @@ export function mountScoreMode(app, container) {
 
   // --- Running ----------------------------------------------------------------------------------
   async function compute(table, design, parameters, mode) {
-    const { names, columns, transfer } = workerInput(table, design);
-    const job = app.worker('score').run('score', { names, columns, design, parameters, mode }, { transfer, onProgress: (fraction, message) => { view.progress = [fraction, message]; renderProgress(); } });
+    const { names, barcodes, columns, transfer } = workerInput(table, design);
+    const job = runScore(app, { names, barcodes, columns, design, parameters, mode }, { transfer, onProgress: (fraction, message) => { view.progress = [fraction, message]; renderProgress(); } });
     view.job = job;
     renderProgress();
     try {
@@ -153,16 +165,78 @@ export function mountScoreMode(app, container) {
   function parametersPane() {
     const p = draft();
     const preset = presetOf(p);
+    const designModel = store.ws.design?.model;
+    const bins = designModel === 'bins';
+    const options = (keys) => keys.map((k) => [k, MODELS[k][0].toUpperCase() + MODELS[k].slice(1)]);
+    const sentence = (text) => text[0].toUpperCase() + text.slice(1);
+    // A table of barcodes: summed per variant, or each barcode scored and a variant's combined
+    // (sorted bins are summed).
+    const barcodes = store.ws.design?.library?.level === 'barcode' ? h('div.form-grid',
+      bins ? h('div.field', h('span', 'Barcodes'), h('span', 'Summed per variant, then scored'))
+        : select('Barcodes', p.aggregation, Object.entries(AGGREGATIONS).map(([k, v]) => [k, sentence(v)]), (v) => setDraft({ aggregation: v })),
+      !bins && p.aggregation === 'barcode' ? select('A variant\'s barcodes combined by', p.barcodeCombination, Object.entries(BARCODE_COMBINATIONS).map(([k, v]) => [k, sentence(v)]), (v) => setDraft({ barcodeCombination: v })) : null) : null;
+    const title = (id) => (id === 'dimsum' ? 'DiMSum 1.4: its fitness (no pseudocount), each replicate scaled and shifted to agree with the others, its error model (multiplicative input and output terms, an additive term), no count filter, replicates combined by inverse variance' : id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios", "WLS" and "OLS": no count filter, every time point required, SEs scaled by the residuals alone, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : id === 'vampseq' ? 'Matreyek et al. 2018: the weighted average scaled to nonsense 0 and wild type 1, a summed bin frequency of at least 10^-4.75, two or more replicates, their mean with SE = SD/√k' : 'Variants with no input reads left out; a regression\'s SE never below counting\'s; REML random effects to convergence');
+    if (bins) {
+      return h('div.pane', h('h3', icon('settings'), 'Parameters'),
+        h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
+          ...Object.entries(PRESETS).filter(([id]) => id !== 'enrich2').map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...defaultParameters(store.ws.design, source(), id), model: p.model }) }, x.label))),
+          preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
+        barcodes,
+        select('Scored by', p.model, options(['bins', 'bins-mle']), (v) => setDraft({ model: v })),
+        select('Scale of each replicate', p.binScale, Object.entries(BIN_SCALES).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ binScale: v })),
+        p.model === 'bins'
+          ? h('div.form-grid',
+            select('Standard error', p.binSE, Object.entries(BIN_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ binSE: v })),
+            number('Pseudocount (in the SE)', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }))
+          : select('Spread σ of log fluorescence', p.binSigma, Object.entries(BIN_SIGMA).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ binSigma: v })),
+        p.model === 'bins' && p.binSE === 'bootstrap' ? h('div.form-grid',
+          number('Bootstrap samples', p.bootstrapSamples, (v) => setDraft({ bootstrapSamples: Math.max(20, Math.round(v ?? 200)) }), { min: 20, step: 50 }),
+          number('Seed', p.seed, (v) => setDraft({ seed: Math.round(v ?? 20261009) }), { step: 1 })) : null,
+        select('Replicates combined by', p.combination, Object.entries(COMBINATIONS).filter(([k]) => k !== 'enrich2').map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ combination: v })),
+        select('Rescaling', p.rescale, Object.entries(RESCALINGS).map(([k, v]) => [k, v.label[0].toUpperCase() + v.label.slice(1)]), (v) => setDraft({ rescale: v })),
+        h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, p.model === 'bins'
+          ? 'Scores are the weighted average of the bins\' values over each variant\'s frequency in each bin (VAMP-seq); technical replicates are summed first, biological replicates scored separately, scaled, and then combined.'
+          : 'Scores are the mean μ of each variant\'s log fluorescence, fitted by maximum likelihood to its distribution over the gated bins (Peterman and Levine 2016); its reads are reweighted by the cells sorted into each bin when the design records them.'));
+    }
     return h('div.pane', h('h3', icon('settings'), 'Parameters'),
-      h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
-        ...Object.entries(PRESETS).map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios": no count filter, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : 'Variants with no input reads left out; REML random effects to convergence', onclick: () => replaceDraft({ ...x.parameters, normalization: p.normalization }) }, x.label))),
+      h('div.field', h('span', 'Start from'), h('div.segmented.wrap', { role: 'group', 'aria-label': 'Preset' },
+        ...Object.entries(PRESETS).filter(([id]) => id !== 'vampseq' && (id !== 'dimsum' || designModel === 'two-population')).map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...x.parameters, ...kept(p, x, id) }) }, x.label))),
         preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
-      select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v })),
+      barcodes,
+      designModel === 'time-series' ? select('Scored by', p.model, options(['ratio', 'wls', 'ols']), (v) => setDraft({ model: v })) : null,
+      // Per unit of time (wave 2, slice 10): per generation when the times are generations.
+      designModel === 'time-series' ? select('A score is the change', p.timeScale, [['course', 'Over the whole time course (time scaled to 0–1, Enrich2)'], ['unit', `Per ${unitOf(store.ws.design)}${store.ws.design?.time?.unit === 'generation' ? ' (a selection coefficient)' : ''}`]], (v) => setDraft({ timeScale: v })) : null,
+      designModel === 'two-population' ? select('Scored by', p.model, [['ratio', 'Log ratio, counting error'], ['dimsum', 'DiMSum\'s fitness and error model']], (v) => setDraft({ model: v })) : null,
+      p.model === 'wls' || p.model === 'ols' ? select('Standard error of a slope', p.regressionSE, Object.entries(REGRESSION_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ regressionSE: v })) : null,
+      p.model === 'dimsum' ? h('div.field', h('span', 'DiMSum'),
+        h('label.check', h('input', { type: 'checkbox', checked: p.dimsumNormalise, onchange: (e) => setDraft({ dimsumNormalise: e.target.checked }) }), 'Scale and shift each replicate to agree with the others'),
+        h('label.check', h('input', { type: 'checkbox', checked: p.dimsumErrorModel, onchange: (e) => setDraft({ dimsumErrorModel: e.target.checked }) }), 'Error model: multiplicative input and output terms, an additive term')) : select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v, ...(p.differential === 'limma' && v !== 'wt' && v !== 'synonymous' ? { differential: 'paired' } : {}) })),
       h('div.form-grid',
-        number('Pseudocount', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }),
+        p.model === 'dimsum' ? number('Dropout pseudocount (outputs of 0)', p.dimsumDropout, (v) => setDraft({ dimsumDropout: v ?? 0 }), { min: 0, step: 1 }) : number('Pseudocount', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }),
         select('Replicates combined by', p.combination, Object.entries(COMBINATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ combination: v }, v === 'enrich2' ? { minReplicates: 'all' } : null))),
       select('Rescaling', p.rescale, Object.entries(RESCALINGS).map(([k, v]) => [k, v.label[0].toUpperCase() + v.label.slice(1)]), (v) => setDraft({ rescale: v })),
-      h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, 'Scores are natural-log ratios of frequencies after and before selection; technical replicates are summed first, biological replicates scored separately and then combined.'));
+      differentialField(p),
+      h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, p.model === 'dimsum'
+        ? 'Scores are DiMSum\'s fitness (Faure et al. 2020): natural-log ratios less the wild type\'s, with no pseudocount (a zero count gives no score). The replicates of each experiment are fitted together: their scales and shifts, and the error model whose terms say how much variance there is beyond counting, and where.'
+        : p.model === 'ratio'
+        ? 'Scores are natural-log ratios of frequencies after and before selection; technical replicates are summed first, biological replicates scored separately and then combined.'
+        : `Scores are the slopes of each variant's normalized log count on time scaled to 0–1, by ${p.model === 'wls' ? 'weighted (each point by its counting precision, as Enrich2)' : 'ordinary'} least squares; technical replicates are summed first, biological replicates scored separately and then combined.`,
+      barcodes ? (p.aggregation === 'sum' ? ' A variant\'s barcodes are summed in each sample first (as Enrich2, and dms_variants by substitution).' : ' Each barcode is scored against its replicate\'s normalizers (as dms_variants by barcode), and a variant\'s barcodes are combined within the replicate, their disagreement in its SE.') : null));
+  }
+
+  // Conditions compared (two or more conditions): each against the reference.
+  function differentialField(p) {
+    const conditions = store.ws.design?.conditions ?? [];
+    if (conditions.length < 2) return null;
+    const reference = conditions.find((c) => c.reference) ?? conditions[0];
+    const labels = { limma: 'limma\'s moderated t (as mutscan)', paired: 'Replicates paired by their shared input', independent: 'As independent (Enrich2\'s z)' };
+    return h('div',
+      select('Conditions compared by', p.differential ?? 'none', [...Object.keys(DIFFERENTIAL_METHODS).map((k) => [k, labels[k]]), ['none', 'Not compared']], (v) => setDraft({ differential: v === 'none' ? null : v })),
+      p.differential ? h('p.muted', { style: { fontSize: '11.5px', margin: '-4px 0 6px' } }, `${conditions.filter((c) => c !== reference).map((c) => c.name).join(', ')} against ${reference.name} (the reference; set it in Experiment). ${p.differential === 'limma'
+        ? 'A linear model of every sample\'s log counts, a term for each input library and for selection in each condition, its variances shared across variants (empirical Bayes): calibrated with few replicates.'
+        : p.differential === 'paired'
+          ? 'Each pair of replicates sharing an input gives a difference without the input\'s counting error; the pairs are combined as the replicates are.'
+          : 'The conditions\' combined scores, each with its own SE: an input they share is counted twice, so the SE is too large.'}`) : null);
   }
 
   function filtersPane() {
@@ -173,22 +247,36 @@ export function mountScoreMode(app, container) {
     const exclude = h('textarea.input', { rows: 2, placeholder: 'One identifier per line', 'aria-label': 'Variants excluded by name', onchange: () => setDraft({}, { exclude: exclude.value.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean) }) }, f.exclude.join('\n'));
     const all = f.minReplicates === 'all';
     const stage = (n, title, control, rule = false) => h('li.filter-stage', h('span.filter-step', String(n)), h('div', h('div.filter-title', title, rule ? h('span.badge', { style: { marginLeft: '6px' } }, 'always') : null), control));
+    const binned = p.model === 'bins' || p.model === 'bins-mle';
+    // A table of barcodes adds a stage: barcodes measured per variant, outliers left out.
+    const barcodes = store.ws.design?.library?.level === 'barcode';
+    const n = (k) => (barcodes && k >= 7 ? k + 1 : k);
     return h('div.pane', h('h3', icon('filter'), 'Filters, in order'),
       h('ol.filter-bar',
-        stage(1, 'Counted in every sample of a replicate', null, true),
+        binned ? stage(1, 'Counted in every bin of a replicate', null, true)
+          : p.model === 'ratio' || p.model === 'dimsum' ? stage(1, 'Counted in every sample of a replicate', null, true)
+          : stage(1, 'Counted at the first time point and enough others', h('div.btn-row',
+            f.minTimePoints === 'all' ? h('span', 'Every time point') : number('Minimum time points', f.minTimePoints, (v) => setDraft({}, { minTimePoints: Math.max(3, Math.round(v ?? 3)) }), { min: 3, step: 1 }),
+            h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: f.minTimePoints === 'all', onchange: (e) => setDraft({}, { minTimePoints: e.target.checked ? 'all' : 3 }) }), ' all'))),
         stage(2, 'Identifier valid against the target', null, true),
         stage(3, 'Variant classes scored', h('div.btn-row', { style: { marginTop: '4px' } }, ...kinds.map((k) => {
           const out = f.excludeKinds.includes(k);
           return h(`button.chip${out ? '' : '.active'}`, { type: 'button', 'aria-pressed': out ? 'false' : 'true', title: out ? `${k}: left out` : `${k}: scored`, onclick: () => setDraft({}, { excludeKinds: out ? f.excludeKinds.filter((x) => x !== k) : [...f.excludeKinds, k] }) }, k);
         }))),
         stage(4, 'Exclusion list', exclude),
-        stage(5, 'Minimum input count, per replicate', number('Minimum input count', f.minInputCount, (v) => setDraft({}, { minInputCount: v ?? 0 }), { min: 0, step: 1 })),
-        stage(6, 'Minimum total count, per replicate', number('Minimum total count', f.minTotalCount, (v) => setDraft({}, { minTotalCount: v ?? 0 }), { min: 0, step: 1 })),
-        stage(7, 'Minimum usable replicates', h('div.btn-row',
+        stage(5, binned ? 'Minimum reads across the bins, per replicate' : 'Minimum input count, per replicate', number(binned ? 'Minimum reads across the bins' : 'Minimum input count', f.minInputCount, (v) => setDraft({}, { minInputCount: v ?? 0 }), { min: 0, step: 1 })),
+        stage(6, binned ? 'Minimum total count and summed bin frequency, per replicate' : 'Minimum total count, per replicate', h('div.form-grid', number('Minimum total count', f.minTotalCount, (v) => setDraft({}, { minTotalCount: v ?? 0 }), { min: 0, step: 1 }),
+          binned ? number('Minimum summed bin frequency', f.minFrequency || null, (v) => setDraft({}, { minFrequency: v ?? 0 }), { min: 0, step: 0.000001, placeholder: 'none' }) : null)),
+        barcodes ? stage(7, binned ? 'Minimum barcodes measured, per replicate' : 'Minimum barcodes measured, per replicate; outlier barcodes', h('div.form-grid',
+          number('Minimum barcodes measured', f.minBarcodes, (v) => setDraft({}, { minBarcodes: Math.max(1, Math.round(v ?? 1)) }), { min: 1, step: 1 }),
+          binned ? null : h('div.field', h('span', 'Outlier barcodes'), h('div.btn-row',
+            h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: f.maxBarcodeZ !== null, onchange: (e) => setDraft({}, { maxBarcodeZ: e.target.checked ? OUTLIER_Z : null }) }), f.maxBarcodeZ !== null ? ' outliers left out, beyond' : ' leave outliers out'),
+            f.maxBarcodeZ !== null ? h('input.input', { type: 'number', value: f.maxBarcodeZ, min: 2, step: 0.5, style: { width: '70px' }, 'aria-label': 'Maximum departure of a barcode (z/√φ)', onchange: (e) => setDraft({}, { maxBarcodeZ: Math.max(2, Number(e.target.value) || OUTLIER_Z) }) }) : null)))) : null,
+        stage(n(7), 'Minimum usable replicates', h('div.btn-row',
           all ? h('span', 'All the variant\'s replicates') : number('Minimum usable replicates', f.minReplicates, (v) => setDraft({}, { minReplicates: Math.max(1, Math.round(v ?? 1)) }), { min: 1, step: 1 }),
           h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: all, onchange: (e) => setDraft({}, { minReplicates: e.target.checked ? 'all' : 1 }) }), ' all'))),
-        stage(8, 'Maximum SE', number('Maximum SE (blank: none)', f.maxSE, (v) => setDraft({}, { maxSE: v }), { min: 0, step: 0.05, placeholder: 'none' }))),
-      h('p.muted', { style: { fontSize: '11.5px', margin: '6px 0 0' } }, 'A filtered variant keeps its counts and replicate scores; its score is NA with the stage that left it out. Count filters act per replicate.'));
+        stage(n(8), 'Maximum SE', number('Maximum SE (blank: none)', f.maxSE, (v) => setDraft({}, { maxSE: v }), { min: 0, step: 0.05, placeholder: 'none' }))),
+      h('p.muted', { style: { fontSize: '11.5px', margin: '6px 0 0' } }, `A filtered variant keeps its counts and replicate scores; its score is NA with the stage that left it out. Count filters act per replicate${barcodes ? (binned ? ', on the barcodes summed' : `, on the barcodes summed (or, scoring each barcode, on each); an outlier barcode departs from its variant's other barcodes by more than the maximum, in z over √φ (QC reports those beyond ${OUTLIER_Z} either way)`) : ''}.`));
   }
 
   const progressEl = h('div');
@@ -202,7 +290,7 @@ export function mountScoreMode(app, container) {
 
   function runPane(ready) {
     return h('div.pane', h('h3', icon('score'), 'Run'),
-      ready.ok ? h('p', { style: { margin: '0 0 8px' } }, describeParameters(draft())) : h('div', ...ready.problems.map((m) => h('div.callout.danger', { style: { marginBottom: '6px' } }, icon('warning'), h('span', m)))),
+      ready.ok ? h('p', { style: { margin: '0 0 8px' } }, describeParameters(draft(), store.ws.design?.library?.level === 'barcode')) : h('div', ...ready.problems.map((m) => h('div.callout.danger', { style: { marginBottom: '6px' } }, icon('warning'), h('span', m)))),
       ready.ok && ready.warnings?.length ? h('div', ...ready.warnings.map((m) => h('div.callout.warn', { style: { marginBottom: '6px' } }, icon('warning'), h('span', `The design: ${m}`)))) : null,
       view.refused ? h('div', ...view.refused.map((m) => h('div.callout.danger', { style: { marginBottom: '6px' } }, icon('warning'), h('span', m)))) : null,
       h('div.btn-row', h('button.btn.primary', { type: 'button', disabled: !ready.ok || !!view.job, onclick: runScoring }, icon('play'), 'Score'),
@@ -217,7 +305,7 @@ export function mountScoreMode(app, container) {
       const status = !r ? h('span.badge', 'not checked') : r.status === 'reproduced' ? h('span.badge.ok', { title: 'Recomputed from its inputs: the same output hash' }, 'reproduced') : r.status === 'computed' ? h('span.badge.ok', 'computed') : r.status === 'checking' ? h('span.badge', 'checking…') : h('span.badge.danger', { title: r.message }, r.status === 'differs' ? 'differs' : 'not checked');
       return h(`tr${run.id === selected?.id ? '.selected' : ''}`, { style: { cursor: 'pointer' }, onclick: () => app.focusItem({ kind: 'run', id: run.id }) },
         h('td', h('b', run.name), h('div.muted.mono', { style: { fontSize: '10.5px' } }, run.id)),
-        h('td', { style: { fontSize: '11.5px' } }, describeParameters(run.inputs.parameters)),
+        h('td', { style: { fontSize: '11.5px' } }, describeParameters(run.inputs.parameters, isBarcodeRun(run))),
         h('td.r', run.output.conditions.map((c) => formatCount(c.scored)).join(' / ')),
         h('td', run.warnings.length ? h('span.badge.warn', `${run.warnings.length} warning${run.warnings.length > 1 ? 's' : ''}`) : null, ' ', status),
         h('td.r', h('button.icon-button.small', { type: 'button', title: 'Remove the run', 'aria-label': `Remove ${run.name}`, onclick: async (event) => {
@@ -242,6 +330,7 @@ export function mountScoreMode(app, container) {
 
   function replicatesTable(results, c, p) {
     const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
+    if (reps.some((r) => r.dimsum)) return dimsumTable(results, reps);
     return h('table.data', h('thead', h('tr', h('th', 'Replicate'), h('th', 'Samples'), h('th.r', p.normalization === 'synonymous' ? 'Synonymous median' : 'Normalizers (first, last)'), h('th.r', 'Used'), h('th.r', 'Median SE'))),
       h('tbody', ...reps.map((r) => {
         let used = 0;
@@ -255,6 +344,23 @@ export function mountScoreMode(app, container) {
           h('td.r', p.normalization === 'synonymous' ? fmt(r.synonymousMedian) : `${formatCount(Math.round(r.normalizers[0]))}, ${formatCount(Math.round(r.normalizers[1]))}`),
           h('td.r', formatCount(used)), h('td.r', fmt(median(ses))));
       })));
+  }
+
+  // DiMSum's model of each replicate: its scale and shift, its multiplicative input and output terms
+  // and additive term (as an SD), with the bootstrap's 10th–90th percentiles.
+  function dimsumTable(results, reps) {
+    const range = (x, iv, d = 2) => (x === null ? '—' : h('span', fmt(x, d), iv ? h('span.muted', { style: { fontSize: '11px' } }, ` (${fmt(iv[0], d)}–${fmt(iv[1], d)})`) : null));
+    const fit = results.dimsum?.[reps[0].dimsum.fit];
+    return h('div',
+      h('table.data', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Scale'), h('th.r', 'Shift'), h('th.r', h('abbr', { title: 'Multiplicative error term of the input: 1 is counting alone' }, 'Input m')), h('th.r', h('abbr', { title: 'Multiplicative error term of the output' }, 'Output m')), h('th.r', h('abbr', { title: 'Additive error term, as an SD (√e)' }, 'Additive SD')), h('th.r', 'Used'))),
+        h('tbody', ...reps.map((r) => {
+          const d = r.dimsum;
+          let used = 0;
+          for (let i = 0; i < results.rows; i += 1) if (r.state[i] === 0) used += 1;
+          return h('tr', h('td', r.name), h('td.r', fmt(d.scale, 3)), h('td.r', fmt(d.shift, 3)), h('td.r', range(d.input, d.intervals?.input)), h('td.r', range(d.output, d.intervals?.output)),
+            h('td.r', d.reperror === null ? '—' : range(Math.sqrt(d.reperror), d.intervals ? d.intervals.reperror.map(Math.sqrt) : null, 3)), h('td.r', formatCount(used)));
+        }))),
+      h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, fit ? `Fitted on ${formatCount(fit.variants)} variants counted in every sample above ${fmt(fit.threshold, 1)} input reads${fit.bootstrap ? `; in brackets the 10th–90th percentiles of ${fit.bootstrap} bootstrap fits` : ''}. A multiplicative term m means about m − 1 reads per molecule beyond counting at that step (a bottleneck); the additive term is variation between replicates.` : ''));
   }
 
   function status(c, i) {
@@ -294,12 +400,12 @@ export function mountScoreMode(app, container) {
     const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
     const body = h('tbody');
     for (const i of shown) {
-      const z = 1.959963984540054;
+      const [lo, hi] = Number.isFinite(c.se[i]) && !c.reason[i] ? intervalOf(c, i) : [Number.NaN, Number.NaN];
       body.append(h(`tr${view.open === i ? '.selected' : ''}`, { style: { cursor: 'pointer' }, onclick: () => { view.open = view.open === i ? -1 : i; if (v.key[i]) app.focusItem({ kind: 'variant', id: v.key[i], run: run.id, condition: view.condition }); render(); } },
         h('td', h('span.mono', v.key[i] || v.original[i]), v.original[i] !== v.key[i] && v.key[i] ? h('div.muted', { style: { fontSize: '10.5px' } }, `as written: ${v.original[i]}`) : null),
         h('td', KIND_NAMES[v.kind[i]] ?? ''),
         h('td.r', fmt(c.score[i])), h('td.r', fmt(c.se[i])),
-        h('td.r', Number.isFinite(c.se[i]) && !c.reason[i] ? `${fmt(c.score[i] - z * c.se[i], 2)} to ${fmt(c.score[i] + z * c.se[i], 2)}` : '—'),
+        h('td.r', Number.isFinite(lo) ? `${fmt(lo, 2)} to ${fmt(hi, 2)}` : '—'),
         h('td.r', `${c.k[i]}/${c.expected[i]}`), h('td.r', Number.isFinite(c.i2[i]) ? `${Math.round(c.i2[i] * 100)}%` : '—'), h('td.r', fmt(c.loo[i])),
         h('td', status(c, i))));
       if (view.open === i) {
@@ -328,7 +434,7 @@ export function mountScoreMode(app, container) {
     if (!r) reproduce(run);
     const head = h('div.pane', h('h3', icon('score'), run.name, h('span.muted.mono', { style: { fontSize: '11px', fontWeight: 400 } }, run.id), h('span.spacer'),
       h('span.muted', { style: { fontSize: '11.5px', fontWeight: 400 } }, `${new Date(run.created).toLocaleString()} · MaveScape ${run.software.version}`)),
-      h('p', { style: { margin: '0 0 6px' } }, `${run.inputs.source.name} · ${run.inputs.design.name ?? 'design'} · ${describeParameters(run.inputs.parameters)}`),
+      h('p', { style: { margin: '0 0 6px' } }, `${run.inputs.source.name} · ${run.inputs.design.name ?? 'design'} · ${describeParameters(run.inputs.parameters, isBarcodeRun(run))}`),
       h('p.muted.mono', { style: { fontSize: '11px', margin: 0 } }, `Table SHA-256 ${run.inputs.source.sha256.slice(0, 16)}… · output SHA-256 ${run.output.sha256.slice(0, 16)}…`),
       r?.status === 'reproduced' ? h('div.callout.ok', { style: { marginTop: '8px' } }, icon('check'), h('span', 'Reproduced: the scores were recomputed from the run\'s recorded inputs and have its output hash.')) : null,
       r?.status === 'differs' || r?.status === 'failed' ? h('div.callout.danger', { style: { marginTop: '8px' } }, icon('warning'), h('span', r.status === 'differs' ? `Not reproduced. ${r.message}` : `Not checked: ${r.message}`),
@@ -350,8 +456,33 @@ export function mountScoreMode(app, container) {
         h('div.pane', h('h3', icon('filter'), 'Filter flow'), tabs, flowView(c),
           h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, `${formatCount(c.scored)} scored${lowConfidence ? `, ${formatCount(lowConfidence)} with low confidence` : ''}; NA for the rest, each with its stage.${c.rescale ? ` Rescaled: ${c.rescale.anchors.map((a) => `${a.what} ${fmt(a.from)} → ${a.to}`).join(', ')}.` : ''}`)),
         h('div.pane', h('h3', icon('histogram'), 'Scores by class'), histogram(c, results))),
-      h('div.pane', h('h3', icon('experiment'), 'Replicates'), replicatesTable(results, c, p)),
+      h('div.pane.replicates-pane', h('h3', icon('experiment'), 'Replicates'), replicatesTable(results, c, p)),
+      results.differential?.length ? h('div.pane.differential-pane', h('h3', icon('compare'), 'Between conditions'), ...results.differential.flatMap((d) => differentialView(results, d, p, run))) : null,
       h('div.pane', h('h3', icon('table'), 'Variants'), variantsTable(results, c, run))];
+  }
+
+  // A contrast: how it was made, how many variants differ, its volcano plot and the largest
+  // differences.
+  function differentialView(results, d, p, run) {
+    const rows = [];
+    for (let i = 0; i < d.reason.length; i += 1) if (!d.reason[i]) rows.push(i);
+    const called = rows.filter((i) => d.q[i] < 0.05);
+    const lower = called.filter((i) => d.delta[i] < 0).length;
+    const method = d.method === 'limma' ? `limma's moderated t (as mutscan), relative to the ${p.normalization === 'wt' ? 'wild type' : 'synonymous variants'}; prior variance on ${Number.isFinite(d.prior.df) ? d.prior.df.toFixed(1) : '∞'} degrees of freedom`
+      : d.method === 'paired' ? `replicates paired by their shared input (${d.pairs.length} pair${d.pairs.length === 1 ? '' : 's'}), combined by ${COMBINATIONS[p.combination]}` : 'the conditions as independent (Enrich2\'s z)';
+    const colorOf = (g) => (g ? cssVar('--danger') : cssVar('--text-3'));
+    const points = rows.map((i) => [d.delta[i], -Math.log10(Math.max(d.p[i], 1e-300)), d.q[i] < 0.05 ? 1 : 0]);
+    const top = called.slice().sort((a, b) => d.p[a] - d.p[b]).slice(0, 8);
+    const q = (x) => (x < 0.001 ? x.toExponential(1) : x.toFixed(3));
+    return [
+      h('h4', d.name),
+      h('p.muted', { style: { fontSize: '12px', margin: '0 0 6px' } }, `${formatCount(rows.length)} variants compared, by ${method}. ${formatCount(called.length)} differ at q < 0.05 (Benjamini–Hochberg): ${formatCount(lower)} lower in ${d.name.split(' vs ')[0]}, ${formatCount(called.length - lower)} higher.${d.note ? ` ${d.note}` : ''}`),
+      scatter({ points, colorOf, xLabel: 'difference (natural log)', yLabel: '−log10 p', label: `${d.name}: each variant's difference against −log10 of its p-value; red where q < 0.05`, height: 220 }),
+      legend([{ label: 'q < 0.05', color: cssVar('--danger') }, { label: 'the others', color: cssVar('--text-3') }]),
+      top.length ? h('table.data.compact', { style: { marginTop: '8px' } }, h('thead', h('tr', h('th', 'Largest differences'), h('th.r', 'Difference'), h('th.r', 'q'))),
+        h('tbody', ...top.map((i) => h('tr', { style: { cursor: 'pointer' }, onclick: () => app.focusItem({ kind: 'variant', id: results.variants.key[i], run: run.id, condition: results.conditions.findIndex((x) => x.id === d.condition) }) },
+          h('td.mono', results.variants.original[i]), h('td.r', `${fmt(d.delta[i], 2)} ± ${fmt(d.se[i], 2)}`), h('td.r', q(d.q[i])))))) : null,
+    ];
   }
 
   // --- The view ---------------------------------------------------------------------------------

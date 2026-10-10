@@ -3,8 +3,16 @@
 // numbers, the threshold, the rationale, the samples or replicates it concerns, the plot behind
 // it, and whether it blocks the analysis or advises. Thresholds are parameters, kept in the
 // workspace and its history; the overall status is the worst finding, shown beside the list.
+//
+// Wave 2, slice 8 (Q11): each finding that is not a pass also says which causes fit it and what to
+// do next (advice.js), and can be acknowledged with a reason (ws.qc.acknowledged: { id: { reason,
+// status, value, time } }): its status does not change, the reason goes on the record, and an
+// acknowledgement holds while the finding is no worse than it was when acknowledged.
 
 import { DEFAULT_MEASURES } from './qc.js';
+import { adviceFor } from './advice.js';
+import { inText } from './readout.js';
+import { log } from './dmath.js';
 
 const pct = (x) => `${(100 * x).toFixed(x < 0.1 ? 1 : 0)}%`;
 const num = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
@@ -24,6 +32,15 @@ export const THRESHOLDS = [
   { key: 'separation', label: 'Separation of controls (AUC)', bad: 'below', review: 0.9, fail: 0.75, unit: 'AUC' },
   { key: 'resolution', label: 'Median SE ÷ the controls\' gap', bad: 'above', review: 0.25, fail: 0.5, unit: '×' },
   { key: 'scoredFraction', label: 'Measured variants scored', bad: 'below', review: 0.8, fail: 0.5, unit: 'fraction' },
+  { key: 'fewerPoints', label: 'Time-series fits on fewer time points than the replicate has', bad: 'above', review: 0.1, fail: 0.3, unit: 'fraction' },
+  { key: 'timeFit', label: 'Departure of time courses from a line ÷ counting noise (median)', bad: 'above', review: 2, fail: 5, unit: '×' },
+  { key: 'binShare', label: 'A bin\'s share of a replicate\'s cells (or reads)', bad: 'below', review: 0.05, fail: 0.01, unit: 'fraction' },
+  { key: 'cellsPerVariant', label: 'Cells sorted per variant into a bin', bad: 'below', review: 20, fail: 5, unit: 'cells' },
+  { key: 'unmappedReads', label: 'Reads of barcodes the map does not name', bad: 'above', review: 0.05, fail: 0.2, unit: 'fraction' },
+  { key: 'singleBarcode', label: 'Variants with a single barcode', bad: 'above', review: 0.5, fail: 0.95, unit: 'fraction' },
+  { key: 'barcodeExcess', label: 'Disagreement of a variant\'s barcodes ÷ counting (φ)', bad: 'above', review: 2, fail: 5, unit: '×' },
+  { key: 'splitHalf', label: 'Agreement of each variant\'s two halves of barcodes (Pearson r)', bad: 'below', review: 0.8, fail: 0.5, unit: 'r' },
+  { key: 'outlierBarcodes', label: 'Outlier barcodes (beyond 4 in z/√φ)', bad: 'above', review: 0.01, fail: 0.05, unit: 'fraction' },
 ];
 
 export function defaultThresholds() {
@@ -72,10 +89,12 @@ const RANK = { na: 0, pass: 1, review: 2, fail: 3 };
 const worst = (list) => list.reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'pass');
 const thresholdText = ({ review, fail }, bad, fmt = num) => (bad === 'above' ? `review above ${fmt(review)}, fail above ${fmt(fail)}` : `review below ${fmt(review)}, fail below ${fmt(fail)}`);
 
-// The findings of a QC result. qc: computeQC's output; thresholds: as defaultThresholds().
-export function findingsFrom(qc, thresholds) {
+// The findings of a QC result. qc: computeQC's output; thresholds: as defaultThresholds();
+// options: { acknowledged } (the workspace's acknowledgements, by finding id).
+export function findingsFrom(qc, thresholds, options = {}) {
   const t = withDefaultThresholds(thresholds);
   const out = [];
+  const ctx = qc.context ?? null;
   const add = (f) => out.push({ blocking: false, affected: { samples: [], replicates: [] }, level: 'counts', ...f });
 
   // Every sample has counts.
@@ -148,15 +167,17 @@ export function findingsFrom(qc, thresholds) {
     affected: { samples: dropped.map((d) => d.sample), replicates: dropped.map((d) => d.replicate) },
   });
 
-  // Coverage.
+  // Coverage: of what the library can make, when it is made of single-base changes and the
+  // target's codons are known (wave 2, slice 8).
   const cv = levels(t, 'coverage');
   const cov = qc.coverage;
+  const reach = cov.assessed && cov.reach?.known ? cov.reach : null;
   add({
-    id: 'coverage', title: 'Coverage of designed substitutions', plot: 'coverage', status: cov.assessed ? statusOf(cov.fraction, cv, 'below') : 'na',
-    value: cov.assessed ? `${pct(cov.fraction)} (${cov.observed} of ${cov.designed}; missense ${cov.byClass.missense[0]}/${cov.byClass.missense[1]}, nonsense ${cov.byClass.nonsense[0]}/${cov.byClass.nonsense[1]})` : `not assessed: ${cov.reason}`,
-    explanation: cov.assessed ? `Of the ${cov.designed} single amino-acid substitutions and stops possible across ${cov.length} positions${qc.coverage.grid ? '' : ''}, ${cov.observed} were seen before selection; ${cov.inTable - cov.observed} are in the table with no input reads, ${cov.designed - cov.inTable} are not in it. Unmeasured substitutions are missing on the map, never "no effect".` : `Coverage is not assessed: ${cov.reason}.`,
-    threshold: thresholdText(cv, 'below', pct),
-    rationale: 'The fraction of designed variants observed. Libraries built by error-prone PCR or with tiles cover less by design; the threshold is a prompt to check, not a standard.',
+    id: 'coverage', title: 'Coverage of designed substitutions', plot: 'coverage', status: cov.assessed ? statusOf(reach ? reach.fraction : cov.fraction, cv, 'below') : 'na',
+    value: cov.assessed ? `${reach ? `${pct(reach.fraction)} of the substitutions one base change makes (${reach.observed} of ${reach.designed}); ` : ''}${pct(cov.fraction)}${reach ? ' of all' : ''} (${cov.observed} of ${cov.designed}; missense ${cov.byClass.missense[0]}/${cov.byClass.missense[1]}, nonsense ${cov.byClass.nonsense[0]}/${cov.byClass.nonsense[1]})` : `not assessed: ${cov.reason}`,
+    explanation: cov.assessed ? `Of the ${cov.designed} single amino-acid substitutions and stops possible across ${cov.length} positions, ${cov.observed} were seen before selection; ${cov.inTable - cov.observed} are in the table with no input reads, ${cov.designed - cov.inTable} are not in it.${reach ? ` The library was made by ${inText(cov.method)}, which reaches mostly the ${reach.designed} substitutions one base change away from each wild-type codon: ${reach.observed} of those were seen, and coverage is judged on them.` : cov.reach && !cov.reach.known ? ` The library was made by ${inText(cov.method)}, which reaches mostly the substitutions one base change makes (about a third of all); with the target's DNA sequence, coverage would be judged against those.` : ''} Unmeasured substitutions are missing on the map, never "no effect".` : `Coverage is not assessed: ${cov.reason}.`,
+    threshold: `${thresholdText(cv, 'below', pct)}${reach ? ', of the substitutions the library can make' : ''}`,
+    rationale: 'The fraction of designed variants observed. A library of single-base changes (error-prone PCR, doped oligos) reaches about a third of the substitutions, and a tiled one covers its tiles: coverage is judged against what the library could make when the design says how it was made. The threshold is a prompt to check, not a standard.',
   });
 
   // Replicate agreement.
@@ -168,14 +189,20 @@ export function findingsFrom(qc, thresholds) {
   add({
     id: 'agreement', title: 'Replicate agreement', plot: 'agreement', status: pairs.length ? worst(agStatus) : 'na',
     value: pairs.length ? `lowest Pearson r ${num(minR)} (${pairs.length} pair${pairs.length > 1 ? 's' : ''}; Spearman ${num(pairs.find((p) => p.pearson === minR)?.spearman)})` : 'not assessed: fewer than two replicates with shared variants',
-    explanation: weak.length ? `Replicates disagree: ${weak.map((p) => `${p.a} and ${p.b} r = ${num(p.pearson)} on ${p.n} variants`).join('; ')}. Scores combined from them carry the disagreement in their SEs (REML's τ²), but check the replicates.` : pairs.length ? 'The replicates\' log ratios agree.' : 'Agreement needs two replicates measuring the same variants.',
+    explanation: weak.length ? `Replicates disagree: ${weak.map((p) => `${p.a} and ${p.b} r = ${num(p.pearson)} on ${p.n} variants`).join('; ')}. Scores combined from them carry the disagreement in their SEs (the moderated combination's shared error model, or REML's τ²), but check the replicates.` : pairs.length ? `The replicates' ${qc.model === 'bins' ? 'weighted bin values' : 'log ratios'} agree.` : 'Agreement needs two replicates measuring the same variants.',
     threshold: `${thresholdText(ag, 'below')}, on variants with at least ${t.agreementInput} input reads in both replicates`,
-    rationale: 'Pearson correlation of replicates\' log ratios, on variants counted well enough to be compared; Spearman is reported beside it. Normalization shifts a replicate as a whole, which correlation ignores, so this is assessed from the counts before any scoring.',
+    rationale: 'Pearson correlation of replicates\' log ratios (for sorted bins, their weighted averages of the bins\' values), on variants counted well enough to be compared; Spearman is reported beside it. Normalization shifts a replicate as a whole, which correlation ignores, so this is assessed from the counts before any scoring.',
     affected: { samples: [], replicates: [...new Set(weak.flatMap((p) => [p.a, p.b]))] },
   });
 
   // Variance beyond counting.
   const ev = levels(t, 'excessVariance');
+  // DiMSum's error model of two populations: where the excess is (a term m means about m − 1 reads
+  // per molecule beyond counting; above 2 at one end and under it at the other says which).
+  const terms = qc.conditions.flatMap((c) => (c.errorModel ?? []).flatMap((g) => g.terms ?? []));
+  const maxIn = terms.length ? Math.max(...terms.map((x) => x.input)) : 0;
+  const maxOut = terms.length ? Math.max(...terms.map((x) => x.output)) : 0;
+  const bottleneckAt = maxIn >= 2 && maxIn >= 2 * maxOut ? 'input' : maxOut >= 2 && maxOut >= 2 * maxIn ? 'output' : null;
   const evPairs = pairs.filter((p) => Number.isFinite(p.ratio));
   const synonymous = qc.conditions.flatMap((c) => c.synonymous).filter((s) => s.n >= 10 && Number.isFinite(s.ratio));
   const values = evPairs.length ? evPairs.map((p) => p.ratio) : synonymous.map((s) => s.ratio);
@@ -184,12 +211,25 @@ export function findingsFrom(qc, thresholds) {
   const worstPair = evPairs.find((p) => p.ratio === maxRatio);
   const resolvable = worstPair && worstPair.bins.length >= 3 && worstPair.bins.at(-1).counting / worstPair.bins[0].counting >= 4;
   const flagged = evPairs.filter((p) => statusOf(p.ratio, ev, 'above') !== 'pass');
+  // The cells recorded against the bottleneck the replicates imply (wave 2, slice 10): the pair's
+  // ratio (the fitted multiplier is diluted by the variants selection depletes, whose counting
+  // error dwarfs a bottleneck at the input); within 1.5× either way, the recorded cells account
+  // for it.
+  const cells = evPairs.filter((p) => p.recorded).map((p) => {
+    const observed = p.ratio;
+    const ratio = observed / p.recorded.predicted;
+    return { a: p.a, b: p.b, input: p.recorded.input, output: p.recorded.output, predicted: p.recorded.predicted, observed, verdict: ratio > 1.5 ? 'more' : ratio < 1 / 1.5 ? 'less' : 'explained' };
+  });
+  const worstCells = cells.length ? cells.reduce((x, y) => (Math.abs(log(y.observed / y.predicted)) > Math.abs(log(x.observed / x.predicted)) ? y : x)) : null;
+  const cellsText = !worstCells ? ''
+    : ` The cells recorded (${worstCells.input.map((x) => num(x, 0)).join(' and ')} carried into selection${worstCells.output.every((x) => x > 0) ? `, ${worstCells.output.map((x) => num(x, 0)).join(' and ')} recovered after it` : ''}, in ${worstCells.a} and ${worstCells.b}) predict ${num(worstCells.predicted, 1)}× the counting variance; the replicates show ${num(worstCells.observed, 1)}×: ${worstCells.verdict === 'explained' ? 'the recorded cells account for it.' : worstCells.verdict === 'more' ? 'more than they explain, so another step had fewer cells (transformation, recovery, DNA extraction) or the replicates differ beyond counting.' : 'less than they predict: check that the cells recorded are those carried into each replicate\'s selection, not a total over replicates.'}`;
   add({
     id: 'excess-variance', title: 'Variance beyond counting (bottleneck)', plot: 'variance', status: values.length ? worst(evStatus) : 'na',
-    value: values.length ? `${num(maxRatio, 1)}× the counting variance${synonymous.length ? `; synonymous variants ${synonymous.map((s) => `${num(s.ratio, 1)}×`).join(', ')}` : ''}` : 'not assessed: no replicate pairs and fewer than 10 synonymous variants',
+    value: values.length ? `${num(maxRatio, 1)}× the counting variance${synonymous.length ? `; synonymous variants ${synonymous.map((s) => `${num(s.ratio, 1)}×`).join(', ')}` : ''}${terms.length ? `; DiMSum's terms up to ${num(Math.max(...terms.map((x) => x.input)), 1)}× at the input, ${num(Math.max(...terms.map((x) => x.output)), 1)}× at the output` : ''}` : 'not assessed: no replicate pairs and fewer than 10 synonymous variants',
     explanation: values.length
-      ? `${flagged.length ? `Replicate differences vary ${num(maxRatio, 1)}× more than counting alone predicts (${worstPair ? `${worstPair.a} and ${worstPair.b}` : 'synonymous variants'}): too few cells somewhere (a bottleneck), or noise between replicates. SEs from counts alone understate the uncertainty; REML's τ² takes up the excess between replicates.` : 'Replicate differences vary about as much as counting predicts.'}${resolvable ? ` Fitted as a·counting + e: a = ${num(worstPair.multiplier, 1)}${worstPair.multiplier > 1.5 ? ' (above 1: a bottleneck)' : ''}, e = ${num(worstPair.additive, 3)} (replicate noise SD about ${num(Math.sqrt(worstPair.additive / 2), 2)}).` : flagged.length ? ' The counts span too narrow a range to tell a bottleneck (which scales with counting error) from replicate noise (which does not).' : ''}`
+      ? `${flagged.length ? `Replicate differences vary ${num(maxRatio, 1)}× more than counting alone predicts (${worstPair ? `${worstPair.a} and ${worstPair.b}` : 'synonymous variants'}): too few cells somewhere (a bottleneck), or noise between replicates. SEs from counts alone understate the uncertainty; the moderated combination (the default) fits the excess across variants and carries it into each variant's SE, as DiMSum's error model does (Score, Scored by); REML's τ² takes it up variant by variant.` : 'Replicate differences vary about as much as counting predicts.'}${resolvable ? ` Fitted as a·counting + e: a = ${num(worstPair.multiplier, 1)}${worstPair.multiplier > 1.5 ? ' (above 1: a bottleneck)' : ''}, e = ${num(worstPair.additive, 3)} (replicate noise SD about ${num(Math.sqrt(worstPair.additive / 2), 2)}).` : flagged.length ? ' The counts span too narrow a range to tell a bottleneck (which scales with counting error) from replicate noise (which does not).' : ''}${terms.length ? ` DiMSum's error model: ${terms.map((x) => `${x.name} input ${num(x.input, 1)}×, output ${num(x.output, 1)}×, additive SD ${num(Math.sqrt(x.reperror), 2)}`).join('; ')}.${bottleneckAt ? ` The excess is at the ${bottleneckAt}: about ${num(bottleneckAt === 'input' ? Math.max(...terms.map((x) => x.input)) : Math.max(...terms.map((x) => x.output)), 0)} reads per molecule there, ${bottleneckAt === 'input' ? 'before selection (the cells transformed or carried into it)' : 'after it (the cells recovered, or the DNA extracted from them)'}.` : ''}` : ''}${cellsText}`
       : 'Variance beyond counting needs two replicates, or ten synonymous variants.',
+    cells: cells.length ? cells : null,
     threshold: thresholdText(ev, 'above', (x) => `${x}×`),
     rationale: 'Under counting (Poisson) noise alone, the difference of two replicates\' log ratios has a variance equal to the sum of the reciprocal counts; its robust ratio to that is about 1. N cells per variant carried through a step add 1/N to each replicate\'s variance: with D reads per variant before and after selection, the ratio becomes about 1 + D/(2N), a multiplier of the counting variance (the multiplicative error term of DiMSum, Faure et al. 2020). Aim for an excess of molecules over reads at every step. Synonymous variants should vary as counting predicts.',
     affected: { samples: [], replicates: [...new Set(flagged.flatMap((p) => [p.a, p.b]))] },
@@ -216,13 +256,31 @@ export function findingsFrom(qc, thresholds) {
   const sp = levels(t, 'separation');
   const sep = (scores ?? []).filter((c) => c.separation);
   const sepStatus = sep.map((c) => statusOf(c.separation.auc, sp, 'below'));
+  const first = sep[0]?.separation;
+  // How far the nonsense variants sit from the reference, on the side the readout expects (or, a
+  // negative distance, the other side).
+  const sideWord = (x) => {
+    const expected = x.side === 'above' ? 'above' : 'below';
+    const other = x.side === 'above' ? 'below' : 'above';
+    return x.side === 'either' ? `${num(Math.abs(x.standardized), 1)} robust SDs away from` : `${num(Math.abs(x.standardized), 1)} robust SDs ${x.standardized >= 0 ? expected : other}`;
+  };
+  const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+  const noControls = ctx && ctx.controls.nonsense === 'none' ? 'not assessed: the design names no nonsense controls' : 'not assessed: needs 5 scored nonsense controls and synonymous variants or the wild type';
+  const limited = ctx?.controls.positions?.nonsense;
+  const changes = sep.filter((c) => c.separation.change && !(limited?.end <= c.separation.change.lastControl));
   add({
     id: 'separation', title: 'Separation of controls', plot: 'controls', level: 'scores',
     status: !scores ? 'na' : sep.length ? worst(sepStatus) : 'na',
-    value: !scores ? noRun : sep.length ? sep.map((c) => `${scores.length > 1 ? `${c.name}: ` : ''}AUC ${num(c.separation.auc, 3)} (${c.separation.reference} median ${num(c.separation.referenceMedian)}, nonsense ${num(c.separation.nonsenseMedian)})`).join('; ') : 'not assessed: needs 5 scored nonsense variants and synonymous variants or the wild type',
-    explanation: sep.length ? `Nonsense variants score ${sep.map((c) => `${num(c.separation.standardized, 1)} robust SDs below ${c.separation.reference === 'wild type' ? 'the wild type' : 'synonymous variants'}${scores.length > 1 ? ` in ${c.name}` : ''}`).join('; ')}${sep.some((c) => Number.isFinite(c.separation.nonsenseAbove)) ? `; ${sep.map((c) => pct(c.separation.nonsenseAbove)).join(', ')} of nonsense variants score above the synonymous 5th percentile` : ''}. ${worst(sepStatus) === 'pass' ? 'The assay tells loss of function from wild-type-like.' : 'The assay struggles to tell loss of function from wild-type-like: intermediate scores will be hard to read.'}` : 'Separation needs scored controls.',
+    value: !scores ? noRun : sep.length ? sep.map((c) => `${scores.length > 1 ? `${c.name}: ` : ''}AUC ${num(c.separation.auc, 3)} (${c.separation.reference} median ${num(c.separation.referenceMedian)}, nonsense ${num(c.separation.nonsenseMedian)}${c.separation.controls < c.separation.stops ? `; ${c.separation.controls} of ${c.separation.stops} stops as controls` : ''})`).join('; ') : noControls,
+    explanation: sep.length ? [
+      `Nonsense variants score ${sep.map((c) => `${sideWord(c.separation)} ${c.separation.reference === 'wild type' ? 'the wild type' : 'synonymous variants'}${scores.length > 1 ? ` in ${c.name}` : ''}`).join('; ')}${sep.some((c) => Number.isFinite(c.separation.nonsenseAbove)) ? `; ${sep.map((c) => pct(c.separation.nonsenseAbove)).join(', ')} of them score on the wild type's side of the synonymous ${first.side === 'above' ? '95th' : '5th'} percentile` : ''}.`,
+      worst(sepStatus) === 'pass' ? 'The assay tells loss of function from wild-type-like.' : 'The assay struggles to tell loss of function from wild-type-like: intermediate scores will be hard to read.',
+      first.stated ? (first.side === 'either' ? 'The readout\'s score has no sign, so separation is counted either way.' : `As the readout says, loss of function scores ${first.side === 'above' ? 'high' : 'low'}.`) : 'The readout\'s direction is not stated: loss of function is taken to score low (a higher score, more of the function).',
+      sep.some((c) => c.separation.reversed) ? `The nonsense variants score ${first.side === 'below' ? 'above' : 'below'} the reference instead${first.stated ? ': check the readout\'s direction, and that the nonsense variants lose the function this assay measures.' : ': in this assay a higher score may mean less of the function. State the readout\'s direction (Experiment).'}` : '',
+      changes.length ? capital(changes.map((c) => `${scores.length > 1 ? `${c.name}: ` : ''}stops after position ${c.separation.change.lastControl} score like the reference (median ${num(c.separation.change.after.median)}, ${c.separation.change.after.n} stops), those up to it ${num(c.separation.change.before.median)} (${c.separation.change.before.n})`).join('; ')) + ': truncations late in the target may keep the function, and are not loss-of-function controls.' : '',
+    ].filter(Boolean).join(' ') : ctx && ctx.controls.nonsense === 'none' ? 'The design names no nonsense controls.' : 'Separation needs scored controls.',
     threshold: thresholdText(sp, 'below', (x) => `AUC ${x}`),
-    rationale: 'No single separation statistic is standard, so three are reported: the AUC (the chance a reference variant outscores a nonsense variant), the standardized median difference, and the nonsense fraction above the synonymous 5th percentile (the class threshold of VAMP-seq, Matreyek et al. 2018). Nonsense variants are loss-of-function controls only where a truncation loses the function assayed: stops after the region an assay needs (BRCA1\'s Y2H construct) can keep it.',
+    rationale: 'No single separation statistic is standard, so three are reported: the AUC (the chance a reference variant sits on the wild-type side of a nonsense variant, in the direction the readout gives), the standardized median difference, and the nonsense fraction on the wild-type side of the synonymous 5th percentile (the class threshold of VAMP-seq, Matreyek et al. 2018). Nonsense variants are loss-of-function controls only where a truncation loses the function assayed: stops after the region an assay needs (BRCA1\'s Y2H construct) can keep it, and the design can limit them to the positions where they serve.',
   });
   const rs = levels(t, 'resolution');
   const res = (scores ?? []).filter((c) => Number.isFinite(c.resolution));
@@ -244,12 +302,142 @@ export function findingsFrom(qc, thresholds) {
     threshold: thresholdText(sf, 'below', pct),
     rationale: 'Filters should remove the few variants that cannot be scored; when they remove many, the parameters or the experiment need a look.',
   });
-  return out;
+
+  // Sorted bins (Q10): how the reads spread over the bins, and how many cells each variant had.
+  if (qc.model === 'bins' && qc.bins?.length) {
+    const bs = levels(t, 'binShare');
+    const shares = qc.bins.map((r) => ({ ...r, smallest: Math.min(...r.bins.map((b) => b.share)) }));
+    const shareStatus = shares.map((r) => statusOf(r.smallest, bs, 'below'));
+    add({
+      id: 'bin-occupancy', title: 'Occupancy of the bins', plot: 'bin-occupancy',
+      status: worst(shareStatus),
+      value: `smallest bin ${pct(Math.min(...shares.map((r) => r.smallest)))} of a replicate's ${shares[0].shareOf}`,
+      explanation: `${shares.filter((r, i) => shareStatus[i] !== 'pass').map((r) => `${r.name}: bin ${r.bins.find((b) => b.share === r.smallest).order} holds ${pct(r.smallest)} of its ${r.shareOf}`).join('; ') || `Every bin holds a fair share of each replicate's ${shares[0].shareOf}.`}${shareStatus.some((x) => x !== 'pass') ? '. A nearly empty bin samples its variants coarsely, and the weighted average leans on the other bins.' : ''}`,
+      threshold: thresholdText(bs, 'below', pct),
+      rationale: 'Bins are usually gated to hold similar numbers of cells and sequenced to similar depths; a bin with a small share of the cells (or, when the cells are not recorded, of the reads) is nearly empty or undersequenced.',
+      affected: { samples: [], replicates: shares.filter((r, i) => shareStatus[i] !== 'pass').map((r) => r.id) },
+    });
+    const cv = levels(t, 'cellsPerVariant');
+    const known = qc.bins.filter((r) => r.bins.every((b) => b.cellsPerVariant !== null));
+    const cellStatus = known.map((r) => statusOf(Math.min(...r.bins.map((b) => b.cellsPerVariant)), cv, 'below'));
+    add({
+      id: 'cells-per-bin', title: 'Cells sorted per variant', plot: 'cells-per-bin',
+      status: known.length ? worst(cellStatus) : 'na',
+      value: known.length ? `fewest ${num(Math.min(...known.flatMap((r) => r.bins.map((b) => b.cellsPerVariant))), 0)} cells per variant in a bin` : 'not assessed: the design does not record the cells sorted into each bin',
+      explanation: known.length ? `${known.map((r) => `${r.name}: ${r.bins.map((b) => num(b.cellsPerVariant, 0)).join(', ')} cells per variant, ${r.bins.map((b) => num(b.readsPerCell, 1)).join(', ')} reads per cell`).join('; ')}. ${worst(cellStatus) === 'pass' ? 'Enough cells were sorted for each variant\'s distribution over the bins.' : 'Few cells per variant: a variant\'s distribution over the bins is sampled coarsely, whatever the depth of sequencing.'}` : 'Record the cells sorted into each bin with each sample (the Experiment view) to assess it; the maximum-likelihood fit uses them too.',
+      threshold: thresholdText(cv, 'below', (x) => `${x} cells`),
+      rationale: 'A variant\'s distribution over the bins is sampled twice: by the cells sorted, then by the reads. Fewer cells than reads per variant means the cells limit what is known.',
+      affected: { samples: [], replicates: known.filter((r, i) => cellStatus[i] !== 'pass').map((r) => r.id) },
+    });
+  }
+
+  // Barcodes (Q8): the map, barcodes per variant, how a variant's barcodes agree, outliers.
+  if (qc.barcodes) {
+    const bq = qc.barcodes;
+    const ur = levels(t, 'unmappedReads');
+    add({
+      id: 'barcode-map', title: 'Barcodes the map names', plot: 'barcodes-per-variant',
+      status: statusOf(bq.unmappedReadShare, ur, 'above'),
+      value: `${pct(bq.unmappedReadShare)} of reads in ${bq.unmapped} barcode${bq.unmapped === 1 ? '' : 's'} (of ${bq.rows}) naming no variant`,
+      explanation: bq.unmapped ? `${bq.unmapped} barcodes are not in the barcode-to-variant map or are given two variants by it; their reads are not scored. ${statusOf(bq.unmappedReadShare, ur, 'above') === 'pass' ? 'They are a small share of the reads.' : 'A large share of the reads: is the map from this library, and its barcodes written the same way (strand, length)?'}` : 'Every barcode counted names a variant.',
+      threshold: thresholdText(ur, 'above', pct),
+      rationale: 'Barcodes are linked to variants by sequencing the library once (long reads); a barcode missing from that map is one seen too rarely there, a sequencing error, or a map from another library. A barcode the map gives two variants cannot be trusted for either.',
+    });
+    const sb = levels(t, 'singleBarcode');
+    const reps = bq.replicates;
+    const singleShare = (r) => (r.variants ? r.perVariant.single / r.variants : Number.NaN);
+    const singleStatus = reps.map((r) => statusOf(singleShare(r), sb, 'above'));
+    add({
+      id: 'barcodes-per-variant', title: 'Barcodes per variant', plot: 'barcodes-per-variant',
+      status: reps.length ? worst(singleStatus) : 'na',
+      value: reps.length ? reps.map((r) => `${reps.length > 1 ? `${r.name}: ` : ''}median ${num(r.perVariant.median, 0)} (${num(r.perVariant.q25, 0)}–${num(r.perVariant.q75, 0)}), ${pct(singleShare(r))} with one`).join('; ') : 'no replicate has barcodes counted',
+      explanation: `${reps.map((r) => `${r.name}: ${r.barcodes} barcodes of ${r.variants} variants with reads before selection`).join('; ')}. ${worst(singleStatus) === 'pass' ? 'Most variants are measured by several barcodes, so a barcode\'s own noise can be told from its variant\'s effect.' : 'Many variants have a single barcode: their scores cannot be checked against another barcode, and an outlier barcode passes for an effect.'}`,
+      threshold: thresholdText(sb, 'above', pct),
+      rationale: 'Several independent barcodes per variant are independent clones: they average out clonal variation and expose barcodes that carry a second mutation or are misassigned.',
+      affected: { samples: [], replicates: reps.filter((r, i) => singleStatus[i] !== 'pass').map((r) => r.id) },
+    });
+    const compared = reps.filter((r) => Number.isFinite(r.phi));
+    if (compared.length || qc.model !== 'bins') {
+      const be = levels(t, 'barcodeExcess');
+      const sh = levels(t, 'splitHalf');
+      const agreementStatus = compared.map((r) => worst([statusOf(r.phi, be, 'above'), r.splitHalf ? statusOf(r.splitHalf.r, sh, 'below') : 'pass']));
+      add({
+        id: 'barcode-agreement', title: 'Agreement of a variant\'s barcodes', plot: 'barcode-agreement',
+        status: compared.length ? worst(agreementStatus) : 'na',
+        value: compared.length ? compared.map((r) => `${compared.length > 1 ? `${r.name}: ` : ''}φ ${num(r.phi, 2)}${r.splitHalf ? `, split-half r ${num(r.splitHalf.r, 3)}` : ''}`).join('; ') : 'not assessed: no variant has two barcodes counted',
+        explanation: compared.length ? `A variant's barcodes disagree ${num(Math.max(...compared.map((r) => r.phi)), 1)}× as much as counting explains at most${compared.some((r) => r.splitHalf) ? `, and the two halves of its barcodes score alike with r ${compared.filter((r) => r.splitHalf).map((r) => num(r.splitHalf.r, 3)).join(', ')}` : ''}. ${worst(agreementStatus) === 'pass' ? 'Barcodes of one variant agree about as counting predicts.' : 'More than counting explains: few cells per barcode (a bottleneck), or clones that differ. Scoring each barcode and combining them by REML takes the extra variation into a variant\'s SE; the sums leave it out.'}` : 'Needs variants with two or more barcodes counted.',
+        threshold: `φ ${thresholdText(be, 'above', (x) => `${x}×`)}; split-half r ${thresholdText(sh, 'below')}`,
+        rationale: 'Each barcode is compared with its variant\'s other barcodes, in units of their counting error together; φ, the median square of these over its value under counting alone, is 1 when barcodes differ only by counting. The split halves are a variant\'s barcodes in two groups, scored separately: their correlation is the replicate agreement of barcodes.',
+        affected: { samples: [], replicates: compared.filter((r, i) => agreementStatus[i] !== 'pass').map((r) => r.id) },
+      });
+      const ob = levels(t, 'outlierBarcodes');
+      const outlierStatus = compared.map((r) => statusOf(r.outlierShare, ob, 'above'));
+      add({
+        id: 'outlier-barcodes', title: 'Outlier barcodes', plot: 'barcode-agreement',
+        status: compared.length ? worst(outlierStatus) : 'na',
+        value: compared.length ? compared.map((r) => `${compared.length > 1 ? `${r.name}: ` : ''}${r.outliers} of ${r.compared} (${pct(r.outlierShare)})`).join('; ') : 'not assessed: no variant has three barcodes counted',
+        explanation: compared.length ? `${compared.reduce((a, r) => a + r.outliers, 0)} barcodes depart from their variant's other barcodes by more than 4 in z/√φ (found one at a time, so that one does not hide another). ${worst(outlierStatus) === 'pass' ? 'Few: they move their variants little.' : 'Many: a barcode carrying a second mutation, or assigned to the wrong variant, scores as its variant. Leave them out with the barcode filter (Score, Filters), and look for a pattern (a library, low counts).'}` : 'Needs variants with three or more barcodes counted.',
+        threshold: thresholdText(ob, 'above', pct),
+        rationale: 'A barcode far from its siblings is rarely its variant\'s effect: it is a clone with a second mutation, a barcode linked to the wrong variant, or a sequencing artefact. Variants with fewer than three barcodes cannot say which barcode is off.',
+        affected: { samples: [], replicates: compared.filter((r, i) => outlierStatus[i] !== 'pass').map((r) => r.id) },
+      });
+    }
+  }
+
+  // Time series (Q10): the time points the fits used, and how well the time courses follow a line.
+  if (qc.model === 'time-series') {
+    const ts = qc.timeSeries;
+    const regression = ts && ts.length;
+    const noRegression = qc.scores ? 'not assessed: the run scores by the log ratio of the first and last samples' : 'not assessed: needs a score run by regression';
+    const fp = levels(t, 'fewerPoints');
+    const fewer = regression ? ts.map((r) => ({ ...r, share: r.fits ? r.fewer / r.fits : Number.NaN })) : [];
+    const fewerStatus = fewer.map((r) => statusOf(r.share, fp, 'above'));
+    add({
+      id: 'time-points', title: 'Time points used', plot: 'time-points', level: 'scores',
+      status: regression ? worst(fewerStatus) : 'na',
+      value: regression ? `${pct(Math.max(...fewer.map((r) => r.share).filter(Number.isFinite), 0))} of fits at most on fewer points; ${fewer.reduce((a, r) => a + r.excluded, 0)} replicate measurements with too few` : noRegression,
+      explanation: regression ? `${fewer.map((r) => `${r.name}: ${r.fewer} of ${r.fits} fits on fewer than its ${r.times} time points${r.excluded ? `, ${r.excluded} measurements left out with too few` : ''}`).join('; ')}. A variant is fitted on the time points where it was counted; missing points are usually variants that dropped out and were written as missing, which the "Missing after selection" finding looks for.` : 'Needs a run scored by weighted or ordinary regression on time.',
+      threshold: thresholdText(fp, 'above', pct),
+      rationale: 'A slope fitted on fewer points is less certain, and points missing at the end of a time course bias it toward the wild type: the variants that dropped out are the most depleted.',
+      affected: { samples: [], replicates: fewer.filter((r, i) => fewerStatus[i] !== 'pass').map((r) => r.id) },
+    });
+    const tf = levels(t, 'timeFit');
+    const fit = regression ? ts.filter((r) => r.assessed) : [];
+    const fitStatus = fit.map((r) => statusOf(r.departure, tf, 'above'));
+    add({
+      id: 'time-fit', title: 'Fit of the time courses', plot: 'time-fit', level: 'scores',
+      status: fit.length ? worst(fitStatus) : 'na',
+      value: fit.length ? `median ${num(Math.max(...fit.map((r) => r.departure)), 1)}× what counting predicts; up to ${pct(Math.max(...fit.map((r) => r.beyond)))} of fits beyond its 99.9th percentile` : regression ? 'not assessed: no fit has three or more points' : noRegression,
+      explanation: fit.length ? `${fit.map((r) => `${r.name}: ${num(r.departure, 1)}×, ${pct(r.beyond)} far from a line`).join('; ')}. ${worst(fitStatus) === 'pass' ? 'The time courses scatter about their lines as counting predicts.' : 'The time courses scatter about their lines more than counting predicts: variation between time points (bottlenecks at each passage, growth that is not exponential, saturation) adds to the counting noise. The SEs are scaled by the residuals, so they include it.'} Trajectories far from a line are reported, never removed: a variant can rise and then fall for real.` : 'Needs fits of three or more time points.',
+      threshold: thresholdText(tf, 'above', (x) => `${x}×`),
+      rationale: 'Each fit\'s weighted residuals are compared with counting noise (χ² per degree of freedom over its median under counting alone, so 1 is typical). Departures well above 1 for most variants point to noise in the experiment at each time point; for a few, to time courses that are not exponential.',
+      affected: { samples: [], replicates: fit.filter((r, i) => fitStatus[i] !== 'pass').map((r) => r.id) },
+    });
+  }
+  // Context: what to do next, and the acknowledgements that still hold.
+  return out.map((f) => ({ ...f, advice: adviceFor(f, qc), acknowledged: acknowledgementOf(f, options.acknowledged?.[f.id]) }));
 }
 
-// The overall status: the worst finding, and how many of each.
+// A workspace's acknowledgement of a finding, as the finding carries it: { reason, time, status,
+// value, current }, current while the finding is still to review or failing and no worse than when
+// it was acknowledged. A blocking finding cannot be acknowledged.
+function acknowledgementOf(f, ack) {
+  if (!ack || f.blocking) return null;
+  return { reason: ack.reason, time: ack.time ?? null, status: ack.status, value: ack.value ?? null, current: (f.status === 'review' || f.status === 'fail') && RANK[f.status] <= RANK[ack.status] };
+}
+
+// The overall status: the worst finding, and how many of each; acknowledgements do not change it,
+// but are counted apart (unacknowledged: the findings to review or failing that no one has
+// acknowledged).
 export function overall(findings) {
   const counts = { fail: 0, review: 0, pass: 0, na: 0 };
   for (const f of findings) counts[f.status] += 1;
-  return { status: counts.fail ? 'fail' : counts.review ? 'review' : 'pass', counts, blocking: findings.filter((f) => f.blocking && f.status === 'fail').map((f) => f.id) };
+  const open = (status) => findings.filter((f) => f.status === status && !f.acknowledged?.current).length;
+  return {
+    status: counts.fail ? 'fail' : counts.review ? 'review' : 'pass',
+    counts,
+    blocking: findings.filter((f) => f.blocking && f.status === 'fail').map((f) => f.id),
+    acknowledged: findings.filter((f) => f.acknowledged?.current).map((f) => f.id),
+    unacknowledged: { fail: open('fail'), review: open('review') },
+  };
 }

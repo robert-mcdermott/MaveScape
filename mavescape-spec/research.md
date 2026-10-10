@@ -104,8 +104,8 @@ The quarterly Zenodo archive (doi:10.5281/zenodo.11201736) holds the CC0 sets.
 ### 1.2 MAVE minimum information and related standards
 
 - **Claussnitzer et al. 2024** (*Genome Biol*, doi:10.1186/s13059-024-03223-9): minimum
-  information for MAVEs, with a controlled vocabulary. MaveScape's design and methods export should
-  fill it (wave 5).
+  information for MAVEs, with a controlled vocabulary. MaveScape's design records the readout in
+  its terms (wave 2, slice 8), and the MaveDB export fills it (wave 3).
 - **Atlas of Variant Effects** (Fowler et al. 2023, doi:10.1186/s13059-023-02986-x).
 - **MaveDB papers:** Esposito 2019 (doi:10.1186/s13059-019-1845-6); MaveDB 2024 (Rubin 2025,
   doi:10.1186/s13059-025-03476-y).
@@ -398,8 +398,11 @@ MaveScape should say so where it applies it.
 - **MaveDB API:** the docs and the live API differ on the search response shape and on license
   headers in CSV downloads (none seen in API CSVs).
 - **Brnich thresholds:** to check against the paper (wave 7).
-- **Enrich2 issue #59** (multi-condition scores): unconfirmed. Test it before using Enrich2 as the
-  differential reference.
+- **Enrich2 issue #59** (multi-condition scores): tested in wave 2, slice 6. Enrich2's command never
+  computes its comparison of conditions (calc_pvalues_pairwise is not called), and with several
+  conditions its estimator starts from the variance over the variants combined in any condition.
+  Called directly, its z equals MaveScape's independent differential within 5 × 10⁻¹³, so Enrich2
+  is a reference for that method; limma (through mutscan) for the others.
 - **Findlay SGE HGVS format:** not inspected.
 - **GB1 supplement license:** unclear.
 - **PDZ3 00000053:** unpublished; replicate structure undocumented.

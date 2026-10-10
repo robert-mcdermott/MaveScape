@@ -152,3 +152,16 @@ test('the summary describes the design in plain language', () => {
   assert.equal(lines[1], 'Two-population selection: 2 replicates (2 biological replicates), each an input and an output.');
   assert.deepEqual(counts, { targets: 1, samples: 4, replicates: 2, conditions: 0, tiles: 0, sharedSamples: 0, ignoredColumns: 0 });
 });
+
+test('controls serve at positions within the target, with reasons; the readout is checked and summarized', () => {
+  const ok = validateDesign(twoPopulation({ controls: { nonsense: 'auto', positions: { nonsense: { start: 1, end: 8 } }, why: { nonsense: 'Stops before the last two residues lose it.' } }, readout: { phenotype: 'Abundance', direction: 'higher-less' }, library: { level: 'variant', method: 'Error-prone PCR' } }), { columns });
+  assert.equal(ok.ok, true, messages(ok));
+  const bad = validateDesign(twoPopulation({ controls: { positions: { nonsense: { start: 9, end: 4 }, missense: {} }, why: { stops: 'x' } }, readout: { direction: 'sideways' } }), { columns });
+  assert.deepEqual(bad.errors.map((e) => e.path).sort(), ['controls.positions.missense', 'controls.positions.nonsense', 'controls.why.stops', 'readout.direction']);
+  assert.match(messages(validateDesign(twoPopulation({ controls: { positions: { nonsense: { end: 11 } } } }), { columns })), /within the target \(1–10\)/);
+  const lines = summarizeDesign(twoPopulation({ controls: { nonsense: 'auto', positions: { nonsense: { end: 8 } }, why: { nonsense: 'Late stops keep the function' } }, readout: { direction: 'higher-more' }, library: { method: 'Error-prone PCR' } })).lines;
+  assert.ok(lines.includes('The library was made by error-prone PCR.'));
+  assert.ok(lines.includes('Readout: a higher score means more of the function measured.'));
+  assert.ok(lines.some((l) => /nonsense found automatically up to position 8/.test(l)));
+  assert.ok(lines.includes('  Nonsense controls: Late stops keep the function.'));
+});

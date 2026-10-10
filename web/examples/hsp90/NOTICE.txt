@@ -1,0 +1,12 @@
+Hsp90 (Hsp82), positions 582-590: variant counts from MaveDB score set
+urn:mavedb:00000011-a-1 (https://mavedb.org/score-sets/urn:mavedb:00000011-a-1), released under
+CC0 1.0.
+
+Hietpas RT, Jensen JD, Bolon DNA. Experimental illumination of a fitness landscape.
+PNAS 2011;108:7896-7901. doi:10.1073/pnas.1016024108
+
+counts.csv is MaveDB's count table for this score set, unchanged (SHA-256
+9459b0416a2b0380970e073380924cc77fde6ac1adc9bac5dd710eecc68622f7). It names each codon variant
+on its own row and writes the wild type once per position; MaveScape reads the rows at the
+protein level when the example opens. design.json and target.fasta were written for MaveScape
+from the record's description.

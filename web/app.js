@@ -16,8 +16,9 @@ import { installImport } from './ui/import.js';
 import { chooseArchiveExport, openArchives } from './ui/record.js';
 import { exampleGuide } from './ui/examples.js';
 import { mountWorkflow } from './ui/workflow.js';
+import { fixClock } from './lib/clock.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
 // show what they are for (mode-planned.js); Compare, Structure, Calibrate, Figures and Report join
@@ -74,6 +75,10 @@ async function start() {
   applyColorVision(prefs.get('colorVision', false));
   const info = await detectBackend();
   const library = createLibrary(info);
+  // A headless run (mavescape run --time) opens the page with ?clock=: every record of the session
+  // then carries that time, so that the run writes the same bytes again (lib/clock.js).
+  const clock = new URLSearchParams(location.search).get('clock');
+  if (clock) fixClock(clock);
 
   // MaveScape starts on the start page with a new, empty workspace: the last one is a click away
   // in its recent workspaces, and files named on the command line go into a workspace of their
@@ -84,7 +89,9 @@ async function start() {
   const app = { store, library, info, version: VERSION, commit: info?.commit ?? '' };
   app.workers = {};
   app.worker = (name) => {
-    app.workers[name] ??= new WorkerClient(`../workers/${name}-worker.js`, { max: 1 });
+    // A worker ends when it has nothing more to do, so that what a large table or run left in its
+    // memory goes with it; starting the next costs a few milliseconds.
+    app.workers[name] ??= new WorkerClient(`../workers/${name}-worker.js`, { max: 1, retire: true });
     return app.workers[name];
   };
   // Readers of opened files by kind, registered by the slices that build them: kind → async
@@ -172,7 +179,9 @@ async function start() {
   folderInput.addEventListener('change', () => app.importFiles([...folderInput.files]));
 
   // Opens dropped or picked files by kind. Entries: File objects or { name, bytes, folder }.
-  app.importFiles = async (files) => {
+  // options.accept: tables are imported with the mapping MaveScape detects, without the wizard
+  // (remote control). Returns { problems: [messages] }; each is also shown and logged.
+  app.importFiles = async (files, options = {}) => {
     const items = files.map((file, order) => ({ file, name: file.name, folder: file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(-2, -1)[0] : file.folder ?? null, order }));
     const unread = new Map();
     const unknown = [];
@@ -191,21 +200,21 @@ async function start() {
       byKind.get(kind).push(item);
     }
     // Sequences first, so a table opened with its target's FASTA finds the target.
+    const messages = [];
     for (const kind of [...byKind.keys()].sort((a, b) => (a === 'sequence' ? -1 : b === 'sequence' ? 1 : 0))) {
       try {
-        await app.importers.get(kind)(byKind.get(kind));
+        await app.importers.get(kind)(byKind.get(kind), options);
       } catch (error) {
-        toast(error.message, { kind: 'error' });
-        app.log(error.message);
+        messages.push(error.message);
       }
     }
-    const messages = [];
     if (unread.size) messages.push(`This build of MaveScape cannot read ${[...unread.keys()].map((k) => KIND_NAMES[k] ?? k).join(', ')} yet.`);
     if (unknown.length) messages.push(`${unknown.length === 1 ? unknown[0] : `${unknown.length} files`}: MaveScape opens count and score tables (.csv, .tsv, .xlsx), sequences (.fasta, .gb), structures (.pdb, .cif) and workspaces (.msz).`);
     for (const message of messages) {
       toast(message, { kind: 'error' });
       app.log(message);
     }
+    return { problems: messages };
   };
 
   app.readBytes = async (item) => {
@@ -601,6 +610,12 @@ async function start() {
   app.inspector.render();
   app.drawer.render();
   await app.setMode('welcome');
+
+  // Remote control, when the program was started with --remote-control (ui/remote.js).
+  if (info?.remoteControl) {
+    const { installRemote } = await import('./ui/remote.js');
+    app.remote = installRemote(app);
+  }
 
   // Files named on the command line of the desktop program (or by a later launch), opened once
   // per program run.

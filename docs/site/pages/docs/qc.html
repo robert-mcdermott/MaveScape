@@ -1,0 +1,79 @@
+---
+title: Quality control
+description: MaveScape's quality-control findings for deep mutational scans: depth, coverage, missing counts, replicate agreement, bottlenecks, outlier replicates and the separation of the controls, each with its threshold and rationale.
+lede: Quality control says whether the experiment supports reliable scores. Each finding is pass, review or fail, with what was found, its threshold, why it matters and the plot behind it; the overall status sits beside the list, never instead of it.
+---
+      <h2 id="view">The QC view</h2>
+      <shot name="qc" alt="The QC view of the GRB2 example: the findings list with eleven passing, and the variance beyond counting failing at 11.4 times, with its explanation, threshold, rationale and plot">The GRB2 example: replicate differences vary 11× more than counting predicts, as a bottleneck makes them.</shot>
+      <p>Quality control is of a score run, or of the counts and the current design alone, before scoring. Choose which at the top left. The findings come from the counts first; the last three need scores.</p>
+
+      <h2 id="findings">The findings</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Finding</th><th>What it checks</th><th>Review / fail</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Every sample has counts</strong></td><td>A sample with no counts at all: a missing file or a misnamed column (blocks scoring)</td><td>fail</td></tr>
+            <tr><td><strong>Sequencing depth</strong></td><td>Reads per counted variant, per sample</td><td>below 30 / 10</td></tr>
+            <tr><td><strong>Low counts before selection</strong></td><td>Input variants below 10 reads</td><td>above 20% / 50%</td></tr>
+            <tr><td><strong>Missing counts</strong></td><td>Variants missing in a sample beyond the others</td><td>above 20% / 50%</td></tr>
+            <tr><td><strong>Missing after selection</strong></td><td>Variants that dropped out during selection but are written as missing rather than 0</td><td>review only</td></tr>
+            <tr><td><strong>Coverage of designed substitutions</strong></td><td>Substitutions observed, by position and class; of those a library of single-base changes can make, when the design says it is one</td><td>below 90% / 50%</td></tr>
+            <tr><td><strong>Replicate agreement</strong></td><td>Pearson and Spearman correlation of the replicates' log ratios</td><td>below 0.8 / 0.5</td></tr>
+            <tr><td><strong>Variance beyond counting</strong></td><td>Replicate differences against the variance counting predicts: above 1, a bottleneck or noise between replicates</td><td>above 2× / 5×</td></tr>
+            <tr><td><strong>Outlier replicates</strong></td><td>A replicate's leave-one-out variance against the others'</td><td>above 2× / 4×</td></tr>
+            <tr><td><strong>Separation of controls</strong></td><td>How well scores tell nonsense from wild-type-like controls (AUC), in the direction the readout gives; where late stops stop losing the function</td><td>below 0.9 / 0.75</td></tr>
+            <tr><td><strong>Resolution of scores</strong></td><td>The median SE against the controls' gap</td><td>above 0.25 / 0.5</td></tr>
+            <tr><td><strong>Variants scored</strong></td><td>Measured variants that pass the filters</td><td>below 80% / 50%</td></tr>
+            <tr><td><strong>Occupancy of the bins</strong> (sorted bins)</td><td>Each bin's share of its replicate's cells, or of its reads when the cells are not recorded</td><td>below 5% / 1%</td></tr>
+            <tr><td><strong>Cells sorted per variant</strong> (sorted bins)</td><td>The cells sorted into each bin per variant, when the design records them</td><td>below 20 / 5</td></tr>
+            <tr><td><strong>Time points used</strong> (time series)</td><td>Fits on fewer time points than the replicate has</td><td>above 10% / 30%</td></tr>
+            <tr><td><strong>Fit of the time courses</strong> (time series)</td><td>How far the time courses scatter about their lines, over what counting predicts (median; 1 is typical)</td><td>above 2× / 5×</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="bottleneck">Bottlenecks</h2>
+      <p>Under counting noise alone, the difference of two replicates' log ratios has a variance equal to the sum of the reciprocal counts. MaveScape fits the observed variance as <em>a</em> × counting + <em>e</em>: <em>a</em> above 1 points to too few cells somewhere (a bottleneck multiplies the counting variance), and <em>e</em> to noise between replicates. Standard errors from counts alone then understate the uncertainty. The <a href="scoring.html#moderated">moderated combination</a> (the default) fits the same model to every variant's replicates and carries it into each SE; REML's τ² takes up the excess only as far as each variant's own few replicates show it.</p>
+      <p><strong>The cells recorded.</strong> When the design records the cells carried into selection from each input (and, if known, those recovered after it in each output; <a href="experiment.html#bins">Experiment, Cells</a>), the finding checks the bottleneck it infers against them. N cells add 1/N of a variant's frequency to its variance, against counting's 1/R for R reads, so for a pair of replicates the ratio should be about 1 + Σ(1/N<sub>in</sub> + 1/N<sub>out</sub>) / Σ(1/R<sub>in</sub> + 1/R<sub>out</sub>) over their samples (about 1 + D/(2N) for D reads per variant). Within 1.5× either way, the recorded cells account for the excess; above it, another step had fewer cells (transformation, recovery, DNA extraction) or the replicates differ beyond counting; below it, check that the cells recorded are those carried into each replicate's selection, not a total. On simulated bottlenecks recorded as they were made, the cells account for the excess in every pair; with noise between replicates, the replicates show more in 8 of 9 pairs; with a tenth of the cells recorded, less in every pair.</p>
+      <p>For an input and an output, the finding also fits <a href="scoring.html#dimsum">DiMSum's error model</a> to the counts, which says <em>where</em> the cells were too few: a multiplicative term for each input and each output, 1 for counting alone. Input terms well above the outputs' point to the steps before selection (transformation, the cells carried into it); output terms to those after it (the cells recovered, the DNA extracted). The finding's plot draws the terms and its explanation names the step. On simulated experiments with a bottleneck of <em>N</em> cells per variant, the input terms rise to about 1 + <em>D</em>/<em>N</em> for <em>D</em> reads per variant (1.7, 5.1 and 10.4 against 2, 5 and 11), and a bottleneck after selection raises the output terms instead. Score with DiMSum's model to carry the terms into every variant's SE.</p>
+      <shot name="dimsum-qc" alt="The QC view of the GRB2 example: the variance beyond counting failing, its explanation putting the excess at the input, and a bar chart of DiMSum's terms, the inputs 20 to 38 times counting and the outputs 1.7 to 5.3">GRB2: the replicates differ 11× more than counting predicts, and DiMSum's terms put the bottleneck at the inputs.</shot>
+
+      <h2 id="bins">Sorted bins</h2>
+      <p>For sorted bins, replicate agreement, the variance beyond counting and outlier replicates compare each replicate's weighted average of the bins' values (with its variance from counting) in place of a log ratio, within each tile. Two more findings: <strong>Occupancy of the bins</strong>, since a nearly empty bin samples its variants coarsely, and <strong>Cells sorted per variant</strong>, since a variant's distribution over the bins is sampled twice, by the cells and then by the reads, and the scarcer limits what is known.</p>
+      <shot name="sort-seq-qc" alt="The QC view of the simulated sort-seq example: the cells sorted per variant in each bin of each replicate, between 54 and 119, and the variance beyond counting under review">The simulated sort: about 300 cells per variant against 320 reads, so the variance beyond counting is under review: the cells limit.</shot>
+      <p>On factor IX, the replicates of each tile agree, but differ about 2,000× more than counting predicts: about 10,000 reads per variant per bin far exceed the cells sorted, which MaveDB does not record.</p>
+
+      <h2 id="barcodes">Barcodes</h2>
+      <p>For a table of barcodes, the findings above use each variant's barcodes summed, and four more look at the barcodes themselves. <strong>Barcodes the map names</strong>: the share of reads in barcodes that name no variant (missing from the map, or given two variants by it). <strong>Barcodes per variant</strong>: a variant measured by one barcode cannot be checked against another. <strong>Agreement of a variant's barcodes</strong>: φ, how much more barcodes of one variant disagree than counting explains (few cells per barcode, or clones that differ), and the split-half r, each variant's barcodes in two halves scored apart and correlated. <strong>Outlier barcodes</strong>: those departing from their siblings by more than 4 in z/√φ, usually a barcode carrying a second mutation or linked to the wrong variant.</p>
+      <shot name="barcode-qc" alt="The QC view of the simulated barcoded library: outlier barcodes under review, about 2% of those compared in each of three replicates, with φ about 1.7 and a split-half r of 0.89">The simulated barcoded library: about 2% of the barcodes are outliers (3% were planted), under review.</shot>
+      <p>These come from the counts alone (raw log ratios, each sample's reads as its normalizer), so they are the same whatever the run's parameters. Tested on simulated libraries: clean, with clones that differ, with 12% of barcodes off their variant, with a map missing a quarter of the barcodes, and with one barcode per variant, each raising exactly its findings in three seeds.</p>
+
+      <h2 id="time-series">Time series</h2>
+      <p>For a time series scored by regression, two more findings. <strong>Time points used</strong>: a variant is fitted on the time points where it was counted, and points missing at the end of a time course are usually variants that dropped out and were written as missing; the slope then leans toward the wild type. <strong>Fit of the time courses</strong>: each fit's weighted residuals against counting noise, so that 1 is typical; well above 1 for most variants points to noise at each time point (a bottleneck at each passage), and the SEs, scaled by the residuals, include it.</p>
+      <shot name="time-series-qc" alt="The QC view of the simulated time series: every finding passes, and the fit of the time courses is 1.0 times what counting predicts in each replicate">A clean simulated time series: the time courses scatter about their lines as counting predicts.</shot>
+      <p>On real data: BRCA1's E2-binding time series (MaveDB urn:mavedb:00000003-a-1) writes variants that dropped out in the last round as missing, so a quarter of its fits miss their last points; with its later samples' missing counts read as 0 ("Missing = 0" in the Experiment view), every fit uses every round and 595 more variants are scored. Its time courses scatter about 7× more than counting predicts, and those of its yeast two-hybrid assay about 30×.</p>
+
+      <h2 id="context">Findings in context</h2>
+      <p>A "fail" can be a failed experiment, an analysis that does not suit the data, or what the library or the assay makes expected. The next step differs. Every finding to review or failing says <strong>what could cause it</strong>, each cause marked as one of three:</p>
+      <ul>
+        <li><strong>experiment:</strong> in the experiment or the counting;</li>
+        <li><strong>analysis:</strong> in the analysis;</li>
+        <li><strong>expected:</strong> expected from the library or the assay.</li>
+      </ul>
+      <p>It also says <strong>what to do</strong>:</p>
+      <ul>
+        <li><strong>look:</strong> the plot or table to inspect;</li>
+        <li><strong>analysis:</strong> the choice that would change it, and where to make it;</li>
+        <li><strong>experiment:</strong> what only another experiment can settle.</li>
+      </ul>
+      <p>A finding not assessed says what it needs.</p>
+      <shot name="qc-advice" alt="The QC view of the GRB2 example: the variance beyond counting failing, what could cause it (too few cells, or noise between replicates), what to do, and the finding acknowledged as the bottleneck the Domainome reported, its status still fail">GRB2's bottleneck: what could cause it, what to do, and the finding acknowledged with a reason.</shot>
+      <p>The findings read the design. <strong>Coverage</strong> of a library made by error-prone PCR or doped oligos is judged against the substitutions one base change makes from each wild-type codon (with a DNA target). <strong>Separation of the controls</strong> expects loss of function on the side the readout's direction gives. When the direction is not stated and the nonsense variants score on the other side, the finding says the direction may be the other way round. When the stops after some position score like the wild type, it names the position and suggests limiting the nonsense controls to the positions before it. For BRCA1's yeast two-hybrid assay that position is 93, in the region between residues 61 and 110 where the published scores change (<a href="experiment.html#controls">The design</a>).</p>
+      <h3 id="acknowledge">Acknowledging a finding</h3>
+      <p>When a finding is expected here (a library that cannot reach every substitution, a bottleneck the experiment's authors reported), <strong>Acknowledge…</strong> records why. The finding keeps its status, and the overall status stays the worst finding. The reason goes into the history, the methods paragraph, the QC findings export and the provenance. An acknowledgement holds while the finding is no worse than when it was acknowledged: a review that becomes a fail asks again. A blocking finding cannot be acknowledged. Headless runs take <code>--acknowledge id=reason</code>, and <code>--strict</code> does not fail on an acknowledged finding (<a href="scripting.html#headless">Headless runs</a>).</p>
+
+      <h2 id="thresholds">Thresholds</h2>
+      <p>Every threshold is editable in the QC view and kept in the workspace; each change goes into its history and the methods paragraph reports the thresholds used. <strong>Reset to the defaults</strong> restores MaveScape's.</p>
+
+      <h2 id="tested">How the findings are tested</h2>
+      <p>Simulated experiments with one problem each (poor replicate agreement, one failing replicate, a severe bottleneck, a low-count tail, a missing sample, and for time series a bottleneck at every passage) raise exactly their findings, and clean experiments (two populations, a time series and a sort) none, on three seeds; sorts with too few cells or a nearly empty bin raise theirs. The variance ratio follows a simulated bottleneck. Every finding the planted problems raise says what to do. A selection that enriches loss of function (inputs and outputs swapped) separates its controls with the direction stated, and fails, saying why, without it. A library of exactly the single-base substitutions passes coverage when the design says it was made by error-prone PCR. <a href="../science.html#validation">Validation</a> has the details.</p>

@@ -1,0 +1,175 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "Two-condition fixture",
+  "description": "Simulated by MaveScape (web/lib/simulate.js, seed 20261013): not real data. One input per replicate selected under two conditions, 4 replicates, 150 reads per variant, 40 cells per variant into selection; in With ligand, missense variants at positions 12, 13, 14, 15, 16 change by -1.5 on average. Replicate 4 is selected without the ligand only. Edge cases planted on: p.Glu5Lys (missing from the ligand's output of replicate 2: two pairs); p.Gly4Asp (missing from replicate 1's shared input: neither condition measures it there); p.Lys3Arg (missing from every output with the ligand: no differential); p.Leu7Pro (0 reads with the ligand in replicate 3 (counted as 0)); p.Thr9Ile (no input reads in replicate 2 (left out there by the minimum input count)).",
+  "model": "two-population",
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "simulated",
+      "name": "Simulated protein",
+      "sequenceType": "protein",
+      "sequence": "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYG"
+    }
+  ],
+  "library": {
+    "level": "variant"
+  },
+  "conditions": [
+    {
+      "id": "a",
+      "name": "Without ligand",
+      "reference": true
+    },
+    {
+      "id": "b",
+      "name": "With ligand"
+    }
+  ],
+  "samples": [
+    {
+      "id": "input_rep1",
+      "name": "input_rep1",
+      "columns": [
+        "input_rep1"
+      ]
+    },
+    {
+      "id": "a_rep1",
+      "name": "a_rep1",
+      "columns": [
+        "a_rep1"
+      ]
+    },
+    {
+      "id": "b_rep1",
+      "name": "b_rep1",
+      "columns": [
+        "b_rep1"
+      ]
+    },
+    {
+      "id": "input_rep2",
+      "name": "input_rep2",
+      "columns": [
+        "input_rep2"
+      ]
+    },
+    {
+      "id": "a_rep2",
+      "name": "a_rep2",
+      "columns": [
+        "a_rep2"
+      ]
+    },
+    {
+      "id": "b_rep2",
+      "name": "b_rep2",
+      "columns": [
+        "b_rep2"
+      ]
+    },
+    {
+      "id": "input_rep3",
+      "name": "input_rep3",
+      "columns": [
+        "input_rep3"
+      ]
+    },
+    {
+      "id": "a_rep3",
+      "name": "a_rep3",
+      "columns": [
+        "a_rep3"
+      ]
+    },
+    {
+      "id": "b_rep3",
+      "name": "b_rep3",
+      "columns": [
+        "b_rep3"
+      ]
+    },
+    {
+      "id": "input_rep4",
+      "name": "input_rep4",
+      "columns": [
+        "input_rep4"
+      ]
+    },
+    {
+      "id": "a_rep4",
+      "name": "a_rep4",
+      "columns": [
+        "a_rep4"
+      ]
+    }
+  ],
+  "replicates": [
+    {
+      "id": "a-rep1",
+      "name": "Without ligand, replicate 1",
+      "biological": 1,
+      "condition": "a",
+      "input": "input_rep1",
+      "output": "a_rep1"
+    },
+    {
+      "id": "b-rep1",
+      "name": "With ligand, replicate 1",
+      "biological": 1,
+      "condition": "b",
+      "input": "input_rep1",
+      "output": "b_rep1"
+    },
+    {
+      "id": "a-rep2",
+      "name": "Without ligand, replicate 2",
+      "biological": 2,
+      "condition": "a",
+      "input": "input_rep2",
+      "output": "a_rep2"
+    },
+    {
+      "id": "b-rep2",
+      "name": "With ligand, replicate 2",
+      "biological": 2,
+      "condition": "b",
+      "input": "input_rep2",
+      "output": "b_rep2"
+    },
+    {
+      "id": "a-rep3",
+      "name": "Without ligand, replicate 3",
+      "biological": 3,
+      "condition": "a",
+      "input": "input_rep3",
+      "output": "a_rep3"
+    },
+    {
+      "id": "b-rep3",
+      "name": "With ligand, replicate 3",
+      "biological": 3,
+      "condition": "b",
+      "input": "input_rep3",
+      "output": "b_rep3"
+    },
+    {
+      "id": "a-rep4",
+      "name": "Without ligand, replicate 4",
+      "biological": 4,
+      "condition": "a",
+      "input": "input_rep4",
+      "output": "a_rep4"
+    }
+  ],
+  "controls": {
+    "wildType": "p.=",
+    "synonymous": "auto",
+    "nonsense": "auto"
+  }
+}

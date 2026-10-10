@@ -6,10 +6,11 @@
 // computed in the score worker. Thresholds are kept in the workspace, each change in its history.
 
 import { h, icon, clear, formatCount } from './dom.js';
-import { toast } from './overlays.js';
+import { promptDialog, toast } from './overlays.js';
 import { validateDesign } from '../lib/design.js';
 import { checkThresholds, findingsFrom, measuresOf, overall, THRESHOLDS, withDefaultThresholds } from '../lib/findings.js';
-import { canonicalJSON, setQcThresholds } from '../lib/workspace.js';
+import { acknowledgeFinding, canonicalJSON, setQcThresholds } from '../lib/workspace.js';
+import { CAUSE_KINDS, NEXT_KINDS } from '../lib/advice.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { KIND } from '../lib/variants.js';
 import { STAGE_BY_ID } from '../lib/filters.js';
@@ -25,22 +26,86 @@ const STATUS = {
   na: { label: 'not assessed', badge: '', icon: 'info' },
 };
 
+// --- QC outside the view (also the remote control's qc_findings) ---------------------------------
+
+const sourceOf = (ws) => ws.sources.find((s) => s.id === (ws.designSource ?? ws.sources[0]?.id)) ?? null;
+
+// What QC can be of: each run (by id), and 'counts' (the current design, no scores).
+export function qcSubjects(ws) {
+  const options = ws.runs.slice().reverse().map((r) => ({ id: `run:${r.id}`, label: `${r.name} (${r.inputs.source.name})`, run: r }));
+  if (ws.design && sourceOf(ws)) options.push({ id: 'counts', label: 'The counts, with the current design (no scores)' });
+  return options;
+}
+
+// The inputs of QC for a subject: { source, design, parameters, mode } or { problem }.
+export function qcInputsOf(ws, sub) {
+  if (sub.run) {
+    const s = ws.sources.find((x) => x.sha256 === sub.run.inputs.source.sha256);
+    if (!s) return { problem: `The table ${sub.run.name} scored (SHA-256 ${sub.run.inputs.source.sha256.slice(0, 12)}…) is not in this workspace.` };
+    return { source: s, design: sub.run.inputs.design, parameters: sub.run.inputs.parameters, mode: sub.run.inputs.mapping.mode };
+  }
+  const s = sourceOf(ws);
+  const design = ws.design;
+  const result = validateDesign(design, { columns: s.columns.map((c) => c.name) });
+  if (!result.ok) return { problem: `The design has problems to fix first: ${result.errors.slice(0, 3).map((e) => e.message).join(' ')}`, experiment: true };
+  return { source: s, design, parameters: null, mode: s.mapping?.mode ?? 'lenient' };
+}
+
+export const qcKeyOf = (ws, inputs) => canonicalJSON({ sha256: inputs.source.sha256, design: inputs.design, parameters: inputs.parameters, measures: measuresOf(ws.qc?.thresholds) });
+
+// Computes QC in the score worker into app.qcCache (key → { status: 'computing' | 'done' |
+// 'failed', qc?, message? }), once per key; returns the finished entry.
+export function computeQc(app, inputs, onProgress) {
+  app.qcCache ??= new Map();
+  const ws = app.store.ws;
+  const key = qcKeyOf(ws, inputs);
+  const cached = app.qcCache.get(key);
+  if (cached?.pending) return cached.pending;
+  if (cached && cached.status !== 'computing') return Promise.resolve(cached);
+  const entry = { status: 'computing' };
+  app.qcCache.set(key, entry);
+  entry.pending = (async () => {
+    let next;
+    try {
+      const table = await app.sourceTable(inputs.source);
+      const { names, barcodes, columns, transfer } = workerInput(table, inputs.design);
+      const job = app.worker('score').run('qc', { names, barcodes, columns, design: inputs.design, mode: inputs.mode, parameters: inputs.parameters, measures: measuresOf(ws.qc?.thresholds) }, { transfer, onProgress });
+      next = { status: 'done', ...(await job.promise) };
+    } catch (error) {
+      next = { status: 'failed', message: error.message };
+    }
+    app.qcCache.set(key, next);
+    app.store.notify(['qc']);
+    return next;
+  })();
+  return entry.pending;
+}
+
+// Records that a run's QC was read, for the workflow strip.
+export function markQcSeen(app, run, o) {
+  app.seen ??= { qc: new Map(), map: new Set() };
+  const was = app.seen.qc.get(run.id);
+  if (was?.status !== o.status || was?.counts.fail !== o.counts.fail || was?.counts.review !== o.counts.review) {
+    app.seen.qc.set(run.id, o);
+    queueMicrotask(() => app.store.notify(['workflow']));
+  }
+}
+
 export function mountQcMode(app, container) {
   const { store } = app;
   const root = h('div.view');
   container.append(root);
   app.qcCache ??= new Map();
-  const view = { subject: null, finding: null, pair: 0, progress: [0, ''] };
+  // The view's state is the app's, so that remote control can show a subject and a finding.
+  app.qcView ??= { subject: null, finding: null, pair: 0 };
+  const view = app.qcView;
+  view.progress = [0, ''];
 
-  const source = () => store.ws.sources.find((s) => s.id === (store.ws.designSource ?? store.ws.sources[0]?.id)) ?? null;
+  const source = () => sourceOf(store.ws);
   const thresholds = () => withDefaultThresholds(store.ws.qc?.thresholds);
 
-  // What QC is of: a run (by id), or 'counts' (the current design, no scores).
   function subjectOptions() {
-    const ws = store.ws;
-    const options = ws.runs.slice().reverse().map((r) => ({ id: `run:${r.id}`, label: `${r.name} (${r.inputs.source.name})`, run: r }));
-    if (ws.design && source()) options.push({ id: 'counts', label: 'The counts, with the current design (no scores)' });
-    return options;
+    return qcSubjects(store.ws);
   }
   function subject() {
     const options = subjectOptions();
@@ -55,34 +120,13 @@ export function mountQcMode(app, container) {
     return current ?? options.find((o) => o.id === 'counts') ?? options[0] ?? null;
   }
 
-  // The inputs of QC for a subject: { table source, design, parameters, mode } or a problem.
-  function inputsOf(sub) {
-    if (sub.run) {
-      const s = store.ws.sources.find((x) => x.sha256 === sub.run.inputs.source.sha256);
-      if (!s) return { problem: `The table ${sub.run.name} scored (SHA-256 ${sub.run.inputs.source.sha256.slice(0, 12)}…) is not in this workspace.` };
-      return { source: s, design: sub.run.inputs.design, parameters: sub.run.inputs.parameters, mode: sub.run.inputs.mapping.mode };
-    }
-    const s = source();
-    const design = store.ws.design;
-    const result = validateDesign(design, { columns: s.columns.map((c) => c.name) });
-    if (!result.ok) return { problem: `The design has problems to fix first: ${result.errors.slice(0, 3).map((e) => e.message).join(' ')}`, experiment: true };
-    return { source: s, design, parameters: null, mode: s.mapping?.mode ?? 'lenient' };
-  }
-
-  const keyOf = (inputs) => canonicalJSON({ sha256: inputs.source.sha256, design: inputs.design, parameters: inputs.parameters, measures: measuresOf(store.ws.qc?.thresholds) });
+  const inputsOf = (sub) => qcInputsOf(store.ws, sub);
+  const keyOf = (inputs) => qcKeyOf(store.ws, inputs);
 
   async function compute(key, inputs) {
-    app.qcCache.set(key, { status: 'computing' });
+    const pending = computeQc(app, inputs, (f, m) => { view.progress = [f, m]; renderProgress(); });
     render();
-    try {
-      const table = await app.sourceTable(inputs.source);
-      const { names, columns, transfer } = workerInput(table, inputs.design);
-      const job = app.worker('score').run('qc', { names, columns, design: inputs.design, mode: inputs.mode, parameters: inputs.parameters, measures: measuresOf(store.ws.qc?.thresholds) }, { transfer, onProgress: (f, m) => { view.progress = [f, m]; renderProgress(); } });
-      const result = await job.promise;
-      app.qcCache.set(key, { status: 'done', ...result });
-    } catch (error) {
-      app.qcCache.set(key, { status: 'failed', message: error.message });
-    }
+    await pending;
     render();
   }
 
@@ -111,6 +155,51 @@ export function mountQcMode(app, container) {
           h('h4', 'Rank abundance'),
           lineChart({ series: shown.map((s, i) => ({ label: s.name, color: categoricalColor(i), points: s.rankAbundance.filter((p) => p[1] > 0) })), xLog: true, yLog: true, xLabel: 'rank', yLabel: 'count', label: 'Counts from the most to the least abundant variant' }),
         ];
+      }
+      case 'bin-occupancy': {
+        const bins = qc.bins ?? [];
+        if (!bins.length) return [h('p.muted', 'Needs sorted bins.')];
+        const items = bins.flatMap((r) => r.bins.map((b) => ({ label: `${r.name}, bin ${b.order}`, value: b.share, status: b.share < t.binShare.fail ? 'fail' : b.share < t.binShare.review ? 'review' : '' })));
+        return [barChart({ items, lines: lines('binShare'), label: `Each bin's share of its replicate's ${bins[0].shareOf}`, format: pct }),
+          h('p.muted.plot-note', `Shares of the ${bins[0].shareOf}${bins[0].shareOf === 'reads' ? ' (record the cells sorted into each bin, in the Experiment view, to see the cells)' : ''}.`)];
+      }
+      case 'cells-per-bin': {
+        const bins = (qc.bins ?? []).filter((r) => r.bins.every((b) => b.cellsPerVariant !== null));
+        if (!bins.length) return [h('p.muted', 'Record the cells sorted into each bin with each sample (the Experiment view) to see them.')];
+        const items = bins.flatMap((r) => r.bins.map((b) => ({ label: `${r.name}, bin ${b.order}`, value: Math.max(b.cellsPerVariant, 0.1), status: b.cellsPerVariant < t.cellsPerVariant.fail ? 'fail' : b.cellsPerVariant < t.cellsPerVariant.review ? 'review' : '' })));
+        return [barChart({ items, log: true, lines: lines('cellsPerVariant'), label: 'Cells sorted per variant into each bin (log scale), with the review and fail thresholds', format: (v) => fmt(v, 0) }),
+          h('p.muted.plot-note', bins.map((r) => `${r.name}: ${r.bins.map((b) => fmt(b.readsPerCell, 1)).join(', ')} reads per cell`).join(' · '))];
+      }
+      case 'barcodes-per-variant': {
+        const bq = qc.barcodes;
+        if (!bq?.replicates.length) return [h('p.muted', 'Needs a table of barcodes.')];
+        return [
+          lineChart({ series: bq.replicates.map((r, i) => ({ label: r.name, color: categoricalColor(i), markers: true, points: r.perVariant.histogram.slice(1).map((n, k) => [k + 1, r.variants ? n / r.variants : 0]) })), xLabel: 'barcodes per variant (10: ten or more)', yLabel: 'share of variants', label: 'How many barcodes measure each variant, by replicate' }),
+          legend(bq.replicates.map((r, i) => ({ label: `${r.name}: median ${fmt(r.perVariant.median, 0)}, ${pct(r.variants ? r.perVariant.single / r.variants : 0)} with one`, color: categoricalColor(i) }))),
+          h('p.muted.plot-note', `${formatCount(bq.rows)} barcodes in the table; ${formatCount(bq.unmapped)} name no variant (${pct(bq.unmappedReadShare)} of the reads). A barcode counts for a variant here when it has reads before selection (in any bin, for sorted bins).`),
+        ];
+      }
+      case 'barcode-agreement': {
+        const reps = (qc.barcodes?.replicates ?? []).filter((r) => Number.isFinite(r.phi));
+        if (!reps.length) return [h('p.muted', 'Needs variants with two or more barcodes counted before and after selection.')];
+        return [
+          barChart({ items: reps.map((r) => ({ label: r.name, value: r.phi, status: r.phi > t.barcodeExcess.fail ? 'fail' : r.phi > t.barcodeExcess.review ? 'review' : '' })), lines: [{ value: 1, kind: 'reference' }, ...lines('barcodeExcess')], label: 'How much a variant\'s barcodes disagree beyond counting (φ), by replicate; 1 is counting alone', format: (v) => `${fmt(v, 2)}×` }),
+          h('table.data', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Barcodes compared'), h('th.r', 'φ'), h('th.r', 'Split-half r'), h('th.r', 'Outliers'))),
+            h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r', formatCount(r.compared)), h('td.r', `${fmt(r.phi, 2)}×`), h('td.r', r.splitHalf ? `${fmt(r.splitHalf.r, 3)} (${formatCount(r.splitHalf.n)})` : '—'), h('td.r', h(`span${r.outlierShare > t.outlierBarcodes.review ? '.warn-text' : ''}`, `${formatCount(r.outliers)} (${pct(r.outlierShare)})`)))))),
+          h('p.muted.plot-note', 'Each barcode against its variant\'s other barcodes: raw log ratios (each sample\'s reads as its normalizer), in units of their counting error together. φ is the median square of these over its value under counting alone; an outlier departs by more than 4 in z/√φ, found one at a time. Split-half r: each variant\'s barcodes in two alternating halves, summed and scored apart, correlated over variants. Open a variant on the map to see its barcodes.'),
+        ];
+      }
+      case 'time-points': {
+        const ts = qc.timeSeries ?? [];
+        if (!ts.length) return [h('p.muted', 'Needs a run scored by regression on time.')];
+        return [barChart({ items: ts.map((r) => ({ label: r.name, value: r.fits ? r.fewer / r.fits : 0, status: r.fits && r.fewer / r.fits > t.fewerPoints.fail ? 'fail' : r.fits && r.fewer / r.fits > t.fewerPoints.review ? 'review' : '' })), lines: lines('fewerPoints'), label: 'Fits on fewer time points than the replicate has, by replicate', format: pct }),
+          h('p.muted.plot-note', ts.map((r) => `${r.name}: ${formatCount(r.fewer)} of ${formatCount(r.fits)} fits on fewer than ${r.times} points; ${formatCount(r.excluded)} measurements with too few`).join(' · '))];
+      }
+      case 'time-fit': {
+        const ts = (qc.timeSeries ?? []).filter((r) => r.assessed);
+        if (!ts.length) return [h('p.muted', 'Needs fits of three or more time points.')];
+        return [barChart({ items: ts.map((r) => ({ label: r.name, value: r.departure, status: r.departure > t.timeFit.fail ? 'fail' : r.departure > t.timeFit.review ? 'review' : '' })), log: true, lines: [{ value: 1, kind: 'reference' }, ...lines('timeFit')], label: 'Median departure of the time courses from their lines, over what counting predicts, by replicate (log scale; 1 is counting alone)', format: (v) => `${fmt(v, 1)}×` }),
+          h('p.muted.plot-note', `Fits far from a line (beyond the 99.9th percentile of counting noise): ${ts.map((r) => `${r.name} ${pct(r.beyond)}`).join(' · ')}. Open a variant on the map to see its time course.`)];
       }
       case 'dropout': {
         const drops = qc.conditions.flatMap((c) => c.dropout ?? []);
@@ -155,6 +244,14 @@ export function mountQcMode(app, container) {
           out.push(legend([...pairs.map((p, i) => ({ label: `${p.a} · ${p.b}: ${fmt(p.ratio, 1)}× (a ${fmt(p.multiplier, 1)}, e ${fmt(p.additive, 3)})`, color: categoricalColor(i) })), { label: 'counting alone', color: cssVar('--text-3'), dash: true }]));
           out.push(h('p.muted.plot-note', 'Each point is a bin of variants by their expected counting variance (the reciprocal counts of both replicates). Points on the dashed line: counting noise alone. Points parallel above it: a bottleneck (variance a× counting). Points bending up where counting variance is small: noise between replicates (e).'));
         }
+        // DiMSum's error model (two populations): where the excess is, input or output.
+        const models = qc.conditions.flatMap((c) => c.errorModel ?? []);
+        const terms = models.flatMap((g) => g.terms ?? []);
+        if (terms.length) {
+          out.push(h('h4', 'DiMSum\'s error model'),
+            barChart({ items: terms.flatMap((x) => [{ label: `${x.name}, input`, value: x.input, status: x.input > t.excessVariance.fail ? 'fail' : x.input > t.excessVariance.review ? 'review' : '' }, { label: `${x.name}, output`, value: x.output, status: x.output > t.excessVariance.fail ? 'fail' : x.output > t.excessVariance.review ? 'review' : '' }]), log: true, lines: [{ value: 1, kind: 'reference' }], label: 'DiMSum\'s multiplicative error terms of each input and output (log scale; 1 is counting alone)', format: (v) => `${fmt(v, 1)}×` }),
+            h('p.muted.plot-note', `Fitted from the counts alone on ${models.map((g) => `${formatCount(g.variants)} variants`).join(', ')} counted in every sample (Faure et al. 2020). A term m means about m − 1 reads per molecule beyond counting at that step: before selection (transformation, the cells carried into it) or after it (the cells recovered, the DNA extracted). Additive SDs: ${terms.map((x) => `${x.name} ${fmt(Math.sqrt(x.reperror), 3)}`).join(', ')}. Score with DiMSum's error model (Score, Scored by) to carry them into each variant's SE.`));
+        } else if (models.some((g) => g.reason)) out.push(h('p.muted.plot-note', `DiMSum's error model: not fitted (${models.find((g) => g.reason).reason})`));
         if (syn.length) out.push(h('table.data', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Synonymous variants'), h('th.r', 'Observed variance'), h('th.r', 'Counting'), h('th.r', 'Ratio'))), h('tbody', ...syn.map((x) => h('tr', h('td', x.id), h('td.r', String(x.n)), h('td.r', fmt(x.observed, 4)), h('td.r', fmt(x.expected, 4)), h('td.r', `${fmt(x.ratio, 1)}×`))))));
         return out.length ? out : [h('p.muted', 'Needs two replicates or synonymous variants.')];
       }
@@ -215,7 +312,40 @@ export function mountQcMode(app, container) {
     return h('div.pane', h('h3', icon('stethoscope'), 'Findings'),
       h('ul.findings', ...list.map((f) => h('li', h(`button.finding${view.finding === f.id ? '.selected' : ''}.${f.status}`, { type: 'button', 'aria-pressed': view.finding === f.id ? 'true' : 'false', onclick: () => { view.finding = f.id; render(); } },
         h(`span.badge${STATUS[f.status].badge}`, STATUS[f.status].label),
-        h('span.finding-text', h('span.finding-title', f.title, f.blocking && f.status === 'fail' ? h('span.badge.danger', { style: { marginLeft: '6px' } }, 'blocking') : null, f.level === 'scores' ? h('span.muted', { style: { fontWeight: 400, marginLeft: '6px', fontSize: '11px' } }, 'from scores') : null), h('span.finding-value', f.value)))))));
+        h('span.finding-text', h('span.finding-title', f.title, f.blocking && f.status === 'fail' ? h('span.badge.danger', { style: { marginLeft: '6px' } }, 'blocking') : null, f.acknowledged?.current ? h('span.badge', { style: { marginLeft: '6px' }, title: f.acknowledged.reason }, 'acknowledged') : null, f.level === 'scores' ? h('span.muted', { style: { fontWeight: 400, marginLeft: '6px', fontSize: '11px' } }, 'from scores') : null), h('span.finding-value', f.value)))))));
+  }
+
+  // Acknowledging a finding (wave 2, slice 8): a reason, kept on the record; the status stays.
+  async function acknowledge(f) {
+    const reason = await promptDialog({
+      title: `Acknowledge "${f.title}"`,
+      label: 'Why it is expected here',
+      value: f.acknowledged?.reason ?? '',
+      placeholder: f.id === 'coverage' ? 'The library was made by error-prone PCR' : f.id === 'separation' ? 'Stops after the RING domain keep binding in this construct' : 'What makes it expected in this experiment',
+      confirm: 'Acknowledge',
+      hint: 'The finding keeps its status. The reason goes into the history, the methods and the QC exports, and holds while the finding is no worse than now.',
+    });
+    if (!reason) return;
+    try {
+      store.commit(acknowledgeFinding(store.ws, f, reason), `Acknowledge "${f.title}"`);
+    } catch (error) {
+      toast(error.message, { kind: 'error' });
+    }
+  }
+
+  // What could cause a finding and what to do next, and its acknowledgement.
+  function contextBlock(f) {
+    const { causes, next } = f.advice ?? { causes: [], next: [] };
+    const ack = f.acknowledged;
+    const canAcknowledge = (f.status === 'review' || f.status === 'fail') && !f.blocking;
+    return h('div.finding-context',
+      causes.length ? [h('h4', 'What could cause it'), h('ul.advice', ...causes.map((c) => h('li', h(`span.advice-kind.${c.kind}`, CAUSE_KINDS[c.kind]), h('span', c.text))))] : null,
+      next.length ? [h('h4', f.status === 'na' ? 'To assess it' : 'What to do'), h('ul.advice', ...next.map((x) => h('li', h(`span.advice-kind.${x.kind}`, NEXT_KINDS[x.kind]), h('span', x.text))))] : null,
+      ack?.current ? h('div.callout.ok.acknowledged', icon('check'), h('span', h('b', 'Acknowledged: '), ack.reason, h('span.muted', ` (when it was ${ack.status}; the status stays ${f.status})`)),
+        h('span.spacer'), h('button.btn.small', { type: 'button', onclick: () => acknowledge(f) }, 'Edit'), h('button.btn.small', { type: 'button', onclick: () => store.commit(acknowledgeFinding(store.ws, f, ''), `Withdraw the acknowledgement of "${f.title}"`) }, 'Withdraw')) : null,
+      ack && !ack.current ? h('div.callout.warn.acknowledged', icon('warning'), h('span', h('b', 'No longer acknowledged: '), `acknowledged when it was ${ack.status} ("${ack.reason}"); it is now ${f.status === 'na' ? 'not assessed' : f.status}.`),
+        h('span.spacer'), canAcknowledge ? h('button.btn.small', { type: 'button', onclick: () => acknowledge(f) }, 'Acknowledge again') : null, h('button.btn.small', { type: 'button', onclick: () => store.commit(acknowledgeFinding(store.ws, f, ''), `Withdraw the acknowledgement of "${f.title}"`) }, 'Withdraw')) : null,
+      canAcknowledge && !ack ? h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => acknowledge(f), title: 'Say why this finding is expected here; its status stays' }, icon('check'), 'Acknowledge…'), h('span.muted', { style: { fontSize: '11.5px' } }, 'When it is expected here: the reason goes on the record.')) : null);
   }
 
   function detailPane(f, qc, t) {
@@ -225,6 +355,7 @@ export function mountQcMode(app, container) {
       h('dl.kv.finding-kv', h('dt', 'Found'), h('dd', f.value), h('dt', 'Threshold'), h('dd', f.threshold), h('dt', 'Why'), h('dd', f.rationale),
         f.affected.samples.length ? [h('dt', 'Samples'), h('dd', f.affected.samples.join(', '))] : null,
         f.affected.replicates.length ? [h('dt', 'Replicates'), h('dd', f.affected.replicates.join(', '))] : null),
+      contextBlock(f),
       h('div.finding-plot', ...plotFor(f, qc, t).filter(Boolean)));
   }
 
@@ -282,18 +413,11 @@ export function mountQcMode(app, container) {
     if (cached?.status === 'failed') right.append(h('div.pane', h('div.callout.danger', icon('warning'), h('span', `Quality control failed: ${cached.message}`))));
     if (cached?.status === 'done') {
       const t = thresholds();
-      const findings = findingsFrom(cached.qc, t);
+      const findings = findingsFrom(cached.qc, t, { acknowledged: store.ws.qc?.acknowledged });
       const o = overall(findings);
       // The workflow strip: this run's QC has been read.
-      if (sub.run) {
-        app.seen ??= { qc: new Map(), map: new Set() };
-        const was = app.seen.qc.get(sub.run.id);
-        if (was?.status !== o.status || was?.counts.fail !== o.counts.fail || was?.counts.review !== o.counts.review) {
-          app.seen.qc.set(sub.run.id, o);
-          queueMicrotask(() => store.notify(['workflow']));
-        }
-      }
-      head.append(h(`span.badge${STATUS[o.status].badge}.qc-overall`, { title: 'The worst finding' }, `${o.status === 'pass' ? 'All pass' : `${o.counts.fail} fail · ${o.counts.review} review`} · ${o.counts.pass} pass${o.counts.na ? ` · ${o.counts.na} not assessed` : ''}`),
+      if (sub.run) markQcSeen(app, sub.run, o);
+      head.append(h(`span.badge${STATUS[o.status].badge}.qc-overall`, { title: 'The worst finding; acknowledged findings keep their status' }, `${o.status === 'pass' ? 'All pass' : `${o.counts.fail} fail · ${o.counts.review} review`} · ${o.counts.pass} pass${o.counts.na ? ` · ${o.counts.na} not assessed` : ''}${o.acknowledged.length ? ` · ${o.acknowledged.length} acknowledged` : ''}`),
         o.blocking.length ? h('span.badge.danger', { style: { marginLeft: '6px' } }, 'blocking') : null);
       if (!view.finding || !findings.some((f) => f.id === view.finding)) view.finding = (findings.find((f) => f.status === 'fail') ?? findings.find((f) => f.status === 'review') ?? findings[0]).id;
       left.append(findingsPane(findings));
@@ -307,7 +431,7 @@ export function mountQcMode(app, container) {
   render();
   return {
     update(topics) {
-      if (topics.has('ws') || topics.has('focus') || topics.has('workspace-loaded') || topics.has('colors') || topics.has('theme')) render();
+      if (topics.has('ws') || topics.has('focus') || topics.has('workspace-loaded') || topics.has('colors') || topics.has('theme') || topics.has('qc')) render();
     },
     destroy() {
       root.remove();

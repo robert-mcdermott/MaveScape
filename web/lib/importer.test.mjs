@@ -57,11 +57,12 @@ test('shared inputs in a time series become one sample, with the copies set asid
   assert.equal(validateDesign(design, { columns: table.columns.map((c) => c.name) }).ok, true);
 });
 
-test('DiMSum\'s whole sequences are named against the wild type', () => {
+test('whole sequences (DiMSum\'s, Enrich2\'s maps) are named against the wild type, synonymous ones by codon', () => {
   const wt = 'ATGGCCAAA'; // Met Ala Lys
-  const { nt, pro, problems } = namesFromSequences(['atggccaaa', 'ATGGCGAAA', 'ATGGTCAAA', 'TTGGCCTAA', 'ATGG'], wt);
+  const { nt, pro, problems } = namesFromSequences(['atggccaaa', 'ATGGCGAAA', 'ATGGTCAAA', 'TTGGCCTAA', 'ATGG', 'ATGGCGAAG'], wt);
   assert.deepEqual(nt.slice(0, 4), ['c.=', 'c.6C>G', 'c.5C>T', 'c.[1A>T;7A>T]']);
-  assert.deepEqual(pro.slice(0, 4), ['p.=', 'p.(=)', 'p.Ala2Val', 'p.[Met1Leu;Lys3Ter]']);
+  assert.deepEqual(pro.slice(0, 4), ['p.=', 'p.Ala2=', 'p.Ala2Val', 'p.[Met1Leu;Lys3Ter]']);
+  assert.equal(pro[5], 'p.[Ala2=;Lys3=]');
   assert.equal(problems[0].row, 4);
 });
 

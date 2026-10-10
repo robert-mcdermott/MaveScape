@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { addRun, describeMethod, describeParameters, makeRun, outputDigest, recordedInputs, removeRun, runId, runInputs } from './runs.js';
+import { addRun, describeMethod, describeParameters, makeRun, outputDigest, recordedInputs, removeRun, reproduction, runId, runInputs } from './runs.js';
 import { DEFAULT_PARAMETERS, PRESETS, scoreExperiment } from './score.js';
 import { createWorkspace, verifyHistory } from './workspace.js';
 
@@ -35,4 +35,12 @@ test('runs are added once, removed with a history entry, and describe their meth
   assert.ok(verifyHistory(ws).ok);
   assert.match(describeParameters(run.inputs.parameters), /Enrich2's estimator, scored in every replicate/);
   assert.match(describeMethod(run).join(' '), /MaveScape 0\.1\.0 \(abc1234\)/);
+});
+
+test('a recomputed run is reproduced, or says why it differs', () => {
+  const run = makeRun({ inputs: runInputs({ source, design, parameters: DEFAULT_PARAMETERS }), source, results: scored(DEFAULT_PARAMETERS), software: { version: '0.2.0' }, name: 'Run 1', created: 't' });
+  assert.deepEqual(reproduction(run, run.output.sha256, '0.2.0'), { status: 'reproduced', message: '' });
+  assert.match(reproduction(run, 'b'.repeat(64), '0.3.0').message, /MaveScape 0\.2\.0 made it; this is 0\.3\.0/);
+  const older = { ...run, inputs: { ...run.inputs, scoring: '1' } };
+  assert.match(reproduction(older, 'b'.repeat(64), '0.3.0').message, /scoring engine 1, which took its logarithms from the browser.*differ only in their last digits/);
 });

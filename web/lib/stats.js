@@ -3,6 +3,8 @@
 // defined (too few values), never an exception. MaveScape's own (CytoWeave's stats.js is tied to
 // its event sets; roadmap, wave 1 slice 1).
 
+import { square } from './dmath.js';
+
 export function sum(x) {
   let s = 0;
   for (const v of x) s += v;
@@ -19,7 +21,7 @@ export function variance(x) {
   if (n < 2) return Number.NaN;
   const m = mean(x);
   let s = 0;
-  for (const v of x) s += (v - m) ** 2;
+  for (const v of x) s += square(v - m);
   return s / (n - 1);
 }
 

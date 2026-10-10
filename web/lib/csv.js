@@ -3,12 +3,14 @@
 // delimiter (comma, tab, semicolon or bar), RFC 4180 quoting (doubled quotes, line breaks inside
 // quotes), line ends (CRLF, as MaveDB writes them; LF; and CR alone, as old Mac files and DiMSum's
 // demo design have them), a header row, and leading comment lines (#). It never coerces silently:
-// every column keeps its text, a column whose every value is a number also gets a Float64Array
-// (missing values NaN, never 0), and every irregular row or value is a diagnostic naming its line.
+// a column of text keeps its text, a column whose every value is a number is kept as a
+// Float64Array (missing values NaN, never 0; its text is not kept, which halves a large table's
+// memory), and every irregular row or value is a diagnostic naming its line.
 //
 //   const parser = createTableParser(); parser.push(text1); parser.push(text2); const table = parser.finish();
-//   table = { columns: [{ name, index, values: string[], numeric: Float64Array | null, type,
-//             missing, nonNumeric: [{ line, value }], nonNumericCount, integer, missingTokens }],
+//   table = { columns: [{ name, index, values: string[] | null (null for a column of numbers),
+//             numeric: Float64Array | null, type, missing, nonNumeric: [{ line, value }],
+//             nonNumericCount, integer, missingTokens }],
 //             rows, lines, delimiter, lineEnd, header, diagnostics: [{ level, code, message, line?, column? }] }
 
 // Cells read as missing. Spelled out in the table's diagnostics (missingTokens) so nothing is
@@ -91,6 +93,10 @@ export function sniff(sample, options = {}) {
 
 // A streaming parser. push(text) with consecutive parts of the decoded text; finish() returns the
 // table. options: { delimiter, header: 'auto' | true | false, fileName }.
+//
+// Fields go straight into columns (no array per row), and an unquoted field is one slice of its
+// part: a million rows of eight columns are read in about a second and held in about 110 MB
+// (requirement D9).
 export function createTableParser(options = {}) {
   const diagnostics = [];
   let delimiter = options.delimiter ?? null;
@@ -98,14 +104,19 @@ export function createTableParser(options = {}) {
   let pending = ''; // text kept until the delimiter is known
   let started = false;
   let field = '';
-  let row = [];
+  const row = [];
   let quoted = false;
   let afterQuote = false; // a quoted field has closed; only a delimiter or line end may follow
   let crPending = false;
   let line = 1;
   let rowLine = 1;
-  const rows = [];
+  // The table by column, the header row (when there is one) included; the line of each row; the
+  // rows whose number of fields differs from the first's, as [row, fields] pairs.
+  const columns = [];
   const rowLines = [];
+  const odd = [];
+  let rows = 0;
+  let firstWidth = 0;
   let comments = 0;
   let blank = 0;
   let strayQuotes = 0;
@@ -118,28 +129,35 @@ export function createTableParser(options = {}) {
   };
   const endRow = () => {
     endField();
-    if (row.length === 1 && row[0] === '' ) blank += 1;
-    else if (!rows.length && row[0].startsWith('#')) comments += 1;
+    if (row.length === 1 && row[0] === '') blank += 1;
+    else if (!rows && row[0].startsWith('#')) comments += 1;
     else {
-      rows.push(row);
+      if (!rows) firstWidth = row.length;
+      if (row.length !== firstWidth) odd.push([rows, row.length]);
+      while (columns.length < row.length) columns.push(new Array(rows).fill(''));
+      for (let j = 0; j < columns.length; j += 1) columns[j].push(j < row.length ? row[j] : '');
       rowLines.push(rowLine);
+      rows += 1;
     }
-    row = [];
+    row.length = 0;
   };
 
   function consume(text) {
-    for (let i = 0; i < text.length; i += 1) {
-      const ch = text[i];
+    const d = delimiter.charCodeAt(0);
+    const n = text.length;
+    let run = -1; // where the current field's unquoted characters not yet in `field` start
+    for (let i = 0; i < n; i += 1) {
+      const ch = text.charCodeAt(i);
       if (crPending) {
         crPending = false;
-        if (ch === '\n') continue;
+        if (ch === 10) continue;
       }
       if (quoted) {
-        if (ch === '"') {
-          if (text[i + 1] === '"') {
+        if (ch === 34) {
+          if (text.charCodeAt(i + 1) === 34) {
             field += '"';
             i += 1;
-          } else if (i + 1 === text.length) {
+          } else if (i + 1 === n) {
             // A quote at the end of a part: decided by the next part.
             quoted = false;
             afterQuote = 'maybe';
@@ -148,41 +166,46 @@ export function createTableParser(options = {}) {
             afterQuote = true;
           }
         } else {
-          if (ch === '\n' || ch === '\r') line += 1;
-          if (ch === '\r' && text[i + 1] === '\n') {
+          if (ch === 10 || ch === 13) line += 1;
+          if (ch === 13 && text.charCodeAt(i + 1) === 10) {
             field += '\r\n';
             i += 1;
-          } else field += ch;
+          } else field += text[i];
         }
         continue;
       }
       if (afterQuote === 'maybe') {
         afterQuote = true;
-        if (ch === '"') {
+        if (ch === 34) {
           field += '"';
           quoted = true;
           afterQuote = false;
           continue;
         }
       }
-      if (ch === delimiter) {
+      if (ch === d) {
+        if (run >= 0) field += text.slice(run, i);
+        run = -1;
         endField();
-      } else if (ch === '\n' || ch === '\r') {
+      } else if (ch === 10 || ch === 13) {
+        if (run >= 0) field += text.slice(run, i);
+        run = -1;
         endRow();
         line += 1;
         rowLine = line;
-        if (ch === '\r') crPending = true;
-      } else if (ch === '"' && field === '' && !afterQuote) {
+        if (ch === 13) crPending = true;
+      } else if (ch === 34 && field === '' && run < 0 && !afterQuote) {
         quoted = true;
       } else {
-        if (ch === '"' || afterQuote) {
+        if (ch === 34 || afterQuote) {
           strayQuotes += 1;
           if (!firstStray) firstStray = line;
         }
-        field += ch;
+        if (run < 0) run = i;
         afterQuote = false;
       }
     }
+    if (run >= 0) field += text.slice(run);
   }
 
   return {
@@ -214,22 +237,29 @@ export function createTableParser(options = {}) {
     consume(text);
   }
 
+  // Row r's fields (the first rows only: the header's decision).
+  function fieldsOf(r) {
+    const width = odd.find(([x]) => x === r)?.[1] ?? firstWidth;
+    return columns.slice(0, width).map((c) => c[r]);
+  }
+
   function build() {
     if (comments) diagnostics.push({ level: 'info', code: 'comments', message: `${comments} comment line${comments > 1 ? 's' : ''} (starting with #) before the table ${comments > 1 ? 'were' : 'was'} skipped.` });
     if (strayQuotes) diagnostics.push({ level: 'warning', code: 'stray-quote', message: `${strayQuotes} quote character${strayQuotes > 1 ? 's' : ''} inside unquoted fields were kept as text (first on line ${firstStray}).`, line: firstStray });
-    if (!rows.length) {
+    if (!rows) {
       diagnostics.push({ level: 'error', code: 'empty', message: 'The file holds no table.' });
       return { columns: [], rows: 0, lines: line, delimiter, lineEnd, header: false, diagnostics };
     }
-    const first = rows[0];
+    const first = fieldsOf(0);
     const looksNumeric = (cells) => cells.filter((c) => NUMBER.test(c)).length;
     let header = options.header ?? 'auto';
     if (header === 'auto') {
       // A header names columns: no number in the first row where the rows below hold numbers.
-      const below = rows.slice(1, 21);
+      const below = [];
+      for (let r = 1; r < Math.min(rows, 21); r += 1) below.push(fieldsOf(r));
       header = !(looksNumeric(first) > 0 && below.length && looksNumeric(first) >= Math.max(...below.map(looksNumeric)));
     }
-    const width = Math.max(...rows.slice(0, 1000).map((r) => r.length));
+    const width = Math.max(firstWidth, ...odd.filter(([r]) => r < 1000).map(([, w]) => w));
     let names = header ? first.map((name) => name.trim()) : Array.from({ length: first.length }, (_, i) => `Column ${i + 1}`);
     if (!header) diagnostics.push({ level: 'warning', code: 'no-header', message: 'The first row holds numbers, so it was read as data; columns are named Column 1, Column 2…' });
     // Unnamed and repeated column names are made unique, and said.
@@ -246,27 +276,29 @@ export function createTableParser(options = {}) {
       seen.set(unique, i);
       return unique;
     });
-    const body = header ? rows.slice(1) : rows;
+    const skip = header ? 1 : 0;
+    const n = rows - skip;
     const lines = header ? rowLines.slice(1) : rowLines;
-    const n = body.length;
-    const ragged = [];
-    for (let r = 0; r < n; r += 1) if (body[r].length !== names.length) ragged.push(r);
+    const ragged = odd.map(([r, w]) => [r - skip, w]);
     if (ragged.length) {
-      const shown = ragged.slice(0, 5).map((r) => `line ${lines[r]} (${body[r].length})`).join(', ');
-      diagnostics.push({ level: 'error', code: 'ragged-rows', message: `${ragged.length} row${ragged.length > 1 ? 's have' : ' has'} a different number of fields than the header's ${names.length}: ${shown}${ragged.length > 5 ? ', …' : ''}. Missing fields are read as empty.`, line: lines[ragged[0]], rows: ragged.slice(0, 100).map((r) => lines[r]) });
+      const shown = ragged.slice(0, 5).map(([r, w]) => `line ${lines[r]} (${w})`).join(', ');
+      diagnostics.push({ level: 'error', code: 'ragged-rows', message: `${ragged.length} row${ragged.length > 1 ? 's have' : ' has'} a different number of fields than the header's ${names.length}: ${shown}${ragged.length > 5 ? ', …' : ''}. Missing fields are read as empty.`, line: lines[ragged[0][0]], rows: ragged.slice(0, 100).map(([r]) => lines[r]) });
     }
     if (width > names.length) diagnostics.push({ level: 'error', code: 'extra-fields', message: `Some rows have ${width} fields but the header names ${names.length}; the extra fields are not read.` });
-    const columns = names.map((name, index) => {
-      const values = new Array(n);
-      for (let r = 0; r < n; r += 1) values[r] = body[r][index] ?? '';
+    const typed = names.map((name, index) => {
+      const values = columns[index];
+      if (header) values.shift();
+      columns[index] = null;
       return typeColumn({ name, index, values }, lines, delimiter, diagnostics);
     });
-    return { columns, rows: n, lines: line, delimiter, lineEnd, header: Boolean(header), diagnostics, lineOfRow: Int32Array.from(lines) };
+    columns.length = 0;
+    return { columns: typed, rows: n, lines: line, delimiter, lineEnd, header: Boolean(header), diagnostics, lineOfRow: Int32Array.from(lines) };
   }
 }
 
 // Types a column: numeric when every present value is a number (or, with a delimiter other than
-// the comma, every value a number with a decimal comma, said in a diagnostic).
+// the comma, every value a number with a decimal comma, said in a diagnostic). A column of
+// numbers keeps them as a Float64Array alone, not their text.
 function typeColumn(column, lines, delimiter, diagnostics) {
   const { values } = column;
   const n = values.length;
@@ -311,6 +343,8 @@ function typeColumn(column, lines, delimiter, diagnostics) {
   if (type === 'number' && commaDecimals) diagnostics.push({ level: 'warning', code: 'decimal-comma', message: `Column "${column.name}" writes ${commaDecimals} number${commaDecimals > 1 ? 's' : ''} with a decimal comma; read as decimals.`, column: column.name });
   return {
     ...column,
+    // A column of numbers keeps its numbers only (cellText gives a cell's text back).
+    values: type === 'number' ? null : values,
     type,
     numeric: type === 'number' ? numeric : null,
     integer: type === 'number' && integer,
@@ -338,6 +372,19 @@ export function parseTable(input, options = {}) {
   parser.push(text);
   const table = parser.finish();
   return { ...table, encoding, diagnostics: [...extra, ...table.diagnostics] };
+}
+
+// A cell's text: as written in a column of text; in a column of numbers (whose text is not kept),
+// the number in JavaScript's shortest form, and '' where missing.
+export function cellText(column, row) {
+  if (column.values) return column.values[row];
+  const x = column.numeric[row];
+  return Number.isNaN(x) ? '' : String(x);
+}
+
+// A column's cells as text (cellText), for the few readers that need them all.
+export function columnText(column) {
+  return column.values ?? Array.from(column.numeric, (x) => (Number.isNaN(x) ? '' : String(x)));
 }
 
 export function columnByName(table, name) {

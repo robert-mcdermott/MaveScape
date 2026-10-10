@@ -123,13 +123,38 @@ export function buildVariants(names, options = {}) {
   return out;
 }
 
+// Some rows of a variant table, as a variant table of their own (in the order given).
+export function selectVariants(variants, rows) {
+  const n = rows.length;
+  const pick = (array, Type) => Type.from(rows, (r) => array[r]);
+  const messages = new Map();
+  rows.forEach((r, i) => {
+    if (variants.messages.has(r)) messages.set(i, variants.messages.get(r));
+  });
+  return {
+    n,
+    level: variants.level,
+    original: rows.map((r) => variants.original[r]),
+    key: rows.map((r) => variants.key[r]),
+    kind: pick(variants.kind, Uint8Array),
+    position: pick(variants.position, Int32Array),
+    ref: pick(variants.ref, Uint8Array),
+    alt: pick(variants.alt, Uint8Array),
+    status: pick(variants.status, Uint8Array),
+    messages,
+  };
+}
+
+// The key under which two names are the same variant: p.Ala12Ala is valid MAVE-HGVS, and the
+// same variant as p.Ala12=.
+export const sameVariantKey = (key) => key.replace(/^(p\.)([A-Z][a-z]{2})([1-9][0-9]*)\2$/, '$1$2$3=');
+
 // Rows whose canonical keys are the same (A12V and p.Ala12Val, or a row written twice): ambiguous,
 // and blocking scoring until resolved (requirement D4). [{ key, rows }].
 export function duplicateKeys(variants) {
   const rows = new Map();
   for (let i = 0; i < variants.n; i += 1) {
-    // p.Ala12Ala is valid MAVE-HGVS, and the same variant as p.Ala12=.
-    const key = variants.key[i].replace(/^(p\.)([A-Z][a-z]{2})([1-9][0-9]*)\2$/, '$1$2$3=');
+    const key = sameVariantKey(variants.key[i]);
     if (!key) continue;
     if (!rows.has(key)) rows.set(key, []);
     rows.get(key).push(i);

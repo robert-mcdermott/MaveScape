@@ -4,7 +4,7 @@
 // listed by line. Tables of one sample each (as many pipelines write them) are joined on their
 // variant column first, and what a variant absent from a file means is the user's choice.
 
-import { isMissing, parseNumber } from './csv.js';
+import { cellText, isMissing, parseNumber } from './csv.js';
 
 // The count columns of a parsed table (csv.js) as samples, with their problems.
 // mapping: { variantColumn, countColumns: [names] }.
@@ -63,7 +63,7 @@ export function identicalColumns(table, names) {
   for (const name of names) {
     const column = table.columns.find((c) => c.name === name);
     if (!column) continue;
-    const key = column.values.join('\u0001');
+    const key = column.numeric ? column.numeric.join(',') : column.values.join('\u0001');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(name);
   }
@@ -111,8 +111,21 @@ export function joinCountTables(parts, options = {}) {
       if (part.countColumns.length > 1 && parts.length > 1) joined = `${part.name}:${name}`;
       while (taken.has(joined)) joined += "'";
       taken.add(joined);
+      if (source.numeric) {
+        // A column of numbers is joined as numbers.
+        const numeric = new Float64Array(n).fill(absentMeans === 'zero' ? 0 : Number.NaN);
+        for (const [v, row] of seen) numeric[index.get(v)] = source.numeric[row];
+        let missing = 0;
+        let integer = true;
+        for (let i = 0; i < n; i += 1) {
+          if (Number.isNaN(numeric[i])) missing += 1;
+          else if (!Number.isInteger(numeric[i])) integer = false;
+        }
+        columns.push({ name: joined, index: columns.length, values: null, numeric, type: 'number', missing, missingTokens: missing ? [''] : [], nonNumeric: [], nonNumericCount: 0, integer, source: { file: part.name, column: name } });
+        continue;
+      }
       const values = new Array(n).fill(absentMeans === 'zero' ? '0' : '');
-      for (const [v, row] of seen) values[index.get(v)] = source.values[row];
+      for (const [v, row] of seen) values[index.get(v)] = cellText(source, row);
       const numeric = new Float64Array(n);
       let missing = 0;
       let nonNumericCount = 0;

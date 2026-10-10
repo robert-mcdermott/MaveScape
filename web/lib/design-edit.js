@@ -87,6 +87,21 @@ export function setBinValue(design, order, value) {
   return { ...design, replicates: design.replicates.map((r) => ({ ...r, bins: (r.bins ?? []).map((b) => (b.order === order ? { ...b, value } : b)) })) };
 }
 
+// A bin's gates on the reporter (fluorescence; null leaves that side open), in every replicate.
+export function setBinGates(design, order, { lower, upper }) {
+  const clean = (x) => (x === null || x === '' || !(Number(x) > 0) ? undefined : Number(x));
+  return { ...design, replicates: design.replicates.map((r) => ({ ...r, bins: (r.bins ?? []).map((b) => {
+    if (b.order !== order) return b;
+    const { lower: oldLower, upper: oldUpper, ...rest } = b;
+    const next = { ...rest };
+    const lo = lower === undefined ? oldLower : clean(lower);
+    const hi = upper === undefined ? oldUpper : clean(upper);
+    if (lo !== undefined) next.lower = lo;
+    if (hi !== undefined) next.upper = hi;
+    return next;
+  }) })) };
+}
+
 // --- Columns and samples -----------------------------------------------------------------------
 
 // How each column of a table is used: Map(column → { kind: 'sample', sample } | { kind: 'copy',
@@ -150,6 +165,7 @@ export function updateSample(design, id, patch) {
     const next = { ...s, ...clean };
     for (const key of ['batch', 'notes', 'name']) if (next[key] === '') delete next[key];
     if (next.cells === null || Number.isNaN(next.cells)) delete next.cells;
+    if (next.missingMeansZero === false) delete next.missingMeansZero;
     return next;
   }) };
 }
@@ -278,6 +294,46 @@ export function setControls(design, patch) {
   return { ...design, controls: { ...(design.controls ?? {}), ...patch } };
 }
 
+// The readout (wave 2, slice 8): fields set, an empty one removed, and no readout left when nothing
+// is said.
+export function setReadout(design, patch) {
+  const readout = { ...(design.readout ?? {}), ...patch };
+  for (const [k, v] of Object.entries(readout)) if (v === '' || v === null || v === undefined) delete readout[k];
+  const next = { ...design, readout };
+  if (!Object.keys(readout).length) delete next.readout;
+  return next;
+}
+
+// How the library was made (MaveDB's term), or nothing.
+export function setLibraryMethod(design, method) {
+  const library = { ...(design.library ?? { level: 'variant' }) };
+  if (method) library.method = method;
+  else delete library.method;
+  return { ...design, library };
+}
+
+// Where a control class serves (start, end: positions, or null for open), and why it is a control.
+export function setControlPositions(design, key, range) {
+  const controls = { ...(design.controls ?? {}) };
+  const positions = { ...(controls.positions ?? {}) };
+  const r = Object.fromEntries(Object.entries(range ?? {}).filter(([, v]) => Number.isInteger(v)));
+  if (Object.keys(r).length) positions[key] = r;
+  else delete positions[key];
+  if (Object.keys(positions).length) controls.positions = positions;
+  else delete controls.positions;
+  return { ...design, controls };
+}
+
+export function setControlWhy(design, key, text) {
+  const controls = { ...(design.controls ?? {}) };
+  const why = { ...(controls.why ?? {}) };
+  if (String(text ?? '').trim()) why[key] = String(text).trim();
+  else delete why[key];
+  if (Object.keys(why).length) controls.why = why;
+  else delete controls.why;
+  return { ...design, controls };
+}
+
 export function setField(design, patch) {
   const next = { ...design, ...patch };
   for (const key of ['name', 'description']) if (next[key] === '') delete next[key];
@@ -287,8 +343,29 @@ export function setField(design, patch) {
 // Columns of the table the design neither uses nor sets aside (columns left out of the count
 // columns at import, text columns), set aside with a reason, so that every column is accounted for
 // without any being dropped silently. identifiers: columns that name variants.
+// A table of barcodes (column: its column of barcodes, out of the columns set aside) or of variants
+// (null: the column of barcodes set aside, with the reason).
+export function setBarcodeColumn(design, column) {
+  const library = { ...(design.library ?? {}) };
+  let ignored = design.ignoredColumns ?? [];
+  const previous = library.barcodeColumn;
+  if (column) {
+    library.level = 'barcode';
+    library.barcodeColumn = column;
+    ignored = ignored.filter((x) => x.column !== column);
+  } else {
+    library.level = 'variant';
+    delete library.barcodeColumn;
+  }
+  if (previous && previous !== column) ignored = [...ignored, { column: previous, reason: 'barcodes (not used: the rows are scored as they are)' }];
+  const next = { ...design, library };
+  if (ignored.length) next.ignoredColumns = ignored;
+  else delete next.ignoredColumns;
+  return next;
+}
+
 export function setAsideOtherColumns(design, columns, identifiers = []) {
-  const accounted = new Set([design.variants?.column, ...identifiers, ...design.samples.flatMap((s) => s.columns), ...(design.ignoredColumns ?? []).map((x) => x.column)]);
+  const accounted = new Set([design.variants?.column, design.library?.barcodeColumn, ...identifiers, ...design.samples.flatMap((s) => s.columns), ...(design.ignoredColumns ?? []).map((x) => x.column)]);
   const others = columns.filter((c) => !accounted.has(c));
   if (!others.length) return design;
   return { ...design, ignoredColumns: [...(design.ignoredColumns ?? []), ...others.map((column) => ({ column, reason: 'not a count column (left out at import)' }))] };

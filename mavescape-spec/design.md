@@ -37,6 +37,8 @@ see `conventions.md`. For the methods, data sources and standards behind these c
 │ cache.go      AlphaFold DB, NCBI (ClinVar), Ensembl, gnomAD; --offline; size limits           │
 │ handoff.go    optional: finds a running Proteoscope and sends it a structure and residue data │
 │ remote.go     remote-control hub (SSE to the page, actions from local programs)               │
+│ actions.go    the remote actions and their arguments (performed by web/ui/remote.js)          │
+│ connection.go remote.json (address and token) for scripts; output.go: exports to a path       │
 │ mcp.go        `mavescape mcp`: Model Context Protocol server on stdio, driving the hub         │
 │ run.go        `mavescape run|validate|export`: headless runs in a hidden browser window       │
 │ embed web/   ───────────────────────────────────────────────────────────────────────────┐     │
@@ -57,6 +59,18 @@ Node tests and the validation suite; no upload step; no Python or R to install. 
 next to cytometry (a protein of 500 residues has about 10,000 single substitutions; barcode tables
 reach a few million rows), so typed arrays and workers are more than enough. The million-row
 barcode case is benchmarked from wave 2.
+
+### The same numbers in every browser
+
+A run is recomputed when its workspace is reopened and must reproduce its recorded output hash,
+so its numbers must not depend on the JavaScript engine. IEEE 754 arithmetic (+, −, ×, ÷, `sqrt`)
+is exact in every engine, but `Math.log`, `exp` and `pow` are not: Chrome 154 and Node 22 differ in
+the last bit of about 2% of logarithms (found by wave 2, slice 1, when the remote-control session
+compared the window's scores with Node's). Scoring, QC, statistics and simulation therefore use
+`web/lib/dmath.js`, fdlibm's logarithm and exponential written in plain arithmetic: within one unit
+in the last place of the engines', and the same bits everywhere. A test forbids the engine's
+functions in those modules; `validation/remote-session.mjs` checks a fingerprint of `dmath.js` in
+the browser against Node's.
 
 ### What is copied from the sibling apps
 

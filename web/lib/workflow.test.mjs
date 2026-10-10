@@ -44,7 +44,7 @@ test('counts and target: draft the design; a broken design is to fix; a missing 
   assert.equal(bad[2].action.mode, 'experiment');
 });
 
-test('scored, then QC, then the map; a changed design asks to score again; bins wait for 0.2', () => {
+test('scored, then QC, then the map; a changed design asks to score again; sorted bins are scored too', () => {
   const base = { sources: [source], targets: [target], design, designSource: 's' };
   assert.equal(workflowSteps(ws(base))[3].state, 'next');
   const stale = workflowSteps(ws({ ...base, runs: [run({ ...design, name: 'older' })] }));
@@ -57,6 +57,5 @@ test('scored, then QC, then the map; a changed design asks to score again; bins 
   const all = workflowSteps(ws({ ...base, runs: [run()] }), { qc: new Map([['run-1', { status: 'pass', counts: { fail: 0, review: 0 } }]]), map: new Set(['run-1']) });
   assert.equal(focusStep(all).id, 'record');
   const bins = workflowSteps(ws({ ...base, design: { ...design, model: 'bins', bins: { weight: 'rank' }, replicates: [{ id: 'r1', biological: 1, bins: [{ sample: 'in', order: 1, value: 1 }, { sample: 'out', order: 2, value: 2 }] }] } }));
-  assert.equal(bins[3].state, 'attention');
-  assert.match(bins[3].detail, /0\.2/);
+  assert.equal(bins[3].state, 'next');
 });

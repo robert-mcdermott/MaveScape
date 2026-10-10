@@ -1,0 +1,38 @@
+---
+title: Getting started
+description: Start MaveScape, find your way around the window, open an example and score your own counts.
+lede: Start MaveScape, find your way around its window, and work through an example before you bring your own data.
+---
+      <h2 id="start">Start MaveScape</h2>
+      <p>If you have not installed it yet, see <a href="../install.html">Install</a>. Then, in a terminal:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>mavescape</code></pre></div>
+      <p>MaveScape starts a local server on <code>http://127.0.0.1:8820</code> (or the next free port) and opens its window. If Chrome, Edge, Brave or Chromium is installed, the window is a desktop app window with its own browser profile; otherwise your default browser opens the address. Closing the window stops the program.</p>
+      <p>Files named on the command line open directly. Running the command again while MaveScape is open hands the files to the open window instead of starting a second copy:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>mavescape counts.csv target.fasta</code></pre></div>
+
+      <h2 id="start-page">The start page</h2>
+      <shot name="start" alt="The start page: buttons to open files, a folder or a saved workspace, recent workspaces, the two examples, what to bring and the blank layouts">The start page: your recent workspaces, the examples, what to bring, and blank layouts to fill in.</shot>
+      <p>Open files or a folder, or drop them anywhere on the window. Workspaces save automatically to the library folder named in the status bar, and the recent ones are listed here. The <strong>blank layouts</strong> are annotated files to fill in with your own data: a count table, a sample sheet and a target FASTA.</p>
+
+      <h2 id="window">The window</h2>
+      <ul>
+        <li><strong>Top bar:</strong> the workspace name and its menu (a dot shows whether it is saved), the views, search and commands (<kbd>⌘K</kbd>), undo and redo, the appearance and help (<kbd>?</kbd>).</li>
+        <li><strong>Views:</strong> <strong>Experiment</strong>, <strong>QC</strong>, <strong>Score</strong> and <strong>Map</strong>; <kbd>⌘1</kbd> to <kbd>⌘4</kbd> switch between them.</li>
+        <li><strong>The workflow strip,</strong> above every view: each step done, next, needing attention or still to do, with the next action and its button.</li>
+        <li><strong>The dataset tree</strong> (left): the workspace's tables, targets, design, score runs and saved selections. Click one to see it in the inspector.</li>
+        <li><strong>The inspector</strong> (right): everything known about the item in focus, from a table's problems to a variant's replicates.</li>
+        <li><strong>The drawer</strong> (<kbd>⌘J</kbd>): the workspace's history, every change chained so that an edit after the fact is caught, and the log.</li>
+      </ul>
+      <p><kbd>⌘\</kbd> hides the dataset tree and <kbd>⇧⌘\</kbd> the inspector. On Windows and Linux, use <kbd>Ctrl</kbd> wherever this guide says <kbd>⌘</kbd>.</p>
+
+      <h2 id="first-analysis">A first analysis</h2>
+      <ol>
+        <li>Open the <strong>GRB2 SH3 domain</strong> example from the start page. It opens scored with MaveScape's defaults, in the QC view, with its guide in the inspector (<a href="examples.html">Examples</a>).</li>
+        <li>Read the findings in <strong>QC</strong>: all pass but the variance beyond counting, a bottleneck (<a href="qc.html">Quality control</a>).</li>
+        <li>In <strong>Score</strong>, score again with the DiMSum-compatible preset, whose error model carries the bottleneck into every SE, and compare the runs (<a href="scoring.html#dimsum">Scoring</a>).</li>
+        <li>Open the <strong>Map</strong> and click a dark cell to see its evidence (<a href="map.html">The map and the inspector</a>).</li>
+        <li>Export the scores and the methods from the run's <strong>Export…</strong> menu (<a href="record.html">Exports and the record</a>).</li>
+      </ol>
+
+      <h2 id="your-data">Your own data</h2>
+      <p>Open your count table and the target's FASTA together; MaveScape recognizes the layout, checks every variant name against the target and lists anything that blocks scoring. Then follow the workflow strip: <strong>Draft the design</strong>, check it in Experiment, and score. <a href="opening-data.html">Opening your data</a> covers the layouts MaveScape reads.</p>

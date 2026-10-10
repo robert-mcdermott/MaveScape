@@ -9,16 +9,14 @@
 // as the history's anchor. See mavescape-spec/conventions.md, "Workspace".
 
 import { sha256 } from './sha256.js';
+import { newId as freshId, now as clockNow } from './clock.js';
 
 export const WORKSPACE_FORMAT = 'mavescape-workspace';
 export const WORKSPACE_VERSION = 1;
 export const HISTORY_LIMIT = 5000;
 const encoder = new TextEncoder();
 
-function newId() {
-  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `ws-${random.replace(/-/g, '').slice(0, 20)}`;
-}
+const newId = () => `ws-${freshId()}`;
 
 // --- The history ---------------------------------------------------------------------------------
 
@@ -42,7 +40,7 @@ function chained(previous, entry) {
 }
 
 // The history fields of ws with an entry appended: { history, historyAnchor? }.
-export function appendHistory(ws, action, detail, time = new Date().toISOString()) {
+export function appendHistory(ws, action, detail, time = clockNow()) {
   const history = ws.history ?? [];
   const previous = history.length ? history[history.length - 1].hash : ws.historyAnchor ?? '';
   const all = [...history, chained(previous, { time, action, detail })];
@@ -64,14 +62,14 @@ export function verifyHistory(ws) {
 }
 
 // A new value of ws with fields changed, modified now, and the change in the history.
-export function change(ws, patch, action, detail, time = new Date().toISOString()) {
+export function change(ws, patch, action, detail, time = clockNow()) {
   return { ...ws, ...patch, modified: time, ...(action ? appendHistory(ws, action, detail, time) : {}) };
 }
 
 // --- The document --------------------------------------------------------------------------------
 
 export function createWorkspace(name = 'Untitled workspace', options = {}) {
-  const now = options.now ?? new Date().toISOString();
+  const now = options.now ?? clockNow();
   return {
     format: WORKSPACE_FORMAT,
     version: WORKSPACE_VERSION,
@@ -124,7 +122,7 @@ export function serializeWorkspace(ws) {
   return JSON.stringify(ws);
 }
 
-export function touch(ws, now = new Date().toISOString()) {
+export function touch(ws, now = clockNow()) {
   return { ...ws, modified: now };
 }
 
@@ -185,7 +183,7 @@ export function updateTarget(ws, id, patch, detail = null) {
 // Adds a named selection of variants (by their MAVE-HGVS keys), made on the map of a run.
 export function addSelection(ws, selection) {
   const id = uniqueId(selection.name ?? 'selection', ws.selections);
-  const entry = { ...selection, id, created: selection.created ?? new Date().toISOString() };
+  const entry = { ...selection, id, created: selection.created ?? clockNow() };
   return { ws: change(ws, { selections: [...ws.selections, entry] }, 'selection', `Saved the selection "${entry.name}": ${entry.keys.length} variant${entry.keys.length === 1 ? '' : 's'}`), id };
 }
 
@@ -195,10 +193,35 @@ export function removeSelection(ws, id) {
   return change(ws, { selections: ws.selections.filter((s) => s.id !== id) }, 'remove-selection', `Removed the selection "${selection.name}"`);
 }
 
+// The QC record with a field set (null or undefined: removed), null when nothing is left.
+function qcWith(ws, key, value) {
+  const next = { ...(ws.qc ?? {}) };
+  if (value === null || value === undefined) delete next[key];
+  else next[key] = value;
+  return Object.keys(next).length ? next : null;
+}
+
 // Sets the QC thresholds (null: the defaults), with what changed in the history.
 export function setQcThresholds(ws, thresholds, detail) {
   if (JSON.stringify(thresholds ?? null) === JSON.stringify(ws.qc?.thresholds ?? null)) return ws;
-  return change(ws, { qc: thresholds ? { ...(ws.qc ?? {}), thresholds } : null }, 'qc', detail);
+  return change(ws, { qc: qcWith(ws, 'thresholds', thresholds) }, 'qc', detail);
+}
+
+// Acknowledges a QC finding with a reason (wave 2, slice 8): { reason, status, value, time } kept
+// by the finding's id, in the history. The finding keeps its status; the acknowledgement holds
+// while it is no worse (findings.js). An empty reason withdraws it.
+export function acknowledgeFinding(ws, finding, reason, time = clockNow()) {
+  const text = String(reason ?? '').trim();
+  const all = { ...(ws.qc?.acknowledged ?? {}) };
+  if (!text) {
+    if (!all[finding.id]) return ws;
+    delete all[finding.id];
+    return change(ws, { qc: qcWith(ws, 'acknowledged', Object.keys(all).length ? all : null) }, 'qc', `Withdrew the acknowledgement of "${finding.title}"`, time);
+  }
+  if (finding.blocking) throw new Error(`"${finding.title}" blocks the analysis and cannot be acknowledged: fix the table or the design.`);
+  if (finding.status !== 'review' && finding.status !== 'fail') throw new Error(`"${finding.title}" is ${finding.status === 'pass' ? 'a pass' : 'not assessed'}: only a finding to review or failing is acknowledged.`);
+  all[finding.id] = { reason: text, status: finding.status, value: finding.value, time };
+  return change(ws, { qc: qcWith(ws, 'acknowledged', all) }, 'qc', `Acknowledged "${finding.title}" (${finding.status}): ${text}`, time);
 }
 
 // Sets (or clears) the design, and the table it describes.

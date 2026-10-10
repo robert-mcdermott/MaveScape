@@ -14,6 +14,8 @@
 // Each combination reports Cochran's Q, I² and τ², and leave-one-replicate-out sensitivity.
 // Variances (v = SE²), not SEs, are passed in.
 
+import { log, square } from './dmath.js';
+
 // Sums the columns of technical replicates: a count missing (NaN) in any column is missing in
 // the sum, never read as 0.
 export function poolColumns(columns) {
@@ -26,6 +28,15 @@ export function poolColumns(columns) {
     out[i] = sum;
   }
   return out;
+}
+
+// A design sample's counts from its columns: technical replicates summed, and, when the design
+// says its missing counts mean 0 (a table that writes variants that dropped out during selection
+// as missing), missing read as 0. Never the caller's array itself.
+export function sampleCounts(sample, columns) {
+  const pooled = columns.length === 1 ? Float64Array.from(columns[0]) : poolColumns(columns);
+  if (sample.missingMeansZero) for (let i = 0; i < pooled.length; i += 1) if (Number.isNaN(pooled[i])) pooled[i] = 0;
+  return pooled;
 }
 
 // Inverse-variance weighted mean: { estimate, se, tau2: 0 }. A variance of 0 (a score known
@@ -53,7 +64,7 @@ export function heterogeneity(y, v) {
   if (k < 2 || v.some((x) => x === 0)) return { q: Number.NaN, df: k - 1, i2: Number.NaN };
   const { estimate } = combineFixed(y, v);
   let q = 0;
-  for (let j = 0; j < k; j += 1) q += (y[j] - estimate) ** 2 / v[j];
+  for (let j = 0; j < k; j += 1) q += square(y[j] - estimate) / v[j];
   return { q, df: k - 1, i2: q > 0 ? Math.max(0, (q - (k - 1)) / q) : 0 };
 }
 
@@ -67,12 +78,12 @@ function remlLogLikelihood(y, v, tau2) {
     const w = 1 / (v[j] + tau2);
     sw += w;
     swy += w * y[j];
-    logs += Math.log(v[j] + tau2);
+    logs += log(v[j] + tau2);
   }
   const beta = swy / sw;
   let rss = 0;
-  for (let j = 0; j < y.length; j += 1) rss += (y[j] - beta) ** 2 / (v[j] + tau2);
-  return -0.5 * logs - 0.5 * Math.log(sw) - 0.5 * rss;
+  for (let j = 0; j < y.length; j += 1) rss += square(y[j] - beta) / (v[j] + tau2);
+  return -0.5 * logs - 0.5 * log(sw) - 0.5 * rss;
 }
 
 export const REML_DEFAULTS = { threshold: 1e-12, maxIterations: 1000, tolerance: 1.220703125e-4 };
@@ -97,7 +108,7 @@ export function combineREML(y, v, options = {}) {
   mean /= k;
   meanV /= k;
   let spread = 0;
-  for (let j = 0; j < k; j += 1) spread += (y[j] - mean) ** 2;
+  for (let j = 0; j < k; j += 1) spread += square(y[j] - mean);
   let tau2 = Math.max(0, spread / (k - 1) - meanV);
   let iterations = 0;
   let converged = true;
@@ -121,10 +132,10 @@ export function combineREML(y, v, options = {}) {
     let yPPy = 0;
     for (let j = 0; j < k; j += 1) {
       const w = 1 / (v[j] + tau2);
-      yPPy += (w * (y[j] - beta)) ** 2;
+      yPPy += square(w * (y[j] - beta));
     }
     const trP = sw - sw2 / sw;
-    const trPP = sw2 - (2 * sw3) / sw + (sw2 / sw) ** 2;
+    const trPP = sw2 - (2 * sw3) / sw + square(sw2 / sw);
     let adj = (yPPy - trP) / trPP;
     if (!Number.isFinite(adj)) adj = 0;
     while (tau2 + adj < 0) adj /= 2;
@@ -156,7 +167,7 @@ export function combineEnrich2(y, v, V, iterations = 50) {
   for (let j = 0; j < k; j += 1) mean += y[j];
   mean /= k;
   let tau2 = 0;
-  for (let j = 0; j < k; j += 1) tau2 += (y[j] - mean) ** 2 / (V - 1);
+  for (let j = 0; j < k; j += 1) tau2 += square(y[j] - mean) / (V - 1);
   let beta = Number.NaN;
   let epsilon = 0;
   for (let it = 0; it < iterations; it += 1) {
@@ -173,7 +184,7 @@ export function combineEnrich2(y, v, V, iterations = 50) {
     let num = 0;
     for (let j = 0; j < k; j += 1) {
       const w = 1 / (v[j] + tau2);
-      num += (y[j] - beta) ** 2 * w * w;
+      num += square(y[j] - beta) * w * w;
     }
     const next = (tau2 * num) / (sw - sw2 / sw);
     epsilon = Math.abs(tau2 - next);
@@ -184,15 +195,34 @@ export function combineEnrich2(y, v, V, iterations = 50) {
   return { estimate: beta, se: Math.sqrt(1 / inv), tau2, epsilon };
 }
 
+// The mean of the replicates' scores, its SE their SD over √k (VAMP-seq, MultiSTEP): the spread
+// between replicates alone, whatever each replicate's own SE. One replicate keeps its own SE.
+export function combineMean(y, v) {
+  const k = y.length;
+  if (!k) return { estimate: Number.NaN, se: Number.NaN, tau2: Number.NaN };
+  let m = 0;
+  for (const x of y) m += x;
+  m /= k;
+  if (k === 1) return { estimate: m, se: Math.sqrt(v[0]), tau2: Number.NaN };
+  let ss = 0;
+  for (const x of y) ss += (x - m) * (x - m);
+  return { estimate: m, se: Math.sqrt(ss / (k - 1) / k), tau2: Number.NaN };
+}
+
 export const COMBINATIONS = {
+  moderated: 'a shared error model with moderated variances (MaveScape)',
   reml: 'REML random effects',
   fixed: 'fixed effects (inverse variance)',
   enrich2: 'Enrich2\'s estimator (compatible)',
+  mean: 'the mean of the replicates, SE their SD over √k (VAMP-seq)',
 };
 
-// One variant's combination by method ('reml', 'fixed' or 'enrich2', which needs V).
+// One variant's combination by method ('reml', 'fixed', 'mean' or 'enrich2', which needs V). The
+// moderated combination needs every variant at once (moderate.js); one variant alone, as in the
+// leave-one-out sensitivity, is combined by REML.
 export function combine(method, y, v, V) {
   if (method === 'fixed') return combineFixed(y, v);
+  if (method === 'mean') return combineMean(y, v);
   if (method === 'enrich2') return combineEnrich2(y, v, V);
   return combineREML(y, v);
 }
@@ -204,7 +234,7 @@ export function combine(method, y, v, V) {
 export function leaveOneOut(method, y, v, full) {
   const k = y.length;
   if (k < 2) return { shift: Number.NaN, which: -1 };
-  const how = method === 'fixed' ? 'fixed' : 'reml';
+  const how = method === 'fixed' || method === 'mean' ? method : 'reml';
   let shift = -1;
   let which = -1;
   for (let j = 0; j < k; j += 1) {

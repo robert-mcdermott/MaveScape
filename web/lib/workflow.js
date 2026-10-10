@@ -70,8 +70,8 @@ export function workflowSteps(ws, seen = {}) {
   const run = currentRun(ws);
   if (!designReady) {
     add({ id: 'score', label: 'Score', detail: 'Scores with standard errors: after the design.' });
-  } else if (ws.design.model === 'bins' || ws.design.model === 'scores') {
-    add({ id: 'score', label: 'Score', state: 'attention', detail: ws.design.model === 'bins' ? 'Sorted-bin (FACS) experiments are scored from MaveScape 0.2; QC already reads their counts.' : 'This design holds precomputed scores: there is nothing to score.', action: { kind: 'mode', mode: 'qc', label: 'Open QC' } });
+  } else if (ws.design.model === 'scores') {
+    add({ id: 'score', label: 'Score', state: 'attention', detail: 'This design holds precomputed scores: there is nothing to score.', action: { kind: 'mode', mode: 'qc', label: 'Open QC' } });
   } else if (!run) {
     const stale = ws.runs.length > 0;
     add({ id: 'score', label: 'Score', state: stale ? 'attention' : 'next', detail: stale ? 'The design or the table changed since the last run: score again (earlier runs are kept).' : 'Score the counts with MaveScape\'s defaults, or choose the normalization, filters and replicate combination first.', action: { kind: 'mode', mode: 'score', label: stale ? 'Score again' : 'Score' } });

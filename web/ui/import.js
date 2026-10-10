@@ -6,11 +6,15 @@
 import { h, icon, clear, formatBytes, formatCount, debounce } from './dom.js';
 import { showDialog, toast, progressToast } from './overlays.js';
 import { sha256Hex } from './storage.js';
-import { applyTemplate, detectLayout, makeTemplate, namesFromSequences, reviewImport, suggestRoles } from '../lib/importer.js';
-import { joinCountTables } from '../lib/counts.js';
+import { applyTemplate, detectLayout, makeTemplate, reviewImport, suggestRoles } from '../lib/importer.js';
+import { assembleTable, looksLikeMap } from '../lib/assemble.js';
+import { codonsSource } from '../lib/codons.js';
+import { headerlessMap } from '../lib/barcodes.js';
+import { cellText } from '../lib/csv.js';
 import { STATUS, KIND_NAMES } from '../lib/variants.js';
 import { parseFasta, targetFromSequence } from '../lib/target.js';
-import { addSource, addTarget, setDesign } from '../lib/workspace.js';
+import { addSource, addTarget, change, setDesign } from '../lib/workspace.js';
+import { now } from '../lib/clock.js';
 import { IDENTIFIER_COLUMNS, validateDesign, summarizeDesign } from '../lib/design.js';
 
 const LINE_ENDS = { crlf: 'CRLF (Windows) line ends', lf: 'LF line ends', cr: 'CR (old Mac) line ends' };
@@ -19,21 +23,63 @@ const DELIMITER_NAMES = { ',': 'comma-separated', '\t': 'tab-separated', ';': 's
 export function installImport(app) {
   // Parsed tables of this session, by source id.
   app.tables = new Map();
-  app.importers.set('table', (items) => openImportWizard(app, items));
+  app.importers.set('table', (items, options) => openImportWizard(app, items, options));
   app.importers.set('sequence', (items) => importSequences(app, items));
   app.importers.set('design', (items) => importDesigns(app, items));
   app.importers.set('json', (items) => importDesigns(app, items));
   app.parseTableFile = (item) => parseTableFile(app, item);
-  // A source's table, read again from the library (by its SHA-256) when this session has not read it.
+  // A source's table, read again from the library (each file by its SHA-256) when this session has
+  // not read it, and assembled as at import (joined, named, its barcode map applied).
   app.sourceTable = async (source) => {
     if (app.tables.has(source.id)) return app.tables.get(source.id).table;
-    if (source.files?.length > 1) throw new Error(`${source.name} was joined from ${source.files.length} files; open them again to read it.`);
-    const bytes = await app.library.getFile(source.sha256);
-    if (!bytes) throw new Error(`${source.fileName} (SHA-256 ${source.sha256.slice(0, 12)}…) is not in the library.`);
-    const table = await parseTableFile(app, { name: source.fileName, file: new Blob([bytes]) });
-    app.tables.set(source.id, { table, review: null });
-    return table;
+    const files = source.files?.length ? source.files : [{ fileName: source.fileName, sha256: source.sha256 }];
+    const parsed = [];
+    for (const f of files) {
+      const bytes = await app.library.getFile(f.sha256);
+      if (!bytes) throw new Error(`${f.fileName} (SHA-256 ${f.sha256.slice(0, 12)}…) is not in the library.`);
+      parsed.push({ name: f.fileName, table: await parseTableFile(app, { name: f.fileName, file: new Blob([bytes]) }), role: f.role ?? 'counts' });
+    }
+    const m = source.mapping ?? {};
+    const target = app.store.ws.targets.find((t) => t.id === source.target);
+    const assembled = assembleTable(parsed, { absentMeans: m.absentMeans ?? 'missing', level: m.level, target, barcodeColumn: m.barcodeColumn ?? undefined, map: m.assembly?.map ?? undefined, codons: m.assembly?.codons ?? undefined });
+    if (!assembled.table) throw new Error(`${source.name} could not be assembled again: ${assembled.problems.map((p) => p.message).join(' ')}`);
+    app.tables.set(source.id, { table: assembled.table, review: null });
+    return assembled.table;
   };
+}
+
+// A source read again with its rows as codon variants at the protein level (wave 2, slice 11):
+// when a design names the protein names derived from a column of codons ("hgvs_pro (from
+// hgvs_nt)") and the table was imported without them, as `mavescape run` and a design file opened
+// later do. Returns the source as updated (the same source when nothing needs doing).
+export async function readCodonsFor(app, source, design) {
+  const column = design?.variants?.column;
+  const from = codonsSource(column);
+  if (!from || source.columns.some((c) => c.name === column) || !source.columns.some((c) => c.name === from)) return source;
+  const files = source.files?.length ? source.files : [{ fileName: source.fileName, sha256: source.sha256 }];
+  const parsed = [];
+  for (const f of files) {
+    const bytes = await app.library.getFile(f.sha256);
+    if (!bytes) throw new Error(`${f.fileName} (SHA-256 ${f.sha256.slice(0, 12)}…) is not in the library.`);
+    parsed.push({ name: f.fileName, table: await parseTableFile(app, { name: f.fileName, file: new Blob([bytes]) }), role: f.role ?? 'counts' });
+  }
+  const m = source.mapping ?? {};
+  const target = app.store.ws.targets.find((t) => t.id === source.target && t.sequenceType === 'dna') ?? design.targets?.find((t) => t.sequenceType === 'dna');
+  const assembled = assembleTable(parsed, { absentMeans: m.absentMeans ?? 'missing', level: 'protein', target, codons: { from } });
+  if (!assembled.table) throw new Error(`${source.name}'s codon variants could not be read at the protein level: ${assembled.problems.map((p) => p.message).join(' ')}`);
+  const table = assembled.table;
+  const countColumns = (m.countColumns ?? []).filter((c) => table.columns.some((x) => x.name === c));
+  const review = reviewImport(table, { variantColumn: column, level: 'protein', countColumns, target, mode: m.mode ?? 'lenient' });
+  const next = {
+    ...source, rows: table.rows, columns: table.columns.map((c) => ({ name: c.name, type: c.type, missing: c.missing })), layout: detectLayout(table).layout,
+    mapping: { ...m, variantColumn: column, level: 'protein', countColumns, assembly: { kind: 'codons', codons: { from } } },
+    summary: review.summary,
+    problems: { blocking: review.blocking.map((p) => p.message), warnings: [...review.warnings, ...assembled.problems.filter((p) => p.level === 'warning')].map((p) => p.message) },
+  };
+  const ws = app.store.ws;
+  app.store.commit(change(ws, { sources: ws.sources.map((s) => (s.id === source.id ? next : s)) }, 'import', `Read ${source.name}'s rows as codon variants at the protein level: ${assembled.notes.join(' ')}`), `Read ${source.name} as codon variants`);
+  app.tables.set(source.id, { table, review });
+  return next;
 }
 
 async function parseTableFile(app, item) {
@@ -84,6 +130,14 @@ async function importDesigns(app, items) {
       toast(`${item.name} is not a MaveScape design (its format is not "mavescape-design").`, { kind: 'error' });
       continue;
     }
+    // A design naming protein names derived from codons reads its table's codons (wave 2, slice 11).
+    for (const s of app.store.ws.sources) {
+      try {
+        await readCodonsFor(app, s, design);
+      } catch (error) {
+        toast(error.message, { kind: 'error' });
+      }
+    }
     const sources = app.store.ws.sources;
     const fits = sources.map((s) => ({ s, r: validateDesign(design, { columns: s.columns.map((c) => c.name) }) }));
     const best = fits.find((x) => x.r.ok) ?? fits.sort((a, b) => a.r.errors.length - b.r.errors.length)[0];
@@ -115,7 +169,9 @@ function pasteSequence() {
   });
 }
 
-async function openImportWizard(app, items) {
+// options.accept: import with the mapping MaveScape detected, without the dialog (remote control);
+// returns whether the table was imported.
+async function openImportWizard(app, items, options = {}) {
   const progress = progressToast(`Reading ${items.length === 1 ? items[0].name : `${items.length} tables`}…`);
   const files = [];
   try {
@@ -126,66 +182,79 @@ async function openImportWizard(app, items) {
     progress.done();
   } catch (error) {
     progress.fail(`The table could not be read: ${error.message}`);
-    return;
+    if (options.accept) throw new Error(`The table could not be read: ${error.message}`);
+    return false;
   }
   const opened = app.store.sameWorkspace();
   let templates = [];
   try {
     templates = await Promise.all((await app.library.listRecords('import-template')).map((r) => app.library.getRecord('import-template', r.id)));
   } catch { /* none */ }
+  // Each file's part: counts, or the barcode-to-variant map (guessed from what it holds).
+  for (const f of files) f.role = files.length > 1 && looksLikeMap(f.table) ? 'map' : 'counts';
 
   // --- State --------------------------------------------------------------------------------
-  const state = { absentMeans: 'missing', mode: 'lenient', targetId: app.store.ws.targets[0]?.id ?? '', pendingTargets: [], template: null };
-  let base; // the (joined) table as read
-  let table; // the table the mapping applies to (with names from DiMSum sequences added)
+  const state = { absentMeans: 'missing', mode: 'lenient', targetId: app.store.ws.targets[0]?.id ?? '', pendingTargets: [], template: null, mapColumns: null, codons: null };
+  // A column of coding nucleotide names (c.…) in a single table: its rows can be read as codon
+  // variants of protein variants (wave 2, slice 11).
+  const ntColumn = (() => {
+    const counts = files.filter((f) => f.role !== 'map');
+    if (counts.length !== 1) return null;
+    const text = counts[0].table.columns.filter((c) => c.values && c.type === 'text');
+    return text.find((c) => c.name === 'hgvs_nt' && c.values.slice(0, 50).some((v) => /^c\./.test(v))) ?? text.find((c) => c.values.slice(0, 50).filter(Boolean).every((v) => /^c\./.test(v))) ?? null;
+  })();
+  let assembled; // assembleTable's result: the table the mapping applies to, with names derived
+  let table;
   let layout;
   let mapping;
   let roles = [];
 
-  function joinFiles() {
-    if (files.length === 1) return files[0].table;
-    const parts = files.map((f) => {
-      const l = detectLayout(f.table);
-      return { name: f.name.replace(/\.(csv|tsv|tab|txt)(\.gz)?$/i, ''), table: f.table, variantColumn: l.variantColumn ?? f.table.columns[0]?.name, countColumns: l.countColumns };
-    });
-    const joined = joinCountTables(parts, { absentMeans: state.absentMeans, variantColumn: parts[0].variantColumn });
-    joined.table.diagnostics = [...files.flatMap((f) => f.table.diagnostics.map((d) => ({ ...d, message: `${f.name}: ${d.message}` }))), ...joined.problems];
-    return joined.table;
+  // The files assembled (joined, pivoted, named, the map applied) with the current choices.
+  function assemble() {
+    assembled = assembleTable(files.map((f) => ({ name: f.name, table: f.table, role: f.role })), { absentMeans: state.absentMeans, level: mapping?.level === 'nucleotide' ? 'nucleotide' : 'protein', target: currentTarget() ?? undefined, barcodeColumn: mapping?.barcodeColumn ?? undefined, map: state.mapColumns ?? undefined, codons: state.codons ?? undefined });
+    table = assembled.table ?? { columns: [], rows: 0, diagnostics: [] };
   }
 
   function setup() {
-    base = joinFiles();
-    layout = detectLayout(base);
-    const fitting = templates.map((t) => ({ t, m: applyTemplate(t, base) })).find((x) => x.m);
+    mapping = null;
+    assemble();
+    layout = detectLayout(table);
+    const fitting = templates.map((t) => ({ t, m: applyTemplate(t, table) })).find((x) => x.m);
     if (fitting) {
       state.template = fitting.t.name;
       mapping = { ...fitting.m };
       state.mode = fitting.m.mode ?? 'lenient';
     } else {
-      mapping = { variantColumn: layout.variantColumn, level: layout.level, countColumns: layout.countColumns.slice(), scoreColumns: { ...layout.scoreColumns } };
+      state.template = null;
+      mapping = { variantColumn: layout.variantColumn, level: layout.level, countColumns: layout.countColumns.slice(), scoreColumns: { ...layout.scoreColumns }, barcodeColumn: layout.barcodeColumn ?? null };
     }
     roles = suggestRoles(mapping.countColumns);
+    derivedNames();
   }
 
   function currentTarget() {
     return [...app.store.ws.targets, ...state.pendingTargets].find((t) => t.id === state.targetId) ?? null;
   }
 
-  // DiMSum's sequences are named against the wild type, which needs a DNA target.
-  function applyDerivedNames() {
-    table = base;
-    if (layout.layout !== 'dimsum') return null;
-    const target = currentTarget();
-    if (!target || target.sequenceType !== 'dna') return 'DiMSum names its variants by whole sequences: choose (or add) the wild-type DNA sequence as the target to name them.';
-    const sequences = base.columns.find((c) => c.name === 'nt_seq').values;
-    const { nt, pro } = namesFromSequences(sequences, target.sequence);
-    const named = { name: 'hgvs_nt (from nt_seq)', index: base.columns.length, values: nt, numeric: null, type: 'text', missing: 0, missingTokens: [], nonNumeric: [], nonNumericCount: 0 };
-    const protein = { name: 'hgvs_pro (from nt_seq)', index: base.columns.length + 1, values: pro, numeric: null, type: 'text', missing: 0, missingTokens: [], nonNumeric: [], nonNumericCount: 0 };
-    table = { ...base, columns: [...base.columns, named, protein] };
-    if (!mapping.variantColumn || mapping.variantColumn === 'nt_seq') mapping.variantColumn = named.name;
-    if (mapping.level === 'nucleotide-sequence') mapping.level = 'nucleotide';
-    return null;
+  // Names MaveScape derived (DiMSum's sequences, Enrich2's elements, the map's): used when the
+  // table's own column is not of names.
+  function derivedNames() {
+    // A column of derived names that another level renamed: the derived one at this level.
+    if (mapping.variantColumn && !table.columns.some((c) => c.name === mapping.variantColumn)) mapping.variantColumn = detectLayout(table).variantColumn;
+    // Codon variants read at the protein level: the protein names derived from the codons'.
+    if (state.codons && assembled.kind === 'codons') {
+      mapping.variantColumn = table.columns[0].name;
+      mapping.countColumns = mapping.countColumns.filter((c) => table.columns.some((x) => x.name === c));
+    }
+    if (layout.layout === 'dimsum') {
+      if (mapping.level === 'nucleotide-sequence') mapping.level = 'nucleotide';
+      const named = table.columns.find((c) => c.name === (mapping.level === 'protein' ? 'hgvs_pro (from nt_seq)' : 'hgvs_nt (from nt_seq)'));
+      if (named && (!mapping.variantColumn || mapping.variantColumn === 'nt_seq' || /\(from nt_seq\)$/.test(mapping.variantColumn))) mapping.variantColumn = named.name;
+    }
   }
+
+  // A problem with the target that naming needs (DiMSum's sequences, a map of sequences).
+  const targetProblem = () => assembled.problems.find((p) => p.code === 'dimsum-target' || p.code === 'map-target')?.message ?? null;
 
   setup();
 
@@ -201,12 +270,13 @@ async function openImportWizard(app, items) {
   function renderSummary() {
     clear(summaryEl);
     const first = files[0].table;
+    const countFiles = files.filter((f) => f.role !== 'map');
     const facts = files.length === 1
       ? [`${formatCount(first.rows)} rows`, `${first.columns.length} columns`, DELIMITER_NAMES[first.delimiter] ?? 'delimited', LINE_ENDS[first.lineEnd] ?? '', first.encoding?.toUpperCase?.() ?? '', formatBytes(files[0].size)].filter(Boolean)
-      : [`${files.length} files joined on their variants`, `${formatCount(base.rows)} variants`];
+      : [countFiles.length > 1 ? `${countFiles.length} files joined on their ${mapping.barcodeColumn ? 'barcodes' : 'variants'}` : `${formatCount(countFiles[0]?.table.rows ?? 0)} rows of counts`, files.length > countFiles.length ? 'a barcode map' : null, `${formatCount(table.rows)} ${mapping.barcodeColumn ? 'barcodes' : 'rows'}`].filter(Boolean);
     summaryEl.append(
       h('p.import-facts', h('b', files.map((f) => f.name).join(', ')), ' · ', facts.join(' · ')),
-      ...layout.notes.map((note) => h('div.callout.accent', icon('info'), h('span', note))),
+      ...[...assembled.notes, ...layout.notes].map((note) => h('div.callout.accent', icon('info'), h('span', note))),
       state.template ? h('div.callout.ok', icon('check'), h('span', `The import template "${state.template}" fits this table; its mapping is used.`)) : null,
     );
   }
@@ -217,21 +287,60 @@ async function openImportWizard(app, items) {
     const variantSelect = h('select.input', { 'aria-label': 'Column of variant names', onchange: () => { mapping.variantColumn = variantSelect.value; update(); } },
       ...table.columns.map((c) => h('option', { value: c.name, selected: c.name === mapping.variantColumn }, c.name)));
     const level = h('div.segmented', { role: 'group', 'aria-label': 'Level of the variant names' },
-      ...[['protein', 'Protein'], ['nucleotide', 'Nucleotide']].map(([value, label]) => h(`button${mapping.level === value ? '.active' : ''}`, { type: 'button', 'aria-pressed': mapping.level === value ? 'true' : 'false', onclick: () => { mapping.level = value; update(); } }, label)));
+      ...[['protein', 'Protein'], ['nucleotide', 'Nucleotide']].map(([value, label]) => h(`button${mapping.level === value ? '.active' : ''}`, { type: 'button', 'aria-pressed': mapping.level === value ? 'true' : 'false', onclick: () => { mapping.level = value; if (value === 'nucleotide' && state.codons) readRowsAs('variants'); else update(); } }, label)));
     const lenient = h('input', { type: 'checkbox', checked: state.mode === 'lenient', onchange: () => { state.mode = lenient.checked ? 'lenient' : 'strict'; update(); } });
+    if (files.length > 1) {
+      // Each file's part: counts, or the barcode-to-variant map.
+      mappingEl.append(h('div.field', h('span', 'Files'), h('div', ...files.map((f) => {
+        const part = h('select.input', { 'aria-label': `What ${f.name} holds`, onchange: () => { f.role = part.value; state.mapColumns = null; setup(); render(); } },
+          h('option', { value: 'counts', selected: f.role !== 'map' }, 'counts'),
+          h('option', { value: 'map', selected: f.role === 'map' }, 'the barcode-to-variant map'));
+        return h('div.file-part', h('span.mono', f.name), part);
+      }))));
+    }
+    // A table of barcodes: its column of barcodes (rows are barcodes, many to a variant).
+    const textColumns = table.columns.filter((c) => c.values && c.type === 'text');
+    // Or a codon variant, its protein variant's codons combined (wave 2, slice 11).
+    const rowsNow = state.codons ? 'codons' : mapping.barcodeColumn ? 'barcodes' : 'variants';
+    const rowsAre = h('div.segmented', { role: 'group', 'aria-label': 'Each row is' },
+      ...[['variants', 'A variant'], ['barcodes', 'A barcode'], ...(ntColumn ? [['codons', 'A codon variant']] : [])].map(([value, label]) => {
+        const active = value === rowsNow;
+        return h(`button${active ? '.active' : ''}`, { type: 'button', 'aria-pressed': active ? 'true' : 'false', disabled: value === 'barcodes' && !textColumns.length, title: value === 'codons' ? `Read each row as a codon variant of the protein variant it encodes (from "${ntColumn.name}" against the target's DNA): each protein variant's codons combined, a variant written on several rows with the same counts read once` : undefined, onclick: () => readRowsAs(value) }, label);
+      }));
+    mappingEl.append(h('div.field', h('span', 'Each row is'), rowsAre));
+    if (mapping.barcodeColumn) {
+      const barcodeSelect = h('select.input', { 'aria-label': 'Column of barcodes', onchange: () => { mapping.barcodeColumn = barcodeSelect.value; update(); } },
+        ...textColumns.map((c) => h('option', { value: c.name, selected: c.name === mapping.barcodeColumn }, c.name)));
+      mappingEl.append(h('label.field', h('span', 'Barcodes'), barcodeSelect));
+    }
     mappingEl.append(
-      h('label.field', h('span', 'Variant names'), variantSelect),
+      h('label.field', h('span', mapping.barcodeColumn ? 'The variant each barcode carries' : 'Variant names'), variantSelect),
       h('div.field', h('span', 'Named at the level of'), level),
       h('label.check', lenient, 'Read lab and legacy forms (A12V, _wt, p.Ala12*) leniently, keeping the originals'),
     );
-    if (files.length > 1) {
-      const absent = h('select.input', { 'aria-label': 'A variant absent from a file', onchange: () => { state.absentMeans = absent.value; setup(); applyDerivedNames(); render(); } },
+    // The map's columns: its barcodes and their variants.
+    const mapFile = files.find((f) => f.role === 'map');
+    if (mapFile && assembled.map) {
+      const mt = headerlessMap(mapFile.table);
+      const choose = (label, key, current) => {
+        const select = h('select.input', { 'aria-label': label, onchange: () => {
+          state.mapColumns = { barcodeColumn: assembled.map.mapBarcodeColumn, variantColumn: assembled.map.mapVariantColumn, [key]: select.value };
+          update();
+        } }, ...mt.columns.map((c) => h('option', { value: c.name, selected: c.name === current }, c.name)));
+        return h('label.field', h('span', label), select);
+      };
+      mappingEl.append(h('div.field', { style: { marginTop: '10px' } }, h('span', `The map (${mapFile.name})`),
+        h('div.map-columns', choose('Its barcodes', 'barcodeColumn', assembled.map.mapBarcodeColumn), choose('Their variants', 'variantColumn', assembled.map.mapVariantColumn)),
+        h('p.muted', { style: { fontSize: '11.5px', margin: '4px 0 0' } }, `${formatCount(assembled.map.mapped)} of ${formatCount(table.rows)} counted barcodes named; ${formatCount(assembled.map.conflicts.length)} given two variants (left unmapped); ${formatCount(assembled.map.unmapped.length)} not in the map.`)));
+    }
+    if (files.filter((f) => f.role !== 'map').length > 1) {
+      const absent = h('select.input', { 'aria-label': 'A variant absent from a file', onchange: () => { state.absentMeans = absent.value; setup(); render(); } },
         h('option', { value: 'missing', selected: state.absentMeans === 'missing' }, 'is missing in that sample (not counted)'),
         h('option', { value: 'zero', selected: state.absentMeans === 'zero' }, 'was counted 0 times in that sample'));
-      mappingEl.append(h('label.field', h('span', 'A variant absent from one file'), absent));
+      mappingEl.append(h('label.field', h('span', `A ${mapping.barcodeColumn ? 'barcode' : 'variant'} absent from one file`), absent));
     }
     // Identifier columns (MaveDB's accession and hgvs_*) and the variant names are not counts.
-    const numeric = table.columns.filter((c) => c.name !== mapping.variantColumn && c.type !== 'text' && !IDENTIFIER_COLUMNS.includes(c.name) && !/\(from nt_seq\)$/.test(c.name));
+    const numeric = table.columns.filter((c) => c.name !== mapping.variantColumn && c.type !== 'text' && !IDENTIFIER_COLUMNS.includes(c.name) && !c.derived && !/\(from nt_seq\)$/.test(c.name));
     const rows = numeric.map((c) => {
       const role = roles.find((r) => r.column === c.name);
       const box = h('input', { type: 'checkbox', checked: mapping.countColumns.includes(c.name), 'aria-label': `Count column ${c.name}`, onchange: () => {
@@ -289,14 +398,20 @@ async function openImportWizard(app, items) {
     const s = review.summary;
     if (s) {
       checksEl.append(h('div.stat-grid',
+        s.barcodes ? h('div.stat-tile', h('div.k', 'Barcodes'), h('div.v', formatCount(s.barcodes.rows - s.barcodes.unmapped))) : null,
         h('div.stat-tile', h('div.k', 'Variants'), h('div.v', formatCount(s.total))),
         h('div.stat-tile', h('div.k', 'Read leniently'), h('div.v', formatCount(s.warning))),
         h('div.stat-tile', h('div.k', 'Not valid'), h('div.v', formatCount(s.invalid)))),
-        h('p.muted', { style: { fontSize: '12px' } }, Object.entries(s.byKind).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${formatCount(n)} ${k}`).join(' · ') || 'No valid variant.', s.positions ? ` · positions ${s.positions[0]}–${s.positions[1]}` : ''));
+        h('p.muted', { style: { fontSize: '12px' } }, Object.entries(s.byKind).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${formatCount(n)} ${k}`).join(' · ') || 'No valid variant.', s.positions ? ` · positions ${s.positions[0]}–${s.positions[1]}` : '', s.barcodes ? ` · ${s.barcodes.perVariant.toFixed(1)} barcodes per variant` : ''));
     }
     const list = (items, kind, glyph) => items.map((p) => h(`div.callout.${kind}`, { style: { marginTop: '6px' } }, icon(glyph), h('span', p.message)));
     if (!review.blocking.length && !review.warnings.length) checksEl.append(h('div.callout.ok', { style: { marginTop: '6px' } }, icon('check'), h('span', 'Nothing blocks scoring.')));
     checksEl.append(...list(review.blocking, 'danger', 'warning'), ...list(review.warnings, 'warn', 'warning'), ...list(review.info, 'accent', 'info'));
+    // Several rows naming one protein variant are often its codons (wave 2, slice 11).
+    if (ntColumn && !state.codons && review.blocking.some((p) => p.code === 'duplicate-variants')) {
+      checksEl.append(h('div.callout.accent', { style: { marginTop: '6px' } }, icon('lightbulb'), h('span', { style: { flex: 1 } }, `If the rows that name one protein variant are its codons, read them as codon variants: each protein variant's codons combined, from "${ntColumn.name}".`),
+        h('button.btn.small', { type: 'button', onclick: () => readRowsAs('codons') }, 'Read as codon variants')));
+    }
     if (review.blocking.length) checksEl.append(h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, 'You can import the table to look at it; scoring stays blocked until these are fixed in the file.'));
   }
 
@@ -305,29 +420,56 @@ async function openImportWizard(app, items) {
     previewEl.append(h('h3', icon('table'), 'First rows'));
     const v = review.variants;
     const counts = mapping.countColumns.slice(0, 4).map((name) => table.columns.find((c) => c.name === name)).filter(Boolean);
+    const barcodes = mapping.barcodeColumn ? table.columns.find((c) => c.name === mapping.barcodeColumn) : null;
     const n = Math.min(8, table.rows);
     const rows = [];
-    for (let i = 0; i < n; i += 1) {
-      const status = v?.status[i];
-      rows.push(h('tr', h('td.mono', v?.original[i] ?? ''), h('td.mono', v?.key[i] || '—'),
-        h('td', status === STATUS.VALID ? h('span.badge.ok', 'valid') : status === STATUS.WARNING ? h('span.badge.warn', { title: v.messages.get(i)?.join('; ') }, 'read leniently') : h('span.badge.danger', { title: v?.messages.get(i)?.join('; ') }, 'not valid')),
-        h('td', v ? KIND_NAMES[v.kind[i]] : ''),
-        ...counts.map((c) => h('td.r', c.values[i] === '' ? h('span.muted', 'missing') : c.values[i]))));
+    for (let row = 0; row < n; row += 1) {
+      // A table of barcodes: the variant the row's barcode carries (none: unmapped).
+      const i = review.variantOfRow ? review.variantOfRow[row] : row;
+      const status = i >= 0 ? v?.status[i] : undefined;
+      rows.push(h('tr', barcodes ? h('td.mono', cellText(barcodes, row)) : null, h('td.mono', i >= 0 ? v?.original[i] ?? '' : h('span.muted', 'no variant')), h('td.mono', (i >= 0 && v?.key[i]) || '—'),
+        h('td', i < 0 ? h('span.badge.warn', 'unmapped') : status === STATUS.VALID ? h('span.badge.ok', 'valid') : status === STATUS.WARNING ? h('span.badge.warn', { title: v.messages.get(i)?.join('; ') }, 'read leniently') : h('span.badge.danger', { title: v?.messages.get(i)?.join('; ') }, 'not valid')),
+        h('td', v && i >= 0 ? KIND_NAMES[v.kind[i]] : ''),
+        ...counts.map((c) => h('td.r', cellText(c, row) === '' ? h('span.muted', 'missing') : cellText(c, row)))));
     }
-    previewEl.append(h('div', { style: { overflow: 'auto' } }, h('table.data', h('thead', h('tr', h('th', 'As written'), h('th', 'MAVE-HGVS'), h('th', 'Status'), h('th', 'Kind'), ...counts.map((c) => h('th.r', c.name)))), h('tbody', ...rows))));
+    previewEl.append(h('div', { style: { overflow: 'auto' } }, h('table.data', h('thead', h('tr', barcodes ? h('th', 'Barcode') : null, h('th', 'As written'), h('th', 'MAVE-HGVS'), h('th', 'Status'), h('th', 'Kind'), ...counts.map((c) => h('th.r', c.name)))), h('tbody', ...rows))));
   }
 
-  function render(problem = null) {
+  function render() {
     review = reviewImport(table, { ...mapping, mode: state.mode, target: currentTarget() ?? undefined });
+    // What assembling the files found: the map's conflicts, Enrich2's names, dms_variants' layout
+    // (which say why barcodes are unmapped, better than the review's count of them).
+    if (assembled.map) review.info = review.info.filter((p) => p.code !== 'barcodes-unmapped');
+    for (const p of assembled.problems) {
+      if (p.code === 'dimsum-target' || p.code === 'map-target') continue;
+      (p.level === 'error' ? review.blocking : p.level === 'warning' ? review.warnings : review.info).push(p);
+    }
     renderSummary();
     renderMapping();
-    renderTarget(problem);
+    renderTarget(targetProblem());
     renderChecks();
     renderPreview();
   }
 
-  const update = debounce(() => render(applyDerivedNames()), 60);
-  render(applyDerivedNames());
+  // What each row is: a variant, a barcode, or a codon variant read at the protein level.
+  function readRowsAs(value) {
+    state.codons = value === 'codons' ? { from: ntColumn.name } : null;
+    if (value === 'codons') mapping.level = 'protein';
+    mapping.barcodeColumn = value === 'barcodes' ? (layout.barcodeColumn ?? table.columns.filter((c) => c.values && c.type === 'text').find((c) => c.name !== mapping.variantColumn)?.name ?? null) : null;
+    update();
+  }
+
+  // A change of target, level or barcode column can change the names derived: assemble again.
+  const update = debounce(() => {
+    assemble();
+    derivedNames();
+    render();
+  }, 60);
+  render();
+  if (options.accept) {
+    if (targetProblem()) throw new Error(targetProblem());
+    return (await importNow()) === true;
+  }
 
   // --- Import ---------------------------------------------------------------------------------
   async function storeFile(file) {
@@ -347,13 +489,18 @@ async function openImportWizard(app, items) {
       return;
     }
     if (!mapping.variantColumn) {
+      if (options.accept) throw new Error(`${files[0].name}: MaveScape found no column of variant names; open it in the window to choose one.`);
       toast('Choose the column of variant names.', { kind: 'error' });
       return false;
     }
     const busy = progressToast('Adding the table to the library…');
     try {
       const stored = [];
-      for (const f of files) stored.push({ fileName: f.name, ...(await storeFile(f.item.file instanceof Blob ? f.item.file : new Blob([f.item.bytes]))) });
+      for (const f of files) stored.push({ fileName: f.name, ...(await storeFile(f.item.file instanceof Blob ? f.item.file : new Blob([f.item.bytes]))), ...(f.role === 'map' ? { role: 'map' } : {}) });
+      // The source is known by its (first) file of counts; a map is one of its files.
+      const lead = stored.find((x) => x.role !== 'map') ?? stored[0];
+      const countFiles = files.filter((f) => f.role !== 'map');
+      const mapFile = files.find((f) => f.role === 'map');
       let ws = app.store.ws;
       let targetId = '';
       const target = currentTarget();
@@ -362,12 +509,12 @@ async function openImportWizard(app, items) {
         ws = added.ws;
         targetId = added.id;
       }
-      const first = files[0].table;
+      const first = countFiles[0]?.table ?? files[0].table;
       const source = {
-        name: files.length === 1 ? files[0].name : `${files.length} tables`,
-        fileName: files[0].name,
-        sha256: stored[0].sha256,
-        size: stored[0].size,
+        name: files.length === 1 ? files[0].name : mapFile && countFiles.length === 1 ? `${countFiles[0].name} with ${mapFile.name}` : `${countFiles.length} tables${mapFile ? ' with a barcode map' : ''}`,
+        fileName: lead.fileName,
+        sha256: lead.sha256,
+        size: lead.size,
         files: stored,
         rows: table.rows,
         columns: table.columns.map((c) => ({ name: c.name, type: c.type, missing: c.missing })),
@@ -375,12 +522,19 @@ async function openImportWizard(app, items) {
         delimiter: first.delimiter,
         lineEnd: first.lineEnd,
         layout: layout.layout,
-        mapping: { variantColumn: mapping.variantColumn, level: mapping.level, mode: state.mode, countColumns: mapping.countColumns.slice(), scoreColumns: { ...mapping.scoreColumns }, absentMeans: files.length > 1 ? state.absentMeans : undefined, derivedNames: layout.layout === 'dimsum' ? 'nt_seq' : undefined, template: state.template ?? undefined },
+        mapping: {
+          variantColumn: mapping.variantColumn, level: mapping.level, mode: state.mode, countColumns: mapping.countColumns.slice(), scoreColumns: { ...mapping.scoreColumns },
+          absentMeans: countFiles.length > 1 ? state.absentMeans : undefined, derivedNames: layout.layout === 'dimsum' ? 'nt_seq' : undefined, template: state.template ?? undefined,
+          // A table of barcodes, and how the files were assembled (dms_variants' layout, Enrich2's
+          // counts, a barcode map and its columns), to assemble them again the same way.
+          barcodeColumn: mapping.barcodeColumn ?? undefined,
+          assembly: assembled.kind !== 'table' || assembled.map ? { kind: assembled.kind, ...(assembled.map ? { map: { barcodeColumn: assembled.map.mapBarcodeColumn, variantColumn: assembled.map.mapVariantColumn } } : {}), ...(assembled.kind === 'codons' ? { codons: state.codons } : {}) } : undefined,
+        },
         target: targetId || undefined,
         roleSuggestions: roles.filter((r) => r.role),
         summary: review.summary,
         problems: { blocking: review.blocking.map((p) => p.message), warnings: review.warnings.map((p) => p.message) },
-        imported: new Date().toISOString(),
+        imported: now(),
       };
       // An untitled workspace takes the name of its first table.
       if (!ws.sources.length && ws.name === 'Untitled workspace') ws = { ...ws, name: source.name.replace(/\.(csv|tsv|tab|txt|xlsx)(\.gz)?$/i, '') };
@@ -388,12 +542,13 @@ async function openImportWizard(app, items) {
       app.store.commit(added.ws, `Import ${source.name}`);
       app.tables.set(added.id, { table, review });
       app.focusItem({ kind: 'source', id: added.id });
-      busy.done(`Imported ${source.name}: ${formatCount(review.summary?.total ?? table.rows)} variants${review.blocking.length ? `; ${review.blocking.length} problem${review.blocking.length > 1 ? 's' : ''} block scoring` : ''}.`);
+      busy.done(`Imported ${source.name}: ${review.summary?.barcodes ? `${formatCount(review.summary.barcodes.rows - review.summary.barcodes.unmapped)} barcodes of ` : ''}${formatCount(review.summary?.total ?? table.rows)} variants${review.blocking.length ? `; ${review.blocking.length} problem${review.blocking.length > 1 ? 's' : ''} block scoring` : ''}.`);
       app.log(`Imported ${source.name} (${source.sha256.slice(0, 12)}…): ${review.summary?.valid ?? 0} valid, ${review.summary?.warning ?? 0} read leniently, ${review.summary?.invalid ?? 0} not valid.`);
       if (app.store.ui.mode === 'welcome') app.setMode('experiment');
       return true;
     } catch (error) {
       busy.fail(`The table could not be added: ${error.message}`);
+      if (options.accept) throw error;
       return false;
     }
   }
@@ -419,7 +574,7 @@ async function openImportWizard(app, items) {
   }
 
   showDialog({
-    title: `Import ${files.length === 1 ? files[0].name : `${files.length} tables`}`,
+    title: `Import ${files.length === 1 ? files[0].name : files.length === 2 ? `${files[0].name} and ${files[1].name}` : `${files.length} files`}`,
     width: 'xwide',
     content,
     buttons: [
@@ -428,4 +583,5 @@ async function openImportWizard(app, items) {
       { label: 'Import', primary: true, onClick: importNow },
     ],
   });
+  return false;
 }

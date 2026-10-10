@@ -8,6 +8,8 @@
 // any particular data set. Checked on three public data sets of different designs (validation
 // suite `designs`, wave 1 slice 2).
 
+import { checkReadout, describeReadout, inText } from './readout.js';
+
 export const DESIGN_FORMAT = 'mavescape-design';
 export const DESIGN_VERSION = 1;
 export const MODELS = ['two-population', 'time-series', 'bins', 'scores'];
@@ -51,15 +53,21 @@ export function replicateSamples(replicate) {
 }
 
 // Samples used by more than one replicate (an input library selected several times), id → [replicate ids].
-export function sharedSamples(design) {
+// withinCondition: only samples shared by replicates of one condition (whose combination they make
+// dependent); an input selected under two conditions is shared between them, which the
+// differential pairs by.
+export function sharedSamples(design, { withinCondition = false } = {}) {
   const users = new Map();
   for (const replicate of design.replicates ?? []) {
     for (const { sample } of replicateSamples(replicate)) {
-      if (!users.has(sample)) users.set(sample, new Set());
-      users.get(sample).add(replicate.id);
+      const key = withinCondition ? `${replicate.condition ?? ''}\u0000${sample}` : sample;
+      if (!users.has(key)) users.set(key, { sample, ids: new Set() });
+      users.get(key).ids.add(replicate.id);
     }
   }
-  return new Map([...users].filter(([, ids]) => ids.size > 1).map(([id, ids]) => [id, [...ids]]));
+  const out = new Map();
+  for (const { sample, ids } of users.values()) if (ids.size > 1) out.set(sample, [...new Set([...(out.get(sample) ?? []), ...ids])]);
+  return out;
 }
 
 // Checks a design, and its columns against a table's header when `table` ({ columns }) is given.
@@ -124,6 +132,13 @@ export function validateDesign(design, table = null) {
   const tiles = design.library?.tiles ?? [];
   const tileIds = new Set();
   if (design.library?.level && !['variant', 'barcode'].includes(design.library.level)) error('library.level', 'The library level must be variant or barcode.');
+  // A table of barcodes: one row per barcode, each naming its variant.
+  const barcodeColumn = design.library?.barcodeColumn;
+  if (design.library?.level === 'barcode') {
+    if (typeof barcodeColumn !== 'string' || !barcodeColumn) error('library.barcodeColumn', 'A table of barcodes names its column of barcodes (library.barcodeColumn).');
+    else if (barcodeColumn === design.variants?.column) error('library.barcodeColumn', 'The barcodes and the variants they carry are different columns.');
+    else if (columns && !columns.has(barcodeColumn)) error('library.barcodeColumn', `The table has no column "${barcodeColumn}".`);
+  } else if (barcodeColumn !== undefined) error('library.barcodeColumn', 'A column of barcodes belongs to a table of barcodes (library.level "barcode").');
   tiles.forEach((tile, i) => {
     const path = `library.tiles[${i}]`;
     if (!ID.test(tile.id ?? '')) error(`${path}.id`, 'A tile needs an id.');
@@ -165,6 +180,7 @@ export function validateDesign(design, table = null) {
       columnOwner.set(column, sample.id);
       if (columns && !columns.has(column)) error(`${path}.columns`, `The table has no column "${column}" (sample "${sample.id}").`);
     }
+    if (sample.missingMeansZero !== undefined && typeof sample.missingMeansZero !== 'boolean') error(`${path}.missingMeansZero`, 'missingMeansZero is true or false.');
   });
   if (model === 'scores' && samples.length) warn('samples', 'A score-only design does not use samples.');
 
@@ -223,6 +239,14 @@ export function validateDesign(design, table = null) {
       const orders = bins.map((b) => b.order);
       if (new Set(orders).size !== orders.length) error(`${path}.bins`, `Replicate "${replicate.id}" has two bins with the same order.`);
       if (bins.some((b) => !Number.isFinite(b.value))) error(`${path}.bins`, 'Every bin needs a numeric value (its weight, rank or fluorescence).');
+      // Gates, for the maximum-likelihood estimate: positive, each bin's below its upper, and the
+      // bins in order without overlap (the outer bins open).
+      const gated = [...bins].sort((x, y) => x.order - y.order);
+      if (gated.some((b) => b.lower !== undefined || b.upper !== undefined)) {
+        if (gated.some((b) => (b.lower !== undefined && !(b.lower > 0)) || (b.upper !== undefined && !(b.upper > 0)))) error(`${path}.bins`, 'Gates are positive fluorescence values.');
+        else if (gated.some((b) => b.lower !== undefined && b.upper !== undefined && !(b.lower < b.upper))) error(`${path}.bins`, `A bin of replicate "${replicate.id}" has its lower gate at or above its upper.`);
+        else if (gated.some((b, k) => k > 0 && (gated[k - 1].upper === undefined || b.lower === undefined || b.lower < gated[k - 1].upper))) warn(`${path}.bins`, `The gates of replicate "${replicate.id}" leave gaps or overlaps, or an inner bin open: the maximum-likelihood estimate needs each bin's lower gate at or above the bin below's upper.`);
+      }
       const byOrder = [...bins].sort((a, b) => a.order - b.order);
       for (let j = 1; j < byOrder.length; j += 1) {
         if (byOrder[j].value <= byOrder[j - 1].value) {
@@ -237,6 +261,13 @@ export function validateDesign(design, table = null) {
   });
   for (const id of sampleIds) {
     if (!used.has(id) && model !== 'scores') warn('samples', `Sample "${id}" is in no replicate and is not scored.`);
+  }
+  // Missing read as 0 is for samples after selection: in a replicate's first sample it would
+  // count a variant that was never in the library as present with no reads.
+  for (const replicate of replicates) {
+    const first = replicateSamples(replicate).filter((p) => p.role !== 'bin').map((p) => ({ ...p, time: p.role === 'input' ? 0 : p.role === 'output' ? 1 : p.time })).sort((a, b) => a.time - b.time)[0];
+    const sample = first && samples.find((x) => x.id === first.sample);
+    if (sample?.missingMeansZero) warn(`samples`, `Sample "${sample.id}" is the first of replicate "${replicate.id}" and its missing counts are read as 0: a variant that was never in the library would count as present with no reads. Read missing as 0 only in samples after selection.`);
   }
   // Replicates of one condition and tile should use the same kind of experiment: the same times
   // or the same bins, so that their scores can be combined.
@@ -273,7 +304,7 @@ export function validateDesign(design, table = null) {
     if (entry.copyOf !== undefined && !columnOwner.has(entry.copyOf)) error(`ignoredColumns[${i}].copyOf`, `Column "${entry.column}" is a copy of "${entry.copyOf}", which no sample uses.`);
   }
   if (columns) {
-    const accounted = new Set([design.variants?.column, ...IDENTIFIER_COLUMNS, ...columnOwner.keys(), ...ignored.keys(), ...Object.values(model === 'scores' ? design.scores ?? {} : {})]);
+    const accounted = new Set([design.variants?.column, design.library?.barcodeColumn, ...IDENTIFIER_COLUMNS, ...columnOwner.keys(), ...ignored.keys(), ...Object.values(model === 'scores' ? design.scores ?? {} : {})]);
     const unaccounted = table.columns.filter((c) => !accounted.has(c));
     if (unaccounted.length) {
       const shown = unaccounted.slice(0, 6).map((c) => `"${c}"`).join(', ');
@@ -287,7 +318,23 @@ export function validateDesign(design, table = null) {
   for (const key of ['synonymous', 'nonsense']) {
     const value = controls[key];
     if (value !== undefined && value !== 'auto' && value !== 'none' && !(Array.isArray(value) && value.every((v) => typeof v === 'string'))) error(`controls.${key}`, `${key} controls are "auto", "none" or a list of variants.`);
+    // Where the class serves as a control (MaveScape 0.2): positions start…end of the target.
+    const range = controls.positions?.[key];
+    if (range !== undefined) {
+      const length = targets.length === 1 ? targetLength(targets[0], level) : Infinity;
+      const ok = (x) => x === undefined || (Number.isInteger(x) && x >= 1 && x <= length);
+      if (!isObject(range) || !ok(range.start) || !ok(range.end)) error(`controls.positions.${key}`, `The positions of the ${key} controls are whole numbers within the target (1–${length}).`);
+      else if (range.start !== undefined && range.end !== undefined && range.end < range.start) error(`controls.positions.${key}`, `The ${key} controls end (${range.end}) before they start (${range.start}).`);
+    }
   }
+  for (const key of Object.keys(controls.positions ?? {})) if (!['synonymous', 'nonsense'].includes(key)) error(`controls.positions.${key}`, 'Positions are given for the synonymous and nonsense controls.');
+  for (const [key, why] of Object.entries(controls.why ?? {})) {
+    if (!['wildType', 'synonymous', 'nonsense'].includes(key)) error(`controls.why.${key}`, 'Reasons are given for the wild type, synonymous and nonsense controls.');
+    else if (typeof why !== 'string') error(`controls.why.${key}`, 'A reason is text.');
+  }
+
+  // --- What the assay measures (MaveScape 0.2) ---
+  checkReadout(design, error, warn);
 
   return { ok: errors.length === 0, errors, warnings };
 }
@@ -342,12 +389,15 @@ export function summarizeDesign(design) {
   } else if (design.model === 'scores') {
     lines.push(`${MODEL_NAMES[design.model]}: column "${design.scores?.score}"${design.scores?.se ? ` with standard errors in "${design.scores.se}"` : ''}.`);
   }
+  if (design.library?.level === 'barcode') lines.push(`A table of barcodes (column "${design.library.barcodeColumn}"): each row a barcode carrying the variant in "${design.variants?.column}".`);
   if (shared.size) {
     const sizes = new Set([...shared.values()].map((ids) => ids.length));
     lines.push(`${plural(shared.size, 'sample is', 'samples are')} shared between replicates (${[...sizes].join(' or ')} each): replicates that share an input are not independent there.`);
   }
   const technical = (design.samples ?? []).filter((s) => s.columns.length > 1);
   if (technical.length) lines.push(`${plural(technical.length, 'sample has', 'samples have')} technical replicates (several columns), summed before scoring.`);
+  const zero = (design.samples ?? []).filter((s) => s.missingMeansZero);
+  if (zero.length) lines.push(`Missing counts are read as 0 in ${zero.length > 3 ? plural(zero.length, 'sample') : zero.map((s) => s.name ?? s.id).join(', ')} (variants that dropped out during selection, written as missing).`);
   if (counts.ignoredColumns) {
     const reasons = new Map();
     for (const entry of design.ignoredColumns) {
@@ -356,8 +406,22 @@ export function summarizeDesign(design) {
     }
     lines.push(`${plural(counts.ignoredColumns, 'column')} not used: ${[...reasons].map(([reason, n]) => `${n} ${reason}`).join('; ')}.`);
   }
+  if (design.library?.method) lines.push(`The library was made by ${inText(design.library.method)}.`);
+  lines.push(describeReadout(design));
   const controls = design.controls ?? {};
-  const named = (value) => (value === undefined || value === 'auto' ? 'found automatically' : value === 'none' ? 'none' : plural(value.length, 'variant'));
-  lines.push(`Controls: wild type ${controls.wildType && controls.wildType !== 'auto' ? `"${controls.wildType}"` : 'found automatically'}; synonymous ${named(controls.synonymous)}; nonsense ${named(controls.nonsense)}.`);
+  const where = (key) => {
+    const r = controls.positions?.[key];
+    if (!r || (r.start === undefined && r.end === undefined)) return '';
+    return r.start !== undefined && r.end !== undefined ? ` at positions ${r.start}–${r.end}` : r.start !== undefined ? ` from position ${r.start}` : ` up to position ${r.end}`;
+  };
+  const named = (key) => {
+    const value = controls[key];
+    return `${value === undefined || value === 'auto' ? 'found automatically' : value === 'none' ? 'none' : plural(value.length, 'variant')}${value === 'none' ? '' : where(key)}`;
+  };
+  lines.push(`Controls: wild type ${controls.wildType && controls.wildType !== 'auto' ? `"${controls.wildType}"` : 'found automatically'}; synonymous ${named('synonymous')}; nonsense ${named('nonsense')}.`);
+  for (const [key, label] of [['wildType', 'The wild type'], ['synonymous', 'Synonymous controls'], ['nonsense', 'Nonsense controls']]) {
+    const why = controls.why?.[key]?.trim();
+    if (why) lines.push(`  ${label}: ${why.replace(/[.\s]+$/, '')}.`);
+  }
   return { model: design.model, counts, lines };
 }

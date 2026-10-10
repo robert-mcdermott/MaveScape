@@ -7,9 +7,13 @@
 
 import { KIND_NAMES, STATUS_NAMES } from './variants.js';
 import { STAGE_BY_CODE, flagNames, REPLICATE_STATE_NAMES } from './filters.js';
-import { describeParameters } from './runs.js';
+import { describeParameters, isBarcodeRun } from './runs.js';
+import { DIFFERENTIAL_REASON_NAMES } from './differential.js';
 import { canonicalJSON } from './workspace.js';
 import { sha256 } from './sha256.js';
+import { columnText } from './csv.js';
+import { tQuantile } from './distributions.js';
+import { anchorUncertainty } from './anchors.js';
 
 export const EXPORT_VERSION = 1;
 const Z = 1.959963984540054;
@@ -40,21 +44,35 @@ export function statusOf(c, i) {
   return c.flags[i] ? 'low confidence' : 'scored';
 }
 
+// A score's 95% interval: [low, high], with t's quantile at the moderated combination's degrees
+// of freedom (wave 2, slice 9), else the normal's.
+const QUANTILES = new Map();
+export function intervalOf(c, i) {
+  const d = c.df ? c.df[i] : Infinity;
+  if (!QUANTILES.has(d)) QUANTILES.set(d, Number.isFinite(d) ? tQuantile(0.975, d) : Z);
+  const q = QUANTILES.get(d);
+  return [c.score[i] - q * c.se[i], c.score[i] + q * c.se[i]];
+}
+
 // The scores of one condition of a run, one row per variant of the table, in table order.
 export function scoresCSV(results, run, condition = 0) {
   const c = results.conditions[condition];
   const level = run.inputs.design.variants.level;
   const v = results.variants;
   const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
-  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'score', 'SE', 'ci95_lower', 'ci95_upper', 'replicates', 'replicates_expected', 'status', 'flags', 'tau2', 'I2', 'leave_one_out', 'variant_as_written', 'variant_class',
+  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'score', 'SE', 'ci95_lower', 'ci95_upper', 'df', 'SE_scale', 'replicates', 'replicates_expected', 'status', 'flags', 'tau2', 'I2', 'leave_one_out', 'variant_as_written', 'variant_class',
     ...reps.flatMap((r) => [`score_${safe(r.id)}`, `SE_${safe(r.id)}`])];
+  // The rescaling anchors' shared uncertainty, apart from each score's SE (SE_scale).
+  const scale = anchorUncertainty(results, run.inputs.design, condition);
   const rows = [];
   for (let i = 0; i < results.rows; i += 1) {
     const scored = !c.reason[i];
+    const [low, high] = scored ? intervalOf(c, i) : [Number.NaN, Number.NaN];
     rows.push([
       ...hgvsColumns(level, v.key[i]),
       num(scored ? c.score[i] : Number.NaN), num(scored ? c.se[i] : Number.NaN),
-      num(scored ? c.score[i] - Z * c.se[i] : Number.NaN), num(scored ? c.score[i] + Z * c.se[i] : Number.NaN),
+      num(low), num(high),
+      scored && c.df ? (Number.isFinite(c.df[i]) ? num(c.df[i]) : 'Inf') : 'NA', num(scored && scale ? scale.at(c.score[i]) : Number.NaN),
       String(c.k[i]), String(c.expected[i]), statusOf(c, i), c.flags[i] ? flagNames(c.flags[i]).join('; ') : '',
       num(c.tau2[i]), num(c.i2[i]), num(c.loo[i]), v.original[i], v.status[i] === 3 ? 'invalid' : KIND_NAMES[v.kind[i]],
       ...reps.flatMap((r) => [num(r.score[i]), num(r.se[i])]),
@@ -63,19 +81,77 @@ export function scoresCSV(results, run, condition = 0) {
   return csv(header, rows);
 }
 
-// The counts the run scored: the design's variant column and every count column it uses (copies
-// of shared samples too), as the table has them, NA where a count is missing.
+// The counts the run scored: the design's variant column (and a table of barcodes' barcodes) and
+// every count column it uses (copies of shared samples too), as the table has them, NA where a
+// count is missing.
 export function countsCSV(table, design) {
   const byName = new Map(table.columns.map((col) => [col.name, col]));
-  const names = byName.get(design.variants.column).values;
+  const names = columnText(byName.get(design.variants.column));
+  const barcodeColumn = design.library?.level === 'barcode' ? design.library.barcodeColumn : null;
+  const barcodes = barcodeColumn ? columnText(byName.get(barcodeColumn)) : null;
   const columns = [...design.samples.flatMap((s) => s.columns), ...(design.ignoredColumns ?? []).filter((x) => x.copyOf).map((x) => x.column)];
   const level = design.variants.level;
-  const header = [...['hgvs_nt', 'hgvs_splice', 'hgvs_pro'].filter((h) => h !== design.variants.column), design.variants.column, ...columns];
+  const header = [...(barcodeColumn ? [barcodeColumn] : []), ...['hgvs_nt', 'hgvs_splice', 'hgvs_pro'].filter((h) => h !== design.variants.column), design.variants.column, ...columns];
   const rows = names.map((name, i) => {
     const ids = hgvsColumns(level, name);
     const identity = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro'].map((h, k) => [h, ids[k]]).filter(([h]) => h !== design.variants.column).map(([, x]) => x);
-    return [...identity, name, ...columns.map((c) => num(byName.get(c).numeric ? byName.get(c).numeric[i] : Number.NaN))];
+    return [...(barcodes ? [barcodes[i]] : []), ...identity, name, ...columns.map((c) => num(byName.get(c).numeric ? byName.get(c).numeric[i] : Number.NaN))];
   });
+  return csv(header, rows);
+}
+
+// A table of barcodes, barcode by barcode: its variant (MAVE-HGVS, and as written), and in each
+// replicate its counts (before and after; for sorted bins, in each bin), its score and SE, its
+// departure from its variant's other barcodes (z over √φ), whether it is an outlier, and whether
+// it was used. NA where a replicate does not count it.
+export function barcodesCSV(results, run) {
+  const b = results.barcodes;
+  if (!b) throw new Error(`${run.name} scored a table of variants, not of barcodes.`);
+  const counts = new Map((results.samples ?? []).map((x) => [x.id, x.barcodeCounts]));
+  const reps = results.replicates;
+  const level = run.inputs.design.variants.level;
+  const header = ['barcode', level === 'protein' ? 'hgvs_pro' : 'hgvs_nt', 'variant_as_written', ...reps.flatMap((r) => (r.bins
+    ? r.samples.map((_, k) => `bin${k + 1}_${safe(r.id)}`)
+    : ['before', 'after', 'score', 'SE', 'z', 'outlier', 'used'].map((x) => `${x}_${safe(r.id)}`)))];
+  const v = results.variants;
+  const rows = [];
+  for (let m = 0; m < b.rows; m += 1) {
+    const i = b.variantOf[m];
+    const cells = [b.ids[m], i >= 0 ? v.key[i] || 'NA' : 'NA', i >= 0 ? v.original[i] : 'NA'];
+    for (const r of reps) {
+      const here = r.samples.map((id) => counts.get(id)?.[m] ?? Number.NaN);
+      if (r.bins) {
+        cells.push(...here.map(num));
+        continue;
+      }
+      const rb = r.barcodes;
+      const counted = here.every(Number.isFinite);
+      const used = !counted || i < 0 ? 'no' : rb.outlier[m] && rb.excluded ? 'no (outlier)' : rb.state[m] ? REPLICATE_STATE_NAMES[rb.state[m]] : 'yes';
+      cells.push(num(here[0]), num(here[here.length - 1]), num(rb.score[m]), num(rb.se[m]), num(rb.z[m]), counted ? (rb.outlier[m] ? 'yes' : 'no') : 'NA', used);
+    }
+    rows.push(cells);
+  }
+  return csv(header, rows);
+}
+
+// Differential scores between conditions, one row per variant of the table: for each contrast
+// (each condition against the reference) the difference, its SE, 95% interval, p and BH-adjusted
+// q, the method, the pairs or replicates behind it (limma, and pairs combined by the moderated
+// combination: t), and why there is none. NA where there is none.
+export function differentialCSV(results, run) {
+  const ds = results.differential;
+  if (!ds?.length) throw new Error(`${run.name} compares no conditions.`);
+  const level = run.inputs.design.variants.level;
+  const v = results.variants;
+  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'variant_as_written', ...ds.flatMap((d) => ['difference', 'SE', 'ci95_lower', 'ci95_upper', d.method === 'limma' || d.df ? 't' : 'z', 'p', 'q', d.method === 'limma' ? 'replicates' : 'pairs', 'status'].map((x) => `${x}_${safe(d.id)}`))];
+  const rows = [];
+  for (let i = 0; i < results.rows; i += 1) {
+    rows.push([...hgvsColumns(level, v.key[i]), v.original[i], ...ds.flatMap((d) => {
+      const ok = !d.reason[i];
+      const x = (a) => num(ok ? a[i] : Number.NaN);
+      return [x(d.delta), x(d.se), x(d.ciLow), x(d.ciHigh), x(d.z), x(d.p), x(d.q), ok ? String(d.k[i]) : 'NA', DIFFERENTIAL_REASON_NAMES[d.reason[i]]];
+    })]);
+  }
   return csv(header, rows);
 }
 
@@ -83,6 +159,15 @@ export function countsCSV(table, design) {
 export function qcSamplesCSV(qc) {
   const header = ['sample', 'columns', 'roles', 'counted', 'missing', 'missing_fraction', 'total_reads', 'reads_per_variant', 'zeros', 'zero_fraction', `below_${qc.measures.lowCount}`, 'low_fraction', 'q05', 'q25', 'median', 'q75', 'q95'];
   return csv(header, qc.samples.map((s) => [s.id, s.columns.join('+'), s.roles.map((r) => `${r.replicate}:${r.role}${r.time !== undefined ? `@${r.time}` : ''}`).join(' '), String(s.counted), String(s.missing), num(s.missingFraction), num(s.total), num(s.readsPerVariant), String(s.zeros), num(s.zeroFraction), String(s.low), num(s.lowFraction), ...s.quantiles.map(num)]));
+}
+
+// The QC findings (wave 2, slice 8): each with its status, what it found, its threshold, the
+// causes that fit it and what to do next, and its acknowledgement (reason, the status it was
+// acknowledged at), if one holds.
+export function qcFindingsCSV(findings) {
+  const header = ['finding', 'title', 'status', 'blocking', 'from', 'value', 'threshold', 'acknowledged', 'acknowledged_status', 'reason', 'causes', 'next'];
+  const join = (list) => (list?.length ? list.map((x) => `${x.kind}: ${x.text}`).join(' | ') : 'NA');
+  return csv(header, findings.map((f) => [f.id, f.title, f.status === 'na' ? 'not assessed' : f.status, f.blocking ? 'yes' : 'no', f.level ?? 'counts', f.value, f.threshold, f.acknowledged?.current ? 'yes' : 'no', f.acknowledged?.current ? f.acknowledged.status : 'NA', f.acknowledged?.current ? f.acknowledged.reason : 'NA', join(f.advice?.causes), join(f.advice?.next)]));
 }
 
 // QC per variant: how each replicate measured it, and the flags of its score.
@@ -127,7 +212,7 @@ export function provenanceJSON(run, ws, { qc = null, findings = null, thresholds
       created: run.created,
       software: run.software,
       parameters: run.inputs.parameters,
-      description: describeParameters(run.inputs.parameters),
+      description: describeParameters(run.inputs.parameters, isBarcodeRun(run)),
       output: run.output,
       warnings: run.warnings,
     },
@@ -137,7 +222,7 @@ export function provenanceJSON(run, ws, { qc = null, findings = null, thresholds
       design: run.inputs.design,
       designSha256: null,
     },
-    qc: findings ? { thresholds, findings: findings.map((f) => ({ id: f.id, status: f.status, blocking: f.blocking, value: f.value, threshold: f.threshold })), measures: qc?.measures ?? null } : null,
+    qc: findings ? { thresholds, findings: findings.map((f) => ({ id: f.id, status: f.status, blocking: f.blocking, value: f.value, threshold: f.threshold, ...(f.acknowledged?.current ? { acknowledged: { reason: f.acknowledged.reason, status: f.acknowledged.status, time: f.acknowledged.time } } : {}) })), measures: qc?.measures ?? null } : null,
     workspace: { id: ws.id, name: ws.name, historyHead: ws.history.at(-1)?.hash ?? null, historyEntries: ws.history.length },
     files,
     researchUse: 'Experimental functional effects for research. Not a clinical classification: no variant is called pathogenic or benign.',

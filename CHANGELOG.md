@@ -1,5 +1,318 @@
 # Changelog
 
+## 0.2.0 (2026-10-10)
+
+Wave 2 of the [roadmap](mavescape-spec/roadmap.md): every common experiment design, each checked
+against an independent reference (time series, sorted bins, barcodes, DiMSum's error model, two
+conditions), headless runs and remote control; then what the scores mean: what the assay measures,
+findings in context, intervals that hold the truth, what each analysis can do with what is there,
+and nine examples. A workspace saved by 0.1.0 opens and reproduces its runs; one saved by 0.2.0 is
+kept for later versions to do the same.
+
+### Added
+
+- **Remote control (wave 2, slice 1).** `mavescape --remote-control` lets programs on this computer
+  drive the open window through `/api/remote/action`: `get_state`, `new_workspace`,
+  `open_example`, `open_files`, `set_mode`, `focus`, `draft_design`, `set_design`, `score`,
+  `qc_findings`, `select_variants`, `inspect_variant`, `render_map` and `export` (scores, counts,
+  QC, provenance, methods, references, the map, a selection or the workspace archive). Each action
+  happens in the window, its changes go into the history and can be undone; names are forgiving, and a wrong
+  one is answered with the choices. `GET /api/remote/tools` lists the actions with their arguments.
+  MaveScape writes its address and a token to `remote.json` in its data folder (readable by its
+  owner only, removed on exit); reading and writing files needs the token. Only programs on this
+  computer, never other web pages, can send actions. The hub, the connection file and the export
+  writer are ported from CytoWeave 0.8.0.
+- **Screenshots captured through remote control.** `docs/capture/capture.mjs` builds MaveScape,
+  runs each scene on an empty library in headless Chrome by remote actions, and writes it in the
+  light and dark themes to `docs/images/` (optionally auditing each with axe-core). Ten scenes: the
+  start page, import, the design and its draft, scoring, QC, the map, a saved selection, the map by
+  standard error, and the exports.
+- **The website** (`docs/site/`, published on GitHub Pages from the `gh-pages` branch): home,
+  install, science (the validation, with its numbers) and a guide of eleven pages (getting started,
+  the examples, opening your data, the design, scoring, QC, the map and the inspector, the record,
+  scripting, troubleshooting), with the screenshots in both themes. The build checks every link,
+  anchor and screenshot. The README shows the map's screenshot.
+- **The import wizard accepts what it detected** when asked (remote control's `open_files`), and
+  leaves the wizard open for review otherwise.
+- **Time series scored by regression (wave 2, slice 2).** A time series of three or more time
+  points is scored by default from every time point: each variant's score is the slope of its
+  normalized log count on time scaled to 0–1, by weighted least squares as Enrich2 computes it
+  (ordinary least squares and the log ratio of the first and last samples are the other choices),
+  on unevenly spaced times. A variant is fitted on the time points where it was counted, at least
+  three with the first among them; fewer than the replicate has are flagged low confidence. The
+  slope's SE is scaled by the residuals and, by default, never below what counting alone predicts;
+  the Enrich2-compatible preset keeps Enrich2's. Equal to Enrich2 2.0.2's WLS and OLS to
+  5 × 10⁻¹³ on BRCA1's two assays and a new time-series fixture, and to statsmodels to 5 × 10⁻¹⁴.
+- **Time-series quality control:** "Time points used" and "Fit of the time courses" (how far the
+  time courses scatter about their lines against counting noise), with plots; the variant inspector
+  draws each replicate's time course and its fitted line.
+- **"Missing = 0"** per sample in the Experiment view (`missingMeansZero` in the design), for tables
+  that write variants that dropped out during selection as missing; scoring and QC read the counts
+  the same way, and the run records it.
+- **A third example: a simulated time series** with known effects (five times over eight
+  generations), and time series in the simulator, with an optional bottleneck at every passage.
+- **Sorted bins (FACS) scored (wave 2, slice 3)** by the weighted average of the bins' values
+  (VAMP-seq), with an analytic or seeded-bootstrap SE, or by the censored log-normal
+  maximum-likelihood fit from the bins' gates (Peterman and Levine 2016), reads reweighted by the
+  cells sorted into each bin. Each replicate is scaled so that nonsense scores 0 and the wild type 1
+  (VAMP-seq), or the median of its lowest 5% 0 (MultiSTEP). A VAMP-seq preset and the mean of
+  replicates (SE = SD/√k). Factor IX's published scores are reproduced from its counts to
+  10⁻¹⁵, and the maximum-likelihood fits equal fitdistrplus's to 3 × 10⁻⁷.
+- **The design records each bin's gates and the cells sorted into it**, edited in the Experiment
+  view.
+- **Sorted-bin quality control:** "Occupancy of the bins" and "Cells sorted per variant", and
+  replicate agreement, variance beyond counting and outlier replicates from the bins' weighted
+  averages, replicates compared within their tile. The inspector shows a variant's distribution
+  over the bins beside the wild type's.
+- **A fourth example: a simulated sort-seq experiment** with gates, cells and known shifts.
+- **Tables of barcodes (wave 2, slice 4).** A count table whose rows are barcodes, opened with the
+  barcode-to-variant map that names each barcode's variant: MAVE-HGVS or lab names, dms_variants'
+  substitutions, or whole variant sequences (Enrich2's map) named against the target. A barcode the
+  map gives two different variants is left unmapped and listed, never resolved by guessing. The
+  design names the column of barcodes (`library.barcodeColumn`); the source keeps the counts, the
+  map and how they were put together, and assembles them again whenever it is read.
+- **Barcodes scored two ways:** summed per variant, then scored (Enrich2; dms_variants by
+  substitution), or each barcode scored against its replicate's normalizers (dms_variants by
+  barcode) and a variant's barcodes combined within the replicate by REML, fixed effects or their
+  mean. Every barcode is compared with its variant's others (its departure over √φ, φ being how much
+  more a replicate's barcodes disagree than counting explains), and outliers are found one at a
+  time. Two filters: a minimum of barcodes per variant, and the barcode filter, which leaves
+  outliers out. Equal to dms_variants 1.6.0's `func_scores` by barcode and by substitution to
+  5 × 10⁻¹³. The inspector lists a variant's barcodes in each replicate; a run's barcodes export
+  one by one (CSV).
+- **Barcode quality control:** "Barcodes the map names", "Barcodes per variant", "Agreement of a
+  variant's barcodes" (φ and the split-half r) and "Outlier barcodes", with plots.
+- **More layouts recognized at import (D12):** dms_variants' `variant_counts` (made one row per
+  library and barcode, a count column per library and sample) and Enrich2's counts files (one per
+  sample, its elements named in MAVE-HGVS, or barcodes with its map).
+- **A fifth example: a simulated barcoded library** with a map in conflict and outlier barcodes.
+- **A million rows (D9, S12).** `validation/bench.mjs` imports a million-barcode table and its
+  million-line map in 3.5 s (budget 15 s, the process at most 830 MB of a 1 GB budget) and scores
+  it in 1.3 s; `validation/browser-bench.mjs` does the same in the window in headless Chrome (3–4 s,
+  the browser's memory up by about 600 MB at most). Both run in CI.
+- **DiMSum's fitness and error model (wave 2, slice 5; S9).** For an input and an output,
+  *Scored by* offers DiMSum's model (Faure et al. 2020), as DiMSum 1.4 computes it: fitness with
+  no pseudocount (an optional dropout pseudocount for outputs of 0), each replicate scaled and
+  shifted to agree with the others, and an error model with a multiplicative term for each input
+  and output and an additive term per replicate, carried into every variant's SE; replicates are
+  merged by inverse variance. The error model is linear in its terms, so MaveScape fits it exactly
+  on every variant (bounded least squares) where DiMSum averages 100 nonlinear fits of bootstrap
+  samples, and reports the 10th–90th percentiles of a seeded bootstrap. A DiMSum-compatible
+  preset; the run lists each replicate's scale, shift and terms, and its methods give them.
+  Against DiMSum 1.4's own functions on GRB2, DiMSum's demo and a fixture: the same threshold and
+  variants fitted, the scales and shifts within 5 × 10⁻⁷, the error model within 5 × 10⁻⁶ of
+  DiMSum's own fit on every variant and inside its percentiles, and every fitness, σ and merged
+  score within 10⁻¹² given DiMSum's parameters. On simulated bottlenecks, its 95% intervals hold
+  the true effects 93–96% of the time (counting alone, 67–69%).
+- **Where the bottleneck is (Q4).** "Variance beyond counting" fits DiMSum's error model to the
+  counts and says whether the excess is before selection or after it, with a plot of the terms.
+  The GRB2 example now shows its bottleneck at the inputs (20–38× counting) and scores with the
+  DiMSum-compatible preset in its guide.
+- **Remote control's `score` takes the `dimsum` preset** and returns each replicate's fitted model.
+- **Two conditions compared (wave 2, slice 6; S10).** With two or more conditions, each condition
+  is compared with the reference: every variant measured in both gets a differential score with its
+  SE, 95% interval, p and Benjamini–Hochberg q. Three methods, under *Conditions compared by*:
+  limma's moderated t on voom log counts with a term for each input library and for selection in
+  each condition, as mutscan's `calculateRelativeFC` computes it (the default where it applies:
+  two populations, relative to the wild type or the synonymous variants, with residual degrees of
+  freedom); replicates paired by their shared input, whose counting error cancels from each pair's
+  difference; and the conditions as independent (Enrich2's z, the Enrich2-compatible preset's).
+  limma's statistics (`web/lib/limma.js`, `web/lib/distributions.js`) are written from the
+  publications, not from limma's source (GPL). Equal to mutscan 1.2.0 within 2 × 10⁻¹⁰ on a
+  two-condition fixture and on CBS at two vitamin B6 levels (MaveDB, four shared inputs), and to
+  Enrich2 2.0.2's z between conditions within 5 × 10⁻¹³. Runs made before keep their output
+  hashes: the differential enters a run only when its parameters ask for it.
+- **The differential on the map and in the inspector (V2):** *Color by* differential score, centered
+  on no difference, a variant without one shown filtered with why; the inspector gives a variant's
+  score in each condition and each difference with its interval and q (paired, each pair's too).
+  The Score view's *Between conditions* pane: how each comparison was made, how many variants
+  differ, a volcano plot and the largest differences. A run's differential scores export as CSV,
+  and its methods describe the comparison with its references.
+- **A sixth example: a simulated two-condition experiment** (one input selected without and with a
+  ligand; a binding site that matters only with it), opening on its differential map; and two
+  conditions in the simulator.
+- **Remote control:** `score` summarizes each comparison, `inspect_variant` gives a variant's
+  differences, `render_map` colors by the differential (`contrast` chooses one), `export` writes
+  `differential`.
+- **Headless runs (wave 2, slice 7; M1).** `mavescape run --design design.json --out results/
+  counts.csv` scores without a window, in a headless Chrome on a private port: it checks the table,
+  the design and the parameters first and scores nothing when anything blocks scoring, then writes
+  the scores (a file per condition), counts, QC, differential scores, barcodes, the map, the
+  provenance, methods and references, the workspace archive and `run.json` (the inputs and outputs
+  with SHA-256, each step, the run and its QC). `--time` or SOURCE_DATE_EPOCH: every file the same
+  bytes for the same inputs. `--from-workspace` reruns a saved run and fails unless it reproduces.
+  `--log json`, `--strict`, `--overwrite`; exit status 0, 1 (not done, or a blocking problem) or 2
+  (a wrong command line). Checked by `validation/headless-run.mjs` in CI.
+- **`mavescape validate` (M2):** tables, a design and parameters checked as scoring would; exit 1
+  with what blocks scoring; `--json`.
+- **Remote control:** `check` (what would block scoring) and `reproduce_run` (a saved run recomputed
+  and checked against its output hash).
+- **What the assay measures (wave 2, slice 8; E7).** The design's `readout` records what was
+  measured, its direction (a higher score means more of the function, less of it, or a larger
+  change with no sign) and the assay's method, mechanism and model system, in MaveDB's controlled
+  keywords. `library.method` says how the library was made. In the Experiment view, *What the assay
+  measures* edits them and the controls. The design's summary, the methods and the exports carry
+  the readout; until its direction is stated, MaveScape takes a higher score to mean more of the
+  function and says so. The bundled examples state theirs.
+- **Controls that fit the assay:** each control class can be limited to the positions where it
+  serves (`controls.positions`) with why it is a control (`controls.why`); normalization,
+  rescaling and QC use the limits.
+- **Findings in context (Q11).** Every QC finding to review or failing says what could cause it (in
+  the experiment, in the analysis, or expected from the library or assay) and what to do next (a
+  plot to look at, an analysis choice, or what needs another experiment); one not assessed says
+  what it needs. The separation of the controls reads the readout's direction, says when the
+  nonsense variants score on the other side, and finds where late stops stop losing the function
+  (position 93 in BRCA1's Y2H assay) to suggest limiting the controls. Coverage of a library made
+  by error-prone PCR or doped oligos is judged against the substitutions one base change makes.
+- **Acknowledging a finding:** *Acknowledge…* in the QC view, `acknowledge_finding` by remote
+  control, and `mavescape run --acknowledge id=reason` record why a finding is expected here. The
+  finding keeps its status; the reason goes into the history, the methods, the provenance, and the
+  new `qc_findings.csv` export of every finding with its causes, next steps and acknowledgement.
+- **Archives that keep opening:** a workspace saved by MaveScape 0.1.0 is kept as a fixture
+  (`validation/archives/`); this version opens it and reproduces its runs, and each release adds
+  one. 0.2.0's (`release-0.2.0.msz`) holds every kind of source and run 0.2 brought (barcodes with
+  their map, sorted bins, two conditions, codon variants per generation, DiMSum's model, the
+  moderated combination), and the replay assembles each run's source as the window does.
+- **Intervals that hold the truth (wave 2, slice 9; S13).** A new way to combine replicates, the
+  *moderated combination*, learns the noise beyond counting from every variant at once: a replicate
+  score's variance is *a* × counting + *b*, fitted robustly to how far replicates disagree (as
+  DiMSum's error model), with the reference's shared shift measured apart, and each variant's own
+  dispersion moderated toward the others' by empirical Bayes (as limma moderates variances). Its
+  95% intervals use t at each score's degrees of freedom (Satterthwaite's, when the reference's
+  shift counts); the inspector shows them. Replicates that share a sample (one input selected
+  several times, one time-0 sample) are combined by generalized least squares with its covariance,
+  so the shared sample is counted once. The run's notes and methods give the fitted model.
+- **The rescaling anchors' uncertainty (S11):** rescaled scores report the anchors' own error, which
+  moves every score together, apart from each score's SE (`SE_scale`, by the delta method), in the
+  inspector, the scores export and the methods.
+- **Scores export:** `df` and `SE_scale` columns; `ci95_lower` and `ci95_upper` use t at `df`.
+- **The coverage suite** (`validation/coverage.mjs`, in CI): 40 simulated experiments of each of 26
+  kinds, from 30 to 2,000 reads per variant, two to six replicates, bottlenecks, selection noise,
+  shared inputs, overdispersed reads, time series, sorted bins, barcodes, DiMSum's fitness, rescaled
+  and differential scores. With the defaults, 95% intervals hold the truth 93.6–96.5% of the time in
+  every kind (REML 81.8–95.5%); on dms_variants' simulated libraries, an independent simulator,
+  94–98% (REML 83–86%); on real data, each replicate held out and predicted from the others, GRB2
+  6.1% and CBS 5.6% beyond ±1.96 SD (REML 22.6% and 3.5%), factor IX 10.0% (26.3%) and BRCA1 12.3%
+  (17.7%). It names what no variance fixes: a time course that is not a line, scored by its slope
+  (QC flags it); variants depleted to a few reads, biased by the pseudocount; replicates selected
+  with different strengths (BRCA1's).
+- **The simulator** can share one input sample between replicates, draw overdispersed reads
+  (gamma-Poisson) and run a time course that saturates; its defaults and the bundled examples are
+  unchanged.
+- **What the analysis can do (wave 2, slice 10; E8).** For the open workspace, every analysis the
+  design allows (each way of scoring, normalizing and rescaling, combining replicates, differential
+  scores, each QC finding, the record and what a MaveDB deposit needs) is ready, partial or not
+  possible, with why. What is missing says why it matters, where it is usually found (the
+  protocol, the bench, the counting pipeline) and where to give it. It is in the Experiment view
+  (*What the analysis can do*, with *Give it*), the workflow strip, the Start page's *What to
+  bring*, `mavescape validate` (in words, and `readiness` with `--json`) and the methods, which name
+  what was not recorded and what that meant. Nothing is filled in by guessing.
+- **The analysis package:** *Write the analysis package* (the Experiment view, a run's export menu,
+  `export` `what: "package"`) writes one ZIP: the count table as imported, the target, the design,
+  the design as a sample sheet, the parameters, the readiness, and a README with the
+  `mavescape run` command. These are the files `mavescape run` reads; scored from a run's package
+  alone, they give that run's output hash.
+- **The cells recorded check the bottleneck:** with the cells carried into selection recorded on
+  each input (and those recovered after it on each output; the Experiment view's Cells column now
+  shows for two populations), the variance-beyond-counting finding says whether they account for
+  the bottleneck the replicates imply, or the replicates show more (another step, or noise between
+  replicates) or less (check the cells recorded).
+- **Scores per generation:** *A score is the change* per unit of time (`timeScale: "unit"`) gives a
+  time series' slope on time itself, per generation with the times in generations: a selection
+  coefficient, comparable between experiments of different lengths. Enrich2's whole time course
+  stays the default.
+- **Three more examples (wave 2, slice 11), nine in all:** Hsp90 over 21 generations (MaveDB
+  urn:mavedb:00000011-a-1, scored per generation, one replicate), coagulation factor IX in sorted
+  bins (urn:mavedb:00001200-a-1, MultiSTEP), both with MaveDB's counts unchanged, and a simulated
+  experiment with two problems to find (a recorded bottleneck and a failing replicate). Each has
+  its question, readout, readiness, the QC findings it teaches and a guided workflow; the guide
+  compares every run of a simulated example with the truth.
+- **Codon variants read at the protein level:** *Each row is: a codon variant* in the import
+  wizard reads a table that names each codon on its own row (MaveDB's EMPIRIC tables) at the
+  protein level: each row's protein change worked out from its nucleotide name against the target,
+  a variant written on several rows with the same counts read once, and each protein variant's
+  codons summed. A design naming `hgvs_pro (from hgvs_nt)` reads its table this way wherever it is
+  opened, `mavescape run` included.
+- **Sample sheets written back:** the package writes the design as a sample sheet that reads as the
+  same design; a sample selected under several conditions is one row naming them
+  (`Without ligand;With ligand`), which sheets now read.
+
+### Changed
+
+- **The README and the guide say what a MAVE is:** a multiplexed assay of variant effect, from the
+  bench to counts to MaveScape (and optionally MaveDB), and what MaveScape needs to begin.
+- **The roadmap, after a researcher's review.** Wave 2 gains three slices before its examples. The
+  first records what the assay measures, so legends and QC stop assuming a direction; QC findings
+  say what to do next and can be acknowledged with a reason. The second tests whether the
+  intervals hold the truth as often as they claim: with three replicates, the simulations so far
+  put 95% intervals at 87–90%. The third shows what an analysis can do with what the researcher
+  has, and what is missing and where to find it. Outside laboratories no longer gate any wave or
+  release. Comparison and robustness to analysis choices move ahead of structure (0.4 and 0.5).
+  Each release keeps a workspace archive that later versions must reopen and reproduce.
+
+- **Replicates are combined by the moderated combination by default** (MaveScape 0.1 used REML).
+  REML estimates each variant's noise between replicates from its own two to six scores; often 0
+  by chance, it left intervals too narrow (as little as 82% coverage where 95% was claimed). Runs
+  keep their parameters, so earlier runs are unchanged and reproduce; score again to use it. REML
+  and the others remain choices. Replicates paired by a shared input are combined the same way, so
+  their differential scores have t statistics (`t_` in the differential export, in place of `z_`).
+- **The shared-samples warning** is a note when the moderated combination accounts for the shared
+  sample, and with the other combinations points to it.
+
+- **The map's legend names its ends from the readout** ("blue is less function, red more
+  function") and says "lower" and "higher" until the direction is stated; the palettes are named by
+  their colors only.
+- **`mavescape run --strict` fails on a failing QC finding that is not acknowledged.**
+
+- **Records take their time from a session clock** (`web/lib/clock.js`), the wall clock in a window;
+  a headless run with a fixed time makes them, and their identifiers, the same every time.
+
+- **Tables are held column by column, a column of numbers as numbers only** (its text is not kept;
+  `cellText` gives it back): a million rows take about 85 MB once read, not 500 MB, and are read in
+  about a second.
+- **Workers end when they have nothing more to do**, so that what a large table or run left in
+  their memory is released.
+- **Synonymous variants named from whole sequences** (DiMSum's, Enrich2's maps) are named by the
+  codons changed (`p.Ala2=`), not `p.(=)`.
+- **A time series is scored by weighted regression by default** (it was the log ratio of its first
+  and last samples). Runs keep their parameters, so earlier runs are unchanged; score again to use
+  every time point.
+
+### Fixed
+
+- **The moderated combination understated the SEs of a single replicate** (0.2 development):
+  with no pairs of replicates to fit its model, it fell back to counting error alone, so a time
+  series' slopes lost the scatter of their own residuals (Hsp90's SEs a median 6.3× too small).
+  With no model to fit, each score keeps its own SE, as with the other combinations.
+- **DiMSum's model on a table of barcodes** (summed, which is allowed) failed after scoring, reading
+  barcode counts its replicates do not keep.
+- **Sorted bins without the wild type were refused by default**: both scales need it. They now
+  start unscaled (an MLE's σ each variant's own), and with the nonsense controls named none, at the
+  lowest 5%.
+- **The separation of the controls used every nonsense variant**, even where the design named others
+  or none; it now uses the design's controls, as scoring does.
+- **A validation note called BRCA1's library error-prone PCR**, but it holds 71% of the
+  substitutions two or three bases from the wild-type codon, which such a library rarely makes; the
+  note no longer says how it was made.
+
+- **Enrich2's estimator with several conditions** started, in MaveScape, from the variance over the
+  variants scored in every replicate of that condition; Enrich2 starts every condition from its
+  table of variants scored in every replicate of at least one condition. Enrich2-compatible runs of
+  designs with conditions now equal Enrich2's (they differed by up to 1.5 × 10⁻⁵).
+- **"Samples shared between replicates"** was raised for an input selected under two conditions,
+  which does not make one condition's replicates dependent; it is now raised only for samples
+  shared within a condition.
+- **A table joined from several files, or named from DiMSum's sequences, could not be read again
+  from the library** (it had to be opened again): the source's files are now assembled again as at
+  import.
+- **Scores depended on the browser.** JavaScript's `Math.log` and `Math.exp` differ in their last
+  bit between engines and their versions (Chrome 154 and Node 22 on about 2% of logarithms), so a
+  run's output hash depended on the browser that scored it, and a saved run could stop reproducing
+  after a browser update. Scoring, QC, statistics and simulation now use `web/lib/dmath.js`
+  (fdlibm's logarithm and exponential in plain arithmetic): within one unit in the last place of
+  the engines' functions, and the same bits everywhere. The scoring engine's version is now 2; runs
+  made by 0.1.0 reopen with scores that differ only in their last digits, and say why.
+
 ## 0.1.0 (2026-10-09)
 
 MaveScape's first release, wave 1 of the [roadmap](mavescape-spec/roadmap.md): from a

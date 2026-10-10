@@ -60,3 +60,12 @@ test('controls by kind or by name', () => {
   const named = controlRows(design({ controls: { wildType: '_wt', synonymous: ['p.Gly4='], nonsense: 'none' } }), v);
   assert.deepEqual([named.synonymous, named.nonsense], [[1], []]);
 });
+
+test('controls serve only at the positions the design gives them', () => {
+  const v = buildVariants(['p.=', 'p.Ser2Ter', 'p.Lys3Ter', 'p.Gly4Ter', 'p.Gly4='], { target });
+  const rows = (positions) => controlRows(design({ controls: { wildType: 'auto', synonymous: 'auto', nonsense: 'auto', positions } }), v);
+  assert.deepEqual(rows(undefined).nonsense, [1, 2, 3]);
+  assert.deepEqual(rows({ nonsense: { end: 3 } }).nonsense, [1, 2]);
+  assert.deepEqual(rows({ nonsense: { start: 3 } }).nonsense, [2, 3]);
+  assert.deepEqual(rows({ synonymous: { end: 3 } }).synonymous, []);
+});

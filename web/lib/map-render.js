@@ -111,7 +111,7 @@ export function drawMap(ctx, model, view, theme, color, paler) {
         }
         ctx.stroke();
       } else if (s === STATE.REFERENCE) {
-        ctx.fillStyle = model.colorBy === 'score' ? color(0.5) : theme.empty;
+        ctx.fillStyle = model.domain.kind === 'diverging' ? color(0.5) : theme.empty;
         ctx.fillRect(x, y, w, h);
       } else {
         // Missing (or a value it cannot be colored by): an empty cell with a dot.
@@ -155,7 +155,7 @@ export function drawMap(ctx, model, view, theme, color, paler) {
     ctx.fillStyle = theme.muted;
     if (cellH >= 8) ctx.fillText(model.rows[r] === '*' ? '*' : model.rows[r], g.left / 2, y);
     const t = colorPosition(model, model.rowMedian[r]);
-    if (Number.isFinite(t) && model.colorBy === 'score') {
+    if (Number.isFinite(t) && model.domain.kind === 'diverging') {
       ctx.fillStyle = color(t);
       ctx.fillRect(view.width - LAYOUT.right + 6, g.top + r * cellH, LAYOUT.right - 8, h);
     }

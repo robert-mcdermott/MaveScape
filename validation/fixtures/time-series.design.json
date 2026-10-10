@@ -1,0 +1,220 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "Synthetic time-series fixture (simulated)",
+  "description": "Simulated by validation/fixtures/make-time-series.mjs (seed 20261010): 199 variants of a 20-residue protein, 3 replicates sequenced at generations 0, 1, 3, 6, 10. Edge cases: p.Lys3His, missing at one later time (replicate 1, generation 6); p.Gly4Ser, missing at two middle times (replicate 2, generations 1 and 3); p.Glu5Ter, dropped out and written as missing at the last two times (every replicate); p.Glu6Gly, missing at time 0 (replicate 3); p.Leu7Asn, missing at three later times (replicate 1): too few points; p.Thr9Leu, rises then falls (every replicate): not a line; p.Gly10Lys, counted 0 at the last two times (every replicate): zeros are counts.",
+  "model": "time-series",
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "synthetic-protein",
+      "name": "Synthetic 20-residue protein",
+      "sequenceType": "protein",
+      "sequence": "MSKGEELFTGVVPILVELDG"
+    }
+  ],
+  "library": {
+    "level": "variant"
+  },
+  "time": {
+    "unit": "generation"
+  },
+  "samples": [
+    {
+      "id": "rep1-gen0",
+      "name": "Replicate 1, generation 0",
+      "columns": [
+        "rep1_gen0"
+      ]
+    },
+    {
+      "id": "rep1-gen1",
+      "name": "Replicate 1, generation 1",
+      "columns": [
+        "rep1_gen1"
+      ]
+    },
+    {
+      "id": "rep1-gen3",
+      "name": "Replicate 1, generation 3",
+      "columns": [
+        "rep1_gen3"
+      ]
+    },
+    {
+      "id": "rep1-gen6",
+      "name": "Replicate 1, generation 6",
+      "columns": [
+        "rep1_gen6"
+      ]
+    },
+    {
+      "id": "rep1-gen10",
+      "name": "Replicate 1, generation 10",
+      "columns": [
+        "rep1_gen10"
+      ]
+    },
+    {
+      "id": "rep2-gen0",
+      "name": "Replicate 2, generation 0",
+      "columns": [
+        "rep2_gen0"
+      ]
+    },
+    {
+      "id": "rep2-gen1",
+      "name": "Replicate 2, generation 1",
+      "columns": [
+        "rep2_gen1"
+      ]
+    },
+    {
+      "id": "rep2-gen3",
+      "name": "Replicate 2, generation 3",
+      "columns": [
+        "rep2_gen3"
+      ]
+    },
+    {
+      "id": "rep2-gen6",
+      "name": "Replicate 2, generation 6",
+      "columns": [
+        "rep2_gen6"
+      ]
+    },
+    {
+      "id": "rep2-gen10",
+      "name": "Replicate 2, generation 10",
+      "columns": [
+        "rep2_gen10"
+      ]
+    },
+    {
+      "id": "rep3-gen0",
+      "name": "Replicate 3, generation 0",
+      "columns": [
+        "rep3_gen0"
+      ]
+    },
+    {
+      "id": "rep3-gen1",
+      "name": "Replicate 3, generation 1",
+      "columns": [
+        "rep3_gen1"
+      ]
+    },
+    {
+      "id": "rep3-gen3",
+      "name": "Replicate 3, generation 3",
+      "columns": [
+        "rep3_gen3"
+      ]
+    },
+    {
+      "id": "rep3-gen6",
+      "name": "Replicate 3, generation 6",
+      "columns": [
+        "rep3_gen6"
+      ]
+    },
+    {
+      "id": "rep3-gen10",
+      "name": "Replicate 3, generation 10",
+      "columns": [
+        "rep3_gen10"
+      ]
+    }
+  ],
+  "replicates": [
+    {
+      "id": "rep1",
+      "name": "Replicate 1",
+      "biological": 1,
+      "timepoints": [
+        {
+          "sample": "rep1-gen0",
+          "time": 0
+        },
+        {
+          "sample": "rep1-gen1",
+          "time": 1
+        },
+        {
+          "sample": "rep1-gen3",
+          "time": 3
+        },
+        {
+          "sample": "rep1-gen6",
+          "time": 6
+        },
+        {
+          "sample": "rep1-gen10",
+          "time": 10
+        }
+      ]
+    },
+    {
+      "id": "rep2",
+      "name": "Replicate 2",
+      "biological": 2,
+      "timepoints": [
+        {
+          "sample": "rep2-gen0",
+          "time": 0
+        },
+        {
+          "sample": "rep2-gen1",
+          "time": 1
+        },
+        {
+          "sample": "rep2-gen3",
+          "time": 3
+        },
+        {
+          "sample": "rep2-gen6",
+          "time": 6
+        },
+        {
+          "sample": "rep2-gen10",
+          "time": 10
+        }
+      ]
+    },
+    {
+      "id": "rep3",
+      "name": "Replicate 3",
+      "biological": 3,
+      "timepoints": [
+        {
+          "sample": "rep3-gen0",
+          "time": 0
+        },
+        {
+          "sample": "rep3-gen1",
+          "time": 1
+        },
+        {
+          "sample": "rep3-gen3",
+          "time": 3
+        },
+        {
+          "sample": "rep3-gen6",
+          "time": 6
+        },
+        {
+          "sample": "rep3-gen10",
+          "time": 10
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "wildType": "p.=",
+    "synonymous": "auto",
+    "nonsense": "auto"
+  }
+}

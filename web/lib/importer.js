@@ -8,8 +8,12 @@
 // mapping to reuse on the next table of the same layout.
 
 import { buildCountSet, identicalColumns } from './counts.js';
+import { columnText } from './csv.js';
+import { barcodeColumnOf } from './barcodes.js';
+import { barcodeProblems, groupBarcodes } from './score-barcodes.js';
 import { buildVariants, duplicateKeys, summarizeVariants, STATUS } from './variants.js';
 import { parseHgvs } from './hgvs.js';
+import { now } from './clock.js';
 import { translate } from './target.js';
 import { IDENTIFIER_COLUMNS } from './design.js';
 
@@ -40,8 +44,9 @@ function variantColumnScore(values) {
   return { share: (protein + nucleotide) / sample.length, level: protein >= nucleotide ? 'protein' : 'nucleotide' };
 }
 
-// The layout of a table: { layout, variantColumn, level, countColumns, scoreColumns, notes }.
-// layout: 'mavedb-counts' | 'mavedb-scores' | 'dimsum' | 'generic' | 'unknown'.
+// The layout of a table: { layout, variantColumn, level, countColumns, scoreColumns, notes, and
+// for a table of barcodes barcodeColumn }. layout: 'mavedb-counts' | 'mavedb-scores' | 'dimsum' |
+// 'barcodes' | 'generic' | 'unknown'.
 export function detectLayout(table) {
   const names = table.columns.map((c) => c.name);
   // Columns of numbers, and columns of numbers with a few cells that are not (they stay, so that
@@ -67,6 +72,20 @@ export function detectLayout(table) {
     }
     notes.push('MaveDB count table: one column per sample, with variants in MAVE-HGVS.');
     return { layout: 'mavedb-counts', variantColumn, level, countColumns: data, scoreColumns: {}, notes };
+  }
+  // A table of barcodes: a column of them, and the variant each carries (as written, or from a map
+  // or substitutions, in a column of its own).
+  const barcodeColumn = barcodeColumnOf(table);
+  if (barcodeColumn) {
+    let variant = null;
+    for (const c of table.columns) {
+      if (c.name === barcodeColumn || !c.values || c.type === 'empty') continue;
+      const score = variantColumnScore(c.values);
+      if (score.share >= 0.8 && (!variant || (c.derived && !variant.derived) || (Boolean(c.derived) === Boolean(variant.derived) && score.share > variant.share))) variant = { name: c.name, derived: Boolean(c.derived), ...score };
+    }
+    const countColumns = numeric.filter((n) => !/^(variant_call_support|n_codon_substitutions|n_aa_substitutions)$/.test(n));
+    notes.push(variant ? `A table of barcodes (column "${barcodeColumn}"), each carrying the variant in "${variant.name}", and ${countColumns.length} column${countColumns.length === 1 ? '' : 's'} of counts.` : `A table of barcodes (column "${barcodeColumn}") with no column naming their variants: open its barcode-to-variant map with it.`);
+    return { layout: 'barcodes', barcodeColumn, variantColumn: variant?.name ?? null, level: variant?.level ?? 'protein', countColumns, scoreColumns: {}, notes };
   }
   let best = null;
   for (const c of table.columns) {
@@ -150,7 +169,8 @@ const slug = (text) => String(text).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^
 // replicate's roles imply, samples (one per column, columns identical value for value made one
 // shared sample with the copies set aside), replicates, tiles from the variants counted in each.
 // Returns { design, notes }; the design is a draft for the Experiment view (validateDesign
-// checks it there).
+// checks it there). options: { variantColumn, level, target, name, barcodeColumn (a table of
+// barcodes) }.
 export function draftDesign(table, roles, options = {}) {
   const notes = [];
   const used = roles.filter((r) => r.role);
@@ -250,7 +270,7 @@ export function draftDesign(table, roles, options = {}) {
     model,
     variants: { column: options.variantColumn, level: options.level === 'nucleotide' ? 'nucleotide' : 'protein' },
     targets: options.target ? [options.target] : [],
-    library: { level: 'variant' },
+    library: options.barcodeColumn ? { level: 'barcode', barcodeColumn: options.barcodeColumn } : { level: 'variant' },
     samples,
     replicates,
     controls: { wildType: 'auto', synonymous: 'auto', nonsense: 'auto' },
@@ -282,7 +302,8 @@ function commonStem(names) {
 
 // The positions counted in a tile's columns (from the variants' first positions).
 function tileRange(table, options, columns) {
-  const names = table.columns.find((c) => c.name === options.variantColumn)?.values ?? [];
+  const found = table.columns.find((c) => c.name === options.variantColumn);
+  const names = found ? columnText(found) : [];
   let start = Infinity;
   let end = -Infinity;
   const cols = columns.map((c) => table.columns.find((x) => x.name === c)).filter(Boolean);
@@ -303,9 +324,10 @@ function tileRange(table, options, columns) {
 
 // --- DiMSum's sequences --------------------------------------------------------------------------
 
-// Names DiMSum's whole sequences by comparing each with the wild type (same length, substitutions
-// only): c.[…] at the nucleotide level and the protein change it makes. Returns { nt: [], pro: [],
-// problems }.
+// Names whole sequences (DiMSum's, and Enrich2's barcode maps') by comparing each with the wild
+// type (same length, substitutions only): c.[…] at the nucleotide level and the protein change it
+// makes; one that leaves the protein as it was is synonymous at the codons it changes (p.Ala2=).
+// Returns { nt: [], pro: [], problems }.
 export function namesFromSequences(sequences, wildType) {
   const wt = wildType.toUpperCase();
   const wtProtein = translate(wt).protein;
@@ -328,7 +350,13 @@ export function namesFromSequences(sequences, wildType) {
     for (let i = 0; i < protein.length; i += 1) {
       if (protein[i] !== wtProtein[i]) aa.push(`${THREE[wtProtein[i]]}${i + 1}${THREE[protein[i]]}`);
     }
-    pro.push(changes.length === 0 ? 'p.=' : aa.length === 0 ? 'p.(=)' : aa.length === 1 ? `p.${aa[0]}` : `p.[${aa.join(';')}]`);
+    if (aa.length === 0 && changes.length) {
+      const codons = [...new Set(changes.map((c) => Math.ceil(Number.parseInt(c, 10) / 3)))];
+      const synonymous = codons.every((k) => k <= wtProtein.length) ? codons.map((k) => `${THREE[wtProtein[k - 1]]}${k}=`) : null;
+      pro.push(!synonymous ? 'p.(=)' : synonymous.length === 1 ? `p.${synonymous[0]}` : `p.[${synonymous.join(';')}]`);
+      continue;
+    }
+    pro.push(changes.length === 0 ? 'p.=' : aa.length === 1 ? `p.${aa[0]}` : `p.[${aa.join(';')}]`);
   }
   return { nt, pro, problems };
 }
@@ -339,28 +367,54 @@ const THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: '
 
 // Everything the import wizard shows for a table and a mapping, and what blocks scoring:
 // { variants, summary, duplicates, countSet, blocking: [problem], warnings: [problem], info }.
-// mapping: { variantColumn, level, countColumns, mode, target }.
+// mapping: { variantColumn, level, countColumns, mode, target, barcodeColumn (a table of
+// barcodes) }. For a table of barcodes, variants are the variants the barcodes carry (variantOfRow:
+// each row's), and a barcode on two rows, not a variant, blocks scoring.
 export function reviewImport(table, mapping) {
   const blocking = [];
   const warnings = [];
   const info = [];
   for (const d of table.diagnostics ?? []) (d.level === 'error' ? blocking : d.level === 'warning' ? warnings : info).push(d);
-  const names = column(table, mapping.variantColumn)?.values;
+  const found = column(table, mapping.variantColumn);
+  const names = found ? columnText(found) : null;
   if (!names) {
     blocking.push({ level: 'error', code: 'no-variant-column', message: 'Choose the column of variant names.' });
     return { variants: null, summary: null, duplicates: [], countSet: null, blocking, warnings, info };
   }
-  const variants = buildVariants(names, { level: mapping.level ?? 'protein', mode: mapping.mode ?? 'lenient', target: mapping.target });
-  const summary = summarizeVariants(variants);
+  const options = { level: mapping.level ?? 'protein', mode: mapping.mode ?? 'lenient', target: mapping.target };
   const lineOf = (row) => table.lineOfRow?.[row] ?? row + 2;
+  let variants;
+  let groups = null;
+  if (mapping.barcodeColumn) {
+    const barcodeColumn = column(table, mapping.barcodeColumn);
+    if (!barcodeColumn) {
+      blocking.push({ level: 'error', code: 'no-barcode-column', message: 'Choose the column of barcodes.' });
+      return { variants: null, summary: null, duplicates: [], countSet: null, blocking, warnings, info };
+    }
+    const ids = columnText(barcodeColumn);
+    const problems = barcodeProblems(ids);
+    if (problems.repeated.length) {
+      const shown = problems.repeated.slice(0, 3).map((d) => `${d.id} (lines ${d.rows.map(lineOf).join(', ')})`).join('; ');
+      blocking.push({ level: 'error', code: 'duplicate-barcodes', message: `${problems.repeated.length} barcode${problems.repeated.length > 1 ? 's appear' : ' appears'} on more than one row: ${shown}${problems.repeated.length > 3 ? '; …' : ''}. A barcode is counted once per sample; which row's counts are right is not for MaveScape to guess.`, lines: problems.repeated.slice(0, 50).flatMap((d) => d.rows.map(lineOf)) });
+    }
+    if (problems.blank.length) blocking.push({ level: 'error', code: 'blank-barcodes', message: `${problems.blank.length} row${problems.blank.length > 1 ? 's have' : ' has'} no barcode (line ${problems.blank.slice(0, 5).map(lineOf).join(', ')}${problems.blank.length > 5 ? ', …' : ''}).`, lines: problems.blank.slice(0, 100).map(lineOf) });
+    groups = groupBarcodes(names, options, ids);
+    variants = groups.variants;
+    if (groups.unmapped) info.push({ level: 'info', code: 'barcodes-unmapped', message: `${groups.unmapped} barcode${groups.unmapped > 1 ? 's name' : ' names'} no variant: not scored.` });
+    if (groups.rewritten) info.push({ level: 'info', code: 'barcodes-rewritten', message: `${groups.rewritten} variant${groups.rewritten > 1 ? 's are' : ' is'} written in more than one way across ${groups.rewritten > 1 ? 'their' : 'its'} barcodes: grouped as one.` });
+  } else variants = buildVariants(names, options);
+  const summary = summarizeVariants(variants);
+  if (groups) summary.barcodes = { rows: groups.rows, unmapped: groups.unmapped, perVariant: variants.n ? (groups.rows - groups.unmapped) / variants.n : 0 };
+  // A variant's line: its row's, or for a table of barcodes its first barcode's.
+  const variantLine = (i) => lineOf(groups ? groups.members[groups.offsets[i]] : i);
   const invalidRows = [];
   for (let i = 0; i < variants.n; i += 1) if (variants.status[i] === STATUS.INVALID) invalidRows.push(i);
   if (invalidRows.length) {
-    const shown = invalidRows.slice(0, 4).map((r) => `"${variants.original[r]}" (line ${lineOf(r)}: ${variants.messages.get(r)?.[0] ?? 'invalid'})`).join('; ');
-    warnings.push({ level: 'warning', code: 'invalid-variants', message: `${invalidRows.length} variant name${invalidRows.length > 1 ? 's are' : ' is'} not valid or do${invalidRows.length > 1 ? '' : 'es'} not agree with the target, and will not be scored: ${shown}${invalidRows.length > 4 ? '; …' : ''}.`, lines: invalidRows.slice(0, 100).map(lineOf) });
+    const shown = invalidRows.slice(0, 4).map((r) => `"${variants.original[r]}" (line ${variantLine(r)}: ${variants.messages.get(r)?.[0] ?? 'invalid'})`).join('; ');
+    warnings.push({ level: 'warning', code: 'invalid-variants', message: `${invalidRows.length} variant name${invalidRows.length > 1 ? 's are' : ' is'} not valid or do${invalidRows.length > 1 ? '' : 'es'} not agree with the target, and will not be scored: ${shown}${invalidRows.length > 4 ? '; …' : ''}.`, lines: invalidRows.slice(0, 100).map(variantLine) });
   }
   if (summary.warning) info.push({ level: 'info', code: 'lenient', message: `${summary.warning} variant name${summary.warning > 1 ? 's were' : ' was'} read leniently (written in MAVE-HGVS, the originals kept).` });
-  const duplicates = duplicateKeys(variants);
+  const duplicates = groups ? [] : duplicateKeys(variants);
   if (duplicates.length) {
     const shown = duplicates.slice(0, 3).map((d) => `${d.key} (lines ${d.rows.map(lineOf).join(', ')})`).join('; ');
     blocking.push({ level: 'error', code: 'duplicate-variants', message: `${duplicates.length} variant${duplicates.length > 1 ? 's appear' : ' appears'} on more than one row: ${shown}${duplicates.length > 3 ? '; …' : ''}. Which row's counts are right is not for MaveScape to guess.`, lines: duplicates.slice(0, 50).flatMap((d) => d.rows.map(lineOf)) });
@@ -372,7 +426,7 @@ export function reviewImport(table, mapping) {
     const copies = identicalColumns(table, mapping.countColumns);
     for (const group of copies) info.push({ level: 'info', code: 'identical-columns', message: `Columns ${group.map((c) => `"${c}"`).join(', ')} are identical, value for value: one sample written once per replicate (a shared input)?`, columns: group });
   }
-  return { variants, summary, duplicates, countSet, blocking, warnings, info };
+  return { variants, variantOfRow: groups?.variantOf ?? null, summary, duplicates, countSet, blocking, warnings, info };
 }
 
 // --- Templates -------------------------------------------------------------------------------
@@ -382,7 +436,7 @@ export function makeTemplate(name, table, mapping) {
     format: TEMPLATE_FORMAT,
     version: TEMPLATE_VERSION,
     name,
-    modified: new Date().toISOString(),
+    modified: now(),
     columns: table.columns.map((c) => c.name),
     variantColumn: mapping.variantColumn,
     level: mapping.level,
@@ -391,6 +445,7 @@ export function makeTemplate(name, table, mapping) {
     mode: mapping.mode ?? 'lenient',
     absentMeans: mapping.absentMeans ?? 'missing',
     roles: mapping.roles ?? null,
+    ...(mapping.barcodeColumn ? { barcodeColumn: mapping.barcodeColumn } : {}),
   };
 }
 
@@ -399,6 +454,6 @@ export function makeTemplate(name, table, mapping) {
 export function applyTemplate(template, table) {
   if (template?.format !== TEMPLATE_FORMAT) return null;
   const names = new Set(table.columns.map((c) => c.name));
-  if (!names.has(template.variantColumn) || !template.countColumns.every((c) => names.has(c))) return null;
-  return { variantColumn: template.variantColumn, level: template.level, countColumns: template.countColumns.slice(), scoreColumns: { ...template.scoreColumns }, mode: template.mode, absentMeans: template.absentMeans, roles: template.roles, template: template.name };
+  if (!names.has(template.variantColumn) || !template.countColumns.every((c) => names.has(c)) || (template.barcodeColumn && !names.has(template.barcodeColumn))) return null;
+  return { variantColumn: template.variantColumn, level: template.level, countColumns: template.countColumns.slice(), scoreColumns: { ...template.scoreColumns }, mode: template.mode, absentMeans: template.absentMeans, roles: template.roles, template: template.name, barcodeColumn: template.barcodeColumn ?? null };
 }

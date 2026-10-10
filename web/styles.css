@@ -350,6 +350,8 @@ textarea.input { height: auto; padding: 7px 9px; resize: vertical; }
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
 }
 .segmented button.active { background: var(--bg-elev); color: var(--accent-text); box-shadow: var(--shadow-sm); }
+/* A group of more choices than fit a narrow pane (the Score view's presets) wraps. */
+.segmented.wrap { display: flex; flex-wrap: wrap; max-width: 100%; }
 
 .badge {
   display: inline-flex; align-items: center; gap: 3px;
@@ -479,6 +481,7 @@ table.data { width: 100%; border-collapse: collapse; font-size: 12px; }
 table.data th { text-align: left; font-weight: 650; color: var(--text-3); font-size: 11px; padding: 5px 6px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
 table.data td { padding: 5px 6px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 table.data td.r, table.data th.r { text-align: right; }
+table.data td.c, table.data th.c { text-align: center; }
 table.data tr:hover td { background: var(--hover); }
 table.data tr.selected td { background: var(--active); }
 
@@ -589,6 +592,21 @@ table.data tr.selected td { background: var(--active); }
 .pane { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 12px; min-width: 0; }
 .pane + .pane { margin-top: 14px; }
 .pane h3 { margin: 0 0 10px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+/* What the analysis can do (wave 2, slice 10). */
+.gap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gap { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; background: var(--panel-2, var(--panel)); }
+.gap p { margin: 3px 0 0; font-size: 12px; line-height: 1.45; }
+.gap-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.gap-label { font-weight: 600; }
+.readiness-pane details { margin-top: 10px; }
+.readiness-pane summary { cursor: pointer; font-size: 12.5px; font-weight: 600; }
+.analysis-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+.analysis-list li { display: grid; grid-template-columns: 96px 1fr; align-items: start; gap: 8px; }
+.analysis-list .badge { display: inline-flex; align-items: center; gap: 3px; justify-self: start; }
+.analysis-list .muted { font-size: 11.5px; }
+.analysis-list .badge svg { width: 11px; height: 11px; }
+@keyframes pane-flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
+.pane.flash { animation: pane-flash 1.6s ease-out; }
 .pane h3 .spacer { flex: 1; }
 
 .matrix-wrap { overflow: auto; max-height: 60vh; }
@@ -692,6 +710,14 @@ table.matrix td.diag input { color: var(--text-3); }
 .import-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 14px; align-items: start; }
 .import-grid .pane + .pane { margin-top: 14px; }
 .import-grid table.data td.mono { font-size: 11.5px; white-space: nowrap; }
+.barcode-table { font-size: 11px; }
+.barcode-table td, .barcode-table th { white-space: nowrap; padding-left: 4px; padding-right: 4px; }
+.barcode-table td.barcode-id { max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; }
+.file-part { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.file-part .mono { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.file-part select.input { width: auto; max-width: 60%; }
+.map-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.map-columns .field { margin-bottom: 0; }
 @media (max-width: 980px) { .import-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- MaveScape: the Experiment view (ui/mode-experiment.js) ---------- */
@@ -763,6 +789,7 @@ svg.plot .bar-value { fill: var(--text-2); font-size: 10.5px; font-variant-numer
 svg.plot .threshold { stroke-width: 1.5; stroke-dasharray: 4 3; }
 svg.plot .threshold.review { stroke: var(--warn); }
 svg.plot .threshold.fail { stroke: var(--danger); }
+svg.plot .threshold.reference { stroke: var(--text-3); }
 .plot-canvas canvas { display: block; max-width: 100%; }
 .plot-note { font-size: 11.5px; margin: 6px 0 0; }
 .swatch.dashed { height: 0; background: none; border-top: 2px dashed; }
@@ -783,6 +810,14 @@ button.finding .badge { justify-self: start; }
 .finding-kv { grid-template-columns: 84px minmax(0, 1fr); font-size: 12px; margin-bottom: 12px; }
 .finding-kv dd { overflow-wrap: anywhere; text-align: left; }
 .finding-plot h4 { margin: 12px 0 6px; font-size: 12px; color: var(--text-2); }
+.finding-context { margin-bottom: 12px; }
+.finding-context h4 { margin: 10px 0 4px; font-size: 12px; color: var(--text-2); }
+ul.advice { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+ul.advice li { line-height: 1.45; }
+.advice-kind { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line-strong); font-size: 10.5px; line-height: 16px; color: var(--text-2); vertical-align: 1px; }
+.advice-kind.technical, .advice-kind.experiment { color: var(--warn-text); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.advice-kind.model, .advice-kind.analysis { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.finding-context .callout.acknowledged { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
 .finding-plot table.data { margin-top: 8px; }
 .qc-thresholds summary { cursor: pointer; list-style: none; }
 .qc-thresholds summary::-webkit-details-marker { display: none; }
@@ -873,3 +908,9 @@ ol.workflow-steps { list-style: none; margin: 0; padding: 0; display: flex; alig
 .workflow-next-text { flex: 1; min-width: 0; }
 .workflow-next.attention .workflow-next-text b { color: var(--warn-text); }
 .workflow-next.next .workflow-next-text b { color: var(--accent-text); }
+.workflow-ready { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: none; padding: 3px 10px; font: inherit; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.workflow-ready:hover { border-color: var(--line-strong); color: var(--text); }
+.workflow-ready svg { width: 13px; height: 13px; }
+.workflow-gaps { color: var(--warn-text); font-weight: 600; }
+.range-inputs { display: flex; gap: 6px; align-items: center; }
+.range-inputs .input { width: 6em; }

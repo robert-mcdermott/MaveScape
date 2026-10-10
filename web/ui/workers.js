@@ -4,9 +4,12 @@
 import { transferable } from '../lib/memory.js';
 
 export class WorkerClient {
+  // options: { max (workers at once), retire (end a worker once it has nothing to do: a million-row
+  // table or run leaves hundreds of megabytes in a worker's heap, released only when it ends) }.
   constructor(url, options = {}) {
     this.url = url;
     this.max = options.max ?? 1;
+    this.retire = options.retire ?? false;
     this.workers = [];
     this.pending = new Map();
     this.queue = [];
@@ -43,6 +46,10 @@ export class WorkerClient {
     if (message.error) job.reject(new Error(message.error));
     else job.resolve(message.result);
     this.drain();
+    if (this.retire && !slot.busy && !this.queue.length) {
+      slot.worker.terminate();
+      this.workers = this.workers.filter((w) => w !== slot);
+    }
   }
 
   drain() {

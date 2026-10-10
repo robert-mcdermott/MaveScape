@@ -4,8 +4,8 @@
 // checked against the recorded output hash ('reproduced', 'differs' or 'failed'). Views and the
 // inspector are told with the store topic 'results'.
 
-import { outputDigest, recordedInputs } from '../lib/runs.js';
-import { workerInput } from './score-input.js';
+import { outputDigest, recordedInputs, reproduction } from '../lib/runs.js';
+import { runScore, workerInput } from './score-input.js';
 
 export function runEntry(app, run) {
   app.runResults ??= new Map();
@@ -27,13 +27,13 @@ export async function ensureResults(app, run) {
     } else {
       try {
         const table = await app.sourceTable(source);
-        const { names, columns, transfer } = workerInput(table, recorded.design);
-        const result = await app.worker('score').run('score', { names, columns, design: recorded.design, parameters: recorded.parameters, mode: recorded.mapping.mode }, { transfer }).promise;
+        const { names, barcodes, columns, transfer } = workerInput(table, recorded.design);
+        const result = await runScore(app, { names, barcodes, columns, design: recorded.design, parameters: recorded.parameters, mode: recorded.mapping.mode }, { transfer }).promise;
         if (!result.ok) throw new Error(result.errors.join(' '));
         const digest = outputDigest(result.results);
-        const same = digest === run.output.sha256;
-        next = { results: result.results, status: same ? 'reproduced' : 'differs', message: same ? '' : `The recomputed scores have output SHA-256 ${digest.slice(0, 12)}…, not ${run.output.sha256.slice(0, 12)}… as recorded (MaveScape ${run.software.version} made it; this is ${app.version}).` };
-        if (!same) app.log(`${run.name}: recomputed scores differ from the recorded ones (output SHA-256 ${digest} for ${run.output.sha256}).`);
+        const verdict = reproduction(run, digest, app.version);
+        next = { results: result.results, ...verdict };
+        if (verdict.status !== 'reproduced') app.log(`${run.name}: recomputed scores differ from the recorded ones (output SHA-256 ${digest} for ${run.output.sha256}).`);
       } catch (error) {
         next = { status: 'failed', message: error.message };
       }

@@ -1,0 +1,10 @@
+Coagulation factor IX, MultiSTEP secretion (strep II tag): variant counts from MaveDB score set
+urn:mavedb:00001200-a-1 (https://mavedb.org/score-sets/urn:mavedb:00001200-a-1), released under
+CC0 1.0.
+
+Popp NA, et al. Multiplex, multimodal mapping of variant effects in secreted proteins.
+Nature Structural & Molecular Biology 2025. doi:10.1038/s41594-025-01582-w
+
+counts.csv is MaveDB's count table for this score set, unchanged (SHA-256
+80a405e84a5a1c69aa53e73a9e83f74f6190fc85f09cc1ab5cbdc77390cedfba). design.json and target.fasta
+were written for MaveScape from the record's description and its MaveDB keywords.

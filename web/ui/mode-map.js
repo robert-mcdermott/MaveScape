@@ -7,7 +7,8 @@
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { promptDialog, showMenu, toast } from './overlays.js';
-import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, NO_DIFFERENTIAL, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, STAGE_BY_CODE } from '../lib/filters.js';
 import { addSelection, removeSelection } from '../lib/workspace.js';
@@ -15,7 +16,8 @@ import { ensureResults, runEntry } from './run-results.js';
 import { mountVariantMap } from './variant-map.js';
 import { exportSelection } from './record.js';
 
-const PALETTES = [['rdbu', 'Blue (loss) – red (gain)'], ['puor', 'Purple (loss) – orange (gain)']];
+// Named by their colors only: which end is loss of function depends on the assay (the readout).
+const PALETTES = [['rdbu', 'Blue (lower) – red (higher)'], ['puor', 'Purple (lower) – orange (higher)']];
 const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const PAGE = 50;
 
@@ -23,7 +25,7 @@ export function mountMapMode(app, container) {
   const { store } = app;
   const root = h('div.view');
   container.append(root);
-  app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, show: 'all', page: 0 };
+  app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0 };
   const view = app.mapView;
   let map = null;
   let mapKey = '';
@@ -45,14 +47,23 @@ export function mountMapMode(app, container) {
     return ws.runs.at(-1) ?? null;
   }
 
+  // The condition a selection or the inspector refers to: the one shown, or a contrast's condition.
+  const conditionIndex = () => (model?.contrast ? results.conditions.findIndex((x) => x.id === model.contrast.condition) : view.condition);
+
   // A cell in words: for the tooltip, the keyboard and screen readers.
   function describeCell(cell) {
-    const c = results.conditions[view.condition];
+    const c = model.source;
     const name = cellName(model, cell);
     const where = model.target.offset ? ` (reference ${cell.position + model.target.offset})` : '';
     const i = cell.index;
     if (cell.state === STATE.NOT_DESIGNED) return `${name}${where}: outside the designed tiles`;
     if (i < 0) return `${name}${where}: ${cell.reference ? 'the reference residue (no synonymous variant in the table)' : 'missing: not in the table'}`;
+    if (c.reason[i] === NO_DIFFERENTIAL) return `${name}${where}: no differential score (${DIFFERENTIAL_REASON_NAMES[c.contrast.reason[i]]})`;
+    if (model.contrast && !c.reason[i]) {
+      const d = c.contrast;
+      const base = `${name}${where}: difference ${fmt(d.delta[i])} ± ${fmt(d.se[i])}, q ${d.q[i] < 0.001 ? d.q[i].toExponential(1) : fmt(d.q[i], 3)} (${d.method === 'limma' ? 'limma' : `from ${d.k[i]} ${d.method === 'paired' ? 'pairs' : 'replicates'}`})`;
+      return c.flags[i] ? `${base}; from a score of low confidence` : base;
+    }
     if (c.reason[i]) {
       const stage = STAGE_BY_CODE.get(c.reason[i]);
       return `${name}${where}: ${stage.id === 'measured' ? 'missing: not counted in every sample of any replicate' : `filtered (${stage.label.toLowerCase()}: ${stage.reason})`}`;
@@ -63,19 +74,19 @@ export function mountMapMode(app, container) {
 
   function selectionCells() {
     const sel = store.ui.selection;
-    if (!sel || sel.run !== run?.id || sel.condition !== view.condition) return [];
+    if (!sel || sel.run !== run?.id || sel.condition !== conditionIndex()) return [];
     return sel.keys.map((k) => cellOfKey.get(k)).filter((k) => k !== undefined);
   }
 
   function onSelect(cells, primary) {
     const keys = [...cells].map((k) => cellName(model, cellAt(model, Math.floor(k / model.rows.length) + 1, k % model.rows.length)));
-    store.setUI({ selection: keys.length ? { run: run.id, condition: view.condition, keys } : null }, ['selection']);
-    if (primary) app.focusItem({ kind: 'variant', id: cellName(model, primary), run: run.id, condition: view.condition });
+    store.setUI({ selection: keys.length ? { run: run.id, condition: conditionIndex(), keys } : null }, ['selection']);
+    if (primary) app.focusItem({ kind: 'variant', id: cellName(model, primary), run: run.id, condition: conditionIndex() });
     renderSelectionBar();
   }
 
   // --- Export ------------------------------------------------------------------------------------
-  const fileBase = () => `${(model.target.name || 'map').replace(/[^\w.-]+/g, '_')}${results.conditions.length > 1 ? `_${model.condition.name.replace(/[^\w.-]+/g, '_')}` : ''}_${run.name.replace(/\s+/g, '')}`;
+  const fileBase = () => `${(model.target.name || 'map').replace(/[^\w.-]+/g, '_')}${results.conditions.length > 1 ? `_${model.condition.name.replace(/[^\w.-]+/g, '_')}` : ''}${model.contrast ? '_differential' : ''}_${run.name.replace(/\s+/g, '')}`;
   function exportSVG() {
     downloadBlob(new Blob([mapSVG(model, { palette: view.palette, results })], { type: 'image/svg+xml' }), `${fileBase()}.svg`);
   }
@@ -112,10 +123,11 @@ export function mountMapMode(app, container) {
     };
     return h('div.map-controls',
       ws.runs.length > 1 ? select('Score run', run.id, ws.runs.slice().reverse().map((r) => [r.id, r.name]), (v) => { view.run = v; app.focusItem({ kind: 'run', id: v }); }) : null,
-      results.conditions.length > 1 ? h('div.segmented', ...results.conditions.map((c, i) => h(`button${i === view.condition ? '.active' : ''}`, { type: 'button', 'aria-pressed': i === view.condition ? 'true' : 'false', onclick: () => { view.condition = i; render(); } }, c.name))) : null,
-      select('Color by', view.colorBy, Object.entries(COLOR_BY).map(([k, v]) => [k, v.label]), (v) => { view.colorBy = v; render(); }),
+      results.conditions.length > 1 && !model.contrast ? h('div.segmented', ...results.conditions.map((c, i) => h(`button${i === view.condition ? '.active' : ''}`, { type: 'button', 'aria-pressed': i === view.condition ? 'true' : 'false', onclick: () => { view.condition = i; render(); } }, c.name))) : null,
+      model.contrast && results.differential.length > 1 ? select('Contrast', String(view.contrast), results.differential.map((d, j) => [String(j), d.name]), (v) => { view.contrast = Number(v); render(); }) : null,
+      select('Color by', model.colorBy, Object.entries(COLOR_BY).filter(([k]) => k !== 'differential' || results.differential?.length).map(([k, v]) => [k, v.label]), (v) => { view.colorBy = v; render(); }),
       select('Rows', view.rowOrder, Object.entries(ROW_ORDERS).map(([k, v]) => [k, `Rows: ${v.label.toLowerCase()}`]), (v) => { view.rowOrder = v; render(); }),
-      view.colorBy === 'score' ? select('Colors', view.palette, PALETTES, (v) => { view.palette = v; map?.setPalette(v); renderLegend(); }) : null,
+      model.domain.kind === 'diverging' ? select('Colors', view.palette, PALETTES, (v) => { view.palette = v; map?.setPalette(v); renderLegend(); }) : null,
       h('span.spacer'),
       h('button.icon-button', { type: 'button', title: 'Zoom out (−)', 'aria-label': 'Zoom out', onclick: () => map?.zoom(1 / 1.5) }, icon('minus')),
       h('button.icon-button', { type: 'button', title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => map?.zoom(1.5) }, icon('plus')),
@@ -133,15 +145,17 @@ export function mountMapMode(app, container) {
     if (!colors) return;
     const d = model.domain;
     const stops = Array.from({ length: 13 }, (_, i) => `${colors.color(i / 12)} ${((100 * i) / 12).toFixed(1)}%`).join(', ');
-    const label = COLOR_BY[model.colorBy].label;
+    const label = model.contrast ? `Differential score, ${model.contrast.name}` : COLOR_BY[model.colorBy].label;
+    const [low, high] = view.palette === 'puor' ? ['purple', 'orange'] : ['blue', 'red'];
+    const [condition, reference] = model.contrast ? model.contrast.name.split(' vs ') : [];
     legendEl.append(
       h('div.map-scale', h('span.map-scale-bar', { style: { background: `linear-gradient(90deg, ${stops})` } }),
-        h('span.map-scale-labels', h('span', fmt(d.min)), d.kind === 'diverging' ? h('span', `${fmt(d.center)} wild type`) : null, h('span', fmt(d.max))),
-        h('span.map-scale-title', d.kind === 'diverging' ? `${label}: ${view.palette === 'puor' ? 'purple' : 'blue'} is loss, ${view.palette === 'puor' ? 'orange' : 'red'} gain` : label)),
+        h('span.map-scale-labels', h('span', fmt(d.min)), d.kind === 'diverging' ? h('span', model.contrast ? '0 no difference' : `${fmt(d.center)} wild type`) : null, h('span', fmt(d.max))),
+        h('span.map-scale-title', { title: model.contrast ? `${label}: ${low} where a variant scores lower in ${condition} than in ${reference}, ${high} where higher` : d.kind === 'diverging' && !model.scale.stated ? 'The readout\'s direction is not stated (Experiment, Readout): which end means loss of function depends on what the assay selects for.' : null }, model.contrast ? `${condition} − ${reference}: ${low} lower, ${high} higher` : d.kind === 'diverging' ? (model.scale.stated ? `${label}: ${low} is ${model.scale.low}, ${high} ${model.scale.high}` : `${label}: ${low} lower, ${high} higher`) : label)),
       h('span.map-state', h('span.map-swatch.low', { style: { background: colors.paler(0.2) } }), `${STATE_NAMES[STATE.LOW]} (${formatCount(model.counts[STATE.LOW])})`),
       h('span.map-state', h('span.map-swatch.filtered'), `${STATE_NAMES[STATE.FILTERED]} (${formatCount(model.counts[STATE.FILTERED])})`),
       h('span.map-state', h('span.map-swatch.missing'), `${STATE_NAMES[STATE.MISSING]} (${formatCount(model.counts[STATE.MISSING])})`),
-      h('span.map-state', h('span.map-swatch.reference', { style: { background: model.colorBy === 'score' ? colors.color(0.5) : undefined } }), 'reference residue'),
+      h('span.map-state', h('span.map-swatch.reference', { style: { background: d.kind === 'diverging' ? colors.color(0.5) : undefined } }), 'reference residue'),
       model.counts[STATE.NOT_DESIGNED] ? h('span.map-state', h('span.map-swatch.none'), `not designed (${formatCount(model.counts[STATE.NOT_DESIGNED])})`) : null);
   }
 
@@ -149,7 +163,7 @@ export function mountMapMode(app, container) {
   function renderSelectionBar() {
     clear(selectionEl);
     const sel = store.ui.selection;
-    const keys = sel && sel.run === run?.id && sel.condition === view.condition ? sel.keys : [];
+    const keys = sel && sel.run === run?.id && sel.condition === conditionIndex() ? sel.keys : [];
     const saved = store.ws.selections.filter((s) => s.run === run?.id);
     selectionEl.append(
       keys.length
@@ -157,12 +171,12 @@ export function mountMapMode(app, container) {
           h('button.btn.small', { type: 'button', onclick: async () => {
             const name = await promptDialog({ title: 'Save the selection', label: 'Name', value: `Selection ${store.ws.selections.length + 1}` });
             if (!name) return;
-            const added = addSelection(store.ws, { name, run: run.id, condition: view.condition, keys });
+            const added = addSelection(store.ws, { name, run: run.id, condition: conditionIndex(), keys });
             store.commit(added.ws, `Save the selection "${name}"`);
           } }, icon('save'), 'Save as…'),
           h('button.btn.small', { type: 'button', onclick: (event) => showMenu(event.currentTarget, [
-            { label: 'Selected variants with scores (CSV)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: view.condition, keys }, 'csv') },
-            { label: 'Selected variants (JSON)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: view.condition, keys, created: new Date().toISOString() }, 'json') },
+            { label: 'Selected variants with scores (CSV)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: conditionIndex(), keys }, 'csv') },
+            { label: 'Selected variants (JSON)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: conditionIndex(), keys, created: new Date().toISOString() }, 'json') },
           ]) }, icon('download'), 'Export'),
           h('button.btn.small', { type: 'button', onclick: () => { store.setUI({ selection: null }, ['selection']); map?.setSelection([]); renderSelectionBar(); } }, 'Clear'))
         : h('p.muted', { style: { margin: 0, fontSize: '12px' } }, 'Click a cell to inspect it; ⌘- or Ctrl-click adds to the selection, Shift-drag selects a rectangle. Drag to pan; ⌘ or Ctrl and the wheel (or a pinch) zooms. With the map focused, arrow keys move and Enter selects.'),
@@ -173,7 +187,7 @@ export function mountMapMode(app, container) {
 
   // The table alternative: every designed cell, with its state.
   function tableOf() {
-    const c = results.conditions[view.condition];
+    const c = model.source;
     const rows = [];
     for (let p = 1; p <= model.length; p += 1) {
       for (let r = 0; r < model.rows.length; r += 1) {
@@ -193,13 +207,13 @@ export function mountMapMode(app, container) {
         h('button.btn.small', { type: 'button', disabled: view.page === 0, 'aria-label': 'Previous page', onclick: () => { view.page -= 1; renderTable(); } }, '‹'),
         h('span.muted', { style: { fontSize: '12px' } }, `${view.page + 1} / ${pages}`),
         h('button.btn.small', { type: 'button', disabled: view.page >= pages - 1, 'aria-label': 'Next page', onclick: () => { view.page += 1; renderTable(); } }, '›')),
-      h('table.data', h('thead', h('tr', h('th', 'Variant'), h('th.r', 'Position'), model.target.offset ? h('th.r', 'Reference position') : null, h('th.r', 'Score'), h('th.r', 'SE'), h('th', 'State'))),
+      h('table.data', h('thead', h('tr', h('th', 'Variant'), h('th.r', 'Position'), model.target.offset ? h('th.r', 'Reference position') : null, h('th.r', model.contrast ? 'Difference' : 'Score'), h('th.r', 'SE'), h('th', 'State'))),
         h('tbody', ...rows.slice(view.page * PAGE, (view.page + 1) * PAGE).map((cell) => {
           const i = cell.index;
           const scored = cell.state === STATE.SCORED || cell.state === STATE.LOW || (cell.reference && i >= 0 && !c.reason[i]);
           return h('tr', { style: { cursor: 'pointer' }, onclick: () => { map?.focusCell(cell.k); onSelect(new Set([cell.k]), cell); map?.setSelection([cell.k]); } },
             h('td.mono', cellName(model, cell)), h('td.r', String(cell.position)), model.target.offset ? h('td.r', String(cell.position + model.target.offset)) : null,
-            h('td.r', scored ? fmt(c.score[i]) : '—'), h('td.r', scored ? fmt(c.se[i]) : '—'), h('td', STATE_NAMES[cell.state]));
+            h('td.r', scored ? fmt(c.score[i]) : '—'), h('td.r', scored ? fmt(c.se[i]) : '—'), h('td', model.contrast && cell.state === STATE.FILTERED ? 'no difference estimated' : STATE_NAMES[cell.state]));
         }))));
   }
   const tableEl = h('div');
@@ -231,7 +245,8 @@ export function mountMapMode(app, container) {
     results = entry.results;
     view.condition = Math.min(view.condition, results.conditions.length - 1);
     try {
-      model = buildMapModel(results, run.inputs.design, { condition: view.condition, rowOrder: view.rowOrder, colorBy: view.colorBy });
+      view.contrast = Math.min(view.contrast ?? 0, Math.max(0, (results.differential?.length ?? 1) - 1));
+      model = buildMapModel(results, run.inputs.design, { condition: view.condition, contrast: view.contrast, rowOrder: view.rowOrder, colorBy: view.colorBy });
     } catch (error) {
       root.append(h('div.view-body', h('div.pane', h('div.callout.warn', icon('warning'), h('span', error.message)))));
       destroyMap();
@@ -244,11 +259,13 @@ export function mountMapMode(app, container) {
     }
     cellOfKey = new Map();
     for (let p = 1; p <= model.length; p += 1) for (let r = 0; r < model.rows.length; r += 1) { const cell = cellAt(model, p, r); cellOfKey.set(cellName(model, cell), cell.k); }
-    const key = `${run.id}|${view.condition}`;
+    const key = `${run.id}|${model.contrast ? `Δ${view.contrast}` : view.condition}`;
     if (!map || mapKey !== key) {
       destroyMap();
       map = mountVariantMap({ model, palette: view.palette, selected: [], describe: describeCell, onSelect });
       mapKey = key;
+      // Remote control zooms the map shown (ui/remote.js, render_map).
+      app.mapControl = map;
     } else {
       map.setModel(model);
     }
@@ -265,6 +282,7 @@ export function mountMapMode(app, container) {
   }
   function destroyMap() {
     map?.destroy();
+    if (app.mapControl === map) app.mapControl = null;
     map = null;
     mapKey = '';
   }
