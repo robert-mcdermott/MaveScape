@@ -42,6 +42,8 @@ import { factor9Column, replicateBins, sortSeqDesign, sortSeqTable, sortSeqTruth
 import { barcodeDesign, barcodeTable, barcodeTruth, dmsVariantsTable, enrich2Files } from './barcode-cases.mjs';
 import { dmsVariantsName } from '../web/lib/barcodes.js';
 import { compareDimsum, demoCase, dimsumReference, fixtureCase, grb2Case } from './dimsum-cases.mjs';
+import { cbsCase, compareLimma, mutscanReference, twoConditionCase } from './differential-cases.mjs';
+import { DIFFERENTIAL_REASON_NAMES } from '../web/lib/differential.js';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
 import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS, withDefaults } from '../web/lib/score.js';
@@ -1064,6 +1066,121 @@ const suites = {
       check('scoring', 'a simulated bottleneck (25 cells per variant before selection, three seeds): DiMSum\'s error model puts it into each variant\'s SE, and its 95% intervals hold the true effects', `DiMSum ${ds.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; counting alone (fixed effects) ${counting.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; counting with REML ${reml.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}`, ds.every((x, i) => x >= 0.9 && x > counting[i] && x > reml[i]), '≥ 90%, above counting\'s');
     }
 
+    // Differential scores (wave 2, slice 6): the two-condition fixture (one input per replicate
+    // selected without and with a ligand) against mutscan's limma contrasts and Enrich2's comparison
+    // of conditions; the paired differential from first principles; the edge cases; the truth.
+    {
+      const tc = twoConditionCase();
+      const run = (parameters) => scoreExperiment({ names: tc.names, columns: tc.columns, design: tc.design, parameters: withDefaults(parameters) });
+      const at = (name) => tc.names.indexOf(name);
+      const mutscan = mutscanReference();
+      const lm = run({ ...defaultParameters(tc.design), differential: 'limma' });
+      const cmp = compareLimma(lm.results.differential[0], tc.ids, mutscan.cases.fixture);
+      const w = cmp.worst;
+      check('scoring', 'limma differential on the two-condition fixture: the rows mutscan fits, and every log fold change, SE, t, p, adjusted p and interval equal to mutscan\'s calculateRelativeFC (limma, relative to the wild type)', `${cmp.fitted} rows fitted, mutscan ${cmp.rows}; log2 FC within ${w.logFC.toExponential(1)}, t ${w.t.toExponential(1)}, SE ${w.se.toExponential(1)}, p ${w.p.toExponential(1)}, adjusted p ${w.q.toExponential(1)}, interval ${w.ci.toExponential(1)} SE; df.prior ${cmp.dfPrior.map((x) => x.toFixed(6)).join(' and ')}`,
+        cmp.fitted === cmp.rows && cmp.missing === 0 && w.logFC <= 1e-8 && w.t <= 1e-8 && Math.max(w.se, w.p, w.q, w.ci, w.dfTotal) <= 1e-10 && Math.abs(cmp.dfPrior[0] - cmp.dfPrior[1]) <= 1e-9 * cmp.dfPrior[1], '≤ 1e-8 relative (fold changes near 0 absolutely); the same rows');
+      // Enrich2: each condition's combined scores and its z between conditions (the Enrich2-compatible preset).
+      const e2 = enrich2.cases['two-condition'];
+      const e2m = e2.methods['ratios/wt'];
+      const ind = run({ ...defaultParameters(tc.design, null, 'enrich2') }).results;
+      const d = ind.differential[0];
+      let worstScore = 0;
+      let worstZ = 0;
+      let worstP = 0;
+      let agree = 0;
+      let differ = 0;
+      e2.variants.forEach((name, k) => {
+        const i = at(name);
+        for (const id of ['a', 'b']) {
+          const c = ind.conditions.find((x) => x.id === id);
+          const ref = e2m.combined[id].score[k];
+          if ((ref === null) !== (c.reason[i] !== 0)) differ += 1;
+          else if (ref !== null) worstScore = Math.max(worstScore, Math.abs(c.score[i] - ref) / Math.max(1, Math.abs(ref)));
+        }
+        const z = e2m.pairwise['a|b'].z[k];
+        const estimated = !d.reason[i] && Number.isFinite(d.z[i]);
+        if ((z === null) !== !estimated) differ += 1;
+        else if (z !== null) {
+          agree += 1;
+          worstZ = Math.max(worstZ, Math.abs(Math.abs(d.z[i]) - z) / Math.max(1, z));
+          worstP = Math.max(worstP, Math.abs(d.p[i] - e2m.pairwise['a|b'].p[k]) / e2m.pairwise['a|b'].p[k]);
+        }
+      });
+      check('scoring', 'independent differential with the Enrich2-compatible preset: each condition\'s combined scores and the z and p between conditions equal Enrich2 2.0.2\'s (calc_pvalues_pairwise, |z| = |s₁ − s₂|/√(SE₁² + SE₂²), which its command never calls)', `${agree} variants compared; combined scores within ${worstScore.toExponential(1)}, |z| within ${worstZ.toExponential(1)}, p within ${worstP.toExponential(1)}; ${differ} scored by one and not the other`, differ === 0 && worstScore <= 5e-13 && worstZ <= 1e-12 && worstP <= 1e-10, '≤ 5e-13 (scores), 1e-12 (z); the same variants');
+      // Paired, from first principles: within a pair the input cancels; d and its variance from the
+      // outputs and the wild type's alone, combined by fixed effects.
+      const paired = run({ ...defaultParameters(tc.design), differential: 'paired', combination: 'fixed' }).results;
+      const pd = paired.differential[0];
+      const col = (id) => tc.columns[id];
+      const wt = at('p.=');
+      let worstPair = 0;
+      tc.names.forEach((name, i) => {
+        if (pd.reason[i]) return;
+        let sw = 0;
+        let swy = 0;
+        for (const r of [1, 2, 3]) {
+          const inp = col(`input_rep${r}`)[i];
+          if (!(inp >= 1) || Number.isNaN(col(`a_rep${r}`)[i]) || Number.isNaN(col(`b_rep${r}`)[i])) continue;
+          const [oa, ob, wa, wb] = [col(`a_rep${r}`)[i], col(`b_rep${r}`)[i], col(`a_rep${r}`)[wt], col(`b_rep${r}`)[wt]].map((x) => x + 0.5);
+          const y = Math.log(ob / wb) - Math.log(oa / wa);
+          const v = 1 / oa + 1 / ob + 1 / wa + 1 / wb;
+          sw += 1 / v;
+          swy += y / v;
+        }
+        worstPair = Math.max(worstPair, Math.abs(pd.delta[i] - swy / sw) / Math.max(1, Math.abs(swy / sw)), Math.abs(pd.se[i] - Math.sqrt(1 / sw)) / Math.sqrt(1 / sw));
+      });
+      check('scoring', 'paired differential from first principles: each pair\'s difference is the log ratio of its two outputs (relative to the wild type\'s), the shared input cancelling, with the variance of the outputs\' counts alone', `${pd.estimated} variants within ${worstPair.toExponential(1)}; pairs ${pd.pairs.map((x) => x.join('·')).join(', ')}; ${pd.note}`, worstPair <= 1e-12 && pd.pairs.length === 3 && pd.unpaired.join() === 'a-rep4', '≤ 1e-12; replicate 4 unpaired');
+      // The per-condition scores do not depend on the differential.
+      const none = run({ ...defaultParameters(tc.design), differential: null }).results;
+      const same = none.conditions.every((c, j) => c.score.every((x, i) => Object.is(x, paired.conditions[j].score[i]) || x === paired.conditions[j].score[i]) || true) && outputDigest(none) !== outputDigest(run(defaultParameters(tc.design)).results);
+      const condSame = none.conditions.every((c, j) => { const other = run(defaultParameters(tc.design)).results.conditions[j]; return c.score.every((x, i) => (Number.isNaN(x) ? Number.isNaN(other.score[i]) : x === other.score[i])); });
+      check('scoring', 'the differential leaves each condition\'s scores as they are, and enters the run\'s output hash only when asked for', `conditions ${condSame ? 'identical' : 'differ'}; hash ${same ? 'changes with the differential' : 'unchanged'}; no differential: ${none.differential}`, condSame && same && none.differential === null, 'identical; hashed');
+      // The edge cases, paired (limma, the default here, fits the rows counted in every sample).
+      const defaults = [defaultParameters(tc.design), defaultParameters(tc.design, null, 'enrich2'), defaultParameters({ ...tc.design, replicates: tc.design.replicates.filter((r) => r.biological === 1) })].map((x) => x.differential);
+      check('scoring', 'the differential by default: limma for two populations with residual degrees of freedom, Enrich2\'s z with its preset, paired with one replicate per condition', defaults.join(', '), defaults.join() === 'limma,independent,paired', 'limma, independent, paired');
+      const def = run({ ...defaultParameters(tc.design), differential: 'paired' }).results.differential[0];
+      const DIFF_EDGE = [
+        ['p.Glu5Lys', 'missing from the ligand\'s output of replicate 2', 2, 0],
+        ['p.Gly4Asp', 'missing from replicate 1\'s shared input', 2, 0],
+        ['p.Lys3Arg', 'missing from every output with the ligand', 0, 2],
+        ['p.Leu7Pro', '0 reads with the ligand in replicate 3', 3, 0],
+        ['p.Thr9Ile', 'no input reads in replicate 2 (minimum input count 1)', 2, 0],
+      ];
+      for (const [name, what, k, reason] of DIFF_EDGE) {
+        const i = at(name);
+        check('scoring', `differential edge case: ${what} (${name})`, reason ? `no differential: ${DIFFERENTIAL_REASON_NAMES[def.reason[i]]}` : `${fmt(def.delta[i])} ± ${fmt(def.se[i])} from ${def.k[i]} pair${def.k[i] === 1 ? '' : 's'}`, def.reason[i] === reason && def.k[i] === k && (reason ? Number.isNaN(def.delta[i]) : Number.isFinite(def.delta[i])), reason ? DIFFERENTIAL_REASON_NAMES[reason] : `${k} pairs`);
+      }
+      // Against the truth: three simulated experiments (one input per replicate selected two ways, a
+      // bottleneck of 25 cells, counting noise only), and with noise between replicates too.
+      const truthRun = (noise) => QC_SEEDS.map((seed) => {
+        const sim = simulateExperiment({ seed, replicates: 3, readsPerVariant: 150, inputCells: 25, replicateNoise: noise, conditions: { names: ['A', 'B'], site: [12, 13, 14, 15, 16], shift: -1.5 } });
+        const t = parseTable(sim.csv);
+        const names = columnText(t.columns[0]);
+        const columns = Object.fromEntries(t.columns.slice(1).map((c) => [c.name, c.numeric]));
+        return Object.fromEntries(['paired', 'independent', 'limma'].map((method) => {
+          const out = scoreExperiment({ names, columns, design: sim.design, parameters: { ...defaultParameters(sim.design), differential: method } }).results.differential[0];
+          let inside = 0;
+          let total = 0;
+          let falseCalls = 0;
+          let nulls = 0;
+          let found = 0;
+          let site = 0;
+          sim.variants.forEach((v, i) => {
+            if (out.reason[i] || v.kind === 'wild type') return;
+            total += 1;
+            if (Math.abs(out.delta[i] - v.differential) <= 1.959964 * out.se[i]) inside += 1;
+            if (v.differential === 0) { nulls += 1; if (out.q[i] < 0.05) falseCalls += 1; } else { site += 1; if (out.q[i] < 0.05) found += 1; }
+          });
+          return [method, { coverage: inside / total, falseCalls: falseCalls / nulls, found: found / site }];
+        }));
+      });
+      const summary = (rows) => ['paired', 'independent', 'limma'].map((m) => `${m} ${rows.map((r) => `${(100 * r[m].coverage).toFixed(0)}%`).join('/')} (site found ${rows.map((r) => `${(100 * r[m].found).toFixed(0)}%`).join('/')}, nulls called ${rows.map((r) => `${(100 * r[m].falseCalls).toFixed(1)}%`).join('/')})`).join('; ');
+      const counting = truthRun(0);
+      check('scoring', 'differential against the truth, counting noise and a shared bottleneck (25 cells), three seeds: the paired 95% intervals hold the true differential; treated as independent, the input counted twice, they are too wide and find fewer of the site\'s variants', summary(counting), counting.every((r) => r.paired.coverage >= 0.93 && r.paired.coverage <= 0.985 && r.independent.coverage > r.paired.coverage + 0.015 && r.independent.found < r.paired.found && r.limma.coverage >= 0.93 && r.paired.falseCalls <= 0.01 && r.limma.falseCalls <= 0.01), 'paired 93–98.5%; independent wider and finds fewer; limma ≥ 93%; ≤ 1% of nulls called');
+      const noisy = truthRun(0.1);
+      check('scoring', 'differential against the truth with selection noise between replicates (SD 0.1 per condition), three seeds: three pairs give REML little to estimate τ² from, so paired intervals hold less and call more nulls; limma\'s moderated variances, shared across variants, hold up', summary(noisy), noisy.every((r) => r.limma.coverage >= 0.8 && r.limma.falseCalls <= 0.02), 'limma ≥ 80%, ≤ 2% of nulls called (reported)');
+    }
+
     // The PRD's edge cases, as planted in the fixture, under MaveScape's defaults.
     const defaults = score(fixture, design, DEFAULT_PARAMETERS);
     const names = fixture.columns.find((c) => c.name === 'hgvs_pro').values;
@@ -1261,6 +1378,36 @@ const suites = {
       const b = [];
       run.variants.original.forEach((x, i) => { const j = pubRow.get(x); if (j !== undefined && !run.conditions[0].reason[i] && Number.isFinite(raw[j])) { a.push(run.conditions[0].score[i]); b.push(raw[j]); } });
       check('scoring', 'GRB2 SH3 scored by DiMSum\'s model follows its published scores (DiMSum\'s, from the Domainome\'s run of many domains together, through a line)', `Pearson r ${pearson(a, b).toFixed(4)} over ${a.length} variants`, pearson(a, b) >= 0.99, 'r ≥ 0.99');
+    }
+    // CBS at two vitamin B6 levels from shared inputs (MaveDB urn:mavedb:00000005-a-5 and -a-6):
+    // limma against mutscan on real data, and how much counting the inputs twice overstates.
+    {
+      const cbs = cbsCase(dataset('mavedb-cbs'));
+      const run = (differential) => {
+        const t0 = performance.now();
+        const out = scoreExperiment({ names: cbs.names, columns: cbs.columns, design: cbs.design, parameters: { ...defaultParameters(cbs.design), normalization: 'synonymous', differential } });
+        if (!out.ok) throw new Error(out.errors.join(' '));
+        return { results: out.results, ms: performance.now() - t0 };
+      };
+      const lm = run('limma');
+      const cmp = compareLimma(lm.results.differential[0], cbs.ids, mutscanReference().cases.cbs);
+      const w = cmp.worst;
+      check('scoring', `CBS, low against high vitamin B6 from the same four inputs (scored in ${lm.ms.toFixed(0)} ms): limma's differential relative to the synonymous variants equals mutscan's calculateRelativeFC on the same rows`, `${cmp.fitted} rows fitted, mutscan ${cmp.rows} (${cmp.compared} compared); log2 FC within ${w.logFC.toExponential(1)}, t ${w.t.toExponential(1)}, SE ${w.se.toExponential(1)}, p ${w.p.toExponential(1)}, adjusted p ${w.q.toExponential(1)}; df.prior ${cmp.dfPrior.map((x) => x.toFixed(6)).join(' and ')}`,
+        cmp.fitted === cmp.rows && cmp.missing === 0 && w.logFC <= 1e-8 && w.t <= 1e-8 && Math.max(w.se, w.p, w.q, w.ci, w.dfTotal) <= 1e-10 && Math.abs(cmp.dfPrior[0] - cmp.dfPrior[1]) <= 1e-9 * cmp.dfPrior[1], '≤ 1e-8; the same rows');
+      const paired = run('paired').results.differential[0];
+      const ind = run('independent').results.differential[0];
+      const ratios = [];
+      const shares = [];
+      const pairs = run('paired').results;
+      paired.reason.forEach((r, i) => {
+        if (r || ind.reason[i]) return;
+        ratios.push(ind.se[i] / paired.se[i]);
+      });
+      // The input's share of a replicate's counting variance, over the replicates scored.
+      for (const rep of pairs.replicates) rep.state.forEach((st, i) => { if (!st) shares.push((1 / (rep.first[i] + 0.5)) / (rep.se[i] * rep.se[i])); });
+      const med = (x) => Float64Array.from(x).sort()[x.length >> 1];
+      const both = (d) => d.reason.reduce((a, r, i) => a + (!r && d.q[i] < 0.05 ? 1 : 0), 0);
+      check('scoring', 'CBS: compared as independent, the two conditions count their shared inputs twice; the paired differential takes the inputs\' counting error out', `inputs ${(100 * med(shares)).toFixed(0)}% of a replicate's counting variance (median); independent SEs a median ${med(ratios).toFixed(2)}× the paired over ${ratios.length} variants; q < 0.05: paired ${both(paired)}, independent ${both(ind)}, limma ${both(lm.results.differential[0])}`, med(ratios) > 1.05, 'independent wider');
     }
   },
   // Quality control (wave 1, slice 6): simulated experiments with one problem each raise exactly
@@ -1477,6 +1624,10 @@ const suites = {
     const grb2Bytes = new Uint8Array(readFileSync(new URL('../web/examples/grb2-sh3/counts.csv', import.meta.url)));
     const grb2Design = JSON.parse(readFileSync(new URL('../web/examples/grb2-sh3/design.json', import.meta.url), 'utf8'));
     cases.push(['the GRB2 SH3 example', { bytes: grb2Bytes, design: grb2Design, fileName: 'counts.csv', name: 'GRB2 SH3' }]);
+    // Two conditions compared (limma, as a new run compares them), its differential export too.
+    const twoBytes = new Uint8Array(readFileSync(new URL('./fixtures/two-condition.csv', import.meta.url)));
+    const twoDesign = JSON.parse(readFileSync(new URL('./fixtures/two-condition.design.json', import.meta.url), 'utf8'));
+    cases.push(['the two-condition fixture', { bytes: twoBytes, design: twoDesign, fileName: 'two-condition.csv', name: 'Two conditions', parameters: defaultParameters(twoDesign) }]);
     for (const [label, input] of cases) {
       const built = buildWorkspace(input);
       const exports = allExports(built.ws, built.table, built.results);
@@ -1490,7 +1641,7 @@ const suites = {
       check('roundtrip', `${label}: the reopened workspace is the saved one (history chained, run reproduced)`, `${reopened.ws.history.length} history entries, ${verifyHistory(reopened.ws).ok ? 'unbroken' : 'broken'}; output SHA-256 ${outputDigest(again.scored.results) === reopened.ws.runs[0].output.sha256 ? 'as recorded' : 'different'}`, serializeWorkspace(reopened.ws) === serializeWorkspace(built.ws) && verifyHistory(reopened.ws).ok && outputDigest(again.scored.results) === reopened.ws.runs[0].output.sha256, 'the same');
       const exportsAgain = allExports(reopened.ws, again.table, again.scored.results);
       const differing = Object.keys(exports).filter((k) => k !== 'methods' && exports[k] !== exportsAgain[k]);
-      check('roundtrip', `${label}: every export again after reopening, byte for byte (${Object.keys(exports).length - 1} files: scores, counts, QC per sample and per variant, provenance, methods, references, selection, map)`, differing.length ? `differ: ${differing.join(', ')}` : 'all identical', !differing.length, 'identical');
+      check('roundtrip', `${label}: every export again after reopening, byte for byte (${Object.keys(exports).length - 1} files: scores, counts, QC per sample and per variant, provenance, methods, references, selection, map${exports['differential.csv'] ? ', differential scores' : ''})`, differing.length ? `differ: ${differing.join(', ')}` : 'all identical', !differing.length, 'identical');
       const light = await writeArchive(built.ws, { software: SOFTWARE, sources: null, results: new Map([[built.run.id, built.results]]), methods: exports.methods });
       const lightRead = await readArchive(light.bytes);
       check('roundtrip', `${label}: with checksums only, the archive names the table by its SHA-256 and holds no table`, `${(light.bytes.length / 1024).toFixed(0)} KB; manifest sources "${lightRead.manifest.sources}"; ${lightRead.sources.size} tables; ${lightRead.problems.length} problems`, lightRead.sources.size === 0 && lightRead.manifest.sources === 'checksums' && !lightRead.problems.length && lightRead.ws.sources[0].sha256 === built.ws.sources[0].sha256, 'no table, no problems');
@@ -1589,7 +1740,9 @@ const suites = {
       const simTable = assembleTable(sim.files.map((f) => ({ name: f.name, table: parseTable(f.text), role: f.role })), { level: sim.design.variants.level, target: sim.design.targets[0] }).table;
       const parameters = defaultParameters(sim.design);
       const simScored = scoreTable(simTable, sim.design, parameters);
-      const simC = simScored.results.conditions[0];
+      // Two conditions: the truth is the difference between them, scored by the run's differential.
+      const differential = sim.truthOf === 'differential';
+      const simC = differential ? { score: simScored.results.differential[0].delta, reason: simScored.results.differential[0].reason } : simScored.results.conditions[0];
       const a = [];
       const b = [];
       simScored.results.variants.key.forEach((k, i) => { if (!simC.reason[i] && k in sim.truth && k !== 'p.=') { a.push(simC.score[i]); b.push(sim.truth[k]); } });
@@ -1597,7 +1750,8 @@ const suites = {
       const simQc = findingsFrom(computeQC({ ...inputFor(simTable, sim.design), design: sim.design, results: simScored.results }), defaultThresholds());
       const raisedSim = Object.fromEntries(simQc.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => [f.id, f.status]));
       const expectedQc = example.findings ?? {};
-      check('roundtrip', `the example "${example.title}": the same data from its seed, labeled simulated, scored by ${MODELS[parameters.model]} close to the true effects, and QC raises exactly the findings it teaches (${simQc.length} findings)`, `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${Object.keys(raisedSim).length ? Object.entries(raisedSim).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > 0.98 && JSON.stringify(raisedSim) === JSON.stringify(expectedQc), `r > 0.98; ${Object.keys(expectedQc).length ? Object.entries(expectedQc).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`);
+      const minimum = differential ? 0.95 : 0.98;
+      check('roundtrip', `the example "${example.title}": the same data from its seed, labeled simulated, scored by ${MODELS[parameters.model]}${differential ? `, its conditions compared by ${parameters.differential},` : ''} close to the true ${differential ? 'differences' : 'effects'}, and QC raises exactly the findings it teaches (${simQc.length} findings)`, `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${Object.keys(raisedSim).length ? Object.entries(raisedSim).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > minimum && JSON.stringify(raisedSim) === JSON.stringify(expectedQc), `r > ${minimum}; ${Object.keys(expectedQc).length ? Object.entries(expectedQc).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`);
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
     // The blank layouts: filled in as they say, they make a valid design.

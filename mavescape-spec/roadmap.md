@@ -628,11 +628,79 @@ runs and the performance targets.
      - **A bottleneck shared by every replicate is missed by REML in part.** Its τ² sees only
        the disagreement between replicates, not the noise they share through counting too few
        cells; DiMSum's multiplicative terms put it into each replicate's SE.
-6. **Two conditions (S10, E2).** Conditions in the design; per-condition runs; differential
-   scores with a shared-input model (the naive SE overstates uncertainty when the input is
-   shared), and limma contrasts (from CytoWeave's `limma.js`) as mutscan computes them.
-   - Validation: Enrich2's between-condition z; mutscan `calculateRelativeFC` (limma) within
-     1e-8.
+6. **Two conditions (S10, E2): done.** `web/lib/differential.js`: each condition against the
+   reference (the condition marked so in the design, else the first), by one of three methods
+   (`differential`): limma's moderated t on voom log counts, a term for each input library and
+   for selection in each condition, relative to the wild type or the synonymous variants' summed
+   counts (their sums scaled to the libraries' geometric mean, as edgeR's scaleOffset does for
+   mutscan), as mutscan's calculateRelativeFC(method = "limma") computes it; replicates paired by
+   their shared input (and tile), each pair's difference with the input's counting error taken out
+   (rescaled scores compared as rescaled), the pairs combined as the run's replicates; the
+   conditions as independent (Enrich2's z). Two-sided p (normal, or t for limma) and
+   Benjamini–Hochberg q per contrast. `web/lib/limma.js` (Cleveland's lowess, voom with limma's
+   adaptive span, weighted least squares per row, contrasts with the design's correlation as
+   limma documents, empirical Bayes moderation) and `web/lib/distributions.js` (ln Γ, digamma,
+   trigamma and its inverse, the incomplete beta, Student's t and its quantile, the normal
+   quantile AS 241, BH), written from the publications: CytoWeave's `limma.js` was written from
+   limma's GPL source and is not used (the risk below, settled). `score.js`: the parameter
+   (null by default, so runs made before keep their hashes; `defaultParameters` sets limma where
+   it applies, paired otherwise, independent for the Enrich2-compatible preset), refusals with
+   reasons, results per contrast in the run's output hash. The simulator's two conditions from
+   shared inputs. The map's differential coloring (V2), the inspector's "Between conditions", the
+   Score view's comparison pane (volcano plot, largest differences) and select, the differential
+   export, the methods (Smyth 2004, Law et al. 2014, Soneson et al. 2023, Benjamini and Hochberg
+   1995), remote control. A sixth example (a simulated ligand-binding site, opening on its
+   differential map); two screenshot scenes; the site's scoring, map, experiment, examples,
+   record, scripting and science pages; FORMATS.md.
+   - Validation (suite `scoring`, 14 more checks, 143 in all): a two-condition fixture
+     (`fixtures/make-two-condition.mjs`: one input per replicate selected under two conditions, a
+     fourth replicate without a partner, five edge cases planted) against mutscan 1.2.0
+     (`reference/generate_mutscan.R`, limma 3.68.5, edgeR 4.10.5): every log fold change and t
+     within 1.8 × 10⁻¹⁰, SE, p, adjusted p and interval within 1.2 × 10⁻¹², the same 836 rows and
+     prior; against Enrich2 2.0.2 (`generate_enrich2.py`, the experiment run through its API and
+     calc_pvalues_pairwise called): both conditions' combined scores and |z| and p within
+     5 × 10⁻¹³; the paired differential from first principles within 10⁻¹⁵; the per-condition
+     scores unchanged by the differential, which enters the hash only when asked; the defaults;
+     the edge cases; the truth on three seeds with shared inputs and a bottleneck (paired intervals
+     95–97%, limma 97–98%, independent 99–100% and fewer found) and with noise between replicates
+     (limma 93–98% and ≤ 0.4% of nulls called; paired 82–94% and 1–11%). External: CBS at low and
+     high vitamin B6 (MaveDB urn:mavedb:00000005-a-5 and -a-6, joined on hgvs_nt, four shared
+     inputs): limma against mutscan on 9,409 rows within 4.1 × 10⁻¹¹; independent SEs a median
+     1.11× the paired. Suite `roundtrip` (7 more, 36): the new example, and a two-condition
+     workspace saved, reopened and exported again byte for byte, its differential export with it.
+     `remote-session.mjs` 5 more (69): the example in the window with Node's hash, its
+     differential map, a variant's difference and the differential export as Node's. 17 more unit
+     tests (178).
+   - Found by slice 6:
+     - **CytoWeave's `limma.js` follows limma's GPL source**, so it was not reused (the risk below);
+       limma's statistics were written again from the papers and matched to R black-box, each
+       convention found by experiment rather than read from limma.
+     - **voom's span is not 0.5** in limma 3.68: `adaptive.span` is on by default and the span is
+       min(1, 0.3 + 0.7 (50/n)^⅓) for n rows (chooseLowessSpan): 0.65 for 400 rows. With 0.5 the
+       trend was 2.4% off.
+     - **limma floors small residual variances at 10⁻⁵ of their median** when it estimates the
+       prior. The wild type's own variance is nearly 0 when it is the normalizer, and its ln s² of
+       −17 would otherwise pull the prior df from 5.7 to 3.2.
+     - **mutscan's library sizes with WTrows** are the wild type's sums scaled to the libraries'
+       geometric mean (edgeR's scaleOffset); its pseudocount argument does not reach limma, whose
+       voom adds 0.5.
+     - **Enrich2's command never compares conditions** (calc_pvalues_pairwise exists but
+       `calculate` does not call it: issue #59), and with several conditions its random-effects
+       estimator starts every condition from the variance over the variants combined in any
+       condition. MaveScape used each condition's own count (1.5 × 10⁻⁵ apart); it now uses
+       Enrich2's.
+     - **Paired REML calls too much with three pairs** when replicates disagree beyond counting:
+       τ² is poorly estimated from three differences (7–11% of nulls called in two seeds of
+       three). limma's variances, moderated across variants, stay calibrated, so limma is the
+       default where it applies.
+     - **A single wild-type normalizer's own noise moves every difference of a pair together**
+       (an offset of 0.2 in one simulated seed): neither the paired SE nor τ² sees it.
+       Normalizing to the synonymous variants averages it out.
+     - **"Shared samples" warned about inputs shared between conditions**, which the differential
+       is built on; it now warns only of sharing within a condition.
+     - **CBS's two MaveDB records share their non-selected samples** (identical wherever both count
+       a variant): one set of inputs selected at two B6 levels. The low-B6 record's select5–8 are
+       at a concentration the record does not give, so they are not used.
 7. **Headless runs (M2, M3).** On slice 1's hub, the `run.go` pattern: `mavescape run --design
    design.json --counts counts.csv --out results/` (validate first, deterministic outputs,
    `run.json` with input and output hashes, structured JSON logs, non-zero exit on blocking errors,
@@ -877,5 +945,5 @@ they hit reorder the waves.
 | Barcode-scale tables in the browser | Memory and speed | Streaming parse, columnar arrays, workers, a million-row benchmark gated in CI |
 | Public APIs change | Broken imports and tracks | Provider adapters, cached records with retrieval metadata, recorded fixtures, graceful degradation |
 | Color maps overstate certainty | Misinterpretation | Separate state patterns and uncertainty channels; missing never neutral |
-| Licensing of reference code | GPL tools (dms_variants, dms_tools2) in an Apache-2.0 project; CytoWeave's `limma.js` follows GPL limma closely (an open decision there) | GPL tools used only as external references in validation; no code ported from GPL sources; the limma question settled before wave 2, slice 6 reuses `limma.js` (reimplement from the publications if needed) |
+| Licensing of reference code | GPL tools (dms_variants, dms_tools2) in an Apache-2.0 project; CytoWeave's `limma.js` follows GPL limma closely (an open decision there) | GPL tools used only as external references in validation; no code ported from GPL sources. Settled in wave 2, slice 6: CytoWeave's `limma.js` is not used; MaveScape's `limma.js` is written from the publications and checked against R's limma as a black box |
 | One developer | Adoption and continuity | Validation and documentation that let others check and continue; external labs from wave 2 |

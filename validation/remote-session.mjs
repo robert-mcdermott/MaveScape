@@ -23,7 +23,7 @@ import { FINGERPRINT } from '../web/lib/dmath.js';
 import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
 import { exampleById, simulatedExample } from '../web/lib/examples.js';
 import { assembleTable } from '../web/lib/assemble.js';
-import { barcodesCSV } from '../web/lib/exports.js';
+import { barcodesCSV, differentialCSV } from '../web/lib/exports.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -283,6 +283,29 @@ try {
   check('export barcodes.csv: the same bytes as Node\'s', `${bcWritten.length} bytes, ${bcWritten.split('\n').length - 2} barcodes`, bcWritten === barcodesCSV(bcNode, bcRun));
   const outlying = await act('inspect_variant', { variant: 'p.Glu6Gln', run: byBarcode.data.name });
   check('inspect_variant on a barcode run: each replicate\'s barcodes measured and its outliers, and the barcodes listed in the inspector', `${outlying.message} ${outlying.data.replicates.map((r) => `${r.name}: ${r.barcodesMeasured} measured, outliers ${r.outlierBarcodes.join(', ') || 'none'}`).join('; ')}`, outlying.data.replicates.every((r) => r.barcodesMeasured >= 3) && outlying.data.replicates.some((r) => r.outlierBarcodes.length === 1) && (await browser.eval(`Boolean(document.querySelector('#inspector .barcode-table'))`)));
+
+  // Two conditions (wave 2, slice 6): the example opens on its differential map; scored in the
+  // window with Node's hash; the map, a variant and the differential export as Node makes them.
+  await act('open_example', { id: 'simulated-conditions' });
+  const twoSim = simulatedExample(exampleById('simulated-conditions'));
+  const twoDesign = await browser.eval('window.mavescape.store.ws.design');
+  const twoNode = scoreTable(parseTable(twoSim.csv), twoDesign, defaultParameters(twoDesign)).results;
+  const twoState = await act('get_state');
+  const twoRun = twoState.data.runs?.[0] ?? null;
+  const twoRecord = await browser.eval('window.mavescape.store.ws.runs[0]');
+  check('open_example "simulated-conditions": Run 1 compares the conditions by limma, with Node\'s output hash', `${twoRecord.inputs.parameters.differential}; ${twoRecord.output.sha256.slice(0, 16)}… and ${outputDigest(twoNode).slice(0, 16)}…`, twoRecord.inputs.parameters.differential === 'limma' && twoRecord.output.sha256 === outputDigest(twoNode) && Boolean(twoRun));
+  const diffMap = await act('render_map', { color_by: 'differential' });
+  check('render_map colored by the differential: the contrast named, the map described as the difference', diffMap.message, diffMap.data.contrast === 'With ligand vs Without ligand' && diffMap.data.colorBy === 'differential' && /Differential map/.test(diffMap.message));
+  const pro13 = await act('inspect_variant', { variant: 'p.Pro13Ala' });
+  const d0 = twoNode.differential[0];
+  const i13 = twoNode.variants.key.indexOf('p.Pro13Ala');
+  const got = pro13.data.differential?.[0];
+  check('inspect_variant with conditions compared: the difference, its SE and q as Node\'s, and the block in the inspector', `${got?.contrast}: ${got?.difference} ± ${got?.se}, q ${got?.q}`, got?.difference === +d0.delta[i13].toPrecision(4) && got?.se === +d0.se[i13].toPrecision(4) && got?.q === +d0.q[i13].toPrecision(4) && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Between conditions')`)));
+  await act('export', { what: 'differential', path: join(out, 'differential.csv') });
+  const diffWritten = readFileSync(join(out, 'differential.csv'), 'utf8');
+  check('export differential.csv: the same bytes as Node\'s', `${diffWritten.length} bytes`, diffWritten === differentialCSV(twoNode, twoRecord));
+  const paired = await act('score', { parameters: { differential: 'paired' } });
+  check('score with the paired differential: a second run, summarized per contrast', paired.message, paired.data.name === 'Run 2' && paired.data.differential?.[0]?.method === 'paired' && paired.data.differential[0].compared > 800);
 
   check('every action listed was exercised', `${[...called].length} of ${names.length}: missing ${names.filter((n) => !called.has(n)).join(', ') || 'none'}`, names.every((n) => called.has(n)));
   check('no uncaught errors in the page', errors.join(' | ') || 'none', errors.length === 0);

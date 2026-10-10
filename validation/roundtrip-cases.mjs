@@ -11,7 +11,7 @@ import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../web/lib/findings.js';
 import { addRun, makeRun, recordedInputs, runInputs } from '../web/lib/runs.js';
 import { addSelection, addSource, addTarget, createWorkspace, setDesign, setQcThresholds } from '../web/lib/workspace.js';
-import { barcodesCSV, countsCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../web/lib/exports.js';
+import { barcodesCSV, countsCSV, differentialCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../web/lib/exports.js';
 import { writeMethods } from '../web/lib/methods.js';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
@@ -38,7 +38,7 @@ export function scoreTable(table, design, parameters, mode = 'lenient') {
 }
 
 // The workspace, built with fixed times so that it is the same every time.
-export function buildWorkspace({ bytes, design, fileName, name }) {
+export function buildWorkspace({ bytes, design, fileName, name, parameters = DEFAULT_PARAMETERS }) {
   const table = parseTable(bytes, { fileName });
   const countColumns = design.samples.flatMap((s) => s.columns);
   const review = reviewImport(table, { variantColumn: design.variants.column, level: design.variants.level, countColumns, target: design.targets[0] });
@@ -55,9 +55,9 @@ export function buildWorkspace({ bytes, design, fileName, name }) {
   };
   const added = addSource(ws, source);
   ws = setDesign(added.ws, design, 'The design', added.id);
-  const scored = scoreTable(table, design, DEFAULT_PARAMETERS);
+  const scored = scoreTable(table, design, parameters);
   if (!scored.ok) throw new Error(scored.errors.join(' '));
-  const run = makeRun({ inputs: runInputs({ source: ws.sources[0], design, parameters: DEFAULT_PARAMETERS }), source: ws.sources[0], results: scored.results, software: SOFTWARE, name: 'Run 1', created: '2026-10-09T12:05:00.000Z' });
+  const run = makeRun({ inputs: runInputs({ source: ws.sources[0], design, parameters }), source: ws.sources[0], results: scored.results, software: SOFTWARE, name: 'Run 1', created: '2026-10-09T12:05:00.000Z' });
   ws = addRun(ws, run).ws;
   const keys = scored.results.variants.key.filter((k, i) => k && scored.results.variants.position[i] >= 3 && scored.results.variants.position[i] <= 5);
   ws = addSelection(ws, { name: 'Positions 3–5', run: run.id, condition: 0, keys, created: '2026-10-09T12:06:00.000Z' }).ws;
@@ -86,6 +86,7 @@ export function allExports(ws, table, results) {
     'selection.json': selectionJSON(selection, run),
     'map.svg': mapSVG(buildMapModel(results, run.inputs.design), { results }),
     ...(results.barcodes ? { 'barcodes.csv': barcodesCSV(results, run) } : {}),
+    ...(results.differential ? { 'differential.csv': differentialCSV(results, run) } : {}),
     methods,
   };
 }

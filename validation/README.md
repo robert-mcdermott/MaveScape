@@ -13,7 +13,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `enrich2` | Enrich2 2.0.2's scores of those data (`reference/enrich2.json`) against the formulas of `mavescape-spec/research.md` §2.1 computed independently, and the published BRCA1 scores against Enrich2 2.0.2 | MaveDB, external; `reference/enrich2.json` |
 | `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
-| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales; barcodes (wave 2): every barcode and every variant's summed counts against dms_variants 1.6.0 by barcode and by substitution, the counts read with MaveScape's map, in dms_variants' `variant_counts` and in Enrich2's layout, the barcode fixture's truth and planted outliers, row order, refusals; DiMSum's model (wave 2): the threshold, the variants fitted, the scales and shifts, the error model, every fitness and σ and the merge against DiMSum 1.4's own functions on the fixture, GRB2 and DiMSum's demo, GRB2's published scores, the 95% intervals' coverage under a simulated bottleneck, refusals | `reference/enrich2.json`, `dms_variants.json`, `dms_variants-barcodes.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `dimsum.json`, `fixtures/`; MaveDB and DiMSum, external |
+| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales; barcodes (wave 2): every barcode and every variant's summed counts against dms_variants 1.6.0 by barcode and by substitution, the counts read with MaveScape's map, in dms_variants' `variant_counts` and in Enrich2's layout, the barcode fixture's truth and planted outliers, row order, refusals; DiMSum's model (wave 2): the threshold, the variants fitted, the scales and shifts, the error model, every fitness and σ and the merge against DiMSum 1.4's own functions on the fixture, GRB2 and DiMSum's demo, GRB2's published scores, the 95% intervals' coverage under a simulated bottleneck, refusals; differential scores (wave 2): limma against mutscan 1.2.0 on the two-condition fixture and CBS, Enrich2's z between conditions, the paired differential from first principles, the edge cases, the truth | `reference/enrich2.json`, `dms_variants.json`, `dms_variants-barcodes.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `dimsum.json`, `mutscan.json`, `fixtures/`; MaveDB and DiMSum, external |
 | `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series, sorts and barcoded libraries) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks, and DiMSum's terms placing them before or after selection; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
 | `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
 | `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked | `fixtures/`, `web/examples/` |
@@ -32,8 +32,9 @@ byte for byte the file Node makes from the exported archive (provenance but for 
 It also checks that `web/lib/dmath.js` gives the same bits in the browser as in Node, and (wave 2,
 slice 4) the barcoded example: its counts and map assembled in the window, scored barcode by
 barcode with Node's output hash, its barcodes exported byte for byte as Node writes them; and
-(slice 5) GRB2 scored with the DiMSum preset, Node's output hash and fitted terms. 64 checks; in CI
-as the `remote` job.
+(slice 5) GRB2 scored with the DiMSum preset, Node's output hash and fitted terms; and (slice 6) the
+two-condition example in the window with Node's hash, its differential map, a variant's difference
+and the differential export as Node writes them. 69 checks; in CI as the `remote` job.
 
 ## Public data (`sources.json`)
 
@@ -43,6 +44,7 @@ as the `remote` job.
 | `mavedb-brca1-ring` (urn:mavedb:00000003-a-1, -a-2) | time series: 2 libraries × 3 replicates × 6 rounds (E2 binding), and 2 × 3 × 4 non-uniform times (Y2H), in one table | shared inputs, two assays in one table, legacy `_wt`/`_sy` rows, a DNA target with an offset and a known difference from UniProt; Enrich2 behind the published scores |
 | `mavedb-factor9` (urn:mavedb:00001200-a-1) | FACS bins: 3 overlapping tiles × 3 replicates × 4 bins | tiled libraries, VAMP-seq-style weights |
 | `dimsum-demo` (lehner-lab/DiMSum `inst/demo`, MIT) | 40,591 whole nucleotide sequences × 4 inputs and 4 outputs; its design file | DiMSum's layout (variants as sequences, named against the 126-nt wild type); CR-only line ends |
+| `mavedb-cbs` (urn:mavedb:00000005-a-5, -a-6) | two populations × 4 replicates at low and at high vitamin B6, in two records whose non-selected samples are the same | two conditions from shared inputs (wave 2, slice 6); counts not whole numbers; codon variants with no wild-type row |
 
 All are CC0 on MaveDB. MaveDB's API writes these CSV files identically on every request (checked
 2026-10-08), with Windows line ends (CRLF) and `NA` for missing values; counts are written as
@@ -444,6 +446,66 @@ and the browser), sampled every 100 ms. On the same laptop (Chrome 154), over tw
 A worker ends when it has nothing more to do (`web/ui/workers.js`), so what a large table or run
 leaves in its memory goes with it; before that, the import held 750 MB after it was done.
 
+## The two-condition fixture (`fixtures/two-condition.*`, wave 2 slice 6)
+
+`node validation/fixtures/make-two-condition.mjs` writes it from the simulator (seed 20261013):
+the 40-residue protein's 839 variants, one input per replicate (40 cells per variant transformed)
+selected without and with a ligand, the missense variants of positions 12–16 losing about 1.5 with
+it; a fourth replicate without the ligand only, whose input no other condition shares. Planted:
+`p.Glu5Lys` missing from the ligand's output of replicate 2, `p.Gly4Asp` missing from replicate 1's
+shared input, `p.Lys3Arg` missing from every output with the ligand, `p.Leu7Pro` with 0 reads with
+the ligand in replicate 3, `p.Thr9Ile` with no input reads in replicate 2. The truth
+(`two-condition.truth.csv`) is each variant's effect in each condition and the difference.
+Enrich2 scores it as case `two-condition` (`generate_enrich2.py`, run through Enrich2's Python API
+so that its comparison of conditions, `calc_pvalues_pairwise`, can be called).
+
+## mutscan (`reference/mutscan.json`, wave 2 slice 6)
+
+```sh
+node validation/fetch.mjs
+Rscript validation/reference/generate_mutscan.R
+```
+
+(R 4.6.1, mutscan 1.2.0, limma 3.68.5, edgeR 4.10.5, from Bioconductor.) mutscan's
+`calculateRelativeFC(method = "limma")` on the design ~ Library + Condition (a term for each input
+library, the input the baseline for selection in each condition) with the contrast of one
+condition's selection less the reference's, the reference rows as `WTrows` (normMethod "sum"): the
+fixture relative to its wild type, and CBS (the low- and high-B6 records joined on `hgvs_nt` in the
+low-B6 record's order, nonselect1–4 shared, select1–4 of each) relative to its synonymous variants'
+summed counts. Rows: those counted in every sample. Kept: every row of the fixture, every 5th of
+CBS's and its reference rows. limma is GPL: it is the reference here only, and MaveScape's
+`web/lib/limma.js` is written from the publications (Smyth 2004; Law et al. 2014; Cleveland 1979).
+
+### What the comparisons showed (wave 2, slice 6)
+
+- **limma, as mutscan computes it:** on the fixture (836 rows, 11 samples) every log₂ fold change
+  and t within 1.8 × 10⁻¹⁰ (largest where the change is near 0), SE, p, adjusted p and the 95%
+  interval within 1.2 × 10⁻¹², df.prior equal (11.22); on CBS (9,409 rows, 12 samples, relative
+  to 466 synonymous variants) within 4.1 × 10⁻¹¹ and 6.5 × 10⁻¹³, df.prior 9.47. Three of limma's
+  conventions were found by experiment against R, not read from its source: voom's lowess span
+  is chosen from the number of rows (limma 3.68's `adaptive.span`, 0.65 for 400 rows: 0.5 put the
+  trend 2.4% off); variances below 10⁻⁵ of the median count as that when the prior is estimated
+  (the wild type's, nearly 0, otherwise moved the prior df from 5.7 to 3.2); and mutscan's library
+  sizes are the reference rows' sums scaled to the libraries' geometric mean (edgeR's
+  scaleOffset).
+- **Enrich2's z between conditions** (|s₁ − s₂|/√(SE₁² + SE₂²), and its normal p) with the
+  Enrich2-compatible preset, and each condition's combined scores: within 5 × 10⁻¹³ over 835
+  variants, the same variants with none (those not scored in every replicate of a condition) —
+  once MaveScape's estimator starts, as Enrich2's does with several conditions, from the variance
+  over the variants combined in any condition (it had used the condition's own: 1.5 × 10⁻⁵ apart).
+- **Paired, from first principles:** each pair's difference is the log ratio of its two outputs,
+  each relative to the wild type's, with the variance of their counts alone: within 10⁻¹⁵.
+- **Against the truth** (three seeds, three replicates, 25 cells per variant shared by both
+  selections, counting noise only): 95% intervals hold the true difference 95–97% of the time
+  paired, 97–98% by limma, 99–100% as independent (the shared input counted twice: too wide, and
+  88–92% of the site's variants found against 93–96%); at most 0.3% of unchanged variants called
+  at q < 0.05. With noise between replicates (SD 0.1 per condition): limma 93–98% and at most
+  0.4% called; paired 82–94% and 1–11% (three pairs give REML little to estimate τ² from);
+  independent 96–99%.
+- **CBS:** the inputs are 16% of a replicate's counting variance (median); as independent, the
+  SEs are a median 1.11× the paired. At q < 0.05: 3,643 variants by limma, 2,417 paired, 1,687
+  as independent.
+
 ## The record (wave 1, slice 8)
 
 `roundtrip-cases.mjs` builds a workspace as the window does (a table imported, its target and
@@ -459,5 +521,8 @@ manifest, or with an entry that inflates beyond its declared size (each refused)
 
 The GRB2 example's counts (`web/examples/grb2-sh3/counts.csv`) must be MaveDB's file byte for byte
 (the SHA-256 in `sources.json`); the simulated example must be the same from its seed, labeled
-simulated, its scores within r > 0.98 of the true effects, and pass every QC finding.
+simulated, its scores within r > 0.98 of the true effects, and pass every QC finding. The
+two-condition example's differences must be within r > 0.95 of the true ones (r = 0.966, most
+being 0). A two-condition workspace (the fixture, compared by limma) is saved, reopened and
+exported again too, its differential export byte for byte.
 

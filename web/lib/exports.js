@@ -8,6 +8,7 @@
 import { KIND_NAMES, STATUS_NAMES } from './variants.js';
 import { STAGE_BY_CODE, flagNames, REPLICATE_STATE_NAMES } from './filters.js';
 import { describeParameters, isBarcodeRun } from './runs.js';
+import { DIFFERENTIAL_REASON_NAMES } from './differential.js';
 import { canonicalJSON } from './workspace.js';
 import { sha256 } from './sha256.js';
 import { columnText } from './csv.js';
@@ -113,6 +114,27 @@ export function barcodesCSV(results, run) {
       cells.push(num(here[0]), num(here[here.length - 1]), num(rb.score[m]), num(rb.se[m]), num(rb.z[m]), counted ? (rb.outlier[m] ? 'yes' : 'no') : 'NA', used);
     }
     rows.push(cells);
+  }
+  return csv(header, rows);
+}
+
+// Differential scores between conditions, one row per variant of the table: for each contrast
+// (each condition against the reference) the difference, its SE, 95% interval, p and BH-adjusted
+// q, the method, the pairs or replicates behind it (limma: t), and why there is none. NA where
+// there is none.
+export function differentialCSV(results, run) {
+  const ds = results.differential;
+  if (!ds?.length) throw new Error(`${run.name} compares no conditions.`);
+  const level = run.inputs.design.variants.level;
+  const v = results.variants;
+  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'variant_as_written', ...ds.flatMap((d) => ['difference', 'SE', 'ci95_lower', 'ci95_upper', d.method === 'limma' ? 't' : 'z', 'p', 'q', d.method === 'limma' ? 'replicates' : 'pairs', 'status'].map((x) => `${x}_${safe(d.id)}`))];
+  const rows = [];
+  for (let i = 0; i < results.rows; i += 1) {
+    rows.push([...hgvsColumns(level, v.key[i]), v.original[i], ...ds.flatMap((d) => {
+      const ok = !d.reason[i];
+      const x = (a) => num(ok ? a[i] : Number.NaN);
+      return [x(d.delta), x(d.se), x(d.ciLow), x(d.ciHigh), x(d.z), x(d.p), x(d.q), ok ? String(d.k[i]) : 'NA', DIFFERENTIAL_REASON_NAMES[d.reason[i]]];
+    })]);
   }
   return csv(header, rows);
 }

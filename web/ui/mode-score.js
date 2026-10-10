@@ -8,7 +8,8 @@
 import { h, icon, clear, formatCount } from './dom.js';
 import { confirmDialog, showMenu, toast } from './overlays.js';
 import { validateDesign } from '../lib/design.js';
-import { checkParameters, defaultParameters, MODELS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
+import { checkParameters, defaultDifferential, defaultParameters, MODELS, PRESETS, RESCALINGS, withDefaults } from '../lib/score.js';
+import { DIFFERENTIAL_METHODS } from '../lib/differential.js';
 import { REGRESSION_SE } from '../lib/score-regression.js';
 import { BIN_SCALES, BIN_SE, BIN_SIGMA } from '../lib/score-bins.js';
 import { AGGREGATIONS, BARCODE_COMBINATIONS, OUTLIER_Z } from '../lib/score-barcodes.js';
@@ -18,7 +19,7 @@ import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '..
 import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, removeRun, runId, runInputs } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
 import { KIND_NAMES } from '../lib/variants.js';
-import { classHistogram, flowBars, scoreGroups } from './plots.js';
+import { classHistogram, cssVar, flowBars, legend, scatter, scoreGroups } from './plots.js';
 import { runScore, workerInput } from './score-input.js';
 import { ensureResults, forgetResults } from './run-results.js';
 import { runExportItems } from './record.js';
@@ -58,11 +59,13 @@ export function mountScoreMode(app, container) {
   // The preset parameters match, whatever the model, normalization and handling of barcodes (each
   // preset keeps them).
   // (DiMSum's preset sets its model; the others keep the model, leaving DiMSum's for the ratio.)
-  const kept = (p, preset) => ({
+  // Each preset compares conditions its own way (lib/score.js, defaultDifferential).
+  const kept = (p, preset, id) => ({
     ...(preset.parameters.model === 'dimsum' ? {} : { model: p.model === 'dimsum' ? 'ratio' : p.model }),
     normalization: p.normalization, aggregation: p.aggregation, barcodeCombination: p.barcodeCombination,
+    differential: defaultDifferential(store.ws.design, id, p.normalization),
   });
-  const presetOf = (p) => Object.entries(PRESETS).find(([, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, ...kept(p, preset) })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
+  const presetOf = (p) => Object.entries(PRESETS).find(([id, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, ...kept(p, preset, id) })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
 
   // --- Readiness ------------------------------------------------------------------------------
   function readiness() {
@@ -196,7 +199,7 @@ export function mountScoreMode(app, container) {
     }
     return h('div.pane', h('h3', icon('settings'), 'Parameters'),
       h('div.field', h('span', 'Start from'), h('div.segmented.wrap', { role: 'group', 'aria-label': 'Preset' },
-        ...Object.entries(PRESETS).filter(([id]) => id !== 'vampseq' && (id !== 'dimsum' || designModel === 'two-population')).map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...x.parameters, ...kept(p, x) }) }, x.label))),
+        ...Object.entries(PRESETS).filter(([id]) => id !== 'vampseq' && (id !== 'dimsum' || designModel === 'two-population')).map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...x.parameters, ...kept(p, x, id) }) }, x.label))),
         preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
       barcodes,
       designModel === 'time-series' ? select('Scored by', p.model, options(['ratio', 'wls', 'ols']), (v) => setDraft({ model: v })) : null,
@@ -204,17 +207,33 @@ export function mountScoreMode(app, container) {
       p.model === 'wls' || p.model === 'ols' ? select('Standard error of a slope', p.regressionSE, Object.entries(REGRESSION_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ regressionSE: v })) : null,
       p.model === 'dimsum' ? h('div.field', h('span', 'DiMSum'),
         h('label.check', h('input', { type: 'checkbox', checked: p.dimsumNormalise, onchange: (e) => setDraft({ dimsumNormalise: e.target.checked }) }), 'Scale and shift each replicate to agree with the others'),
-        h('label.check', h('input', { type: 'checkbox', checked: p.dimsumErrorModel, onchange: (e) => setDraft({ dimsumErrorModel: e.target.checked }) }), 'Error model: multiplicative input and output terms, an additive term')) : select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v })),
+        h('label.check', h('input', { type: 'checkbox', checked: p.dimsumErrorModel, onchange: (e) => setDraft({ dimsumErrorModel: e.target.checked }) }), 'Error model: multiplicative input and output terms, an additive term')) : select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v, ...(p.differential === 'limma' && v !== 'wt' && v !== 'synonymous' ? { differential: 'paired' } : {}) })),
       h('div.form-grid',
         p.model === 'dimsum' ? number('Dropout pseudocount (outputs of 0)', p.dimsumDropout, (v) => setDraft({ dimsumDropout: v ?? 0 }), { min: 0, step: 1 }) : number('Pseudocount', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }),
         select('Replicates combined by', p.combination, Object.entries(COMBINATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ combination: v }, v === 'enrich2' ? { minReplicates: 'all' } : null))),
       select('Rescaling', p.rescale, Object.entries(RESCALINGS).map(([k, v]) => [k, v.label[0].toUpperCase() + v.label.slice(1)]), (v) => setDraft({ rescale: v })),
+      differentialField(p),
       h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, p.model === 'dimsum'
         ? 'Scores are DiMSum\'s fitness (Faure et al. 2020): natural-log ratios less the wild type\'s, with no pseudocount (a zero count gives no score). The replicates of each experiment are fitted together: their scales and shifts, and the error model whose terms say how much variance there is beyond counting, and where.'
         : p.model === 'ratio'
         ? 'Scores are natural-log ratios of frequencies after and before selection; technical replicates are summed first, biological replicates scored separately and then combined.'
         : `Scores are the slopes of each variant's normalized log count on time scaled to 0–1, by ${p.model === 'wls' ? 'weighted (each point by its counting precision, as Enrich2)' : 'ordinary'} least squares; technical replicates are summed first, biological replicates scored separately and then combined.`,
       barcodes ? (p.aggregation === 'sum' ? ' A variant\'s barcodes are summed in each sample first (as Enrich2, and dms_variants by substitution).' : ' Each barcode is scored against its replicate\'s normalizers (as dms_variants by barcode), and a variant\'s barcodes are combined within the replicate, their disagreement in its SE.') : null));
+  }
+
+  // Conditions compared (two or more conditions): each against the reference.
+  function differentialField(p) {
+    const conditions = store.ws.design?.conditions ?? [];
+    if (conditions.length < 2) return null;
+    const reference = conditions.find((c) => c.reference) ?? conditions[0];
+    const labels = { limma: 'limma\'s moderated t (as mutscan)', paired: 'Replicates paired by their shared input', independent: 'As independent (Enrich2\'s z)' };
+    return h('div',
+      select('Conditions compared by', p.differential ?? 'none', [...Object.keys(DIFFERENTIAL_METHODS).map((k) => [k, labels[k]]), ['none', 'Not compared']], (v) => setDraft({ differential: v === 'none' ? null : v })),
+      p.differential ? h('p.muted', { style: { fontSize: '11.5px', margin: '-4px 0 6px' } }, `${conditions.filter((c) => c !== reference).map((c) => c.name).join(', ')} against ${reference.name} (the reference; set it in Experiment). ${p.differential === 'limma'
+        ? 'A linear model of every sample\'s log counts, a term for each input library and for selection in each condition, its variances shared across variants (empirical Bayes): calibrated with few replicates.'
+        : p.differential === 'paired'
+          ? 'Each pair of replicates sharing an input gives a difference without the input\'s counting error; the pairs are combined as the replicates are.'
+          : 'The conditions\' combined scores, each with its own SE: an input they share is counted twice, so the SE is too large.'}`) : null);
   }
 
   function filtersPane() {
@@ -435,7 +454,32 @@ export function mountScoreMode(app, container) {
           h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, `${formatCount(c.scored)} scored${lowConfidence ? `, ${formatCount(lowConfidence)} with low confidence` : ''}; NA for the rest, each with its stage.${c.rescale ? ` Rescaled: ${c.rescale.anchors.map((a) => `${a.what} ${fmt(a.from)} → ${a.to}`).join(', ')}.` : ''}`)),
         h('div.pane', h('h3', icon('histogram'), 'Scores by class'), histogram(c, results))),
       h('div.pane.replicates-pane', h('h3', icon('experiment'), 'Replicates'), replicatesTable(results, c, p)),
+      results.differential?.length ? h('div.pane.differential-pane', h('h3', icon('compare'), 'Between conditions'), ...results.differential.flatMap((d) => differentialView(results, d, p, run))) : null,
       h('div.pane', h('h3', icon('table'), 'Variants'), variantsTable(results, c, run))];
+  }
+
+  // A contrast: how it was made, how many variants differ, its volcano plot and the largest
+  // differences.
+  function differentialView(results, d, p, run) {
+    const rows = [];
+    for (let i = 0; i < d.reason.length; i += 1) if (!d.reason[i]) rows.push(i);
+    const called = rows.filter((i) => d.q[i] < 0.05);
+    const lower = called.filter((i) => d.delta[i] < 0).length;
+    const method = d.method === 'limma' ? `limma's moderated t (as mutscan), relative to the ${p.normalization === 'wt' ? 'wild type' : 'synonymous variants'}; prior variance on ${Number.isFinite(d.prior.df) ? d.prior.df.toFixed(1) : '∞'} degrees of freedom`
+      : d.method === 'paired' ? `replicates paired by their shared input (${d.pairs.length} pair${d.pairs.length === 1 ? '' : 's'}), combined by ${COMBINATIONS[p.combination]}` : 'the conditions as independent (Enrich2\'s z)';
+    const colorOf = (g) => (g ? cssVar('--danger') : cssVar('--text-3'));
+    const points = rows.map((i) => [d.delta[i], -Math.log10(Math.max(d.p[i], 1e-300)), d.q[i] < 0.05 ? 1 : 0]);
+    const top = called.slice().sort((a, b) => d.p[a] - d.p[b]).slice(0, 8);
+    const q = (x) => (x < 0.001 ? x.toExponential(1) : x.toFixed(3));
+    return [
+      h('h4', d.name),
+      h('p.muted', { style: { fontSize: '12px', margin: '0 0 6px' } }, `${formatCount(rows.length)} variants compared, by ${method}. ${formatCount(called.length)} differ at q < 0.05 (Benjamini–Hochberg): ${formatCount(lower)} lower in ${d.name.split(' vs ')[0]}, ${formatCount(called.length - lower)} higher.${d.note ? ` ${d.note}` : ''}`),
+      scatter({ points, colorOf, xLabel: 'difference (natural log)', yLabel: '−log10 p', label: `${d.name}: each variant's difference against −log10 of its p-value; red where q < 0.05`, height: 220 }),
+      legend([{ label: 'q < 0.05', color: cssVar('--danger') }, { label: 'the others', color: cssVar('--text-3') }]),
+      top.length ? h('table.data.compact', { style: { marginTop: '8px' } }, h('thead', h('tr', h('th', 'Largest differences'), h('th.r', 'Difference'), h('th.r', 'q'))),
+        h('tbody', ...top.map((i) => h('tr', { style: { cursor: 'pointer' }, onclick: () => app.focusItem({ kind: 'variant', id: results.variants.key[i], run: run.id, condition: results.conditions.findIndex((x) => x.id === d.condition) }) },
+          h('td.mono', results.variants.original[i]), h('td.r', `${fmt(d.delta[i], 2)} ± ${fmt(d.se[i], 2)}`), h('td.r', q(d.q[i])))))) : null,
+    ];
   }
 
   // --- The view ---------------------------------------------------------------------------------

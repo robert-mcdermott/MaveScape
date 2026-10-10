@@ -17,6 +17,10 @@ samples, replicates, times, the wild-type row. Enrich2 conventions, read from it
   it here and back in the output.
 - Two-population replicates are written as time series of two points (input 0, output 1).
 - Output folders are named by Enrich2's fix_filename (it drops "-" and other punctuation).
+- Enrich2 compares conditions by z = |s₁ − s₂| / √(SE₁² + SE₂²) and its two-sided normal p
+  (Experiment.calc_pvalues_pairwise), but its command never calls it (issue #59): for cases with two
+  conditions the experiment is run through its Python API, as enrich_cmd runs it, and that method
+  called after scoring.
 
 The output holds, for every case and method, each replicate's score and SE and the combined
 score, SE and epsilon (Enrich2's last change in the random-effects variance), column by column for
@@ -62,6 +66,10 @@ CASES = [
     # (fixtures/make-time-series.mjs).
     ("time-series", "fixtures/time-series.design.json", "fixtures/time-series.csv",
      [("WLS", "wt"), ("OLS", "wt"), ("WLS", "complete"), ("ratios", "wt")]),
+    # Two conditions from shared inputs, with the differential's edge cases planted
+    # (fixtures/make-two-condition.mjs): the conditions compared as well.
+    ("two-condition", "fixtures/two-condition.design.json", "fixtures/two-condition.csv",
+     [("ratios", "wt")]),
 ]
 
 WT = "_wt"
@@ -69,7 +77,7 @@ WT = "_wt"
 # Which variants a case keeps: "all", or every n-th variant by name plus the wild-type and
 # synonymous rows and the first `partial` variants (by name) missing from some replicates but not
 # all (how missing counts are handled).
-KEEP = {"grb2-sh3": "all", "two-population": "all", "time-series": "all", "brca1-ring-e2": {"every": 6, "partial": 300}, "brca1-ring-y2h": {"every": 6, "partial": 300}}
+KEEP = {"grb2-sh3": "all", "two-population": "all", "time-series": "all", "two-condition": "all", "brca1-ring-e2": {"every": 6, "partial": 300}, "brca1-ring-y2h": {"every": 6, "partial": 300}}
 
 
 def sha256(path):
@@ -118,6 +126,10 @@ def columns(results, variants):
                                 "epsilon": [values.get(v, [None] * 3)[2] for v in variants]}
                          for cond, values in method["combined"].items()},
         }
+        if method.get("pairwise"):
+            out[key]["pairwise"] = {pair: {"z": [values.get(v, [None, None])[0] for v in variants],
+                                           "p": [values.get(v, [None, None])[1] for v in variants]}
+                                    for pair, values in method["pairwise"].items()}
     return out
 
 
@@ -168,6 +180,37 @@ def build_config(design, rows, workdir):
     return config
 
 
+def run_api(config, scoring, logr):
+    """Runs the experiment as enrich_cmd does (Python API), then Enrich2's comparison of each pair
+    of conditions; returns {"a|b": {variant: [z, p]}}."""
+    from enrich2.experiment import Experiment
+    obj = Experiment()
+    obj.force_recalculate = False
+    obj.component_outliers = False
+    obj.scoring_method = scoring
+    obj.logr_method = logr
+    obj.plots_requested = False
+    obj.tsv_requested = True
+    obj.output_dir_override = False
+    obj.configure(config)
+    obj.validate()
+    obj.store_open(children=True)
+    try:
+        obj.calculate()
+        out = {}
+        for label in obj.labels:
+            if label == "barcodes":
+                continue
+            obj.calc_pvalues_pairwise(label)
+            frame = obj.store["/main/{}/scores_pvalues".format(label)]
+            for (c1, c2) in sorted({(a, b) for a, b, _ in frame.columns}):
+                out[f"{c1}|{c2}"] = {name: [number(r[(c1, c2, "z")]), number(r[(c1, c2, "pvalue_raw")])] for name, r in frame.iterrows()}
+        obj.write_tsv()
+        return out
+    finally:
+        obj.store_close(children=True)
+
+
 def run_case(design, rows, scoring, logr):
     workdir = tempfile.mkdtemp(prefix="mavescape-enrich2-")
     try:
@@ -175,13 +218,19 @@ def run_case(design, rows, scoring, logr):
         config_path = os.path.join(workdir, "config.json")
         with open(config_path, "w") as f:
             json.dump(config, f)
-        enrich = shutil.which("enrich_cmd")
-        subprocess.run([enrich, config_path, scoring, logr, "--no-plots"], check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        pairwise = None
+        if len(config["conditions"]) > 1:
+            pairwise = run_api(config, scoring, logr)
+        else:
+            enrich = shutil.which("enrich_cmd")
+            subprocess.run([enrich, config_path, scoring, logr, "--no-plots"], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         tsv = os.path.join(workdir, "out", "tsv")
         wild = design.get("controls", {}).get("wildType", "auto")
         back = (lambda name: wild if name == WT and wild != "auto" else name)
         result = {"replicates": {}, "combined": {}}
+        if pairwise is not None:
+            result["pairwise"] = {pair: {back(name): values for name, values in table.items()} for pair, table in pairwise.items()}
         for condition in config["conditions"]:
             for selection in condition["selections"]:
                 frame = pd.read_csv(os.path.join(tsv, f"{fix_filename(selection['name'])}_sel", "main_identifiers_scores.tsv"),

@@ -32,7 +32,33 @@ export const COLOR_BY = {
   se: { label: 'Standard error', kind: 'sequential' },
   replicates: { label: 'Replicates used', kind: 'sequential' },
   input: { label: 'Input count (log)', kind: 'sequential' },
+  // A run with conditions compared (wave 2, slice 6): a contrast's differential scores.
+  differential: { label: 'Differential score', kind: 'diverging', differential: true },
 };
+
+// A contrast of a run as the map reads a condition: Δ as the score, its SE, the pairs (or
+// replicates) behind it, low confidence where either condition's score has it, and as reasons the
+// "not measured" stage where neither condition measured the variant, else 255 where there is no
+// differential (the map shows it filtered; DIFFERENTIAL_REASON_NAMES says why).
+export const NO_DIFFERENTIAL = 255;
+export function contrastCondition(results, index = 0) {
+  const d = results.differential[index];
+  const A = results.conditions.find((x) => x.id === d.reference);
+  const B = results.conditions.find((x) => x.id === d.condition);
+  const measured = STAGE_BY_ID.get('measured').code;
+  return {
+    id: d.id,
+    name: d.name,
+    contrast: d,
+    score: d.delta,
+    se: d.se,
+    k: d.k,
+    flags: Uint8Array.from(A.flags, (f, i) => (d.reason[i] ? 0 : f | B.flags[i])),
+    reason: Uint8Array.from(d.reason, (r, i) => (!r ? 0 : A.reason[i] === measured && B.reason[i] === measured ? measured : NO_DIFFERENTIAL)),
+    replicates: [...A.replicates, ...B.replicates],
+    rescale: null,
+  };
+}
 
 function proteinOf(target) {
   if (target.sequenceType === 'protein') return target.sequence.toUpperCase();
@@ -47,14 +73,16 @@ function proteinOf(target) {
   return out;
 }
 
-// The model of one condition of a run. options: { condition (index), rowOrder, colorBy }.
+// The model of one condition of a run, or of a contrast between two (colorBy 'differential').
+// options: { condition (index), contrast (index), rowOrder, colorBy }.
 export function buildMapModel(results, design, options = {}) {
   const target = design.targets?.length === 1 ? design.targets[0] : null;
   if (!target) throw new Error('The map needs the design\'s target: the sequence its positions are numbered on.');
   if (design.variants.level !== 'protein') throw new Error('The map shows protein-level variants; this run names nucleotide variants (their mapping to the protein comes in wave 3).');
-  const c = results.conditions[options.condition ?? 0];
+  const differential = options.colorBy === 'differential' && results.differential?.length;
+  const c = differential ? contrastCondition(results, Math.min(options.contrast ?? 0, results.differential.length - 1)) : results.conditions[options.condition ?? 0];
   const order = ROW_ORDERS[options.rowOrder ?? 'biochemical'] ?? ROW_ORDERS.biochemical;
-  const colorBy = COLOR_BY[options.colorBy] ? options.colorBy : 'score';
+  const colorBy = differential ? 'differential' : COLOR_BY[options.colorBy] && options.colorBy !== 'differential' ? options.colorBy : 'score';
   const protein = proteinOf(target);
   const length = targetLength(target, 'protein');
   const tiles = design.library?.tiles ?? [];
@@ -118,14 +146,20 @@ export function buildMapModel(results, design, options = {}) {
   for (let k = 0; k < cells.length; k += 1) {
     const i = cells[k];
     if (i < 0 || (state[k] !== STATE.SCORED && state[k] !== STATE.LOW && !(state[k] === STATE.REFERENCE && !c.reason[i]))) continue;
-    value[k] = colorBy === 'score' ? c.score[i] : colorBy === 'se' ? c.se[i] : colorBy === 'replicates' ? c.k[i] : log10(inputOf(i) + 1);
+    value[k] = colorBy === 'score' || colorBy === 'differential' ? c.score[i] : colorBy === 'se' ? c.se[i] : colorBy === 'replicates' ? c.k[i] : log10(inputOf(i) + 1);
   }
   // The color domain: scores diverge from the wild type's score, symmetrically (the same color
   // distance is the same score distance on both sides); the others run from their low to high end.
   const finite = sorted([...value].filter(Number.isFinite));
   const wt = results.controls.wt >= 0 && !c.reason[results.controls.wt] ? c.score[results.controls.wt] : Number.NaN;
   let domain;
-  if (colorBy === 'score') {
+  if (colorBy === 'differential') {
+    // Centered on no difference, symmetric.
+    const lo = quantileSorted(finite, 0.02);
+    const hi = quantileSorted(finite, 0.98);
+    const span = Math.max(-lo, hi, 1e-9);
+    domain = { kind: 'diverging', center: 0, min: -span, max: span };
+  } else if (colorBy === 'score') {
     const center = Number.isFinite(wt) ? wt : (c.rescale?.anchors.find((a) => a.what === 'wild type')?.to ?? 0);
     const lo = quantileSorted(finite, 0.02);
     const hi = quantileSorted(finite, 0.98);
@@ -162,6 +196,9 @@ export function buildMapModel(results, design, options = {}) {
     rowOrder: options.rowOrder ?? 'biochemical',
     groups: order.groups ?? null,
     condition: { id: c.id, name: c.name },
+    contrast: differential ? { id: c.id, name: c.name, method: c.contrast.method, reference: c.contrast.reference, condition: c.contrast.condition } : null,
+    // The condition (or contrast as a condition) the cells come from.
+    source: c,
     colorBy,
     domain,
     cells,
@@ -206,10 +243,16 @@ export function describeMap(model, results) {
   const total = c[STATE.SCORED] + c[STATE.LOW] + c[STATE.FILTERED] + c[STATE.MISSING];
   const lines = [];
   const pos = (p) => `${p}${model.target.offset ? ` (${p + model.target.offset} in the reference)` : ''}`;
-  lines.push(`Variant-effect map of ${model.target.name}${results.conditions.length > 1 ? `, ${model.condition.name}` : ''}: ${model.length} positions by ${model.rows.length} substitutions (the 20 amino acids and stop), ${total} designed. ${c[STATE.SCORED]} scored, ${c[STATE.LOW]} scored with low confidence, ${c[STATE.FILTERED]} filtered, ${c[STATE.MISSING]} missing${c[STATE.NOT_DESIGNED] ? `, ${c[STATE.NOT_DESIGNED]} outside the designed tiles` : ''}.`);
+  if (model.contrast) {
+    lines.push(`Differential map of ${model.target.name}, ${model.contrast.name}: ${model.length} positions by ${model.rows.length} substitutions, ${total} designed. ${c[STATE.SCORED] + c[STATE.LOW]} with a differential score${c[STATE.LOW] ? ` (${c[STATE.LOW]} from a score of low confidence)` : ''}, ${c[STATE.FILTERED]} without one (not scored in one of the conditions), ${c[STATE.MISSING]} measured in neither.`);
+  } else lines.push(`Variant-effect map of ${model.target.name}${results.conditions.length > 1 ? `, ${model.condition.name}` : ''}: ${model.length} positions by ${model.rows.length} substitutions (the 20 amino acids and stop), ${total} designed. ${c[STATE.SCORED]} scored, ${c[STATE.LOW]} scored with low confidence, ${c[STATE.FILTERED]} filtered, ${c[STATE.MISSING]} missing${c[STATE.NOT_DESIGNED] ? `, ${c[STATE.NOT_DESIGNED]} outside the designed tiles` : ''}.`);
   const positions = [];
   for (let p = 1; p <= model.length; p += 1) if (model.columnCount[p - 1] >= 5) positions.push([p, model.columnMedian[p - 1]]);
-  if (positions.length >= 10) {
+  if (model.contrast && positions.length >= 10) {
+    positions.sort((a, b) => a[1] - b[1]);
+    lines.push(`Positions whose substitutions change most between the conditions (lowest median difference): ${positions.slice(0, 5).map(([p, m]) => `${model.protein[p - 1]}${pos(p)} ${m.toFixed(2)}`).join(', ')}; highest: ${positions.slice(-3).reverse().map(([p, m]) => `${model.protein[p - 1]}${pos(p)} ${m.toFixed(2)}`).join(', ')}.`);
+    lines.push(`Colors run from ${model.domain.min.toFixed(2)} to ${model.domain.max.toFixed(2)}, centered on no difference.`);
+  } else if (positions.length >= 10) {
     positions.sort((a, b) => a[1] - b[1]);
     lines.push(`Positions least tolerant of substitution (lowest median score): ${positions.slice(0, 5).map(([p, m]) => `${model.protein[p - 1]}${pos(p)} ${m.toFixed(2)}`).join(', ')}.`);
     lines.push(`Most tolerant: ${positions.slice(-5).reverse().map(([p, m]) => `${model.protein[p - 1]}${pos(p)} ${m.toFixed(2)}`).join(', ')}.`);

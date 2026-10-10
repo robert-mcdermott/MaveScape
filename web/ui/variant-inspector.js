@@ -3,13 +3,16 @@
 // every sample, each replicate's score and whether it was used (for a regression on time, its time
 // course in each replicate with the fitted line), the sequence around it, where it falls among the
 // substitutions at its position, and the run it comes from; for a table of barcodes, each of its
-// barcodes in each replicate (counts, score, departure from the others, outliers). Focus:
+// barcodes in each replicate (counts, score, departure from the others, outliers); with conditions
+// compared, its score in each and each difference (with the pairs of replicates behind it). Focus:
 // { kind: 'variant', id: MAVE-HGVS key, run, condition }.
 
 import { h, icon } from './dom.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { describeParameters, isBarcodeRun } from '../lib/runs.js';
+import { DIFFERENTIAL_REASON_NAMES, pairDifference, transformOf } from '../lib/differential.js';
+import { withDefaults } from '../lib/score.js';
 import { timeCourse } from '../lib/score-regression.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { ensureResults, runEntry } from './run-results.js';
@@ -80,6 +83,38 @@ function positionStrip(results, c, row, position, key) {
 // A table of barcodes: the variant's barcodes in each replicate that counts them, with their counts
 // (before and after; in each bin), score ± SE, departure from the variant's other barcodes (z/√φ)
 // and whether each is an outlier or left out.
+// Between conditions: the variant's score in each condition, and each contrast's difference with
+// its interval and adjusted p; paired, each pair's difference (the shared input cancelled).
+function differentialBlock(results, row, run) {
+  const p = withDefaults(run.inputs.parameters);
+  const design = run.inputs.design;
+  const reference = (design.conditions ?? []).find((c) => c.reference)?.id ?? design.conditions?.[0]?.id;
+  const q = (x) => (x < 0.001 ? x.toExponential(1) : x.toFixed(3));
+  const out = [h('h4.inspector-sub', 'Between conditions'),
+    h('table.data.compact', h('thead', h('tr', h('th', 'Condition'), h('th.r', 'Score'), h('th.r', 'Replicates'))),
+      h('tbody', ...results.conditions.map((c) => h('tr', h('td', c.id === reference ? `${c.name} (reference)` : c.name), h('td.r', c.reason[row] ? 'not scored' : `${fmt(c.score[row], 2)} ± ${fmt(c.se[row], 2)}`), h('td.r', String(c.k[row]))))))];
+  for (const d of results.differential) {
+    if (d.reason[row]) {
+      out.push(h('p.muted', { style: { fontSize: '12px', margin: '6px 0' } }, `${d.name}: no difference estimated (${DIFFERENTIAL_REASON_NAMES[d.reason[row]]}).`));
+      continue;
+    }
+    out.push(h('div.variant-score', { style: { marginTop: '8px' } }, h('span.variant-score-value', fmt(d.delta[row])), h('span.muted', ` ± ${fmt(d.se[row])} SE · 95% CI ${fmt(d.ciLow[row], 2)} to ${fmt(d.ciHigh[row], 2)} · q ${q(d.q[row])}`)),
+      h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 6px' } }, `${d.name}: ${d.method === 'limma' ? `limma's moderated t = ${fmt(d.z[row], 2)} on ${fmt(d.df, 1)} degrees of freedom, from every sample's counts relative to the ${p.normalization === 'wt' ? 'wild type' : 'synonymous variants'}` : d.method === 'paired' ? `the differences of ${d.k[row]} pair${d.k[row] === 1 ? '' : 's'} of replicates sharing an input, combined` : 'the two conditions\' scores as independent (Enrich2\'s z)'}.`));
+    if (d.method === 'paired') {
+      const A = results.conditions.find((c) => c.id === d.reference);
+      const B = results.conditions.find((c) => c.id === d.condition);
+      const terms = { tA: transformOf(A), tB: transformOf(B), pseudocount: p.pseudocount, normalization: p.normalization };
+      const byId = new Map(results.replicates.map((r) => [r.id, r]));
+      out.push(h('table.data.compact', h('thead', h('tr', h('th', 'Pair'), h('th.r', 'Difference'))),
+        h('tbody', ...d.pairs.map(([a, b]) => {
+          const t = pairDifference(byId.get(a), byId.get(b), row, terms);
+          return h('tr', h('td', `${byId.get(b).name} · ${byId.get(a).name}`), h('td.r', t ? `${fmt(t.d, 2)} ± ${fmt(Math.sqrt(t.v), 2)}` : 'not measured in both'));
+        }))));
+    }
+  }
+  return out;
+}
+
 function barcodesBlock(results, reps, row, binned) {
   const b = results.barcodes;
   const members = Array.from(b.members.subarray(b.offsets[row], b.offsets[row + 1]));
@@ -202,6 +237,7 @@ export function variantSection(app, focus) {
         legend(items.map(([color, label]) => ({ color, label }))),
         h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, 'Points: ln(count + pseudocount) − ln(normalizer) at each time; dashed: the fitted line, whose slope on time scaled to 0–1 is the replicate\'s score. Departure: scatter about the line over what counting predicts (1 is typical).'));
     }
+    if (results.differential?.length) parts.push(...differentialBlock(results, row, run));
     // Every sample's counts.
     if (results.samples?.length) {
       parts.push(h('details.inspector-details', h('summary', `Counts in all ${results.samples.length} samples`),

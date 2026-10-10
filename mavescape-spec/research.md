@@ -398,8 +398,11 @@ MaveScape should say so where it applies it.
 - **MaveDB API:** the docs and the live API differ on the search response shape and on license
   headers in CSV downloads (none seen in API CSVs).
 - **Brnich thresholds:** to check against the paper (wave 7).
-- **Enrich2 issue #59** (multi-condition scores): unconfirmed. Test it before using Enrich2 as the
-  differential reference.
+- **Enrich2 issue #59** (multi-condition scores): tested in wave 2, slice 6. Enrich2's command never
+  computes its comparison of conditions (calc_pvalues_pairwise is not called), and with several
+  conditions its estimator starts from the variance over the variants combined in any condition.
+  Called directly, its z equals MaveScape's independent differential within 5 × 10⁻¹³, so Enrich2
+  is a reference for that method; limma (through mutscan) for the others.
 - **Findlay SGE HGVS format:** not inspected.
 - **GB1 supplement license:** unclear.
 - **PDZ3 00000053:** unpublished; replicate structure undocumented.

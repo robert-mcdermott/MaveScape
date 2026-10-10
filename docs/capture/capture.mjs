@@ -252,6 +252,22 @@ const scenes = {
     await act('qc_findings', { finding: 'outlier-barcodes' });
     await sleep(600);
   },
+  // Two conditions from shared inputs: the map of their difference, a binding-site variant in the
+  // inspector with its score in each condition and the difference.
+  async 'differential-map'() {
+    await example('simulated-conditions');
+    await act('render_map', { color_by: 'differential' });
+    await act('inspect_variant', { variant: 'p.Pro13Ala' });
+    await sleep(600);
+    await scrollTo('#inspector h4.inspector-sub:nth-of-type(2)', 'start');
+  },
+  // The Score view's comparison of the conditions: how, how many differ, the volcano plot.
+  async 'differential-score'() {
+    await example('simulated-conditions');
+    await act('set_mode', { mode: 'score' });
+    await act('focus', { kind: 'run', name: 'Run 1' });
+    await scrollTo('.differential-pane', 'center');
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

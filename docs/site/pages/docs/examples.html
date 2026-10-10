@@ -1,7 +1,7 @@
 ---
 title: Examples
-description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and simulated experiments, a time series, a sort and a barcoded library, whose true effects are known.
-lede: Five examples come with MaveScape: a published experiment, and four simulated ones whose true effects are known: two populations, a time series, a sort and a barcoded library. Each opens scored, with its question, guided steps and what to expect in the inspector.
+description: MaveScape's bundled examples: a published deep mutational scan of the GRB2 SH3 domain from MaveDB, and simulated experiments, a time series, a sort, a barcoded library and two conditions, whose true effects are known.
+lede: Six examples come with MaveScape: a published experiment, and five simulated ones whose true effects are known: two populations, a time series, a sort, a barcoded library and two conditions from shared inputs. Each opens scored, with its question, guided steps and what to expect in the inspector.
 ---
       <h2 id="grb2">GRB2 SH3 domain (published)</h2>
       <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
@@ -50,6 +50,16 @@ lede: Five examples come with MaveScape: a published experiment, and four simula
         <li>The map names about 96% of the barcodes; those it gives two variants are left unmapped, and listed at import.</li>
         <li>Quality control reviews the outlier barcodes, about 2% of those compared, and the variance between replicates beyond counting.</li>
         <li>Summed per variant, the scores track the true effects with r = 0.985; each barcode scored and combined by REML, 0.996; summed with the outliers left out, 0.995.</li>
+      </ul>
+
+      <h2 id="conditions">A simulated two-condition experiment (known truth)</h2>
+      <p>Every variant of a 40-residue protein selected from one input library under two conditions, without and with a ligand, in three replicates, simulated by MaveScape (seed 20261015). About 40 cells per variant were transformed and split between the two selections. Missense variants of a five-residue binding site (positions 12–16) lose about 1.5 in log fitness with the ligand only; every other variant behaves the same in both, so the true difference is known.</p>
+      <p><strong>The question:</strong> which variants behave differently with the ligand, and how sure is each difference?</p>
+      <shot name="differential-map" alt="The map of the simulated two-condition example colored by the difference With ligand vs Without ligand, pale except a blue band at positions 12 to 16, with p.Pro13Ala in the inspector">The example opens on the map of the difference between the conditions; the binding site stands out.</shot>
+      <ul>
+        <li>The differences track the true ones (r = 0.97); limma's moderated t calls 94 of the site's 95 variants at q &lt; 0.05, and none of the other 743.</li>
+        <li>Quality control reviews the variance beyond counting in each condition: about 40 cells per variant were transformed. Both conditions grew from the same cells, so the bottleneck cancels from their differences.</li>
+        <li>Compared as independent (Enrich2's z), the same differences have SEs about 1.6× larger: the input both conditions share is counted twice.</li>
       </ul>
 
       <h2 id="layouts">Blank layouts</h2>

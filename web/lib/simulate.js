@@ -32,6 +32,13 @@
 // misread barcode). The counts are a table of barcodes; which variant each carries is in a
 // separate barcode-to-variant map, in which a fraction `conflicts` of barcodes is given a second,
 // different variant (both are wrong to trust) and a fraction `unmapped` is missing.
+//
+// With `conditions` (wave 2, slice 6), two conditions selected from one input: each replicate's
+// input library and transformed cells (with any bottleneck) are shared, then split into a
+// selection under each condition, each with its own noise and output. In the second condition,
+// missense variants at the `site` positions change by `shift` ± `siteSd` (a binding site that
+// matters only there); every other variant's effect is the same in both, so the true differential
+// is known and 0 for most variants.
 
 import { exp, log, normalCdf } from './dmath.js';
 import { createRandom, poisson } from './random.js';
@@ -63,6 +70,7 @@ export const DEFAULT_SIMULATION = {
   timeUnit: 'generation',
   sort: null, // { gates: [log offsets from the wild type's μ], sigma, effectScale, cellsPerVariant, wtFluorescence, values }
   barcodes: null, // { perVariant, wildType, readsPerBarcode, noise, outliers, conflicts, unmapped, doubles, length }
+  conditions: null, // { names: [reference, other], site: [positions], shift, siteSd }
 };
 
 // The variants of a protein: the wild type, then by position a synonymous variant, a nonsense
@@ -99,6 +107,7 @@ export function simulateExperiment(options = {}) {
   if (o.times) return simulateTimeSeries(o, random, variants, f, noise);
   if (o.sort) return simulateSort(o, random, variants, f, noise);
   if (o.barcodes) return simulateBarcodes(o, random, variants);
+  if (o.conditions) return simulateConditions(o, random, variants, f, noise, outDepth);
   const columns = [];
   for (let r = 0; r < o.replicates; r += 1) {
     const input = f.map((x) => poisson(random, o.readsPerVariant * V * x));
@@ -129,6 +138,49 @@ export function simulateExperiment(options = {}) {
     library: { level: 'variant' },
     samples: columns.map((c) => ({ id: c.name, name: c.name, columns: [c.name] })),
     replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, input: `input_rep${r + 1}`, output: `output_rep${r + 1}` })),
+    controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
+  };
+  return { csv: `${lines.join('\n')}\n`, design, variants, options: o };
+}
+
+// Two conditions from shared inputs (see the top of this file).
+function simulateConditions(o, random, variants, f, noise, outDepth) {
+  const V = variants.length;
+  const c = { names: ['Condition A', 'Condition B'], site: [], shift: -1.5, siteSd: 0.4, ...o.conditions };
+  const site = new Set(c.site);
+  // The effects in each condition, and the true differential.
+  for (const v of variants) {
+    const position = Number(/^p\.[A-Z][a-z]{2}(\d+)/.exec(v.name)?.[1] ?? 0);
+    const change = v.kind === 'missense' && site.has(position) ? c.shift + c.siteSd * random.gaussian() : 0;
+    v.effects = [v.effect, v.effect + change];
+    v.differential = change;
+  }
+  const ids = ['a', 'b'];
+  const columns = [];
+  for (let r = 0; r < o.replicates; r += 1) {
+    const input = f.map((x) => poisson(random, o.readsPerVariant * V * x));
+    const cells = Number.isFinite(o.inputCells) ? f.map((x) => poisson(random, o.inputCells * V * x)) : f.map((x) => x);
+    columns.push({ name: `input_rep${r + 1}`, values: input });
+    for (let k = 0; k < 2; k += 1) {
+      const grown = cells.map((x, i) => x * exp(variants[i].effects[k] + noise(r) * random.gaussian()));
+      const total = grown.reduce((a, b) => a + b, 0);
+      columns.push({ name: `${ids[k]}_rep${r + 1}`, values: grown.map((g) => poisson(random, (outDepth * V * g) / total)) });
+    }
+  }
+  const lines = [['hgvs_pro', ...columns.map((x) => x.name)].join(',')];
+  variants.forEach((v, i) => lines.push([v.name, ...columns.map((x) => String(x.values[i]))].join(',')));
+  const design = {
+    format: 'mavescape-design',
+    version: 1,
+    name: 'Simulated two-condition experiment',
+    description: `Simulated by MaveScape (web/lib/simulate.js, seed ${o.seed}): not real data. One input per replicate selected under two conditions, ${o.replicates} replicates, ${o.readsPerVariant} reads per variant${Number.isFinite(o.inputCells) ? `, ${o.inputCells} cells per variant into selection` : ''}; in ${c.names[1]}, missense variants at positions ${[...site].join(', ')} change by ${c.shift} on average.`,
+    model: 'two-population',
+    variants: { column: 'hgvs_pro', level: 'protein' },
+    targets: [{ id: 'simulated', name: 'Simulated protein', sequenceType: 'protein', sequence: o.protein }],
+    library: { level: 'variant' },
+    conditions: c.names.map((name, k) => ({ id: ids[k], name, ...(k === 0 ? { reference: true } : {}) })),
+    samples: columns.map((x) => ({ id: x.name, name: x.name, columns: [x.name] })),
+    replicates: Array.from({ length: o.replicates }, (_, r) => ids.map((id, k) => ({ id: `${id}-rep${r + 1}`, name: `${c.names[k]}, replicate ${r + 1}`, biological: r + 1, condition: id, input: `input_rep${r + 1}`, output: `${id}_rep${r + 1}` }))).flat(),
     controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
   };
   return { csv: `${lines.join('\n')}\n`, design, variants, options: o };

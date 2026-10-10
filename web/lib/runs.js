@@ -45,6 +45,8 @@ export function outputDigest(results) {
     keys: results.variants.key,
     replicates: results.replicates.map((r) => ({ id: r.id, normalizers: r.normalizers, score: list(r.score), se: list(r.se), state: Array.from(r.state) })),
     conditions: results.conditions.map((c) => ({ id: c.id, score: list(c.score), se: list(c.se), k: Array.from(c.k), reason: Array.from(c.reason), flags: Array.from(c.flags), rescale: c.rescale })),
+    // Only when there are some, so that runs without them keep their hashes.
+    ...(results.differential ? { differential: results.differential.map((d) => ({ id: d.id, method: d.method, delta: list(d.delta), se: list(d.se), p: list(d.p), reason: Array.from(d.reason) })) } : {}),
   });
 }
 
@@ -131,6 +133,7 @@ export function describeParameters(parameters, barcodes = false) {
   if (f.excludeKinds.length) parts.push(`without ${f.excludeKinds.join(', ')}`);
   if (f.exclude.length) parts.push(`${f.exclude.length} excluded`);
   if (p.rescale !== 'none') parts.push(`rescaled: ${RESCALINGS[p.rescale].label}`);
+  if (p.differential) parts.push(`conditions compared by ${p.differential === 'limma' ? 'limma' : p.differential === 'paired' ? 'replicates paired by input' : 'Enrich2\'s z'}`);
   return parts.join(', ');
 }
 
@@ -163,6 +166,19 @@ export function dimsumSentence(p, cite) {
   return `Scores are DiMSum's fitness (${cite}): the natural-log ratio of each variant's counts after to before selection less the wild type's, with no pseudocount, so that a zero count gives no score${p.dimsumDropout ? `, but for outputs of 0 raised by a dropout pseudocount of ${p.dimsumDropout}` : ''}.${p.dimsumNormalise ? ' Each replicate was scaled and shifted to agree with the others (minimising the sum over variants of the distance between the replicates\' fitness and their mean, the first replicate\'s scale 1), the wild type then 0.' : ''}${fitted}`;
 }
 
+// How conditions were compared, in a sentence or two (also the methods paragraph's). cite: {
+// limma, voom, mutscan, enrich2, bh } as each place cites them.
+export function differentialSentence(p, design, cite) {
+  const conditions = design.conditions ?? [];
+  if (!p.differential || conditions.length < 2) return null;
+  const reference = conditions.find((c) => c.reference) ?? conditions[0];
+  const against = `${conditions.filter((c) => c !== reference).map((c) => c.name ?? c.id).join(', ')} against ${reference.name ?? reference.id}`;
+  const bh = `p-values were adjusted for the variants compared by Benjamini and Hochberg's method (${cite.bh})`;
+  if (p.differential === 'limma') return `Differential scores between conditions (${against}) are limma's moderated t-statistics (${cite.limma}) on voom log counts per million with their precision weights (${cite.voom}): a linear model of every sample with a term for each input library and for selection in each condition, the ${p.normalization === 'wt' ? 'wild type\'s counts' : 'synonymous variants\' summed counts'} as library sizes, as mutscan's calculateRelativeFC computes them (${cite.mutscan}), on the variants counted in every sample; log₂ fold changes are reported in natural logarithms, and ${bh}.`;
+  if (p.differential === 'paired') return `Differential scores between conditions (${against}) were estimated from pairs of replicates selected from the same input sample: within a pair, the difference of the two scores, whose variance leaves out the input's counting error that both share; the pairs' differences were combined by ${COMBINATIONS[p.combination]}, tested against the normal distribution, and ${bh}.`;
+  return `Differential scores between conditions (${against}) are the differences of the conditions' combined scores, with SE √(SE₁² + SE₂²), z-tested as in Enrich2 (${cite.enrich2}); ${bh}.`;
+}
+
 // The run's method in sentences (the methods paragraph of slice 8 builds on it).
 export function describeMethod(run) {
   const p = withDefaults(run.inputs.parameters);
@@ -176,6 +192,8 @@ export function describeMethod(run) {
   lines.push(`Biological replicates were scored separately and combined by ${COMBINATIONS[p.combination]}${p.combination === 'enrich2' ? ' (Enrich2 2.0.2\'s random-effects estimator, 50 iterations)' : p.combination === 'reml' ? ' (Fisher scoring as metafor\'s REML)' : ''}; technical replicates were summed before scoring.`);
   lines.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols', design.library?.level === 'barcode').filter((x) => x.active !== false).map((x) => x.text.toLowerCase()).join('; ')}.`);
   if (p.rescale !== 'none') lines.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}.`);
+  const differential = differentialSentence(p, design, { limma: 'Smyth 2004', voom: 'Law et al. 2014', mutscan: 'Soneson et al. 2023', enrich2: 'Rubin et al. 2017', bh: 'Benjamini and Hochberg 1995' });
+  if (differential) lines.push(differential);
   lines.push(`MaveScape ${run.software.version}${run.software.commit ? ` (${run.software.commit.slice(0, 7)})` : ''}, scoring version ${run.software.scoring}; run ${run.id}, output SHA-256 ${run.output.sha256}.`);
   return lines;
 }

@@ -6,7 +6,7 @@
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
 import { readArchive, writeArchive } from '../lib/archive.js';
-import { barcodesCSV, countsCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
+import { barcodesCSV, countsCSV, differentialCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
 import { writeMethods } from '../lib/methods.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../lib/findings.js';
 import { sha256 } from '../lib/sha256.js';
@@ -36,7 +36,7 @@ export async function methodsOf(app, run) {
 
 // --- A run's files ------------------------------------------------------------------------------
 
-export const RUN_FILES = ['scores', 'counts', 'qc-samples', 'qc-variants', 'barcodes', 'provenance', 'methods', 'references'];
+export const RUN_FILES = ['scores', 'counts', 'qc-samples', 'qc-variants', 'barcodes', 'differential', 'provenance', 'methods', 'references'];
 
 // A run's file of one kind, made (not downloaded): { name, type, text }. Throws when the run's
 // scores cannot be recomputed.
@@ -55,6 +55,7 @@ export async function runFile(app, run, kind, condition = 0) {
   }
   if (kind === 'qc-variants') return csv('qc_variants', qcVariantsCSV(results, run, condition));
   if (kind === 'barcodes') return csv('barcodes', barcodesCSV(results, run));
+  if (kind === 'differential') return { name: `${safe(app.store.ws.name)}_${safe(run.name)}_differential.csv`, type: 'text/csv', text: differentialCSV(results, run) };
   if (kind === 'qc-samples') return csv('qc_samples', qcSamplesCSV((await qcOf(app, run)).qc));
   if (kind === 'provenance') {
     const q = await qcOf(app, run).catch(() => null);
@@ -86,6 +87,7 @@ export function runExportItems(app, run, condition = 0) {
     { section: 'MaveDB columns' },
     { label: 'Scores (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'scores', condition) },
     { label: 'Counts scored (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'counts', condition) },
+    ...((run.inputs.design.conditions?.length ?? 0) > 1 && run.inputs.parameters.differential ? [{ label: 'Differential scores between conditions (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'differential', condition) }] : []),
     '-',
     { section: 'Quality control' },
     { label: 'QC per sample (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'qc-samples', condition) },

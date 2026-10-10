@@ -126,6 +126,34 @@ export const EXAMPLES = [
       ['score', 'Export the barcodes, one by one, from the run\'s menu.'],
     ],
   },
+  {
+    id: 'simulated-conditions',
+    title: 'A simulated two-condition experiment (known truth)',
+    summary: 'Every variant of a 40-residue protein selected from one input library under two conditions, without and with a ligand, in three replicates; the variants of a five-residue binding site lose fitness only with the ligand.',
+    question: 'Which variants behave differently with the ligand, and how sure is each difference?',
+    source: 'Simulated by MaveScape (web/lib/simulate.js, seed 20261015): not real data',
+    license: 'Simulated: no license needed',
+    citation: null,
+    simulated: true,
+    simulation: { seed: 20261015, replicates: 3, readsPerVariant: 150, inputCells: 40, replicateNoise: 0.05, conditions: { names: ['Without ligand', 'With ligand'], site: [12, 13, 14, 15, 16], shift: -1.5, siteSd: 0.4 } },
+    // The QC findings that do not pass, by design: the lesson.
+    findings: { 'excess-variance': 'review' },
+    // The map opens on the difference between the conditions.
+    map: { colorBy: 'differential' },
+    opens: 'map',
+    expected: [
+      'The map, colored by the difference With ligand vs Without ligand, is pale everywhere but positions 12–16, where missense variants lose about 1.5 with the ligand.',
+      'limma\'s moderated t (as mutscan computes it) calls the site\'s variants at q < 0.05 and nothing else; the guide counts both against the truth.',
+      'Quality control reviews the variance beyond counting in each condition: about 40 cells per variant were transformed. Both conditions grew from the same cells, so the bottleneck cancels from their differences.',
+      'Compared as independent (Enrich2\'s z), the same differences have SEs about 1.6× larger: the input both conditions share is counted twice.',
+    ],
+    steps: [
+      ['map', 'The map shows the difference between the conditions. Click a cell at positions 12–16: the inspector shows the variant\'s score in each condition and the difference, with its interval and q.'],
+      ['experiment', 'In Experiment, see one input per replicate, selected under both conditions, and "Without ligand" marked the reference.'],
+      ['score', 'In Score, read "Between conditions": the volcano plot and the largest differences. Choose "Replicates paired by their shared input", then "As independent", and score again each time; compare the SEs in the inspector.'],
+      ['score', 'Export the differential scores (CSV) and the methods from the run\'s menu.'],
+    ],
+  },
 ];
 
 export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
@@ -135,9 +163,10 @@ export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
 export function simulatedExample(example = exampleById('simulated')) {
   const sim = simulateExperiment(example.simulation);
   const design = { ...sim.design, name: `${sim.design.name} (simulated data)` };
-  // The truth: each variant's effect (a sort-seq experiment's: its shift in log fluorescence).
-  const truth = Object.fromEntries(sim.variants.map((v) => [v.name, v.shift ?? v.effect]));
+  // The truth: each variant's effect (a sort-seq experiment's: its shift in log fluorescence; two
+  // conditions': the difference between them).
+  const truth = Object.fromEntries(sim.variants.map((v) => [v.name, v.differential ?? v.shift ?? v.effect]));
   const files = [{ name: 'simulated-counts.csv', text: sim.csv, role: 'counts' }];
   if (sim.map) files.push({ name: 'simulated-barcode-map.csv', text: sim.map, role: 'map' });
-  return { files, csv: sim.csv, design, truth };
+  return { files, csv: sim.csv, design, truth, truthOf: example.simulation.conditions ? 'differential' : 'effect' };
 }

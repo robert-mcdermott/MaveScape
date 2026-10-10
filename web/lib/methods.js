@@ -8,7 +8,7 @@ import { summarizeDesign } from './design.js';
 import { NORMALIZATIONS } from './score-ratio.js';
 import { RESCALINGS, withDefaults } from './score.js';
 import { describeFilters } from './filters.js';
-import { barcodeSentence, binSentence, dimsumSentence, regressionSentence } from './runs.js';
+import { barcodeSentence, binSentence, differentialSentence, dimsumSentence, regressionSentence } from './runs.js';
 
 export const REFERENCES = {
   enrich2: { type: 'article', authors: ['Rubin, Alan F', 'Gelman, Hannah', 'Lucas, Nathan', 'Bajjalieh, Sandra M', 'Papenfuss, Anthony T', 'Speed, Terence P', 'Fowler, Douglas M'], title: 'A statistical framework for analyzing deep mutational scanning data', journal: 'Genome Biology', year: 2017, volume: 18, pages: '150', doi: '10.1186/s13059-017-1272-5' },
@@ -19,6 +19,10 @@ export const REFERENCES = {
   vampseq: { type: 'article', authors: ['Matreyek, Kenneth A', 'Starita, Lea M', 'Stephany, Jason J', 'Martin, Beth', 'Chiasson, Melissa A', 'Gray, Vanessa E', 'Kircher, Martin', 'Khechaduri, Arineh', 'Dines, Jennifer N', 'Hause, Ronald J', 'Bhatia, Smita', 'Evans, William E', 'Relling, Mary V', 'Yang, Wenjian', 'Shendure, Jay', 'Fowler, Douglas M'], title: 'Multiplex assessment of protein variant abundance by massively parallel sequencing', journal: 'Nature Genetics', year: 2018, volume: 50, number: 6, pages: '874--882', doi: '10.1038/s41588-018-0122-z' },
   peterman: { type: 'article', authors: ['Peterman, Neil', 'Levine, Erel'], title: 'Sort-seq under the hood: implications of design choices on large-scale characterization of sequence-function relations', journal: 'BMC Genomics', year: 2016, volume: 17, pages: '206', doi: '10.1186/s12864-016-2533-5' },
   dmsVariants: { type: 'software', authors: ['Bloom, Jesse D'], title: 'dms_variants', version: '1.6.0', year: 2024, url: 'https://github.com/jbloomlab/dms_variants' },
+  limma: { type: 'article', authors: ['Smyth, Gordon K'], title: 'Linear models and empirical Bayes methods for assessing differential expression in microarray experiments', journal: 'Statistical Applications in Genetics and Molecular Biology', year: 2004, volume: 3, number: 1, pages: 'Article 3', doi: '10.2202/1544-6115.1027' },
+  voom: { type: 'article', authors: ['Law, Charity W', 'Chen, Yunshun', 'Shi, Wei', 'Smyth, Gordon K'], title: 'voom: precision weights unlock linear model analysis tools for RNA-seq read counts', journal: 'Genome Biology', year: 2014, volume: 15, pages: 'R29', doi: '10.1186/gb-2014-15-2-r29' },
+  mutscan: { type: 'article', authors: ['Soneson, Charlotte', 'Bendel, Alexandra M', 'Diss, Guillaume', 'Stadler, Michael B'], title: 'mutscan—a flexible R package for efficient end-to-end analysis of multiplexed assays of variant effect data', journal: 'Genome Biology', year: 2023, volume: 24, pages: '132', doi: '10.1186/s13059-023-02967-0' },
+  bh: { type: 'article', authors: ['Benjamini, Yoav', 'Hochberg, Yosef'], title: 'Controlling the false discovery rate: a practical and powerful approach to multiple testing', journal: 'Journal of the Royal Statistical Society: Series B (Methodological)', year: 1995, volume: 57, number: 1, pages: '289--300', doi: '10.1111/j.2517-6161.1995.tb02031.x' },
   mavedb: { type: 'article', authors: ['Esposito, Daniel', 'Weile, Jochen', 'Shendure, Jay', 'Starita, Lea M', 'Papenfuss, Anthony T', 'Roth, Frederick P', 'Fowler, Douglas M', 'Rubin, Alan F'], title: 'MaveDB: an open-source platform to distribute and interpret data from multiplexed assays of variant effect', journal: 'Genome Biology', year: 2019, volume: 20, pages: '223', doi: '10.1186/s13059-019-1845-6' },
 };
 
@@ -110,6 +114,12 @@ export function writeMethods(ws, run, options = {}) {
   scoring.push(`Heterogeneity is reported as Cochran's Q and I² ${cite('higgins')}, with the largest change in a score when one replicate is left out.`);
   scoring.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols', design.library?.level === 'barcode').filter((x) => x.active !== false).map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join('; ')}. A filtered variant's score is reported as NA with the stage that removed it.`);
   if (p.rescale !== 'none') scoring.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}${run.output.conditions[0]?.rescale ? ` (${run.output.conditions[0].rescale.anchors.map((a) => `${a.what} ${Number(a.from.toFixed(4))} to ${a.to}`).join(', ')})` : ''}; the anchors' own uncertainty is not propagated.`);
+  if (p.differential && (design.conditions?.length ?? 0) >= 2) {
+    const strip = (text) => text.replace(/ \((\[\d+\])\)/g, ' $1');
+    const keys = p.differential === 'limma' ? { limma: 'limma', voom: 'voom', mutscan: 'mutscan' } : p.differential === 'independent' ? { enrich2: 'enrich2' } : {};
+    const cites = Object.fromEntries(Object.entries(keys).map(([k, ref]) => [k, cite(ref)]));
+    scoring.push(strip(differentialSentence(p, design, { ...cites, bh: cite('bh') })));
+  }
   const conditions = run.output.conditions.map((c) => `${run.output.conditions.length > 1 ? `${c.name}: ` : ''}${c.scored} of ${run.output.variants} variants scored`).join('; ');
   scoring.push(`${conditions}.`);
   if (run.warnings.length) scoring.push(`Notes: ${run.warnings.map((w) => w.message).join(' ')}`);

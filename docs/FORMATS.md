@@ -203,7 +203,7 @@ entry, so that a change made later breaks the chain.
 A **score run** keeps its inputs, not its scores: the table's SHA-256, the mapping, the design,
 the parameters and the scoring version (whose canonical JSON's SHA-256 is the run's id), the
 software, the warnings, and the output's SHA-256. Reopened, a run is recomputed from its inputs
-and must have that output hash. Its `output.replicates` keep each replicate's normalizers and, for
+and must have that output hash (which covers its differential scores when it has some). Its `output.replicates` keep each replicate's normalizers and, for
 DiMSum's model, `dimsum`: the scale, shift, multiplicative `input` and `output` terms, additive
 `reperror` (a variance), and `intervals` (the 10th and 90th percentiles of their bootstrap).
 
@@ -244,6 +244,20 @@ Scored by DiMSum's model (MaveScape 0.2; parameters `model: "dimsum"`, `dimsumNo
 `dimsumErrorModel`, `dimsumDropout`), `score_<replicate>` is DiMSum's fitness, scaled and shifted,
 and `SE_<replicate>` its σ from the error model; a replicate with a zero count is `NA` there (no
 pseudocount). The methods list each replicate's fitted scale, shift and error terms.
+
+With two or more conditions, the scores file holds one condition (its name in the file name);
+differential scores between conditions are in their own file (below).
+
+### Differential scores (`*_differential.csv`)
+
+With conditions compared (MaveScape 0.2; the parameter `differential`: `limma`, `paired` or
+`independent`; `null` for none), one row per variant of the table: `hgvs_nt`, `hgvs_splice`,
+`hgvs_pro`, `variant_as_written`, then for each contrast (each condition against the reference,
+`<condition>-vs-<reference>`): `difference_<contrast>` (natural log; limma's log₂ fold change
+times ln 2), `SE_`, `ci95_lower_`, `ci95_upper_`, `t_` (limma) or `z_`, `p_`, `q_`
+(Benjamini–Hochberg within the contrast), `replicates_` (limma) or `pairs_`, and `status_`
+(`estimated`, or why not: not scored in the reference condition or in the condition, no pair of
+replicates measuring it, not counted in every sample for limma). `NA` where there is none.
 
 ### Counts (`*_counts.csv`)
 

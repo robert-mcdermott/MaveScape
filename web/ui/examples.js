@@ -33,11 +33,13 @@ export async function openExample(app, id) {
     let parts;
     let design;
     let truth = null;
+    let truthOf = 'effect';
     if (example.simulated) {
       const sim = simulatedExample(example);
       parts = sim.files.map((f) => ({ name: f.name, bytes: new TextEncoder().encode(f.text), role: f.role }));
       design = sim.design;
       truth = sim.truth;
+      truthOf = sim.truthOf;
     } else {
       parts = [{ name: 'counts.csv', bytes: await fetchBytes(example.files.counts), role: 'counts' }];
       design = JSON.parse(new TextDecoder().decode(await fetchBytes(example.files.design)));
@@ -79,7 +81,7 @@ export async function openExample(app, id) {
     };
     const added = addSource(ws, source);
     ws = setDesign(added.ws, { ...design, targets: [{ ...design.targets[0], id: target.id }] }, `The design of the example "${example.title}"`, added.id);
-    ws = change(ws, { example: { id: example.id, simulated: example.simulated, truth } }, 'example', `Opened the example "${example.title}"${example.simulated ? ' (simulated data)' : ` (${example.source}, ${example.license})`}`);
+    ws = change(ws, { example: { id: example.id, simulated: example.simulated, truth, ...(truthOf === 'differential' ? { truthOf } : {}) } }, 'example', `Opened the example "${example.title}"${example.simulated ? ' (simulated data)' : ` (${example.source}, ${example.license})`}`);
     // A first score run with MaveScape's defaults.
     const { names, barcodes, columns, transfer } = workerInput(table, ws.design);
     const parameters = defaultParameters(ws.design, ws.sources[0]);
@@ -95,6 +97,7 @@ export async function openExample(app, id) {
     // A new workspace: not in the library until it is saved.
     app.store.markSaved(null);
     await app.saveNow();
+    if (example.map) app.mapView = { ...(app.mapView ?? { rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0 }), ...example.map };
     await app.setMode(example.opens);
     busy.done(`Opened the example "${example.title}". Its guide is in the inspector.`);
     return { ok: true, message: `Opened the example "${example.title}"${result.ok ? ', scored with MaveScape\'s defaults' : ''}.` };
@@ -113,7 +116,29 @@ export function exampleGuide(app) {
   if (info.truth) {
     const run = app.store.ws.runs[0];
     const results = run ? runEntry(app, run)?.results : null;
-    if (results) {
+    if (results && info.truthOf === 'differential' && results.differential?.length) {
+      // Two conditions: the differences against the true ones, and the calls at q < 0.05.
+      const d = results.differential[0];
+      const a = [];
+      const b = [];
+      let site = 0;
+      let found = 0;
+      let others = 0;
+      let called = 0;
+      results.variants.key.forEach((k, i) => {
+        if (d.reason[i] || !(k in info.truth) || k === 'p.=') return;
+        a.push(d.delta[i]);
+        b.push(info.truth[k]);
+        if (info.truth[k] !== 0) {
+          site += 1;
+          if (d.q[i] < 0.05) found += 1;
+        } else {
+          others += 1;
+          if (d.q[i] < 0.05) called += 1;
+        }
+      });
+      truthLine = h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s differences (${d.method}) against the simulated true ones: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants; at q < 0.05, ${found} of the site's ${site} variants called, and ${called} of the ${others} others.`));
+    } else if (results) {
       const c = results.conditions[0];
       const a = [];
       const b = [];
@@ -134,7 +159,7 @@ export function exampleGuide(app) {
     h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, `Source: ${example.source}. License: ${example.license}.${example.citation ? ` Cite: ${example.citation}.` : ''}`),
     example.files?.notice ? h('div.btn-row', { style: { marginTop: '6px' } }, h('button.btn.small', { type: 'button', onclick: async () => downloadBlob(new Blob([await fetchBytes(example.files.notice)], { type: 'text/plain' }), 'NOTICE.txt') }, icon('download'), 'Notice'),
       h('button.btn.small', { type: 'button', onclick: async () => downloadBlob(new Blob([await fetchBytes(example.files.counts)], { type: 'text/csv' }), `${example.id}-counts.csv`) }, icon('download'), 'The counts')) : null,
-    info.truth ? h('div.btn-row', { style: { marginTop: '6px' } }, h('button.btn.small', { type: 'button', onclick: () => downloadBlob(new Blob([`hgvs_pro,true_effect\n${Object.entries(info.truth).map(([k, v]) => `${k},${v}`).join('\n')}\n`], { type: 'text/csv' }), 'simulated-truth.csv') }, icon('download'), 'The true effects (simulated)')) : null);
+    info.truth ? h('div.btn-row', { style: { marginTop: '6px' } }, h('button.btn.small', { type: 'button', onclick: () => downloadBlob(new Blob([`hgvs_pro,${info.truthOf === 'differential' ? 'true_differential' : 'true_effect'}\n${Object.entries(info.truth).map(([k, v]) => `${k},${v}`).join('\n')}\n`], { type: 'text/csv' }), 'simulated-truth.csv') }, icon('download'), info.truthOf === 'differential' ? 'The true differences (simulated)' : 'The true effects (simulated)')) : null);
 }
 
 export const LAYOUTS = [

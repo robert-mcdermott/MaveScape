@@ -30,6 +30,7 @@ import { BIN_SCALES, BIN_SE, BIN_SIGMA, binAverages, binMLEScores, binTotals, sc
 import { AGGREGATIONS, BARCODE_COMBINATIONS, OUTLIER_Z, barcodeDisagreement, barcodeProblems, combineBarcodes, groupBarcodes, sumByVariant } from './score-barcodes.js';
 import { createRandom } from './random.js';
 import { scoreDimsumGroup, substitutionsOf } from './score-dimsum.js';
+import { contrastsOf, differentialContrast, DIFFERENTIAL_METHODS, limmaDesign, limmaDifferential } from './differential.js';
 import { combine, COMBINATIONS, heterogeneity, leaveOneOut, sampleCounts } from './replicates.js';
 import {
   checkFilters, DEFAULT_FILTERS, FLAG, filterFlow, kindCodes, REPLICATE_STATE, replicateState, STAGE_BY_ID, variantStage,
@@ -74,6 +75,8 @@ export const DEFAULT_PARAMETERS = {
   dimsumDropout: 0,
   combination: 'reml',
   rescale: 'none',
+  // Differential scores between conditions (null: none; runs made before 0.2 have none).
+  differential: null,
   filters: DEFAULT_FILTERS,
 };
 
@@ -116,7 +119,20 @@ export function defaultParameters(design, source = null, preset = 'mavescape') {
     return withDefaults({ ...base, binScale: base.binScale === 'nonsense-wt' && !hasNonsense ? 'low5-wt' : base.binScale });
   }
   const model = PRESETS[preset].parameters.model === 'dimsum' && design?.model === 'two-population' ? 'dimsum' : design?.model === 'time-series' && design.replicates?.length && design.replicates.every((r) => orderedSlots(r).length >= 3) ? 'wls' : 'ratio';
-  return withDefaults({ ...PRESETS[preset].parameters, model, normalization: hasWildType ? 'wt' : 'complete' });
+  const normalization = hasWildType ? 'wt' : 'complete';
+  return withDefaults({ ...PRESETS[preset].parameters, model, normalization, differential: defaultDifferential(design, preset, normalization) });
+}
+
+// Differential scores for a design with two or more conditions: limma's moderated t where it
+// applies (two populations relative to the wild type or the synonymous variants, with residual
+// degrees of freedom), whose variances, shared across variants, keep calls calibrated with few
+// replicates; replicates paired by their shared inputs otherwise; Enrich2's comparison of
+// conditions for the Enrich2-compatible preset.
+export function defaultDifferential(design, preset = 'mavescape', normalization = 'wt') {
+  if ((design?.conditions?.length ?? 0) < 2) return null;
+  if (preset === 'enrich2') return 'independent';
+  if (design.model === 'two-population' && (normalization === 'wt' || normalization === 'synonymous') && !limmaDesign(design).refused) return 'limma';
+  return 'paired';
 }
 
 export function withDefaults(parameters = {}) {
@@ -142,6 +158,7 @@ export function checkParameters(parameters, design) {
   if (typeof p.dimsumNormalise !== 'boolean' || typeof p.dimsumErrorModel !== 'boolean') errors.push('DiMSum\'s normalisation and error model are on or off (true or false).');
   if (!COMBINATIONS[p.combination]) errors.push(`Unknown combination "${p.combination}".`);
   if (!RESCALINGS[p.rescale]) errors.push(`Unknown rescaling "${p.rescale}".`);
+  if (p.differential !== null && !DIFFERENTIAL_METHODS[p.differential]) errors.push(`Unknown differential method "${p.differential}".`);
   errors.push(...checkFilters(p.filters));
   if (design) {
     if (design.model === 'bins' && !BIN_MODELS.has(p.model)) errors.push('Sorted bins are scored by the weighted average of their values or by the maximum-likelihood fit, not as a selection: choose one under "Scored by".');
@@ -170,6 +187,14 @@ export function checkParameters(parameters, design) {
     if (p.aggregation === 'barcode' && design.model === 'bins') errors.push('Sorted bins are scored from each variant\'s barcodes summed: a barcode\'s few cells spread over the bins give no estimate of their own. Choose "sum, then score".');
     if (p.filters.maxBarcodeZ !== null && barcodes && design.model === 'bins') errors.push('The barcode filter compares barcodes\' scores, and sorted bins score variants only: set no maximum departure.');
     if (p.combination === 'enrich2' && p.filters.minReplicates !== 'all') errors.push('Enrich2\'s estimator combines only variants scored in every replicate: set the minimum usable replicates to "all", or choose another combination.');
+    if (p.differential === 'limma' && (design.conditions?.length ?? 0) >= 2) {
+      if (design.model !== 'two-population') errors.push('limma\'s differential models the counts of inputs and outputs: it needs a two-population design.');
+      else if (p.normalization !== 'wt' && p.normalization !== 'synonymous') errors.push('limma\'s differential is relative to the wild type or the synonymous variants, as mutscan\'s is to its reference rows: choose wild-type or synonymous normalization.');
+      else {
+        const m = limmaDesign(design);
+        if (m.refused) errors.push(m.refused);
+      }
+    }
   }
   if (p.pseudocount === 0 && p.model !== 'dimsum') errors.push('A pseudocount of 0 leaves every variant with a zero count unscorable (log 0); use a positive pseudocount.');
   return { errors, warnings: [] };
@@ -707,8 +732,8 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
 
   // Run-level notes on the design.
   if (design.model === 'time-series' && !regression) warnings.push({ code: 'time-series-ratio', message: 'A time series scored by the ratio of its first and last time points (as Enrich2\'s "ratios"): the time points between them are not used. Weighted regression uses every one.' });
-  const shared = sharedSamples(design);
-  if (shared.size) warnings.push({ code: 'shared-samples', message: `${shared.size} sample${shared.size > 1 ? 's are' : ' is'} shared between replicates (${[...shared.keys()].join(', ')}): those replicates' scores are not independent, so the combined SE is likely too small.` });
+  const shared = sharedSamples(design, { withinCondition: true });
+  if (shared.size) warnings.push({ code: 'shared-samples', message: `${shared.size} sample${shared.size > 1 ? 's are' : ' is'} shared between replicates${design.conditions?.length > 1 ? ' of one condition' : ''} (${[...shared.keys()].join(', ')}): those replicates' scores are not independent, so the combined SE is likely too small.` });
 
   // Per condition.
   const conditionList = design.conditions?.length ? design.conditions : [{ id: 'all', name: 'All replicates' }];
@@ -716,6 +741,18 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   const excluded = new Set(f.exclude);
   const tiles = new Map((design.library?.tiles ?? []).map((t) => [t.id, t]));
   const conditions = [];
+  // Enrich2 starts its estimator from the variance over every variant in its table of variants
+  // scored in every replicate of at least one condition (scores_shared): with several conditions,
+  // the same count for each, not the condition's own.
+  let enrich2Variants = null;
+  if (p.combination === 'enrich2' && conditionList.length > 1) {
+    enrich2Variants = 0;
+    const repsOf = conditionList.map((condition) => replicates.filter((r) => r.condition === condition.id));
+    for (let i = 0; i < n; i += 1) {
+      if (variantStage(i, variants, excludeKinds, excluded)) continue;
+      if (repsOf.some((reps) => reps.length && reps.every((r) => r.state[i] === REPLICATE_STATE.USED))) enrich2Variants += 1;
+    }
+  }
   conditionList.forEach((condition, ci) => {
     onProgress(0.6 + (ci / conditionList.length) * 0.35, `Combining replicates${conditionList.length > 1 ? ` of ${condition.name}` : ''}`);
     const reps = replicates.filter((r) => (design.conditions?.length ? r.condition === condition.id : true));
@@ -783,7 +820,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
         se[i] = 0;
         epsilon[i] = 0;
       } else {
-        const c = combine(p.combination, y, v, combinedFromAll);
+        const c = combine(p.combination, y, v, enrich2Variants ?? combinedFromAll);
         score[i] = c.estimate;
         se[i] = c.se;
         tau2[i] = c.tau2;
@@ -856,6 +893,39 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     });
   });
 
+  // Differential scores: each condition against the reference.
+  const contrasts = p.differential ? contrastsOf(design) : [];
+  let differential = null;
+  if (contrasts.length) {
+    onProgress(0.97, 'Comparing conditions');
+    if (p.differential === 'limma') {
+      // Rows counted in every sample of the model and not left out by the identifier, class or
+      // exclusion stages; the reference rows (the wild type or the synonymous variants), always.
+      const model = limmaDesign(design);
+      const reference = p.normalization === 'wt' ? (controls.wt >= 0 ? [controls.wt] : []) : controls.synonymous;
+      const isReference = new Set(reference);
+      const rows = [];
+      for (let i = 0; i < n; i += 1) {
+        if (!isReference.has(i) && variantStage(i, variants, excludeKinds, excluded)) continue;
+        if (model.samples.every((sid) => !Number.isNaN(pooled.get(sid)[i]))) rows.push(i);
+      }
+      const res = limmaDifferential(design, contrasts, { counts: pooled, rows, reference, referenceName: p.normalization === 'wt' ? 'the wild type' : 'the synonymous variants', n });
+      if (res.refused) throw new Refused([res.refused]);
+      differential = res.contrasts;
+      for (const d of differential) {
+        const reps = conditions.filter((c) => c.id === d.condition || c.id === d.reference).reduce((a, c) => a + c.replicates.length, 0);
+        for (let i = 0; i < n; i += 1) if (!d.reason[i]) d.k[i] = reps;
+      }
+      info.push(`limma: ${res.fit.rows} variants counted in every one of ${res.fit.samples.length} samples fitted together, relative to ${p.normalization === 'wt' ? 'the wild type' : `${res.fit.reference} synonymous variants' summed counts`}; prior variance ${differential[0].prior.s2.toPrecision(3)} on ${Number.isFinite(differential[0].prior.df) ? differential[0].prior.df.toFixed(1) : '∞'} degrees of freedom.`);
+    } else {
+      differential = contrasts.map((contrast) => differentialContrast(contrast, { replicates, conditions, p, method: p.differential }));
+    }
+    for (const d of differential) {
+      d.estimated = d.reason.reduce((a, r) => a + (r ? 0 : 1), 0);
+      if (d.note) info.push(`${d.name}: ${d.note}`);
+    }
+  }
+
   const replicateMeasurementsDropped = replicates.reduce((a, r) => a + r.state.reduce((x, s) => x + (s === REPLICATE_STATE.INPUT_COUNT || s === REPLICATE_STATE.TOTAL_COUNT ? 1 : 0), 0), 0);
   if (replicateMeasurementsDropped) info.push(`${replicateMeasurementsDropped} replicate measurement${replicateMeasurementsDropped > 1 ? 's' : ''} below the count minimums not used (the variants' other replicates still count).`);
   onProgress(1, 'Done');
@@ -876,6 +946,8 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     barcodes: groups ? { rows: groups.rows, ids: barcodes, variantOf: groups.variantOf, offsets: groups.offsets, members: groups.members, unmapped: groups.unmapped } : null,
     // DiMSum: each experiment's fit (its input threshold, the variants fitted, the bootstrap).
     dimsum: dimsum ? dimsum.fits : null,
+    // Differential scores, one per contrast (each condition against the reference), or null.
+    differential,
     warnings,
     info,
   };

@@ -92,6 +92,26 @@
      "sha256": "799c4565533e9fd69e0afdd2b0849e88e340b2e1afb9cdb062121825414e71f8"
     }
    ]
+  },
+  "mavedb-cbs": {
+   "title": "Cystathionine beta-synthase, yeast complementation at low and high vitamin B6 (urn:mavedb:00000005-a-5 and -a-6)",
+   "description": "Two population (non-selected and selected) counts by TileSeq, codon replacements of the 551-residue protein (UniProt P35520), relative allele frequencies scaled to counts (not whole numbers) after subtracting a non-mutagenized control. The low-B6 record has nonselect1–8 and select1–8 (nonselect5–8 repeat 1–4); the high-B6 record nonselect1–4 and select1–4. Wherever both records count a variant, their nonselect1–4 are the same: one set of inputs selected at two B6 levels (shared inputs). No wild-type row; about 500 synonymous rows (466 counted in every sample of both records); protein names repeat across codons (rows are unique by hgvs_nt).",
+   "source": "MaveDB; Sun et al., Genome Medicine 2020 (doi:10.1186/s13073-020-0711-1)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "low-b6-counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000005-a-5/counts",
+     "size": 4616367,
+     "sha256": "b1bc332e11a2584cd199cbfcf2070b7cc7628d0d4d95a2e39938cd06851026c9"
+    },
+    {
+     "path": "high-b6-counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000005-a-6/counts",
+     "size": 2568937,
+     "sha256": "247ed53735d626eb46fb1af162ee57e084ec596e6808438e51aef2b297da9f46"
+    }
+   ]
   }
  }
 }

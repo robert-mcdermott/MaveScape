@@ -67,7 +67,7 @@ var remoteActions = []remoteAction{
 	}, "design")},
 	{Name: "score", Description: "Scores the counts with the current design: functional scores with standard errors, a new immutable run (or the existing one, when a run already has the same table, design and parameters). Shows it in the Score view.", InputSchema: schema(map[string]any{
 		"preset":     textArg("mavescape (the default), enrich2 (Enrich2 2.0.2's ratios, for comparison) or dimsum (DiMSum's fitness and error model, for an input and an output; the run's fitted terms are returned)."),
-		"parameters": map[string]any{"type": "object", "description": "Parameters to change from the preset: model (ratio, wls, ols: a time series starts from wls; dimsum), regressionSE (counting-floor, residual), normalization (wt, complete, full, synonymous), combination (reml, fixed, enrich2), rescale, pseudocount, dimsumNormalise, dimsumErrorModel, dimsumDropout, filters {minInputCount, minTimePoints, …}."},
+		"parameters": map[string]any{"type": "object", "description": "Parameters to change from the preset: model (ratio, wls, ols: a time series starts from wls; dimsum), regressionSE (counting-floor, residual), normalization (wt, complete, full, synonymous), combination (reml, fixed, enrich2), rescale, pseudocount, dimsumNormalise, dimsumErrorModel, dimsumDropout, differential (with two or more conditions: limma, paired, independent or null), filters {minInputCount, minTimePoints, …}."},
 	}), long: true},
 	{Name: "qc_findings", Description: "Quality control of a score run (or of the counts alone, before scoring): each finding's status (pass, review, fail or not assessed), what was found, its threshold and why it matters, and the overall status. Shows them in the QC view.", InputSchema: schema(map[string]any{
 		"run":     textArg("A score run by name or id, or \"counts\" for the counts with the current design; the latest run of the current design if not given."),
@@ -81,7 +81,7 @@ var remoteActions = []remoteAction{
 		"run":       runArg,
 		"condition": conditionArg,
 	})},
-	{Name: "inspect_variant", Description: "A variant's evidence: its score with SE and 95% interval (or why it has none), flags, each replicate's counts and score, every sample's counts. Shows it in the inspector.", InputSchema: schema(map[string]any{
+	{Name: "inspect_variant", Description: "A variant's evidence: its score with SE and 95% interval (or why it has none), flags, each replicate's counts and score, every sample's counts, and with conditions compared each difference with its SE, interval and adjusted p. Shows it in the inspector.", InputSchema: schema(map[string]any{
 		"variant":   textArg("Its MAVE-HGVS name, such as p.Trp36Ala."),
 		"run":       runArg,
 		"condition": conditionArg,
@@ -89,7 +89,8 @@ var remoteActions = []remoteAction{
 	{Name: "render_map", Description: "Shows a run's variant-effect map with the given settings and returns the map described in words, with the number of cells in each state.", InputSchema: schema(map[string]any{
 		"run":       runArg,
 		"condition": conditionArg,
-		"color_by":  textArg("score, se, replicates or input."),
+		"color_by":  textArg("score, se, replicates or input; differential for a run that compares conditions."),
+		"contrast":  textArg("With conditions compared: the contrast to color by, by name (such as \"With ligand vs Without ligand\"); implies color_by differential."),
 		"rows":      textArg("The order of the substitutions: biochemical, hydrophobicity or alphabetical."),
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},

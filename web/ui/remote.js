@@ -16,6 +16,7 @@ import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js
 import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
+import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { openExample } from './examples.js';
 import { draftFromColumns } from './design-draft.js';
@@ -105,7 +106,25 @@ export function installRemote(app) {
   }
 
   function modelOf(run, results, condition, view = app.mapView ?? {}) {
-    return buildMapModel(results, run.inputs.design, { condition, rowOrder: view.rowOrder ?? 'biochemical', colorBy: view.colorBy ?? 'score' });
+    return buildMapModel(results, run.inputs.design, { condition, contrast: view.contrast ?? 0, rowOrder: view.rowOrder ?? 'biochemical', colorBy: view.colorBy ?? 'score' });
+  }
+
+  // A run's differential scores in brief: per contrast, how they were made and how many differ.
+  function differentialSummary(results) {
+    return (results.differential ?? []).map((d) => {
+      let compared = 0;
+      let lower = 0;
+      let higher = 0;
+      d.reason.forEach((r, i) => {
+        if (r) return;
+        compared += 1;
+        if (d.q[i] < 0.05) {
+          if (d.delta[i] < 0) lower += 1;
+          else higher += 1;
+        }
+      });
+      return { contrast: d.name, method: d.method, compared, lowerAtQ05: lower, higherAtQ05: higher, ...(d.note ? { note: d.note } : {}) };
+    });
   }
 
   // Waits for the views to draw what an action changed (the store notifies them synchronously;
@@ -319,7 +338,8 @@ export function installRemote(app) {
         replicate: r.name, scale: round(r.dimsum.scale), shift: round(r.dimsum.shift),
         ...(r.dimsum.input === null ? {} : { input: round(r.dimsum.input), output: round(r.dimsum.output), reperror: round(r.dimsum.reperror), intervals: r.dimsum.intervals && Object.fromEntries(Object.entries(r.dimsum.intervals).map(([k, v]) => [k, v.map((x) => round(x))])) }),
       })) : null;
-      return { message: `${run.name}: ${c.map((x) => `${x.scored} of ${result.results.rows} variants scored${c.length > 1 ? ` in ${x.name}` : ''}`).join('; ')} (${PRESETS[presetId].label}).${dimsum?.[0]?.input !== undefined ? ` DiMSum's multiplicative terms: ${dimsum.map((x) => `${x.replicate} input ${x.input}, output ${x.output}`).join('; ')}.` : ''}`, data: { ...runSummary(run), ...(dimsum ? { dimsum } : {}) } };
+      const differential = result.results.differential ? differentialSummary(result.results) : null;
+      return { message: `${run.name}: ${c.map((x) => `${x.scored} of ${result.results.rows} variants scored${c.length > 1 ? ` in ${x.name}` : ''}`).join('; ')} (${PRESETS[presetId].label}).${dimsum?.[0]?.input !== undefined ? ` DiMSum's multiplicative terms: ${dimsum.map((x) => `${x.replicate} input ${x.input}, output ${x.output}`).join('; ')}.` : ''}${differential ? ` ${differential.map((x) => `${x.contrast} (${x.method}): ${x.lowerAtQ05 + x.higherAtQ05} of ${x.compared} differ at q < 0.05`).join('; ')}.` : ''}`, data: { ...runSummary(run), ...(dimsum ? { dimsum } : {}), ...(differential ? { differential } : {}) } };
     },
 
     async qc_findings(args) {
@@ -444,6 +464,10 @@ export function installRemote(app) {
         lowConfidence: c.flags[row] ? flagNames(c.flags[row]) : [],
         notScored: reasons ? { stage: reasons.label, reason: reasons.reason } : null,
         replicates,
+        // Each contrast's difference for the variant (null where there is none, with why).
+        ...(results.differential ? { differential: results.differential.map((d) => (d.reason[row]
+          ? { contrast: d.name, method: d.method, notEstimated: DIFFERENTIAL_REASON_NAMES[d.reason[row]] }
+          : { contrast: d.name, method: d.method, difference: round(d.delta[row]), se: round(d.se[row]), ci95: [round(d.ciLow[row]), round(d.ciHigh[row])], p: round(d.p[row]), q: round(d.q[row]), ...(d.method === 'limma' ? { t: round(d.z[row]) } : { pairs: d.k[row] }) })) } : {}),
         counts: Object.fromEntries((results.samples ?? []).map((s) => [s.name, Number.isFinite(s.counts[row]) ? s.counts[row] : null])),
         run: run.name,
         reproduced: entry.status,
@@ -460,7 +484,12 @@ export function installRemote(app) {
       const condition = resolveCondition(results, args.condition);
       app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, show: 'all', page: 0 };
       const view = app.mapView;
-      if (args.color_by) view.colorBy = choose(args.color_by, Object.keys(COLOR_BY), 'coloring');
+      if (args.color_by) view.colorBy = choose(args.color_by, Object.keys(COLOR_BY).filter((k) => k !== 'differential' || results.differential?.length), 'coloring');
+      if (args.contrast !== undefined) {
+        const names = (results.differential ?? []).map((d) => d.name);
+        view.contrast = names.indexOf(choose(args.contrast, names, 'contrast'));
+        view.colorBy = 'differential';
+      }
       if (args.rows) view.rowOrder = choose(args.rows, Object.keys(ROW_ORDERS), 'row order');
       if (args.palette) view.palette = choose(args.palette, ['rdbu', 'puor'], 'palette');
       view.run = run.id;
@@ -477,7 +506,7 @@ export function installRemote(app) {
       const model = modelOf(run, results, condition, view);
       const counts = Object.fromEntries(STATE_NAMES.map((name, i) => [name, model.counts[i]]));
       const lines = describeMap(model, results);
-      return { message: lines.join(' '), data: { run: run.name, condition: results.conditions[condition].name, colorBy: view.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines } };
+      return { message: lines.join(' '), data: { run: run.name, condition: model.contrast ? null : results.conditions[condition].name, ...(model.contrast ? { contrast: model.contrast.name } : {}), colorBy: model.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines } };
     },
 
     async export(args) {

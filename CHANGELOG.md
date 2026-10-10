@@ -106,6 +106,31 @@ each.
   The GRB2 example now shows its bottleneck at the inputs (20–38× counting) and scores with the
   DiMSum-compatible preset in its guide.
 - **Remote control's `score` takes the `dimsum` preset** and returns each replicate's fitted model.
+- **Two conditions compared (wave 2, slice 6; S10).** With two or more conditions, each condition
+  is compared with the reference: every variant measured in both gets a differential score with its
+  SE, 95% interval, p and Benjamini–Hochberg q. Three methods, under *Conditions compared by*:
+  limma's moderated t on voom log counts with a term for each input library and for selection in
+  each condition, as mutscan's `calculateRelativeFC` computes it (the default where it applies:
+  two populations, relative to the wild type or the synonymous variants, with residual degrees of
+  freedom); replicates paired by their shared input, whose counting error cancels from each pair's
+  difference; and the conditions as independent (Enrich2's z, the Enrich2-compatible preset's).
+  limma's statistics (`web/lib/limma.js`, `web/lib/distributions.js`) are written from the
+  publications, not from limma's source (GPL). Equal to mutscan 1.2.0 within 2 × 10⁻¹⁰ on a
+  two-condition fixture and on CBS at two vitamin B6 levels (MaveDB, four shared inputs), and to
+  Enrich2 2.0.2's z between conditions within 5 × 10⁻¹³. Runs made before keep their output
+  hashes: the differential enters a run only when its parameters ask for it.
+- **The differential on the map and in the inspector (V2):** *Color by* differential score, centered
+  on no difference, a variant without one shown filtered with why; the inspector gives a variant's
+  score in each condition and each difference with its interval and q (paired, each pair's too).
+  The Score view's *Between conditions* pane: how each comparison was made, how many variants
+  differ, a volcano plot and the largest differences. A run's differential scores export as CSV,
+  and its methods describe the comparison with its references.
+- **A sixth example: a simulated two-condition experiment** (one input selected without and with a
+  ligand; a binding site that matters only with it), opening on its differential map; and two
+  conditions in the simulator.
+- **Remote control:** `score` summarizes each comparison, `inspect_variant` gives a variant's
+  differences, `render_map` colors by the differential (`contrast` chooses one), `export` writes
+  `differential`.
 
 ### Changed
 
@@ -122,6 +147,13 @@ each.
 
 ### Fixed
 
+- **Enrich2's estimator with several conditions** started, in MaveScape, from the variance over the
+  variants scored in every replicate of that condition; Enrich2 starts every condition from its
+  table of variants scored in every replicate of at least one condition. Enrich2-compatible runs of
+  designs with conditions now equal Enrich2's (they differed by up to 1.5 × 10⁻⁵).
+- **"Samples shared between replicates"** was raised for an input selected under two conditions,
+  which does not make one condition's replicates dependent; it is now raised only for samples
+  shared within a condition.
 - **A table joined from several files, or named from DiMSum's sequences, could not be read again
   from the library** (it had to be opened again): the source's files are now assembled again as at
   import.

@@ -51,15 +51,21 @@ export function replicateSamples(replicate) {
 }
 
 // Samples used by more than one replicate (an input library selected several times), id → [replicate ids].
-export function sharedSamples(design) {
+// withinCondition: only samples shared by replicates of one condition (whose combination they make
+// dependent); an input selected under two conditions is shared between them, which the
+// differential pairs by.
+export function sharedSamples(design, { withinCondition = false } = {}) {
   const users = new Map();
   for (const replicate of design.replicates ?? []) {
     for (const { sample } of replicateSamples(replicate)) {
-      if (!users.has(sample)) users.set(sample, new Set());
-      users.get(sample).add(replicate.id);
+      const key = withinCondition ? `${replicate.condition ?? ''}\u0000${sample}` : sample;
+      if (!users.has(key)) users.set(key, { sample, ids: new Set() });
+      users.get(key).ids.add(replicate.id);
     }
   }
-  return new Map([...users].filter(([, ids]) => ids.size > 1).map(([id, ids]) => [id, [...ids]]));
+  const out = new Map();
+  for (const { sample, ids } of users.values()) if (ids.size > 1) out.set(sample, [...new Set([...(out.get(sample) ?? []), ...ids])]);
+  return out;
 }
 
 // Checks a design, and its columns against a table's header when `table` ({ columns }) is given.
