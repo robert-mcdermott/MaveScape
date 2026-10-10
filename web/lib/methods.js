@@ -8,7 +8,8 @@ import { summarizeDesign } from './design.js';
 import { NORMALIZATIONS } from './score-ratio.js';
 import { RESCALINGS, withDefaults } from './score.js';
 import { describeFilters } from './filters.js';
-import { barcodeSentence, binSentence, differentialSentence, dimsumSentence, regressionSentence } from './runs.js';
+import { barcodeSentence, binSentence, differentialSentence, dimsumSentence, regressionSentence, unitOf } from './runs.js';
+import { notRecorded, readiness } from './readiness.js';
 import { anchorUncertainty } from './anchors.js';
 
 export const REFERENCES = {
@@ -87,8 +88,10 @@ export function writeMethods(ws, run, options = {}) {
   }
   paragraphs.push(data.join(' '));
 
-  // The design, and what the assay measures (left out when the design does not say).
-  paragraphs.push(`Design: ${summarizeDesign(design).lines.filter((line) => design.readout || !line.startsWith('Readout:')).join(' ')}`);
+  // The design, and what the assay measures (left out when the design does not say); then what was
+  // not recorded with the counts, and what that meant (wave 2, slice 10: never filled by guessing).
+  const missing = source ? notRecorded(readiness({ ...ws, design, designSource: source.id }, { design })) : [];
+  paragraphs.push(`Design: ${summarizeDesign(design).lines.filter((line) => design.readout || !line.startsWith('Readout:')).join(' ')}${missing.length ? ` Not recorded with the counts: ${missing.join('; ')}.` : ''}`);
 
   // Scoring.
   const scoring = [];
@@ -103,8 +106,8 @@ export function writeMethods(ws, run, options = {}) {
     if (fits.length > 1 && fits[0].dimsum.input !== null) fitted.push(`the multiplicative error terms ${list((d) => d.input)} at the input and ${list((d) => d.output)} at the output, and the additive SDs ${list((d) => Math.sqrt(d.reperror))}`);
     if (fitted.length) scoring.push(`For ${fits.map((r) => design.replicates.find((x) => x.id === r.id)?.name ?? r.id).join(', ')} in turn, ${fitted.join('; ')}.`);
   }
-  else if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
-  else if (p.model === 'wls' || p.model === 'ols') scoring.push(regressionSentence(p, cite('enrich2')).replace(/ \((\[\d+\])\)/, ' $1'));
+  else if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ` (the first and last time points${p.timeScale === 'unit' ? `, over the time between them: a score per ${unitOf(design)}` : ''})` : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
+  else if (p.model === 'wls' || p.model === 'ols') scoring.push(regressionSentence(p, cite('enrich2'), design).replace(/ \((\[\d+\])\)/, ' $1'));
   else scoring.push(binSentence(p, { average: cite('vampseq'), mle: cite('peterman') }).replace(/ \((\[\d+\])\)/, ' $1'));
   if (design.library?.level === 'barcode') scoring.push(barcodeSentence(p, p.aggregation === 'sum' ? { enrich2: cite('enrich2') } : { dmsVariants: cite('dmsVariants') }).replace(/ \((\[\d+\])\)/, ' $1'));
   scoring.push('Technical replicates were summed before scoring; biological replicates were scored separately.');

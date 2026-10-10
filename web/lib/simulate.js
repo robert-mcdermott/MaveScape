@@ -75,6 +75,7 @@ export const DEFAULT_SIMULATION = {
   missing: [], // [{ replicate: 1, sample: 'output' }]: samples written as missing
   times: null, // [0, …]: a time series sampled at these times
   passageCells: Infinity, // cells per variant carried over at each later time point of a time series
+  recordCells: false, // write the cells carried into selection (and recovered after it) on the input (and output) samples, as a laboratory records them (wave 2, slice 10)
   timeUnit: 'generation',
   sort: null, // { gates: [log offsets from the wild type's μ], sigma, effectScale, cellsPerVariant, wtFluorescence, values }
   barcodes: null, // { perVariant, wildType, readsPerBarcode, noise, outliers, conflicts, unmapped, doubles, length }
@@ -139,15 +140,19 @@ export function simulateExperiment(options = {}) {
   const columns = [];
   const reads = readsOf(o, random);
   let sharedInput = null;
+  // The cells each sample carried (recordCells): into selection from an input, recovered in an output.
+  const cellsOf = new Map();
   for (let r = 0; r < o.replicates; r += 1) {
     const input = o.sharedInput ? (sharedInput ??= f.map((x) => reads(o.readsPerVariant * V * x))) : f.map((x) => reads(o.readsPerVariant * V * x));
     const cells = Number.isFinite(o.inputCells) ? f.map((x) => poisson(random, o.inputCells * V * x)) : f.map((x) => x);
+    if (Number.isFinite(o.inputCells) && !o.sharedInput) cellsOf.set(`input_rep${r + 1}`, cells.reduce((a, b) => a + b, 0));
     const grown = cells.map((c, i) => c * exp(variants[i].effect + noise(r) * random.gaussian()));
     const grownTotal = grown.reduce((a, b) => a + b, 0);
     let after = grown.map((g) => g / grownTotal);
     if (Number.isFinite(o.outputCells)) {
       const sampled = after.map((x) => poisson(random, o.outputCells * V * x));
       const s = sampled.reduce((a, b) => a + b, 0);
+      cellsOf.set(`output_rep${r + 1}`, s);
       after = sampled.map((x) => x / s);
     }
     const output = after.map((x) => reads(outDepth * V * x));
@@ -167,7 +172,7 @@ export function simulateExperiment(options = {}) {
     variants: { column: 'hgvs_pro', level: 'protein' },
     targets: [{ id: 'simulated', name: 'Simulated protein', sequenceType: 'protein', sequence: o.protein }],
     library: { level: 'variant' },
-    samples: columns.map((c) => ({ id: c.name, name: c.name, columns: [c.name] })),
+    samples: columns.map((c) => ({ id: c.name, name: c.name, columns: [c.name], ...(o.recordCells && cellsOf.has(c.name) ? { cells: cellsOf.get(c.name) } : {}) })),
     replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, input: o.sharedInput ? 'input' : `input_rep${r + 1}`, output: `output_rep${r + 1}` })),
     controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
   };

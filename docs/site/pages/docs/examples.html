@@ -11,6 +11,7 @@ lede: Six examples come with MaveScape: a published experiment, and five simulat
         <li>Quality control passes everything except the variance beyond counting, about 11×: a bottleneck. DiMSum's error model puts it at the input, 20 to 38 times counting, as the Domainome's own analysis found; scored with the DiMSum-compatible preset, every SE carries it.</li>
         <li>Nonsense variants score about −4.6 against the wild type's 0: the assay separates loss of function cleanly.</li>
         <li>The least tolerant positions are buried hydrophobic and glycine residues of the fold: A163, G196, G203 and I183 on GRB2's numbering.</li>
+        <li>In Experiment, <a href="experiment.html#readiness">What the analysis can do</a>: 19 of 25 analyses are ready. The published counts do not say how the library was made or how many cells were carried into selection; with the cells, QC would check the bottleneck it finds against them. The library is protein-level, so there are no synonymous variants to normalize to.</li>
       </ul>
 
       <h2 id="simulated">A simulated experiment (known truth)</h2>
@@ -31,6 +32,7 @@ lede: Six examples come with MaveScape: a published experiment, and five simulat
         <li>The scores track the true effects (r = 0.99).</li>
         <li>Quality control passes, including the two time-series findings: every fit uses every time point, and the time courses scatter about their lines as counting predicts.</li>
         <li>Scored again by the log ratio of the first and last samples, the scores are a little noisier and their SEs larger: the middle time points carry information.</li>
+        <li>The times are in generations, so <em>A score is the change</em> per generation gives each score as a selection coefficient: the whole-course score over the eight generations.</li>
       </ul>
 
       <h2 id="sort-seq">A simulated sort-seq experiment (known truth)</h2>

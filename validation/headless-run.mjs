@@ -27,6 +27,10 @@ import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { outputDigest } from '../web/lib/runs.js';
 import { inputFor, recompute } from './roundtrip-cases.mjs';
+import { readZip } from '../web/lib/zip.js';
+import { parseTable } from '../web/lib/csv.js';
+import { readiness } from '../web/lib/readiness.js';
+import { workspaceOf } from './readiness-cases.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const verbose = process.argv.includes('--verbose');
@@ -145,13 +149,27 @@ try {
       await act('new_workspace', { name: design.name });
       await act('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] });
       await act('set_design', { design });
-      await act('score');
+      const scored = await act('score');
       const dir = out('window');
       mkdirSync(dir);
       const names = { scores: 'scores.csv', counts: 'counts.csv', 'qc-samples': 'qc_samples.csv', 'qc-variants': 'qc_variants.csv', map: 'map.svg', methods: 'methods.md', references: 'references.bib' };
       for (const [what, file] of Object.entries(names)) await act('export', { what, path: join(dir, file) });
       const differ = Object.values(names).filter((f) => Buffer.compare(readFileSync(join(dir, f)), readFileSync(join(out('a'), f))) !== 0);
       check('the same analysis through remote control in a window: the same scores, counts, QC, map, methods and references', differ.length ? `differ: ${differ.join(', ')}` : `${Object.keys(names).length} files identical`, !differ.length);
+      // The analysis package (wave 2, slice 10), written by the window: unpacked, mavescape run
+      // with its own files, as its README says, scores the window's run again.
+      await act('export', { what: 'package', path: join(dir, 'package.zip') });
+      const unpacked = await readZip(new Uint8Array(readFileSync(join(dir, 'package.zip'))));
+      const packageDir = out('package');
+      for (const [name, data] of unpacked) {
+        mkdirSync(dirname(join(packageDir, name)), { recursive: true });
+        writeFileSync(join(packageDir, name), data);
+      }
+      const readme = new TextDecoder().decode(unpacked.get('README.md'));
+      const counts = [...unpacked.keys()].filter((n) => n.startsWith('counts/'));
+      const rerun = await mavescape(['run', '--design', join(packageDir, 'design.json'), '--parameters', join(packageDir, 'parameters.json'), '--out', out('from-package'), ...counts.map((n) => join(packageDir, n))]);
+      const rerunHash = rerun.code === 0 ? record(out('from-package')).run?.outputSha256 : null;
+      check('the analysis package written by the window: mavescape run with its files alone, as its README says, scores the window\'s run again', `${[...unpacked.keys()].join(', ')}; exit ${rerun.code}; output SHA-256 ${rerunHash === scored.data.outputSha256 ? 'the window run\'s' : `${rerunHash} against ${scored.data.outputSha256}`}`, rerun.code === 0 && rerunHash === scored.data.outputSha256 && readme.includes('mavescape run --design design.json --parameters parameters.json') && unpacked.has('samples.csv') && unpacked.has('readiness.json'));
     } finally {
       await browser.close();
       server.kill();
@@ -241,6 +259,18 @@ try {
   const designOnly = await mavescape(['validate', '--design', 'validation/fixtures/two-condition.design.json']);
   const badParameters = await mavescape(['validate', ...grb2, '--parameters', out('params.json')]);
   const noInput = await mavescape(['validate']);
+  // The readiness (wave 2, slice 10): the same in validate --json as in Node, for GRB2 with what
+  // the assay measures taken away; and in words without --json.
+  {
+    const design = JSON.parse(readFileSync(join(ROOT, 'web/examples/grb2-sh3/design.json'), 'utf8'));
+    delete design.readout;
+    writeFileSync(out('grb2-no-readout.design.json'), JSON.stringify(design));
+    const asJson = await mavescape(['validate', '--json', '--design', out('grb2-no-readout.design.json'), 'web/examples/grb2-sh3/counts.csv']);
+    const asText = await mavescape(['validate', '--design', out('grb2-no-readout.design.json'), 'web/examples/grb2-sh3/counts.csv']);
+    const window = JSON.parse(asJson.stdout || '{}').readiness;
+    const node = readiness(workspaceOf(parseTable(new Uint8Array(readFileSync(join(ROOT, 'web/examples/grb2-sh3/counts.csv')))), design));
+    check('mavescape validate: the readiness, what each analysis can do and what is missing, the same in validate --json as in Node, and in words without --json', `${window ? `${window.analyses.length} analyses, missing ${window.gaps.map((g) => g.id).join(', ')}` : 'none'}; ${JSON.stringify(window) === JSON.stringify(node) ? 'the same as Node' : 'not as Node'}; text ${/What is missing:/.test(asText.stdout) && /What the assay measures/.test(asText.stdout) ? 'names it' : 'does not'}`, asJson.code === 0 && JSON.stringify(window) === JSON.stringify(node) && window.gaps.some((g) => g.id === 'readout') && /What is missing:/.test(asText.stdout));
+  }
   check('mavescape validate: 0 when valid, 1 with what blocks scoring (as JSON with --json), a design alone, parameters checked, 2 for a wrong command line',
     `valid ${valid.code} (${valid.stdout.trim().slice(0, 60)}…); invalid ${invalid.code}, ${report.blocking?.length} problems, table ${report.table?.name}; design alone ${designOnly.code}; parameters ${badParameters.code}; nothing named ${noInput.code}`,
     valid.code === 0 && /^Valid/.test(valid.stdout) && invalid.code === 1 && report.valid === false && report.blocking.some((p) => /does not|no column/.test(p)) && report.inputs.length === 2 && designOnly.code === 0 && badParameters.code === 1 && /pseudocount/i.test(badParameters.stdout) && noInput.code === 2);

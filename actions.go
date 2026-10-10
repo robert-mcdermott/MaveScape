@@ -109,8 +109,8 @@ var remoteActions = []remoteAction{
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
 	})},
-	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), QC per sample or per variant, provenance, the methods or their references, the map (SVG), the selection, or the whole workspace as an archive (.msz). Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, selection or archive."),
+	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG), the selection, the whole workspace as an archive (.msz), or the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing). Needs the token.", InputSchema: schema(map[string]any{
+		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, selection, archive or package."),
 		"path":           textArg("The absolute path of the file to write."),
 		"overwrite":      flagArg("Replace the file if it exists."),
 		"run":            runArg,

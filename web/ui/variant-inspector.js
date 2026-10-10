@@ -228,7 +228,7 @@ export function variantSection(app, focus) {
       const items = [];
       reps.forEach((r, k) => {
         const color = categoricalColor(k);
-        const course = timeCourse(r.samples.map((id) => counts.get(id)?.[row] ?? Number.NaN), r.times, r.normalizers, { weighted: p.model === 'wls', pseudocount: p.pseudocount, method: p.normalization });
+        const course = timeCourse(r.samples.map((id) => counts.get(id)?.[row] ?? Number.NaN), r.times, r.normalizers, { weighted: p.model === 'wls', pseudocount: p.pseudocount, method: p.normalization, perUnit: p.timeScale === 'unit' });
         series.push({ points: course.points, color, markers: true, width: 0 });
         if (course.line.length && !r.state[row]) series.push({ points: course.line, color, dash: true, width: 1.5 });
         items.push([color, `${r.name}: ${r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : `slope ${fmt(course.slope, 2)}, ${r.points?.[row] ?? '—'} points, departure ${fmt(course.fit, 1)}×`}`]);

@@ -948,33 +948,84 @@ measures, and intervals checked against the truth.
      - **Data:** CBS took Hsp90's place among the real data sets (its four replicates from shared
        inputs are already in the validation data), and dms_variants was the independent simulator
        (already the barcodes' reference; Rosette was not needed).
-10. **A complete analysis package (E8; D13, E5, Q4, M2).** The hardest part of an analysis is
-    often gathering what the experiment was, not scoring it: which sample is which, what the assay
-    selects for, and numbers kept at the bench that never reach the count table. This slice shows,
-    for the open workspace, what the analysis can do with what is there, and what would unlock
-    more.
-    - **One readiness model** (`web/lib/readiness.js`), computed from the workspace and never
-      stored. The workflow strip, the Start page's "What to bring", the Experiment view and
-      `mavescape validate` all show it, and wave 7's `describe_experiment` returns it. For each
-      analysis it says whether it is possible, and if not, what it lacks. The analyses are each
-      scoring model, combining replicates, each QC finding, differential scores, barcodes,
-      rescaling and the MaveDB export.
-    - **What is missing, why it matters, and where it is usually found.** Some of it is bench
-      records that improve the analysis when they come with the counts:
-      - the cells sorted into each bin, and the gates (for the maximum-likelihood bin model);
-      - the time points in generations, or the cell counts to work them out;
-      - the cells carried into selection, so the bottleneck the QC infers from the data can be
-        checked against the one recorded;
-      - how the library was made (the coverage it can reach);
-      - the readout and the controls (slice 8).
-    - **Nothing is filled in by guessing.** A gap stays visible, and the methods name it.
-    - **The package, written out:** counts, target, design or sample sheet, readout and
-      parameters. These are the files `mavescape run` reads and what the MAVE minimum information
-      asks for, so the package that analyzes an experiment is the one that deposits it (wave 3).
-    - Validation: every example and fixture with parts taken away (the WT row, a replicate, the
-      gates, the cells, the times, the readout, the controls). The readiness model names exactly
-      what was taken away and what that disables, the same in the window and in
-      `validate --json`.
+10. **A complete analysis package (E8; D13, E5, Q4, M2): done.** The hardest part of an analysis
+    is often gathering what the experiment was, not scoring it: which sample is which, what the
+    assay selects for, and numbers kept at the bench that never reach the count table. This slice
+    shows, for the open workspace, what the analysis can do with what is there, and what would
+    unlock more.
+    - **One readiness model** (`web/lib/readiness.js`), computed from the workspace (the table's
+      import summary, the target, the design) and never stored. For every analysis the design
+      allows (each way of scoring, normalizing and rescaling, combining replicates, differential
+      scores, each QC finding, the record and a deposit's needs) it says ready, partial (it runs,
+      and something missing would make it more complete) or not possible, and why. Each gap says
+      why it matters, where it is usually found and where to give it in MaveScape; what needs
+      another experiment (replicates, time points, conditions) is listed apart.
+    - **Where it is shown:**
+      - the Experiment view's *What the analysis can do*, with *Give it* taking you to the place;
+      - the workflow strip ("21/25 analyses, 3 missing");
+      - the Start page's *What to bring*, from the same catalog, with the open workspace's gaps;
+      - `mavescape validate` (in words, and `readiness` in `--json`), through the `check` action;
+      - the methods: "Not recorded with the counts: …", each gap with what its absence meant.
+    - **The bench records it names now do something:**
+      - the cells carried into selection (an input's `cells`) and recovered after it (an output's):
+        QC predicts the variance ratio 1 + Σ(1/N)/Σ(1/R_in + 1/R_out) and says whether the cells
+        account for the bottleneck the replicates imply, more, or less; the Experiment view's Cells
+        column now shows for two populations;
+      - the times in generations: `timeScale: 'unit'` (*A score is the change*: per unit of time)
+        gives a slope on time itself, a selection coefficient per generation, and the ratio of the
+        ends over the time between them; Enrich2's whole time course stays the default;
+      - the gates and cells per bin, how the library was made, the readout and controls, as before.
+    - **The package, written out** (`web/lib/package.js`; *Write the analysis package*, a run's
+      export menu, `export` `what: "package"`): the count table byte for byte, the target as
+      FASTA, the design, the design as a sample sheet (`sampleSheetCSV`, read back to the same
+      design; a sample under several conditions is one row, `A;B`), the parameters, the readiness
+      as data, and a README with the `mavescape run` command and what is missing. Deterministic.
+    - Validation:
+      - `readiness` (77 checks): the six examples and five fixtures, and a simulated bottleneck
+        with its cells, whole and with one part taken away (the wild-type row, a replicate, the
+        gates, the cells, the times in generations, the middle time points, the readout, the
+        nonsense or synonymous controls): 74 workspaces. The model names exactly what was taken
+        away, and every verdict agrees with the engine: each scoring analysis scored or refused
+        with the parameters that use it, each QC finding assessed or not, and an analysis left out
+        for a design one the engine cannot do there either. An empty workspace needs the counts,
+        target and design; a broken design is the gap, with its first problem.
+      - `qc`: the cells recorded against simulated bottlenecks (three seeds): accounted for in
+        every pair (20 and 100 cells into selection; 50 recovered after it); with noise between
+        replicates, more in 8 of 9 pairs; with a tenth of the cells recorded, less in every pair;
+        not recorded, the advice to record them.
+      - `scoring`: per unit of time, the whole-course scores and SEs over the span within 5 ×
+        10⁻¹⁶ (WLS, OLS, the ratio); refused for two populations; DiMSum's model on a table of
+        barcodes; the bins' defaults without the wild type or with nonsense named none.
+      - `experiment`: every validation design written as a sample sheet reads back as itself.
+      - `roundtrip`: each case's package scores from its own files to the run's output hash, its
+        sheet reads as its design, its readiness as computed, the same bytes twice.
+      - `headless-run.mjs` 22 checks: the package written by the window, run by `mavescape run`
+        from its own files, gives the window's run; `validate --json`'s readiness equals Node's,
+        and the text names what is missing.
+      - Unit tests 213, with `readiness.test.mjs`, `samplesheet.test.mjs`, `package.test.mjs`.
+    - Found by slice 10:
+      - **Probing every verdict against the engine found three engine faults:**
+        - DiMSum's model on a table of barcodes (summed, which is allowed) crashed after scoring:
+          the summary read barcode counts its replicates do not keep;
+        - sorted bins without the wild type were refused by default, since both scales need it:
+          they now start unscaled, and an MLE's σ each variant's own;
+        - the defaults ignored controls the design names as none (bins scaled to nonsense that the
+          design excludes).
+      - **The fitted multiplier understates a bottleneck at the input**: depleted variants' counting
+        error dwarfs it, which dilutes the slope (2.2–4.3 for a predicted 6). The pair's ratio, which
+        the bottleneck check already validated, follows the cells (4.0–5.5 for 6), so the cells are
+        checked against it.
+      - **Rounds of selection are not generations**: no growth record would make them so, so the
+        per-generation scores are not listed for them.
+      - **A sample sheet could not say an input selected under two conditions**: the reader takes a
+        list of conditions now, as it takes a list of replicates.
+      - **What the engine can do decides, not the design alone**: the variance beyond counting is
+        assessable with one replicate given ten synonymous variants; the separation of the controls
+        needs nonsense variants and synonymous ones or the wild type; maximum likelihood needs the
+        wild type only for its σ. The readiness follows each.
+      - **The deposit's needs are listed now** (the assay in MaveDB's terms, how the library was
+        made, the target's identifier), so a laboratory can gather them before wave 3 deposits.
+      - `describe_experiment` (wave 7) will return the readiness as it is.
 11. **Examples (T4).** Three more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
    growth time series; Factor IX MultiSTEP (one readout) as the FACS-bin assay; and a simulated
    problematic experiment (a bottleneck and a failing replicate), labeled simulated. (The simulated

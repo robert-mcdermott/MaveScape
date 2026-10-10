@@ -132,6 +132,7 @@ export function describeParameters(parameters, barcodes = false) {
       `pseudocount ${p.pseudocount}`,
       combinationShort(p.combination),
     ];
+  if (p.timeScale === 'unit') parts.push('per unit of time');
   if (regression) {
     parts.push(p.regressionSE === 'residual' ? 'residual-scaled SE' : 'SE at least counting\'s');
     parts.push(f.minTimePoints === 'all' ? 'every time point' : `time points ≥ ${f.minTimePoints}`);
@@ -153,10 +154,15 @@ export function describeParameters(parameters, barcodes = false) {
   return parts.join(', ');
 }
 
-// A regression's method in one sentence (also the methods paragraph's).
-export function regressionSentence(p, citation) {
+// A time series' unit, for a score per unit of time: "generation", "round", … (wave 2, slice 10).
+export const unitOf = (design) => (design?.time?.unit && design.time.unit !== 'other' ? design.time.unit : 'unit of time');
+
+// A regression's method in one sentence (also the methods paragraph's). design: for the unit of a
+// score per unit of time.
+export function regressionSentence(p, citation, design = null) {
   const f = p.filters;
-  return `Scores are the slopes of ${p.model === 'wls' ? 'a weighted' : 'an ordinary'} least-squares regression of each variant's natural-log count, normalized by the ${NORMALIZATIONS[p.normalization]}, on time scaled to 0–1 (${citation}), with a pseudocount of ${p.pseudocount}${p.model === 'wls' ? ' and weights 1/(1/(c + p) + 1/r) for a count c, the pseudocount p and the sample\'s normalizer r' : ''}; a variant was fitted on the time points where it was counted, ${f.minTimePoints === 'all' ? 'all of them required' : `its first and at least ${f.minTimePoints} in all`}; each replicate's SE is the slope's standard error scaled by the residuals${p.regressionSE === 'residual' ? '' : ', and never below what counting alone predicts'}.`;
+  const time = p.timeScale === 'unit' ? `on time in ${unitOf(design) === 'unit of time' ? 'the design\'s units' : `${unitOf(design)}s`}, a slope per ${unitOf(design)} (${citation}, whose slopes are on time scaled to 0–1)` : `on time scaled to 0–1 (${citation})`;
+  return `Scores are the slopes of ${p.model === 'wls' ? 'a weighted' : 'an ordinary'} least-squares regression of each variant's natural-log count, normalized by the ${NORMALIZATIONS[p.normalization]}, ${time}, with a pseudocount of ${p.pseudocount}${p.model === 'wls' ? ' and weights 1/(1/(c + p) + 1/r) for a count c, the pseudocount p and the sample\'s normalizer r' : ''}; a variant was fitted on the time points where it was counted, ${f.minTimePoints === 'all' ? 'all of them required' : `its first and at least ${f.minTimePoints} in all`}; each replicate's SE is the slope's standard error scaled by the residuals${p.regressionSE === 'residual' ? '' : ', and never below what counting alone predicts'}.`;
 }
 
 // Sorted bins' method in one sentence (also the methods paragraph's).
@@ -213,8 +219,8 @@ export function describeMethod(run) {
   const design = run.inputs.design;
   const lines = [];
   if (p.model === 'dimsum') lines.push(dimsumSentence(p, 'Faure et al. 2020'));
-  else if (p.model === 'ratio') lines.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; each replicate's SE is the square root of the sum of the reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'} (Rubin et al. 2017).`);
-  else if (p.model === 'wls' || p.model === 'ols') lines.push(regressionSentence(p, 'Rubin et al. 2017'));
+  else if (p.model === 'ratio') lines.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ` (the first and last time points${p.timeScale === 'unit' ? `, over the time between them: a score per ${unitOf(design)}` : ''})` : ''}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; each replicate's SE is the square root of the sum of the reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'} (Rubin et al. 2017).`);
+  else if (p.model === 'wls' || p.model === 'ols') lines.push(regressionSentence(p, 'Rubin et al. 2017', design));
   else lines.push(binSentence(p, { average: 'Matreyek et al. 2018', mle: 'Peterman and Levine 2016' }));
   if (design.library?.level === 'barcode') lines.push(barcodeSentence(p, { enrich2: 'Rubin et al. 2017', dmsVariants: 'the Bloom lab\'s dms_variants' }));
   lines.push(`Biological replicates were scored separately and combined by ${COMBINATIONS[p.combination]}${p.combination === 'enrich2' ? ' (Enrich2 2.0.2\'s random-effects estimator, 50 iterations)' : p.combination === 'reml' ? ' (Fisher scoring as metafor\'s REML)' : p.combination === 'moderated' ? ` (${moderatedSummary(run)})` : ''}; technical replicates were summed before scoring.`);

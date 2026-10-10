@@ -4,9 +4,15 @@
 // experiment design file (sample_name, experiment_replicate, selection_id, technical_replicate)
 // is one such sheet. A sample shared by several replicates (one input library selected several
 // times) is listed once, with the replicates that share it ("1;2;3"), or with no replicate, when
-// every replicate of its condition and tile shares it.
+// every replicate of its condition and tile shares it; one selected under several conditions lists
+// them too ("Without ligand;With ligand", wave 2 slice 10).
+//
+// sampleSheetCSV writes a design back as a sheet (wave 2, slice 10: the analysis package), one row
+// per column of counts, and says whether reading it gives the same design (designStructure): the
+// sheet leaves out the gates, the readout, the controls and the target, which design.json keeps.
 
-import { cellText } from './csv.js';
+import { cellText, parseTable } from './csv.js';
+import { replicateSamples } from './design.js';
 
 const ALIASES = {
   column: ['column', 'count_column', 'counts_column', 'sample_name', 'sample', 'name', 'file'],
@@ -88,7 +94,7 @@ export function designFromSampleSheet(sheet, options = {}) {
     rows.push({
       line: lineOf(r), column, role, time: role === 'input' && time === null ? 0 : time, bin, value: number(value('value', r)),
       replicates: numbers(value('replicate', r)), technical: number(value('technical', r)) ?? 1,
-      condition: String(value('condition', r) ?? '').trim() || null, tile: String(value('tile', r) ?? '').trim() || null,
+      conditions: String(value('condition', r) ?? '').split(';').map((x) => x.trim()).filter(Boolean), tile: String(value('tile', r) ?? '').trim() || null,
       batch: String(value('batch', r) ?? '').trim() || null, cells: number(value('cells', r)),
     });
   }
@@ -99,7 +105,7 @@ export function designFromSampleSheet(sheet, options = {}) {
 
   // Conditions and tiles, in the order the sheet names them.
   const conditionIds = new Map();
-  for (const r of rows) if (r.condition && !conditionIds.has(r.condition)) conditionIds.set(r.condition, slug(r.condition));
+  for (const r of rows) for (const c of r.conditions) if (!conditionIds.has(c)) conditionIds.set(c, slug(c));
   const tileIds = new Map();
   for (const r of rows) if (r.tile && !tileIds.has(r.tile)) tileIds.set(r.tile, `tile${tileIds.size + 1}`);
 
@@ -108,7 +114,7 @@ export function designFromSampleSheet(sheet, options = {}) {
   const samples = new Map();
   const sampleOfRow = new Map();
   for (const r of rows) {
-    const key = [r.role, r.replicates.join(';') || '*', r.condition ?? '', r.tile ?? '', r.time ?? '', r.bin ?? ''].join('\u0001');
+    const key = [r.role, r.replicates.join(';') || '*', r.conditions.join(';'), r.tile ?? '', r.time ?? '', r.bin ?? ''].join('\u0001');
     if (!samples.has(key)) samples.set(key, { id: slug(r.column), name: r.column, columns: [], rows: [] });
     const sample = samples.get(key);
     sample.columns.push(r.column);
@@ -126,10 +132,12 @@ export function designFromSampleSheet(sheet, options = {}) {
   // to each; a row naming none is shared by every replicate of its condition and tile.
   const groups = new Map();
   for (const r of rows) {
-    for (const n of r.replicates) {
-      const key = [r.condition ?? '', r.tile ?? '', n].join('\u0001');
-      if (!groups.has(key)) groups.set(key, { condition: r.condition, tile: r.tile, biological: n, rows: [] });
-      groups.get(key).rows.push(r);
+    for (const condition of r.conditions.length ? r.conditions : [null]) {
+      for (const n of r.replicates) {
+        const key = [condition ?? '', r.tile ?? '', n].join('\u0001');
+        if (!groups.has(key)) groups.set(key, { condition, tile: r.tile, biological: n, rows: [] });
+        groups.get(key).rows.push(r);
+      }
     }
   }
   const shared = rows.filter((r) => !r.replicates.length);
@@ -140,7 +148,7 @@ export function designFromSampleSheet(sheet, options = {}) {
     if (g.condition) replicate.condition = conditionIds.get(g.condition);
     if (g.tile) replicate.tile = tileIds.get(g.tile);
     const own = g.rows;
-    const common = shared.filter((r) => (r.condition ?? null) === (g.condition ?? null) && (r.tile ?? null) === (g.tile ?? null));
+    const common = shared.filter((r) => (r.conditions.length ? r.conditions.includes(g.condition) : g.condition === null) && (r.tile ?? null) === (g.tile ?? null));
     const all = [...own, ...common.filter((c) => !own.some((o) => o.role === c.role && o.time === c.time && o.bin === c.bin))];
     const sampleId = (r) => sampleOfRow.get(r).id;
     if (model === 'two-population') {
@@ -200,4 +208,76 @@ export function designFromSampleSheet(sheet, options = {}) {
     if (unlisted.length) design.ignoredColumns = unlisted.map((column) => ({ column, reason: 'not in the sample sheet' }));
   }
   return { design, problems, found };
+}
+
+// --- Writing a sheet (wave 2, slice 10) -------------------------------------------------------------
+
+// The time column's name, which says the unit to the reader above.
+const TIME_HEADERS = { generation: 'generation', round: 'round', day: 'day', hour: 'hours' };
+const quote = (value) => {
+  const text = value === null || value === undefined ? '' : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+// A design's structure, the same for any two designs of one experiment however their ids were made:
+// each replicate by its condition's and tile's names and biological number, with each slot's
+// columns; each sample's columns, batch and cells; the unit of time and the bins' measure.
+export function designStructure(design) {
+  const samples = new Map((design.samples ?? []).map((x) => [x.id, x]));
+  const columnsOf = (id) => (samples.get(id)?.columns ?? [`?${id}`]).join('+');
+  const conditionName = (id) => (design.conditions ?? []).find((c) => c.id === id)?.name ?? '';
+  const tileName = (id) => {
+    const tile = (design.library?.tiles ?? []).find((t) => t.id === id);
+    return tile ? tile.name ?? tile.id : '';
+  };
+  const slot = (x) => `${x.role === 'input' && design.model === 'time-series' ? 'timepoint@0' : x.role}${x.time !== undefined ? `@${x.time}` : ''}${x.order !== undefined ? `#${x.order}=${x.value}` : ''}:${columnsOf(x.sample)}`;
+  return {
+    model: design.model,
+    time: design.model === 'time-series' ? design.time?.unit ?? null : null,
+    bins: design.model === 'bins' ? design.bins?.weight ?? 'rank' : null,
+    replicates: (design.replicates ?? []).map((r) => `${conditionName(r.condition)}|${tileName(r.tile)}|${r.biological}|${replicateSamples(r).map(slot).sort().join(',')}`).sort(),
+    samples: (design.samples ?? []).map((x) => `${x.columns.join('+')}|${x.batch ?? ''}|${x.cells ?? ''}`).sort(),
+  };
+}
+
+// The design as a sample sheet: { csv, complete }, one row per column of counts in use. complete:
+// whether the reader gives back a design of the same structure (a sample used in two roles, or a
+// unit of time or bin measure the sheet cannot name, is not). The gates, the readout, the controls
+// and the target are design.json's alone.
+export function sampleSheetCSV(design) {
+  const model = design.model;
+  const conditionName = (id) => (design.conditions ?? []).find((c) => c.id === id)?.name ?? null;
+  const tileName = (id) => {
+    const tile = (design.library?.tiles ?? []).find((t) => t.id === id);
+    return tile ? tile.name ?? tile.id : null;
+  };
+  const timeHeader = TIME_HEADERS[design.time?.unit] ?? 'time';
+  const valueHeader = design.bins?.weight === 'fluorescence' ? 'fluorescence' : 'value';
+  const header = ['column', 'role', 'replicate', 'technical_replicate', 'condition', 'tile', ...(model === 'time-series' ? [timeHeader] : []), ...(model === 'bins' ? ['bin', valueHeader] : []), 'batch', 'cells'];
+  // Each sample's uses: by role, time or bin, and tile (one row each).
+  const uses = new Map();
+  for (const r of design.replicates ?? []) {
+    for (const x of replicateSamples(r)) {
+      const role = model === 'time-series' ? 'timepoint' : x.role;
+      const key = `${x.sample}\u0001${role}\u0001${x.time ?? ''}\u0001${x.order ?? ''}\u0001${x.value ?? ''}\u0001${r.tile ?? ''}`;
+      if (!uses.has(key)) uses.set(key, { sample: x.sample, role, time: x.time, order: x.order, value: x.value, tile: r.tile ?? null, replicates: new Set(), conditions: new Set() });
+      const use = uses.get(key);
+      use.replicates.add(r.biological);
+      if (r.condition) use.conditions.add(conditionName(r.condition));
+    }
+  }
+  const rows = [];
+  for (const sample of design.samples ?? []) {
+    for (const use of [...uses.values()].filter((u) => u.sample === sample.id)) {
+      sample.columns.forEach((column, k) => {
+        rows.push([column, use.role, [...use.replicates].sort((a, b) => a - b).join(';'), k + 1, [...use.conditions].join(';'), tileName(use.tile),
+          ...(model === 'time-series' ? [use.time] : []), ...(model === 'bins' ? [use.order, use.value] : []), sample.batch ?? null, k === 0 ? sample.cells ?? null : null]);
+      });
+    }
+  }
+  const text = `${[header, ...rows].map((row) => row.map(quote).join(',')).join('\n')}\n`;
+  // Read back, the same structure?
+  const back = designFromSampleSheet(parseTable(text), { variants: design.variants, targets: design.targets });
+  const same = back.design && !back.problems.some((x) => x.level === 'error') && JSON.stringify(designStructure(back.design)) === JSON.stringify(designStructure(design));
+  return { csv: text, complete: Boolean(same) };
 }

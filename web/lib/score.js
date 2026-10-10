@@ -58,6 +58,8 @@ export const MODELS = {
   'bins-mle': 'maximum likelihood (censored log-normal, from the gates)',
 };
 const BIN_MODELS = new Set(['bins', 'bins-mle']);
+// A time series' scores: over the whole time course, or per unit of time (wave 2, slice 10).
+export const TIME_SCALES = { course: 'the whole time course (time scaled to 0–1, Enrich2)', unit: 'unit of time (per generation, with times in generations)' };
 
 export const DEFAULT_PARAMETERS = {
   model: 'ratio',
@@ -75,6 +77,10 @@ export const DEFAULT_PARAMETERS = {
   dimsumErrorModel: true,
   dimsumDropout: 0,
   combination: 'moderated',
+  // A time series' scores: the slope on time scaled to 0–1, the change over the whole time course
+  // (Enrich2's), or per unit of the design's time, per generation when the times are generations
+  // (wave 2, slice 10).
+  timeScale: 'course',
   rescale: 'none',
   // Differential scores between conditions (null: none; runs made before 0.2 have none).
   differential: null,
@@ -111,13 +117,16 @@ export const PRESETS = {
 // table counts it (else complete cases), and for a time series of three or more time points in
 // every replicate, weighted regression.
 // For sorted bins: the weighted average, scaled to nonsense 0 and wild type 1 when the table has
-// nonsense variants (else to the lowest 5%).
+// nonsense variants (else to the lowest 5%), unscaled without the wild type (both scales need it).
+// Controls the design names as none count as absent (wave 2, slice 10).
 export function defaultParameters(design, source = null, preset = 'mavescape') {
-  const hasWildType = source ? (source.summary?.byKind?.['wild type'] ?? 0) > 0 : true;
+  const controls = design?.controls ?? {};
+  const hasWildType = controls.wildType === 'none' ? false : source ? (source.summary?.byKind?.['wild type'] ?? 0) > 0 || Boolean(controls.wildType && controls.wildType !== 'auto' && !/^(p\.=|c\.=|n\.=|_wt)$/i.test(controls.wildType)) : true;
   if (design?.model === 'bins') {
-    const hasNonsense = source ? (source.summary?.byKind?.nonsense ?? 0) > 0 : true;
+    const hasNonsense = controls.nonsense === 'none' ? false : Array.isArray(controls.nonsense) ? controls.nonsense.length > 0 : source ? (source.summary?.byKind?.nonsense ?? 0) > 0 : true;
     const base = PRESETS[preset].bins ? PRESETS[preset].parameters : { ...PRESETS[preset].parameters, model: 'bins' };
-    return withDefaults({ ...base, binScale: base.binScale === 'nonsense-wt' && !hasNonsense ? 'low5-wt' : base.binScale });
+    const scale = base.binScale === 'none' ? 'none' : !hasWildType ? 'none' : base.binScale === 'nonsense-wt' && !hasNonsense ? 'low5-wt' : base.binScale;
+    return withDefaults({ ...base, binScale: scale, ...(hasWildType ? {} : { binSigma: 'per-variant' }) });
   }
   const model = PRESETS[preset].parameters.model === 'dimsum' && design?.model === 'two-population' ? 'dimsum' : design?.model === 'time-series' && design.replicates?.length && design.replicates.every((r) => orderedSlots(r).length >= 3) ? 'wls' : 'ratio';
   const normalization = hasWildType ? 'wt' : 'complete';
@@ -159,6 +168,7 @@ export function checkParameters(parameters, design) {
   if (typeof p.dimsumNormalise !== 'boolean' || typeof p.dimsumErrorModel !== 'boolean') errors.push('DiMSum\'s normalisation and error model are on or off (true or false).');
   if (!COMBINATIONS[p.combination]) errors.push(`Unknown combination "${p.combination}".`);
   if (!RESCALINGS[p.rescale]) errors.push(`Unknown rescaling "${p.rescale}".`);
+  if (!TIME_SCALES[p.timeScale]) errors.push(`Unknown time scale "${p.timeScale}" (course or unit).`);
   if (p.differential !== null && !DIFFERENTIAL_METHODS[p.differential]) errors.push(`Unknown differential method "${p.differential}".`);
   errors.push(...checkFilters(p.filters));
   if (design) {
@@ -179,6 +189,7 @@ export function checkParameters(parameters, design) {
       }
     }
     if (design.model === 'scores') errors.push('This design holds precomputed scores: there are no counts to score.');
+    if (p.timeScale === 'unit' && design.model !== 'time-series') errors.push('Scores per unit of time need a time series; this design is not one: score over the time course (the default).');
     if (p.model === 'dimsum') {
       if (design.model !== 'two-population') errors.push(`DiMSum scores an input and an output; this design is ${design.model === 'time-series' ? 'a time series: score it by regression, or by the log ratio of its first and last samples' : `of kind "${design.model}"`}.`);
       if (p.aggregation === 'barcode') errors.push('DiMSum scores variants: sum each variant\'s barcodes first.');
@@ -590,6 +601,19 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     const label = `replicate ${replicate.name ?? replicate.id}`;
     const T = slots.length;
     const times = slots.map((s) => s.time);
+    // Per unit of time (a time series, wave 2 slice 10): a regression's slope on time itself; the
+    // log ratio of the first and last samples over the time between them, its coefficient on the
+    // first sample −1/span (for replicates sharing it).
+    const perUnit = p.timeScale === 'unit' && design.model === 'time-series';
+    const span = times[T - 1] - times[0];
+    const perUnitRatio = (out) => {
+      if (!perUnit) return out;
+      for (let i = 0; i < out.score.length; i += 1) {
+        out.score[i] /= span;
+        out.se[i] /= span;
+      }
+      return { ...out, firstCoef: new Float64Array(out.score.length).fill(-1 / span) };
+    };
     // A regression fits a variant on the time points where it was counted: its first and at least
     // `need` in all. A ratio needs every sample.
     const need = regression ? (f.minTimePoints === 'all' ? T : Math.min(f.minTimePoints, T)) : T;
@@ -623,8 +647,8 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     const scoreRows = (samples, m, reference) => {
       try {
         return regression
-          ? regressionScores(samples, times, m.r, m.usable, { weighted: p.model === 'wls', pseudocount: p.pseudocount, method: p.normalization, se: p.regressionSE, reference, label })
-          : ratioScores(p.normalization, samples, m.counted, m.r, { pseudocount: p.pseudocount, reference, label });
+          ? regressionScores(samples, times, m.r, m.usable, { weighted: p.model === 'wls', pseudocount: p.pseudocount, method: p.normalization, se: p.regressionSE, reference, label, perUnit })
+          : perUnitRatio(ratioScores(p.normalization, samples, m.counted, m.r, { pseudocount: p.pseudocount, reference, label }));
       } catch (error) {
         throw new Refused([error.message]);
       }
@@ -734,7 +758,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       seCounting: regression && !byBarcode ? scored.seCounting : null,
       shared: byBarcode ? null : {
         sample: slots[0].sample,
-        coef: regression ? scored.firstCoef : null,
+        coef: scored.firstCoef ?? null,
         variance: regression ? scored.firstVar : Float64Array.from(samples[0], (c) => 1 / (c + p.pseudocount) + (p.normalization === 'synonymous' ? 0 : 1 / r[0])),
       },
     };
@@ -742,9 +766,10 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     repById.set(replicate.id, entry);
   });
 
-  // A table of barcodes: how many measure a variant in a replicate.
+  // A table of barcodes: how many measure a variant in a replicate (DiMSum's model sums them
+  // before it scores, and counts none).
   if (groups) {
-    const perReplicate = replicates.map((r) => {
+    const perReplicate = replicates.filter((r) => r.barcodes).map((r) => {
       let variantsMeasured = 0;
       let barcodes = 0;
       for (const k of r.barcodes.measured) {
@@ -755,7 +780,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       return variantsMeasured ? barcodes / variantsMeasured : 0;
     });
     const mean = perReplicate.reduce((a, x) => a + x, 0) / Math.max(1, perReplicate.length);
-    info.push(`${groups.rows - groups.unmapped} barcodes of ${n} variants, ${mean.toFixed(1)} measuring a variant in a replicate on average; ${p.aggregation === 'sum' ? 'their counts summed per variant before scoring' : `each scored, then combined per variant by ${BARCODE_COMBINATIONS[p.barcodeCombination]}`}.`);
+    info.push(`${groups.rows - groups.unmapped} barcodes of ${n} variants${perReplicate.length ? `, ${mean.toFixed(1)} measuring a variant in a replicate on average` : ''}; ${p.aggregation === 'sum' ? 'their counts summed per variant before scoring' : `each scored, then combined per variant by ${BARCODE_COMBINATIONS[p.barcodeCombination]}`}.`);
   }
 
   // Run-level notes on the design.

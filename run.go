@@ -719,6 +719,13 @@ func validateHeadless(args []string, stdout, stderr io.Writer) int {
 		for _, warning := range report.Warnings {
 			fmt.Fprintln(stdout, "  !", warning)
 		}
+		// What each analysis can do with these files, and what is missing (wave 2, slice 10).
+		if report.readinessText != "" {
+			fmt.Fprintln(stdout)
+			for _, line := range strings.Split(report.readinessText, "\n") {
+				fmt.Fprintln(stdout, strings.TrimRight("  "+line, " "))
+			}
+		}
 	}
 	if !report.Valid {
 		return exitFailed
@@ -733,7 +740,11 @@ type validateReport struct {
 	Warnings []string        `json:"warnings"`
 	Table    json.RawMessage `json:"table,omitempty"`
 	Design   json.RawMessage `json:"design,omitempty"`
-	Inputs   []runFile       `json:"inputs"`
+	// What each analysis can do with these files, and what is missing (web/lib/readiness.js).
+	Readiness json.RawMessage `json:"readiness,omitempty"`
+	Inputs    []runFile       `json:"inputs"`
+
+	readinessText string
 }
 
 func parseValidateArgs(args []string, stderr io.Writer) (validateOptions, error) {
@@ -862,11 +873,13 @@ func performValidate(ctx context.Context, opts validateOptions, browser string) 
 		return report, nil
 	}
 	var data struct {
-		Valid    bool            `json:"valid"`
-		Blocking []string        `json:"blocking"`
-		Warnings []string        `json:"warnings"`
-		Table    json.RawMessage `json:"table"`
-		Design   json.RawMessage `json:"design"`
+		Valid         bool            `json:"valid"`
+		Blocking      []string        `json:"blocking"`
+		Warnings      []string        `json:"warnings"`
+		Table         json.RawMessage `json:"table"`
+		Design        json.RawMessage `json:"design"`
+		Readiness     json.RawMessage `json:"readiness"`
+		ReadinessText string          `json:"readinessText"`
 	}
 	if err := json.Unmarshal(checked.Data, &data); err != nil {
 		return report, fmt.Errorf("the check's answer could not be read: %v", err)
@@ -881,6 +894,10 @@ func performValidate(ctx context.Context, opts validateOptions, browser string) 
 	if string(data.Design) != "null" {
 		report.Design = data.Design
 	}
+	if len(data.Readiness) > 0 && string(data.Readiness) != "null" {
+		report.Readiness = data.Readiness
+	}
+	report.readinessText = data.ReadinessText
 	return report, nil
 }
 

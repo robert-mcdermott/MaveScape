@@ -15,6 +15,9 @@ import { designFromSampleSheet } from '../lib/samplesheet.js';
 import { parseTable } from '../lib/csv.js';
 import { setDesign, updateTarget } from '../lib/workspace.js';
 import { draftFromColumns } from './design-draft.js';
+import { GAPS, readiness, readinessLine } from '../lib/readiness.js';
+import { currentRun } from '../lib/workflow.js';
+import { exportPackage } from './record.js';
 
 const MODELS = [['two-population', 'Two populations'], ['time-series', 'Time series'], ['bins', 'FACS bins']];
 const TIME_UNITS = ['round', 'generation', 'hour', 'day', 'minute', 'other'];
@@ -108,7 +111,7 @@ export function mountExperimentMode(app, container) {
       if (!Number.isInteger(n)) toast(`${label} is a whole number.`, { kind: 'error' });
       else apply(n);
     };
-    return h('div.pane', h('h3', icon('sequence'), 'Target'),
+    return h('div.pane', { dataset: { place: 'target' } }, h('h3', icon('sequence'), 'Target'),
       h('p.muted', { style: { margin: '0 0 8px', fontSize: '12px' } }, `${target.sequenceType === 'dna' ? 'DNA' : 'Protein'}, ${formatCount(target.sequence.length)} ${target.sequenceType === 'dna' ? 'nt' : 'aa'}. Variants are numbered from the target's first ${target.sequenceType === 'dna' ? 'base' : 'residue'}; the offset gives positions in the reference protein.`),
       h('div.form-grid',
         field('Name', target.name, (v) => v && patch({ name: v }, `Renamed the target ${v}`)),
@@ -142,7 +145,7 @@ export function mountExperimentMode(app, container) {
       extra.push(h('label.field', h('span', 'Bin values are'), h('select.input', { onchange: (e) => edit((d) => setField(d, { bins: { weight: e.target.value } }), `Bin values are ${e.target.value}`) },
         ...[['rank', 'ranks or weights (VAMP-seq 0.25–1)'], ['fluorescence', 'fluorescence'], ['other', 'another measure']].map(([v, l]) => h('option', { value: v, selected: design.bins?.weight === v }, l)))));
     }
-    return h('div.pane', h('h3', icon('settings'), 'Experiment'),
+    return h('div.pane', { dataset: { place: 'time conditions' } }, h('h3', icon('settings'), 'Experiment'),
       h('label.field', h('span', 'Name'), h('input.input', { value: design.name ?? '', onchange: (e) => edit((d) => setField(d, { name: e.target.value.trim() }), 'Renamed the design') })),
       h('div.field', h('span', 'Kind of experiment'), model),
       ...extra,
@@ -184,7 +187,7 @@ export function mountExperimentMode(app, container) {
       return h('label.field', h('span', label), input);
     };
     const range = (key, label) => h('div.field', h('span', label), h('div.range-inputs', position(key, 'start', `${label}, from`), h('span.muted', '–'), position(key, 'end', `${label}, to`)));
-    return h('div.pane.readout-pane', h('h3', icon('target'), 'What the assay measures'),
+    return h('div.pane.readout-pane', { dataset: { place: 'readout controls' } }, h('h3', icon('target'), 'What the assay measures'),
       h('p.muted', { style: { margin: '0 0 8px', fontSize: '12px' } }, 'A score\'s sign means nothing without the selection. The map\'s legend, the separation of the controls, the methods and the exports read the direction from here; until it is stated, MaveScape takes a higher score to mean more of the function, and says so. The terms are MaveDB\'s.'),
       h('label.field', h('span', 'What was measured'), phenotype),
       h('div.form-grid',
@@ -241,6 +244,8 @@ export function mountExperimentMode(app, container) {
 
   function columnsPane(design, s) {
     const columns = countColumns(s);
+    const withCells = design.model === 'bins' || design.model === 'two-population';
+    const cellsTitle = design.model === 'bins' ? 'Cells sorted into the bin, when known: the maximum-likelihood fit reweights reads by them, and QC reads the cells per variant' : 'Cells carried into selection from an input, or recovered after it in an output, when known: QC checks the bottleneck it infers from the replicates against them';
     const assignments = columnAssignments(design, columns);
     const sampleColumns = design.samples.flatMap((x) => x.columns);
     const rows = columns.map((column) => {
@@ -265,13 +270,16 @@ export function mountExperimentMode(app, container) {
       const batch = first ? h('input.input', { value: sample.batch ?? '', placeholder: '—', 'aria-label': `Batch of sample ${sample.id}`, style: { width: '90px' }, onchange: (e) => edit((d) => updateSample(d, sample.id, { batch: e.target.value.trim() }), `Set the batch of ${sample.id}`) }) : null;
       // Missing read as 0: for tables that write variants that dropped out during selection as
       // missing (the QC finding "Missing after selection" says when).
-      const cellsInput = first && design.model === 'bins' ? h('input.input', { value: sample.cells ?? '', inputmode: 'numeric', placeholder: '—', style: { width: '90px' }, 'aria-label': `Cells sorted into ${sample.name ?? sample.id}`, onchange: (e) => edit((d) => updateSample(d, sample.id, { cells: e.target.value.trim() === '' ? null : Number(e.target.value) }), `Set the cells sorted into ${sample.name ?? sample.id}`) }) : null;
+      // Cells, when the bench recorded them: sorted into a bin, or carried into selection (an
+      // input) and recovered after it (an output), for QC's check of the bottleneck (wave 2, slice 10).
+      const cellsWhat = design.model === 'bins' ? 'sorted into' : 'recorded for';
+      const cellsInput = first && withCells ? h('input.input', { value: sample.cells ?? '', inputmode: 'numeric', placeholder: '—', style: { width: '90px' }, 'aria-label': `Cells ${cellsWhat} ${sample.name ?? sample.id}`, onchange: (e) => edit((d) => updateSample(d, sample.id, { cells: e.target.value.trim() === '' ? null : Number(e.target.value) }), `Set the cells ${cellsWhat} ${sample.name ?? sample.id}`) }) : null;
       const zero = first ? h('input', { type: 'checkbox', checked: Boolean(sample.missingMeansZero), 'aria-label': `Read missing counts as 0 in ${sample.name ?? sample.id}`, title: 'Read this sample\'s missing counts as 0: for tables that write variants that dropped out during selection as missing. Not for a replicate\'s first sample.', onchange: (e) => edit((d) => updateSample(d, sample.id, { missingMeansZero: e.target.checked }), `${e.target.checked ? 'Read' : 'Stopped reading'} missing counts as 0 in ${sample.name ?? sample.id}`) }) : null;
-      return h(`tr${a.kind === 'unassigned' ? '.unset' : ''}`, h('td.mono', column), h('td', select), h('td', detail), h('td', batch), design.model === 'bins' ? h('td', cellsInput) : null, h('td.c', zero));
+      return h(`tr${a.kind === 'unassigned' ? '.unset' : ''}`, h('td.mono', column), h('td', select), h('td', detail), h('td', batch), withCells ? h('td', cellsInput) : null, h('td.c', zero));
     });
-    return h('div.pane', h('h3', icon('table'), 'Columns', h('span.spacer'), h('span.muted', { style: { fontWeight: 400, fontSize: '12px' } }, `${columns.length} count columns, ${design.samples.length} samples`)),
+    return h('div.pane', { dataset: { place: 'columns' } }, h('h3', icon('table'), 'Columns', h('span.spacer'), h('span.muted', { style: { fontWeight: 400, fontSize: '12px' } }, `${columns.length} count columns, ${design.samples.length} samples`)),
       h('p.muted', { style: { fontSize: '12px', margin: '0 0 8px' } }, 'Each column of counts is a sample, a technical replicate of one (its counts are summed), a copy of another column (a sample shared by replicates, written once per replicate), or not used. "Missing = 0" reads a sample\'s missing counts as 0, for tables that write variants that dropped out during selection as missing.'),
-      h('div', { style: { maxHeight: '420px', overflow: 'auto' } }, h('table.data.design-columns', h('thead', h('tr', h('th', 'Column'), h('th', 'Is'), h('th', 'Sample name or note'), h('th', 'Batch'), design.model === 'bins' ? h('th', { title: 'Cells sorted into the bin, when known: the maximum-likelihood fit reweights reads by them, and QC reads the cells per variant' }, 'Cells') : null, h('th.c', { title: 'Read this sample\'s missing counts as 0 (variants that dropped out, written as missing)' }, 'Missing = 0'))), h('tbody', ...rows))));
+      h('div', { style: { maxHeight: '420px', overflow: 'auto' } }, h('table.data.design-columns', h('thead', h('tr', h('th', 'Column'), h('th', 'Is'), h('th', 'Sample name or note'), h('th', 'Batch'), withCells ? h('th', { title: cellsTitle }, 'Cells') : null, h('th.c', { title: 'Read this sample\'s missing counts as 0 (variants that dropped out, written as missing)' }, 'Missing = 0'))), h('tbody', ...rows))));
   }
 
   // Sorted bins: each bin's value and gates (the same in every replicate; a design file can give
@@ -288,7 +296,7 @@ export function mountExperimentMode(app, container) {
       const input = h('input.input', { value, inputmode: 'decimal', placeholder: 'open', style: { width: '96px' }, disabled: value === 'varies', 'aria-label': `${label} gate of bin ${order}`, onchange: () => edit((d) => setBinGates(d, order, { [key]: input.value.trim() === '' ? null : Number(input.value) }), `Set bin ${order}'s ${label.toLowerCase()} gate to ${input.value.trim() || 'open'}`) });
       return h('td', input);
     };
-    return h('div.pane', h('h3', icon('filter'), 'Bins and gates'),
+    return h('div.pane', { dataset: { place: 'gates' } }, h('h3', icon('filter'), 'Bins and gates'),
       h('p.muted', { style: { fontSize: '12px', margin: '0 0 8px' } }, 'Each bin\'s value (its weight in the weighted average) and the gates it was sorted between, on the reporter\'s fluorescence; leave the lowest bin\'s lower gate and the highest bin\'s upper gate open. With the gates, sorted bins can also be scored by maximum likelihood; with the cells sorted into each bin (in the columns below), its reads are reweighted by them.'),
       h('table.data', h('thead', h('tr', h('th', 'Bin'), h('th.r', 'Value'), h('th', 'Lower gate'), h('th', 'Upper gate'))),
         h('tbody', ...orders.map((order) => h('tr', h('td', `Bin ${order}`), h('td.r', String(of(order, 'value'))), gate(order, 'lower', 'Lower'), gate(order, 'upper', 'Upper'))))));
@@ -355,13 +363,52 @@ export function mountExperimentMode(app, container) {
           render();
         } }, icon('plus'), 'Add a bin')
         : null;
-    return h('div.pane', h('h3', icon('experiment'), 'Replicates', h('span.spacer'), addSlot,
+    return h('div.pane', { dataset: { place: 'replicates' } }, h('h3', icon('experiment'), 'Replicates', h('span.spacer'), addSlot,
       h('button.btn.small', { type: 'button', onclick: () => edit((d) => addReplicate(d).design, 'Added a replicate') }, icon('plus'), 'Add a replicate')),
       h('p.muted', { style: { fontSize: '12px', margin: '0 0 8px' } }, design.model === 'two-population' ? 'Each biological replicate: the sample before selection and the sample after.' : design.model === 'time-series' ? 'Each biological replicate: its sample at each time (time 0 is the input). Times are edited in the column heads.' : 'Each biological replicate: its sample in each bin. Bin values (weights, or fluorescence) are edited in the column heads.'),
       h('div', { style: { overflow: 'auto' } }, h('table.data.design-matrix',
         h('thead', h('tr', h('th', 'Replicate'), h('th', 'Biological'), conditions.length ? h('th', 'Condition') : null, tiles.length ? h('th', 'Tile') : null, ...slots.map(headSlot), h('th', h('span.sr-only', 'Remove')))),
         h('tbody', ...rows))),
       !design.replicates.length ? h('p.muted', 'No replicate yet.') : null);
+  }
+
+  // What the analysis can do (wave 2, slice 10): each analysis ready, partial or not possible with
+  // what the workspace holds, and what is missing, why it matters, where it is usually found and
+  // where to give it here. Nothing is filled in by guessing.
+  function go(place) {
+    if (place === 'open') return app.pickFiles();
+    if (place === 'open-fasta') return app.pickFiles('.fasta,.fa,.faa,.fna,.fas,.seq');
+    const pane = [...root.querySelectorAll('[data-place]')].find((x) => x.dataset.place.split(' ').includes(place));
+    if (!pane) return;
+    pane.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    pane.classList.remove('flash');
+    void pane.offsetWidth;
+    pane.classList.add('flash');
+  }
+
+  function readinessPane() {
+    const r = readiness(store.ws);
+    const STATUS = { ready: ['check', 'ok', 'ready'], partial: ['info', 'warn', 'partial'], unavailable: ['close', 'danger', 'not possible'] };
+    const gapItem = (g) => h('li.gap',
+      h('div.gap-head', h('b', g.label), GAPS[g.id] && g.place !== 'experiment' ? h('button.btn.small', { type: 'button', onclick: () => go(g.place), title: g.how }, g.place === 'open' || g.place === 'open-fasta' ? 'Open…' : 'Give it') : null),
+      h('p', g.why),
+      h('p.muted', h('span.gap-label', 'Usually found: '), g.where),
+      h('p.muted', h('span.gap-label', g.unlocks.length ? 'Unlocks: ' : 'Improves: '), [...g.unlocks, ...g.improves].map((id) => r.analyses.find((a) => a.id === id)?.label ?? id).join('; ')));
+    const now = r.gaps.filter((g) => g.kind !== 'experiment');
+    const later = r.gaps.filter((g) => g.kind === 'experiment');
+    const groups = [...new Set(r.analyses.map((a) => a.group))];
+    return h('div.pane.readiness-pane', h('h3', icon('lightbulb'), 'What the analysis can do'),
+      h('p', { style: { margin: '0 0 8px' } }, `${readinessLine(r)}.`, now.length ? ` ${now.length === 1 ? 'One thing' : `${now.length} things`} you may have at the bench or in the protocol would unlock or improve more.` : ' Nothing missing that the protocol or the bench could give.'),
+      now.length ? h('ul.gap-list', ...now.map(gapItem)) : null,
+      later.length ? h('details', h('summary', `What another experiment would add (${later.length})`), h('ul.gap-list', ...later.map(gapItem))) : null,
+      r.analyses.length ? h('details', h('summary', `Every analysis (${r.analyses.length})`),
+        ...groups.map((group) => h('div', h('div.section-title', { style: { marginTop: '8px' } }, group),
+          h('ul.analysis-list', ...r.analyses.filter((a) => a.group === group).map((a) => {
+            const [glyph, tone, word] = STATUS[a.status];
+            const why = a.needs.length ? `needs ${a.needs.map((g) => GAPS[g].label.charAt(0).toLowerCase() + GAPS[g].label.slice(1)).join(', ')}` : a.improves.length ? `better with ${a.improves.map((g) => GAPS[g].label.charAt(0).toLowerCase() + GAPS[g].label.slice(1)).join(', ')}` : a.status === 'unavailable' ? a.note : '';
+            return h('li', h(`span.badge.${tone}`, { title: word }, icon(glyph), word), h('div', h('div', a.label), why ? h('div.muted', why) : null));
+          }))))) : null,
+      h('div.btn-row', { style: { marginTop: '10px' } }, h('button.btn.small', { type: 'button', onclick: () => exportPackage(app, currentRun(store.ws)), title: 'The counts, target, design, sample sheet and parameters, with a README of what is missing: the files mavescape run reads' }, icon('download'), 'Write the analysis package')));
   }
 
   // --- The view -------------------------------------------------------------------------------
@@ -392,7 +439,7 @@ export function mountExperimentMode(app, container) {
       return;
     }
     root.append(h('div.view-body', h('div.split.experiment-split',
-      h('div', sourcePane(s), summaryPane(design, s), settingsPane(design, s), readoutPane(design), targetPane(s)),
+      h('div', sourcePane(s), summaryPane(design, s), readinessPane(), settingsPane(design, s), readoutPane(design), targetPane(s)),
       h('div', replicatesPane(design), design.model === 'bins' ? gatesPane(design) : null, columnsPane(design, s),
         h('div.btn-row', { style: { marginTop: '12px' } }, h('button.btn', { type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Draft the design again?', message: 'The design is replaced by the draft from the column names. Undo (⌘Z) brings this one back.', confirm: 'Draft again' })) draftFromColumns(app, s); } }, icon('sparkles'), 'Draft again from the column names'))))));
   }

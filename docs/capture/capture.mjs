@@ -141,6 +141,13 @@ const scenes = {
     await act('set_mode', { mode: 'experiment' });
     await scrollTo('.readout-pane', 'center');
   },
+  // What the analysis can do (wave 2, slice 10): GRB2's readiness in the Experiment view, and what
+  // the published counts leave out.
+  async readiness() {
+    await example('grb2-sh3');
+    await act('set_mode', { mode: 'experiment' });
+    await scrollTo('.readiness-pane', 'start');
+  },
   // Scores with their evidence: the filter flow, the classes, the variants.
   async score() {
     await example('grb2-sh3');

@@ -291,6 +291,34 @@ function dropout(slots, samples, variants, minimum) {
   return { sample: slots[slots.length - 1].sample, by: previous ? 'trend' : 'input', counted, missing, zeros, missingTrend: median(trendMissing), countedTrend: median(trendCounted) };
 }
 
+// The bottleneck the cells recorded predict for a pair of replicates (wave 2, slice 10): N cells
+// carried into selection (an input sample's cells) add 1/(N f) to a variant's variance at library
+// frequency f, against counting's 1/(R_in f) + 1/(R_out f) for R reads (and the cells recovered
+// after selection, an output's, add theirs), so the multiplier of the counting variance is about
+//
+//   1 + Σ (1/N_in + 1/N_out) / Σ (1/R_in + 1/R_out)   (sums over the pair's replicates),
+//
+// for any variant near the wild type's effect: 1 + reads per cell, as qc.js's header says. Null
+// unless both replicates' inputs record their cells.
+function recordedCells(design, pooled, ids) {
+  const sample = (id) => design.samples.find((s) => s.id === id);
+  const reads = (id) => {
+    let total = 0;
+    for (const c of pooled.get(id) ?? []) if (c > 0) total += c;
+    return total;
+  };
+  const reps = ids.map((id) => design.replicates.find((r) => r.id === id));
+  if (reps.some((r) => !r || !(sample(r.input)?.cells > 0) || !(reads(r.input) > 0) || !(reads(r.output) > 0))) return null;
+  let counting = 0;
+  let cells = 0;
+  for (const r of reps) {
+    counting += 1 / reads(r.input) + 1 / reads(r.output);
+    cells += 1 / sample(r.input).cells;
+    if (sample(r.output)?.cells > 0) cells += 1 / sample(r.output).cells;
+  }
+  return { input: reps.map((r) => sample(r.input).cells), output: reps.map((r) => sample(r.output)?.cells ?? null), predicted: 1 + cells / counting };
+}
+
 // Agreement and the variance of the difference of two replicates.
 function pairMetrics(a, b) {
   const ya = [];
@@ -581,6 +609,9 @@ export function computeQC({ names, barcodes = null, columns, design, mode = 'len
     const groups = [...new Set(reps.map((r) => r.tile))].map((tile) => reps.filter((r) => r.tile === tile));
     const pairs = [];
     for (const g of groups) for (let j = 0; j < g.length; j += 1) for (let k = j + 1; k < g.length; k += 1) pairs.push(pairMetrics(g[j], g[k]));
+    // The cells recorded (wave 2, slice 10): the bottleneck they predict, beside the one the pair's
+    // disagreement implies.
+    if (design.model === 'two-population') for (const pair of pairs) pair.recorded = recordedCells(design, pooled, [pair.a, pair.b]);
     const loo = groups.filter((g) => g.length >= 3).flatMap((g) => leaveOneOut(g) ?? []);
     const errorModel = design.model === 'two-population' ? groups.filter((g) => g.length >= 2).map((g) => errorModelOf(g, design, pooled, variants)) : [];
     return { id: c.id ?? 'all', name: c.name, replicates: reps.map((r) => r.id), dropout: reps.map((r) => ({ replicate: r.id, ...r.dropout })).filter((d) => d.sample), pairs, leaveOneOut: loo.length ? loo : null, synonymous: reps.map((r) => synonymousCheck(r, variants)), errorModel };

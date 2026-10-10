@@ -17,7 +17,7 @@ import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
 import { intervalOf } from '../lib/exports.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
-import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, removeRun, runId, runInputs } from '../lib/runs.js';
+import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, removeRun, runId, runInputs, unitOf } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { classHistogram, cssVar, flowBars, legend, scatter, scoreGroups } from './plots.js';
@@ -204,6 +204,8 @@ export function mountScoreMode(app, container) {
         preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
       barcodes,
       designModel === 'time-series' ? select('Scored by', p.model, options(['ratio', 'wls', 'ols']), (v) => setDraft({ model: v })) : null,
+      // Per unit of time (wave 2, slice 10): per generation when the times are generations.
+      designModel === 'time-series' ? select('A score is the change', p.timeScale, [['course', 'Over the whole time course (time scaled to 0–1, Enrich2)'], ['unit', `Per ${unitOf(store.ws.design)}${store.ws.design?.time?.unit === 'generation' ? ' (a selection coefficient)' : ''}`]], (v) => setDraft({ timeScale: v })) : null,
       designModel === 'two-population' ? select('Scored by', p.model, [['ratio', 'Log ratio, counting error'], ['dimsum', 'DiMSum\'s fitness and error model']], (v) => setDraft({ model: v })) : null,
       p.model === 'wls' || p.model === 'ols' ? select('Standard error of a slope', p.regressionSE, Object.entries(REGRESSION_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ regressionSE: v })) : null,
       p.model === 'dimsum' ? h('div.field', h('span', 'DiMSum'),

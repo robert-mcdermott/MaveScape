@@ -9,6 +9,7 @@ lede: An analysis needs three things: the counts, the sequence the variants are 
         <li><strong>The target sequence</strong> the variants are named against: a FASTA file, protein or DNA.</li>
         <li><strong>The design:</strong> which column is which sample, replicate and time point. MaveScape drafts it from the column names, or reads it from a sample sheet (<a href="experiment.html">The design</a>).</li>
       </ul>
+      <p>Worth bringing if you have them, because they unlock or improve an analysis: what the assay measures and how the library was made (from the protocol); the cells carried into selection, the bins' gates and the cells sorted into each, and the times in generations (from the bench); the target's UniProt or RefSeq identifier. The Start page lists them with why each matters, and once there is a design, <a href="experiment.html#readiness">What the analysis can do</a> says which are missing and what each would unlock.</p>
       <p>Open the files from the start page, the workspace menu (<kbd>⌘O</kbd>), by dropping them on the window, or by naming them on the command line. Open the table and its FASTA together: sequences are read first, so the table finds its target.</p>
       <div class="code"><pre><code>hgvs_pro,input_rep1,output_rep1,input_rep2,output_rep2
 p.=,52011,61873,48320,57112

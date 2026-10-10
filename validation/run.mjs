@@ -7,7 +7,7 @@
 //
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
 // data), experiment (external data), scoring, qc, map and roundtrip (their last checks need
-// external data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// external data), readiness; all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -31,7 +31,11 @@ import { KIND_NAMES } from '../web/lib/variants.js';
 import { parseFasta, targetFromSequence } from '../web/lib/target.js';
 import { createRandom, shuffle } from '../web/lib/random.js';
 import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
-import { designFromSampleSheet } from '../web/lib/samplesheet.js';
+import { designFromSampleSheet, designStructure, sampleSheetCSV } from '../web/lib/samplesheet.js';
+import { readinessDatasets, REMOVALS, caseOf, probe } from './readiness-cases.mjs';
+import { writePackage } from '../web/lib/package.js';
+import { readZip } from '../web/lib/zip.js';
+import { readiness } from '../web/lib/readiness.js';
 import { acknowledgeFinding, addSource, addTarget, createWorkspace, parseWorkspace, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
 const formatCount = (n) => n.toLocaleString('en-US');
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
@@ -531,6 +535,16 @@ const suites = {
     const fromDiMSum = designFromSampleSheet(parseTable(demo.bytes('experimentDesign_Toy.txt')), { countColumns: toyColumns.filter((n) => n !== 'nt_seq'), variants: { column: 'nt_seq', level: 'nucleotide' }, targets: [targetFromSequence({ id: 'tdp43', description: '', sequence: demo.set.wildType }).target] });
     const toyResult = validateDesign(fromDiMSum.design, { columns: toyColumns });
     check('experiment', 'DiMSum\'s own experiment design file (CR line ends) as a sample sheet for its demo counts', `${fromDiMSum.design.replicates.map((r) => `${r.biological}: ${r.input} → ${r.output}`).join(', ')}${toyResult.ok ? '' : `; ${toyResult.errors[0].message}`}`, toyResult.ok && fromDiMSum.design.replicates.length === 4, '4 replicates, valid');
+    // The design written back as a sample sheet (wave 2, slice 10: the analysis package) reads as
+    // the same design, for every validation design: inputs selected under two conditions as one row
+    // naming both, shared samples, technical replicates, times, bins and cells.
+    {
+      const designs = ['two-population', 'time-series', 'sort-seq', 'barcodes', 'two-condition'].map((f) => [`fixtures/${f}`, JSON.parse(readFileSync(new URL(`./fixtures/${f}.design.json`, import.meta.url), 'utf8'))])
+        .concat(['brca1-ring-e2', 'brca1-ring-y2h', 'factor9', 'grb2-sh3'].map((f) => [`designs/${f}`, readDesign(`${f}.design.json`)]));
+      const incomplete = designs.filter(([, d]) => !sampleSheetCSV(d).complete).map(([name]) => name);
+      const twoConditions = sampleSheetCSV(designs.find(([n]) => n === 'fixtures/two-condition')[1]).csv.split('\n').find((line) => line.startsWith('input_rep1,'));
+      check('experiment', 'every validation design written as a sample sheet reads back as the same design (samples, slots, times, bins, cells, conditions)', incomplete.length ? `not the same: ${incomplete.join(', ')}` : `${designs.length} designs; an input selected under two conditions: "${twoConditions}"`, !incomplete.length && /Without ligand;With ligand/.test(twoConditions ?? ''), 'all; one row naming both conditions');
+    }
 
     // A workspace through the slice's edits: its history chained, saved and reopened intact.
     let ws = createWorkspace('GRB2', { now: '2026-10-08T12:00:00.000Z' });
@@ -724,6 +738,27 @@ const suites = {
         for (const [what, out, pattern] of refusals) check('scoring', `refused: ${what}, with the reason`, out.ok ? 'scored anyway' : out.errors[0], !out.ok && pattern.test(out.errors.join(' ')), 'refused');
         const defaults = defaultParameters(tsDesign);
         check('scoring', 'a time series of three or more time points starts from weighted regression; a two-population experiment from the log ratio', `${defaults.model}; ${defaultParameters(design).model}`, defaults.model === 'wls' && defaultParameters(design).model === 'ratio', 'wls; ratio');
+        // Scores per unit of time (wave 2, slice 10): a regression's slope on time itself, the ratio
+        // of the ends over the time between them; the whole time course stays the default.
+        {
+          const span = Math.max(...tsDesign.replicates.flatMap((r) => r.timepoints.map((t) => t.time)));
+          const worst = { score: 0, se: 0 };
+          for (const model of ['wls', 'ols', 'ratio']) {
+            const course = score(ts, tsDesign, { ...DEFAULT_PARAMETERS, model });
+            const unit = score(ts, tsDesign, { ...DEFAULT_PARAMETERS, model, timeScale: 'unit' });
+            for (let i = 0; i < course.rows; i += 1) {
+              for (let k = 0; k < course.replicates.length; k += 1) {
+                const [a, b] = [course.replicates[k], unit.replicates[k]];
+                if (!Number.isFinite(a.score[i])) continue;
+                const t = a.times.at(-1) - (model === 'ratio' ? a.times[0] : 0);
+                worst.score = Math.max(worst.score, Math.abs(b.score[i] * t - a.score[i]) / Math.max(1, Math.abs(a.score[i])));
+                worst.se = Math.max(worst.se, Math.abs(b.se[i] * t - a.se[i]) / a.se[i]);
+              }
+            }
+          }
+          const twoPopulation = scoreExperiment({ ...engineInput(fixture, design), parameters: { ...DEFAULT_PARAMETERS, timeScale: 'unit' } });
+          check('scoring', 'scores per unit of time (per generation with times in generations): each replicate\'s slope on time itself, and the ratio of the ends over the time between them, are the whole-course scores over the time span (WLS, OLS, ratio)', `scores within ${worst.score.toExponential(1)}, SEs within ${worst.se.toExponential(1)} (span ${span}); a two-population design ${twoPopulation.ok ? 'scored anyway' : 'refused'}; the default ${DEFAULT_PARAMETERS.timeScale}`, worst.score <= 1e-12 && worst.se <= 1e-12 && !twoPopulation.ok && DEFAULT_PARAMETERS.timeScale === 'course', '≤ 1e-12; refused; course');
+        }
       }
     }
 
@@ -873,6 +908,14 @@ const suites = {
         return Math.max(a, Math.abs(median(non)), Math.abs(r.score[scaled.controls.wt] - 1));
       }, 0);
       check('scoring', 'sorted bins scaled as VAMP-seq: in every replicate the nonsense median scores 0 and the wild type 1', `largest departure ${worstAnchor.toExponential(2)}`, worstAnchor <= 1e-12, '≤ 1e-12');
+      // The defaults follow what the table and the design hold (wave 2, slice 10): without the wild
+      // type both scales are refused, so the bins start unscaled (and an MLE's σ each variant's
+      // own); with the nonsense controls named none, the lowest 5%.
+      {
+        const noWildType = defaultParameters(ssDesign, { summary: { byKind: { nonsense: 20, missense: 500 } } });
+        const noNonsense = defaultParameters({ ...ssDesign, controls: { ...ssDesign.controls, nonsense: 'none' } }, { summary: { byKind: { 'wild type': 1, nonsense: 20 } } });
+        check('scoring', 'sorted bins\' defaults follow the table and the design: unscaled without the wild type, the lowest 5% with the nonsense controls named none', `${noWildType.binScale} (σ ${noWildType.binSigma}); ${noNonsense.binScale}`, noWildType.binScale === 'none' && noWildType.binSigma === 'per-variant' && noNonsense.binScale === 'low5-wt', 'none (per-variant); low5-wt');
+      }
       // Refusals: bins where they cannot be scored as asked.
       const refusals = [
         ['sorted bins scored as a selection', scoreExperiment({ ...engineInput(ss, ssDesign), parameters: DEFAULT_PARAMETERS }), /weighted average/],
@@ -1007,6 +1050,9 @@ const suites = {
       const shuffled = shuffledTable(bt, createRandom(41));
       const reordered = [sameScores(own.summed, score(shuffled, btDesign, DEFAULT_PARAMETERS)), sameScores(own.byBarcode, score(shuffled, btDesign, { ...DEFAULT_PARAMETERS, aggregation: 'barcode' }))];
       check('scoring', 'barcode fixture with its rows and columns shuffled: the same combined scores, bit for bit, summed and by barcode', `${reordered[0]} and ${reordered[1]} variants differ`, reordered[0] === 0 && reordered[1] === 0, 'none');
+      // DiMSum's model on a table of barcodes, summed first (wave 2, slice 10: it crashed).
+      const dimsumBarcodes = scoreExperiment({ ...engineInput(bt, btDesign), parameters: { ...DEFAULT_PARAMETERS, model: 'dimsum' } });
+      check('scoring', 'DiMSum\'s model on a table of barcodes: the barcodes summed per variant, then scored', dimsumBarcodes.ok ? `${dimsumBarcodes.results.conditions[0].scored} variants scored; ${dimsumBarcodes.results.info.find((x) => /barcodes of/.test(x))}` : dimsumBarcodes.errors.join(' '), dimsumBarcodes.ok && dimsumBarcodes.results.conditions[0].scored > 0, 'scored');
       const ids = engineInput(bt, btDesign);
       const refusals = [
         ['a barcode on two rows', scoreExperiment({ ...ids, barcodes: ids.barcodes.map((x, i) => (i === 5 ? ids.barcodes[0] : x)), parameters: DEFAULT_PARAMETERS }), /more than one row/],
@@ -1464,6 +1510,36 @@ const suites = {
       check('qc', 'variance beyond counting follows a simulated bottleneck (cells per variant into selection): measured ratio against 1 + D/(2N)', rows.join('; '), ok, 'increasing, within 30%');
     }
 
+    // The cells recorded against the bottleneck the replicates imply (wave 2, slice 10): recorded as
+    // they were carried (and recovered), they account for it; with noise between replicates beyond
+    // counting the replicates show more than they explain; recorded ten times too few, less.
+    {
+      const rows = [];
+      let ok = true;
+      for (const [label, options, expected, alter] of [
+        ['20 cells per variant into selection', { inputCells: 20 }, 'explained'],
+        ['100 cells per variant', { inputCells: 100 }, 'explained'],
+        ['20 into selection, 50 recovered after it', { inputCells: 20, outputCells: 50 }, 'explained'],
+        ['20 cells and noise between replicates (SD 0.3)', { inputCells: 20, replicateNoise: 0.3 }, 'more'],
+        ['100 cells, recorded as a tenth of them', { inputCells: 100 }, 'less', (design) => design.samples.forEach((x) => { if (x.cells) x.cells /= 10; })],
+      ]) {
+        const verdicts = QC_SEEDS.flatMap((seed) => {
+          const sim = simulateExperiment({ seed, ...options, recordCells: true });
+          alter?.(sim.design);
+          const t = parseTable(sim.csv);
+          const q = computeQC({ names: columnText(t.columns[0]), columns: Object.fromEntries(t.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design });
+          return (findingsFrom(q, defaultThresholds()).find((f) => f.id === 'excess-variance').cells ?? []).map((c) => c.verdict);
+        });
+        const share = verdicts.filter((v) => v === expected).length / Math.max(1, verdicts.length);
+        rows.push(`${label}: ${verdicts.filter((v) => v === expected).length} of ${verdicts.length} pairs "${expected}"`);
+        if (!(verdicts.length === 9 && share >= 0.75)) ok = false;
+      }
+      const unrecorded = runFixture({ inputCells: 20 }, QC_SEEDS[0]).findings.find((f) => f.id === 'excess-variance');
+      const advises = unrecorded.cells === null && unrecorded.advice.next.some((x) => /Record the cells carried into selection/.test(x.text));
+      rows.push(`not recorded: ${advises ? 'no check, and the advice says to record them' : 'not as expected'}`);
+      check('qc', 'the cells recorded against the bottleneck the replicates imply: 1 + Σ(1/N)/Σ(1/R_in + 1/R_out) for N cells and R reads (three seeds, three pairs each)', rows.join('; '), ok && advises, 'each verdict in ≥ 75% of pairs; advice to record them when not');
+    }
+
     // DiMSum's error model, fitted from the counts alone, says where a bottleneck is: N cells per
     // variant before selection raise its input terms to about 1 + D/N (D reads per variant), after
     // selection its output terms.
@@ -1754,6 +1830,24 @@ const suites = {
       const countsTable = parseTable(exports['counts.csv']);
       const rescored = scoreTable(countsTable, built.run.inputs.design, built.run.inputs.parameters);
       check('roundtrip', `${label}: the exported counts, imported and scored again with the same design and parameters, give the run's output hash`, rescored.ok ? (outputDigest(rescored.results) === built.run.output.sha256 ? 'the same output' : 'a different output') : rescored.errors[0], rescored.ok && outputDigest(rescored.results) === built.run.output.sha256, 'the same');
+
+      // The analysis package (wave 2, slice 10): its files are what mavescape run reads, and
+      // scored from them alone the run's output hash comes back; written again, the same bytes.
+      const pack = await writePackage(built.ws, { run: built.run, sources, software: SOFTWARE });
+      const packAgain = await writePackage(built.ws, { run: built.run, sources, software: SOFTWARE });
+      const unpacked = await readZip(pack.bytes);
+      const text = (name) => new TextDecoder().decode(unpacked.get(name));
+      const packDesign = JSON.parse(text('design.json'));
+      const packParameters = JSON.parse(text('parameters.json'));
+      const countsName = [...unpacked.keys()].find((n) => n.startsWith('counts/'));
+      const fromPackage = scoreTable(parseTable(unpacked.get(countsName), { fileName: countsName }), packDesign, packParameters);
+      const readme = text('README.md');
+      const listed = [...unpacked.keys()].filter((n) => n !== 'README.md').every((n) => readme.includes(`\`${n}\``)) && readme.includes(`--out results`) && readme.includes(countsName);
+      const target = parseFasta(text('target.fasta'))[0];
+      const sheet = designFromSampleSheet(parseTable(unpacked.get('samples.csv')), { variants: packDesign.variants, targets: packDesign.targets });
+      const sameReadiness = text('readiness.json') === `${JSON.stringify(readiness({ ...built.ws, design: packDesign }), null, 2)}\n`;
+      check('roundtrip', `${label}: the analysis package (counts, target, design, sample sheet, parameters, readiness, README) scores from its own files to the run's output hash, and is written the same way twice`, `${[...unpacked.keys()].join(', ')}; ${fromPackage.ok ? (outputDigest(fromPackage.results) === built.run.output.sha256 ? 'the run\'s output hash' : 'a different output') : fromPackage.errors[0]}; counts ${sha256(unpacked.get(countsName)) === built.ws.sources[0].sha256 ? 'byte for byte' : 'changed'}; target ${target?.sequence === packDesign.targets[0].sequence ? 'the design\'s' : 'different'}; sample sheet ${JSON.stringify(designStructure(sheet.design)) === JSON.stringify(designStructure(packDesign)) ? 'the same design' : 'a different design'}; readiness ${sameReadiness ? 'as computed' : 'differs'}; README ${listed ? 'names every file and the command' : 'incomplete'}; ${Buffer.compare(Buffer.from(pack.bytes), Buffer.from(packAgain.bytes)) === 0 ? 'the same bytes' : 'different bytes'}`,
+        fromPackage.ok && outputDigest(fromPackage.results) === built.run.output.sha256 && sha256(unpacked.get(countsName)) === built.ws.sources[0].sha256 && target?.sequence === packDesign.targets[0].sequence && JSON.stringify(designStructure(sheet.design)) === JSON.stringify(designStructure(packDesign)) && sameReadiness && listed && Buffer.compare(Buffer.from(pack.bytes), Buffer.from(packAgain.bytes)) === 0, 'all');
     }
 
     // Damaged, hostile and foreign archives.
@@ -1932,6 +2026,56 @@ const suites = {
     const layoutReview = reviewImport(layoutTable, { variantColumn: 'hgvs_pro', level: 'protein', countColumns: detectLayout(layoutTable).countColumns, target: layoutTarget });
     const layoutValid = validateDesign(layoutDesign.design, { columns: layoutTable.columns.map((c) => c.name) });
     check('roundtrip', 'the blank layouts (count table, sample sheet, target FASTA) read as they say and make a valid design', `${layoutTable.rows} example rows, ${layoutReview.summary.valid} valid names, ${layoutReview.summary.invalid} invalid; design ${layoutValid.ok ? 'valid' : layoutValid.errors[0].message}; ${layoutTable.diagnostics.map((d) => d.code).join(', ')}`, layoutValid.ok && layoutReview.summary.invalid === 0 && !layoutReview.blocking.length, 'valid');
+  },
+
+  // Wave 2, slice 10 (E8): what each analysis can do with what a workspace holds. Every example and
+  // fixture, whole and with one part taken away: the readiness model names exactly what was taken
+  // away, and its verdict on every analysis agrees with what the engine does (scored or refused;
+  // a QC finding assessed or not). An analysis it leaves out for a design must be one the engine
+  // cannot do there either.
+  readiness() {
+    const agree = (c) => {
+      const { probes, scored } = probe(c);
+      const status = new Map(c.readiness.analyses.map((a) => [a.id, a.status !== 'unavailable']));
+      const disagree = [];
+      for (const [id, possible] of probes) {
+        if (!status.has(id)) {
+          if (possible) disagree.push(`${id}: the engine does it, readiness leaves it out`);
+        } else if (status.get(id) !== possible) disagree.push(`${id}: readiness ${status.get(id) ? 'possible' : 'not possible'}, the engine ${possible ? 'does it' : 'does not'}`);
+      }
+      return { disagree, probed: [...probes.keys()].filter((id) => status.has(id)).length, scored };
+    };
+    let cases = 0;
+    for (const d of readinessDatasets()) {
+      const whole = caseOf(d.table, d.design);
+      const r = whole.readiness;
+      const a = agree(whole);
+      cases += 1;
+      check('readiness', `${d.name}: every verdict agrees with the engine`, a.disagree.length ? a.disagree.join('; ') : `${r.analyses.length} analyses (${r.counts.ready} ready, ${r.counts.partial} partial, ${r.counts.unavailable} not possible); ${a.probed} probed, all agree; missing: ${r.gaps.map((g) => g.id).join(', ') || 'nothing'}`, !a.disagree.length && a.scored, 'all agree; scored with the defaults');
+      const was = new Map(r.analyses.map((x) => [x.id, x.status]));
+      const before = new Set(r.gaps.map((g) => g.id));
+      for (const removal of REMOVALS) {
+        if (!removal.applies(whole)) continue;
+        const taken = removal.apply(whole);
+        const c = caseOf(taken.table, taken.design);
+        const named = c.readiness.gaps.map((g) => g.id).filter((g) => !before.has(g));
+        const expected = removal.gaps(whole.design, taken.design);
+        const exact = named.length === expected.length && expected.every((g) => named.includes(g));
+        const disabled = c.readiness.analyses.filter((x) => x.status === 'unavailable' && was.get(x.id) !== 'unavailable').map((x) => x.id);
+        const b = agree(c);
+        cases += 1;
+        check('readiness', `${d.name}, without ${removal.what}: names exactly that, and every verdict agrees with the engine`, `names ${named.join(', ') || 'nothing'}; disables ${disabled.join(', ') || 'nothing'}${b.disagree.length ? `; disagrees: ${b.disagree.join('; ')}` : ''}`, exact && !b.disagree.length, `names ${expected.join(', ') || 'nothing'}; all agree`);
+      }
+    }
+    check('readiness', 'cases', `${cases} workspaces, whole and with a part taken away`, cases >= 60, '≥ 60');
+    // Before there is anything to analyze: the files every analysis needs, nothing else.
+    const empty = readiness(createWorkspace('empty', { now: '2026-10-10T12:00:00.000Z', id: 'ws-empty' }));
+    check('readiness', 'an empty workspace: needs the counts, the target and the design, and lists no analysis', `${empty.gaps.map((g) => g.id).join(', ')}; ${empty.analyses.length} analyses`, empty.gaps.map((g) => g.id).join() === 'counts,target,design' && !empty.analyses.length, 'counts, target, design; none');
+    const grb2 = readinessDatasets()[0];
+    const broken = JSON.parse(JSON.stringify(grb2.design));
+    broken.replicates[0].output = 'no-such-sample';
+    const invalid = caseOf(grb2.table, broken).readiness;
+    check('readiness', 'a design with a problem: the design is the gap, with its first problem', `${invalid.gaps.map((g) => `${g.id}${g.detail ? ` (${g.detail})` : ''}`).join('; ')}; ${invalid.analyses.length} analyses`, invalid.gaps.length === 1 && invalid.gaps[0].id === 'design' && Boolean(invalid.gaps[0].detail) && !invalid.analyses.length, 'design, with why');
   },
 };
 

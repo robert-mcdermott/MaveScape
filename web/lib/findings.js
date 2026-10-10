@@ -12,6 +12,7 @@
 import { DEFAULT_MEASURES } from './qc.js';
 import { adviceFor } from './advice.js';
 import { inText } from './readout.js';
+import { log } from './dmath.js';
 
 const pct = (x) => `${(100 * x).toFixed(x < 0.1 ? 1 : 0)}%`;
 const num = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
@@ -210,12 +211,25 @@ export function findingsFrom(qc, thresholds, options = {}) {
   const worstPair = evPairs.find((p) => p.ratio === maxRatio);
   const resolvable = worstPair && worstPair.bins.length >= 3 && worstPair.bins.at(-1).counting / worstPair.bins[0].counting >= 4;
   const flagged = evPairs.filter((p) => statusOf(p.ratio, ev, 'above') !== 'pass');
+  // The cells recorded against the bottleneck the replicates imply (wave 2, slice 10): the pair's
+  // ratio (the fitted multiplier is diluted by the variants selection depletes, whose counting
+  // error dwarfs a bottleneck at the input); within 1.5× either way, the recorded cells account
+  // for it.
+  const cells = evPairs.filter((p) => p.recorded).map((p) => {
+    const observed = p.ratio;
+    const ratio = observed / p.recorded.predicted;
+    return { a: p.a, b: p.b, input: p.recorded.input, output: p.recorded.output, predicted: p.recorded.predicted, observed, verdict: ratio > 1.5 ? 'more' : ratio < 1 / 1.5 ? 'less' : 'explained' };
+  });
+  const worstCells = cells.length ? cells.reduce((x, y) => (Math.abs(log(y.observed / y.predicted)) > Math.abs(log(x.observed / x.predicted)) ? y : x)) : null;
+  const cellsText = !worstCells ? ''
+    : ` The cells recorded (${worstCells.input.map((x) => num(x, 0)).join(' and ')} carried into selection${worstCells.output.every((x) => x > 0) ? `, ${worstCells.output.map((x) => num(x, 0)).join(' and ')} recovered after it` : ''}, in ${worstCells.a} and ${worstCells.b}) predict ${num(worstCells.predicted, 1)}× the counting variance; the replicates show ${num(worstCells.observed, 1)}×: ${worstCells.verdict === 'explained' ? 'the recorded cells account for it.' : worstCells.verdict === 'more' ? 'more than they explain, so another step had fewer cells (transformation, recovery, DNA extraction) or the replicates differ beyond counting.' : 'less than they predict: check that the cells recorded are those carried into each replicate\'s selection, not a total over replicates.'}`;
   add({
     id: 'excess-variance', title: 'Variance beyond counting (bottleneck)', plot: 'variance', status: values.length ? worst(evStatus) : 'na',
     value: values.length ? `${num(maxRatio, 1)}× the counting variance${synonymous.length ? `; synonymous variants ${synonymous.map((s) => `${num(s.ratio, 1)}×`).join(', ')}` : ''}${terms.length ? `; DiMSum's terms up to ${num(Math.max(...terms.map((x) => x.input)), 1)}× at the input, ${num(Math.max(...terms.map((x) => x.output)), 1)}× at the output` : ''}` : 'not assessed: no replicate pairs and fewer than 10 synonymous variants',
     explanation: values.length
-      ? `${flagged.length ? `Replicate differences vary ${num(maxRatio, 1)}× more than counting alone predicts (${worstPair ? `${worstPair.a} and ${worstPair.b}` : 'synonymous variants'}): too few cells somewhere (a bottleneck), or noise between replicates. SEs from counts alone understate the uncertainty; the moderated combination (the default) fits the excess across variants and carries it into each variant's SE, as DiMSum's error model does (Score, Scored by); REML's τ² takes it up variant by variant.` : 'Replicate differences vary about as much as counting predicts.'}${resolvable ? ` Fitted as a·counting + e: a = ${num(worstPair.multiplier, 1)}${worstPair.multiplier > 1.5 ? ' (above 1: a bottleneck)' : ''}, e = ${num(worstPair.additive, 3)} (replicate noise SD about ${num(Math.sqrt(worstPair.additive / 2), 2)}).` : flagged.length ? ' The counts span too narrow a range to tell a bottleneck (which scales with counting error) from replicate noise (which does not).' : ''}${terms.length ? ` DiMSum's error model: ${terms.map((x) => `${x.name} input ${num(x.input, 1)}×, output ${num(x.output, 1)}×, additive SD ${num(Math.sqrt(x.reperror), 2)}`).join('; ')}.${bottleneckAt ? ` The excess is at the ${bottleneckAt}: about ${num(bottleneckAt === 'input' ? Math.max(...terms.map((x) => x.input)) : Math.max(...terms.map((x) => x.output)), 0)} reads per molecule there, ${bottleneckAt === 'input' ? 'before selection (the cells transformed or carried into it)' : 'after it (the cells recovered, or the DNA extracted from them)'}.` : ''}` : ''}`
+      ? `${flagged.length ? `Replicate differences vary ${num(maxRatio, 1)}× more than counting alone predicts (${worstPair ? `${worstPair.a} and ${worstPair.b}` : 'synonymous variants'}): too few cells somewhere (a bottleneck), or noise between replicates. SEs from counts alone understate the uncertainty; the moderated combination (the default) fits the excess across variants and carries it into each variant's SE, as DiMSum's error model does (Score, Scored by); REML's τ² takes it up variant by variant.` : 'Replicate differences vary about as much as counting predicts.'}${resolvable ? ` Fitted as a·counting + e: a = ${num(worstPair.multiplier, 1)}${worstPair.multiplier > 1.5 ? ' (above 1: a bottleneck)' : ''}, e = ${num(worstPair.additive, 3)} (replicate noise SD about ${num(Math.sqrt(worstPair.additive / 2), 2)}).` : flagged.length ? ' The counts span too narrow a range to tell a bottleneck (which scales with counting error) from replicate noise (which does not).' : ''}${terms.length ? ` DiMSum's error model: ${terms.map((x) => `${x.name} input ${num(x.input, 1)}×, output ${num(x.output, 1)}×, additive SD ${num(Math.sqrt(x.reperror), 2)}`).join('; ')}.${bottleneckAt ? ` The excess is at the ${bottleneckAt}: about ${num(bottleneckAt === 'input' ? Math.max(...terms.map((x) => x.input)) : Math.max(...terms.map((x) => x.output)), 0)} reads per molecule there, ${bottleneckAt === 'input' ? 'before selection (the cells transformed or carried into it)' : 'after it (the cells recovered, or the DNA extracted from them)'}.` : ''}` : ''}${cellsText}`
       : 'Variance beyond counting needs two replicates, or ten synonymous variants.',
+    cells: cells.length ? cells : null,
     threshold: thresholdText(ev, 'above', (x) => `${x}×`),
     rationale: 'Under counting (Poisson) noise alone, the difference of two replicates\' log ratios has a variance equal to the sum of the reciprocal counts; its robust ratio to that is about 1. N cells per variant carried through a step add 1/N to each replicate\'s variance: with D reads per variant before and after selection, the ratio becomes about 1 + D/(2N), a multiplier of the counting variance (the multiplicative error term of DiMSum, Faure et al. 2020). Aim for an excess of molecules over reads at every step. Synonymous variants should vary as counting predicts.',
     affected: { samples: [], replicates: [...new Set(flagged.flatMap((p) => [p.a, p.b]))] },

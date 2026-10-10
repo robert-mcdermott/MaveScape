@@ -4,17 +4,26 @@
 import { h, icon, clear, relativeTime, formatBytes } from './dom.js';
 import { prefs } from './storage.js';
 import { EXAMPLES, LAYOUTS, downloadLayout, openExample } from './examples.js';
+import { BRING, GAPS, fillable, readiness, readinessLine } from '../lib/readiness.js';
 
-// What a researcher brings: the files MaveScape reads (mavescape-spec/requirements.md, D12–D13).
-const INPUTS = [
-  ['table', 'Variant counts', 'A table with one row per variant and one column per sample (CSV, TSV or Excel), as Enrich2, DiMSum, dms_variants or a lab\'s own scripts write them; or one file per sample.'],
-  ['sequence', 'The target sequence', 'The reference the variants are named against: a FASTA file (DNA or protein), or pasted.'],
-  ['experiment', 'The design', 'Which column is which sample: its role (input, output, time point or bin), condition and replicate. A sample sheet fills it in.'],
-  ['score', 'Or published scores', 'Score tables with variants in HGVS (MaveDB\'s CSV layout and others) open for exploration and comparison.'],
-];
+// What a researcher brings (requirements D12–D13, E8): the files MaveScape reads, then the records
+// that unlock or improve an analysis, from the readiness model's catalog (lib/readiness.js).
+const GLYPHS = { counts: 'table', target: 'sequence', design: 'experiment', readout: 'target', 'library-method': 'dna', 'selection-cells': 'cell', gates: 'gate', 'bin-cells': 'cell', generations: 'history', 'target-identifiers': 'tag' };
+const NEEDED = BRING.filter((id) => GAPS[id].kind === 'required');
+const WORTH = BRING.filter((id) => GAPS[id].kind !== 'required');
 
 export function mountWelcome(app, container) {
   const { library } = app;
+  // The open workspace's readiness, when it has a design: what is missing, and where to see it.
+  function openWorkspace() {
+    const ws = app.store.ws;
+    if (!ws.design) return null;
+    const r = readiness(ws);
+    const missing = fillable(r);
+    return h('div.callout.accent', { style: { margin: '0 0 10px' } }, icon('lightbulb'),
+      h('span', { style: { flex: 1 } }, `${ws.name}: ${readinessLine(r)}${missing.length ? `; ${missing.length} missing that the bench or the protocol could give (${missing.map((g) => `${g.label.charAt(0).toLowerCase()}${g.label.slice(1)}`).join(', ')})` : ''}.`),
+      h('button.btn.small', { type: 'button', onclick: () => app.setMode('experiment') }, 'See what each analysis can do'));
+  }
   const recent = h('div.welcome-grid');
   const root = h('div.workbench-scroll', h('div.welcome',
     h('div.welcome-hero',
@@ -35,7 +44,11 @@ export function mountWelcome(app, container) {
       h('p', x.summary),
       h('p.muted', { style: { fontSize: '11.5px' } }, x.question)))),
     h('div.section-title', { style: { marginTop: '22px' } }, 'What to bring'),
-    h('div.feature-list', ...INPUTS.map(([glyph, title, text]) => h('div.feature', h('span.glyph', icon(glyph)), h('div', h('b', title), h('span', text))))),
+    openWorkspace(),
+    h('div.feature-list', ...NEEDED.map((id) => h('div.feature', h('span.glyph', icon(GLYPHS[id])), h('div', h('b', GAPS[id].label), h('span', `${GAPS[id].why} ${GAPS[id].where}`)))),
+      h('div.feature', h('span.glyph', icon('score')), h('div', h('b', 'Or published scores'), h('span', 'Score tables with variants in HGVS (MaveDB\'s CSV layout and others) open for exploration and comparison.')))),
+    h('p.muted', { style: { margin: '14px 0 6px', fontSize: '12.5px' } }, 'Worth bringing if you have them: records kept at the bench or in the protocol that unlock or improve an analysis. Nothing is guessed in their place; a gap stays visible, and the methods name it.'),
+    h('div.feature-list', ...WORTH.map((id) => h('div.feature', h('span.glyph', icon(GLYPHS[id])), h('div', h('b', GAPS[id].label), h('span', `${GAPS[id].why} Usually found: ${GAPS[id].where.charAt(0).toLowerCase()}${GAPS[id].where.slice(1)}`))))),
     h('div.section-title', { style: { marginTop: '22px' } }, 'Blank layouts'),
     h('p.muted', { style: { margin: '0 0 8px', fontSize: '12.5px' } }, 'Annotated files to fill in with your own data; docs/FORMATS.md describes every file MaveScape reads and writes.'),
     h('div.welcome-grid', ...LAYOUTS.map(([path, title, text]) => h('div.card.clickable', { role: 'button', tabIndex: 0, onclick: () => downloadLayout(path), onkeydown: (event) => { if (event.key === 'Enter') downloadLayout(path); } },

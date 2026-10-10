@@ -6,6 +6,7 @@ import { h, icon, clear } from './dom.js';
 import { showMenu } from './overlays.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
 import { draftFromColumns } from './design-draft.js';
+import { fillable, readiness } from '../lib/readiness.js';
 import { chooseArchiveExport, runExportItems } from './record.js';
 
 const VIEW = { counts: 'experiment', target: 'experiment', design: 'experiment', score: 'score', qc: 'qc', map: 'map', record: 'score' };
@@ -51,7 +52,20 @@ export function mountWorkflow(app, el) {
     }));
     const next = focus ? h(`div.workflow-next.${focus.state}`, h('span.workflow-next-text', h('b', `${focus.state === 'attention' ? 'Needs attention' : focus.state === 'optional' ? 'All done' : 'Next'}: `), focus.detail),
       focus.action ? h(`button.btn.small${focus.state === 'next' ? '.primary' : ''}`, { type: 'button', onclick: (event) => act(focus, event) }, focus.action.label) : null) : null;
-    el.append(list, next);
+    // What the analysis can do (wave 2, slice 10): once there is a design, how many analyses are
+    // ready and how many gaps the bench or the protocol could fill; it opens the Experiment view's
+    // account of them.
+    const r = ws.design ? readiness(ws) : null;
+    const gaps = r ? fillable(r).length : 0;
+    const ready = r?.analyses.length ? h('button.workflow-ready', {
+      type: 'button',
+      title: `${r?.counts.ready + r?.counts.partial} of ${r?.analyses.length} analyses possible with what is here${gaps ? `; ${gaps} things the bench or the protocol could give would unlock or improve more` : ''} (Experiment)`,
+      onclick: () => {
+        app.setMode('experiment');
+        requestAnimationFrame(() => document.querySelector('.readiness-pane')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      },
+    }, icon('lightbulb'), `${r.counts.ready + r.counts.partial}/${r.analyses.length} analyses`, gaps ? h('span.workflow-gaps', `${gaps} missing`) : null) : null;
+    el.append(list, next, ready);
   }
 
   render();

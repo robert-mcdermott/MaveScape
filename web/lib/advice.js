@@ -74,15 +74,23 @@ const ADVICE = {
     causes: [technical('Too few cells per variant at some step (a bottleneck): replicates then disagree by chance.'), technical('A sample swap or a mislabeled column.'), expected('Most variants with effects near the wild type\'s: a narrow range of true effects lowers the correlation of good replicates too.')],
     next: [inspect('The replicates\' log ratios against each other.'), analysis('Check which column is which replicate in Experiment. The moderated combination (the default) or DiMSum\'s error model carry the disagreement into the SEs.'), experiment('Carry more cells per variant through each step, or add a replicate.')],
   }),
-  'excess-variance': (f, qc, ctx) => ({
-    causes: [technical('Too few cells carried through a step (transformation, selection, recovery) when the variance grows with the counting variance (a multiplicative term).'), technical('Noise between replicates (selection of different strength) when the excess is the same at every depth (an additive term).')],
-    next: [
-      inspect('The variance plot: observed against counting, by depth.'),
-      analysis('Score with the moderated combination (the default) or DiMSum\'s error model (Score, preset), so that the SEs carry the excess.'),
-      inspect('The cells carried into selection, if known: N cells per variant raise the ratio to about 1 + D/(2N) for D reads per variant, so the ratio says roughly how few cells there were.'),
-      experiment('Carry more cells than reads per variant through every step.'),
-    ],
-  }),
+  'excess-variance': (f) => {
+    // The cells recorded (wave 2, slice 10): whether they account for the excess.
+    const explained = f.cells?.length && f.cells.every((c) => c.verdict === 'explained');
+    return {
+      causes: [
+        ...(explained ? [expected('The bottleneck the recorded cells predict: they account for the excess.')] : []),
+        technical('Too few cells carried through a step (transformation, selection, recovery) when the variance grows with the counting variance (a multiplicative term).'),
+        technical('Noise between replicates (selection of different strength) when the excess is the same at every depth (an additive term).'),
+      ],
+      next: [
+        inspect('The variance plot: observed against counting, by depth.'),
+        analysis('Score with the moderated combination (the default) or DiMSum\'s error model (Score, preset), so that the SEs carry the excess.'),
+        f.cells?.length ? inspect('The cells recorded against the excess (above): where they fall short of it, look for the step that had fewer cells.') : analysis('Record the cells carried into selection with each input sample (Experiment, Columns, Cells): QC then checks the bottleneck it infers against them. N cells per variant against D reads raise the ratio to about 1 + D/(2N).'),
+        experiment('Carry more cells than reads per variant through every step.'),
+      ],
+    };
+  },
   'outlier-replicate': () => ({
     causes: [technical('A replicate that failed, was mislabeled or contaminated, or was selected with a different strength.')],
     next: [inspect('Leave-one-out: each replicate against the others, and its samples\' depth.'), analysis('Score without it (remove the replicate in Experiment) and compare the runs; leaving it out is a decision for the record, not a default.'), experiment('Repeat the replicate.')],

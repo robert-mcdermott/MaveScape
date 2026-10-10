@@ -143,10 +143,15 @@ output_rep2,output,2,1,,,,,
 | `technical_replicate` (`technical`, `tech_rep`) | 1, 2, … for one library sequenced more than once: summed |
 | `time` (`timepoint`, `generation`, `round`, `day`, `hours`) | a time point's time; the unit is taken from the column's name |
 | `bin` and `value` (`weight`, `fluorescence`) | a sorted bin's order and its value |
-| `condition`, `tile`, `batch` (`library`, `lane`), `cells` | optional |
+| `condition` | the condition's name; a sample selected under several conditions lists them, `Without ligand;With ligand` (MaveScape 0.2) |
+| `cells` | the cells sorted into a bin, or carried into selection from an input (recovered after it, for an output) |
+| `tile`, `batch` (`library`, `lane`) | optional |
 
 DiMSum's experiment design file (`sample_name`, `experiment_replicate`, `selection_id`, …) reads as a
-sample sheet.
+sample sheet. The analysis package (below) writes a design back as a sheet, one row per column of
+counts (its `cells` on a sample's first column), with the time column named by the unit
+(`generation`, `round`, `day`, `hours`, else `time`); read again, it gives the same design. The
+gates, the readout, the controls and the target are the design file's alone.
 
 ### `*.design.json`
 
@@ -162,7 +167,9 @@ that write variants that dropped out during selection as missing (MaveScape 0.2;
 the Experiment view; warned about on a replicate's first sample). For sorted bins, each bin of a replicate
 may give its gates on the reporter, `lower` and `upper` (fluorescence; the lowest bin's lower and
 the highest bin's upper left open), and each sample the `cells` sorted into it: with the gates the
-bins can be scored by maximum likelihood, whose reads are reweighted by the cells (MaveScape 0.2). Written by the Experiment view; the validation designs are examples
+bins can be scored by maximum likelihood, whose reads are reweighted by the cells (MaveScape 0.2). For two populations, an input's
+`cells` are those carried into selection from it, and an output's those recovered after it: quality
+control checks the bottleneck it infers against them (MaveScape 0.2). Written by the Experiment view; the validation designs are examples
 ([`validation/designs/`](../validation/designs/)).
 
 #### What the assay measures (MaveScape 0.2)
@@ -293,6 +300,9 @@ outlier barcodes were left out.
 For a time series scored by regression (MaveScape 0.2), a score is the slope of the variant's
 normalized log count on time scaled to 0–1, and `score_<replicate>` is each replicate's slope; the
 provenance and methods say which model, standard error and minimum of time points the run used.
+With the parameter `timeScale: "unit"` (MaveScape 0.2; `"course"`, the default, is Enrich2's), the
+slope is on time itself, per the design's unit of time (per generation with times in generations),
+and the log ratio of the first and last samples is over the time between them.
 
 Scored by DiMSum's model (MaveScape 0.2; parameters `model: "dimsum"`, `dimsumNormalise`,
 `dimsumErrorModel`, `dimsumDropout`), `score_<replicate>` is DiMSum's fitness, scaled and shifted,
@@ -360,8 +370,43 @@ the research-use statement.
 ### Methods (`*_methods.md`, `*_references.bib`)
 
 A methods paragraph written from what the run did: the table and its SHA-256, the identifiers and
-target, the design, the scoring with every parameter and filter, the QC findings, the software and
-the run's output hash, with numbered references, and the same references as BibTeX.
+target, the design (and what was not recorded with the counts, with what that meant: "Not recorded
+with the counts: the cells carried into selection (the bottleneck QC infers was not checked against
+them)", MaveScape 0.2), the scoring with every parameter and filter, the QC findings, the software
+and the run's output hash, with numbered references, and the same references as BibTeX.
+
+### The analysis package (`*_package.zip`)
+
+MaveScape 0.2: what an analysis needs, as the files `mavescape run` reads and the MAVE minimum
+information asks for. A ZIP, written the same way every time (dated with the workspace's
+modification time, in UTC):
+
+| File | |
+| --- | --- |
+| `README.md` | what each file is, the `mavescape run` command that scores them (with any acknowledged QC finding as `--acknowledge`), the run's output hash, and the readiness in words |
+| `counts/<file>` | the count table as imported, byte for byte (each part of a table joined from several files; a table of barcodes' map after it) |
+| `target.fasta` | the target, 60 letters to a line |
+| `design.json` | the design (a run's, or the workspace's) |
+| `samples.csv` | the design as a sample sheet (above) |
+| `parameters.json` | the parameters, complete: a run's, or MaveScape's defaults for the design |
+| `readiness.json` | the readiness (below) |
+
+Scored from a run's package alone, `mavescape run --design design.json --parameters parameters.json
+--out results counts/<file>` gives that run's output hash.
+
+### The readiness (`readiness.json`; `mavescape validate --json`'s `readiness`)
+
+What each analysis can do with what a workspace holds, and what is missing (MaveScape 0.2,
+`web/lib/readiness.js`): `version` (1), `model`, `base` (`counts`, `target`, `design`: whether each
+is there), `analyses`, `gaps` and `counts` (`ready`, `partial`, `unavailable`).
+
+| Field | |
+| --- | --- |
+| `analyses[]` | `id` (`score.log-ratio`, `score.dimsum`, `score.regression`, `score.ratio-of-ends`, `score.per-generation`, `score.bin-average`, `score.bin-mle`, `score.barcodes-each`, `normalize.wild-type`, `normalize.synonymous`, `scale.bins-nonsense-wt`, `scale.bins-low5-wt`, `rescale.nonsense-wt`, `rescale.synonymous-nonsense`, `replicates.combine`, `replicates.leave-one-out`, `conditions.differential`, `qc.<finding id>`, `record.scores`, `record.methods`, `record.package`, `record.deposit`), `group`, `label`, `status` (`ready`, `partial`: it runs, and what `improves` lists would make it more complete; `unavailable`: `needs` lists what it lacks, or `note` says why), `needs`, `improves` (gap ids), `note` |
+| `gaps[]` | `id` (`counts`, `target`, `design`, `wild-type`, `synonymous`, `nonsense`, `replicates`, `third-replicate`, `time-points`, `conditions`, `readout`, `readout-terms`, `library-method`, `gates`, `bin-cells`, `selection-cells`, `generations`, `target-identifiers`), `label`, `kind` (`required`, `counts`, `experiment`, `bench`, `description`), `why`, `where` (where it is usually found), `how` (where to give it in MaveScape), `place`, `consequence` (what its absence meant, for the methods), `detail` (the design's first problem), `unlocks` and `improves` (analysis ids) |
+
+Only the analyses a design allows are listed: no per-generation scores for rounds of selection, no
+bins' scales for a selection.
 
 ### The map (`*.svg`, `*.png`)
 

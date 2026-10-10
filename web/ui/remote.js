@@ -25,9 +25,10 @@ import { draftFromColumns } from './design-draft.js';
 import { ensureResults, forgetResults } from './run-results.js';
 import { runScore, workerInput } from './score-input.js';
 import { computeQc, markQcSeen, qcInputsOf, qcSubjects } from './mode-qc.js';
-import { archiveFile, RUN_FILES, runFile, selectionFile } from './record.js';
+import { archiveFile, packageFile, RUN_FILES, runFile, selectionFile } from './record.js';
 import { intervalOf } from '../lib/exports.js';
 import { anchorUncertainty } from '../lib/anchors.js';
+import { readiness, readinessText } from '../lib/readiness.js';
 
 export class ActionError extends Error {}
 
@@ -352,9 +353,10 @@ export function installRemote(app) {
         if (!design) throw new ActionError('Give a table to check, a design, or both.');
         const d = designSummary(design, null);
         const blocking = d.problems.map((m) => `The design: ${m}`);
+        const ready = readiness(ws(), { design });
         return {
           message: blocking.length ? `Not valid: ${plural(blocking.length, 'problem')} in the design. ${blocking.join(' ')}` : `Valid: the design (${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')}), checked without its table.${d.warnings.length ? ` ${plural(d.warnings.length, 'warning')}: ${d.warnings.join(' ')}` : ''}`,
-          data: { valid: !blocking.length, table: null, design: d, blocking, warnings: d.warnings },
+          data: { valid: !blocking.length, table: null, design: d, blocking, warnings: d.warnings, readiness: ready, readinessText: readinessText(ready, { all: false }) },
         };
       }
       const source = resolveSource(args.table);
@@ -388,8 +390,12 @@ export function installRemote(app) {
       ];
       const warnings = [...review.warnings.map((x) => x.message), ...(d ? d.warnings : [])];
       const sum = review.summary ?? {};
+      // What each analysis can do with these files, and what is missing (wave 2, slice 10).
+      const ready = design ? readiness({ ...ws(), designSource: source.id }, { design }) : readiness({ ...ws(), designSource: source.id });
       const data = {
         valid: !blocking.length,
+        readiness: ready,
+        readinessText: readinessText(ready, { all: false }),
         table: { name: source.name, rows: table.rows, layout: source.layout ?? null, variantColumn: design?.variants?.column ?? mapping.variantColumn ?? null, level: design?.variants?.level ?? mapping.level ?? null, target: target?.name ?? null, names: { valid: sum.valid ?? 0, readLeniently: sum.warning ?? 0, invalid: sum.invalid ?? 0, byKind: sum.byKind ?? {} } },
         design: d,
         blocking,
@@ -639,9 +645,16 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package'];
       const what = choose(args.what, kinds, 'export');
       let file;
+      // The analysis package (wave 2, slice 10): of a run when named, else of the current run, else
+      // of the design with the default parameters.
+      if (what === 'package') {
+        const run = args.run ? resolveRun(args.run) : currentRun(ws());
+        file = await packageFile(app, run);
+        return { file: file.bytes, message: `The analysis package of "${ws().name}"${run ? `, ${run.name}` : ' (the design, with the default parameters)'}: counts, target, design, sample sheet, parameters and what is missing.` };
+      }
       if (what === 'archive') {
         file = await archiveFile(app, { includeTables: args.include_tables !== false });
         return { file: file.bytes, message: `The workspace archive of "${ws().name}" (${plural(ws().runs.length, 'run')}${args.include_tables === false ? ', tables by checksum only' : ', with its tables'}).` };

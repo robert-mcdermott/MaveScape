@@ -194,6 +194,31 @@ each.
 - **The simulator** can share one input sample between replicates, draw overdispersed reads
   (gamma-Poisson) and run a time course that saturates; its defaults and the bundled examples are
   unchanged.
+- **What the analysis can do (wave 2, slice 10; E8).** For the open workspace, every analysis the
+  design allows (each way of scoring, normalizing and rescaling, combining replicates, differential
+  scores, each QC finding, the record and what a MaveDB deposit needs) is ready, partial or not
+  possible, with why. What is missing says why it matters, where it is usually found (the
+  protocol, the bench, the counting pipeline) and where to give it. It is in the Experiment view
+  (*What the analysis can do*, with *Give it*), the workflow strip, the Start page's *What to
+  bring*, `mavescape validate` (in words, and `readiness` with `--json`) and the methods, which name
+  what was not recorded and what that meant. Nothing is filled in by guessing.
+- **The analysis package:** *Write the analysis package* (the Experiment view, a run's export menu,
+  `export` `what: "package"`) writes one ZIP: the count table as imported, the target, the design,
+  the design as a sample sheet, the parameters, the readiness, and a README with the
+  `mavescape run` command. These are the files `mavescape run` reads; scored from a run's package
+  alone, they give that run's output hash.
+- **The cells recorded check the bottleneck:** with the cells carried into selection recorded on
+  each input (and those recovered after it on each output; the Experiment view's Cells column now
+  shows for two populations), the variance-beyond-counting finding says whether they account for
+  the bottleneck the replicates imply, or the replicates show more (another step, or noise between
+  replicates) or less (check the cells recorded).
+- **Scores per generation:** *A score is the change* per unit of time (`timeScale: "unit"`) gives a
+  time series' slope on time itself, per generation with the times in generations: a selection
+  coefficient, comparable between experiments of different lengths. Enrich2's whole time course
+  stays the default.
+- **Sample sheets written back:** the package writes the design as a sample sheet that reads as the
+  same design; a sample selected under several conditions is one row naming them
+  (`Without ligand;With ligand`), which sheets now read.
 
 ### Changed
 
@@ -238,6 +263,11 @@ each.
 
 ### Fixed
 
+- **DiMSum's model on a table of barcodes** (summed, which is allowed) failed after scoring, reading
+  barcode counts its replicates do not keep.
+- **Sorted bins without the wild type were refused by default**: both scales need it. They now
+  start unscaled (an MLE's σ each variant's own), and with the nonsense controls named none, at the
+  lowest 5%.
 - **The separation of the controls used every nonsense variant**, even where the design named others
   or none; it now uses the design's controls, as scoring does.
 - **A validation note called BRCA1's library error-prone PCR**, but it holds 71% of the

@@ -39,7 +39,7 @@ lede: Started with --remote-control, MaveScape accepts actions from programs on 
             <tr><td><code>select_variants</code></td><td>Selects <code>variants</code> or <code>positions</code> on the map, optionally only those scored, low, filtered or missing, and saves the selection (<code>save_as</code>)</td></tr>
             <tr><td><code>inspect_variant</code></td><td>A variant's score, SE and interval (with the moderated combination, its degrees of freedom, <code>df</code>; rescaled, the anchors' uncertainty, <code>seScale</code>), flags, replicates and counts (for a regression, each replicate's time points and departure from a line; with conditions compared, each difference with its SE, interval and q)</td></tr>
             <tr><td><code>render_map</code></td><td>Shows the map with the given coloring (<code>differential</code> for a comparison of conditions, and <code>contrast</code> to choose one), row order, palette and zoom, and returns it in words</td></tr>
-            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>qc-findings</code>, <code>barcodes</code> (a table of barcodes), <code>differential</code> (conditions compared), <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG), <code>selection</code> or <code>archive</code> to <code>path</code>. Needs the token</td></tr>
+            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>qc-findings</code>, <code>barcodes</code> (a table of barcodes), <code>differential</code> (conditions compared), <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG), <code>selection</code>, <code>archive</code> or <code>package</code> (the analysis package of a run, or of the design with the default parameters) to <code>path</code>. Needs the token</td></tr>
           </tbody>
         </table>
       </div>
@@ -114,7 +114,14 @@ Done in 1.2 s: 9 files written to results (run.json lists them).</code></pre></d
       <h2 id="validate">Checking before scoring</h2>
       <div class="code wrap"><pre><code><span class="prompt">$ </span>mavescape validate --design design.json counts.csv</code></pre></div>
       <div class="code wrap" data-no-copy><pre><code>Valid: counts.csv, 1121 rows (1121 names valid), with the design (two-population, 3 replicates of 6 samples).</code></pre></div>
-      <p><code>mavescape validate</code> checks tables, a design and parameters as scoring would, without scoring, and lists what blocks scoring and the warnings. It exits 0 when they are valid and 1 when not; <code>--json</code> prints the report as JSON. A design alone is checked without its table, and a score table against its target (<code>--target</code>).</p>
+      <p><code>mavescape validate</code> checks tables, a design and parameters as scoring would, without scoring, and lists what blocks scoring and the warnings. It then says what each analysis can do with these files: the analyses that are partial or not possible and why, and what is missing, why it matters and where it is usually found (<a href="experiment.html#readiness">What the analysis can do</a>). It exits 0 when they are valid and 1 when not; <code>--json</code> prints the report as JSON, the readiness as data in <code>readiness</code>. A design alone is checked without its table, and a score table against its target (<code>--target</code>).</p>
+      <div class="code wrap" data-no-copy><pre><code>  19 of 25 analyses ready, 2 partial, 4 not possible
+  …
+  Quality control:
+  - partial: Variance beyond counting (bottleneck) (better with cells carried into selection)
+  …
+  What is missing:
+  - Cells carried into selection: QC infers a bottleneck from how much replicates disagree; …</code></pre></div>
 
       <h2 id="later">Coming</h2>
       <p>An MCP server for AI agents on the same actions (<a href="{{github}}/blob/main/mavescape-spec/roadmap.md">roadmap</a>).</p>

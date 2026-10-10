@@ -6,6 +6,7 @@
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
 import { readArchive, writeArchive } from '../lib/archive.js';
+import { writePackage } from '../lib/package.js';
 import { barcodesCSV, countsCSV, differentialCSV, provenanceJSON, provenanceText, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
 import { writeMethods } from '../lib/methods.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../lib/findings.js';
@@ -101,7 +102,41 @@ export function runExportItems(app, run, condition = 0) {
     { section: 'Record' },
     { label: 'Provenance (JSON)', icon: 'download', onSelect: () => exportRunFile(app, run, 'provenance', condition) },
     { label: 'Methods and references (.md, .bib)', icon: 'download', onSelect: () => exportRunFile(app, run, 'methods', condition) },
+    { label: 'Analysis package: counts, target, design, parameters (.zip)', icon: 'download', onSelect: () => exportPackage(app, run) },
   ];
+}
+
+// --- The analysis package (wave 2, slice 10) -------------------------------------------------------
+
+// The tables' bytes from the library, by SHA-256.
+async function libraryBytes(app, hashes) {
+  const out = new Map();
+  for (const hash of hashes) {
+    const bytes = await app.library.getFile(hash);
+    if (bytes) out.set(hash, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));
+  }
+  return out;
+}
+
+// The package of a run (its design and parameters), or of the workspace's design with the default
+// parameters (run null), made (not downloaded): { name, bytes }.
+export async function packageFile(app, run = null) {
+  const ws = app.store.ws;
+  const source = run ? ws.sources.find((s) => s.sha256 === run.inputs.source.sha256) : ws.sources.find((s) => s.id === ws.designSource) ?? ws.sources[0];
+  const hashes = source ? (source.files?.length ? source.files : [source]).map((f) => f.sha256) : [];
+  const { bytes } = await writePackage(ws, { run, sources: await libraryBytes(app, hashes), software: { version: app.version } });
+  return { name: `${safe(ws.name)}${run ? `_${safe(run.name)}` : ''}_package.zip`, bytes };
+}
+
+export async function exportPackage(app, run = null) {
+  const busy = progressToast('Writing the analysis package…');
+  try {
+    const { name, bytes } = await packageFile(app, run);
+    downloadBlob(new Blob([bytes], { type: 'application/zip' }), name);
+    busy.done(`Wrote ${name}: the counts, target, design, sample sheet and parameters, with what is missing.`);
+  } catch (error) {
+    busy.fail(`The package could not be written: ${error.message}`);
+  }
 }
 
 // A selection's file: { name, type, text }, its variants with their scores (CSV) or the selection

@@ -5,7 +5,10 @@
 //   y_t = ln(c_t + p) − ln r_t,   w_t = 1 / (1/(c_t + p) + 1/r_t)   (OLS: w_t = 1),   x_t = t / max t
 //
 // fitted as y = a + b·x by weighted (or ordinary) least squares with an intercept; the score is b.
-// Spacing need not be uniform. r_t is the sample's normalizer (score-ratio.js, normalizers); with
+// Per unit of time (wave 2, slice 10; `perUnit`), x_t = t: the slope per generation when the times
+// are in generations (a selection coefficient), comparable between experiments of different
+// lengths, where Enrich2's slope is the change over the whole time course. Spacing need not be
+// uniform. r_t is the sample's normalizer (score-ratio.js, normalizers); with
 // synonymous normalization r_t = 1 without its 1/r_t term, and the replicate's median synonymous
 // slope is subtracted afterward.
 //
@@ -89,10 +92,11 @@ export function fitLine(x, y, w, v, use, seMethod = 'counting-floor') {
 // One variant's time course in one replicate, as the regression saw it: { points: [[t, y]], line:
 // [[t, y], [t, y]] (the fitted line over the replicate's times), slope, fit }. counts: the count
 // at each time (NaN where missing); for the inspector.
-export function timeCourse(counts, times, r, { weighted = true, pseudocount, method }) {
+export function timeCourse(counts, times, r, { weighted = true, pseudocount, method, perUnit = false }) {
   const tMax = Math.max(...times);
+  const scale = perUnit ? 1 : tMax;
   const synonymous = method === 'synonymous';
-  const x = times.map((t) => t / tMax);
+  const x = times.map((t) => t / scale);
   const y = [];
   const w = [];
   const v = [];
@@ -107,7 +111,7 @@ export function timeCourse(counts, times, r, { weighted = true, pseudocount, met
   const f = fitLine(x, y, w, v, use);
   return {
     points: times.map((t, k) => [t, use[k] ? y[k] : Number.NaN]),
-    line: Number.isFinite(f.slope) ? [[times[0], f.intercept + f.slope * x[0]], [tMax, f.intercept + f.slope]] : [],
+    line: Number.isFinite(f.slope) ? [[times[0], f.intercept + f.slope * x[0]], [tMax, f.intercept + f.slope * (tMax / scale)]] : [],
     slope: f.slope,
     fit: f.fit,
   };
@@ -123,11 +127,11 @@ export function timeCourse(counts, times, r, { weighted = true, pseudocount, met
 // coefficient on the first sample and that sample's counting variance (for replicates sharing it),
 // and `seCounting`, the slope's SE from counting alone (the moderated combination's covariate).
 export function regressionScores(samples, times, r, use, options) {
-  const { weighted = true, pseudocount, method, se: seMethod = 'counting-floor', reference = null, label = 'this replicate' } = options;
+  const { weighted = true, pseudocount, method, se: seMethod = 'counting-floor', reference = null, label = 'this replicate', perUnit = false } = options;
   const T = samples.length;
   const tMax = Math.max(...times);
   if (!(tMax > 0)) throw new Error(`The time points of ${label} are all at time 0 or before: a regression on time needs a later time.`);
-  const x = times.map((t) => t / tMax);
+  const x = times.map((t) => (perUnit ? t : t / tMax));
   const n = samples[0].length;
   const score = new Float64Array(n).fill(Number.NaN);
   const se = new Float64Array(n).fill(Number.NaN);

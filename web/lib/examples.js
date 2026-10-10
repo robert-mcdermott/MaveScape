@@ -28,6 +28,7 @@ export const EXAMPLES = [
       ['map', 'Open the map. The darkest columns are the positions that tolerate nothing; hover one, then click a cell to see its replicates in the inspector.'],
       ['map', 'Shift-drag over a stretch of positions, save the selection, and export the map as SVG.'],
       ['score', 'Export the scores (MaveDB columns) and the methods paragraph from the run\'s menu.'],
+      ['experiment', 'In Experiment, read "What the analysis can do": the published counts do not say how the library was made or how many cells were carried into selection. With the cells recorded, QC would check the bottleneck it finds against them.'],
     ],
   },
   {
@@ -68,12 +69,14 @@ export const EXAMPLES = [
       'Scored by weighted regression on every time point, the scores track the true effects (r about 0.99; the guide shows it).',
       'Quality control passes, including the two time-series findings: every fit uses every time point, and the time courses scatter about their lines as counting predicts.',
       'Scored again by the log ratio of the first and last samples, the scores are a little noisier and their SEs larger: the middle time points carry information.',
+      'Per generation, every score and SE is the whole-course one over the 8 generations: a selection coefficient, comparable with experiments of other lengths.',
     ],
     steps: [
       ['map', 'Click a dark cell: the inspector draws its time course in each replicate, the points and the fitted line whose slope is the score.'],
       ['qc', 'In QC, read "Time points used" and "Fit of the time courses": both pass for a clean experiment.'],
       ['score', 'In Score, choose "Log ratio of the first and last samples" and score again; compare the runs\' scores and SEs in the inspector.'],
       ['score', 'Choose the Enrich2-compatible preset: its SEs are scaled by the residuals alone, and some are smaller than counting allows.'],
+      ['score', 'Set "A score is the change" to per generation and score again: the times are in generations, so each score is a selection coefficient.'],
     ],
   },
   {
