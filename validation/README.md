@@ -34,7 +34,32 @@ slice 4) the barcoded example: its counts and map assembled in the window, score
 barcode with Node's output hash, its barcodes exported byte for byte as Node writes them; and
 (slice 5) GRB2 scored with the DiMSum preset, Node's output hash and fitted terms; and (slice 6) the
 two-condition example in the window with Node's hash, its differential map, a variant's difference
-and the differential export as Node writes them. 69 checks; in CI as the `remote` job.
+and the differential export as Node writes them; and (slice 7) `check` (valid, a design that does
+not fit, parameters that cannot score) and `reproduce_run`. 71 checks; in CI as the `remote` job.
+
+## Headless runs (`headless-run.mjs`, wave 2 slice 7)
+
+`node validation/headless-run.mjs [--verbose]` builds MaveScape and runs it as a command, as a
+pipeline would (headless Chrome: `CHROME`, else one installed):
+
+- the GRB2 example (`web/examples/grb2-sh3`) twice with `--time`: every file the same bytes, the
+  provenance and the workspace archive too; with SOURCE_DATE_EPOCH, the same; with no fixed time,
+  the results the same and the provenance differing only in its times and identifiers;
+- the run's own archive recomputed in Node (`roundtrip-cases.mjs`'s `recompute`): its recorded
+  output hash, and the scores, counts, QC, map, methods and references as Node writes them; the
+  same analysis through remote control in a window: the same files;
+- `--from-workspace` with that archive: the run reproduced, every file the same bytes; with the
+  run's recorded output hash altered: exit 1, nothing exported;
+- the two-condition fixture (a scores file per condition, the differential scores) and the barcode
+  fixture with its map (the barcodes export), as Node writes them;
+- the failures: a design that does not fit the table and parameters that cannot score (exit 1,
+  nothing scored), an output sample with no counts (QC's blocking finding: exit 1, the files
+  written), `--strict` (GRB2's failing finding), and a wrong command line, an output folder in
+  use, a missing input and conflicting options (exit 2, nothing run);
+- `--log json` (one JSON object per line) and `mavescape validate` (0 valid; 1 with what blocks
+  scoring, `--json`; a design alone; parameters; 2 for a wrong command line).
+
+18 checks, in CI's `remote` job; about 20 s.
 
 ## Public data (`sources.json`)
 

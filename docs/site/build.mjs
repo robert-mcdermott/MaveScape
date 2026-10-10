@@ -49,7 +49,7 @@ const DOCS = [
   { group: 'Start', pages: [['index', 'Overview'], ['getting-started', 'Getting started'], ['examples', 'Examples'], ['opening-data', 'Opening your data']] },
   { group: 'Analysis', pages: [['experiment', 'The design'], ['scoring', 'Scoring'], ['qc', 'Quality control'], ['map', 'The map and the inspector']] },
   { group: 'Results', pages: [['record', 'Exports and the record']] },
-  { group: 'Automate', pages: [['scripting', 'Remote control and scripting']] },
+  { group: 'Automate', pages: [['scripting', 'Remote control, headless runs and scripting']] },
   { group: 'Reference', pages: [['troubleshooting', 'Troubleshooting']] },
 ];
 const ORDER = DOCS.flatMap((g) => g.pages);

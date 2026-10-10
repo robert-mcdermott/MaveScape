@@ -16,6 +16,7 @@ import { installImport } from './ui/import.js';
 import { chooseArchiveExport, openArchives } from './ui/record.js';
 import { exampleGuide } from './ui/examples.js';
 import { mountWorkflow } from './ui/workflow.js';
+import { fixClock } from './lib/clock.js';
 
 const VERSION = '0.1.0';
 
@@ -74,6 +75,10 @@ async function start() {
   applyColorVision(prefs.get('colorVision', false));
   const info = await detectBackend();
   const library = createLibrary(info);
+  // A headless run (mavescape run --time) opens the page with ?clock=: every record of the session
+  // then carries that time, so that the run writes the same bytes again (lib/clock.js).
+  const clock = new URLSearchParams(location.search).get('clock');
+  if (clock) fixClock(clock);
 
   // MaveScape starts on the start page with a new, empty workspace: the last one is a click away
   // in its recent workspaces, and files named on the command line go into a workspace of their

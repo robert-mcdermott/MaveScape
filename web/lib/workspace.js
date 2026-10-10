@@ -9,16 +9,14 @@
 // as the history's anchor. See mavescape-spec/conventions.md, "Workspace".
 
 import { sha256 } from './sha256.js';
+import { newId as freshId, now as clockNow } from './clock.js';
 
 export const WORKSPACE_FORMAT = 'mavescape-workspace';
 export const WORKSPACE_VERSION = 1;
 export const HISTORY_LIMIT = 5000;
 const encoder = new TextEncoder();
 
-function newId() {
-  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `ws-${random.replace(/-/g, '').slice(0, 20)}`;
-}
+const newId = () => `ws-${freshId()}`;
 
 // --- The history ---------------------------------------------------------------------------------
 
@@ -42,7 +40,7 @@ function chained(previous, entry) {
 }
 
 // The history fields of ws with an entry appended: { history, historyAnchor? }.
-export function appendHistory(ws, action, detail, time = new Date().toISOString()) {
+export function appendHistory(ws, action, detail, time = clockNow()) {
   const history = ws.history ?? [];
   const previous = history.length ? history[history.length - 1].hash : ws.historyAnchor ?? '';
   const all = [...history, chained(previous, { time, action, detail })];
@@ -64,14 +62,14 @@ export function verifyHistory(ws) {
 }
 
 // A new value of ws with fields changed, modified now, and the change in the history.
-export function change(ws, patch, action, detail, time = new Date().toISOString()) {
+export function change(ws, patch, action, detail, time = clockNow()) {
   return { ...ws, ...patch, modified: time, ...(action ? appendHistory(ws, action, detail, time) : {}) };
 }
 
 // --- The document --------------------------------------------------------------------------------
 
 export function createWorkspace(name = 'Untitled workspace', options = {}) {
-  const now = options.now ?? new Date().toISOString();
+  const now = options.now ?? clockNow();
   return {
     format: WORKSPACE_FORMAT,
     version: WORKSPACE_VERSION,
@@ -124,7 +122,7 @@ export function serializeWorkspace(ws) {
   return JSON.stringify(ws);
 }
 
-export function touch(ws, now = new Date().toISOString()) {
+export function touch(ws, now = clockNow()) {
   return { ...ws, modified: now };
 }
 
@@ -185,7 +183,7 @@ export function updateTarget(ws, id, patch, detail = null) {
 // Adds a named selection of variants (by their MAVE-HGVS keys), made on the map of a run.
 export function addSelection(ws, selection) {
   const id = uniqueId(selection.name ?? 'selection', ws.selections);
-  const entry = { ...selection, id, created: selection.created ?? new Date().toISOString() };
+  const entry = { ...selection, id, created: selection.created ?? clockNow() };
   return { ws: change(ws, { selections: [...ws.selections, entry] }, 'selection', `Saved the selection "${entry.name}": ${entry.keys.length} variant${entry.keys.length === 1 ? '' : 's'}`), id };
 }
 

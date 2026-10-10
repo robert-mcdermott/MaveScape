@@ -13,6 +13,7 @@ import { cellText } from '../lib/csv.js';
 import { STATUS, KIND_NAMES } from '../lib/variants.js';
 import { parseFasta, targetFromSequence } from '../lib/target.js';
 import { addSource, addTarget, setDesign } from '../lib/workspace.js';
+import { now } from '../lib/clock.js';
 import { IDENTIFIER_COLUMNS, validateDesign, summarizeDesign } from '../lib/design.js';
 
 const LINE_ENDS = { crlf: 'CRLF (Windows) line ends', lf: 'LF line ends', cr: 'CR (old Mac) line ends' };
@@ -465,7 +466,7 @@ async function openImportWizard(app, items, options = {}) {
         roleSuggestions: roles.filter((r) => r.role),
         summary: review.summary,
         problems: { blocking: review.blocking.map((p) => p.message), warnings: review.warnings.map((p) => p.message) },
-        imported: new Date().toISOString(),
+        imported: now(),
       };
       // An untitled workspace takes the name of its first table.
       if (!ws.sources.length && ws.name === 'Untitled workspace') ws = { ...ws, name: source.name.replace(/\.(csv|tsv|tab|txt|xlsx)(\.gz)?$/i, '') };

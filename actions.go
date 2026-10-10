@@ -65,6 +65,15 @@ var remoteActions = []remoteAction{
 		"design": map[string]any{"type": "object", "description": "The design document."},
 		"table":  textArg("The table by name; the one the design describes, or the first, if not given."),
 	}, "design")},
+	{Name: "check", Description: "Checks a table as scoring would, without scoring: its variant names against the design's target, its problems, the design against its columns, and the parameters against the design. Returns valid (nothing blocks scoring), what blocks it, and the warnings. mavescape validate and mavescape run use it.", InputSchema: schema(map[string]any{
+		"table":      textArg("The table by name; the one the design describes, or the first, if not given."),
+		"design":     map[string]any{"type": "object", "description": "A design to check against the table (a mavescape-design document); the workspace's own if not given."},
+		"preset":     textArg("The preset whose parameters are checked: mavescape (the default), enrich2, dimsum or vampseq."),
+		"parameters": map[string]any{"type": "object", "description": "Parameters to change from the preset, checked against the design (as for score)."},
+	}), long: true},
+	{Name: "reproduce_run", Description: "Recomputes a saved run's scores from its recorded inputs (its table, design and parameters) and checks them against its recorded output hash: refused, saying why, when they differ. mavescape run --from-workspace uses it.", InputSchema: schema(map[string]any{
+		"run": runArg,
+	}), long: true},
 	{Name: "score", Description: "Scores the counts with the current design: functional scores with standard errors, a new immutable run (or the existing one, when a run already has the same table, design and parameters). Shows it in the Score view.", InputSchema: schema(map[string]any{
 		"preset":     textArg("mavescape (the default), enrich2 (Enrich2 2.0.2's ratios, for comparison) or dimsum (DiMSum's fitness and error model, for an input and an output; the run's fitted terms are returned)."),
 		"parameters": map[string]any{"type": "object", "description": "Parameters to change from the preset: model (ratio, wls, ols: a time series starts from wls; dimsum), regressionSE (counting-floor, residual), normalization (wt, complete, full, synonymous), combination (reml, fixed, enrich2), rescale, pseudocount, dimsumNormalise, dimsumErrorModel, dimsumDropout, differential (with two or more conditions: limma, paired, independent or null), filters {minInputCount, minTimePoints, …}."},

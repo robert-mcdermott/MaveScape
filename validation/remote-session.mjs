@@ -140,6 +140,14 @@ try {
     check(`set_mode "${name}"`, r.message, r.data.mode === mode && (await browser.eval(`document.getElementById('app').dataset.mode`)) === (mode === 'start' ? 'welcome' : mode));
   }
 
+  // check and reproduce_run (mavescape validate and run --from-workspace use them).
+  const checked = await act('check');
+  const misfit = await act('check', { design: { ...exampleDesign, samples: exampleDesign.samples.map((x, i) => (i ? x : { ...x, columns: ['no_such_column'] })) } });
+  const unscorable = await act('check', { parameters: { pseudocount: 0 } });
+  check('check: the example valid; a design that does not fit and parameters that cannot score not, each saying why', `${checked.message} | ${misfit.data.blocking[0]} | ${unscorable.data.blocking[0]}`, checked.data.valid && checked.data.table.names.valid > 1000 && !misfit.data.valid && /no_such_column/.test(misfit.data.blocking.join(' ')) && !unscorable.data.valid && /pseudocount/.test(unscorable.data.blocking.join(' ')));
+  const reproduced = await act('reproduce_run', { run: 'Run 1' });
+  check('reproduce_run: Run 1 recomputed from its recorded inputs, with its recorded output hash', reproduced.message, reproduced.data.status === 'reproduced' && reproduced.data.recomputed === reproduced.data.recorded && reproduced.data.conditions.length === 1 && reproduced.data.map === true);
+
   // QC: GRB2 passes everything but the variance beyond counting (its bottleneck).
   const qc = await act('qc_findings', { finding: 'variance' });
   const notPass = qc.data.findings.filter((f) => f.status !== 'pass' && f.status !== 'na');

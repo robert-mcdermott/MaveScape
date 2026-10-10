@@ -13,6 +13,7 @@ import { sha256 } from '../lib/sha256.js';
 import { addRun, makeRun, runInputs } from '../lib/runs.js';
 import { defaultParameters } from '../lib/score.js';
 import { addSource, addTarget, change, createWorkspace, setDesign } from '../lib/workspace.js';
+import { now } from '../lib/clock.js';
 import { pearson } from '../lib/stats.js';
 import { runScore, workerInput } from './score-input.js';
 import { runEntry } from './run-results.js';
@@ -77,7 +78,7 @@ export async function openExample(app, id) {
       roleSuggestions: suggestRoles(countColumns).filter((r) => r.role),
       summary: review.summary,
       problems: { blocking: review.blocking.map((p) => p.message), warnings: [...review.warnings, ...assembled.problems.filter((p) => p.level === 'warning')].map((p) => p.message) },
-      imported: new Date().toISOString(),
+      imported: now(),
     };
     const added = addSource(ws, source);
     ws = setDesign(added.ws, { ...design, targets: [{ ...design.targets[0], id: target.id }] }, `The design of the example "${example.title}"`, added.id);

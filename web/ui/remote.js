@@ -9,8 +9,10 @@ import { toast } from './overlays.js';
 import { EXAMPLES } from '../lib/examples.js';
 import { validateDesign, summarizeDesign } from '../lib/design.js';
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
-import { addRun, makeRun, runId, runInputs } from '../lib/runs.js';
-import { addSelection, createWorkspace, rename, setDesign } from '../lib/workspace.js';
+import { addRun, makeRun, outputDigest, runId, runInputs } from '../lib/runs.js';
+import { reviewImport } from '../lib/importer.js';
+import { addSelection, addTarget, createWorkspace, rename, setDesign } from '../lib/workspace.js';
+import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
 import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
 import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
@@ -20,7 +22,7 @@ import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { openExample } from './examples.js';
 import { draftFromColumns } from './design-draft.js';
-import { ensureResults } from './run-results.js';
+import { ensureResults, forgetResults } from './run-results.js';
 import { runScore, workerInput } from './score-input.js';
 import { computeQc, markQcSeen, qcInputsOf, qcSubjects } from './mode-qc.js';
 import { archiveFile, RUN_FILES, runFile, selectionFile } from './record.js';
@@ -160,6 +162,12 @@ export function installRemote(app) {
       variants: run.output.variants,
       scored: Object.fromEntries(run.output.conditions.map((c) => [c.name, c.scored])),
       outputSha256: run.output.sha256,
+      // What the run's files are (mavescape run writes them): its conditions, whether it compares
+      // them, whether its table is of barcodes, whether it has a map (protein-level variants).
+      conditions: run.output.conditions.map((c) => c.name),
+      comparesConditions: Boolean(run.inputs.parameters?.differential) && run.output.conditions.length > 1,
+      barcodes: run.inputs.design.library?.level === 'barcode',
+      map: run.inputs.design.variants?.level === 'protein' && (run.inputs.design.targets?.length ?? 0) === 1,
     };
   }
 
@@ -283,13 +291,95 @@ export function installRemote(app) {
       const source = resolveSource(args.table);
       const result = validateDesign(design, { columns: source.columns.map((c) => c.name) });
       if (!result.ok) throw new ActionError(`The design does not fit ${source.name}: ${result.errors.map((e) => e.message).join(' ')}`);
-      // The workspace's own target (with the same sequence) stands in for the design's copy.
-      const own = ws().targets.find((t) => t.sequence === design.targets?.[0]?.sequence);
-      const next = own ? { ...design, targets: [own, ...design.targets.slice(1)] } : design;
-      store.commit(setDesign(ws(), next, `The design set by ${author}`, source.id), `Set the design (${author})`);
+      // The workspace's own target (with the same sequence) stands in for the design's copy; a
+      // workspace without it gets the design's (a table opened without its FASTA).
+      let w = ws();
+      const own = w.targets.find((t) => t.sequence === design.targets?.[0]?.sequence);
+      let next = design;
+      if (own) next = { ...design, targets: [own, ...design.targets.slice(1)] };
+      else if (design.targets?.[0]) {
+        const added = addTarget(w, design.targets[0]);
+        w = added.ws;
+        next = { ...design, targets: [{ ...design.targets[0], id: added.id }, ...design.targets.slice(1)] };
+      }
+      store.commit(setDesign(w, next, `The design set by ${author}`, source.id), `Set the design (${author})`);
       await settle();
       const summary = designSummary(next, source);
       return { message: `Set the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')}.${summary.warnings.length ? ` Warnings: ${summary.warnings.join(' ')}` : ''}`, data: summary };
+    },
+
+    // Checks a table as scoring would, without scoring (mavescape validate; mavescape run checks
+    // first): its names against the design's target, its problems, the design against its
+    // columns, and the parameters against the design. design: one to check (else the
+    // workspace's, if any). valid: nothing blocks scoring.
+    async check(args) {
+      const design = args.design ?? ws().design ?? null;
+      if (design && (typeof design !== 'object' || design.format !== 'mavescape-design')) throw new ActionError('The design must be a mavescape-design document (docs/FORMATS.md).');
+      // A design alone: its structure, without a table to check its columns against.
+      if (!ws().sources.length) {
+        if (!design) throw new ActionError('Give a table to check, a design, or both.');
+        const d = designSummary(design, null);
+        const blocking = d.problems.map((m) => `The design: ${m}`);
+        return {
+          message: blocking.length ? `Not valid: ${plural(blocking.length, 'problem')} in the design. ${blocking.join(' ')}` : `Valid: the design (${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')}), checked without its table.${d.warnings.length ? ` ${plural(d.warnings.length, 'warning')}: ${d.warnings.join(' ')}` : ''}`,
+          data: { valid: !blocking.length, table: null, design: d, blocking, warnings: d.warnings },
+        };
+      }
+      const source = resolveSource(args.table);
+      const table = await app.sourceTable(source);
+      const mapping = source.mapping ?? {};
+      const target = design?.targets?.[0] ?? ws().targets.find((t) => t.id === source.target) ?? null;
+      const barcodeColumn = design ? (design.library?.level === 'barcode' ? design.library.barcodeColumn : undefined) : mapping.barcodeColumn;
+      const review = reviewImport(table, {
+        variantColumn: design?.variants?.column ?? mapping.variantColumn,
+        level: design?.variants?.level ?? mapping.level,
+        countColumns: design ? (design.samples ?? []).flatMap((x) => x.columns ?? []) : mapping.countColumns ?? [],
+        target,
+        barcodeColumn,
+      });
+      const d = design ? designSummary(design, source) : null;
+      let parameterErrors = [];
+      if (design && d.valid && design.model !== 'scores') {
+        const presetId = choose(args.preset ?? 'mavescape', Object.keys(PRESETS), 'preset');
+        const base = defaultParameters(design, source, presetId);
+        const extra = args.parameters ?? {};
+        parameterErrors = checkParameters(withDefaults({ ...base, ...extra, filters: { ...base.filters, ...(extra.filters ?? {}) } }), design).errors;
+      }
+      // A column the design names and the table lacks is said once, by the design.
+      const designText = d ? d.problems.join(' ') : '';
+      const missing = (message) => /has no column "([^"]+)"/.exec(message)?.[1];
+      const blocking = [
+        ...review.blocking.filter((x) => !(missing(x.message) && designText.includes(`"${missing(x.message)}"`))).map((x) => `The table: ${x.message}`),
+        ...(d ? d.problems.map((m) => `The design: ${m}`) : []),
+        ...parameterErrors.map((m) => `The parameters: ${m}`),
+        ...(target ? [] : ['There is no target to check the variant names against: give its sequence (a FASTA file) or a design with its target.']),
+      ];
+      const warnings = [...review.warnings.map((x) => x.message), ...(d ? d.warnings : [])];
+      const sum = review.summary ?? {};
+      const data = {
+        valid: !blocking.length,
+        table: { name: source.name, rows: table.rows, layout: source.layout ?? null, variantColumn: design?.variants?.column ?? mapping.variantColumn ?? null, level: design?.variants?.level ?? mapping.level ?? null, target: target?.name ?? null, names: { valid: sum.valid ?? 0, readLeniently: sum.warning ?? 0, invalid: sum.invalid ?? 0, byKind: sum.byKind ?? {} } },
+        design: d,
+        blocking,
+        warnings,
+      };
+      const message = blocking.length
+        ? `Not valid: ${plural(blocking.length, 'problem')} ${blocking.length > 1 ? 'block' : 'blocks'} scoring. ${blocking.join(' ')}`
+        : `Valid: ${source.name}, ${plural(table.rows, 'row')} (${data.table.names.valid} names valid${data.table.names.readLeniently ? `, ${data.table.names.readLeniently} read leniently` : ''})${d ? `, with the design (${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')})` : ''}.${warnings.length ? ` ${plural(warnings.length, 'warning')}: ${warnings.join(' ')}` : ''}`;
+      return { message, data };
+    },
+
+    // Recomputes a saved run from its recorded inputs and checks its output hash (mavescape run
+    // --from-workspace): refused, saying why, when it does not reproduce.
+    async reproduce_run(args) {
+      const run = resolveRun(args.run);
+      forgetResults(app, run);
+      const entry = await ensureResults(app, run);
+      const recomputed = entry.results ? outputDigest(entry.results) : null;
+      const data = { run: run.name, id: run.id, status: entry.status, recorded: run.output.sha256, recomputed };
+      if (entry.status !== 'reproduced') throw new ActionError(`${run.name} (${run.id}) did not reproduce: ${entry.status === 'differs' ? entry.message : `its scores could not be recomputed: ${entry.message}`}`);
+      app.focusItem({ kind: 'run', id: run.id });
+      return { message: `${run.name} (${run.id}) reproduced from its recorded inputs: output SHA-256 ${recomputed.slice(0, 16)}…, as recorded.`, data: { ...runSummary(run), ...data } };
     },
 
     async score(args) {
@@ -519,7 +609,7 @@ export function installRemote(app) {
       }
       if (what === 'selection') {
         const saved = args.selection ? ws().selections.find((s) => s.name === choose(args.selection, ws().selections.map((x) => x.name), 'saved selection')) : null;
-        const sel = saved ?? (store.ui.selection ? { name: 'selection', ...store.ui.selection, created: new Date().toISOString() } : null);
+        const sel = saved ?? (store.ui.selection ? { name: 'selection', ...store.ui.selection, created: now() } : null);
         if (!sel) throw new ActionError('There is no selection: select variants first (select_variants), or name a saved selection.');
         file = await selectionFile(app, sel, /\.json$/i.test(args.path ?? '') ? 'json' : 'csv');
         return { file: file.text, message: `${plural(sel.keys.length, 'selected variant')}${saved ? ` of "${saved.name}"` : ''}.` };

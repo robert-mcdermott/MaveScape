@@ -309,6 +309,29 @@ numberings, the color scale and a key to the states; the SVG carries the map's d
 `<desc>`, and each cell its variant as a `<title>`. The PNG is the SVG drawn at three times its
 size.
 
+## Headless runs: `run.json`
+
+`mavescape run` (MaveScape 0.2) writes the run's files to its `--out` folder (the scores, counts,
+QC, differential scores, barcodes and map exports above, `provenance.json`, `methods.md`,
+`references.bib` and `workspace.msz`) and `run.json`, format `mavescape-run`, version 1:
+
+| Field | |
+| --- | --- |
+| `mavescape`, `commit` | the program |
+| `command` | the command line |
+| `clock` | the fixed time every record carries (`--time` or `SOURCE_DATE_EPOCH`), if any |
+| `browser`, `browserStarts` | the headless browser, and how many starts its page took |
+| `started`, `finished`, `seconds` | the wall-clock times of the run (these differ between runs) |
+| `ok`, `exit` | the outcome and the exit status: 0 done, 1 not done or a blocking problem, 2 a wrong command line |
+| `problems` | why not, in words |
+| `inputs` | each file read: `role` (`design`, `counts`, `target`, `parameters`, `workspace`), `path`, `bytes`, `sha256` |
+| `run` | the run: `id`, `name`, `outputSha256`, `conditions`, and what its files are |
+| `qc` | the quality control: `overall` (`status`, counts by status, `blocking` finding ids) and every finding |
+| `steps` | each action performed: `action`, `ok`, `message`, `seconds`, `data` |
+| `outputs` | each file written: `role`, `path`, `bytes`, `sha256` |
+
+With a fixed time, the same inputs write the same bytes in every file but `run.json`.
+
 ## Remote control: `remote.json`
 
 Started with `--remote-control`, MaveScape writes `remote.json` to its data folder

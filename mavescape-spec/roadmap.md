@@ -701,12 +701,58 @@ runs and the performance targets.
      - **CBS's two MaveDB records share their non-selected samples** (identical wherever both count
        a variant): one set of inputs selected at two B6 levels. The low-B6 record's select5–8 are
        at a concentration the record does not give, so they are not used.
-7. **Headless runs (M2, M3).** On slice 1's hub, the `run.go` pattern: `mavescape run --design
-   design.json --counts counts.csv --out results/` (validate first, deterministic outputs,
-   `run.json` with input and output hashes, structured JSON logs, non-zero exit on blocking errors,
-   `--from-workspace` reruns a saved run exactly) and `mavescape validate`.
-   - Validation: `validation/headless-run.mjs` runs twice with identical outputs and once through
-     the UI with the same results.
+7. **Headless runs (M1, M2): done.** `run.go` (CytoWeave's pattern): `mavescape run --design
+   design.json --out results/ counts.csv [map.csv]` starts MaveScape on a private port with a
+   temporary library, opens it in headless Chrome (Chromium, Edge, Brave; `--chrome`, `CHROME`),
+   and performs through the hub: a workspace named after the design, the files opened, the design
+   set (the workspace given the design's target when it has none), the `check` action (names
+   against the target, the design against the columns, the parameters against the design: nothing
+   scored when anything blocks), `score` (`--preset`, `--parameters`), `qc_findings`, and the
+   exports (scores, a file per condition; counts; QC; barcodes; differential scores; the map;
+   provenance; methods and references; the workspace archive), then `run.json` (inputs and outputs
+   with SHA-256, each step, the run, its QC, the browser and its starts). `--from-workspace` opens
+   an archive and `reproduce_run` recomputes the run from its recorded inputs: it must have its
+   recorded output hash. `--time` (or SOURCE_DATE_EPOCH) fixes the session's clock
+   (`web/lib/clock.js`, `?clock=`): every record's time, and identifiers counted from the start,
+   so every file is the same bytes. `--log json`; `--strict`; `--overwrite`; exit 0 done, 1 not
+   done or a blocking problem (a design that does not fit, parameters that cannot score, a run
+   that does not reproduce, a blocking QC finding), 2 a wrong command line, a missing input, an
+   output folder in use, no browser. `mavescape validate [--design] [--target] [--parameters]
+   [--json] [tables]` (M2's validate; its export is wave 3). The remote actions `check` and
+   `reproduce_run`; each run's summary says what its files are. The scripting, install,
+   troubleshooting and science pages, FORMATS.md (run.json), the README; no screenshot scene (the
+   commands have no window: the guide shows their output).
+   - Validation: `validation/headless-run.mjs` (18 checks, in CI's `remote` job): the GRB2
+     example twice with `--time` (every file the same bytes, the provenance and the archive
+     too), with SOURCE_DATE_EPOCH (the same), and with no fixed time (the results the same, the
+     provenance differing only in its times and identifiers); the run's archive recomputed in Node
+     (the output hash recorded; scores, counts, QC, map, methods, references as Node writes them);
+     the same analysis through remote control in a window (the same files); `--from-workspace` (the
+     same bytes) and a tampered archive refused; two conditions (a scores file per condition, the
+     differential scores) and a table of barcodes with its map (the barcodes export), as Node
+     writes them; each failure with its exit status and run.json's reasons; the JSON log; and
+     `validate` (valid, not valid with `--json`, a design alone, parameters, a wrong command line).
+     Go tests (`run_test.go`): the arguments, the clock, file names, a browser that does not start.
+     `remote-session.mjs` 2 more (71): `check` and `reproduce_run` in a window. One more unit
+     test (179): the session clock.
+   - Found by slice 7:
+     - **The results were deterministic, the records were not:** the scores, counts, QC, map and
+       methods came out the same bytes, but each record took the wall clock's time and random
+       identifiers, so two identical runs wrote different provenance and archives. A session
+       clock that a headless run fixes makes every file the same; without one, records keep the
+       real time.
+     - **A name shared by two summaries hid a file:** the `score` action's per-comparison summary
+       was also called `differential`, overwriting the run summary's flag of that name, and the
+       differential scores were not written. The flag is now `comparesConditions`, and a summary
+       that cannot be read stops the run rather than writing fewer files.
+     - **A headless page occasionally did not start, or stalled** (macOS, a fresh profile; the
+       Keychain is the likely wait). Chrome now starts with a mock Keychain and without background
+       networking, a page that has not connected in 20 s gets a new browser (up to three), and
+       run.json records how many starts it took.
+     - **A column missing from the table was reported twice,** by the table's review and by the
+       design's check; it is now said once, by the design.
+     - The requirement numbers: `mavescape run` is M1 and `validate` M2 (this slice's heading said
+       M2, M3).
 8. **Examples (T4).** Two more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
    growth time series; Factor IX MultiSTEP (one readout) as the FACS-bin assay; and a simulated
    problematic experiment (a bottleneck and a failing replicate), labeled simulated. (The simulated

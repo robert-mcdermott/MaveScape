@@ -11,6 +11,7 @@ import { writeMethods } from '../lib/methods.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../lib/findings.js';
 import { sha256 } from '../lib/sha256.js';
 import { change } from '../lib/workspace.js';
+import { newId } from '../lib/clock.js';
 import { ensureResults } from './run-results.js';
 import { workerInput } from './score-input.js';
 
@@ -180,7 +181,7 @@ export async function openArchives(app, items) {
       let doc = ws;
       const existing = (await app.library.listWorkspaces().catch(() => [])).some((x) => x.id === ws.id);
       if (existing) {
-        doc = change({ ...ws, id: `ws-${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`, name: `${ws.name} (from ${item.name})` }, {}, 'open-archive', `Opened as a copy of workspace ${ws.id} from ${item.name}`);
+        doc = change({ ...ws, id: `ws-${newId()}`, name: `${ws.name} (from ${item.name})` }, {}, 'open-archive', `Opened as a copy of workspace ${ws.id} from ${item.name}`);
       }
       await app.saveNow();
       await app.loadWorkspace(doc);

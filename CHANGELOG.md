@@ -131,8 +131,24 @@ each.
 - **Remote control:** `score` summarizes each comparison, `inspect_variant` gives a variant's
   differences, `render_map` colors by the differential (`contrast` chooses one), `export` writes
   `differential`.
+- **Headless runs (wave 2, slice 7; M1).** `mavescape run --design design.json --out results/
+  counts.csv` scores without a window, in a headless Chrome on a private port: it checks the table,
+  the design and the parameters first and scores nothing when anything blocks scoring, then writes
+  the scores (a file per condition), counts, QC, differential scores, barcodes, the map, the
+  provenance, methods and references, the workspace archive and `run.json` (the inputs and outputs
+  with SHA-256, each step, the run and its QC). `--time` or SOURCE_DATE_EPOCH: every file the same
+  bytes for the same inputs. `--from-workspace` reruns a saved run and fails unless it reproduces.
+  `--log json`, `--strict`, `--overwrite`; exit status 0, 1 (not done, or a blocking problem) or 2
+  (a wrong command line). Checked by `validation/headless-run.mjs` in CI.
+- **`mavescape validate` (M2):** tables, a design and parameters checked as scoring would; exit 1
+  with what blocks scoring; `--json`.
+- **Remote control:** `check` (what would block scoring) and `reproduce_run` (a saved run recomputed
+  and checked against its output hash).
 
 ### Changed
+
+- **Records take their time from a session clock** (`web/lib/clock.js`), the wall clock in a window;
+  a headless run with a fixed time makes them, and their identifiers, the same every time.
 
 - **Tables are held column by column, a column of numbers as numbers only** (its text is not kept;
   `cellText` gives it back): a million rows take about 85 MB once read, not 500 MB, and are read in

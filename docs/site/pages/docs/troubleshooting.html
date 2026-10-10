@@ -34,3 +34,10 @@ lede: Common problems and what to do about them. If yours is not here, the drawe
         <li><strong>Forbidden:</strong> address MaveScape as <code>127.0.0.1</code> or <code>localhost</code>, from this computer.</li>
         <li><strong>Unauthorized:</strong> <code>open_files</code> and <code>export</code> need the <code>X-MaveScape-Token</code> header with the token from <code>remote.json</code> (<a href="scripting.html#files">Reading and writing files</a>).</li>
       </ul>
+
+      <h2 id="headless">mavescape run stops</h2>
+      <ul>
+        <li><strong>Exit 2, "none was found":</strong> it runs in Chrome, Chromium, Edge or Brave; name one with <code>--chrome PATH</code> or the <code>CHROME</code> variable.</li>
+        <li><strong>Exit 2, "is not empty":</strong> the output folder holds files; give another <code>--out</code>, or <code>--overwrite</code>.</li>
+        <li><strong>Exit 1:</strong> <code>run.json</code> in the output folder lists the problems and each step's outcome: a design that does not fit the table, parameters that cannot score, a quality-control finding that blocks, a run that did not reproduce. <code>mavescape validate</code> shows the same checks without scoring.</li>
+      </ul>

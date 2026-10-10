@@ -13,6 +13,7 @@ import { barcodeColumnOf } from './barcodes.js';
 import { barcodeProblems, groupBarcodes } from './score-barcodes.js';
 import { buildVariants, duplicateKeys, summarizeVariants, STATUS } from './variants.js';
 import { parseHgvs } from './hgvs.js';
+import { now } from './clock.js';
 import { translate } from './target.js';
 import { IDENTIFIER_COLUMNS } from './design.js';
 
@@ -435,7 +436,7 @@ export function makeTemplate(name, table, mapping) {
     format: TEMPLATE_FORMAT,
     version: TEMPLATE_VERSION,
     name,
-    modified: new Date().toISOString(),
+    modified: now(),
     columns: table.columns.map((c) => c.name),
     variantColumn: mapping.variantColumn,
     level: mapping.level,

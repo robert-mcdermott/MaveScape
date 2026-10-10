@@ -26,9 +26,10 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > statsmodels, fitdistrplus, metafor and published scores; quality control reports its findings,
 > the variant-effect map shows each run and each difference between conditions, and a workspace
 > saves to one archive that reopens identically. A million rows import in a few seconds. Scripts
-> can drive the window (`--remote-control`). Six examples are on the Start page;
+> can drive the window (`--remote-control`), and `mavescape run` does a whole analysis without one,
+> the same bytes every time. Six examples are on the Start page;
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md) continues with headless runs in 0.2.
+> [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with more examples.
 
 ## Install
 
@@ -72,6 +73,8 @@ MaveScape starts from counts; reads (FASTQ) are counted by those upstream tools.
 | `--keep-running` | Keep serving after the window is closed |
 | `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)) |
 | `--version` | Print the version |
+| `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/mavescape/docs/scripting.html#headless)) |
+| `mavescape validate [--design D] [tables]` | Check tables and a design as scoring would; exit 1 when something blocks scoring |
 
 A second `mavescape <files>` hands its files to the window already open.
 
@@ -95,6 +98,17 @@ curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "qc_findings"}'
 `GET /api/remote/tools` lists the actions with their arguments. The documentation's screenshots
 are made this way (`docs/capture/capture.mjs`).
 
+For pipelines, `mavescape run` does the whole analysis without a window (in a headless Chrome)
+and writes the scores, counts, QC, map, methods, provenance, the workspace archive and `run.json`
+to a folder; `--time` (or `SOURCE_DATE_EPOCH`) makes every file the same bytes for the same inputs,
+and `--from-workspace` reruns a saved run exactly:
+
+```sh
+mavescape validate --design design.json counts.csv
+mavescape run --design design.json --out results/ --time 2026-10-09T12:00:00Z counts.csv
+mavescape run --from-workspace results/workspace.msz --out rerun/
+```
+
 ## Privacy and security
 
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
@@ -114,6 +128,7 @@ go test -race ./...               # the host
 node --test "web/lib/*.test.mjs"  # the browser modules
 node validation/run.mjs           # the validation suites
 node validation/remote-session.mjs  # every remote action in the program and headless Chrome
+node validation/headless-run.mjs    # mavescape run and validate: the same bytes twice, reruns, failures
 node docs/capture/capture.mjs     # the screenshots (docs/images/), through remote control
 node docs/site/build.mjs /tmp/site  # the website, with every link and screenshot checked
 ```

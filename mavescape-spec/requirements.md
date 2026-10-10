@@ -158,8 +158,8 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| M1 | `mavescape run`: a versioned design, validation before execution, deterministic outputs (scores, QC, figures, methods, provenance), structured JSON logs, non-zero exit on blocking errors, exact reruns from a workspace run | planned (wave 2) |
-| M2 | `mavescape validate` (a score or count table, a design) and `mavescape export` (an archive to MaveDB or tables) | planned (wave 2 validate; wave 3 export) |
+| M1 | `mavescape run`: a versioned design, validation before execution, deterministic outputs (scores, QC, figures, methods, provenance), structured JSON logs, non-zero exit on blocking errors, exact reruns from a workspace run | done (wave 2, slice 7: headless Chrome on the remote-control hub; every file the same bytes with `--time` or SOURCE_DATE_EPOCH; `--log json`; exit 1 or 2 with run.json saying why; `--from-workspace` reproduces exactly; `validation/headless-run.mjs`) |
+| M2 | `mavescape validate` (a score or count table, a design) and `mavescape export` (an archive to MaveDB or tables) | validate done (wave 2, slice 7: tables, a design and parameters checked as scoring would, exit 1 with what blocks scoring, `--json`); export planned (wave 3) |
 | M3 | Remote-control API with per-session tokens | done (wave 2, slice 1: `--remote-control`, 14 actions, a per-run token for files in `remote.json`; the MCP server on it in wave 7) |
 | M4 | MCP server with the PRD's tools; changes to design, filters, scoring, calibration or exports arrive as reviewable proposals; read-only queries run directly | planned (wave 7) |
 | M5 | Python and R clients generated from the tool list | planned (wave 7) |

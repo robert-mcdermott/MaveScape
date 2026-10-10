@@ -70,6 +70,15 @@ func init() {
 }
 
 func main() {
+	// Headless commands (run.go).
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "run":
+			os.Exit(runHeadless(os.Args[2:], os.Stdout, os.Stderr))
+		case "validate":
+			os.Exit(validateHeadless(os.Args[2:], os.Stdout, os.Stderr))
+		}
+	}
 	cfg, err := parseConfig(os.Args[1:])
 	if errors.Is(err, flag.ErrHelp) {
 		return
@@ -263,6 +272,8 @@ func parseConfig(args []string) (config, error) {
 	noOpen := flags.Bool("no-open", false, "same as --window none")
 	flags.Usage = func() {
 		fmt.Fprintln(flags.Output(), "Usage: mavescape [flags] [count or score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif), workspaces (.msz) or folders of them...]")
+		fmt.Fprintln(flags.Output(), "       mavescape run --design design.json --out results/ counts.csv   (scores without a window; mavescape run -h)")
+		fmt.Fprintln(flags.Output(), "       mavescape validate [--design design.json] [tables...]         (checks them as scoring would; mavescape validate -h)")
 		flags.PrintDefaults()
 	}
 	files, err := parseArgs(flags, args)

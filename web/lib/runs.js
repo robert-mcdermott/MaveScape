@@ -6,6 +6,7 @@
 // have the recorded hash (reproduced, or the run says it was not).
 
 import { canonicalJSON, change } from './workspace.js';
+import { now } from './clock.js';
 import { sha256 } from './sha256.js';
 import { SCORING_VERSION, withDefaults, RESCALINGS } from './score.js';
 import { NORMALIZATIONS } from './score-ratio.js';
@@ -51,7 +52,7 @@ export function outputDigest(results) {
 }
 
 // The record kept in the workspace. software: { version, commit }.
-export function makeRun({ inputs, source, results, software, name, created = new Date().toISOString() }) {
+export function makeRun({ inputs, source, results, software, name, created = now() }) {
   return {
     id: runId(inputs),
     name,
