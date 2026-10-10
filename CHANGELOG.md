@@ -149,11 +149,13 @@ each.
 
 - **The README and the guide say what a MAVE is:** a multiplexed assay of variant effect, from the
   bench to counts to MaveScape (and optionally MaveDB), and what MaveScape needs to begin.
-- **The roadmap, after a researcher's review.** Wave 2 gains two slices before its examples. The
+- **The roadmap, after a researcher's review.** Wave 2 gains three slices before its examples. The
   first records what the assay measures, so legends and QC stop assuming a direction; QC findings
   say what to do next and can be acknowledged with a reason. The second tests whether the
   intervals hold the truth as often as they claim: with three replicates, the simulations so far
-  put 95% intervals at 87–90%. Comparison and robustness to analysis choices move ahead of structure (0.4 and 0.5).
+  put 95% intervals at 87–90%. The third shows what an analysis can do with what the researcher
+  has, and what is missing and where to find it. Outside laboratories no longer gate any wave or
+  release. Comparison and robustness to analysis choices move ahead of structure (0.4 and 0.5).
   Each release keeps a workspace archive that later versions must reopen and reproduce.
 
 - **Records take their time from a session clock** (`web/lib/clock.js`), the wall clock in a window;

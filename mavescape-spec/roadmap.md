@@ -44,9 +44,13 @@ these changes:
   was changed on 2026-10-09 after a researcher's review: robustness is what no other DMS tool
   shows, and a laboratory checking its own experiment needs it sooner than a structure, while MaveDB
   already shows published maps on structures;
-- also from that review, wave 2 gains two slices before its examples. One records what the assay
-  measures. The other checks that the intervals hold the truth as often as they claim, since
-  matching the reference tools shows only that MaveScape computes what they compute.
+- the PRD's exits that need outside laboratories (phase 2's, and two before 1.0) gate no wave or
+  release here: the maintainer arranges them outside this plan ("Toward 1.0");
+- also from that review, wave 2 gains three slices before its examples:
+  - one records what the assay measures;
+  - one checks that the intervals hold the truth as often as they claim, since matching the
+    reference tools shows only that MaveScape computes what they compute;
+  - one helps a researcher assemble a complete package for analysis.
 
 ## Decisions taken in this plan
 
@@ -850,13 +854,40 @@ measures, and intervals checked against the truth.
    - Validation: the suite runs in CI. Nominal 95% intervals hold 93–97% of the truth across the
      grid, or the exception is documented with its reason in `science.html`. These gates replace
      today's "85% or more".
-10. **Examples (T4).** Three more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
+10. **A complete analysis package (E8; D13, E5, Q4, M2).** The hardest part of an analysis is
+    often gathering what the experiment was, not scoring it: which sample is which, what the assay
+    selects for, and numbers kept at the bench that never reach the count table. This slice shows,
+    for the open workspace, what the analysis can do with what is there, and what would unlock
+    more.
+    - **One readiness model** (`web/lib/readiness.js`), computed from the workspace and never
+      stored. The workflow strip, the Start page's "What to bring", the Experiment view and
+      `mavescape validate` all show it, and wave 7's `describe_experiment` returns it. For each
+      analysis it says whether it is possible, and if not, what it lacks. The analyses are each
+      scoring model, combining replicates, each QC finding, differential scores, barcodes,
+      rescaling and the MaveDB export.
+    - **What is missing, why it matters, and where it is usually found.** Some of it is bench
+      records that improve the analysis when they come with the counts:
+      - the cells sorted into each bin, and the gates (for the maximum-likelihood bin model);
+      - the time points in generations, or the cell counts to work them out;
+      - the cells carried into selection, so the bottleneck the QC infers from the data can be
+        checked against the one recorded;
+      - how the library was made (the coverage it can reach);
+      - the readout and the controls (slice 8).
+    - **Nothing is filled in by guessing.** A gap stays visible, and the methods name it.
+    - **The package, written out:** counts, target, design or sample sheet, readout and
+      parameters. These are the files `mavescape run` reads and what the MAVE minimum information
+      asks for, so the package that analyzes an experiment is the one that deposits it (wave 3).
+    - Validation: every example and fixture with parts taken away (the WT row, a replicate, the
+      gates, the cells, the times, the readout, the controls). The readiness model names exactly
+      what was taken away and what that disables, the same in the window and in
+      `validate --json`.
+11. **Examples (T4).** Three more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
    growth time series; Factor IX MultiSTEP (one readout) as the FACS-bin assay; and a simulated
    problematic experiment (a bottleneck and a failing replicate), labeled simulated. (The simulated
    barcode map with conflicts came with slice 4. No barcode-level counts are on MaveDB; Enrich2's
    example data are CC BY-SA, whose ShareAlike term should not enter an Apache-2.0 binary.) Each
-   with its question, source and license, its readout and direction (slice 8), expected findings,
-   opening view and a guided workflow under ten minutes.
+   with its question, source and license, its readout and direction (slice 8), its readiness
+   (slice 10), expected findings, opening view and a guided workflow under ten minutes.
 
 ## 0.3.0: public data in and out (wave 3)
 
@@ -878,15 +909,11 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
    taken from the record's experiment keywords; retries with backoff; cached for offline use.
    Records under CC BY-NC-SA or "other" licenses are shown with their terms.
 
-   **What you can do with what you have:** a checklist for the record, or for one's own files.
-   - It lists what is present: scores only, counts, replicates, a target, a design.
-   - It lists what each piece allows. Scores alone support the map, exploration and comparison.
-     Counts allow rescoring and count-based QC.
-   - It lists what is missing and where it is usually found: the paper's methods, the supplement,
-     the laboratory's sample sheet.
-
-   Rebuilding a published experiment's design from scattered records is often the hardest part.
-   The Start page's "What to bring" becomes this checklist for the open workspace.
+   **Readiness** (wave 2, slice 10) applied to a MaveDB record. A record with scores alone supports
+   the map, exploration and comparison; counts allow rescoring and count-based QC. What the record
+   lacks (counts, replicates, a design, the readout) is named with where it is usually found: the
+   paper's methods, its supplement, the authors' repository. Rebuilding a published experiment's
+   design from scattered records is often the hardest part of a reanalysis.
    - Validation: the three feasibility records import through the UI with no dataset-specific
      code; imported scores equal MaveDB's; the PRD's phase-0 exit ("score agreement within
      documented tolerances") re-checked from the live import.
@@ -1089,24 +1116,11 @@ The 1.0 candidate: what the PRD's phase 3 asks for beyond features.
 - stable design, run and archive schemas, with a promise that later versions open them;
 - a versioned HTTP and MCP API covered by the clients' tests;
 - an external reproducibility review;
-- at least two independent laboratories that analyzed their own data (the PRD's phase-2 exit),
-  and three contributed fixtures or examples;
 - automated, signed releases and documented exceptions to unmet metrics.
 
-Beside waves 2–9, and what 1.0 most needs: find the two laboratories early (wave 2), and let what
-they hit reorder the waves.
-
-How to judge their use. Each laboratory brings a dataset MaveScape has not seen and analyzes it
-without the developer guiding each step. Record:
-- the time to a result they would defend;
-- the mistakes made in import and design, and where;
-- how they read the QC findings, and whether they acted on them;
-- how MaveScape's scores agree with their established pipeline's, and why they differ where they
-  do;
-- whether a second person reproduces the analysis from the archive alone.
-
-The most persuasive outcome: MaveScape uncovers a problem in an analysis, or clarifies a biological
-conclusion that the laboratory's previous workflow obscured.
+Outside laboratories using MaveScape on their own data (the PRD's phase-2 exit, and its 1.0 goal of
+two) are arranged by the maintainer, outside this plan. No wave or release waits for them; what they
+report is taken in when it comes, and may reorder the waves.
 
 ## Parking lot
 
@@ -1137,4 +1151,4 @@ conclusion that the laboratory's previous workflow obscured.
 | Licensing of reference code | GPL tools (dms_variants, dms_tools2) in an Apache-2.0 project; CytoWeave's `limma.js` follows GPL limma closely (an open decision there) | GPL tools used only as external references in validation; no code ported from GPL sources. Settled in wave 2, slice 6: CytoWeave's `limma.js` is not used; MaveScape's `limma.js` is written from the publications and checked against R's limma as a black box |
 | Intervals that look right but do not hold | Scores that match the reference tools while their 95% intervals hold the truth less often (87–90% with three replicates in wave 2's simulations) | A coverage suite over depth, replicates, bottlenecks, shared inputs and model mismatch, with an independent simulator, as an acceptance gate (wave 2, slice 9) |
 | Scores read the wrong way round | A selection that enriches loss of function is drawn as "gain" and its controls judged failed | The readout's direction stated in the design and used by legends, QC and comparisons; "not stated" never guessed (wave 2, slice 8) |
-| One developer | Adoption and continuity | Validation and documentation that let others check and continue; external labs from wave 2 |
+| One developer | Adoption and continuity | Validation and documentation that let others check and continue |

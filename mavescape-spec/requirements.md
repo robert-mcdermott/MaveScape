@@ -60,6 +60,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | E5 | A human-readable design summary and validation before scoring | done (wave 1, slice 4) |
 | E6 | Every material change undoable and recorded in a hash-chained history | done (wave 1, slice 4: verified in the drawer; validation `experiment`) |
 | E7 | The assay's readout: the phenotype measured and how, the biological system, the score's units, its direction (higher means more of the function, less of it, or not signed) and the reference state, in the MAVE minimum information's terms; "not stated" never guessed; used by the map's legend, the QC's expected directions, the methods, exports and comparisons | planned (wave 2, slice 8) |
+| E8 | Readiness: for the open workspace, which analyses (each model, combination, QC finding, differential scores, barcodes, rescaling, export) are possible with what is there, what each lacks, why it matters and where it is usually found (bench records included: cells per bin and gates, generations, cells into selection, library construction); never filled by guessing; the package written out as the files `mavescape run` reads | planned (wave 2, slice 10) |
 
 ## Quality control
 

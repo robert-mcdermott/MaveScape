@@ -30,7 +30,7 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > the same bytes every time. Six examples are on the Start page;
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
 > [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with what the assay measures, calibrated
-> uncertainty and more examples.
+> uncertainty, help assembling a complete analysis package, and more examples.
 
 ## What is a MAVE?
 
