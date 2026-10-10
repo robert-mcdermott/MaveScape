@@ -66,8 +66,8 @@ var remoteActions = []remoteAction{
 		"table":  textArg("The table by name; the one the design describes, or the first, if not given."),
 	}, "design")},
 	{Name: "score", Description: "Scores the counts with the current design: functional scores with standard errors, a new immutable run (or the existing one, when a run already has the same table, design and parameters). Shows it in the Score view.", InputSchema: schema(map[string]any{
-		"preset":     textArg("mavescape (the default) or enrich2 (Enrich2 2.0.2's ratios, for comparison)."),
-		"parameters": map[string]any{"type": "object", "description": "Parameters to change from the preset: model (ratio, wls, ols: a time series starts from wls), regressionSE (counting-floor, residual), normalization (wt, complete, full, synonymous), combination (reml, fixed, enrich2), rescale, pseudocount, filters {minInputCount, minTimePoints, …}."},
+		"preset":     textArg("mavescape (the default), enrich2 (Enrich2 2.0.2's ratios, for comparison) or dimsum (DiMSum's fitness and error model, for an input and an output; the run's fitted terms are returned)."),
+		"parameters": map[string]any{"type": "object", "description": "Parameters to change from the preset: model (ratio, wls, ols: a time series starts from wls; dimsum), regressionSE (counting-floor, residual), normalization (wt, complete, full, synonymous), combination (reml, fixed, enrich2), rescale, pseudocount, dimsumNormalise, dimsumErrorModel, dimsumDropout, filters {minInputCount, minTimePoints, …}."},
 	}), long: true},
 	{Name: "qc_findings", Description: "Quality control of a score run (or of the counts alone, before scoring): each finding's status (pass, review, fail or not assessed), what was found, its threshold and why it matters, and the overall status. Shows them in the QC view.", InputSchema: schema(map[string]any{
 		"run":     textArg("A score run by name or id, or \"counts\" for the counts with the current design; the latest run of the current design if not given."),

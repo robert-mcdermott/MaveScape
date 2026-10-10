@@ -87,6 +87,25 @@ each.
   million-line map in 3.5 s (budget 15 s, the process at most 830 MB of a 1 GB budget) and scores
   it in 1.3 s; `validation/browser-bench.mjs` does the same in the window in headless Chrome (3–4 s,
   the browser's memory up by about 600 MB at most). Both run in CI.
+- **DiMSum's fitness and error model (wave 2, slice 5; S9).** For an input and an output,
+  *Scored by* offers DiMSum's model (Faure et al. 2020), as DiMSum 1.4 computes it: fitness with
+  no pseudocount (an optional dropout pseudocount for outputs of 0), each replicate scaled and
+  shifted to agree with the others, and an error model with a multiplicative term for each input
+  and output and an additive term per replicate, carried into every variant's SE; replicates are
+  merged by inverse variance. The error model is linear in its terms, so MaveScape fits it exactly
+  on every variant (bounded least squares) where DiMSum averages 100 nonlinear fits of bootstrap
+  samples, and reports the 10th–90th percentiles of a seeded bootstrap. A DiMSum-compatible
+  preset; the run lists each replicate's scale, shift and terms, and its methods give them.
+  Against DiMSum 1.4's own functions on GRB2, DiMSum's demo and a fixture: the same threshold and
+  variants fitted, the scales and shifts within 5 × 10⁻⁷, the error model within 5 × 10⁻⁶ of
+  DiMSum's own fit on every variant and inside its percentiles, and every fitness, σ and merged
+  score within 10⁻¹² given DiMSum's parameters. On simulated bottlenecks, its 95% intervals hold
+  the true effects 93–96% of the time (counting alone, 67–69%).
+- **Where the bottleneck is (Q4).** "Variance beyond counting" fits DiMSum's error model to the
+  counts and says whether the excess is before selection or after it, with a plot of the terms.
+  The GRB2 example now shows its bottleneck at the inputs (20–38× counting) and scores with the
+  DiMSum-compatible preset in its guide.
+- **Remote control's `score` takes the `dimsum` preset** and returns each replicate's fitted model.
 
 ### Changed
 

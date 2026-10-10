@@ -24,7 +24,7 @@ import { checkSchema } from './json-schema.mjs';
 import { enrich2Combination, normalizers, ratioScores, regressionScores, replicateCounts } from './enrich2-formulas.mjs';
 import { summarizeDesign, validateDesign } from '../web/lib/design.js';
 import { parseHgvs, formatPosition } from '../web/lib/hgvs.js';
-import { cellText, createTableParser, parseTable } from '../web/lib/csv.js';
+import { cellText, columnText, createTableParser, parseTable } from '../web/lib/csv.js';
 import { detectLayout, draftDesign, namesFromSequences, reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { buildCountSet, joinCountTables } from '../web/lib/counts.js';
 import { KIND_NAMES } from '../web/lib/variants.js';
@@ -41,9 +41,11 @@ import { TIME_SERIES_EXPECTATIONS, edgeVariants, timeSeriesDesign, timeSeriesTab
 import { factor9Column, replicateBins, sortSeqDesign, sortSeqTable, sortSeqTruth } from './bins-cases.mjs';
 import { barcodeDesign, barcodeTable, barcodeTruth, dmsVariantsTable, enrich2Files } from './barcode-cases.mjs';
 import { dmsVariantsName } from '../web/lib/barcodes.js';
+import { compareDimsum, demoCase, dimsumReference, fixtureCase, grb2Case } from './dimsum-cases.mjs';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
-import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS } from '../web/lib/score.js';
+import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS, withDefaults } from '../web/lib/score.js';
+import { scoreDimsumGroup } from '../web/lib/score-dimsum.js';
 import { combineFixed, combineREML, heterogeneity } from '../web/lib/replicates.js';
 import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE, REPLICATE_STATE_NAMES } from '../web/lib/filters.js';
 import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs } from '../web/lib/runs.js';
@@ -1008,6 +1010,60 @@ const suites = {
       for (const [what, out, pattern] of refusals) check('scoring', `refused: ${what}, with the reason`, out.ok ? 'scored anyway' : out.errors[0], !out.ok && pattern.test(out.errors.join(' ')), 'refused');
     }
 
+    // DiMSum's fitness and error model (wave 2, slice 5): MaveScape's against DiMSum 1.4's own R
+    // functions (reference/dimsum.json) on the fixture (GRB2 and DiMSum's demo below, external).
+    const dimsumRef = dimsumReference();
+    const againstDimsum = (label, c, ref) => {
+      const d = compareDimsum(c, ref);
+      check('scoring', `DiMSum on ${label}: the input threshold and the variants fitted are DiMSum's`, `threshold within ${d.threshold.toExponential(1)} relative; ${d.fitted[0]} variants fitted, DiMSum ${d.fitted[1]}${d.refused ? `; refused: ${d.refused}` : ''}`, !d.refused && d.threshold <= 1e-14 && d.fitted[0] === d.fitted[1], '≤ 1e-14; the same');
+      const n = d.normalisation;
+      check('scoring', `DiMSum on ${label}: each replicate's scale and shift at DiMSum's minimum (nlm${n.code === 1 ? '' : `, which stopped with its code ${n.code}`}), the minimum never above nlm's`, `within ${n.difference.toExponential(2)}; minimum ${n.minimum.toPrecision(13)}, nlm's ${n.nlm.toPrecision(13)}`, n.difference <= 5e-4 && n.minimum <= n.nlm * (1 + 1e-12), '≤ 5e-4; not above');
+      check('scoring', `DiMSum on ${label}: the error model fitted on every variant equals DiMSum's own fit of it (nls, port) and lies within the 10th–90th percentiles of DiMSum's 100 bootstrap fits`, `within ${d.fullFit.toExponential(2)} relative; ${d.inside[0]} of ${d.inside[1]} terms inside DiMSum's percentiles`, d.fullFit <= 2e-5 && d.inside[0] === d.inside[1], '≤ 2e-5; all inside');
+      for (const [key, s] of Object.entries(d.scored)) {
+        check('scoring', `DiMSum on ${label}${key === 'dropout' ? `, with a dropout pseudocount of ${ref.dropout.pseudocount}` : ''}: with DiMSum's parameters, each variant's fitness and sigma in each replicate equal dimsum__calculate_fitness's, and merged by inverse variance its merge (${s.values} values of ${s.variants} variants)`, `${s.worst.toExponential(2)} (${s.where}); merged ${s.merged.toExponential(2)}${s.oneSide ? `; ${s.oneSide} by one side only` : ''}`, s.worst <= 1e-10 && s.merged <= 1e-10 && !s.oneSide && s.values > 0, '≤ 1e-10 relative, the same values');
+      }
+    };
+    againstDimsum('the fixture', fixtureCase(), dimsumRef.cases.fixture);
+    {
+      // The engine with the DiMSum-compatible preset: the experiment fitted once, replicates
+      // combined by inverse variance, every zero count unscored.
+      const dsDesign = design;
+      const dsRun = score(fixture, dsDesign, defaultParameters(dsDesign, null, 'dimsum'));
+      const direct = fixtureCase();
+      const group = scoreDimsumGroup({ inputs: direct.inputs, outputs: direct.outputs, wtRow: direct.wtRow, substitutions: direct.substitutions, options: { random: null, samples: 0 } });
+      let differ = 0;
+      dsRun.replicates.forEach((r, j) => r.score.forEach((x, i) => {
+        const y = group.score[j][i];
+        if (!(x === y || (Number.isNaN(x) && Number.isNaN(y)))) differ += 1;
+      }));
+      const zeros = dsRun.replicates.reduce((a, r) => a + r.state.reduce((x, s, i) => x + (s === REPLICATE_STATE.NOT_ESTIMABLE && (r.first[i] === 0 || r.last[i] === 0) ? 1 : 0), 0), 0);
+      check('scoring', 'DiMSum through the engine (the DiMSum-compatible preset): the same scores as the experiment fitted directly, and every measurement with a zero count left unscored, with its reason', `${differ} replicate scores differ; ${zeros} zero-count measurements not estimable; terms ${dsRun.replicates.map((r) => `${r.name} ${r.dimsum.input.toFixed(2)}/${r.dimsum.output.toFixed(2)}`).join(', ')}`, differ === 0 && zeros > 0 && dsRun.parameters.combination === 'fixed', 'none differ');
+      const refusals = [
+        ['DiMSum on a time series', scoreExperiment({ ...engineInput(timeSeriesTable(), timeSeriesDesign()), parameters: { ...DEFAULT_PARAMETERS, model: 'dimsum' } }), /input and an output/],
+        ['DiMSum scoring each barcode', scoreExperiment({ ...engineInput(barcodeTable().table, barcodeDesign()), parameters: { ...DEFAULT_PARAMETERS, model: 'dimsum', aggregation: 'barcode' } }), /sum each variant/],
+      ];
+      for (const [what, out, pattern] of refusals) check('scoring', `refused: ${what}, with the reason`, out.ok ? 'scored anyway' : out.errors[0], !out.ok && pattern.test(out.errors.join(' ')), 'refused');
+      // A bottleneck: DiMSum's error model puts it into each variant's SE.
+      const coverage = (parameters) => QC_SEEDS.map((seed) => {
+        const sim = simulateExperiment({ seed, inputCells: 25 });
+        const t = parseTable(sim.csv);
+        const r = scoreExperiment({ names: columnText(t.columns[0]), columns: Object.fromEntries(t.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design, parameters: { ...withDefaults(parameters) } }).results;
+        const truth = new Map(sim.variants.map((v) => [v.name, v.effect]));
+        let k = 0;
+        let total = 0;
+        r.variants.original.forEach((name, i) => {
+          if (r.conditions[0].reason[i] || name === 'p.=') return;
+          total += 1;
+          if (Math.abs(r.conditions[0].score[i] - truth.get(name)) < 1.959964 * r.conditions[0].se[i]) k += 1;
+        });
+        return k / total;
+      });
+      const ds = coverage(PRESETS.dimsum.parameters);
+      const counting = coverage({ ...DEFAULT_PARAMETERS, combination: 'fixed' });
+      const reml = coverage(DEFAULT_PARAMETERS);
+      check('scoring', 'a simulated bottleneck (25 cells per variant before selection, three seeds): DiMSum\'s error model puts it into each variant\'s SE, and its 95% intervals hold the true effects', `DiMSum ${ds.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; counting alone (fixed effects) ${counting.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; counting with REML ${reml.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}`, ds.every((x, i) => x >= 0.9 && x > counting[i] && x > reml[i]), '≥ 90%, above counting\'s');
+    }
+
     // The PRD's edge cases, as planted in the fixture, under MaveScape's defaults.
     const defaults = score(fixture, design, DEFAULT_PARAMETERS);
     const names = fixture.columns.find((c) => c.name === 'hgvs_pro').values;
@@ -1188,6 +1244,24 @@ const suites = {
       const ungated = scoreExperiment({ ...engineInput(f9Table, f9Design), parameters: { ...defaultParameters(f9Design), model: 'bins-mle' } });
       check('scoring', 'factor IX: the maximum-likelihood fit is refused, as MaveDB records no gates for its bins', ungated.ok ? 'scored' : ungated.errors[0], !ungated.ok && /gates/.test(ungated.errors[0]), 'refused');
     }
+    // DiMSum on GRB2 SH3 (the data DiMSum scored for MaveDB) and on DiMSum's own demo.
+    {
+      const grb2Data = dataset('mavedb-grb2-sh3');
+      againstDimsum('GRB2 SH3', grb2Case(grb2Data), dimsumRef.cases.grb2);
+      againstDimsum('DiMSum\'s demo (TDP-43, four replicates, nucleotide variants)', demoCase(dataset('dimsum-demo')), dimsumRef.cases.demo);
+      // GRB2's published scores are DiMSum's merged fitness through a line (its growth rates),
+      // from the Domainome's own run, which fitted many domains' libraries together.
+      const gDesign = readDesign('grb2-sh3.design.json');
+      const gt = parseTable(grb2Data.bytes('counts.csv'));
+      const run = score(gt, gDesign, defaultParameters(gDesign, null, 'dimsum'));
+      const pub = parseTable(grb2Data.bytes('scores.csv'));
+      const pubRow = new Map(columnText(pub.columns.find((c) => c.name === 'hgvs_pro')).map((x, i) => [x, i]));
+      const raw = pub.columns.find((c) => c.name === 'raw_score').numeric;
+      const a = [];
+      const b = [];
+      run.variants.original.forEach((x, i) => { const j = pubRow.get(x); if (j !== undefined && !run.conditions[0].reason[i] && Number.isFinite(raw[j])) { a.push(run.conditions[0].score[i]); b.push(raw[j]); } });
+      check('scoring', 'GRB2 SH3 scored by DiMSum\'s model follows its published scores (DiMSum\'s, from the Domainome\'s run of many domains together, through a line)', `Pearson r ${pearson(a, b).toFixed(4)} over ${a.length} variants`, pearson(a, b) >= 0.99, 'r ≥ 0.99');
+    }
   },
   // Quality control (wave 1, slice 6): simulated experiments with one problem each raise exactly
   // the findings for it (the clean one none); the variance ratio follows a simulated bottleneck;
@@ -1226,6 +1300,35 @@ const suites = {
         previous = measured;
       }
       check('qc', 'variance beyond counting follows a simulated bottleneck (cells per variant into selection): measured ratio against 1 + D/(2N)', rows.join('; '), ok, 'increasing, within 30%');
+    }
+
+    // DiMSum's error model, fitted from the counts alone, says where a bottleneck is: N cells per
+    // variant before selection raise its input terms to about 1 + D/N (D reads per variant), after
+    // selection its output terms.
+    {
+      const rows = [];
+      let ok = true;
+      const med = (x) => median(Float64Array.from(x));
+      for (const [where, cells] of [['none', Infinity], ['before', 200], ['before', 50], ['before', 20], ['after', 50], ['after', 20]]) {
+        const ins = [];
+        const outs = [];
+        for (const seed of QC_SEEDS) {
+          const sim = simulateExperiment({ seed, replicateNoise: 0, ...(where === 'before' ? { inputCells: cells } : where === 'after' ? { outputCells: cells } : {}) });
+          const t = parseTable(sim.csv);
+          const q = computeQC({ names: columnText(t.columns[0]), columns: Object.fromEntries(t.columns.slice(1).map((c) => [c.name, c.numeric])), design: sim.design });
+          for (const g of q.conditions[0].errorModel) for (const x of g.terms ?? []) {
+            ins.push(x.input);
+            outs.push(x.output);
+          }
+        }
+        const predicted = 1 + 200 / cells;
+        const [mi, mo] = [med(ins), med(outs)];
+        rows.push(`${where === 'none' ? 'no bottleneck' : `${cells} cells ${where}`}: input ${mi.toFixed(2)}, output ${mo.toFixed(2)}${where === 'none' ? '' : ` (1 + D/N = ${predicted.toFixed(1)})`}`);
+        if (where === 'none' && !(mi < 1.2 && mo < 1.2)) ok = false;
+        if (where === 'before' && !(Math.abs(mi / predicted - 1) <= 0.25 && mo < 2)) ok = false;
+        if (where === 'after' && !(mo >= 0.6 * predicted && mo >= 2 * mi)) ok = false;
+      }
+      check('qc', 'DiMSum\'s error model, from the counts alone, locates a simulated bottleneck: before selection its input terms rise to about 1 + D/N, after it its output terms (three seeds, medians)', rows.join('; '), ok, 'within 25% before, the output ≥ 2× the input after');
     }
 
     // Invariance and independence.

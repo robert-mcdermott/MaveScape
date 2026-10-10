@@ -350,6 +350,8 @@ textarea.input { height: auto; padding: 7px 9px; resize: vertical; }
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
 }
 .segmented button.active { background: var(--bg-elev); color: var(--accent-text); box-shadow: var(--shadow-sm); }
+/* A group of more choices than fit a narrow pane (the Score view's presets) wraps. */
+.segmented.wrap { display: flex; flex-wrap: wrap; max-width: 100%; }
 
 .badge {
   display: inline-flex; align-items: center; gap: 3px;

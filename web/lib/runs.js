@@ -60,7 +60,7 @@ export function makeRun({ inputs, source, results, software, name, created = new
     output: {
       sha256: outputDigest(results),
       variants: results.rows,
-      replicates: results.replicates.map((r) => ({ id: r.id, normalizers: r.normalizers, synonymousMedian: r.synonymousMedian ?? null })),
+      replicates: results.replicates.map((r) => ({ id: r.id, normalizers: r.normalizers, synonymousMedian: r.synonymousMedian ?? null, ...(r.dimsum ? { dimsum: r.dimsum } : {}) })),
       conditions: results.conditions.map((c) => ({ id: c.id, name: c.name, replicates: c.replicates, scored: c.scored, flow: c.flow, rescale: c.rescale, combinedFromAll: c.combinedFromAll })),
     },
     warnings: results.warnings,
@@ -97,7 +97,13 @@ export function describeParameters(parameters, barcodes = false) {
   const f = p.filters;
   const regression = p.model === 'wls' || p.model === 'ols';
   const bins = p.model === 'bins' || p.model === 'bins-mle';
-  const parts = bins
+  const parts = p.model === 'dimsum'
+    ? [
+      `DiMSum's fitness${p.dimsumNormalise ? ', replicates scaled and shifted' : ''}, ${p.dimsumErrorModel ? 'its error model' : 'counting error'}`,
+      ...(p.dimsumDropout ? [`dropout pseudocount ${p.dimsumDropout}`] : []),
+      p.combination === 'reml' ? 'REML' : p.combination === 'fixed' ? 'fixed effects' : p.combination === 'mean' ? 'mean of replicates' : 'Enrich2\'s estimator',
+    ]
+    : bins
     ? [
       p.model === 'bins' ? `weighted bin average, ${p.binSE === 'bootstrap' ? `bootstrap SE (${p.bootstrapSamples}, seed ${p.seed})` : 'analytic SE'}` : `maximum likelihood, σ ${p.binSigma === 'wild-type' ? 'the wild type\'s' : 'per variant'}`,
       p.binScale === 'none' ? 'unscaled' : p.binScale === 'nonsense-wt' ? 'nonsense 0, wild type 1' : 'lowest 5% 0, wild type 1',
@@ -151,12 +157,19 @@ export function barcodeSentence(p, cite) {
   return `Each barcode was scored on its own, against its replicate's normalizers from the summed counts (as dms_variants' func_scores by barcode, ${cite.dmsVariants}), and a variant's barcodes were combined within each replicate by ${BARCODE_COMBINATIONS[p.barcodeCombination]}${p.barcodeCombination === 'reml' ? ', the variance between barcodes estimated as between replicates' : ''}.${outliers}${minimum}`;
 }
 
+// DiMSum's method in a sentence or two (also the methods paragraph's).
+export function dimsumSentence(p, cite) {
+  const fitted = p.dimsumErrorModel ? ` Each replicate's SE is DiMSum's error model, σ² = a·(m_in/N_in + m_out/N_out) + e, with a multiplicative term m ≥ 1 for each input and output and an additive term e ≥ 10⁻⁴ per replicate, fitted by weighted least squares to the variance of each variant's normalised fitness over every subset of two or more replicates (on every variant at once; 10th–90th percentiles from ${p.bootstrapSamples} bootstrap samples, seed ${p.seed}), where DiMSum takes the mean of 100 bootstrap fits.` : ' Each replicate\'s SE is the square root of the four reciprocal counts.';
+  return `Scores are DiMSum's fitness (${cite}): the natural-log ratio of each variant's counts after to before selection less the wild type's, with no pseudocount, so that a zero count gives no score${p.dimsumDropout ? `, but for outputs of 0 raised by a dropout pseudocount of ${p.dimsumDropout}` : ''}.${p.dimsumNormalise ? ' Each replicate was scaled and shifted to agree with the others (minimising the sum over variants of the distance between the replicates\' fitness and their mean, the first replicate\'s scale 1), the wild type then 0.' : ''}${fitted}`;
+}
+
 // The run's method in sentences (the methods paragraph of slice 8 builds on it).
 export function describeMethod(run) {
   const p = withDefaults(run.inputs.parameters);
   const design = run.inputs.design;
   const lines = [];
-  if (p.model === 'ratio') lines.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; each replicate's SE is the square root of the sum of the reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'} (Rubin et al. 2017).`);
+  if (p.model === 'dimsum') lines.push(dimsumSentence(p, 'Faure et al. 2020'));
+  else if (p.model === 'ratio') lines.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; each replicate's SE is the square root of the sum of the reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'} (Rubin et al. 2017).`);
   else if (p.model === 'wls' || p.model === 'ols') lines.push(regressionSentence(p, 'Rubin et al. 2017'));
   else lines.push(binSentence(p, { average: 'Matreyek et al. 2018', mle: 'Peterman and Levine 2016' }));
   if (design.library?.level === 'barcode') lines.push(barcodeSentence(p, { enrich2: 'Rubin et al. 2017', dmsVariants: 'the Bloom lab\'s dms_variants' }));

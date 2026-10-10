@@ -57,8 +57,12 @@ export function mountScoreMode(app, container) {
   }
   // The preset parameters match, whatever the model, normalization and handling of barcodes (each
   // preset keeps them).
-  const kept = (p) => ({ model: p.model, normalization: p.normalization, aggregation: p.aggregation, barcodeCombination: p.barcodeCombination });
-  const presetOf = (p) => Object.entries(PRESETS).find(([, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, ...kept(p) })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
+  // (DiMSum's preset sets its model; the others keep the model, leaving DiMSum's for the ratio.)
+  const kept = (p, preset) => ({
+    ...(preset.parameters.model === 'dimsum' ? {} : { model: p.model === 'dimsum' ? 'ratio' : p.model }),
+    normalization: p.normalization, aggregation: p.aggregation, barcodeCombination: p.barcodeCombination,
+  });
+  const presetOf = (p) => Object.entries(PRESETS).find(([, preset]) => canonicalJSON(withDefaults({ ...preset.parameters, ...kept(p, preset) })) === canonicalJSON(withDefaults(p)))?.[0] ?? null;
 
   // --- Readiness ------------------------------------------------------------------------------
   function readiness() {
@@ -167,7 +171,7 @@ export function mountScoreMode(app, container) {
       bins ? h('div.field', h('span', 'Barcodes'), h('span', 'Summed per variant, then scored'))
         : select('Barcodes', p.aggregation, Object.entries(AGGREGATIONS).map(([k, v]) => [k, sentence(v)]), (v) => setDraft({ aggregation: v })),
       !bins && p.aggregation === 'barcode' ? select('A variant\'s barcodes combined by', p.barcodeCombination, Object.entries(BARCODE_COMBINATIONS).map(([k, v]) => [k, sentence(v)]), (v) => setDraft({ barcodeCombination: v })) : null) : null;
-    const title = (id) => (id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios", "WLS" and "OLS": no count filter, every time point required, SEs scaled by the residuals alone, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : id === 'vampseq' ? 'Matreyek et al. 2018: the weighted average scaled to nonsense 0 and wild type 1, a summed bin frequency of at least 10^-4.75, two or more replicates, their mean with SE = SD/√k' : 'Variants with no input reads left out; a regression\'s SE never below counting\'s; REML random effects to convergence');
+    const title = (id) => (id === 'dimsum' ? 'DiMSum 1.4: its fitness (no pseudocount), each replicate scaled and shifted to agree with the others, its error model (multiplicative input and output terms, an additive term), no count filter, replicates combined by inverse variance' : id === 'enrich2' ? 'Enrich2 2.0.2\'s "ratios", "WLS" and "OLS": no count filter, every time point required, SEs scaled by the residuals alone, variants combined only when scored in every replicate, its random-effects estimator (50 iterations)' : id === 'vampseq' ? 'Matreyek et al. 2018: the weighted average scaled to nonsense 0 and wild type 1, a summed bin frequency of at least 10^-4.75, two or more replicates, their mean with SE = SD/√k' : 'Variants with no input reads left out; a regression\'s SE never below counting\'s; REML random effects to convergence');
     if (bins) {
       return h('div.pane', h('h3', icon('settings'), 'Parameters'),
         h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
@@ -191,18 +195,23 @@ export function mountScoreMode(app, container) {
           : 'Scores are the mean μ of each variant\'s log fluorescence, fitted by maximum likelihood to its distribution over the gated bins (Peterman and Levine 2016); its reads are reweighted by the cells sorted into each bin when the design records them.'));
     }
     return h('div.pane', h('h3', icon('settings'), 'Parameters'),
-      h('div.field', h('span', 'Start from'), h('div.segmented', { role: 'group', 'aria-label': 'Preset' },
-        ...Object.entries(PRESETS).filter(([id]) => id !== 'vampseq').map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...x.parameters, ...kept(p) }) }, x.label))),
+      h('div.field', h('span', 'Start from'), h('div.segmented.wrap', { role: 'group', 'aria-label': 'Preset' },
+        ...Object.entries(PRESETS).filter(([id]) => id !== 'vampseq' && (id !== 'dimsum' || designModel === 'two-population')).map(([id, x]) => h(`button${preset === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': preset === id ? 'true' : 'false', title: title(id), onclick: () => replaceDraft({ ...x.parameters, ...kept(p, x) }) }, x.label))),
         preset ? null : h('span.muted', { style: { fontSize: '11.5px' } }, 'Custom parameters')),
       barcodes,
       designModel === 'time-series' ? select('Scored by', p.model, options(['ratio', 'wls', 'ols']), (v) => setDraft({ model: v })) : null,
+      designModel === 'two-population' ? select('Scored by', p.model, [['ratio', 'Log ratio, counting error'], ['dimsum', 'DiMSum\'s fitness and error model']], (v) => setDraft({ model: v })) : null,
       p.model === 'wls' || p.model === 'ols' ? select('Standard error of a slope', p.regressionSE, Object.entries(REGRESSION_SE).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ regressionSE: v })) : null,
-      select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v })),
+      p.model === 'dimsum' ? h('div.field', h('span', 'DiMSum'),
+        h('label.check', h('input', { type: 'checkbox', checked: p.dimsumNormalise, onchange: (e) => setDraft({ dimsumNormalise: e.target.checked }) }), 'Scale and shift each replicate to agree with the others'),
+        h('label.check', h('input', { type: 'checkbox', checked: p.dimsumErrorModel, onchange: (e) => setDraft({ dimsumErrorModel: e.target.checked }) }), 'Error model: multiplicative input and output terms, an additive term')) : select('Normalization', p.normalization, Object.entries(NORMALIZATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ normalization: v })),
       h('div.form-grid',
-        number('Pseudocount', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }),
+        p.model === 'dimsum' ? number('Dropout pseudocount (outputs of 0)', p.dimsumDropout, (v) => setDraft({ dimsumDropout: v ?? 0 }), { min: 0, step: 1 }) : number('Pseudocount', p.pseudocount, (v) => setDraft({ pseudocount: v ?? 0.5 }), { min: 0, step: 0.1 }),
         select('Replicates combined by', p.combination, Object.entries(COMBINATIONS).map(([k, v]) => [k, v[0].toUpperCase() + v.slice(1)]), (v) => setDraft({ combination: v }, v === 'enrich2' ? { minReplicates: 'all' } : null))),
       select('Rescaling', p.rescale, Object.entries(RESCALINGS).map(([k, v]) => [k, v.label[0].toUpperCase() + v.label.slice(1)]), (v) => setDraft({ rescale: v })),
-      h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, p.model === 'ratio'
+      h('p.muted', { style: { fontSize: '11.5px', margin: '2px 0 0' } }, p.model === 'dimsum'
+        ? 'Scores are DiMSum\'s fitness (Faure et al. 2020): natural-log ratios less the wild type\'s, with no pseudocount (a zero count gives no score). The replicates of each experiment are fitted together: their scales and shifts, and the error model whose terms say how much variance there is beyond counting, and where.'
+        : p.model === 'ratio'
         ? 'Scores are natural-log ratios of frequencies after and before selection; technical replicates are summed first, biological replicates scored separately and then combined.'
         : `Scores are the slopes of each variant's normalized log count on time scaled to 0–1, by ${p.model === 'wls' ? 'weighted (each point by its counting precision, as Enrich2)' : 'ordinary'} least squares; technical replicates are summed first, biological replicates scored separately and then combined.`,
       barcodes ? (p.aggregation === 'sum' ? ' A variant\'s barcodes are summed in each sample first (as Enrich2, and dms_variants by substitution).' : ' Each barcode is scored against its replicate\'s normalizers (as dms_variants by barcode), and a variant\'s barcodes are combined within the replicate, their disagreement in its SE.') : null));
@@ -223,7 +232,7 @@ export function mountScoreMode(app, container) {
     return h('div.pane', h('h3', icon('filter'), 'Filters, in order'),
       h('ol.filter-bar',
         binned ? stage(1, 'Counted in every bin of a replicate', null, true)
-          : p.model === 'ratio' ? stage(1, 'Counted in every sample of a replicate', null, true)
+          : p.model === 'ratio' || p.model === 'dimsum' ? stage(1, 'Counted in every sample of a replicate', null, true)
           : stage(1, 'Counted at the first time point and enough others', h('div.btn-row',
             f.minTimePoints === 'all' ? h('span', 'Every time point') : number('Minimum time points', f.minTimePoints, (v) => setDraft({}, { minTimePoints: Math.max(3, Math.round(v ?? 3)) }), { min: 3, step: 1 }),
             h('label', { style: { fontSize: '12px' } }, h('input', { type: 'checkbox', checked: f.minTimePoints === 'all', onchange: (e) => setDraft({}, { minTimePoints: e.target.checked ? 'all' : 3 }) }), ' all'))),
@@ -299,6 +308,7 @@ export function mountScoreMode(app, container) {
 
   function replicatesTable(results, c, p) {
     const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
+    if (reps.some((r) => r.dimsum)) return dimsumTable(results, reps);
     return h('table.data', h('thead', h('tr', h('th', 'Replicate'), h('th', 'Samples'), h('th.r', p.normalization === 'synonymous' ? 'Synonymous median' : 'Normalizers (first, last)'), h('th.r', 'Used'), h('th.r', 'Median SE'))),
       h('tbody', ...reps.map((r) => {
         let used = 0;
@@ -312,6 +322,23 @@ export function mountScoreMode(app, container) {
           h('td.r', p.normalization === 'synonymous' ? fmt(r.synonymousMedian) : `${formatCount(Math.round(r.normalizers[0]))}, ${formatCount(Math.round(r.normalizers[1]))}`),
           h('td.r', formatCount(used)), h('td.r', fmt(median(ses))));
       })));
+  }
+
+  // DiMSum's model of each replicate: its scale and shift, its multiplicative input and output terms
+  // and additive term (as an SD), with the bootstrap's 10th–90th percentiles.
+  function dimsumTable(results, reps) {
+    const range = (x, iv, d = 2) => (x === null ? '—' : h('span', fmt(x, d), iv ? h('span.muted', { style: { fontSize: '11px' } }, ` (${fmt(iv[0], d)}–${fmt(iv[1], d)})`) : null));
+    const fit = results.dimsum?.[reps[0].dimsum.fit];
+    return h('div',
+      h('table.data', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Scale'), h('th.r', 'Shift'), h('th.r', h('abbr', { title: 'Multiplicative error term of the input: 1 is counting alone' }, 'Input m')), h('th.r', h('abbr', { title: 'Multiplicative error term of the output' }, 'Output m')), h('th.r', h('abbr', { title: 'Additive error term, as an SD (√e)' }, 'Additive SD')), h('th.r', 'Used'))),
+        h('tbody', ...reps.map((r) => {
+          const d = r.dimsum;
+          let used = 0;
+          for (let i = 0; i < results.rows; i += 1) if (r.state[i] === 0) used += 1;
+          return h('tr', h('td', r.name), h('td.r', fmt(d.scale, 3)), h('td.r', fmt(d.shift, 3)), h('td.r', range(d.input, d.intervals?.input)), h('td.r', range(d.output, d.intervals?.output)),
+            h('td.r', d.reperror === null ? '—' : range(Math.sqrt(d.reperror), d.intervals ? d.intervals.reperror.map(Math.sqrt) : null, 3)), h('td.r', formatCount(used)));
+        }))),
+      h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, fit ? `Fitted on ${formatCount(fit.variants)} variants counted in every sample above ${fmt(fit.threshold, 1)} input reads${fit.bootstrap ? `; in brackets the 10th–90th percentiles of ${fit.bootstrap} bootstrap fits` : ''}. A multiplicative term m means about m − 1 reads per molecule beyond counting at that step (a bottleneck); the additive term is variation between replicates.` : ''));
   }
 
   function status(c, i) {
@@ -407,7 +434,7 @@ export function mountScoreMode(app, container) {
         h('div.pane', h('h3', icon('filter'), 'Filter flow'), tabs, flowView(c),
           h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, `${formatCount(c.scored)} scored${lowConfidence ? `, ${formatCount(lowConfidence)} with low confidence` : ''}; NA for the rest, each with its stage.${c.rescale ? ` Rescaled: ${c.rescale.anchors.map((a) => `${a.what} ${fmt(a.from)} → ${a.to}`).join(', ')}.` : ''}`)),
         h('div.pane', h('h3', icon('histogram'), 'Scores by class'), histogram(c, results))),
-      h('div.pane', h('h3', icon('experiment'), 'Replicates'), replicatesTable(results, c, p)),
+      h('div.pane.replicates-pane', h('h3', icon('experiment'), 'Replicates'), replicatesTable(results, c, p)),
       h('div.pane', h('h3', icon('table'), 'Variants'), variantsTable(results, c, run))];
   }
 

@@ -243,6 +243,14 @@ export function mountQcMode(app, container) {
           out.push(legend([...pairs.map((p, i) => ({ label: `${p.a} · ${p.b}: ${fmt(p.ratio, 1)}× (a ${fmt(p.multiplier, 1)}, e ${fmt(p.additive, 3)})`, color: categoricalColor(i) })), { label: 'counting alone', color: cssVar('--text-3'), dash: true }]));
           out.push(h('p.muted.plot-note', 'Each point is a bin of variants by their expected counting variance (the reciprocal counts of both replicates). Points on the dashed line: counting noise alone. Points parallel above it: a bottleneck (variance a× counting). Points bending up where counting variance is small: noise between replicates (e).'));
         }
+        // DiMSum's error model (two populations): where the excess is, input or output.
+        const models = qc.conditions.flatMap((c) => c.errorModel ?? []);
+        const terms = models.flatMap((g) => g.terms ?? []);
+        if (terms.length) {
+          out.push(h('h4', 'DiMSum\'s error model'),
+            barChart({ items: terms.flatMap((x) => [{ label: `${x.name}, input`, value: x.input, status: x.input > t.excessVariance.fail ? 'fail' : x.input > t.excessVariance.review ? 'review' : '' }, { label: `${x.name}, output`, value: x.output, status: x.output > t.excessVariance.fail ? 'fail' : x.output > t.excessVariance.review ? 'review' : '' }]), log: true, lines: [{ value: 1, kind: 'reference' }], label: 'DiMSum\'s multiplicative error terms of each input and output (log scale; 1 is counting alone)', format: (v) => `${fmt(v, 1)}×` }),
+            h('p.muted.plot-note', `Fitted from the counts alone on ${models.map((g) => `${formatCount(g.variants)} variants`).join(', ')} counted in every sample (Faure et al. 2020). A term m means about m − 1 reads per molecule beyond counting at that step: before selection (transformation, the cells carried into it) or after it (the cells recovered, the DNA extracted). Additive SDs: ${terms.map((x) => `${x.name} ${fmt(Math.sqrt(x.reperror), 3)}`).join(', ')}. Score with DiMSum's error model (Score, Scored by) to carry them into each variant's SE.`));
+        } else if (models.some((g) => g.reason)) out.push(h('p.muted.plot-note', `DiMSum's error model: not fitted (${models.find((g) => g.reason).reason})`));
         if (syn.length) out.push(h('table.data', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Synonymous variants'), h('th.r', 'Observed variance'), h('th.r', 'Counting'), h('th.r', 'Ratio'))), h('tbody', ...syn.map((x) => h('tr', h('td', x.id), h('td.r', String(x.n)), h('td.r', fmt(x.observed, 4)), h('td.r', fmt(x.expected, 4)), h('td.r', `${fmt(x.ratio, 1)}×`))))));
         return out.length ? out : [h('p.muted', 'Needs two replicates or synonymous variants.')];
       }

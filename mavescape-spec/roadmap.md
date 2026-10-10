@@ -574,12 +574,60 @@ runs and the performance targets.
        empty), and its wild-type normalizer is the codon-identical barcodes (without
        `syn_as_wt`). MaveScape names synonymous variants by their codons (`p.Ala2=`), so the wild
        type's barcodes, and every other substitution, compare exactly; the empty group does not.
-5. **DiMSum's error model (S9, Q4).** `web/lib/score-dimsum.js`: DiMSum fitness with its
-   dropout pseudocount and count filters, per-replicate scale and shift, the multiplicative and
-   additive error terms, inverse-variance merging. Its multiplicative terms feed the bottleneck
-   finding ("about m-fold more variance than counting alone").
-   - Validation: exact against DiMSum 1.4's own functions with fixed parameters; the fitted
-     parameters loosely against a full DiMSum run (`numCores = 1`).
+5. **DiMSum's error model (S9, Q4): done.** `web/lib/score-dimsum.js`: DiMSum 1.4's fitness (no
+   pseudocount, a zero count no estimate; the dropout pseudocount for outputs of 0), its input
+   threshold (R's type-7 quantile), each replicate's scale and shift (DiMSum's sum of distances to
+   the replicates' mean, minimised by BFGS with its gradient where DiMSum uses `nlm`), the error
+   model σ² = a(m_in/N_in + m_out/N_out) + e over every subset of two or more replicates with
+   DiMSum's weights, and σ without it. The model is linear in its terms, so it is fitted exactly
+   on every variant by bounded least squares (Lawson and Hanson's active set) where DiMSum averages
+   100 `nls` fits of bootstrap samples; a seeded bootstrap gives the 10th–90th percentiles.
+   `score.js`: the model `dimsum` (two populations only; refused for barcodes scored one by one),
+   `dimsumNormalise`, `dimsumErrorModel`, `dimsumDropout`, a DiMSum-compatible preset (fixed
+   effects, no input-count filter), refusals with reasons (no wild-type reads; fewer than 30
+   variants per replicate to fit), and each replicate's fitted model in the results and the run
+   record. QC (Q4): "Variance beyond counting" fits the model to the counts alone and says where
+   the excess is, input or output, with a plot of the terms. The Score view's *Scored by*, DiMSum's
+   switches and the replicates' table of scales, shifts and terms with their percentiles; the
+   methods give the fitted values; remote control's `score` returns them. The GRB2 example's
+   guide scores with the preset; two screenshot scenes; the site's scoring, QC, examples,
+   getting-started, scripting and science pages; FORMATS.md.
+   - Validation (suite `scoring`, 18 more checks, 129 in all): `reference/generate_dimsum.R`
+     sources DiMSum 1.4's own functions (from its release, by checksum) and records, for GRB2,
+     DiMSum's demo (TDP-43, four replicates, every 8th row) and a fixture with zero counts and
+     dropouts planted (also with a dropout pseudocount of 1): the threshold, the variants fitted,
+     `nlm`'s scales and shifts, the error model fitted by DiMSum's `nls` on every variant and its
+     100 bootstrap fits, and `dimsum__calculate_fitness` and its merge given those parameters.
+     MaveScape: the threshold within 1.5 × 10⁻¹⁶, the same variants (193, 602, 378), the scales
+     and shifts within 4.5 × 10⁻⁷ (2.6 × 10⁻⁴ on the fixture, where `nlm` stopped early) at a
+     minimum never above `nlm`'s, the error model within 4.3 × 10⁻⁶ of DiMSum's fit and inside its
+     percentiles, every fitness and σ within 8 × 10⁻¹³ and the merge within 6 × 10⁻¹³. GRB2 follows
+     its published scores (r = 0.994). On a simulated bottleneck (25 cells per variant, three
+     seeds), DiMSum's 95% intervals hold the truth 93–96% of the time, counting alone with fixed
+     effects 67–69%, with REML 87–88%. The engine equals the group fitted directly; refusals.
+     Suite `qc` (1 more, 27): the terms locate simulated bottlenecks, input terms near 1 + D/N
+     before selection (1.7, 5.1, 10.4 against 2, 5, 11) and output terms after it.
+     `remote-session.mjs` 1 more (64): the DiMSum preset in the window with Node's hash and terms.
+     6 more unit tests (167).
+   - Found by slice 5:
+     - **DiMSum's threshold sits on a count.** It is often a ratio of counts: exp(−log(1/112)) is
+       112 within a unit of its last bit, below 112 in R and above it in JavaScript, so variants
+       with exactly 112 input reads were fitted by one and not the other, moving the scales by
+       0.2%. A count within 10⁻¹² of the threshold counts as above it, the same everywhere.
+     - **`nlm` can stop short.** On the fixture it stopped with code 3 (no lower point found) at
+       22.67239435957; the minimum is 22.67239435541 (MaveScape's BFGS, and R's Nelder–Mead from
+       there). The check is that MaveScape's minimum is never above `nlm`'s. The sum of distances
+       has kinks where its gradient never vanishes, so BFGS stops after five iterations without a
+       change (it ran its 2,000 before, and QC took 13 s for 3).
+     - **The error model has one answer.** It is linear in its terms with lower bounds, so its
+       least-squares fit is unique; DiMSum's mean of 100 bootstrap fits from random starts
+       differs from it by the bootstrap's noise, while DiMSum's own `nls` on every variant equals
+       it to 4 × 10⁻⁶.
+     - **DiMSum's "90% interval" is the 10th–90th percentiles** of its bootstrap fits, an 80%
+       interval; MaveScape names them as what they are.
+     - **A bottleneck shared by every replicate is missed by REML in part.** Its τ² sees only
+       the disagreement between replicates, not the noise they share through counting too few
+       cells; DiMSum's multiplicative terms put it into each replicate's SE.
 6. **Two conditions (S10, E2).** Conditions in the design; per-condition runs; differential
    scores with a shared-input model (the naive SE overstates uncertainty when the input is
    shared), and limma contrasts (from CytoWeave's `limma.js`) as mutscan computes them.

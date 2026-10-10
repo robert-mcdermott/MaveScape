@@ -10,7 +10,9 @@
 //       counts, or its barcodes' scores combined
 //     ─ per biological replicate: normalizers, and log ratios (score-ratio.js) or the slope of a
 //       regression on time (score-regression.js); or for sorted bins, the weighted average of the
-//       bins' values or the maximum-likelihood fit, scaled (score-bins.js); and whether each
+//       bins' values or the maximum-likelihood fit, scaled (score-bins.js); or DiMSum's fitness,
+//       its replicates' scales and shifts and its error model, fitted per experiment
+//       (score-dimsum.js); and whether each
 //       variant's measurement is used (filters.js: counted, time points, counts, bin frequency)
 //     ─ per condition: variant-level stages (identifier, class, exclusions, usable replicates),
 //       the replicates combined (replicates.js) with heterogeneity and leave-one-out sensitivity
@@ -27,6 +29,7 @@ import { MODELS as TIME_MODELS, REGRESSION_SE, regressionScores } from './score-
 import { BIN_SCALES, BIN_SE, BIN_SIGMA, binAverages, binMLEScores, binTotals, scaleAnchors } from './score-bins.js';
 import { AGGREGATIONS, BARCODE_COMBINATIONS, OUTLIER_Z, barcodeDisagreement, barcodeProblems, combineBarcodes, groupBarcodes, sumByVariant } from './score-barcodes.js';
 import { createRandom } from './random.js';
+import { scoreDimsumGroup, substitutionsOf } from './score-dimsum.js';
 import { combine, COMBINATIONS, heterogeneity, leaveOneOut, sampleCounts } from './replicates.js';
 import {
   checkFilters, DEFAULT_FILTERS, FLAG, filterFlow, kindCodes, REPLICATE_STATE, replicateState, STAGE_BY_ID, variantStage,
@@ -43,10 +46,12 @@ export const RESCALINGS = {
   'synonymous-nonsense': { label: 'synonymous median 0, nonsense median −1', anchors: [['synonymous', 0], ['nonsense', -1]] },
 };
 
-// How a run scores: the ratio or a regression on time (two populations, time series), or sorted
-// bins' weighted average or maximum-likelihood fit.
+// How a run scores: the ratio or a regression on time (two populations, time series), DiMSum's
+// fitness and error model (two populations), or sorted bins' weighted average or
+// maximum-likelihood fit.
 export const MODELS = {
   ...TIME_MODELS,
+  dimsum: 'DiMSum\'s fitness and error model',
   bins: 'weighted average of the bins\' values',
   'bins-mle': 'maximum likelihood (censored log-normal, from the gates)',
 };
@@ -64,6 +69,9 @@ export const DEFAULT_PARAMETERS = {
   seed: 20261009,
   aggregation: 'sum',
   barcodeCombination: 'reml',
+  dimsumNormalise: true,
+  dimsumErrorModel: true,
+  dimsumDropout: 0,
   combination: 'reml',
   rescale: 'none',
   filters: DEFAULT_FILTERS,
@@ -81,6 +89,12 @@ export const PRESETS = {
   enrich2: {
     label: 'Enrich2-compatible',
     parameters: { ...DEFAULT_PARAMETERS, regressionSE: 'residual', combination: 'enrich2', filters: { ...DEFAULT_FILTERS, minInputCount: 0, minTimePoints: 'all', minReplicates: 'all' } },
+  },
+  // DiMSum 1.4's defaults: its fitness (no pseudocount) with its replicates' scales and shifts and
+  // its error model, no count filter, replicates combined by inverse variance.
+  dimsum: {
+    label: 'DiMSum-compatible',
+    parameters: { ...DEFAULT_PARAMETERS, model: 'dimsum', combination: 'fixed', filters: { ...DEFAULT_FILTERS, minInputCount: 0 } },
   },
   vampseq: {
     label: 'VAMP-seq',
@@ -101,7 +115,7 @@ export function defaultParameters(design, source = null, preset = 'mavescape') {
     const base = PRESETS[preset].bins ? PRESETS[preset].parameters : { ...PRESETS[preset].parameters, model: 'bins' };
     return withDefaults({ ...base, binScale: base.binScale === 'nonsense-wt' && !hasNonsense ? 'low5-wt' : base.binScale });
   }
-  const model = design?.model === 'time-series' && design.replicates?.length && design.replicates.every((r) => orderedSlots(r).length >= 3) ? 'wls' : 'ratio';
+  const model = PRESETS[preset].parameters.model === 'dimsum' && design?.model === 'two-population' ? 'dimsum' : design?.model === 'time-series' && design.replicates?.length && design.replicates.every((r) => orderedSlots(r).length >= 3) ? 'wls' : 'ratio';
   return withDefaults({ ...PRESETS[preset].parameters, model, normalization: hasWildType ? 'wt' : 'complete' });
 }
 
@@ -124,6 +138,8 @@ export function checkParameters(parameters, design) {
   if (!AGGREGATIONS[p.aggregation]) errors.push(`Unknown aggregation of barcodes "${p.aggregation}".`);
   if (!BARCODE_COMBINATIONS[p.barcodeCombination]) errors.push(`Unknown combination of barcodes "${p.barcodeCombination}".`);
   if (!(Number.isFinite(p.pseudocount) && p.pseudocount >= 0)) errors.push('The pseudocount must be a number of 0 or more.');
+  if (!(Number.isFinite(p.dimsumDropout) && p.dimsumDropout >= 0)) errors.push('DiMSum\'s dropout pseudocount must be a number of 0 or more.');
+  if (typeof p.dimsumNormalise !== 'boolean' || typeof p.dimsumErrorModel !== 'boolean') errors.push('DiMSum\'s normalisation and error model are on or off (true or false).');
   if (!COMBINATIONS[p.combination]) errors.push(`Unknown combination "${p.combination}".`);
   if (!RESCALINGS[p.rescale]) errors.push(`Unknown rescaling "${p.rescale}".`);
   errors.push(...checkFilters(p.filters));
@@ -145,13 +161,17 @@ export function checkParameters(parameters, design) {
       }
     }
     if (design.model === 'scores') errors.push('This design holds precomputed scores: there are no counts to score.');
+    if (p.model === 'dimsum') {
+      if (design.model !== 'two-population') errors.push(`DiMSum scores an input and an output; this design is ${design.model === 'time-series' ? 'a time series: score it by regression, or by the log ratio of its first and last samples' : `of kind "${design.model}"`}.`);
+      if (p.aggregation === 'barcode') errors.push('DiMSum scores variants: sum each variant\'s barcodes first.');
+    }
     const barcodes = design.library?.level === 'barcode';
     if (p.aggregation === 'barcode' && !barcodes) errors.push('Scoring each barcode needs a table of barcodes; this table\'s rows are variants: sum (there is nothing to sum) or describe the barcodes in the Experiment view.');
     if (p.aggregation === 'barcode' && design.model === 'bins') errors.push('Sorted bins are scored from each variant\'s barcodes summed: a barcode\'s few cells spread over the bins give no estimate of their own. Choose "sum, then score".');
     if (p.filters.maxBarcodeZ !== null && barcodes && design.model === 'bins') errors.push('The barcode filter compares barcodes\' scores, and sorted bins score variants only: set no maximum departure.');
     if (p.combination === 'enrich2' && p.filters.minReplicates !== 'all') errors.push('Enrich2\'s estimator combines only variants scored in every replicate: set the minimum usable replicates to "all", or choose another combination.');
   }
-  if (p.pseudocount === 0) errors.push('A pseudocount of 0 leaves every variant with a zero count unscorable (log 0); use a positive pseudocount.');
+  if (p.pseudocount === 0 && p.model !== 'dimsum') errors.push('A pseudocount of 0 leaves every variant with a zero count unscorable (log 0); use a positive pseudocount.');
   return { errors, warnings: [] };
 }
 
@@ -329,6 +349,96 @@ function barcodeVariantStates(groups, barcodeState, measured, minimum) {
   return state;
 }
 
+// DiMSum (score-dimsum.js): the replicates of each experiment (a condition and a tile) scored
+// together, their scales and shifts and the error model fitted on them, on the measurements the
+// count filters keep. Returns { entries: Map(replicate id → entry), fits: [{ replicates,
+// condition, tile, threshold, variants, bootstrap, normalised, errorModel }] }.
+function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info }) {
+  const f = p.filters;
+  const groups = new Map();
+  for (const r of design.replicates) {
+    const key = `${r.condition ?? ''}\u0001${r.tile ?? ''}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  if (controls.wt < 0) throw new Refused([controls.wtProblem ?? 'DiMSum normalises to the wild type, and the table has none: name the wild type in the design\'s controls.']);
+  // Variants with names that cannot be read are scored but not fitted.
+  const substitutions = variants.key.map((k, i) => (variants.status[i] === STATUS.INVALID ? -1 : substitutionsOf(k)));
+  const entries = new Map();
+  const fits = [];
+  let index = 0;
+  for (const reps of groups.values()) {
+    index += 1;
+    const label = reps.length === design.replicates.length ? 'the experiment' : `replicates ${reps.map((r) => r.name ?? r.id).join(', ')}`;
+    const raw = [];
+    const inputs = [];
+    const outputs = [];
+    const states = [];
+    for (const r of reps) {
+      const slots = orderedSlots(r);
+      const inp = pooled.get(slots[0].sample);
+      const out = pooled.get(slots[slots.length - 1].sample);
+      const state = new Uint8Array(n);
+      const mi = new Float64Array(n);
+      const mo = new Float64Array(n);
+      for (let i = 0; i < n; i += 1) {
+        const counted = !Number.isNaN(inp[i]) && !Number.isNaN(out[i]);
+        state[i] = replicateState(counted ? 1 : 0, inp[i], inp[i] + out[i], f);
+        const use = state[i] === REPLICATE_STATE.USED;
+        mi[i] = use ? inp[i] : Number.NaN;
+        mo[i] = use ? out[i] : Number.NaN;
+      }
+      raw.push({ r, inp, out, slots });
+      inputs.push(mi);
+      outputs.push(mo);
+      states.push(state);
+    }
+    const fitted = p.dimsumErrorModel && reps.length >= 2;
+    const res = scoreDimsumGroup({ inputs, outputs, wtRow: controls.wt, substitutions, options: { dropoutPseudocount: p.dimsumDropout, normalise: p.dimsumNormalise, errorModel: p.dimsumErrorModel, random: fitted ? createRandom(p.seed + 7919 * index) : null, samples: fitted ? p.bootstrapSamples : 0 } });
+    if (res.refused) throw new Refused([`DiMSum, ${label}: ${res.refused}`]);
+    const m = res.model;
+    if (reps.length < 2) info.push(`DiMSum's scales, shifts and error model need two replicates or more; ${label} has one, scored with the counting error alone.`);
+    const negative = m.scale.map((a, k) => (a < 0 ? reps[k].name ?? reps[k].id : null)).filter(Boolean);
+    if (negative.length) warnings.push({ code: 'dimsum-negative-scale', message: `DiMSum's normalisation turns ${negative.join(', ')} upside down (a negative scale): are an input and an output swapped in the design?` });
+    fits.push({ replicates: reps.map((r) => r.id), condition: reps[0].condition ?? null, tile: reps[0].tile ?? null, threshold: m.threshold, variants: m.variants, bootstrap: m.bootstrap, normalised: m.normalised, errorModel: m.input !== null });
+    raw.forEach(({ r, inp, out, slots }, k) => {
+      const state = states[k];
+      for (let i = 0; i < n; i += 1) if (state[i] === REPLICATE_STATE.USED && Number.isNaN(res.score[k][i])) state[i] = REPLICATE_STATE.NOT_ESTIMABLE;
+      const pick = (x) => (x ? x[k] : null);
+      entries.set(r.id, {
+        id: r.id,
+        name: r.name ?? r.id,
+        biological: r.biological,
+        condition: r.condition ?? null,
+        tile: r.tile ?? null,
+        samples: slots.map((s) => s.sample),
+        times: slots.map((s) => s.time),
+        normalizers: [inp[controls.wt], out[controls.wt]],
+        synonymousMedian: undefined,
+        first: inp,
+        last: out,
+        score: res.score[k],
+        se: res.se[k],
+        state,
+        points: null,
+        fit: null,
+        // DiMSum's model of the replicate: its scale and shift, its input and output multiplicative
+        // error terms and additive term, with their bootstrap 10th–90th percentiles.
+        dimsum: {
+          fit: fits.length - 1,
+          scale: m.scale[k],
+          shift: m.shift[k],
+          input: pick(m.input),
+          output: pick(m.output),
+          reperror: pick(m.reperror),
+          intervals: m.intervals ? { input: [m.intervals.lower.input[k], m.intervals.upper.input[k]], output: [m.intervals.lower.output[k], m.intervals.upper.output[k]], reperror: [m.intervals.lower.reperror[k], m.intervals.upper.reperror[k]] } : null,
+        },
+      });
+    });
+  }
+  return { entries, fits };
+}
+
 class Refused extends Error {
   constructor(errors) {
     super(errors.join(' '));
@@ -399,8 +509,17 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   const sorted = BIN_MODELS.has(p.model);
   const synonymousRow = new Uint8Array(n);
   for (const i of controls.synonymous) synonymousRow[i] = 1;
+  // DiMSum: the replicates of each experiment fitted together, first.
+  if (p.model === 'dimsum') onProgress(0.05, 'Fitting DiMSum\'s error model');
+  const dimsum = p.model === 'dimsum' ? scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info }) : null;
   design.replicates.forEach((replicate, index) => {
     onProgress((index / design.replicates.length) * 0.6, `Scoring ${replicate.name ?? replicate.id}`);
+    if (dimsum) {
+      const entry = dimsum.entries.get(replicate.id);
+      replicates.push(entry);
+      repById.set(replicate.id, entry);
+      return;
+    }
     if (sorted) {
       const entry = scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings });
       if (groups) {
@@ -755,6 +874,8 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     // A barcode table: each barcode's identifier and variant (−1: none), the barcodes of each
     // variant (members, from offsets[i] to offsets[i + 1]), and those that name no variant.
     barcodes: groups ? { rows: groups.rows, ids: barcodes, variantOf: groups.variantOf, offsets: groups.offsets, members: groups.members, unmapped: groups.unmapped } : null,
+    // DiMSum: each experiment's fit (its input threshold, the variants fitted, the bootstrap).
+    dimsum: dimsum ? dimsum.fits : null,
     warnings,
     info,
   };

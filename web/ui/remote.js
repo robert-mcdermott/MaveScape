@@ -313,7 +313,13 @@ export function installRemote(app) {
       app.log(`${run.name} (${run.id}), scored for ${author}: output SHA-256 ${run.output.sha256.slice(0, 12)}…`);
       await show('score');
       const c = result.results.conditions;
-      return { message: `${run.name}: ${c.map((x) => `${x.scored} of ${result.results.rows} variants scored${c.length > 1 ? ` in ${x.name}` : ''}`).join('; ')} (${PRESETS[presetId].label}).`, data: runSummary(run) };
+      // DiMSum's fitted model, per replicate: its scale and shift, and its error terms with the 10th–90th
+      // percentiles of their bootstrap.
+      const dimsum = result.results.dimsum ? result.results.replicates.filter((r) => r.dimsum).map((r) => ({
+        replicate: r.name, scale: round(r.dimsum.scale), shift: round(r.dimsum.shift),
+        ...(r.dimsum.input === null ? {} : { input: round(r.dimsum.input), output: round(r.dimsum.output), reperror: round(r.dimsum.reperror), intervals: r.dimsum.intervals && Object.fromEntries(Object.entries(r.dimsum.intervals).map(([k, v]) => [k, v.map((x) => round(x))])) }),
+      })) : null;
+      return { message: `${run.name}: ${c.map((x) => `${x.scored} of ${result.results.rows} variants scored${c.length > 1 ? ` in ${x.name}` : ''}`).join('; ')} (${PRESETS[presetId].label}).${dimsum?.[0]?.input !== undefined ? ` DiMSum's multiplicative terms: ${dimsum.map((x) => `${x.replicate} input ${x.input}, output ${x.output}`).join('; ')}.` : ''}`, data: { ...runSummary(run), ...(dimsum ? { dimsum } : {}) } };
     },
 
     async qc_findings(args) {

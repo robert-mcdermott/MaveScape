@@ -8,7 +8,7 @@ import { summarizeDesign } from './design.js';
 import { NORMALIZATIONS } from './score-ratio.js';
 import { RESCALINGS, withDefaults } from './score.js';
 import { describeFilters } from './filters.js';
-import { barcodeSentence, binSentence, regressionSentence } from './runs.js';
+import { barcodeSentence, binSentence, dimsumSentence, regressionSentence } from './runs.js';
 
 export const REFERENCES = {
   enrich2: { type: 'article', authors: ['Rubin, Alan F', 'Gelman, Hannah', 'Lucas, Nathan', 'Bajjalieh, Sandra M', 'Papenfuss, Anthony T', 'Speed, Terence P', 'Fowler, Douglas M'], title: 'A statistical framework for analyzing deep mutational scanning data', journal: 'Genome Biology', year: 2017, volume: 18, pages: '150', doi: '10.1186/s13059-017-1272-5' },
@@ -87,7 +87,18 @@ export function writeMethods(ws, run, options = {}) {
 
   // Scoring.
   const scoring = [];
-  if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
+  if (p.model === 'dimsum') {
+    scoring.push(dimsumSentence(p, cite('dimsum')).replace(/ \((\[\d+\])\)/, ' $1'));
+    // The fitted model, from the run record.
+    const fits = (run.output.replicates ?? []).filter((r) => r.dimsum);
+    const g = (x) => String(Number(x.toPrecision(3)));
+    const list = (f) => fits.map((r) => g(f(r.dimsum))).join(', ');
+    const fitted = [];
+    if (p.dimsumNormalise && fits.length > 1) fitted.push(`the scales were ${list((d) => d.scale)} and the shifts ${list((d) => d.shift)}`);
+    if (fits.length > 1 && fits[0].dimsum.input !== null) fitted.push(`the multiplicative error terms ${list((d) => d.input)} at the input and ${list((d) => d.output)} at the output, and the additive SDs ${list((d) => Math.sqrt(d.reperror))}`);
+    if (fitted.length) scoring.push(`For ${fits.map((r) => design.replicates.find((x) => x.id === r.id)?.name ?? r.id).join(', ')} in turn, ${fitted.join('; ')}.`);
+  }
+  else if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ' (the first and last time points)' : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
   else if (p.model === 'wls' || p.model === 'ols') scoring.push(regressionSentence(p, cite('enrich2')).replace(/ \((\[\d+\])\)/, ' $1'));
   else scoring.push(binSentence(p, { average: cite('vampseq'), mle: cite('peterman') }).replace(/ \((\[\d+\])\)/, ' $1'));
   if (design.library?.level === 'barcode') scoring.push(barcodeSentence(p, p.aggregation === 'sum' ? { enrich2: cite('enrich2') } : { dmsVariants: cite('dmsVariants') }).replace(/ \((\[\d+\])\)/, ' $1'));

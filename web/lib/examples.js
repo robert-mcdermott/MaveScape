@@ -18,13 +18,13 @@ export const EXAMPLES = [
     files: { counts: 'examples/grb2-sh3/counts.csv', design: 'examples/grb2-sh3/design.json', target: 'examples/grb2-sh3/target.fasta', notice: 'examples/grb2-sh3/NOTICE.txt' },
     opens: 'qc',
     expected: [
-      'Quality control: everything passes except the variance beyond counting, about 11× (a bottleneck: the Domainome\'s own error model found one at the input).',
+      'Quality control: everything passes except the variance beyond counting, about 11× (a bottleneck). DiMSum\'s error model puts it at the input, 20–38× counting, as the Domainome\'s own analysis found.',
       'Nonsense variants score about −4.6 against the wild type\'s 0: the assay separates loss of function cleanly.',
       'The least tolerant positions are buried hydrophobic and glycine residues of the fold (A163, G196, G203, I183 on GRB2\'s numbering).',
     ],
     steps: [
-      ['qc', 'Read the QC findings. Open "Variance beyond counting" and its plot: replicate differences sit above the dashed line of counting noise, in parallel, as a bottleneck does.'],
-      ['score', 'In Score, the run with MaveScape\'s defaults is ready. Run it again with the Enrich2-compatible preset and compare the runs.'],
+      ['qc', 'Read the QC findings. Open "Variance beyond counting" and its plot: replicate differences sit above the dashed line of counting noise, in parallel, as a bottleneck does. DiMSum\'s terms below it show where: the inputs.'],
+      ['score', 'In Score, the run with MaveScape\'s defaults is ready. Run it again with the DiMSum-compatible preset: its error model carries the bottleneck into every SE. Compare the runs\' tables of replicates.'],
       ['map', 'Open the map. The darkest columns are the positions that tolerate nothing; hover one, then click a cell to see its replicates in the inspector.'],
       ['map', 'Shift-drag over a stretch of positions, save the selection, and export the map as SVG.'],
       ['score', 'Export the scores (MaveDB columns) and the methods paragraph from the run\'s menu.'],

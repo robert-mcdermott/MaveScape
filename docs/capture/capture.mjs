@@ -141,11 +141,24 @@ const scenes = {
     await act('score', { preset: 'enrich2' });
     await act('focus', { kind: 'run', name: 'Run 1' });
   },
+  // GRB2 scored by DiMSum's model: each replicate's scale, shift and error terms.
+  async 'dimsum-score'() {
+    await example('grb2-sh3');
+    await act('score', { preset: 'dimsum' });
+    await scrollTo('.replicates-pane', 'center');
+  },
   // QC of GRB2: everything passes but the variance beyond counting (a bottleneck).
   async qc() {
     await example('grb2-sh3');
     await act('qc_findings', { finding: 'excess-variance' });
     await sleep(600);
+  },
+  // The same finding's plots: DiMSum's terms put the bottleneck at the inputs.
+  async 'dimsum-qc'() {
+    await example('grb2-sh3');
+    await act('qc_findings', { finding: 'excess-variance' });
+    await sleep(600);
+    await scrollTo('svg.plot[aria-label^="DiMSum"]', 'center');
   },
   // The map of GRB2, a variant in the inspector.
   async map() {

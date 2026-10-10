@@ -13,8 +13,8 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `enrich2` | Enrich2 2.0.2's scores of those data (`reference/enrich2.json`) against the formulas of `mavescape-spec/research.md` §2.1 computed independently, and the published BRCA1 scores against Enrich2 2.0.2 | MaveDB, external; `reference/enrich2.json` |
 | `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
-| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales; barcodes (wave 2): every barcode and every variant's summed counts against dms_variants 1.6.0 by barcode and by substitution, the counts read with MaveScape's map, in dms_variants' `variant_counts` and in Enrich2's layout, the barcode fixture's truth and planted outliers, row order, refusals | `reference/enrich2.json`, `dms_variants.json`, `dms_variants-barcodes.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `fixtures/`; MaveDB, external |
-| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series, sorts and barcoded libraries) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
+| `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales; barcodes (wave 2): every barcode and every variant's summed counts against dms_variants 1.6.0 by barcode and by substitution, the counts read with MaveScape's map, in dms_variants' `variant_counts` and in Enrich2's layout, the barcode fixture's truth and planted outliers, row order, refusals; DiMSum's model (wave 2): the threshold, the variants fitted, the scales and shifts, the error model, every fitness and σ and the merge against DiMSum 1.4's own functions on the fixture, GRB2 and DiMSum's demo, GRB2's published scores, the 95% intervals' coverage under a simulated bottleneck, refusals | `reference/enrich2.json`, `dms_variants.json`, `dms_variants-barcodes.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `dimsum.json`, `fixtures/`; MaveDB and DiMSum, external |
+| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series, sorts and barcoded libraries) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks, and DiMSum's terms placing them before or after selection; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
 | `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
 | `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked | `fixtures/`, `web/examples/` |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
@@ -31,8 +31,9 @@ the same table and design, a variant's evidence matches, and every export the hu
 byte for byte the file Node makes from the exported archive (provenance but for its file names).
 It also checks that `web/lib/dmath.js` gives the same bits in the browser as in Node, and (wave 2,
 slice 4) the barcoded example: its counts and map assembled in the window, scored barcode by
-barcode with Node's output hash, its barcodes exported byte for byte as Node writes them. 63
-checks; in CI as the `remote` job.
+barcode with Node's output hash, its barcodes exported byte for byte as Node writes them; and
+(slice 5) GRB2 scored with the DiMSum preset, Node's output hash and fitted terms. 64 checks; in CI
+as the `remote` job.
 
 ## Public data (`sources.json`)
 
@@ -312,6 +313,50 @@ normalizer. It also writes the table's `variant_counts` in dms_variants' own lay
 - Shuffling the rows and columns changes no combined score by a bit: a variant's barcodes are
   combined in the order of their identifiers.
 
+## DiMSum (`reference/dimsum.json`, wave 2 slice 5)
+
+```sh
+node validation/fetch.mjs
+Rscript validation/reference/generate_dimsum.R
+```
+
+(R 4.6.1, data.table 1.18.6, jsonlite 2.0.0.) The generator downloads DiMSum 1.4's release (MIT;
+SHA-256 checked) and sources the functions of its counts-to-fitness stage, so the reference is
+DiMSum's own code, not a rewriting of it. Each data set goes in as DiMSum's count table would be
+after its earlier stages (one row per variant, its number of substitutions, each replicate's input
+and output): the two-population fixture (three replicates, with zero counts and dropouts), GRB2's
+MaveDB counts (the data DiMSum scored for the Domainome) and DiMSum's own demo (TDP-43, four
+replicates of whole sequences, every 8th row). For each it records the input threshold, the
+variants fitted, `nlm`'s scales and shifts with its minimum and code, the error model's 100
+bootstrap fits (`numCores = 1`, so that it is reproducible), the same `nls` fit given every
+variant in order (`sample` replaced by the identity), and `dimsum__calculate_fitness` with its
+merge given DiMSum's parameters; for the fixture also with a dropout pseudocount of 1. 370 KB.
+
+### What the comparisons showed (wave 2, slice 5)
+
+- **Given DiMSum's parameters, every number is DiMSum's:** fitness and σ of each variant in each
+  replicate within 8 × 10⁻¹³ (6,760 values), merged within 6 × 10⁻¹³, with and without the dropout
+  pseudocount and the zero counts left unscored as DiMSum leaves them.
+- **The threshold and the variants fitted** are DiMSum's (within 1.5 × 10⁻¹⁶; 193, 602 and 378
+  variants), once a count within 10⁻¹² of the threshold counts as above it: the threshold is often a
+  ratio of counts, which R's `exp` puts a unit of the last bit below the count (112 on GRB2) and
+  JavaScript's above, and DiMSum keeps those variants.
+- **The scales and shifts** agree within 4.5 × 10⁻⁷ on GRB2 and the demo. On the fixture `nlm`
+  stopped with code 3 at 22.67239435957, short of the minimum, 22.67239435541 (MaveScape's BFGS;
+  R's Nelder–Mead from `nlm`'s answer finds it too), and the parameters differ by 2.6 × 10⁻⁴. The
+  check: within 5 × 10⁻⁴, at a minimum never above `nlm`'s.
+- **The error model** is linear in its terms, so its least-squares fit has one answer: MaveScape's
+  exact fit equals DiMSum's `nls` given every variant within 4.3 × 10⁻⁶ (8 × 10⁻⁷ on GRB2), and
+  every term lies within the 10th–90th percentiles of DiMSum's 100 bootstrap fits, whose mean is
+  what DiMSum reports. (DiMSum calls those percentiles a 90% interval.) GRB2's terms: inputs 20–38,
+  outputs 1.7–5.3, the bottleneck before selection that the Domainome reported.
+- **GRB2 scored by DiMSum's model** follows the published scores (from the Domainome's run of many
+  domains together) with r = 0.994 over 1,108 variants.
+- **Coverage:** on a simulated two-population experiment with 25 cells per variant into selection
+  (three seeds), DiMSum's 95% intervals hold the true effects 96%, 93% and 95% of the time;
+  counting alone with fixed effects 67–69%, with REML 87–88% (τ² sees the replicates' disagreement,
+  not the noise they share).
+
 ## Quality control (wave 1, slice 6)
 
 `qc-cases.mjs` simulates (web/lib/simulate.js, seeds 20261009–11) a 40-residue protein's 839
@@ -345,6 +390,12 @@ replicates beyond counting; 12% of barcodes off their variant raise the outlier 
 found, fail), the barcodes' disagreement (review), replicate agreement and the variance beyond
 counting; a map missing a quarter of the barcodes raises the barcodes the map names (fail); one
 barcode per variant raises barcodes per variant (fail).
+
+DiMSum's terms (wave 2, slice 5), fitted from the counts alone, place a simulated bottleneck (three
+seeds, medians): with N cells per variant before selection and D reads per variant, the input terms
+rise to about 1 + D/N (1.73, 5.11 and 10.37 against 2, 5 and 11) while the outputs stay near 1;
+with the cells too few after selection, the output terms rise instead (4.29 and 7.66 against 5 and
+11). On GRB2 they put the 11× excess at the inputs.
 
 ## The map (wave 1, slice 7)
 

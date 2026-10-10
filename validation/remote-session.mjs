@@ -156,6 +156,10 @@ try {
   check('scoring the same inputs again shows the existing run', again.message, again.data.existing === true && again.data.id === enrich2.data.id);
   const refused = await send('score', { parameters: { pseudocount: 0 } });
   check('parameters that cannot score are refused with the reason', refused.message, !refused.ok && /pseudocount/i.test(refused.message));
+  const dimsum = await act('score', { preset: 'DiMSum' });
+  const dimsumNode = scoreTable(exampleTable, workspaceDesign, defaultParameters(workspaceDesign, null, 'dimsum')).results;
+  check('score with the DiMSum preset: Node\'s run, and its fitted terms (a bottleneck at the inputs)', dimsum.message, dimsum.data.name === 'Run 3' && dimsum.data.outputSha256 === outputDigest(dimsumNode)
+    && dimsum.data.dimsum.length === 3 && dimsum.data.dimsum.every((x, i) => x.input === +dimsumNode.replicates[i].dimsum.input.toPrecision(4) && x.input > 4 * x.output));
 
   // The map.
   const map = await act('render_map', { run: 'Run 1', color_by: 'SE', rows: 'hydro', zoom: 2 });
@@ -206,7 +210,7 @@ try {
 
   // Every export equals the same file made in Node from the exported archive.
   const archive = await readArchive(readFileSync(join(out, 'grb2.msz')));
-  check('the exported archive opens', `${archived.message} ${archive.problems.length} problems`, archive.problems.length === 0 && archive.ws.runs.length === 2 && archive.ws.selections.length === 1);
+  check('the exported archive opens', `${archived.message} ${archive.problems.length} problems`, archive.problems.length === 0 && archive.ws.runs.length === 3 && archive.ws.selections.length === 1);
   const { table, scored } = recompute(archive.ws, archive.sources);
   const expected = allExports(archive.ws, table, scored.results);
   for (const name of ['scores.csv', 'counts.csv', 'qc_samples.csv', 'qc_variants.csv', 'methods.md', 'references.bib', 'map.svg', 'selection.csv', 'selection.json']) {

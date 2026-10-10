@@ -8,7 +8,7 @@ import { KIND, KIND_NAMES } from './variants.js';
 
 // The stages in the order they apply. `rule`: always on (not a parameter).
 export const STAGES = [
-  { id: 'measured', code: 1, label: 'Counted in a replicate', rule: true, reason: 'not measured in any replicate (not counted in enough of its samples, or, from sorted bins, no estimate)' },
+  { id: 'measured', code: 1, label: 'Counted in a replicate', rule: true, reason: 'not measured in any replicate (not counted in enough of its samples; a zero count with no pseudocount, scored by DiMSum; or, from sorted bins, no estimate)' },
   { id: 'identifier', code: 2, label: 'Valid identifier', rule: true, reason: 'the identifier is not valid or does not agree with the target' },
   { id: 'class', code: 3, label: 'Variant class', reason: 'its class is not scored' },
   { id: 'excluded', code: 4, label: 'Exclusion list', reason: 'excluded by the user' },
@@ -24,11 +24,12 @@ export const STAGE_BY_ID = new Map(STAGES.map((s) => [s.id, s]));
 // Why a replicate's measurement of a variant is not used (per replicate, per variant).
 // FEW_POINTS: a time series counted at its first time point but at fewer later ones than the
 // regression needs. LOW_FREQUENCY: sorted bins whose summed bin frequency is below the minimum
-// (VAMP-seq's filter). NOT_ESTIMABLE: no maximum-likelihood estimate from the bins (all reads in an
-// open outer bin, or in fewer than three bins with σ fitted). FEW_BARCODES: a barcode table's
+// (VAMP-seq's filter). NOT_ESTIMABLE: no estimate: a zero count scored by DiMSum (which takes no
+// pseudocount), or no maximum-likelihood estimate from the bins (all reads in an open outer bin, or
+// in fewer than three bins with σ fitted). FEW_BARCODES: a barcode table's
 // variant measured by fewer barcodes than the minimum (outlier barcodes left out not counting).
 export const REPLICATE_STATE = { USED: 0, NOT_COUNTED: 1, INPUT_COUNT: 2, TOTAL_COUNT: 3, FEW_POINTS: 4, LOW_FREQUENCY: 5, NOT_ESTIMABLE: 6, FEW_BARCODES: 7 };
-export const REPLICATE_STATE_NAMES = ['used', 'not counted in every sample', 'input count below the minimum', 'total count below the minimum', 'counted at too few time points', 'summed bin frequency below the minimum', 'no estimate from the bins', 'fewer barcodes than the minimum'];
+export const REPLICATE_STATE_NAMES = ['used', 'not counted in every sample', 'input count below the minimum', 'total count below the minimum', 'counted at too few time points', 'summed bin frequency below the minimum', 'no estimate (a zero count with no pseudocount, or no fit from the bins)', 'fewer barcodes than the minimum'];
 
 // Flags on a scored variant (bits): measurements to read with care, shown as low confidence.
 export const FLAG = { OUTPUT_ZERO: 1, INPUT_ZERO: 2, FEWER_REPLICATES: 4, FEWER_POINTS: 8 };

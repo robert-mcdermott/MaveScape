@@ -203,7 +203,9 @@ entry, so that a change made later breaks the chain.
 A **score run** keeps its inputs, not its scores: the table's SHA-256, the mapping, the design,
 the parameters and the scoring version (whose canonical JSON's SHA-256 is the run's id), the
 software, the warnings, and the output's SHA-256. Reopened, a run is recomputed from its inputs
-and must have that output hash.
+and must have that output hash. Its `output.replicates` keep each replicate's normalizers and, for
+DiMSum's model, `dimsum`: the scale, shift, multiplicative `input` and `output` terms, additive
+`reperror` (a variance), and `intervals` (the 10th and 90th percentiles of their bootstrap).
 
 ## Exports
 
@@ -237,6 +239,11 @@ outlier barcodes were left out.
 For a time series scored by regression (MaveScape 0.2), a score is the slope of the variant's
 normalized log count on time scaled to 0–1, and `score_<replicate>` is each replicate's slope; the
 provenance and methods say which model, standard error and minimum of time points the run used.
+
+Scored by DiMSum's model (MaveScape 0.2; parameters `model: "dimsum"`, `dimsumNormalise`,
+`dimsumErrorModel`, `dimsumDropout`), `score_<replicate>` is DiMSum's fitness, scaled and shifted,
+and `SE_<replicate>` its σ from the error model; a replicate with a zero count is `NA` there (no
+pseudocount). The methods list each replicate's fitted scale, shift and error terms.
 
 ### Counts (`*_counts.csv`)
 

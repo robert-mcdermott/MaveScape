@@ -7,7 +7,9 @@
 // replicates' log ratios, on variants with enough input reads); the variance of replicate
 // differences against what counting predicts, fitted as a·(counting variance) + e: a ≈ 1 + reads
 // per cell, so a > 1 points to a bottleneck (fewer cells than reads), and e is variance between
-// replicates beyond counting (DiMSum's multiplicative and additive error terms); leave-one-out z
+// replicates beyond counting (DiMSum's multiplicative and additive error terms; for two populations
+// DiMSum's own error model too, which says whether the excess is at the input or the output, wave 2
+// slice 5); leave-one-out z
 // of each replicate against the others (an outlier replicate); synonymous log ratios against
 // their Poisson expectation; missingness patterns.
 //
@@ -26,6 +28,7 @@ import { replicateSamples, targetLength } from './design.js';
 import { sampleCounts } from './replicates.js';
 import { binAverages, binTotals } from './score-bins.js';
 import { barcodeDisagreement, groupBarcodes, OUTLIER_Z, sumByVariant } from './score-barcodes.js';
+import { scoreDimsumGroup, substitutionsOf } from './score-dimsum.js';
 import { auc, mad, mean, median, MEDIAN_CHI2_1, nonNegativeLine, pearson, quantileSorted, sorted, spearman, variance } from './stats.js';
 
 export const QC_VERSION = '1';
@@ -205,6 +208,26 @@ function binMetrics(design, pooled) {
       bins: slots.map((s, b) => ({ order: s.order, value: s.value, reads: totals[b], share: known ? cells[b] / allCells : all > 0 ? totals[b] / all : Number.NaN, cells: known ? cells[b] : null, cellsPerVariant: known && variants ? cells[b] / variants : null, readsPerCell: known && cells[b] > 0 ? totals[b] / cells[b] : null })),
     };
   }).filter(Boolean);
+}
+
+// DiMSum's error model of a group of replicates of two populations, from the counts alone
+// (score-dimsum.js; no filter, no bootstrap): each replicate's multiplicative input and output terms
+// (about 1 + reads per molecule where a step had fewer molecules than reads) and additive term.
+// { replicates, variants (fitted), terms: [{ id, name, input, output, reperror }] } or { reason }.
+function errorModelOf(group, design, pooled, variants) {
+  const reps = group.map((g) => design.replicates.find((r) => r.id === g.id));
+  const ids = reps.map((r) => r.id);
+  const wtRows = [];
+  for (let i = 0; i < variants.n; i += 1) if (variants.kind[i] === KIND.WT && variants.status[i] !== STATUS.INVALID) wtRows.push(i);
+  if (wtRows.length !== 1) return { replicates: ids, reason: 'needs one wild-type row' };
+  const inputs = reps.map((r) => pooled.get(r.input));
+  const outputs = reps.map((r) => pooled.get(r.output));
+  if (inputs.some((x) => !x) || outputs.some((x) => !x)) return { replicates: ids, reason: 'a sample has no counts' };
+  const substitutions = variants.key.map((k, i) => (variants.status[i] === STATUS.INVALID ? -1 : substitutionsOf(k)));
+  const res = scoreDimsumGroup({ inputs, outputs, wtRow: wtRows[0], substitutions, options: { normalise: true, errorModel: true } });
+  if (res.refused) return { replicates: ids, reason: res.refused };
+  const m = res.model;
+  return { replicates: ids, variants: m.variants, terms: reps.map((r, k) => ({ id: r.id, name: r.name ?? r.id, input: m.input[k], output: m.output[k], reperror: m.reperror[k] })) };
 }
 
 // Missing after selection: of the variants counted well before selection, how many have no count
@@ -465,7 +488,8 @@ export function computeQC({ names, barcodes = null, columns, design, mode = 'len
     const pairs = [];
     for (const g of groups) for (let j = 0; j < g.length; j += 1) for (let k = j + 1; k < g.length; k += 1) pairs.push(pairMetrics(g[j], g[k]));
     const loo = groups.filter((g) => g.length >= 3).flatMap((g) => leaveOneOut(g) ?? []);
-    return { id: c.id ?? 'all', name: c.name, replicates: reps.map((r) => r.id), dropout: reps.map((r) => ({ replicate: r.id, ...r.dropout })).filter((d) => d.sample), pairs, leaveOneOut: loo.length ? loo : null, synonymous: reps.map((r) => synonymousCheck(r, variants)) };
+    const errorModel = design.model === 'two-population' ? groups.filter((g) => g.length >= 2).map((g) => errorModelOf(g, design, pooled, variants)) : [];
+    return { id: c.id ?? 'all', name: c.name, replicates: reps.map((r) => r.id), dropout: reps.map((r) => ({ replicate: r.id, ...r.dropout })).filter((d) => d.sample), pairs, leaveOneOut: loo.length ? loo : null, synonymous: reps.map((r) => synonymousCheck(r, variants)), errorModel };
   });
   // Missingness: rows by their pattern of missing samples.
   const patterns = new Map();
