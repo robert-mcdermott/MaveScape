@@ -664,3 +664,15 @@ output hashes, and the first run's scores equal the archived ones exactly. A 0.1
 another browser would differ in its last digits and say so (`reproduction` in `web/lib/runs.js`).
 The reopened workspace keeps its threshold and selection and makes every export and the methods.
 
+`archives/release-0.2.0.msz` was written by MaveScape 0.2.0's own code by
+`archives/make-0.2.0.mjs` (`node validation/archives/make-0.2.0.mjs <v0.2.0 checkout> <out>
+<commit>`), and holds every kind of source and run 0.2 brought, each with its scores: the barcode
+fixture with its barcode-to-variant map (each barcode scored and combined), the sort-seq fixture
+(sorted bins), the two-condition fixture (limma), the Hsp90 example (its codon variants read at the
+protein level, scored per generation from one replicate), and the GRB2 example scored with DiMSum's
+model and with the defaults (the moderated combination, each score's degrees of freedom), with a
+selection, a changed threshold and an acknowledged finding. The suite assembles each run's source
+from the archive's files as the window does, and every run has its recorded output hash and its
+archived scores exactly; `mavescape run --from-workspace` reruns them in a window to the same
+hashes.
+

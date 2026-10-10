@@ -1,10 +1,13 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-10-10)
 
 Wave 2 of the [roadmap](mavescape-spec/roadmap.md): every common experiment design, each checked
-against an independent reference, plus headless runs. Built slice by slice; this section grows with
-each.
+against an independent reference (time series, sorted bins, barcodes, DiMSum's error model, two
+conditions), headless runs and remote control; then what the scores mean: what the assay measures,
+findings in context, intervals that hold the truth, what each analysis can do with what is there,
+and nine examples. A workspace saved by 0.1.0 opens and reproduces its runs; one saved by 0.2.0 is
+kept for later versions to do the same.
 
 ### Added
 
@@ -167,7 +170,9 @@ each.
   new `qc_findings.csv` export of every finding with its causes, next steps and acknowledgement.
 - **Archives that keep opening:** a workspace saved by MaveScape 0.1.0 is kept as a fixture
   (`validation/archives/`); this version opens it and reproduces its runs, and each release adds
-  one.
+  one. 0.2.0's (`release-0.2.0.msz`) holds every kind of source and run 0.2 brought (barcodes with
+  their map, sorted bins, two conditions, codon variants per generation, DiMSum's model, the
+  moderated combination), and the replay assembles each run's source as the window does.
 - **Intervals that hold the truth (wave 2, slice 9; S13).** A new way to combine replicates, the
   *moderated combination*, learns the noise beyond counting from every variant at once: a replicate
   score's variance is *a* × counting + *b*, fitted robustly to how far replicates disagree (as

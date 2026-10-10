@@ -1087,8 +1087,14 @@ measures, and intervals checked against the truth.
         terms put the planted input bottleneck after selection; without replicate 3, before it.
       - **Factor IX's nonsense median is 0.47 on MultiSTEP's scale** (the lowest 5% of missense at
         0): the scale convention changes what 0 means.
-      - Wave 2 is complete with slice 11; 0.2.0 can be released, with a workspace archive of it
-        kept for later versions to reopen (`validation/archives/`).
+      - Wave 2 is complete with slice 11.
+
+**Released 0.2.0 on 2026-10-10.** Its workspace archive (`validation/archives/release-0.2.0.msz`,
+written by `make-0.2.0.mjs` with 0.2.0's own code) holds every kind of source and run 0.2 brought:
+a table of barcodes with its map, sorted bins, two conditions compared by limma, codon variants
+read at the protein level and scored per generation, DiMSum's model and the moderated combination,
+with a selection, a changed threshold and an acknowledged finding. Every later version must reopen
+it and reproduce its six runs; the replay now assembles each run's source as the window does.
 
 ## 0.3.0: public data in and out (wave 3)
 

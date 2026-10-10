@@ -1982,10 +1982,10 @@ const suites = {
       const chain = verifyHistory(opened.ws);
       check('roundtrip', `${file}, saved by MaveScape ${release}, opens: every file's SHA-256 as its manifest records, the history's chain unbroken`, `${opened.ws.runs.length} runs, ${opened.ws.selections.length} selections, ${chain.entries} history entries; ${opened.problems.length ? opened.problems[0] : 'no problems'}`, !opened.problems.length && chain.ok, 'no problems');
       let last = null;
-      for (const run of opened.ws.runs) {
-        const recorded = recordedInputs(run);
-        const t = parseTable(opened.sources.get(recorded.source.sha256), { fileName: run.inputs.source.fileName });
-        const again = scoreTable(t, recorded.design, recorded.parameters, recorded.mapping.mode);
+      for (const [index, run] of opened.ws.runs.entries()) {
+        // Its table assembled from the archive's files as the window assembles it (a barcode map
+        // applied, codon variants read at the protein level: 0.2's sources).
+        const { table: t, scored: again } = recompute(opened.ws, opened.sources, index);
         if (!again.ok) {
           check('roundtrip', `${file}: ${run.name} is recomputed`, again.errors[0], false, 'scored');
           continue;

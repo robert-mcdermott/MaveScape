@@ -17,7 +17,7 @@ functional effects for research; it does not classify variants as pathogenic or 
 **[Website and user guide](https://robert-mcdermott.github.io/mavescape/)**: getting started,
 opening your data, scoring, quality control, the map, the record and scripting, with screenshots.
 
-> **Status: 0.1.0 released; 0.2.0 in progress.** Count tables import, designs are set in the
+> **Status: 0.2.0 released; 0.3.0 in progress.** Count tables import, designs are set in the
 > Experiment view, two-population experiments (by log ratio or DiMSum's fitness and error model),
 > time series (by weighted regression on every time point), sorted bins (by their weighted average
 > or maximum likelihood) and barcoded libraries (their barcodes summed, or each scored and

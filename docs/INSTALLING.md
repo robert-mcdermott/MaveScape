@@ -49,7 +49,7 @@ lists them):
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL \
   https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh |
-  MAVESCAPE_VERSION=v0.1.0 sh
+  MAVESCAPE_VERSION=v0.2.0 sh
 ```
 
 To install somewhere else, use a directory you can write to:
@@ -63,7 +63,7 @@ curl --proto '=https' --tlsv1.2 -fsSL \
 A downloaded installer takes the same settings as options:
 
 ```sh
-sh install-mavescape.sh --version v0.1.0 --install-dir "$HOME/bin"
+sh install-mavescape.sh --version v0.2.0 --install-dir "$HOME/bin"
 ```
 
 `MAVESCAPE_REPOSITORY=owner/repository` installs from a fork. For a
@@ -109,7 +109,7 @@ Piping into `iex` cannot pass parameters. Set environment variables, which the
 piped form reads:
 
 ```powershell
-$env:MAVESCAPE_VERSION = 'v0.1.0'
+$env:MAVESCAPE_VERSION = 'v0.2.0'
 $env:MAVESCAPE_INSTALL_DIR = "$HOME\bin"
 irm https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.ps1 | iex
 ```
@@ -118,7 +118,7 @@ or build a script block, which accepts parameters:
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.ps1))) `
-  -Version v0.1.0 -InstallDir "$HOME\bin"
+  -Version v0.2.0 -InstallDir "$HOME\bin"
 ```
 
 | Parameter | Environment variable | Purpose |
