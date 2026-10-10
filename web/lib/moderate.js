@@ -34,8 +34,9 @@
 // Each row: { y, v, rep (replicate indices), share (each measurement's shared first sample, or
 // null), u (√ of the counting variance it shares, signed by its coefficient), informative (false
 // for a row whose counts are a few reads: its scores sit at the floor the pseudocount sets, their
-// spread says nothing of the model's, and it takes no part in fitting the model or the prior) };
-// null for a row not combined.
+// spread says nothing of the model's, and it takes no part in fitting the model or the prior),
+// own (each measurement's own variance: a regression's residual-scaled one, used when the model
+// cannot be fitted) }; null for a row not combined.
 
 import { exp, log, square } from './dmath.js';
 import { digamma, trigamma, trigammaInverse } from './distributions.js';
@@ -194,7 +195,10 @@ export function moderatedCombination(rows) {
     const k = row.y.length;
     const V = new Float64Array(k * k);
     for (let j = 0; j < k; j += 1) {
-      V[j * k + j] = model.a * row.v[j] + extra;
+      // Without a fitted model (too few pairs of replicates: one replicate, say), each
+      // measurement's own variance stands, as in the other combinations: a regression's SE scaled
+      // by its residuals (wave 2, slice 11: Hsp90's single replicate).
+      V[j * k + j] = model.fitted || !row.own ? model.a * row.v[j] + extra : row.own[j];
       for (let l = 0; l < j; l += 1) {
         const c = Math.min(model.a, 1) * sharedCov(row, j, l);
         V[j * k + l] = c;

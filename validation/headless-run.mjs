@@ -31,6 +31,8 @@ import { readZip } from '../web/lib/zip.js';
 import { parseTable } from '../web/lib/csv.js';
 import { readiness } from '../web/lib/readiness.js';
 import { workspaceOf } from './readiness-cases.mjs';
+import { openExampleInNode } from './example-cases.mjs';
+import { exampleById } from '../web/lib/examples.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const verbose = process.argv.includes('--verbose');
@@ -251,6 +253,16 @@ try {
     parsed = logged.stdout.trim().split('\n').map((l) => JSON.parse(l));
   } catch { parsed = []; }
   check('--log json: one JSON object per line, from start to done, each step with its action and outcome', `${parsed.length} lines: ${[...new Set(parsed.map((p) => p.event))].join(', ')}; last ${JSON.stringify(parsed.at(-1) ?? {}).slice(0, 100)}`, logged.code === 0 && parsed.length > 5 && parsed[0].event === 'start' && parsed.at(-1).event === 'done' && parsed.at(-1).exit === 0 && parsed.filter((p) => p.event === 'step').every((p) => p.action && p.ok === true && typeof p.seconds === 'number'));
+
+  // A table of codon variants (wave 2, slice 11): Hsp90's design names the protein variants derived
+  // from MaveDB's nucleotide names, and mavescape run reads the table's codons for it.
+  {
+    writeFileSync(out('per-generation.json'), JSON.stringify({ timeScale: 'unit' }));
+    const hsp = await mavescape(['run', '--design', 'web/examples/hsp90/design.json', '--parameters', out('per-generation.json'), '--out', out('hsp90'), '--time', TIME, 'web/examples/hsp90/counts.csv']);
+    const node = openExampleInNode(exampleById('hsp90'));
+    const recorded = hsp.code === 0 ? record(out('hsp90')).run?.outputSha256 : null;
+    check('mavescape run on Hsp90\'s design and MaveDB\'s counts as they are: the codon variants read at the protein level for the design, scored per generation as Node scores the example', `exit ${hsp.code}; output SHA-256 ${recorded === outputDigest(node.scored.results) ? 'Node\'s' : `${recorded} against ${outputDigest(node.scored.results)}`}`, hsp.code === 0 && recorded === outputDigest(node.scored.results));
+  }
 
   // --- mavescape validate ---------------------------------------------------------------------
   const valid = await mavescape(['validate', ...grb2]);

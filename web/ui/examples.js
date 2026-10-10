@@ -11,7 +11,7 @@ import { assembleTable } from '../lib/assemble.js';
 import { detectLayout, reviewImport, suggestRoles } from '../lib/importer.js';
 import { sha256 } from '../lib/sha256.js';
 import { addRun, makeRun, runInputs } from '../lib/runs.js';
-import { defaultParameters } from '../lib/score.js';
+import { defaultParameters, withDefaults } from '../lib/score.js';
 import { addSource, addTarget, change, createWorkspace, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { pearson } from '../lib/stats.js';
@@ -46,7 +46,9 @@ export async function openExample(app, id) {
       parts = [{ name: 'counts.csv', bytes: await fetchBytes(example.files.counts), role: 'counts' }];
       design = JSON.parse(new TextDecoder().decode(await fetchBytes(example.files.design)));
     }
-    const assembled = assembleTable(parts.map((p) => ({ name: p.name, table: parseTable(p.bytes, { fileName: p.name }), role: p.role })), { level: design.variants.level, target: design.targets[0] });
+    // A published example's files are assembled as at import: its codon variants read at the
+    // protein level, when its table names codons (example.assembly).
+    const assembled = assembleTable(parts.map((p) => ({ name: p.name, table: parseTable(p.bytes, { fileName: p.name }), role: p.role })), { level: design.variants.level, target: design.targets[0], ...(example.assembly ?? {}) });
     const table = assembled.table;
     const layout = detectLayout(table);
     const countColumns = design.samples.flatMap((s) => s.columns);
@@ -74,6 +76,7 @@ export async function openExample(app, id) {
         variantColumn: design.variants.column, level: design.variants.level, mode: 'lenient', countColumns, scoreColumns: {},
         ...(barcodeColumn ? { barcodeColumn } : {}),
         ...(assembled.map ? { assembly: { kind: assembled.kind, map: { barcodeColumn: assembled.map.mapBarcodeColumn, variantColumn: assembled.map.mapVariantColumn } } } : {}),
+        ...(assembled.kind === 'codons' ? { assembly: { kind: 'codons', codons: example.assembly.codons } } : {}),
       },
       target: target.id,
       roleSuggestions: suggestRoles(countColumns).filter((r) => r.role),
@@ -86,7 +89,8 @@ export async function openExample(app, id) {
     ws = change(ws, { example: { id: example.id, simulated: example.simulated, truth, ...(truthOf === 'differential' ? { truthOf } : {}) } }, 'example', `Opened the example "${example.title}"${example.simulated ? ' (simulated data)' : ` (${example.source}, ${example.license})`}`);
     // A first score run with MaveScape's defaults.
     const { names, barcodes, columns, transfer } = workerInput(table, ws.design);
-    const parameters = defaultParameters(ws.design, ws.sources[0]);
+    // MaveScape's defaults, with what the example sets (Hsp90: scores per generation).
+    const parameters = withDefaults({ ...defaultParameters(ws.design, ws.sources[0]), ...(example.parameters ?? {}) });
     const result = await runScore(app, { names, barcodes, columns, design: ws.design, parameters, mode: 'lenient' }, { transfer }).promise;
     if (result.ok) {
       const run = makeRun({ inputs: runInputs({ source: ws.sources[0], design: ws.design, parameters }), source: ws.sources[0], results: result.results, software: { version: app.version, commit: app.commit }, name: 'Run 1' });
@@ -111,61 +115,69 @@ export async function openExample(app, id) {
 
 const percent = (x, n) => `${(100 * x / n).toFixed(1)}%`;
 
+// One run against the simulated truth, as a callout.
+function truthLine(run, results, info, example) {
+  if (info.truthOf === 'differential' && results.differential?.length) {
+    // Two conditions: the differences against the true ones, and the calls at q < 0.05.
+    const d = results.differential[0];
+    const a = [];
+    const b = [];
+    let site = 0;
+    let found = 0;
+    let others = 0;
+    let called = 0;
+    let held = 0;
+    results.variants.key.forEach((k, i) => {
+      if (d.reason[i] || !(k in info.truth) || k === 'p.=') return;
+      a.push(d.delta[i]);
+      b.push(info.truth[k]);
+      if (d.ciLow[i] <= info.truth[k] && info.truth[k] <= d.ciHigh[i]) held += 1;
+      if (info.truth[k] !== 0) {
+        site += 1;
+        if (d.q[i] < 0.05) found += 1;
+      } else {
+        others += 1;
+        if (d.q[i] < 0.05) called += 1;
+      }
+    });
+    return h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s differences (${d.method}) against the simulated true ones: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants; their 95% intervals hold ${percent(held, a.length)} of the true differences; at q < 0.05, ${found} of the site's ${site} variants called, and ${called} of the ${others} others.`));
+  }
+  const c = results.conditions[0];
+  const a = [];
+  const b = [];
+  let held = 0;
+  results.variants.key.forEach((k, i) => {
+    if (c.reason[i] || !(k in info.truth) || k === 'p.=') return;
+    a.push(c.score[i]);
+    b.push(info.truth[k]);
+    const [low, high] = intervalOf(c, i);
+    if (low <= info.truth[k] && info.truth[k] <= high) held += 1;
+  });
+  // Rescaled scores, and sorted bins' (scaled per replicate), are on another scale than the true
+  // effects: their intervals are not compared.
+  const comparable = !c.rescale && !example.simulation?.sort;
+  return h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s scores against the simulated true effects: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants${comparable ? `; their 95% intervals hold ${percent(held, a.length)} of them` : ''}.`));
+}
+
 // The guide of the open example, as an inspector section (null when the workspace is not one).
 export function exampleGuide(app) {
   const info = app.store.ws.example;
   const example = info ? exampleById(info.id) : null;
   if (!example) return null;
-  let truthLine = null;
+  // Each run against the truth (a simulated example): how close, and how often the intervals hold
+  // it; a later run (replicate 3 left out, say) beside the first.
+  const truthLines = [];
   if (info.truth) {
-    const run = app.store.ws.runs[0];
-    const results = run ? runEntry(app, run)?.results : null;
-    if (results && info.truthOf === 'differential' && results.differential?.length) {
-      // Two conditions: the differences against the true ones, and the calls at q < 0.05.
-      const d = results.differential[0];
-      const a = [];
-      const b = [];
-      let site = 0;
-      let found = 0;
-      let others = 0;
-      let called = 0;
-      let held = 0;
-      results.variants.key.forEach((k, i) => {
-        if (d.reason[i] || !(k in info.truth) || k === 'p.=') return;
-        a.push(d.delta[i]);
-        b.push(info.truth[k]);
-        if (d.ciLow[i] <= info.truth[k] && info.truth[k] <= d.ciHigh[i]) held += 1;
-        if (info.truth[k] !== 0) {
-          site += 1;
-          if (d.q[i] < 0.05) found += 1;
-        } else {
-          others += 1;
-          if (d.q[i] < 0.05) called += 1;
-        }
-      });
-      truthLine = h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s differences (${d.method}) against the simulated true ones: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants; their 95% intervals hold ${percent(held, a.length)} of the true differences; at q < 0.05, ${found} of the site's ${site} variants called, and ${called} of the ${others} others.`));
-    } else if (results) {
-      const c = results.conditions[0];
-      const a = [];
-      const b = [];
-      let held = 0;
-      results.variants.key.forEach((k, i) => {
-        if (c.reason[i] || !(k in info.truth) || k === 'p.=') return;
-        a.push(c.score[i]);
-        b.push(info.truth[k]);
-        const [low, high] = intervalOf(c, i);
-        if (low <= info.truth[k] && info.truth[k] <= high) held += 1;
-      });
-      // Rescaled scores, and sorted bins' (scaled per replicate), are on another scale than the true
-      // effects: their intervals are not compared.
-      const comparable = !c.rescale && !example.simulation?.sort;
-      truthLine = h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s scores against the simulated true effects: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants${comparable ? `; their 95% intervals hold ${percent(held, a.length)} of them` : ''}.`));
+    for (const run of app.store.ws.runs.slice(0, 6)) {
+      const results = runEntry(app, run)?.results;
+      if (!results) continue;
+      truthLines.push(truthLine(run, results, info, example));
     }
   }
   return h('section.inspector-section.example-guide',
     h('h3', icon('school'), 'Example', example.simulated ? h('span.badge.warn', 'simulated data') : h('span.badge.accent', example.license)),
     h('p', { style: { margin: '0 0 6px', fontWeight: 600 } }, example.question),
-    truthLine,
+    ...truthLines,
     h('ol.example-steps', ...example.steps.map(([mode, text]) => h('li', h('span', text), h('button.btn.small', { type: 'button', onclick: () => app.setMode(mode) }, `Open ${mode === 'qc' ? 'QC' : mode[0].toUpperCase() + mode.slice(1)}`)))),
     h('details', h('summary', 'What to expect'), h('ul.summary-lines', ...example.expected.map((x) => h('li', x)))),
     h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, `Source: ${example.source}. License: ${example.license}.${example.citation ? ` Cite: ${example.citation}.` : ''}`),

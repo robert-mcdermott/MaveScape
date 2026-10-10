@@ -1,7 +1,8 @@
 // The table a source describes, assembled from its files (requirements D1, D8, D12): one table,
 // or one file per sample joined on its first column; dms_variants' long variant_counts made one
 // row per barcode; variant names derived where the table does not write them in MAVE-HGVS
-// (DiMSum's whole sequences, Enrich2's elements); and a barcode-to-variant map applied. Pure: the
+// (DiMSum's whole sequences, Enrich2's elements); codon variants read at the protein level
+// (codons.js, wave 2 slice 11); and a barcode-to-variant map applied. Pure: the
 // import wizard assembles a table this way, and the workspace assembles it again, from the same
 // files and the mapping recorded with the source, whenever the source is read from the library.
 //
@@ -10,14 +11,16 @@
 // files: [{ name, table (csv.js), role: 'counts' | 'map' }]. options: { absentMeans ('missing' |
 // 'zero'), level ('protein' | 'nucleotide'), target (to name sequences and synonymous changes),
 // barcodeColumn (the counts' column of barcodes, for the map), map: { barcodeColumn,
-// variantColumn } (the map's columns; found when not given) }.
-// kind: 'table' | 'joined' | 'dms-variants' | 'enrich2' | 'dimsum'. map: applyBarcodeMap's report.
+// variantColumn } (the map's columns; found when not given), codons: { from } (a table's codon
+// variants, named in column `from`, read at the protein level) }.
+// kind: 'table' | 'joined' | 'dms-variants' | 'enrich2' | 'dimsum' | 'codons'. map: applyBarcodeMap's report.
 // samples: dms_variants' samples with their libraries.
 
 import { joinCountTables } from './counts.js';
 import { columnText } from './csv.js';
 import { detectLayout, namesFromSequences } from './importer.js';
 import { CODONS, targetProtein } from './target.js';
+import { combineCodons } from './codons.js';
 import { applyBarcodeMap, barcodeColumnOf, dmsVariantsName, enrich2Name, headerlessMap, isDmsVariantsCounts, isEnrich2Counts, pivotDmsVariants, textColumn } from './barcodes.js';
 
 const DNA = /^[ACGTN]+$/i;
@@ -102,6 +105,15 @@ export function assembleTable(files, options = {}) {
       const named = namesFromSequences(columnText(table.columns.find((c) => c.name === 'nt_seq')), options.target.sequence);
       table = { ...table, columns: [...table.columns, textColumn('hgvs_nt (from nt_seq)', table.columns.length, named.nt), textColumn('hgvs_pro (from nt_seq)', table.columns.length + 1, named.pro)] };
     }
+  }
+  // Codon variants read at the protein level: each protein variant's codons combined.
+  if (options.codons && level === 'protein' && kind === 'table' && !mapFile) {
+    const combined = combineCodons(table, { column: options.codons.from, target: options.target });
+    notes.push(...combined.notes);
+    problems.push(...combined.problems);
+    if (!combined.table) return { table: null, kind: 'codons', notes, problems, map: null, samples: null };
+    table = combined.table;
+    kind = 'codons';
   }
   // The barcode-to-variant map.
   let map = null;

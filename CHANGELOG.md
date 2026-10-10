@@ -216,6 +216,18 @@ each.
   time series' slope on time itself, per generation with the times in generations: a selection
   coefficient, comparable between experiments of different lengths. Enrich2's whole time course
   stays the default.
+- **Three more examples (wave 2, slice 11), nine in all:** Hsp90 over 21 generations (MaveDB
+  urn:mavedb:00000011-a-1, scored per generation, one replicate), coagulation factor IX in sorted
+  bins (urn:mavedb:00001200-a-1, MultiSTEP), both with MaveDB's counts unchanged, and a simulated
+  experiment with two problems to find (a recorded bottleneck and a failing replicate). Each has
+  its question, readout, readiness, the QC findings it teaches and a guided workflow; the guide
+  compares every run of a simulated example with the truth.
+- **Codon variants read at the protein level:** *Each row is: a codon variant* in the import
+  wizard reads a table that names each codon on its own row (MaveDB's EMPIRIC tables) at the
+  protein level: each row's protein change worked out from its nucleotide name against the target,
+  a variant written on several rows with the same counts read once, and each protein variant's
+  codons summed. A design naming `hgvs_pro (from hgvs_nt)` reads its table this way wherever it is
+  opened, `mavescape run` included.
 - **Sample sheets written back:** the package writes the design as a sample sheet that reads as the
   same design; a sample selected under several conditions is one row naming them
   (`Without ligand;With ligand`), which sheets now read.
@@ -263,6 +275,10 @@ each.
 
 ### Fixed
 
+- **The moderated combination understated the SEs of a single replicate** (0.2 development):
+  with no pairs of replicates to fit its model, it fell back to counting error alone, so a time
+  series' slopes lost the scatter of their own residuals (Hsp90's SEs a median 6.3× too small).
+  With no model to fit, each score keeps its own SE, as with the other combinations.
 - **DiMSum's model on a table of barcodes** (summed, which is allowed) failed after scoring, reading
   barcode counts its replicates do not keep.
 - **Sorted bins without the wild type were refused by default**: both scales need it. They now

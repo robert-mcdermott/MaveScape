@@ -878,6 +878,8 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
         rows[i] = {
           y: these.map((rep) => rep.score[i]),
           v: these.map((rep) => { const s = rep.seCounting ? rep.seCounting[i] : rep.se[i]; return s * s; }),
+          // Each measurement's own variance, for when the model cannot be fitted.
+          own: these.map((rep) => rep.se[i] * rep.se[i]),
           rep: these.map((rep) => replicates.indexOf(rep)),
           // Fewer than 5 reads before or after selection in a replicate: at the counts' floor.
           informative: sorted || these.every((rep) => !(rep.first[i] < 5 || rep.last[i] < 5)),

@@ -45,6 +45,15 @@ p.Lys3Pro,488,NA,502,33</code></pre></div>
       <h2 id="names">Variant names</h2>
       <p>Names are MAVE-HGVS, MaveDB's nomenclature: <code>p.Ala12Val</code>, <code>p.Ala12Ter</code>, <code>p.Ala12=</code> (synonymous), <code>p.=</code> (the wild type), <code>p.[Ala12Val;Lys14Arg]</code>, and <code>c.34C&gt;T</code> at the nucleotide level. Lenient reading, the default, also takes lab and legacy forms (<code>A12V</code>, <code>p.A12V</code>, <code>p.Ala12*</code>, <code>_wt</code>, <code>_sy</code>) and keeps each as written beside its MAVE-HGVS form. Every name is checked against the target: one that disagrees with it (another residue at that position, or a position beyond the target) is not scored, and says why.</p>
 
+      <h3 id="codons">Codon variants</h3>
+      <p>Some tables name each codon variant on its own row, several codons to an amino-acid substitution (the EMPIRIC tables on MaveDB, for Hsp90 and others), and a protein-level column then names the same substitution on several rows. MaveScape does not guess which row is right: read at the protein level, such a table is blocked. <em>Each row is: a codon variant</em> (offered when a column holds coding names, <code>c.…</code>, and suggested when the protein names repeat) reads it at the protein level instead:</p>
+      <ul>
+        <li>each row's protein change is worked out from its nucleotide name against the target's DNA, in its reading frame (substitutions in the coding sequence; any other change is not named and not scored, and says why);</li>
+        <li>a variant written on several rows with the same count in every column is one measurement written more than once, and is read once (MaveDB writes Hsp90's wild type once per position); with different counts it is a problem, not a guess;</li>
+        <li>the codons of each protein variant are summed in every count column, into a column named <code>hgvs_pro (from hgvs_nt)</code>.</li>
+      </ul>
+      <p>The table's own protein column is not used: Hsp90's names the wild type's nine copies as synonymous changes, where their nucleotide names say no change. A design naming <code>hgvs_pro (from hgvs_nt)</code> reads its table this way wherever it is opened, by <code>mavescape run</code> too. Read at the nucleotide level, the rows stay codons.</p>
+
       <h2 id="missing">Missing is not zero</h2>
       <p>An empty cell or <code>NA</code> (also <code>N/A</code>, <code>NaN</code>, <code>null</code>, <code>None</code>) is <strong>missing</strong>: the variant was not counted in that sample, and is not scored in that replicate. Write 0 only for a variant counted zero times. Some tables write variants that dropped out during selection as missing; quality control's "Missing after selection" finding says when that happens, and <a href="experiment.html#missing-zero">Missing = 0</a> in the Experiment view reads those samples' missing counts as 0.</p>
 

@@ -100,7 +100,7 @@ export function recompute(ws, sources, which = 0) {
   const source = ws.sources.find((s) => s.sha256 === recorded.source.sha256);
   const files = source?.files?.length ? source.files : [{ fileName: run.inputs.source.fileName, sha256: recorded.source.sha256 }];
   const m = source?.mapping ?? {};
-  const assembled = assembleTable(files.map((f) => ({ name: f.fileName, table: parseTable(sources.get(f.sha256), { fileName: f.fileName }), role: f.role ?? 'counts' })), { absentMeans: m.absentMeans ?? 'missing', level: m.level, target: ws.targets.find((t) => t.id === source?.target), barcodeColumn: m.barcodeColumn, map: m.assembly?.map });
+  const assembled = assembleTable(files.map((f) => ({ name: f.fileName, table: parseTable(sources.get(f.sha256), { fileName: f.fileName }), role: f.role ?? 'counts' })), { absentMeans: m.absentMeans ?? 'missing', level: m.level, target: ws.targets.find((t) => t.id === source?.target), barcodeColumn: m.barcodeColumn, map: m.assembly?.map, codons: m.assembly?.codons });
   const table = assembled.table;
   return { table, scored: scoreTable(table, recorded.design, recorded.parameters, recorded.mapping.mode) };
 }

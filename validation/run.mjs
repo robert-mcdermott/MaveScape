@@ -7,7 +7,7 @@
 //
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
 // data), experiment (external data), scoring, qc, map and roundtrip (their last checks need
-// external data), readiness; all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// external data), readiness, examples (its last checks need external data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -34,6 +34,9 @@ import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
 import { designFromSampleSheet, designStructure, sampleSheetCSV } from '../web/lib/samplesheet.js';
 import { readinessDatasets, REMOVALS, caseOf, probe } from './readiness-cases.mjs';
 import { writePackage } from '../web/lib/package.js';
+import { EXAMPLE_DATASETS, openExampleInNode, raisedOf } from './example-cases.mjs';
+import { proteinChange } from '../web/lib/codons.js';
+import { intervalOf } from '../web/lib/exports.js';
 import { readZip } from '../web/lib/zip.js';
 import { readiness } from '../web/lib/readiness.js';
 import { acknowledgeFinding, addSource, addTarget, createWorkspace, parseWorkspace, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
@@ -1935,7 +1938,7 @@ const suites = {
       const simQc = findingsFrom(computeQC({ ...inputFor(simTable, sim.design), design: sim.design, results: simScored.results }), defaultThresholds());
       const raisedSim = Object.fromEntries(simQc.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => [f.id, f.status]));
       const expectedQc = example.findings ?? {};
-      const minimum = differential ? 0.95 : 0.98;
+      const minimum = example.minimumR ?? (differential ? 0.95 : 0.98);
       check('roundtrip', `the example "${example.title}": the same data from its seed, labeled simulated, scored by ${MODELS[parameters.model]}${differential ? `, its conditions compared by ${parameters.differential},` : ''} close to the true ${differential ? 'differences' : 'effects'}, and QC raises exactly the findings it teaches (${simQc.length} findings)`, `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${Object.keys(raisedSim).length ? Object.entries(raisedSim).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > minimum && JSON.stringify(raisedSim) === JSON.stringify(expectedQc), `r > ${minimum}; ${Object.keys(expectedQc).length ? Object.entries(expectedQc).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`);
     }
     // An acknowledged finding (wave 2, slice 8): GRB2's variance beyond counting, which the
@@ -2076,6 +2079,124 @@ const suites = {
     broken.replicates[0].output = 'no-such-sample';
     const invalid = caseOf(grb2.table, broken).readiness;
     check('readiness', 'a design with a problem: the design is the gap, with its first problem', `${invalid.gaps.map((g) => `${g.id}${g.detail ? ` (${g.detail})` : ''}`).join('; ')}; ${invalid.analyses.length} analyses`, invalid.gaps.length === 1 && invalid.gaps[0].id === 'design' && Boolean(invalid.gaps[0].detail) && !invalid.analyses.length, 'design, with why');
+  },
+
+  // Wave 2, slice 11 (T4): every example opened as the window opens it. Its files (a published
+  // example's MaveDB's, unchanged), its design fitting them, its first run, the QC findings it
+  // teaches and no others, what its readiness says is missing, its guide; then each new example's
+  // own lesson, checked: Hsp90's codon variants and its per-generation scores against the
+  // published fitness, factor IX against MultiSTEP's scores, and the simulated problems against
+  // their truth.
+  examples() {
+    const pct = (x) => `${(100 * x).toFixed(1)}%`;
+    const opened = new Map();
+    for (const example of EXAMPLES) {
+      const o = openExampleInNode(example);
+      opened.set(example.id, o);
+      const valid = validateDesign(o.design, { columns: o.table.columns.map((c) => c.name) });
+      const raised = raisedOf(o.findings);
+      const expected = example.findings ?? {};
+      const gaps = o.readiness.gaps.map((g) => g.id);
+      const missing = (example.teaches ?? []).filter((g) => !gaps.includes(g));
+      check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
+      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
+      if (!example.simulated) {
+        const bytes = o.parts[0].bytes;
+        const file = sources.datasets[EXAMPLE_DATASETS[example.id]]?.files.find((f) => f.path === 'counts.csv');
+        const notice = readFileSync(new URL(`../web/${example.files.notice}`, import.meta.url), 'utf8');
+        check('examples', `${example.title}: its counts are MaveDB's, unchanged, and its notice says so, with the license and the citation`, `${sha256(bytes).slice(0, 16)}… against ${file?.sha256.slice(0, 16)}…`, Boolean(file) && sha256(bytes) === file.sha256 && notice.includes(file.sha256) && notice.includes('CC0') && notice.includes(example.source.match(/urn:mavedb:[\d-a-z]+/)[0]), 'the same; said');
+      }
+    }
+
+    // Hsp90: MaveDB's 568 codon rows read as 188 protein variants, the wild type's nine copies once,
+    // MaveDB's own protein names agreeing with the translation but for those copies.
+    {
+      const o = opened.get('hsp90');
+      const raw = parseTable(o.parts[0].bytes);
+      const nt = columnText(raw.columns.find((c) => c.name === 'hgvs_nt'));
+      const pro = columnText(raw.columns.find((c) => c.name === 'hgvs_pro'));
+      const differ = nt.map((n, i) => [n, pro[i], proteinChange(n, o.design.targets[0]).protein]).filter(([, a, b]) => a !== b);
+      const copies = o.assembled.problems.filter((p) => p.code === 'codons-copies');
+      check('examples', 'Hsp90: its 568 codon rows read at the protein level, each substitution\'s codons combined, the wild type (written once per position, with the same counts) read once; MaveDB\'s own protein names agree with the translation but for those nine copies, which it names as synonymous changes', `${raw.rows} rows → ${o.table.rows} protein variants; ${copies.map((p) => p.message.slice(0, 60)).join('; ')}…; ${differ.length} rows named otherwise by MaveDB (${[...new Set(differ.map(([, , b]) => b))].join(', ')})`, raw.rows === 568 && o.table.rows === 188 && copies.length === 1 && /c\.= is written on 9 rows/.test(copies[0].message) && differ.length === 9 && differ.every(([, , b]) => b === 'p.='), '188; read once; 9, all the wild type');
+      // One replicate: each score's SE is its own slope's (residual-scaled), as with REML.
+      const c = o.scored.results.conditions[0];
+      const rep = o.scored.results.replicates[0];
+      let worst = 0;
+      c.se.forEach((x, i) => { if (Number.isFinite(x) && rep.state[i] === REPLICATE_STATE.USED) worst = Math.max(worst, Math.abs(x - rep.se[i]) / rep.se[i]); });
+      check('examples', 'Hsp90: with one replicate there is no shared error model to fit, so each score keeps its own slope\'s SE, scaled by its residuals (the time courses scatter far beyond counting)', `largest relative difference from the replicate's SE ${worst.toExponential(1)}`, worst <= 1e-12, '≤ 1e-12');
+    }
+
+    // The simulated problems: the cells account for replicates 1 and 2, not 3; without replicate 3
+    // the scores come closer to the truth and the intervals stop being too wide.
+    {
+      const example = exampleById('simulated-problems');
+      const o = opened.get('simulated-problems');
+      const truth = o.sim.truth;
+      const against = (results) => {
+        const c = results.conditions[0];
+        const a = [];
+        const b = [];
+        let held = 0;
+        results.variants.key.forEach((k, i) => {
+          if (c.reason[i] || !(k in truth) || k === 'p.=') return;
+          a.push(c.score[i]);
+          b.push(truth[k]);
+          const [low, high] = intervalOf(c, i);
+          if (low <= truth[k] && truth[k] <= high) held += 1;
+        });
+        return { r: pearson(a, b), held: held / a.length };
+      };
+      const without = openExampleInNode(example, { design: (d) => ({ ...d, replicates: d.replicates.filter((r) => r.id !== 'rep3') }) });
+      const [all, two] = [against(o.scored.results), against(without.scored.results)];
+      const cells = o.findings.find((f) => f.id === 'excess-variance').cells ?? [];
+      const verdict = (a, b) => cells.find((x) => x.a === a && x.b === b)?.verdict;
+      // Where DiMSum's terms put the excess, with and without the failing replicate.
+      const placed = (x) => /The excess is at the input/.test(x.findings.find((f) => f.id === 'excess-variance').explanation) ? 'input' : /The excess is at the output/.test(x.findings.find((f) => f.id === 'excess-variance').explanation) ? 'output' : 'neither';
+      check('examples', 'the simulated problems: the recorded cells account for the excess between replicates 1 and 2, not with replicate 3; with replicate 3 the intervals are too wide and DiMSum\'s terms misplace the bottleneck after selection; without it the scores come closer to the truth, the intervals hold it about 95% of the time, and the bottleneck is placed before selection, where it was planted', `cells: rep1–rep2 ${verdict('rep1', 'rep2')}, rep1–rep3 ${verdict('rep1', 'rep3')}, rep2–rep3 ${verdict('rep2', 'rep3')}; all three r ${all.r.toFixed(3)}, intervals ${pct(all.held)}, DiMSum's terms at the ${placed(o)}; without replicate 3 r ${two.r.toFixed(3)}, ${pct(two.held)}, at the ${placed(without)}`, verdict('rep1', 'rep2') === 'explained' && verdict('rep1', 'rep3') === 'more' && verdict('rep2', 'rep3') === 'more' && all.held > 0.98 && two.held >= 0.93 && two.held <= 0.97 && two.r > all.r && placed(o) === 'output' && placed(without) === 'input', 'explained, more, more; > 98%, output; 93–97%, closer, input');
+    }
+
+    // With external data: Hsp90 against the published fitness; factor IX against MultiSTEP's scores.
+    {
+      const o = opened.get('hsp90');
+      const published = parseTable(dataset('mavedb-hsp90').bytes('scores.csv'));
+      const nt = columnText(published.columns.find((c) => c.name === 'hgvs_nt'));
+      const scores = published.columns.find((c) => c.name === 'score').numeric;
+      // The authors' null-like variants: within 3 SD of the stops' mean (they fit those on the first
+      // three time points).
+      const stops = nt.map((n, i) => (/Ter$/.test(proteinChange(n, o.design.targets[0]).protein) ? scores[i] : null)).filter((x) => x !== null);
+      const mean = stops.reduce((a, b) => a + b, 0) / stops.length;
+      const sd = Math.sqrt(stops.reduce((a, b) => a + (b - mean) ** 2, 0) / (stops.length - 1));
+      const byProtein = new Map();
+      nt.forEach((n, i) => { const p = proteinChange(n, o.design.targets[0]).protein; byProtein.set(p, [...(byProtein.get(p) ?? []), scores[i]]); });
+      const c = o.scored.results.conditions[0];
+      const pairs = [];
+      o.scored.results.variants.key.forEach((k, i) => {
+        if (c.reason[i] || !byProtein.has(k)) return;
+        const theirs = byProtein.get(k).reduce((a, b) => a + b, 0) / byProtein.get(k).length;
+        pairs.push([k, c.score[i], theirs]);
+      });
+      const fitted = pairs.filter(([, , theirs]) => theirs > mean + 3 * sd);
+      const nulls = pairs.filter(([k]) => /Ter$/.test(k));
+      const median = (xs) => { const t = [...xs].sort((a, b) => a - b); return t[t.length >> 1]; };
+      const r = pearson(fitted.map((x) => x[1]), fitted.map((x) => x[2]));
+      const gap = median(fitted.map(([, mine, theirs]) => Math.abs(mine - theirs)));
+      const ratio = median(fitted.filter(([, , theirs]) => Math.abs(theirs) > 0.05).map(([, mine, theirs]) => mine / theirs));
+      check('examples', 'Hsp90 against the published fitness per generation (the mean of each substitution\'s codons): MaveScape\'s per-generation slopes by weighted regression follow it where the authors fit every time point, in natural logarithms (the record says log₂: in log₂ MaveScape\'s would be 1/ln 2 ≈ 1.44× the published); stops score less negative, as a slope over all 21 generations of a course that reaches the floor must', `r ${r.toFixed(4)} over ${fitted.length} variants, median difference ${gap.toFixed(4)}, median ratio ${ratio.toFixed(3)}; stops median ${median(nulls.map((x) => x[1])).toFixed(3)} here against ${median(nulls.map((x) => x[2])).toFixed(3)} published (first three time points)`, r >= 0.95 && gap <= 0.01 && Math.abs(ratio - 1) <= 0.07 && median(nulls.map((x) => x[1])) > median(nulls.map((x) => x[2])), 'r ≥ 0.95; ≤ 0.01; ratio within 7% of 1; less negative');
+    }
+    {
+      const o = opened.get('factor9');
+      const published = parseTable(dataset('mavedb-factor9').bytes('scores.csv'));
+      const theirs = new Map(columnText(published.columns.find((c) => c.name === 'hgvs_pro')).map((n, i) => [n, published.columns.find((c) => c.name === 'score').numeric[i]]));
+      const rOf = (results) => {
+        const c = results.conditions[0];
+        const a = [];
+        const b = [];
+        results.variants.key.forEach((k, i) => { if (!c.reason[i] && Number.isFinite(theirs.get(k))) { a.push(c.score[i]); b.push(theirs.get(k)); } });
+        return pearson(a, b);
+      };
+      const multistep = openExampleInNode(exampleById('factor9'), { parameters: { binScale: 'low5-wt', combination: 'mean' } });
+      check('examples', 'factor IX against MultiSTEP\'s published scores: with MaveScape\'s defaults (nonsense 0, wild type 1, the moderated combination) and with MultiSTEP\'s own settings set in the Score view (the lowest 5% at 0, the replicates\' mean), as the guide says', `defaults r ${rOf(o.scored.results).toFixed(4)}; MultiSTEP's settings r ${rOf(multistep.scored.results).toFixed(4)}`, rOf(o.scored.results) >= 0.99 && rOf(multistep.scored.results) >= 0.999, '≥ 0.99; ≥ 0.999');
+    }
   },
 };
 

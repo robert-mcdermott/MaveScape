@@ -73,6 +73,26 @@
     }
    ]
   },
+  "mavedb-hsp90": {
+   "title": "Hsp90 (Hsp82) positions 582–590, growth over 21 generations (urn:mavedb:00000011-a-1)",
+   "description": "EMPIRIC time series: every codon at nine positions of yeast Hsp90, one replicate sampled at 0, 3, …, 21 wild-type generations; 568 rows, one per codon variant, the wild type written once per position. Scored by the authors as the slope of log2(variant/wild type) on generations, null-like variants on the first three time points. The bundled example (web/examples/hsp90) is this counts file, unchanged.",
+   "source": "MaveDB; Hietpas, Jensen and Bolon, PNAS 2011 (doi:10.1073/pnas.1016024108)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000011-a-1/scores",
+     "size": 42793,
+     "sha256": "3694a4257598b5c1412885a9bb8e8a2aa7642237e4fa6ceb2e79b8200818fe89"
+    },
+    {
+     "path": "counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000011-a-1/counts",
+     "size": 60253,
+     "sha256": "9459b0416a2b0380970e073380924cc77fde6ac1adc9bac5dd710eecc68622f7"
+    }
+   ]
+  },
   "dimsum-demo": {
    "title": "DiMSum's demo variant counts (TDP-43, lehner-lab/DiMSum inst/demo)",
    "description": "DiMSum's own count table: 40,591 whole nucleotide sequences (lower case; CRLF line ends, the last line unterminated) × 4 input and 4 output samples, and its experiment design file (old Mac line ends, CR only). The wild type, 126 nt (42 codons), is set in DiMSum's R/dimsum.R for --runDemo.",

@@ -211,6 +211,27 @@ const scenes = {
     await act('inspect_variant', { variant: 'p.Lys3Glu' });
     await sleep(600);
   },
+  // Wave 2, slice 11: the three new examples. Hsp90 per generation: its nine positions, and a
+  // variant's time course over 21 generations in its one replicate.
+  async hsp90() {
+    await example('hsp90');
+    await act('render_map', { color_by: 'score', rows: 'biochemical' });
+    await act('inspect_variant', { variant: 'p.Ser5Ala' });
+    await sleep(600);
+  },
+  // Factor IX: 461 positions in three overlapping tiles, a variant's distribution over the bins.
+  async factor9() {
+    await example('factor9');
+    await act('render_map', { color_by: 'score', rows: 'biochemical' });
+    await act('inspect_variant', { variant: 'p.Gly254Asp' });
+    await sleep(600);
+  },
+  // The simulated problems: the variance beyond counting, the recorded cells against it.
+  async problems() {
+    await example('simulated-problems');
+    await act('qc_findings', { finding: 'excess-variance' });
+    await sleep(600);
+  },
   // A time series: a nonsense variant's time course in each replicate, with its fitted lines.
   async 'time-course'() {
     await example('simulated-time-series');

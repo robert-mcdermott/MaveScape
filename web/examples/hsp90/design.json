@@ -1,0 +1,150 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "Hsp90 (Hsp82) positions 582–590, growth over 21 generations (EMPIRIC)",
+  "description": "Every codon at nine positions of yeast Hsp90 (Hsp82), made with NNN codons and inserted by cassette ligation, transformed into yeast whose own Hsp90 is temperature-sensitive (G170D). At 36 °C that copy is inactive, so growth depends on the variant. Sampled at eight times, 0 to 21 wild-type generations, in one replicate. MaveDB names each codon variant on its own row; MaveScape reads them at the protein level, each amino-acid substitution's codons combined.",
+  "source": {
+    "mavedb": "urn:mavedb:00000011-a-1",
+    "citation": "Hietpas RT, Jensen JD, Bolon DNA. Experimental illumination of a fitness landscape. PNAS 2011;108:7896–7901. doi:10.1073/pnas.1016024108",
+    "license": "CC0"
+  },
+  "model": "time-series",
+  "time": {
+    "unit": "generation"
+  },
+  "readout": {
+    "phenotype": "Growth of yeast whose only active Hsp90 carries the variant (36 °C, the temperature-sensitive copy inactivated)",
+    "modelSystem": "Yeast",
+    "direction": "higher-more"
+  },
+  "variants": {
+    "column": "hgvs_pro (from hgvs_nt)",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "hsp82-582-590",
+      "name": "Hsp90 (Hsp82) 582–590",
+      "sequenceType": "dna",
+      "sequence": "CAATTTGGTTGGTCTGCTAATATGGAA",
+      "codingStart": 1,
+      "offset": 581,
+      "organism": "Saccharomyces cerevisiae",
+      "identifiers": {
+        "uniprot": "P02829",
+        "gene": "HSP82"
+      }
+    }
+  ],
+  "library": {
+    "level": "variant"
+  },
+  "samples": [
+    {
+      "id": "gen-0",
+      "name": "Generation 0",
+      "columns": [
+        "Gen_0"
+      ]
+    },
+    {
+      "id": "gen-3",
+      "name": "Generation 3",
+      "columns": [
+        "Gen_3"
+      ]
+    },
+    {
+      "id": "gen-6",
+      "name": "Generation 6",
+      "columns": [
+        "Gen_6"
+      ]
+    },
+    {
+      "id": "gen-9",
+      "name": "Generation 9",
+      "columns": [
+        "Gen_9"
+      ]
+    },
+    {
+      "id": "gen-12",
+      "name": "Generation 12",
+      "columns": [
+        "Gen_12"
+      ]
+    },
+    {
+      "id": "gen-15",
+      "name": "Generation 15",
+      "columns": [
+        "Gen_15"
+      ]
+    },
+    {
+      "id": "gen-18",
+      "name": "Generation 18",
+      "columns": [
+        "Gen_18"
+      ]
+    },
+    {
+      "id": "gen-21",
+      "name": "Generation 21",
+      "columns": [
+        "Gen_21"
+      ]
+    }
+  ],
+  "replicates": [
+    {
+      "id": "rep1",
+      "name": "Replicate 1",
+      "biological": 1,
+      "timepoints": [
+        {
+          "sample": "gen-0",
+          "time": 0
+        },
+        {
+          "sample": "gen-3",
+          "time": 3
+        },
+        {
+          "sample": "gen-6",
+          "time": 6
+        },
+        {
+          "sample": "gen-9",
+          "time": 9
+        },
+        {
+          "sample": "gen-12",
+          "time": 12
+        },
+        {
+          "sample": "gen-15",
+          "time": 15
+        },
+        {
+          "sample": "gen-18",
+          "time": 18
+        },
+        {
+          "sample": "gen-21",
+          "time": 21
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "wildType": "auto",
+    "synonymous": "auto",
+    "nonsense": "auto",
+    "why": {
+      "nonsense": "Hsp90 is essential in yeast, and a stop at any of these positions truncates it."
+    }
+  },
+  "notes": "MaveDB's protein column names the wild type's nine copies (one per position) as synonymous changes; MaveScape names each row from its nucleotide name instead, and reads the copies once."
+}

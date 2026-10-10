@@ -31,9 +31,9 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > cause it and what to do. Replicates are combined under a shared error model whose 95% intervals
 > hold the truth 94–97% of the time in 26 kinds of simulated experiment. For the open workspace,
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
-> would add, and writes the analysis package that `mavescape run` reads. Six examples are on the Start page;
+> would add, and writes the analysis package that `mavescape run` reads. Nine examples are on the Start page (three published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with more examples.
+> [roadmap](mavescape-spec/roadmap.md)'s wave 2 is complete; 0.3 brings public data in and out.
 
 ## What is a MAVE?
 

@@ -90,3 +90,14 @@ test('a reference that varies widens a score\'s degrees of freedom toward the re
   assert.ok(steady.df[0] > 15 && shifting.df[0] < 4 && shifting.df[0] >= 2, `${steady.df[0]} against ${shifting.df[0]}`);
   assert.ok(shifting.seWithin[0] < shifting.se[0] && Math.abs(steady.seWithin[0] - steady.se[0]) < 0.01 * steady.se[0]);
 });
+
+test('with one replicate there is no model to fit: each measurement keeps its own SE (a regression\'s residual-scaled one)', () => {
+  const data = rows({ n: 300, K: 1, seed: 31 }).rows.map((row) => ({ ...row, own: row.v.map((v) => 9 * v) }));
+  const m = moderatedCombination(data);
+  assert.equal(m.model.fitted, false);
+  data.forEach((row, i) => assert.ok(Math.abs(m.se[i] - Math.sqrt(row.own[0])) < 1e-12 * m.se[i] && Math.abs(m.estimate[i] - row.y[0]) <= 1e-15 * Math.max(1, Math.abs(row.y[0]))));
+  // With a model, own is not used.
+  const fitted = moderatedCombination(rows({ n: 800, seed: 32 }).rows.map((row) => ({ ...row, own: row.v.map(() => 100) })));
+  assert.ok(fitted.model.fitted && fitted.se.every((x) => x < 1));
+});
+

@@ -19,6 +19,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked; an acknowledged finding through the archive; the archive each release saved (`archives/`) opened and its runs reproduced; the analysis package (wave 2 slice 10) scored from its own files to the run's output hash, its sample sheet read as its design, the same bytes twice | `fixtures/`, `web/examples/`, `archives/` |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 | `readiness` | What each analysis can do with what a workspace holds (wave 2, slice 10; `readiness-cases.mjs`): the six examples, the five fixtures and a simulated bottleneck with its cells recorded, whole and with one part taken away (the wild-type row, a replicate, the gates, the cells, the times in generations, the middle time points, the readout, the nonsense or synonymous controls), 74 workspaces. The readiness model must name exactly what was taken away, and its verdict on every analysis must agree with the engine: each scoring analysis scored or refused with the parameters that use it, each QC finding assessed or not, and an analysis it leaves out for a design one the engine cannot do there either. An empty workspace and a broken design | `web/examples/`, `fixtures/`, simulated |
+| `examples` | Every bundled example opened as the window opens it (wave 2, slice 11; `example-cases.mjs`): assembled (Hsp90's codon variants read at the protein level), scored with its parameters, raising exactly the QC findings it teaches, its readout stated and its readiness naming what its guide points to, at most six guided steps; the published examples' counts MaveDB's, byte for byte. Hsp90's codons (568 rows, 188 protein variants, the wild type's nine copies read once) and its per-generation scores against the published fitness; a single replicate's own SEs; factor IX against MultiSTEP's scores; the simulated problems against their truth, with and without replicate 3 | `web/examples/`; MaveDB, external (`mavedb-hsp90`, `mavedb-factor9`) |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -71,7 +72,10 @@ pipeline would (headless Chrome: `CHROME`, else one installed):
   from its own files, as its README says, it gives the window's run; `mavescape validate --json`'s
   readiness (GRB2 without its readout) equal to Node's, and the text naming what is missing.
 
-22 checks, in CI's `remote` job; about 25 s.
+- Hsp90's design run on MaveDB's counts as they are (wave 2, slice 11): `mavescape run` reads the
+  codon variants at the protein level for the design and gives Node's output hash.
+
+23 checks, in CI's `remote` job; about 25 s.
 
 ## Coverage of intervals (`coverage.mjs`, wave 2 slice 9)
 
@@ -117,10 +121,12 @@ what the reference tools compute; this shows whether the intervals mean what the
 | `mavedb-grb2-sh3` (urn:mavedb:00000835-a-1) | two populations × 3 replicates | the common case; DiMSum behind the published scores |
 | `mavedb-brca1-ring` (urn:mavedb:00000003-a-1, -a-2) | time series: 2 libraries × 3 replicates × 6 rounds (E2 binding), and 2 × 3 × 4 non-uniform times (Y2H), in one table | shared inputs, two assays in one table, legacy `_wt`/`_sy` rows, a DNA target with an offset and a known difference from UniProt; Enrich2 behind the published scores |
 | `mavedb-factor9` (urn:mavedb:00001200-a-1) | FACS bins: 3 overlapping tiles × 3 replicates × 4 bins | tiled libraries, VAMP-seq-style weights |
+| `mavedb-hsp90` (urn:mavedb:00000011-a-1) | time series: 1 replicate × 8 times, 0–21 generations; one row per codon, the wild type written once per position | the Hsp90 example (wave 2, slice 11): its counts byte for byte, its codons read at the protein level, its per-generation scores against the published fitness |
 | `dimsum-demo` (lehner-lab/DiMSum `inst/demo`, MIT) | 40,591 whole nucleotide sequences × 4 inputs and 4 outputs; its design file | DiMSum's layout (variants as sequences, named against the 126-nt wild type); CR-only line ends |
 | `mavedb-cbs` (urn:mavedb:00000005-a-5, -a-6) | two populations × 4 replicates at low and at high vitamin B6, in two records whose non-selected samples are the same | two conditions from shared inputs (wave 2, slice 6); counts not whole numbers; codon variants with no wild-type row |
 
-All are CC0 on MaveDB. MaveDB's API writes these CSV files identically on every request (checked
+All are CC0 on MaveDB. The GRB2, factor IX and Hsp90 examples (`web/examples/`) are their count
+files, unchanged. MaveDB's API writes these CSV files identically on every request (checked
 2026-10-08), with Windows line ends (CRLF) and `NA` for missing values; counts are written as
 decimals (`3232.0`).
 

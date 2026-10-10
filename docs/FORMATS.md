@@ -65,6 +65,20 @@ Layouts recognized:
 | A table of barcodes | a column of barcodes (named `barcode`, `bc`, `tag`…, or DNA of one length, six bases or more) and the variant each carries, in a column of its own or from a barcode-to-variant map opened with it (below) |
 | dms_variants' variant counts | `library`, `sample`, `barcode`, `count` and `aa_substitutions` or `codon_substitutions` (its `variant_counts` CSV) |
 | Enrich2's counts files | two columns, the elements (Enrich2 leaves their column unnamed) and `count`; one file per sample, joined. Elements that are variants are named in MAVE-HGVS; barcodes need Enrich2's barcode map |
+| Codon variants (MaveScape 0.2) | a table naming each codon variant on its own row in a column of coding names (`hgvs_nt`, `c.…`), read at the protein level when chosen (*Each row is: a codon variant*): below |
+
+**Codon variants** (MaveScape 0.2). A table such as MaveDB's EMPIRIC tables names each codon
+variant on its own row, several to an amino-acid substitution, and often writes the wild type once
+per position. Read at the protein level, each row's protein change is worked out from its
+nucleotide name against the target's DNA in its reading frame (substitutions in the coding
+sequence; any other change is not named, and not scored); a variant on several rows with the same
+count in every column is one measurement written more than once, read once (with different
+counts it is a blocking problem); and the codons of each protein variant are summed in every count
+column (missing in a sample only if every codon is). The result has one row per protein variant,
+named in a column `hgvs_pro (from <column>)`; the table's own protein column is not used. The
+source's mapping records `assembly: { kind: "codons", codons: { from: "<column>" } }`, and a design
+whose `variants.column` is `hgvs_pro (from <column>)` reads its table this way wherever it is
+opened (`mavescape run`, a design file opened later).
 
 Large tables are held column by column, a column of numbers as numbers only: a million rows of
 counts and barcodes take about 100 MB once read (MaveScape 0.2; `validation/bench.mjs` checks a

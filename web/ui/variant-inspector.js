@@ -10,7 +10,7 @@
 import { h, icon } from './dom.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
-import { describeParameters, isBarcodeRun } from '../lib/runs.js';
+import { describeParameters, isBarcodeRun, unitOf } from '../lib/runs.js';
 import { DIFFERENTIAL_REASON_NAMES, pairDifference, transformOf } from '../lib/differential.js';
 import { withDefaults } from '../lib/score.js';
 import { intervalOf } from '../lib/exports.js';
@@ -237,7 +237,7 @@ export function variantSection(app, focus) {
       parts.push(h('h4.inspector-sub', 'Time course'),
         lineChart({ series, xLabel: `time${unit && unit !== 'other' ? ` (${unit}s)` : ''}`, yLabel: 'normalized ln count', label: `${focus.id}: its normalized log count at each time in each replicate, with the fitted lines`, width: 300, height: 170 }),
         legend(items.map(([color, label]) => ({ color, label }))),
-        h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, 'Points: ln(count + pseudocount) − ln(normalizer) at each time; dashed: the fitted line, whose slope on time scaled to 0–1 is the replicate\'s score. Departure: scatter about the line over what counting predicts (1 is typical).'));
+        h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, `Points: ln(count + pseudocount) − ln(normalizer) at each time; dashed: the fitted line, whose slope ${p.timeScale === 'unit' ? `per ${unitOf(run.inputs.design)}` : 'on time scaled to 0–1'} is the replicate's score. Departure: scatter about the line over what counting predicts (1 is typical).`));
     }
     if (results.differential?.length) parts.push(...differentialBlock(results, row, run));
     // Every sample's counts.

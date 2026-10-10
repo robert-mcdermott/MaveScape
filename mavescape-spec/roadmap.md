@@ -1026,13 +1026,69 @@ measures, and intervals checked against the truth.
       - **The deposit's needs are listed now** (the assay in MaveDB's terms, how the library was
         made, the target's identifier), so a laboratory can gather them before wave 3 deposits.
       - `describe_experiment` (wave 7) will return the readiness as it is.
-11. **Examples (T4).** Three more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
-   growth time series; Factor IX MultiSTEP (one readout) as the FACS-bin assay; and a simulated
-   problematic experiment (a bottleneck and a failing replicate), labeled simulated. (The simulated
-   barcode map with conflicts came with slice 4. No barcode-level counts are on MaveDB; Enrich2's
-   example data are CC BY-SA, whose ShareAlike term should not enter an Apache-2.0 binary.) Each
-   with its question, source and license, its readout and direction (slice 8), its readiness
-   (slice 10), expected findings, opening view and a guided workflow under ten minutes.
+11. **Examples (T4; D10 in part): done.** Three more, nine in all, each with its question, source
+    and license, its readout and direction, its readiness, the QC findings it teaches
+    (`findings`), the gaps its guide points to (`teaches`), its opening view and a guided workflow
+    of four to six steps:
+    - **Hsp90** (`00000011-a-1`, CC0; Hietpas, Jensen and Bolon 2011), the growth time series: every
+      codon at positions 582–590 of yeast Hsp82, sampled eight times over 21 generations in one
+      replicate. It opens on the map, scored per generation (`parameters: { timeScale: 'unit' }`).
+      Its lessons: codon variants read at the protein level; per-generation scores against the
+      published fitness; a time course that reaches the floor; what one replicate cannot tell.
+    - **Factor IX** (`00001200-a-1`, CC0; Popp et al. 2025), the FACS-bin assay (MultiSTEP, strep II
+      tag): 461 positions in three overlapping tiles of three replicates, 2 MB of counts. It opens
+      on the map. Its lessons: reads far beyond the cells sorted (QC fails the variance beyond
+      counting, about 2,300×); the gates and cells MaveDB does not record; MaveScape's scale
+      against MultiSTEP's (the guide's step sets MultiSTEP's own).
+    - **A simulated experiment with problems** (seed 20261016, labeled simulated): about 50 cells
+      per variant into selection, recorded with the inputs, and a third replicate far noisier than
+      the others. It opens in QC. The lesson: find the problems, leave replicate 3 out, and compare
+      the runs against the truth; the guide now shows every run's.
+    - **Codon variants read at the protein level** (`web/lib/codons.js`; part of wave 3's
+      translation brought forward, because Hsp90 needs it): each row's protein change from its
+      nucleotide name against the target's DNA, in its reading frame (substitutions in the coding
+      sequence); a variant on several rows with the same counts read once, with different counts a
+      problem; each protein variant's codons summed, into `hgvs_pro (from hgvs_nt)`. Offered in the
+      import wizard (*Each row is: a codon variant*, suggested when protein names repeat),
+      recorded as the source's assembly, and applied whenever a design names the derived column
+      (`readCodonsFor`: `mavescape run`, `set_design`, `check`, a design file opened later).
+    - Validation:
+      - `examples` (26 checks): all nine opened as the window opens them, each scored with its
+        parameters and raising exactly the findings it teaches, its readout stated, its readiness
+        naming what its guide points to, at most six steps; the published ones' counts MaveDB's,
+        byte for byte, with notices saying so. Hsp90: 568 rows read as 188 protein variants, the
+        wild type's nine copies once, MaveDB's protein names agreeing with the translation but for
+        those nine; each score's SE its own slope's with one replicate; against the published
+        fitness, r 0.954 over the 100 variants the authors fit on every time point, a median 0.005
+        apart, a median ratio 0.97, stops less negative. Factor IX against MultiSTEP's scores:
+        r 0.994 with the defaults, 0.9995 with MultiSTEP's settings. The simulated problems: the
+        cells account for replicates 1 and 2, not 3; all three r 0.961 and intervals 99.5%, DiMSum's
+        terms at the output; without replicate 3 r 0.983, 95.9%, at the input.
+      - `headless-run.mjs` 23 checks: `mavescape run` on Hsp90's design and MaveDB's counts reads
+        the codons for the design and gives Node's output hash.
+      - Unit tests 217, with `codons.test.mjs` and a one-replicate case in `moderate.test.mjs`.
+    - Found by slice 11:
+      - **The moderated combination ignored a single replicate's own SE** (from slice 9): with no
+        pairs of replicates, its model fell back to counting error alone, a regression's slope
+        dropping the scatter of its own residuals. Hsp90's SEs were understated a median 6.3×
+        (up to 21×). With no model to fit, each score now keeps its own SE, as with the other
+        combinations. The coverage suite had tested two to six replicates.
+      - **Hsp90's table writes its wild type once per position**, nine identical rows, and its
+        protein column names them as synonymous changes (`p.Gln1=` … `p.Glu9=`) where their
+        nucleotide names say no change; each substitution is on several rows, one per codon.
+        Reading it at the protein level needed the translation of wave 3, in part.
+      - **The record says log₂; its scores are natural-log slopes**: MaveScape's per-generation
+        slopes, in natural logarithms, are a median 0.97 of the published; in log₂ they would be
+        1.4×.
+      - **The authors' null-like variants were fit on three time points**: a slope over all 21
+        generations of a course that reaches the floor is shallower (−0.32 against −0.77), which
+        QC's fit of the time courses shows.
+      - **A failing replicate distorts DiMSum's error model too**: in the problems example its
+        terms put the planted input bottleneck after selection; without replicate 3, before it.
+      - **Factor IX's nonsense median is 0.47 on MultiSTEP's scale** (the lowest 5% of missense at
+        0): the scale convention changes what 0 means.
+      - Wave 2 is complete with slice 11; 0.2.0 can be released, with a workspace archive of it
+        kept for later versions to reopen (`validation/archives/`).
 
 ## 0.3.0: public data in and out (wave 3)
 

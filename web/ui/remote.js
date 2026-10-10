@@ -21,6 +21,7 @@ import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.
 import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { openExample } from './examples.js';
+import { readCodonsFor } from './import.js';
 import { draftFromColumns } from './design-draft.js';
 import { ensureResults, forgetResults } from './run-results.js';
 import { runScore, workerInput } from './score-input.js';
@@ -321,7 +322,8 @@ export function installRemote(app) {
       const design = args.design;
       if (!design || typeof design !== 'object') throw new ActionError('Give "design": a mavescape-design document (docs/FORMATS.md).');
       if (design.format !== 'mavescape-design') throw new ActionError('The design\'s format must be "mavescape-design".');
-      const source = resolveSource(args.table);
+      // A design naming protein names derived from codons reads the table's codons (wave 2, slice 11).
+      const source = await readCodonsFor(app, resolveSource(args.table), design).catch((error) => { throw new ActionError(error.message); });
       const result = validateDesign(design, { columns: source.columns.map((c) => c.name) });
       if (!result.ok) throw new ActionError(`The design does not fit ${source.name}: ${result.errors.map((e) => e.message).join(' ')}`);
       // The workspace's own target (with the same sequence) stands in for the design's copy; a
@@ -359,7 +361,7 @@ export function installRemote(app) {
           data: { valid: !blocking.length, table: null, design: d, blocking, warnings: d.warnings, readiness: ready, readinessText: readinessText(ready, { all: false }) },
         };
       }
-      const source = resolveSource(args.table);
+      const source = design ? await readCodonsFor(app, resolveSource(args.table), design).catch((error) => { throw new ActionError(error.message); }) : resolveSource(args.table);
       const table = await app.sourceTable(source);
       const mapping = source.mapping ?? {};
       const target = design?.targets?.[0] ?? ws().targets.find((t) => t.id === source.target) ?? null;
