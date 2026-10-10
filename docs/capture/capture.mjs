@@ -135,6 +135,12 @@ const scenes = {
     await act('draft_design');
     await act('set_mode', { mode: 'experiment' });
   },
+  // What the assay measures (wave 2, slice 8): GRB2's readout in MaveDB's terms, and its controls.
+  async readout() {
+    await example('grb2-sh3');
+    await act('set_mode', { mode: 'experiment' });
+    await scrollTo('.readout-pane', 'center');
+  },
   // Scores with their evidence: the filter flow, the classes, the variants.
   async score() {
     await example('grb2-sh3');
@@ -152,6 +158,15 @@ const scenes = {
     await example('grb2-sh3');
     await act('qc_findings', { finding: 'excess-variance' });
     await sleep(600);
+  },
+  // A finding in context (wave 2, slice 8): what could cause GRB2's bottleneck, what to do, and the
+  // finding acknowledged with a reason, its status unchanged.
+  async 'qc-advice'() {
+    await example('grb2-sh3');
+    await act('acknowledge_finding', { finding: 'excess-variance', reason: 'The input bottleneck the Domainome\'s own analysis reported' });
+    await act('qc_findings', { finding: 'excess-variance' });
+    await sleep(600);
+    await scrollTo('.finding-context', 'center');
   },
   // The same finding's plots: DiMSum's terms put the bottleneck at the inputs.
   async 'dimsum-qc'() {

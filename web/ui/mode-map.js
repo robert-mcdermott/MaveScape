@@ -16,7 +16,8 @@ import { ensureResults, runEntry } from './run-results.js';
 import { mountVariantMap } from './variant-map.js';
 import { exportSelection } from './record.js';
 
-const PALETTES = [['rdbu', 'Blue (loss) – red (gain)'], ['puor', 'Purple (loss) – orange (gain)']];
+// Named by their colors only: which end is loss of function depends on the assay (the readout).
+const PALETTES = [['rdbu', 'Blue (lower) – red (higher)'], ['puor', 'Purple (lower) – orange (higher)']];
 const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const PAGE = 50;
 
@@ -150,7 +151,7 @@ export function mountMapMode(app, container) {
     legendEl.append(
       h('div.map-scale', h('span.map-scale-bar', { style: { background: `linear-gradient(90deg, ${stops})` } }),
         h('span.map-scale-labels', h('span', fmt(d.min)), d.kind === 'diverging' ? h('span', model.contrast ? '0 no difference' : `${fmt(d.center)} wild type`) : null, h('span', fmt(d.max))),
-        h('span.map-scale-title', { title: model.contrast ? `${label}: ${low} where a variant scores lower in ${condition} than in ${reference}, ${high} where higher` : null }, model.contrast ? `${condition} − ${reference}: ${low} lower, ${high} higher` : d.kind === 'diverging' ? `${label}: ${low} is loss, ${high} gain` : label)),
+        h('span.map-scale-title', { title: model.contrast ? `${label}: ${low} where a variant scores lower in ${condition} than in ${reference}, ${high} where higher` : d.kind === 'diverging' && !model.scale.stated ? 'The readout\'s direction is not stated (Experiment, Readout): which end means loss of function depends on what the assay selects for.' : null }, model.contrast ? `${condition} − ${reference}: ${low} lower, ${high} higher` : d.kind === 'diverging' ? (model.scale.stated ? `${label}: ${low} is ${model.scale.low}, ${high} ${model.scale.high}` : `${label}: ${low} lower, ${high} higher`) : label)),
       h('span.map-state', h('span.map-swatch.low', { style: { background: colors.paler(0.2) } }), `${STATE_NAMES[STATE.LOW]} (${formatCount(model.counts[STATE.LOW])})`),
       h('span.map-state', h('span.map-swatch.filtered'), `${STATE_NAMES[STATE.FILTERED]} (${formatCount(model.counts[STATE.FILTERED])})`),
       h('span.map-state', h('span.map-swatch.missing'), `${STATE_NAMES[STATE.MISSING]} (${formatCount(model.counts[STATE.MISSING])})`),

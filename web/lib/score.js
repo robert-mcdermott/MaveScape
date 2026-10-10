@@ -201,7 +201,10 @@ export function checkParameters(parameters, design) {
 }
 
 // The rows of the wild type, synonymous and nonsense controls, as the design names them ('auto':
-// by kind). Returns { wt: row or -1, wtProblem, synonymous: [rows], nonsense: [rows] }.
+// by kind), within the positions where each serves as a control (controls.positions; a stop late
+// in a protein can keep the function an assay measures, wave 2 slice 8). Returns { wt: row or −1,
+// wtProblem, synonymous: [rows], nonsense: [rows] }. variants: { n, original, key, kind, status,
+// position }.
 export function controlRows(design, variants) {
   const controls = design.controls ?? {};
   const byName = (name) => {
@@ -216,12 +219,17 @@ export function controlRows(design, variants) {
     return rows;
   };
   const wtRows = !controls.wildType || controls.wildType === 'auto' ? kindRows(KIND.WT) : byName(controls.wildType);
-  const list = (value, kind) => (value === 'none' ? [] : Array.isArray(value) ? [...new Set(value.flatMap(byName))] : kindRows(kind));
+  const within = (key) => {
+    const r = controls.positions?.[key];
+    if (!r || (r.start === undefined && r.end === undefined)) return () => true;
+    return (i) => variants.position[i] >= (r.start ?? 1) && variants.position[i] <= (r.end ?? Infinity);
+  };
+  const list = (value, kind, key) => (value === 'none' ? [] : Array.isArray(value) ? [...new Set(value.flatMap(byName))] : kindRows(kind)).filter(within(key));
   return {
     wt: wtRows.length === 1 ? wtRows[0] : -1,
     wtProblem: wtRows.length > 1 ? `The wild type is on ${wtRows.length} rows; which one normalizes is ambiguous.` : null,
-    synonymous: list(controls.synonymous, KIND.SYNONYMOUS),
-    nonsense: list(controls.nonsense, KIND.NONSENSE),
+    synonymous: list(controls.synonymous, KIND.SYNONYMOUS, 'synonymous'),
+    nonsense: list(controls.nonsense, KIND.NONSENSE, 'nonsense'),
   };
 }
 

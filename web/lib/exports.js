@@ -145,6 +145,15 @@ export function qcSamplesCSV(qc) {
   return csv(header, qc.samples.map((s) => [s.id, s.columns.join('+'), s.roles.map((r) => `${r.replicate}:${r.role}${r.time !== undefined ? `@${r.time}` : ''}`).join(' '), String(s.counted), String(s.missing), num(s.missingFraction), num(s.total), num(s.readsPerVariant), String(s.zeros), num(s.zeroFraction), String(s.low), num(s.lowFraction), ...s.quantiles.map(num)]));
 }
 
+// The QC findings (wave 2, slice 8): each with its status, what it found, its threshold, the
+// causes that fit it and what to do next, and its acknowledgement (reason, the status it was
+// acknowledged at), if one holds.
+export function qcFindingsCSV(findings) {
+  const header = ['finding', 'title', 'status', 'blocking', 'from', 'value', 'threshold', 'acknowledged', 'acknowledged_status', 'reason', 'causes', 'next'];
+  const join = (list) => (list?.length ? list.map((x) => `${x.kind}: ${x.text}`).join(' | ') : 'NA');
+  return csv(header, findings.map((f) => [f.id, f.title, f.status === 'na' ? 'not assessed' : f.status, f.blocking ? 'yes' : 'no', f.level ?? 'counts', f.value, f.threshold, f.acknowledged?.current ? 'yes' : 'no', f.acknowledged?.current ? f.acknowledged.status : 'NA', f.acknowledged?.current ? f.acknowledged.reason : 'NA', join(f.advice?.causes), join(f.advice?.next)]));
+}
+
 // QC per variant: how each replicate measured it, and the flags of its score.
 export function qcVariantsCSV(results, run, condition = 0) {
   const c = results.conditions[condition];
@@ -197,7 +206,7 @@ export function provenanceJSON(run, ws, { qc = null, findings = null, thresholds
       design: run.inputs.design,
       designSha256: null,
     },
-    qc: findings ? { thresholds, findings: findings.map((f) => ({ id: f.id, status: f.status, blocking: f.blocking, value: f.value, threshold: f.threshold })), measures: qc?.measures ?? null } : null,
+    qc: findings ? { thresholds, findings: findings.map((f) => ({ id: f.id, status: f.status, blocking: f.blocking, value: f.value, threshold: f.threshold, ...(f.acknowledged?.current ? { acknowledged: { reason: f.acknowledged.reason, status: f.acknowledged.status, time: f.acknowledged.time } } : {}) })), measures: qc?.measures ?? null } : null,
     workspace: { id: ws.id, name: ws.name, historyHead: ws.history.at(-1)?.hash ?? null, historyEntries: ws.history.length },
     files,
     researchUse: 'Experimental functional effects for research. Not a clinical classification: no variant is called pathogenic or benign.',

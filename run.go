@@ -58,6 +58,16 @@ func (l *listFlag) Set(value string) error {
 	return nil
 }
 
+// repeatFlag collects a flag given several times, each value whole (a reason may hold commas).
+type repeatFlag []string
+
+func (r *repeatFlag) String() string { return strings.Join(*r, "; ") }
+
+func (r *repeatFlag) Set(value string) error {
+	*r = append(*r, value)
+	return nil
+}
+
 type runOptions struct {
 	design     string
 	counts     listFlag
@@ -71,9 +81,11 @@ type runOptions struct {
 	log        string
 	overwrite  bool
 	strict     bool
-	chrome     string
-	timeout    time.Duration
-	dev        bool
+	// Findings expected here, each "id=reason": acknowledged before the QC is read.
+	acknowledge repeatFlag
+	chrome      string
+	timeout     time.Duration
+	dev         bool
 	// Read from the files above.
 	designJSON     json.RawMessage
 	parametersJSON json.RawMessage
@@ -182,7 +194,8 @@ func parseRunArgs(args []string, stderr io.Writer) (runOptions, error) {
 	flags.StringVar(&opts.clock, "time", "", "the time every record carries (ISO 8601), so that the same inputs write the same bytes (default: SOURCE_DATE_EPOCH if set, else now)")
 	flags.StringVar(&opts.log, "log", "text", "progress as text or json (one JSON object per line)")
 	flags.BoolVar(&opts.overwrite, "overwrite", false, "replace outputs already in the folder")
-	flags.BoolVar(&opts.strict, "strict", false, "exit 1 when any quality-control finding fails (by default only a blocking one)")
+	flags.BoolVar(&opts.strict, "strict", false, "exit 1 when any quality-control finding fails and is not acknowledged (by default only a blocking one fails the run)")
+	flags.Var(&opts.acknowledge, "acknowledge", "a finding expected here, as id=reason (\"coverage=error-prone PCR library\"): its status stays, the reason goes on the record, and --strict does not fail on it (repeatable)")
 	flags.StringVar(&opts.chrome, "chrome", "", "the Chrome, Chromium, Edge or Brave to run in (default: CHROME, else one installed)")
 	flags.DurationVar(&opts.timeout, "timeout", time.Hour, "stop a run that takes longer")
 	flags.BoolVar(&opts.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
@@ -214,6 +227,9 @@ func parseRunArgs(args []string, stderr io.Writer) (runOptions, error) {
 	}
 	if opts.timeout <= 0 {
 		return opts, errors.New("--timeout must be positive")
+	}
+	if _, err := acknowledgements(opts.acknowledge); err != nil {
+		return opts, err
 	}
 	if opts.clock, err = runClock(opts.clock, os.Getenv("SOURCE_DATE_EPOCH")); err != nil {
 		return opts, err
@@ -365,10 +381,26 @@ type runSummary struct {
 
 type qcOverall struct {
 	Overall struct {
-		Status   string         `json:"status"`
-		Counts   map[string]int `json:"counts"`
-		Blocking []string       `json:"blocking"`
+		Status         string         `json:"status"`
+		Counts         map[string]int `json:"counts"`
+		Blocking       []string       `json:"blocking"`
+		Acknowledged   []string       `json:"acknowledged"`
+		Unacknowledged map[string]int `json:"unacknowledged"`
 	} `json:"overall"`
+}
+
+// acknowledgements reads --acknowledge values, "id=reason", in order.
+func acknowledgements(values []string) ([][2]string, error) {
+	var out [][2]string
+	for _, v := range values {
+		id, reason, ok := strings.Cut(v, "=")
+		id, reason = strings.TrimSpace(id), strings.TrimSpace(reason)
+		if !ok || id == "" || reason == "" {
+			return nil, fmt.Errorf("--acknowledge takes a finding and the reason it is expected, as id=reason (%q)", v)
+		}
+		out = append(out, [2]string{id, reason})
+	}
+	return out, nil
 }
 
 // executeRun performs the analysis in a headless page and returns the exit status.
@@ -455,7 +487,14 @@ func executeRun(ctx context.Context, opts runOptions, browser string, record *ru
 		record.Run = data
 	}
 
-	// Quality control.
+	// Quality control: the findings expected here acknowledged first (a refusal, such as a finding
+	// that is not there, stops the run), then read.
+	acks, _ := acknowledgements(opts.acknowledge)
+	for _, a := range acks {
+		if _, ok := steps.do("acknowledge_finding", map[string]any{"finding": a[0], "reason": a[1], "run": summary.ID}); !ok {
+			return exitFailed
+		}
+	}
 	qcData, qcOK := steps.do("qc_findings", map[string]any{"run": summary.ID})
 	var qc qcOverall
 	if qcOK {
@@ -480,6 +519,7 @@ func executeRun(ctx context.Context, opts runOptions, browser string, record *ru
 		struct{ what, file, condition string }{"counts", "counts.csv", ""},
 		struct{ what, file, condition string }{"qc-samples", "qc_samples.csv", ""},
 		struct{ what, file, condition string }{"qc-variants", "qc_variants.csv", ""},
+		struct{ what, file, condition string }{"qc-findings", "qc_findings.csv", ""},
 	)
 	if summary.Barcodes {
 		exports = append(exports, struct{ what, file, condition string }{"barcodes", "barcodes.csv", ""})
@@ -519,8 +559,11 @@ func executeRun(ctx context.Context, opts runOptions, browser string, record *ru
 		record.Problems = append(record.Problems, message)
 		log.problem(message)
 		return exitFailed
-	case opts.strict && qc.Overall.Counts["fail"] > 0:
-		message := fmt.Sprintf("quality control: %d finding(s) fail (--strict)", qc.Overall.Counts["fail"])
+	case opts.strict && qc.Overall.Unacknowledged["fail"] > 0:
+		message := fmt.Sprintf("quality control: %d finding(s) fail (--strict)", qc.Overall.Unacknowledged["fail"])
+		if acknowledged := qc.Overall.Counts["fail"] - qc.Overall.Unacknowledged["fail"]; acknowledged > 0 {
+			message += fmt.Sprintf(", besides %d acknowledged", acknowledged)
+		}
 		record.Problems = append(record.Problems, message)
 		log.problem(message)
 		return exitFailed

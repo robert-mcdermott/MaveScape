@@ -78,6 +78,17 @@ export function recordedInputs(run) {
   return { ...run.inputs, source };
 }
 
+// Whether a run's recomputed output is its recorded one: { status: 'reproduced' | 'differs',
+// message }. digest: outputDigest of the recomputed results; version: this program's.
+export function reproduction(run, digest, version) {
+  if (digest === run.output.sha256) return { status: 'reproduced', message: '' };
+  const scoring = run.inputs.scoring;
+  const why = scoring !== SCORING_VERSION
+    ? `MaveScape ${run.software.version} scored it with scoring engine ${scoring}, which took its logarithms from the browser (their last digit varies between browsers and their versions); this is engine ${SCORING_VERSION}, the same in every browser. The scores differ only in their last digits.`
+    : `MaveScape ${run.software.version} made it; this is ${version}.`;
+  return { status: 'differs', message: `The recomputed scores have output SHA-256 ${digest.slice(0, 12)}…, not ${run.output.sha256.slice(0, 12)}… as recorded. ${why}` };
+}
+
 export function addRun(ws, run) {
   if (ws.runs.some((r) => r.id === run.id)) return { ws, existing: true };
   const conditions = run.output.conditions.map((c) => `${run.output.conditions.length > 1 ? `${c.name}: ` : ''}${c.scored} of ${run.output.variants} scored`).join('; ');

@@ -11,7 +11,7 @@ import { validateDesign, summarizeDesign } from '../lib/design.js';
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
 import { addRun, makeRun, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
-import { addSelection, addTarget, createWorkspace, rename, setDesign } from '../lib/workspace.js';
+import { acknowledgeFinding, addSelection, addTarget, createWorkspace, rename, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
 import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
@@ -172,7 +172,37 @@ export function installRemote(app) {
   }
 
   function findingSummary(f) {
-    return { id: f.id, title: f.title, status: f.status, blocking: Boolean(f.blocking), value: f.value, threshold: f.threshold, explanation: f.explanation, rationale: f.rationale };
+    return {
+      id: f.id, title: f.title, status: f.status, blocking: Boolean(f.blocking), value: f.value, threshold: f.threshold, explanation: f.explanation, rationale: f.rationale,
+      // What could cause it and what to do next (wave 2, slice 8), and its acknowledgement.
+      causes: f.advice?.causes ?? [], next: f.advice?.next ?? [],
+      ...(f.acknowledged ? { acknowledged: { reason: f.acknowledged.reason, status: f.acknowledged.status, current: f.acknowledged.current } } : {}),
+    };
+  }
+
+  // The QC of a run (by name or id), or of the counts ("counts"), with the workspace's thresholds
+  // and acknowledgements: { sub, findings, overall, of }.
+  async function qcOfSubject(runName) {
+    const w = ws();
+    const subjects = qcSubjects(w);
+    if (!subjects.length) throw new ActionError('Quality control needs a count table and its design first.');
+    let sub;
+    if (/^counts$/i.test(String(runName ?? ''))) {
+      sub = subjects.find((s) => s.id === 'counts');
+      if (!sub) throw new ActionError('There is no current design to check the counts with.');
+    } else if (runName || w.runs.length) {
+      const run = resolveRun(runName);
+      sub = subjects.find((s) => s.id === `run:${run.id}`);
+    } else {
+      sub = subjects.find((s) => s.id === 'counts');
+    }
+    const inputs = qcInputsOf(w, sub);
+    if (inputs.problem) throw new ActionError(inputs.problem);
+    const entry = await computeQc(app, inputs);
+    if (entry.status !== 'done') throw new ActionError(`Quality control failed: ${entry.message}`);
+    const now = ws();
+    const findings = findingsFrom(entry.qc, withDefaultThresholds(now.qc?.thresholds), { acknowledged: now.qc?.acknowledged });
+    return { sub, findings, overall: overall(findings), of: sub.run ? sub.run.name : 'the counts' };
   }
 
   // --- Actions --------------------------------------------------------------------------------
@@ -433,25 +463,7 @@ export function installRemote(app) {
     },
 
     async qc_findings(args) {
-      const w = ws();
-      const subjects = qcSubjects(w);
-      if (!subjects.length) throw new ActionError('Quality control needs a count table and its design first.');
-      let sub;
-      if (/^counts$/i.test(String(args.run ?? ''))) {
-        sub = subjects.find((s) => s.id === 'counts');
-        if (!sub) throw new ActionError('There is no current design to check the counts with.');
-      } else if (args.run || w.runs.length) {
-        const run = resolveRun(args.run);
-        sub = subjects.find((s) => s.id === `run:${run.id}`);
-      } else {
-        sub = subjects.find((s) => s.id === 'counts');
-      }
-      const inputs = qcInputsOf(w, sub);
-      if (inputs.problem) throw new ActionError(inputs.problem);
-      const entry = await computeQc(app, inputs);
-      if (entry.status !== 'done') throw new ActionError(`Quality control failed: ${entry.message}`);
-      const findings = findingsFrom(entry.qc, withDefaultThresholds(w.qc?.thresholds));
-      const o = overall(findings);
+      const { sub, findings, overall: o, of } = await qcOfSubject(args.run);
       if (sub.run) markQcSeen(app, sub.run, o);
       app.qcView ??= { subject: null, finding: null, pair: 0 };
       app.qcView.subject = sub.id;
@@ -461,11 +473,33 @@ export function installRemote(app) {
         app.qcView.finding = byId?.id ?? findings.find((f) => f.title === choose(args.finding, titles, 'finding'))?.id;
       }
       await show('qc');
-      const of = sub.run ? sub.run.name : 'the counts';
       return {
-        message: `Quality control of ${of}: ${o.status === 'pass' ? 'every finding passes' : `${o.counts.fail} fail, ${o.counts.review} to review`}, ${o.counts.pass} pass${o.counts.na ? `, ${o.counts.na} not assessed` : ''}.${o.blocking.length ? ` Blocking: ${o.blocking.join(', ')}.` : ''}`,
+        message: `Quality control of ${of}: ${o.status === 'pass' ? 'every finding passes' : `${o.counts.fail} fail, ${o.counts.review} to review`}, ${o.counts.pass} pass${o.counts.na ? `, ${o.counts.na} not assessed` : ''}.${o.acknowledged.length ? ` Acknowledged: ${o.acknowledged.join(', ')}.` : ''}${o.blocking.length ? ` Blocking: ${o.blocking.join(', ')}.` : ''}`,
         data: { of, overall: o, findings: findings.map(findingSummary) },
       };
+    },
+
+    // Acknowledges a finding to review or failing with a reason (an empty reason withdraws it):
+    // its status does not change; the reason goes into the history, the methods and the exports.
+    async acknowledge_finding(args) {
+      const { findings, of } = await qcOfSubject(args.run);
+      const id = String(args.finding ?? '').trim();
+      if (!id) throw new ActionError(`Name the finding to acknowledge: ${findings.filter((f) => f.status === 'review' || f.status === 'fail').map((f) => f.id).join(', ') || 'none is to review or failing'}.`);
+      const finding = findings.find((f) => f.id === id) ?? findings.find((f) => f.title === choose(id, findings.map((x) => x.title), 'finding'));
+      const reason = String(args.reason ?? '').trim();
+      // A finding that passes (or is not assessed) needs no acknowledgement: said, not refused, so
+      // that a script can acknowledge what it expects on every data set.
+      if (reason && (finding.status === 'pass' || finding.status === 'na') && !finding.blocking) return { message: `"${finding.title}" ${finding.status === 'pass' ? 'passes' : 'is not assessed'} in the QC of ${of}: nothing to acknowledge.`, data: findingSummary(finding) };
+      let next;
+      try {
+        next = acknowledgeFinding(ws(), finding, reason);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      if (next === ws()) return { message: `"${finding.title}" was not acknowledged; nothing to withdraw.`, data: findingSummary(finding) };
+      app.store.commit(next, reason ? `Acknowledge "${finding.title}"` : `Withdraw the acknowledgement of "${finding.title}"`);
+      const again = (await qcOfSubject(args.run)).findings.find((f) => f.id === finding.id);
+      return { message: reason ? `Acknowledged "${finding.title}" (${finding.status}): ${reason}. Its status is unchanged; the reason goes into the history, the methods and the QC exports.` : `Withdrew the acknowledgement of "${finding.title}".`, data: findingSummary(again) };
     },
 
     async select_variants(args) {

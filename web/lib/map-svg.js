@@ -99,7 +99,7 @@ export function mapSVG(model, options = {}) {
   out.push(`<g font-size="9" fill="${theme.muted}">`);
   for (let i = 0; i < 32; i += 1) out.push(`<rect x="${n(left + (i * barW) / 32)}" y="${legendTop}" width="${n(barW / 32 + 0.3)}" height="10" fill="${color(i / 31)}"/>`);
   const d = model.domain;
-  const label = model.contrast ? `differential score, ${model.contrast.name}` : model.domain.kind === 'diverging' ? 'score' : model.colorBy === 'se' ? 'SE' : model.colorBy === 'replicates' ? 'replicates used' : 'log10 input count';
+  const label = model.contrast ? `differential score, ${model.contrast.name}` : model.domain.kind === 'diverging' ? (model.scale?.stated ? `score: lower, ${model.scale.low}; higher, ${model.scale.high}` : 'score') : model.colorBy === 'se' ? 'SE' : model.colorBy === 'replicates' ? 'replicates used' : 'log10 input count';
   out.push(`<text x="${left}" y="${legendTop + 22}">${n(Number(d.min.toFixed(2)))}</text>`);
   if (d.kind === 'diverging') out.push(`<text x="${left + barW / 2}" y="${legendTop + 22}" text-anchor="middle">${n(Number(d.center.toFixed(2)))} (${model.contrast ? 'no difference' : 'wild type'})</text>`);
   out.push(`<text x="${left + barW}" y="${legendTop + 22}" text-anchor="end">${n(Number(d.max.toFixed(2)))}</text>`);

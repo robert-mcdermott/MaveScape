@@ -21,7 +21,7 @@ import { launch, sleep } from '../docs/capture/cdp.mjs';
 import { readArchive, writeArchive } from '../web/lib/archive.js';
 import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../web/lib/findings.js';
-import { barcodesCSV, countsCSV, differentialCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV } from '../web/lib/exports.js';
+import { barcodesCSV, countsCSV, differentialCSV, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV } from '../web/lib/exports.js';
 import { writeMethods } from '../web/lib/methods.js';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
@@ -73,12 +73,13 @@ function nodeFiles(dir) {
   const r = scored.results;
   const thresholds = withDefaultThresholds(ws.qc?.thresholds);
   const qc = computeQC({ ...inputFor(table, run.inputs.design), design: run.inputs.design, results: r, measures: measuresOf(thresholds) });
-  const findings = findingsFrom(qc, thresholds);
+  const findings = findingsFrom(qc, thresholds, { acknowledged: ws.qc?.acknowledged });
   const methods = writeMethods(ws, run, { findings, thresholds });
   const out = {
     'counts.csv': countsCSV(table, run.inputs.design),
     'qc_samples.csv': qcSamplesCSV(qc),
     'qc_variants.csv': qcVariantsCSV(r, run),
+    'qc_findings.csv': qcFindingsCSV(findings),
     'methods.md': methods.markdown,
     'references.bib': methods.bibtex,
   };
@@ -208,6 +209,15 @@ try {
   }
   const strict = await mavescape(['run', ...grb2, '--strict', '--out', out('strict')]);
   check('--strict: any failing QC finding exits 1 (GRB2\'s variance beyond counting)', `exit ${strict.code}; ${record(out('strict')).problems.join(' ')}`, strict.code === 1 && /--strict/.test(record(out('strict')).problems.join(' ')));
+  // An acknowledged finding (wave 2, slice 8): --strict reports it, and does not fail on it.
+  const reason = 'The input bottleneck the Domainome\'s analysis reported, as expected';
+  const acknowledged = await mavescape(['run', ...grb2, '--strict', '--acknowledge', `excess-variance=${reason}`, '--acknowledge', 'depth=Deep enough, so nothing to acknowledge', '--out', out('acknowledged')]);
+  const ackRecord = record(out('acknowledged'));
+  const ackCsv = existsSync(join(out('acknowledged'), 'qc_findings.csv')) ? readFileSync(join(out('acknowledged'), 'qc_findings.csv'), 'utf8') : '';
+  check('--strict --acknowledge excess-variance=…: the finding still fails but is acknowledged, so the run exits 0; the reason is in run.json, the QC findings and the methods', `exit ${acknowledged.code}; acknowledged ${JSON.stringify(ackRecord.qc?.overall?.acknowledged)}; ${ackRecord.problems.join(' ') || 'no problems'}`,
+    acknowledged.code === 0 && ackRecord.qc?.overall?.status === 'fail' && ackRecord.qc.overall.acknowledged.includes('excess-variance') && ackCsv.includes(reason) && readFileSync(join(out('acknowledged'), 'methods.md'), 'utf8').includes(reason));
+  const badAck = await mavescape(['run', ...grb2, '--acknowledge', 'excess-variance', '--out', out('bad-ack')]);
+  check('--acknowledge without a reason is a wrong command line (exit 2)', `exit ${badAck.code}: ${badAck.stderr.trim().split('\n')[0]}`, badAck.code === 2 && /id=reason/.test(badAck.stderr));
   const usage = await Promise.all([
     mavescape(['run', ...grb2]),
     mavescape(['run', ...grb2, '--out', out('a')]),

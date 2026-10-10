@@ -64,6 +64,8 @@ func TestRunArguments(t *testing.T) {
 		{[]string{"--design", design, "--out", full, counts}, "is not empty"},
 		{[]string{"--from-workspace", archive, "--design", design, "--out", out}, "give no --design"},
 		{[]string{"--design", design, "--out", out, "--run", "Run 1", counts}, "--run chooses a run of --from-workspace"},
+		{[]string{"--design", design, "--out", out, "--acknowledge", "coverage", counts}, "as id=reason"},
+		{[]string{"--design", design, "--out", out, "--acknowledge", "=no finding", counts}, "as id=reason"},
 	}
 	for _, c := range refused {
 		if _, err := parse(c.args...); err == nil || !strings.Contains(err.Error(), c.want) {
@@ -75,6 +77,15 @@ func TestRunArguments(t *testing.T) {
 	}
 	if opts, err := parse("--from-workspace", archive, "--run", "Run 2", "--out", out); err != nil || opts.from != archive || opts.run != "Run 2" {
 		t.Errorf("--from-workspace: %v, %+v", err, opts)
+	}
+	// Acknowledgements: repeated, each whole (a reason may hold commas and "=").
+	opts, err = parse("--design", design, "--out", out, "--acknowledge", "coverage=error-prone PCR, as designed", "--acknowledge", " separation = stops after 93 keep it (a=b) ", counts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acks, err := acknowledgements(opts.acknowledge)
+	if err != nil || len(acks) != 2 || acks[0] != [2]string{"coverage", "error-prone PCR, as designed"} || acks[1] != [2]string{"separation", "stops after 93 keep it (a=b)"} {
+		t.Errorf("--acknowledge: %v %q", err, acks)
 	}
 }
 

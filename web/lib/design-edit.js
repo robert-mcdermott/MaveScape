@@ -294,6 +294,46 @@ export function setControls(design, patch) {
   return { ...design, controls: { ...(design.controls ?? {}), ...patch } };
 }
 
+// The readout (wave 2, slice 8): fields set, an empty one removed, and no readout left when nothing
+// is said.
+export function setReadout(design, patch) {
+  const readout = { ...(design.readout ?? {}), ...patch };
+  for (const [k, v] of Object.entries(readout)) if (v === '' || v === null || v === undefined) delete readout[k];
+  const next = { ...design, readout };
+  if (!Object.keys(readout).length) delete next.readout;
+  return next;
+}
+
+// How the library was made (MaveDB's term), or nothing.
+export function setLibraryMethod(design, method) {
+  const library = { ...(design.library ?? { level: 'variant' }) };
+  if (method) library.method = method;
+  else delete library.method;
+  return { ...design, library };
+}
+
+// Where a control class serves (start, end: positions, or null for open), and why it is a control.
+export function setControlPositions(design, key, range) {
+  const controls = { ...(design.controls ?? {}) };
+  const positions = { ...(controls.positions ?? {}) };
+  const r = Object.fromEntries(Object.entries(range ?? {}).filter(([, v]) => Number.isInteger(v)));
+  if (Object.keys(r).length) positions[key] = r;
+  else delete positions[key];
+  if (Object.keys(positions).length) controls.positions = positions;
+  else delete controls.positions;
+  return { ...design, controls };
+}
+
+export function setControlWhy(design, key, text) {
+  const controls = { ...(design.controls ?? {}) };
+  const why = { ...(controls.why ?? {}) };
+  if (String(text ?? '').trim()) why[key] = String(text).trim();
+  else delete why[key];
+  if (Object.keys(why).length) controls.why = why;
+  else delete controls.why;
+  return { ...design, controls };
+}
+
 export function setField(design, patch) {
   const next = { ...design, ...patch };
   for (const key of ['name', 'description']) if (next[key] === '') delete next[key];

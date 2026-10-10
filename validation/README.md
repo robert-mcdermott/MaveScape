@@ -14,9 +14,9 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
 | `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales; barcodes (wave 2): every barcode and every variant's summed counts against dms_variants 1.6.0 by barcode and by substitution, the counts read with MaveScape's map, in dms_variants' `variant_counts` and in Enrich2's layout, the barcode fixture's truth and planted outliers, row order, refusals; DiMSum's model (wave 2): the threshold, the variants fitted, the scales and shifts, the error model, every fitness and σ and the merge against DiMSum 1.4's own functions on the fixture, GRB2 and DiMSum's demo, GRB2's published scores, the 95% intervals' coverage under a simulated bottleneck, refusals; differential scores (wave 2): limma against mutscan 1.2.0 on the two-condition fixture and CBS, Enrich2's z between conditions, the paired differential from first principles, the edge cases, the truth | `reference/enrich2.json`, `dms_variants.json`, `dms_variants-barcodes.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `dimsum.json`, `mutscan.json`, `fixtures/`; MaveDB and DiMSum, external |
-| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series, sorts and barcoded libraries) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks, and DiMSum's terms placing them before or after selection; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found | simulated; MaveDB, external |
+| `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series, sorts and barcoded libraries) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks, and DiMSum's terms placing them before or after selection; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found; findings in context (wave 2 slice 8): every raised finding says what could cause it and what to do, the readout's direction, coverage of a single-base library, where BRCA1 Y2H's stops stop losing the function | simulated; MaveDB, external |
 | `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
-| `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked | `fixtures/`, `web/examples/` |
+| `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked; an acknowledged finding through the archive; the archive each release saved (`archives/`) opened and its runs reproduced | `fixtures/`, `web/examples/`, `archives/` |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 
 ## The remote-control session (`remote-session.mjs`)
@@ -35,7 +35,10 @@ barcode with Node's output hash, its barcodes exported byte for byte as Node wri
 (slice 5) GRB2 scored with the DiMSum preset, Node's output hash and fitted terms; and (slice 6) the
 two-condition example in the window with Node's hash, its differential map, a variant's difference
 and the differential export as Node writes them; and (slice 7) `check` (valid, a design that does
-not fit, parameters that cannot score) and `reproduce_run`. 71 checks; in CI as the `remote` job.
+not fit, parameters that cannot score) and `reproduce_run`; and (slice 8) a finding's causes and
+next steps, `acknowledge_finding` (the finding still fails, the overall status counts it apart, a
+passing one is left alone, an unknown one lists the findings) and the QC findings export, byte for
+byte Node's. 75 checks; in CI as the `remote` job.
 
 ## Headless runs (`headless-run.mjs`, wave 2 slice 7)
 
@@ -56,10 +59,14 @@ pipeline would (headless Chrome: `CHROME`, else one installed):
   nothing scored), an output sample with no counts (QC's blocking finding: exit 1, the files
   written), `--strict` (GRB2's failing finding), and a wrong command line, an output folder in
   use, a missing input and conflicting options (exit 2, nothing run);
+- `--strict --acknowledge excess-variance=…` (wave 2, slice 8): the finding still fails but is
+  acknowledged, so the run exits 0, with the reason in `run.json`, `qc_findings.csv` and the
+  methods; an acknowledgement of a finding that passes is left alone; one without a reason is a
+  wrong command line (exit 2);
 - `--log json` (one JSON object per line) and `mavescape validate` (0 valid; 1 with what blocks
   scoring, `--json`; a design alone; parameters; 2 for a wrong command line).
 
-18 checks, in CI's `remote` job; about 20 s.
+20 checks, in CI's `remote` job; about 20 s.
 
 ## Public data (`sources.json`)
 
@@ -399,13 +406,18 @@ What QC found in the feasibility data, with MaveScape's default scoring (locked 
 
 - **GRB2 SH3**: variance beyond counting, about 11× (fail): the input bottleneck the data's own
   DiMSum analysis reported. Everything else passes, coverage 100%.
-- **BRCA1 E2**: coverage 76% of single substitutions (an error-prone-PCR library), replicate
+- **BRCA1 E2**: coverage 76% of single substitutions, and 71% of those two or three bases from
+  the wild-type codon (so not a library of single-base changes, as an earlier note had it), replicate
   agreement down to r = 0.68, variance 36× counting, and dropouts: about 30% of the variants are
   missing from the last round with no count of 0 anywhere in the table, and those had fallen to
   1–3% of their input a round earlier (others 12–54%).
-- **BRCA1 Y2H**: the controls do not separate (AUC 0.39): nonsense variants before residue 61
+- **BRCA1 Y2H**: the controls do not separate (AUC 0.37): nonsense variants before residue 61
   score about −3.7, after residue 110 about +0.5. Truncations that keep the RING domain keep
-  binding BARD1, so most nonsense variants are not loss-of-function controls in this assay.
+  binding BARD1, so most nonsense variants are not loss-of-function controls in this assay. From
+  wave 2, slice 8, the finding finds where (the change point of the stops' scores along the target:
+  up to position 93, median −4.37 over 50 stops; after it, 0.81 over 164) and suggests limiting
+  the nonsense controls to positions up to 93; limited so, the controls separate (AUC 1.000), and
+  with their gap wider the resolution passes too.
 - **Factor IX**: scored by the weighted average from wave 2 slice 3. Replicates of each tile agree,
   but differ about 2,000× more than counting predicts (about 10,000 reads per variant per bin far
   exceed the cells sorted, which MaveDB does not record); bin occupancy passes.
@@ -423,6 +435,23 @@ seeds, medians): with N cells per variant before selection and D reads per varia
 rise to about 1 + D/N (1.73, 5.11 and 10.37 against 2, 5 and 11) while the outputs stay near 1;
 with the cells too few after selection, the output terms rise instead (4.29 and 7.66 against 5 and
 11). On GRB2 they put the 11× excess at the inputs.
+
+### Findings in context (wave 2, slice 8)
+
+- **Every finding the planted problems raise** (the fixtures above, seed 20261009) names the causes
+  that fit it and at least one next step.
+- **A selection that enriches loss of function:** the clean two-population experiment with each
+  replicate's input and output swapped, so that every score changes sign (three seeds). With the
+  readout's direction stated (`higher-less`) the controls separate as in the clean experiment (AUC
+  ≥ 0.9, pass). Without it, separation fails, the explanation says the higher score may mean less
+  of the function, and the next steps ask for the direction. On the clean experiment no late-stop
+  warning is raised.
+- **A library of single-base changes:** the two-population fixture's 20 DNA codons, with a table of
+  exactly the substitutions one base away from each wild-type codon (122, counted here
+  independently with a separate genetic code). Judged against all substitutions coverage fails;
+  with the design's library made by error-prone PCR, coverage is judged against those 122 and
+  passes at 100%.
+- **BRCA1 Y2H** (above): the stops' change point at position 93, and the controls limited to it.
 
 ## The map (wave 1, slice 7)
 
@@ -550,4 +579,22 @@ simulated, its scores within r > 0.98 of the true effects, and pass every QC fin
 two-condition example's differences must be within r > 0.95 of the true ones (r = 0.966, most
 being 0). A two-condition workspace (the fixture, compared by limma) is saved, reopened and
 exported again too, its differential export byte for byte.
+
+An acknowledged finding (wave 2, slice 8): GRB2's variance beyond counting acknowledged with a
+reason keeps its status (fail) and the overall status; the reason survives the archive and is in
+the history, the methods, the QC findings and the provenance; withdrawn, it is gone, and a finding
+that passes cannot be acknowledged.
+
+### Archives that keep opening (`archives/`, wave 2 slice 8)
+
+Each release saves a workspace archive that every later MaveScape must open and reproduce.
+`archives/grb2-0.1.0.msz` was written by MaveScape 0.1.0's own code, from a v0.1.0 checkout, by
+`archives/make-0.1.0.mjs`: the GRB2 example scored with the defaults and the Enrich2-compatible
+preset, a saved selection and a changed QC threshold, with the first run's scores. The suite opens
+it (every file's SHA-256 as the manifest records, the history's chain unbroken) and recomputes each
+run from its recorded inputs. Scoring engine 1 (0.1.0) took its logarithms from the JavaScript
+engine. Node's are fdlibm's, as `web/lib/dmath.js`'s are, so here both runs have their recorded
+output hashes, and the first run's scores equal the archived ones exactly. A 0.1.0 run scored in
+another browser would differ in its last digits and say so (`reproduction` in `web/lib/runs.js`).
+The reopened workspace keeps its threshold and selection and makes every export and the methods.
 

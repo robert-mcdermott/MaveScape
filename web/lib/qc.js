@@ -30,6 +30,9 @@ import { binAverages, binTotals } from './score-bins.js';
 import { barcodeDisagreement, groupBarcodes, OUTLIER_Z, sumByVariant } from './score-barcodes.js';
 import { scoreDimsumGroup, substitutionsOf } from './score-dimsum.js';
 import { auc, mad, mean, median, MEDIAN_CHI2_1, nonNegativeLine, pearson, quantileSorted, sorted, spearman, variance } from './stats.js';
+import { controlRows } from './score.js';
+import { CODONS } from './target.js';
+import { lossSide, readoutOf, SINGLE_NUCLEOTIDE_LIBRARIES } from './readout.js';
 
 export const QC_VERSION = '1';
 // The measurements' own parameters (the review and fail thresholds are findings.js's).
@@ -129,7 +132,35 @@ function coverage(design, variants, observed) {
       if (g === 2) cls[0] += 1;
     }
   }
-  return { assessed: true, length, offset: target.offset ?? 0, grid, designed, inTable, observed: seen, fraction: designed ? seen / designed : Number.NaN, byClass };
+  // A library made mostly of single-nucleotide changes (error-prone PCR, doped oligos) reaches the
+  // substitutions one base change away from each wild-type codon: judged against those when the
+  // target's codons are known (a DNA target), named as expected otherwise.
+  const method = design.library?.method ?? null;
+  let reach = null;
+  if (method && SINGLE_NUCLEOTIDE_LIBRARIES.has(method)) {
+    const dna = target.sequenceType === 'dna' ? target.sequence.toUpperCase().slice((target.codingStart ?? 1) - 1) : null;
+    if (!dna) reach = { known: false };
+    else {
+      const codes = 'ARNDCQEGHILKMFPSTWYV*';
+      let reachable = 0;
+      let reachableSeen = 0;
+      for (let p = 1; p <= length; p += 1) {
+        const codon = dna.slice(3 * (p - 1), 3 * p);
+        if (codon.length < 3) continue;
+        const alts = new Set();
+        for (let j = 0; j < 3; j += 1) for (const b of 'ACGT') if (b !== codon[j]) alts.add(CODONS[codon.slice(0, j) + b + codon.slice(j + 1)]);
+        alts.delete(CODONS[codon]);
+        for (const aa of alts) {
+          const g = grid[(p - 1) * 21 + codes.indexOf(aa)];
+          if (g === 3 || g === 4 || g === undefined) continue;
+          reachable += 1;
+          if (g === 2) reachableSeen += 1;
+        }
+      }
+      reach = { known: true, designed: reachable, observed: reachableSeen, fraction: reachable ? reachableSeen / reachable : Number.NaN };
+    }
+  }
+  return { assessed: true, length, offset: target.offset ?? 0, grid, designed, inTable, observed: seen, fraction: designed ? seen / designed : Number.NaN, byClass, tiles: tiles.length, method, reach };
 }
 
 function targetProteinOf(target) {
@@ -334,18 +365,66 @@ function synonymousCheck(rep, variants) {
   return { id: rep.id, n: y.length, observed: variance(y), expected: mean(v), ratio: y.length >= 2 ? variance(y) / mean(v) : Number.NaN };
 }
 
-// From a score run's results: per condition, the controls and resolution.
-function scoreMetrics(results) {
+// Where the nonsense variants stop scoring as loss of function: the position that best splits them,
+// in order along the target, into an earlier group and a later group whose median is nearer the
+// reference's (the least squares of one change point, at least 3 variants after it). Truncations
+// after the region an assay needs keep the function (BRCA1's Y2H construct, Starita et al. 2015):
+// those are not loss-of-function controls. Returns null when no such split stands out.
+function nonsenseChange(points, referenceMedian) {
+  if (points.length < 8) return null;
+  const xs = points.slice().sort((a, b) => a.position - b.position);
+  const ys = xs.map((p) => p.score);
+  const n = ys.length;
+  const prefix = [0];
+  const prefix2 = [0];
+  for (const y of ys) {
+    prefix.push(prefix.at(-1) + y);
+    prefix2.push(prefix2.at(-1) + y * y);
+  }
+  const sse = (a, b) => {
+    const m = b - a;
+    const sum = prefix[b] - prefix[a];
+    return prefix2[b] - prefix2[a] - (sum * sum) / m;
+  };
+  let best = null;
+  for (let k = 3; k <= n - 3; k += 1) {
+    if (xs[k].position === xs[k - 1].position) continue;
+    const cost = sse(0, k) + sse(k, n);
+    if (!best || cost < best.cost) best = { k, cost };
+  }
+  if (!best) return null;
+  const before = median(ys.slice(0, best.k));
+  const after = median(ys.slice(best.k));
+  // The later group must sit nearer the reference than the earlier, by most of their gap.
+  if (!(Math.abs(after - referenceMedian) < 0.5 * Math.abs(before - referenceMedian))) return null;
+  // And the split must explain most of the spread (R² of one change point).
+  const total = sse(0, n);
+  if (!(total > 0) || 1 - best.cost / total < 0.5) return null;
+  return { lastControl: xs[best.k - 1].position, firstAfter: xs[best.k].position, before: { n: best.k, median: before }, after: { n: n - best.k, median: after } };
+}
+
+// From a score run's results: per condition, the controls (as the design names them, where it
+// says they serve) and their separation in the direction the readout gives, and resolution.
+function scoreMetrics(results, design) {
   const kind = results.variants.kind;
+  const rows = controlRows(design, { ...results.variants, n: results.rows });
+  const isSyn = new Uint8Array(results.rows);
+  const isNon = new Uint8Array(results.rows);
+  for (const i of rows.synonymous) isSyn[i] = 1;
+  for (const i of rows.nonsense) isNon[i] = 1;
+  const { side, stated } = lossSide(design);
   return results.conditions.map((c) => {
-    const scored = (k) => {
+    const scoredWhere = (test) => {
       const out = [];
-      for (let i = 0; i < results.rows; i += 1) if (!c.reason[i] && kind[i] === k && Number.isFinite(c.score[i])) out.push(c.score[i]);
+      for (let i = 0; i < results.rows; i += 1) if (!c.reason[i] && test(i) && Number.isFinite(c.score[i])) out.push(c.score[i]);
       return out;
     };
-    const synonymous = scored(KIND.SYNONYMOUS);
-    const nonsense = scored(KIND.NONSENSE);
-    const missense = scored(KIND.MISSENSE);
+    const synonymous = scoredWhere((i) => isSyn[i]);
+    const nonsense = scoredWhere((i) => isNon[i]);
+    const missense = scoredWhere((i) => kind[i] === KIND.MISSENSE);
+    // Every scored stop, controls or not, by position: where stops stop losing the function.
+    const stops = [];
+    for (let i = 0; i < results.rows; i += 1) if (!c.reason[i] && kind[i] === KIND.NONSENSE && Number.isFinite(c.score[i])) stops.push({ position: results.variants.position[i], score: c.score[i] });
     const wt = results.controls.wt >= 0 && !c.reason[results.controls.wt] ? c.score[results.controls.wt] : Number.NaN;
     const reference = synonymous.length >= 5 ? { what: 'synonymous', scores: synonymous } : Number.isFinite(wt) ? { what: 'wild type', scores: [wt] } : null;
     let separation = null;
@@ -353,14 +432,29 @@ function scoreMetrics(results) {
       const mRef = median(reference.scores);
       const mNon = median(nonsense);
       const spread = reference.scores.length > 1 ? Math.sqrt((square(mad(reference.scores)) + square(mad(nonsense))) / 2) : mad(nonsense);
+      // The chance a reference variant sits on the wild-type side of a nonsense variant: below
+      // them when loss of function scores high, either way when the score has no sign.
+      const below = auc(reference.scores, nonsense);
+      const aucValue = side === 'below' ? below : side === 'above' ? 1 - below : Math.max(below, 1 - below);
+      const toward = side === 'above' ? -1 : side === 'below' ? 1 : Math.sign(mRef - mNon) || 1;
+      const ref = sorted(reference.scores);
       separation = {
         reference: reference.what,
-        auc: auc(reference.scores, nonsense),
+        side,
+        stated,
+        auc: aucValue,
+        // Nonsense variants on the other side of the reference than the direction says (an AUC
+        // well under 0.5): the direction may be the other way round.
+        reversed: side !== 'either' && aucValue < 0.25,
         referenceMedian: mRef,
         nonsenseMedian: mNon,
-        standardized: (mRef - mNon) / spread,
-        // The fraction of nonsense variants scored above the reference's 5th percentile (VAMP-seq's class threshold).
-        nonsenseAbove: reference.scores.length > 1 ? nonsense.filter((x) => x > quantileSorted(sorted(reference.scores), 0.05)).length / nonsense.length : Number.NaN,
+        standardized: (toward * (mRef - mNon)) / spread,
+        // The fraction of nonsense variants on the reference's side of its 5th (or 95th)
+        // percentile (VAMP-seq's class threshold).
+        nonsenseAbove: reference.scores.length > 1 ? nonsense.filter((x) => (toward > 0 ? x > quantileSorted(ref, 0.05) : x < quantileSorted(ref, 0.95))).length / nonsense.length : Number.NaN,
+        controls: nonsense.length,
+        stops: stops.length,
+        change: nonsenseChange(stops, mRef),
       };
     }
     const ses = [];
@@ -507,7 +601,18 @@ export function computeQC({ names, barcodes = null, columns, design, mode = 'len
     coverage: coverage(design, variants, observed),
     conditions,
     missingness: { samples: design.samples.map((s) => s.id), patterns: [...patterns].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pattern, count]) => ({ pattern, count })) },
-    scores: results ? scoreMetrics(results) : null,
+    scores: results ? scoreMetrics(results, design) : null,
+    // What the findings read their context from: the readout, how the library was made, where the
+    // controls serve, whether the cells were recorded (wave 2, slice 8).
+    context: {
+      readout: readoutOf(design),
+      libraryMethod: design.library?.method ?? null,
+      tiles: design.library?.tiles?.length ?? 0,
+      barcodes: design.library?.level === 'barcode',
+      controls: { positions: design.controls?.positions ?? null, nonsense: design.controls?.nonsense ?? 'auto', synonymous: design.controls?.synonymous ?? 'auto' },
+      cellsRecorded: design.samples.some((x) => Number.isFinite(x.cells)),
+      conditions: design.conditions?.length ?? 0,
+    },
     timeSeries: results && (results.parameters?.model === 'wls' || results.parameters?.model === 'ols') ? timeSeriesMetrics(results) : null,
     bins: design.model === 'bins' ? binMetrics(design, pooled) : null,
     barcodes: groups ? barcodeMetrics(design, pooledRows, groups, m.agreementInput) : null,

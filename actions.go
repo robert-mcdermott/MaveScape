@@ -82,6 +82,11 @@ var remoteActions = []remoteAction{
 		"run":     textArg("A score run by name or id, or \"counts\" for the counts with the current design; the latest run of the current design if not given."),
 		"finding": textArg("A finding to show in full in the QC view, by id or title."),
 	}), long: true},
+	{Name: "acknowledge_finding", Description: "Acknowledges a quality-control finding that is to review or failing, with the reason it is expected (\"the library was made by error-prone PCR\"); an empty reason withdraws it. The finding keeps its status; the reason goes into the history, the methods and the QC exports, and holds while the finding is no worse. A blocking finding cannot be acknowledged.", InputSchema: schema(map[string]any{
+		"finding": textArg("The finding, by id (coverage, separation…) or title."),
+		"reason":  textArg("Why the finding is expected here; empty to withdraw the acknowledgement."),
+		"run":     textArg("A score run by name or id, or \"counts\"; the latest run of the current design if not given."),
+	}, "finding"), long: true},
 	{Name: "select_variants", Description: "Selects variants on the map, by name or by position, and optionally saves the selection by name. Shows the Map view with the selection.", InputSchema: schema(map[string]any{
 		"variants":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "MAVE-HGVS names, such as p.Trp36Ala."},
 		"positions": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Positions on the target (numbered from 1): every substitution there."},
@@ -105,7 +110,7 @@ var remoteActions = []remoteAction{
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
 	})},
 	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), QC per sample or per variant, provenance, the methods or their references, the map (SVG), the selection, or the whole workspace as an archive (.msz). Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, qc-samples, qc-variants, barcodes (a table of barcodes), provenance, methods, references, map, selection or archive."),
+		"what":           textArg("scores, counts, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, selection or archive."),
 		"path":           textArg("The absolute path of the file to write."),
 		"overwrite":      flagArg("Replace the file if it exists."),
 		"run":            runArg,

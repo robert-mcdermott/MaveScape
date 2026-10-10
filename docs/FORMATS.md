@@ -165,6 +165,45 @@ the highest bin's upper left open), and each sample the `cells` sorted into it: 
 bins can be scored by maximum likelihood, whose reads are reweighted by the cells (MaveScape 0.2). Written by the Experiment view; the validation designs are examples
 ([`validation/designs/`](../validation/designs/)).
 
+#### What the assay measures (MaveScape 0.2)
+
+`readout` says what the scores mean, in MaveDB's controlled keywords for an experiment (the MAVE
+minimum information's vocabulary, Claussnitzer et al. 2024). `library.method` says how the library
+was made, and `controls.positions` and `controls.why` say where each control class serves and why.
+All are optional. Until `readout.direction` is given, MaveScape takes a higher score to mean more of
+the function measured, and says so in the summary, the legend and the QC.
+
+```json
+"readout": {
+  "phenotype": "Cellular abundance of the GRB2 SH3 domain (abundancePCA)",
+  "method": "Reporter",
+  "mechanism": "Loss of function",
+  "modelSystem": "Yeast",
+  "direction": "higher-more"
+},
+"library": { "level": "variant", "method": "Error-prone PCR" },
+"controls": {
+  "wildType": "auto", "synonymous": "auto", "nonsense": "auto",
+  "positions": { "nonsense": { "end": 93 } },
+  "why": { "nonsense": "Stops before residue 94 lose the RING domain's helices that bind BARD1." }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `readout.phenotype` | what was measured, in words |
+| `readout.method` | MaveDB's Phenotypic Assay Method (`Reporter`, `Cell fitness`, `Binding assay`, …) |
+| `readout.mechanism` | MaveDB's Phenotypic Assay Mechanism: what the assay detects (`Loss of function`, `Gain of function`, …) |
+| `readout.modelSystem` | MaveDB's Phenotypic Assay Model System (`Yeast`, `Immortalized human cells`, …) |
+| `readout.direction` | `higher-more` (a higher score, more of the function), `higher-less` (less of it), or `unsigned` (a larger change, either way) |
+| `library.method` | MaveDB's In Vitro Construct Library Method System (`Error-prone PCR`, `Doped oligo synthesis`, `Oligo pool synthesis`, …); a library of single-base changes has its coverage judged against the substitutions one base change makes |
+| `controls.positions` | `{ "synonymous" or "nonsense": { "start", "end" } }`: target positions where the class serves as a control (either end may be left open) |
+| `controls.why` | `{ "wildType", "synonymous", "nonsense" }`: why each is a control here |
+
+A term outside MaveDB's lists is kept as written, with a warning; a deposit would say "Other". The
+limits apply wherever the controls are used: normalization to synonymous variants, rescaling, and
+the separation of the controls.
+
 ### Import templates, `*.import.json`
 
 A table's mapping (variant column, level, count columns, roles, strict or lenient reading, what
@@ -196,14 +235,18 @@ already in the library opens as a copy.
 The **workspace document** (`workspace.json`, also exported alone as JSON) is format
 `mavescape-workspace`, version 1: `id`, `name`, `created`, `modified`, `sources` (each table's file
 name, SHA-256, size, rows, encoding, layout, mapping and import summary), `targets`, `design` and
-`designSource`, `runs`, `selections`, `qc` (its thresholds), `example`, and `history`: every
+`designSource`, `runs`, `selections`, `qc` (its `thresholds`, and from MaveScape 0.2 the findings
+`acknowledged`, by id: `{ reason, status, value, time }`, the status and value when acknowledged),
+`example`, and `history`: every
 material change, `{ time, action, detail, hash }`, each hash the SHA-256 of the one before and the
 entry, so that a change made later breaks the chain.
 
 A **score run** keeps its inputs, not its scores: the table's SHA-256, the mapping, the design,
 the parameters and the scoring version (whose canonical JSON's SHA-256 is the run's id), the
 software, the warnings, and the output's SHA-256. Reopened, a run is recomputed from its inputs
-and must have that output hash (which covers its differential scores when it has some). Its `output.replicates` keep each replicate's normalizers and, for
+and must have that output hash (which covers its differential scores when it has some). Archives
+saved by earlier releases keep opening: the validation keeps one from each release
+([`validation/archives/`](../validation/archives/), from 0.1.0) and reproduces its runs. Its `output.replicates` keep each replicate's normalizers and, for
 DiMSum's model, `dimsum`: the scale, shift, multiplicative `input` and `output` terms, additive
 `reperror` (a variance), and `intervals` (the 10th and 90th percentiles of their bootstrap).
 
@@ -280,6 +323,11 @@ A table of barcodes, one row per barcode: `barcode`, its variant (`hgvs_pro` or 
 
 - `*_qc_samples.csv`: per sample: its columns and roles, variants counted and missing, total reads,
   reads per variant, zeros, counts below the low-count threshold, quantiles.
+- `*_qc_findings.csv` (MaveScape 0.2): per finding: `finding` (its id), `title`, `status` (`pass`,
+  `review`, `fail` or `not assessed`), `blocking`, `from` (`counts` or `scores`), `value`, `threshold`,
+  `acknowledged` (`yes` while an acknowledgement holds), `acknowledged_status` and `reason`, and
+  `causes` and `next` (each `kind: text`, separated by ` | `; causes are `technical`, `model` or
+  `expected`, next steps `inspect`, `analysis` or `experiment`).
 - `*_qc_variants.csv`: per variant: the state of its name, its status and flags, and for each
   replicate its counts before and after and whether that replicate was used (or why not).
 
@@ -292,7 +340,8 @@ CSV (`hgvs_pro`, `score`, `SE`, `status`) or JSON (`format: "mavescape-selection
 
 Format `mavescape-provenance`, version 1: the run (id, name, created, software and commit,
 parameters, output hash, warnings), its inputs (the table's name, SHA-256, rows, encoding and
-import time; the mapping; the design and its SHA-256), the QC thresholds and findings, the
+import time; the mapping; the design and its SHA-256), the QC thresholds and findings (an
+acknowledged one with `acknowledged: { reason, status, time }`), the
 workspace (id, name, the history's latest hash), the files exported with it and their SHA-256, and
 the research-use statement.
 
@@ -312,7 +361,7 @@ size.
 ## Headless runs: `run.json`
 
 `mavescape run` (MaveScape 0.2) writes the run's files to its `--out` folder (the scores, counts,
-QC, differential scores, barcodes and map exports above, `provenance.json`, `methods.md`,
+QC (with `qc_findings.csv`), differential scores, barcodes and map exports above, `provenance.json`, `methods.md`,
 `references.bib` and `workspace.msz`) and `run.json`, format `mavescape-run`, version 1:
 
 | Field | |
@@ -326,7 +375,7 @@ QC, differential scores, barcodes and map exports above, `provenance.json`, `met
 | `problems` | why not, in words |
 | `inputs` | each file read: `role` (`design`, `counts`, `target`, `parameters`, `workspace`), `path`, `bytes`, `sha256` |
 | `run` | the run: `id`, `name`, `outputSha256`, `conditions`, and what its files are |
-| `qc` | the quality control: `overall` (`status`, counts by status, `blocking` finding ids) and every finding |
+| `qc` | the quality control: `overall` (`status`, counts by status, `blocking` finding ids, `acknowledged` ids and the `unacknowledged` counts of `fail` and `review`) and every finding, with its `causes`, `next` steps and acknowledgement |
 | `steps` | each action performed: `action`, `ok`, `message`, `seconds`, `data` |
 | `outputs` | each file written: `role`, `path`, `bytes`, `sha256` |
 

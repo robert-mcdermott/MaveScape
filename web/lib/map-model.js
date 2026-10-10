@@ -14,6 +14,7 @@ import { KIND, STATUS } from './variants.js';
 import { targetLength } from './design.js';
 import { median, quantileSorted, sorted } from './stats.js';
 import { STAGE_BY_ID } from './filters.js';
+import { scaleWords } from './readout.js';
 
 export const STATE = { NOT_DESIGNED: 0, MISSING: 1, FILTERED: 2, LOW: 3, SCORED: 4, REFERENCE: 5 };
 export const STATE_NAMES = ['not designed', 'missing', 'filtered', 'low confidence', 'scored', 'reference residue'];
@@ -201,6 +202,8 @@ export function buildMapModel(results, design, options = {}) {
     source: c,
     colorBy,
     domain,
+    // What the ends of the score scale mean, from the design's readout (wave 2, slice 8).
+    scale: scaleWords(design),
     cells,
     state,
     reference,

@@ -8,8 +8,9 @@ import { confirmDialog, showDialog, toast } from './overlays.js';
 import { summarizeDesign, validateDesign, IDENTIFIER_COLUMNS } from '../lib/design.js';
 import {
   addCondition, addReplicate, addTile, assignColumn, columnAssignments, removeCondition, removeReplicate, removeTile,
-  setAsideOtherColumns, setBarcodeColumn, setBinGates, setBinValue, setControls, setField, setModel, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample, updateTile,
+  setAsideOtherColumns, setBarcodeColumn, setBinGates, setBinValue, setControlPositions, setControls, setControlWhy, setField, setLibraryMethod, setModel, setReadout, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample, updateTile,
 } from '../lib/design-edit.js';
+import { ASSAY_MECHANISMS, ASSAY_METHODS, DIRECTIONS, LIBRARY_METHODS, MODEL_SYSTEMS } from '../lib/readout.js';
 import { designFromSampleSheet } from '../lib/samplesheet.js';
 import { parseTable } from '../lib/csv.js';
 import { setDesign, updateTarget } from '../lib/workspace.js';
@@ -141,19 +142,62 @@ export function mountExperimentMode(app, container) {
       extra.push(h('label.field', h('span', 'Bin values are'), h('select.input', { onchange: (e) => edit((d) => setField(d, { bins: { weight: e.target.value } }), `Bin values are ${e.target.value}`) },
         ...[['rank', 'ranks or weights (VAMP-seq 0.25–1)'], ['fluorescence', 'fluorescence'], ['other', 'another measure']].map(([v, l]) => h('option', { value: v, selected: design.bins?.weight === v }, l)))));
     }
-    const controls = design.controls ?? {};
-    const wild = h('input.input', { value: controls.wildType ?? 'auto', 'aria-label': 'Wild type', onchange: () => edit((d) => setControls(d, { wildType: wild.value.trim() || 'auto' }), `Set the wild type to ${wild.value.trim() || 'auto'}`) });
-    const choice = (key, label) => h('label.field', h('span', label), h('select.input', { onchange: (e) => edit((d) => setControls(d, { [key]: e.target.value }), `${label}: ${e.target.value}`) },
-      h('option', { value: 'auto', selected: (controls[key] ?? 'auto') === 'auto' }, 'found from the variant names'),
-      h('option', { value: 'none', selected: controls[key] === 'none' }, 'none'),
-      Array.isArray(controls[key]) ? h('option', { value: '__list', selected: true, disabled: true }, controls[key].join(', ')) : null));
     return h('div.pane', h('h3', icon('settings'), 'Experiment'),
       h('label.field', h('span', 'Name'), h('input.input', { value: design.name ?? '', onchange: (e) => edit((d) => setField(d, { name: e.target.value.trim() }), 'Renamed the design') })),
       h('div.field', h('span', 'Kind of experiment'), model),
       ...extra,
-      h('div.section-title', { style: { marginTop: '10px' } }, 'Controls'),
-      h('div.form-grid', h('label.field', h('span', 'Wild-type row ("auto": p.=, c.= or _wt)'), wild), choice('synonymous', 'Synonymous controls'), choice('nonsense', 'Nonsense controls')),
       barcodesBlock(design, s), conditionsBlock(design), tilesBlock(design));
+  }
+
+  // What the assay measures (wave 2, slice 8): the readout in MaveDB's terms, how the library was
+  // made, and the controls, each with where it serves and why. Nothing is guessed: until the
+  // direction is stated, the map and QC say what they assume.
+  function readoutPane(design) {
+    const r = design.readout ?? {};
+    const select = (label, value, options, onPick, empty = 'not stated') => h('label.field', h('span', label), h('select.input', { 'aria-label': label, onchange: (e) => onPick(e.target.value) },
+      h('option', { value: '', selected: !value }, empty),
+      ...options.map(([v, text]) => h('option', { value: v, selected: v === value }, text)),
+      value && !options.some(([v]) => v === value) ? h('option', { value, selected: true }, `${value} (not one of MaveDB's terms)`) : null));
+    const terms = (list) => list.map((x) => [x, x]);
+    const phenotype = h('input.input', { value: r.phenotype ?? '', placeholder: 'Cellular abundance of the domain', 'aria-label': 'What was measured', onchange: () => edit((d) => setReadout(d, { phenotype: phenotype.value.trim() }), `Readout: measured ${phenotype.value.trim() || 'not stated'}`) });
+    const controls = design.controls ?? {};
+    const wild = h('input.input', { value: controls.wildType ?? 'auto', 'aria-label': 'Wild type', onchange: () => edit((d) => setControls(d, { wildType: wild.value.trim() || 'auto' }), `Set the wild type to ${wild.value.trim() || 'auto'}`) });
+    const choice = (key, label) => h('label.field', h('span', label), h('select.input', { onchange: (e) => edit((d) => setControls(d, { [key]: e.target.value }), `${label}: ${e.target.value}`) },
+      h('option', { value: 'auto', selected: (controls[key] ?? 'auto') === 'auto' }, 'from the names'),
+      h('option', { value: 'none', selected: controls[key] === 'none' }, 'none'),
+      Array.isArray(controls[key]) ? h('option', { value: '__list', selected: true, disabled: true }, controls[key].join(', ')) : null));
+    const position = (key, end, label) => {
+      const range = controls.positions?.[key] ?? {};
+      const input = h('input.input', { value: range[end] ?? '', inputmode: 'numeric', placeholder: end === 'start' ? 'first' : 'last', 'aria-label': label, onchange: () => {
+        const text = input.value.trim();
+        const n = Number(text);
+        if (text && !Number.isInteger(n)) {
+          toast(`${label} is a whole number.`, { kind: 'error' });
+          return;
+        }
+        edit((d) => setControlPositions(d, key, { ...(d.controls?.positions?.[key] ?? {}), [end]: text ? n : null }), `${label}: ${text || 'open'}`);
+      } });
+      return input;
+    };
+    const why = (key, label, placeholder) => {
+      const input = h('input.input', { value: controls.why?.[key] ?? '', placeholder, 'aria-label': label, onchange: () => edit((d) => setControlWhy(d, key, input.value), `${label}: ${input.value.trim() || 'none'}`) });
+      return h('label.field', h('span', label), input);
+    };
+    const range = (key, label) => h('div.field', h('span', label), h('div.range-inputs', position(key, 'start', `${label}, from`), h('span.muted', '–'), position(key, 'end', `${label}, to`)));
+    return h('div.pane.readout-pane', h('h3', icon('target'), 'What the assay measures'),
+      h('p.muted', { style: { margin: '0 0 8px', fontSize: '12px' } }, 'A score\'s sign means nothing without the selection. The map\'s legend, the separation of the controls, the methods and the exports read the direction from here; until it is stated, MaveScape takes a higher score to mean more of the function, and says so. The terms are MaveDB\'s.'),
+      h('label.field', h('span', 'What was measured'), phenotype),
+      h('div.form-grid',
+        select('A higher score means', design.readout?.direction ?? '', [['higher-more', 'more of the function'], ['higher-less', 'less of the function'], ['unsigned', 'a larger change, either way (no sign)']], (v) => edit((d) => setReadout(d, { direction: v }), v ? `Readout: ${DIRECTIONS[v]}` : 'Readout: direction not stated'), 'not stated (taken as more)'),
+        select('Assay method', r.method, terms(ASSAY_METHODS), (v) => edit((d) => setReadout(d, { method: v }), `Readout: method ${v || 'not stated'}`)),
+        select('It detects', r.mechanism, terms(ASSAY_MECHANISMS), (v) => edit((d) => setReadout(d, { mechanism: v }), `Readout: detects ${v || 'not stated'}`)),
+        select('Model system', r.modelSystem, terms(MODEL_SYSTEMS), (v) => edit((d) => setReadout(d, { modelSystem: v }), `Readout: model system ${v || 'not stated'}`)),
+        select('The library was made by', design.library?.method, terms(LIBRARY_METHODS), (v) => edit((d) => setLibraryMethod(d, v), `Library made by ${v || 'not stated'}`))),
+      h('div.section-title', { style: { marginTop: '10px' } }, 'Controls'),
+      h('div.form-grid', h('label.field', h('span', 'Wild-type row ("auto": p.=, c.= or _wt)'), wild), choice('synonymous', 'Synonymous controls'), choice('nonsense', 'Nonsense controls'),
+        range('nonsense', 'Nonsense controls at positions'), range('synonymous', 'Synonymous controls at positions')),
+      why('nonsense', 'Why the nonsense variants are loss-of-function controls', 'Stops before the last domain lose the function'),
+      why('synonymous', 'Why the synonymous variants are wild-type-like controls', 'Codon changes outside splice regions'));
   }
 
   // Whether each row is a variant or a barcode (wave 2, slice 4): a barcode table's column of
@@ -348,7 +392,7 @@ export function mountExperimentMode(app, container) {
       return;
     }
     root.append(h('div.view-body', h('div.split.experiment-split',
-      h('div', sourcePane(s), summaryPane(design, s), settingsPane(design, s), targetPane(s)),
+      h('div', sourcePane(s), summaryPane(design, s), settingsPane(design, s), readoutPane(design), targetPane(s)),
       h('div', replicatesPane(design), design.model === 'bins' ? gatesPane(design) : null, columnsPane(design, s),
         h('div.btn-row', { style: { marginTop: '12px' } }, h('button.btn', { type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Draft the design again?', message: 'The design is replaced by the draft from the column names. Undo (⌘Z) brings this one back.', confirm: 'Draft again' })) draftFromColumns(app, s); } }, icon('sparkles'), 'Draft again from the column names'))))));
   }

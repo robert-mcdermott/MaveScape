@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { WORKSPACE_FORMAT, WORKSPACE_VERSION, createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWorkspace } from './workspace.js';
+import { acknowledgeFinding, createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWorkspace, setQcThresholds, verifyHistory, WORKSPACE_FORMAT, WORKSPACE_VERSION } from './workspace.js';
 
 test('a new workspace is an empty, versioned document with a valid id', () => {
   const ws = createWorkspace('GRB2 SH3', { now: '2026-10-08T12:00:00.000Z' });
@@ -99,5 +99,21 @@ test('named selections: saved and removed, each in the history', async () => {
   assert.equal(addSelection(ws, { name: 'Hot spot', run: 'run-x', keys: [] }).id, 'Hot-spot-2');
   ws = removeSelection(ws, added.id);
   assert.deepEqual(ws.history.map((e) => e.action), ['create', 'selection', 'remove-selection']);
+  assert.ok(verifyHistory(ws).ok);
+});
+
+test('a finding acknowledged with a reason, in the history; withdrawn; thresholds and acknowledgements kept apart', () => {
+  const finding = { id: 'coverage', title: 'Coverage of designed substitutions', status: 'review', value: '60%', blocking: false };
+  let ws = acknowledgeFinding(createWorkspace('W'), finding, '  Error-prone PCR library  ', 't1');
+  assert.deepEqual(ws.qc.acknowledged.coverage, { reason: 'Error-prone PCR library', status: 'review', value: '60%', time: 't1' });
+  assert.match(ws.history.at(-1).detail, /Acknowledged "Coverage of designed substitutions" \(review\): Error-prone PCR library/);
+  ws = setQcThresholds(ws, { agreement: { review: 0.9, fail: 0.5 } }, 'stricter');
+  ws = setQcThresholds(ws, null, 'defaults');
+  assert.ok(ws.qc.acknowledged.coverage && !ws.qc.thresholds, 'resetting the thresholds keeps the acknowledgements');
+  ws = acknowledgeFinding(ws, finding, '');
+  assert.equal(ws.qc, null);
+  assert.equal(acknowledgeFinding(ws, finding, ''), ws, 'nothing to withdraw');
+  assert.throws(() => acknowledgeFinding(ws, { ...finding, status: 'pass' }, 'why'), /only a finding to review or failing/);
+  assert.throws(() => acknowledgeFinding(ws, { ...finding, status: 'fail', blocking: true }, 'why'), /blocks the analysis/);
   assert.ok(verifyHistory(ws).ok);
 });

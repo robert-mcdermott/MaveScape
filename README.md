@@ -27,10 +27,11 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > the variant-effect map shows each run and each difference between conditions, and a workspace
 > saves to one archive that reopens identically. A million rows import in a few seconds. Scripts
 > can drive the window (`--remote-control`), and `mavescape run` does a whole analysis without one,
-> the same bytes every time. Six examples are on the Start page;
+> the same bytes every time. A design says what the assay measures, and every QC finding what could
+> cause it and what to do. Six examples are on the Start page;
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with what the assay measures, calibrated
-> uncertainty, help assembling a complete analysis package, and more examples.
+> [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with calibrated uncertainty, help assembling a
+> complete analysis package, and more examples.
 
 ## What is a MAVE?
 
@@ -124,12 +125,14 @@ are made this way (`docs/capture/capture.mjs`).
 For pipelines, `mavescape run` does the whole analysis without a window (in a headless Chrome)
 and writes the scores, counts, QC, map, methods, provenance, the workspace archive and `run.json`
 to a folder; `--time` (or `SOURCE_DATE_EPOCH`) makes every file the same bytes for the same inputs,
-and `--from-workspace` reruns a saved run exactly:
+`--from-workspace` reruns a saved run exactly, and `--strict` fails on any failing QC finding not
+acknowledged (`--acknowledge id=reason` for one expected here):
 
 ```sh
 mavescape validate --design design.json counts.csv
 mavescape run --design design.json --out results/ --time 2026-10-09T12:00:00Z counts.csv
 mavescape run --from-workspace results/workspace.msz --out rerun/
+mavescape run --design design.json --out strict/ --strict --acknowledge "coverage=an error-prone PCR library" counts.csv
 ```
 
 ## Privacy and security

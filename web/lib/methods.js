@@ -86,8 +86,8 @@ export function writeMethods(ws, run, options = {}) {
   }
   paragraphs.push(data.join(' '));
 
-  // The design.
-  paragraphs.push(`Design: ${summarizeDesign(design).lines.join(' ')}`);
+  // The design, and what the assay measures (left out when the design does not say).
+  paragraphs.push(`Design: ${summarizeDesign(design).lines.filter((line) => design.readout || !line.startsWith('Readout:')).join(' ')}`);
 
   // Scoring.
   const scoring = [];
@@ -130,7 +130,8 @@ export function writeMethods(ws, run, options = {}) {
     const f = options.findings;
     const flagged = f.filter((x) => x.status === 'review' || x.status === 'fail');
     const bottleneck = flagged.some((x) => x.id === 'excess-variance');
-    paragraphs.push(`Quality control: ${f.filter((x) => x.status === 'pass').length} findings passed, ${f.filter((x) => x.status === 'review').length} were to review and ${f.filter((x) => x.status === 'fail').length} failed${f.some((x) => x.status === 'na') ? ` (${f.filter((x) => x.status === 'na').length} not assessed)` : ''}.${flagged.length ? ` ${flagged.map((x) => `${x.title}: ${x.value} (${x.status}; ${x.threshold})`).join('. ')}.` : ''}${bottleneck ? ` Variance beyond counting is read as in DiMSum's error model ${cite('dimsum')}.` : ''} Thresholds are recorded with the workspace.`);
+    const acknowledged = flagged.filter((x) => x.acknowledged?.current);
+    paragraphs.push(`Quality control: ${f.filter((x) => x.status === 'pass').length} findings passed, ${f.filter((x) => x.status === 'review').length} were to review and ${f.filter((x) => x.status === 'fail').length} failed${f.some((x) => x.status === 'na') ? ` (${f.filter((x) => x.status === 'na').length} not assessed)` : ''}.${flagged.length ? ` ${flagged.map((x) => `${x.title}: ${x.value} (${x.status}; ${x.threshold})`).join('. ')}.` : ''}${acknowledged.length ? ` ${acknowledged.length === 1 ? 'One finding was' : `${acknowledged.length} findings were`} acknowledged, ${acknowledged.length === 1 ? 'its status' : 'their statuses'} unchanged: ${acknowledged.map((x) => `${x.title.charAt(0).toLowerCase()}${x.title.slice(1)} ("${x.acknowledged.reason.replace(/[.\s]+$/, '')}")`).join('; ')}.` : ''}${bottleneck ? ` Variance beyond counting is read as in DiMSum's error model ${cite('dimsum')}.` : ''} Thresholds are recorded with the workspace.`);
   }
 
   // Software.

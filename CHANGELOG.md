@@ -144,6 +144,30 @@ each.
   with what blocks scoring; `--json`.
 - **Remote control:** `check` (what would block scoring) and `reproduce_run` (a saved run recomputed
   and checked against its output hash).
+- **What the assay measures (wave 2, slice 8; E7).** The design's `readout` records what was
+  measured, its direction (a higher score means more of the function, less of it, or a larger
+  change with no sign) and the assay's method, mechanism and model system, in MaveDB's controlled
+  keywords. `library.method` says how the library was made. In the Experiment view, *What the assay
+  measures* edits them and the controls. The design's summary, the methods and the exports carry
+  the readout; until its direction is stated, MaveScape takes a higher score to mean more of the
+  function and says so. The bundled examples state theirs.
+- **Controls that fit the assay:** each control class can be limited to the positions where it
+  serves (`controls.positions`) with why it is a control (`controls.why`); normalization,
+  rescaling and QC use the limits.
+- **Findings in context (Q11).** Every QC finding to review or failing says what could cause it (in
+  the experiment, in the analysis, or expected from the library or assay) and what to do next (a
+  plot to look at, an analysis choice, or what needs another experiment); one not assessed says
+  what it needs. The separation of the controls reads the readout's direction, says when the
+  nonsense variants score on the other side, and finds where late stops stop losing the function
+  (position 93 in BRCA1's Y2H assay) to suggest limiting the controls. Coverage of a library made
+  by error-prone PCR or doped oligos is judged against the substitutions one base change makes.
+- **Acknowledging a finding:** *Acknowledge…* in the QC view, `acknowledge_finding` by remote
+  control, and `mavescape run --acknowledge id=reason` record why a finding is expected here. The
+  finding keeps its status; the reason goes into the history, the methods, the provenance, and the
+  new `qc_findings.csv` export of every finding with its causes, next steps and acknowledgement.
+- **Archives that keep opening:** a workspace saved by MaveScape 0.1.0 is kept as a fixture
+  (`validation/archives/`); this version opens it and reproduces its runs, and each release adds
+  one.
 
 ### Changed
 
@@ -157,6 +181,11 @@ each.
   has, and what is missing and where to find it. Outside laboratories no longer gate any wave or
   release. Comparison and robustness to analysis choices move ahead of structure (0.4 and 0.5).
   Each release keeps a workspace archive that later versions must reopen and reproduce.
+
+- **The map's legend names its ends from the readout** ("blue is less function, red more
+  function") and says "lower" and "higher" until the direction is stated; the palettes are named by
+  their colors only.
+- **`mavescape run --strict` fails on a failing QC finding that is not acknowledged.**
 
 - **Records take their time from a session clock** (`web/lib/clock.js`), the wall clock in a window;
   a headless run with a fixed time makes them, and their identifiers, the same every time.
@@ -173,6 +202,12 @@ each.
   every time point.
 
 ### Fixed
+
+- **The separation of the controls used every nonsense variant**, even where the design named others
+  or none; it now uses the design's controls, as scoring does.
+- **A validation note called BRCA1's library error-prone PCR**, but it holds 71% of the
+  substitutions two or three bases from the wild-type codon, which such a library rarely makes; the
+  note no longer says how it was made.
 
 - **Enrich2's estimator with several conditions** started, in MaveScape, from the variance over the
   variants scored in every replicate of that condition; Enrich2 starts every condition from its

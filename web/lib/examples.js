@@ -162,7 +162,8 @@ export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
 // library's barcode-to-variant map), csv, design, truth: { key: effect } }.
 export function simulatedExample(example = exampleById('simulated')) {
   const sim = simulateExperiment(example.simulation);
-  const design = { ...sim.design, name: `${sim.design.name} (simulated data)` };
+  // A simulated selection for function: a variant that loses it becomes rarer (wave 2, slice 8).
+  const design = { ...sim.design, name: `${sim.design.name} (simulated data)`, readout: { phenotype: `Simulated ${example.simulation.sort ? 'reporter fluorescence, sorted into bins' : 'growth under a selection for function'}`, direction: 'higher-more' } };
   // The truth: each variant's effect (a sort-seq experiment's: its shift in log fluorescence; two
   // conditions': the difference between them).
   const truth = Object.fromEntries(sim.variants.map((v) => [v.name, v.differential ?? v.shift ?? v.effect]));

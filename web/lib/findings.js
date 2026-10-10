@@ -3,8 +3,15 @@
 // numbers, the threshold, the rationale, the samples or replicates it concerns, the plot behind
 // it, and whether it blocks the analysis or advises. Thresholds are parameters, kept in the
 // workspace and its history; the overall status is the worst finding, shown beside the list.
+//
+// Wave 2, slice 8 (Q11): each finding that is not a pass also says which causes fit it and what to
+// do next (advice.js), and can be acknowledged with a reason (ws.qc.acknowledged: { id: { reason,
+// status, value, time } }): its status does not change, the reason goes on the record, and an
+// acknowledgement holds while the finding is no worse than it was when acknowledged.
 
 import { DEFAULT_MEASURES } from './qc.js';
+import { adviceFor } from './advice.js';
+import { inText } from './readout.js';
 
 const pct = (x) => `${(100 * x).toFixed(x < 0.1 ? 1 : 0)}%`;
 const num = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
@@ -81,10 +88,12 @@ const RANK = { na: 0, pass: 1, review: 2, fail: 3 };
 const worst = (list) => list.reduce((a, b) => (RANK[b] > RANK[a] ? b : a), 'pass');
 const thresholdText = ({ review, fail }, bad, fmt = num) => (bad === 'above' ? `review above ${fmt(review)}, fail above ${fmt(fail)}` : `review below ${fmt(review)}, fail below ${fmt(fail)}`);
 
-// The findings of a QC result. qc: computeQC's output; thresholds: as defaultThresholds().
-export function findingsFrom(qc, thresholds) {
+// The findings of a QC result. qc: computeQC's output; thresholds: as defaultThresholds();
+// options: { acknowledged } (the workspace's acknowledgements, by finding id).
+export function findingsFrom(qc, thresholds, options = {}) {
   const t = withDefaultThresholds(thresholds);
   const out = [];
+  const ctx = qc.context ?? null;
   const add = (f) => out.push({ blocking: false, affected: { samples: [], replicates: [] }, level: 'counts', ...f });
 
   // Every sample has counts.
@@ -157,15 +166,17 @@ export function findingsFrom(qc, thresholds) {
     affected: { samples: dropped.map((d) => d.sample), replicates: dropped.map((d) => d.replicate) },
   });
 
-  // Coverage.
+  // Coverage: of what the library can make, when it is made of single-base changes and the
+  // target's codons are known (wave 2, slice 8).
   const cv = levels(t, 'coverage');
   const cov = qc.coverage;
+  const reach = cov.assessed && cov.reach?.known ? cov.reach : null;
   add({
-    id: 'coverage', title: 'Coverage of designed substitutions', plot: 'coverage', status: cov.assessed ? statusOf(cov.fraction, cv, 'below') : 'na',
-    value: cov.assessed ? `${pct(cov.fraction)} (${cov.observed} of ${cov.designed}; missense ${cov.byClass.missense[0]}/${cov.byClass.missense[1]}, nonsense ${cov.byClass.nonsense[0]}/${cov.byClass.nonsense[1]})` : `not assessed: ${cov.reason}`,
-    explanation: cov.assessed ? `Of the ${cov.designed} single amino-acid substitutions and stops possible across ${cov.length} positions${qc.coverage.grid ? '' : ''}, ${cov.observed} were seen before selection; ${cov.inTable - cov.observed} are in the table with no input reads, ${cov.designed - cov.inTable} are not in it. Unmeasured substitutions are missing on the map, never "no effect".` : `Coverage is not assessed: ${cov.reason}.`,
-    threshold: thresholdText(cv, 'below', pct),
-    rationale: 'The fraction of designed variants observed. Libraries built by error-prone PCR or with tiles cover less by design; the threshold is a prompt to check, not a standard.',
+    id: 'coverage', title: 'Coverage of designed substitutions', plot: 'coverage', status: cov.assessed ? statusOf(reach ? reach.fraction : cov.fraction, cv, 'below') : 'na',
+    value: cov.assessed ? `${reach ? `${pct(reach.fraction)} of the substitutions one base change makes (${reach.observed} of ${reach.designed}); ` : ''}${pct(cov.fraction)}${reach ? ' of all' : ''} (${cov.observed} of ${cov.designed}; missense ${cov.byClass.missense[0]}/${cov.byClass.missense[1]}, nonsense ${cov.byClass.nonsense[0]}/${cov.byClass.nonsense[1]})` : `not assessed: ${cov.reason}`,
+    explanation: cov.assessed ? `Of the ${cov.designed} single amino-acid substitutions and stops possible across ${cov.length} positions, ${cov.observed} were seen before selection; ${cov.inTable - cov.observed} are in the table with no input reads, ${cov.designed - cov.inTable} are not in it.${reach ? ` The library was made by ${inText(cov.method)}, which reaches mostly the ${reach.designed} substitutions one base change away from each wild-type codon: ${reach.observed} of those were seen, and coverage is judged on them.` : cov.reach && !cov.reach.known ? ` The library was made by ${inText(cov.method)}, which reaches mostly the substitutions one base change makes (about a third of all); with the target's DNA sequence, coverage would be judged against those.` : ''} Unmeasured substitutions are missing on the map, never "no effect".` : `Coverage is not assessed: ${cov.reason}.`,
+    threshold: `${thresholdText(cv, 'below', pct)}${reach ? ', of the substitutions the library can make' : ''}`,
+    rationale: 'The fraction of designed variants observed. A library of single-base changes (error-prone PCR, doped oligos) reaches about a third of the substitutions, and a tiled one covers its tiles: coverage is judged against what the library could make when the design says how it was made. The threshold is a prompt to check, not a standard.',
   });
 
   // Replicate agreement.
@@ -231,13 +242,31 @@ export function findingsFrom(qc, thresholds) {
   const sp = levels(t, 'separation');
   const sep = (scores ?? []).filter((c) => c.separation);
   const sepStatus = sep.map((c) => statusOf(c.separation.auc, sp, 'below'));
+  const first = sep[0]?.separation;
+  // How far the nonsense variants sit from the reference, on the side the readout expects (or, a
+  // negative distance, the other side).
+  const sideWord = (x) => {
+    const expected = x.side === 'above' ? 'above' : 'below';
+    const other = x.side === 'above' ? 'below' : 'above';
+    return x.side === 'either' ? `${num(Math.abs(x.standardized), 1)} robust SDs away from` : `${num(Math.abs(x.standardized), 1)} robust SDs ${x.standardized >= 0 ? expected : other}`;
+  };
+  const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+  const noControls = ctx && ctx.controls.nonsense === 'none' ? 'not assessed: the design names no nonsense controls' : 'not assessed: needs 5 scored nonsense controls and synonymous variants or the wild type';
+  const limited = ctx?.controls.positions?.nonsense;
+  const changes = sep.filter((c) => c.separation.change && !(limited?.end <= c.separation.change.lastControl));
   add({
     id: 'separation', title: 'Separation of controls', plot: 'controls', level: 'scores',
     status: !scores ? 'na' : sep.length ? worst(sepStatus) : 'na',
-    value: !scores ? noRun : sep.length ? sep.map((c) => `${scores.length > 1 ? `${c.name}: ` : ''}AUC ${num(c.separation.auc, 3)} (${c.separation.reference} median ${num(c.separation.referenceMedian)}, nonsense ${num(c.separation.nonsenseMedian)})`).join('; ') : 'not assessed: needs 5 scored nonsense variants and synonymous variants or the wild type',
-    explanation: sep.length ? `Nonsense variants score ${sep.map((c) => `${num(c.separation.standardized, 1)} robust SDs below ${c.separation.reference === 'wild type' ? 'the wild type' : 'synonymous variants'}${scores.length > 1 ? ` in ${c.name}` : ''}`).join('; ')}${sep.some((c) => Number.isFinite(c.separation.nonsenseAbove)) ? `; ${sep.map((c) => pct(c.separation.nonsenseAbove)).join(', ')} of nonsense variants score above the synonymous 5th percentile` : ''}. ${worst(sepStatus) === 'pass' ? 'The assay tells loss of function from wild-type-like.' : 'The assay struggles to tell loss of function from wild-type-like: intermediate scores will be hard to read.'}` : 'Separation needs scored controls.',
+    value: !scores ? noRun : sep.length ? sep.map((c) => `${scores.length > 1 ? `${c.name}: ` : ''}AUC ${num(c.separation.auc, 3)} (${c.separation.reference} median ${num(c.separation.referenceMedian)}, nonsense ${num(c.separation.nonsenseMedian)}${c.separation.controls < c.separation.stops ? `; ${c.separation.controls} of ${c.separation.stops} stops as controls` : ''})`).join('; ') : noControls,
+    explanation: sep.length ? [
+      `Nonsense variants score ${sep.map((c) => `${sideWord(c.separation)} ${c.separation.reference === 'wild type' ? 'the wild type' : 'synonymous variants'}${scores.length > 1 ? ` in ${c.name}` : ''}`).join('; ')}${sep.some((c) => Number.isFinite(c.separation.nonsenseAbove)) ? `; ${sep.map((c) => pct(c.separation.nonsenseAbove)).join(', ')} of them score on the wild type's side of the synonymous ${first.side === 'above' ? '95th' : '5th'} percentile` : ''}.`,
+      worst(sepStatus) === 'pass' ? 'The assay tells loss of function from wild-type-like.' : 'The assay struggles to tell loss of function from wild-type-like: intermediate scores will be hard to read.',
+      first.stated ? (first.side === 'either' ? 'The readout\'s score has no sign, so separation is counted either way.' : `As the readout says, loss of function scores ${first.side === 'above' ? 'high' : 'low'}.`) : 'The readout\'s direction is not stated: loss of function is taken to score low (a higher score, more of the function).',
+      sep.some((c) => c.separation.reversed) ? `The nonsense variants score ${first.side === 'below' ? 'above' : 'below'} the reference instead${first.stated ? ': check the readout\'s direction, and that the nonsense variants lose the function this assay measures.' : ': in this assay a higher score may mean less of the function. State the readout\'s direction (Experiment).'}` : '',
+      changes.length ? capital(changes.map((c) => `${scores.length > 1 ? `${c.name}: ` : ''}stops after position ${c.separation.change.lastControl} score like the reference (median ${num(c.separation.change.after.median)}, ${c.separation.change.after.n} stops), those up to it ${num(c.separation.change.before.median)} (${c.separation.change.before.n})`).join('; ')) + ': truncations late in the target may keep the function, and are not loss-of-function controls.' : '',
+    ].filter(Boolean).join(' ') : ctx && ctx.controls.nonsense === 'none' ? 'The design names no nonsense controls.' : 'Separation needs scored controls.',
     threshold: thresholdText(sp, 'below', (x) => `AUC ${x}`),
-    rationale: 'No single separation statistic is standard, so three are reported: the AUC (the chance a reference variant outscores a nonsense variant), the standardized median difference, and the nonsense fraction above the synonymous 5th percentile (the class threshold of VAMP-seq, Matreyek et al. 2018). Nonsense variants are loss-of-function controls only where a truncation loses the function assayed: stops after the region an assay needs (BRCA1\'s Y2H construct) can keep it.',
+    rationale: 'No single separation statistic is standard, so three are reported: the AUC (the chance a reference variant sits on the wild-type side of a nonsense variant, in the direction the readout gives), the standardized median difference, and the nonsense fraction on the wild-type side of the synonymous 5th percentile (the class threshold of VAMP-seq, Matreyek et al. 2018). Nonsense variants are loss-of-function controls only where a truncation loses the function assayed: stops after the region an assay needs (BRCA1\'s Y2H construct) can keep it, and the design can limit them to the positions where they serve.',
   });
   const rs = levels(t, 'resolution');
   const res = (scores ?? []).filter((c) => Number.isFinite(c.resolution));
@@ -371,12 +400,30 @@ export function findingsFrom(qc, thresholds) {
       affected: { samples: [], replicates: fit.filter((r, i) => fitStatus[i] !== 'pass').map((r) => r.id) },
     });
   }
-  return out;
+  // Context: what to do next, and the acknowledgements that still hold.
+  return out.map((f) => ({ ...f, advice: adviceFor(f, qc), acknowledged: acknowledgementOf(f, options.acknowledged?.[f.id]) }));
 }
 
-// The overall status: the worst finding, and how many of each.
+// A workspace's acknowledgement of a finding, as the finding carries it: { reason, time, status,
+// value, current }, current while the finding is still to review or failing and no worse than when
+// it was acknowledged. A blocking finding cannot be acknowledged.
+function acknowledgementOf(f, ack) {
+  if (!ack || f.blocking) return null;
+  return { reason: ack.reason, time: ack.time ?? null, status: ack.status, value: ack.value ?? null, current: (f.status === 'review' || f.status === 'fail') && RANK[f.status] <= RANK[ack.status] };
+}
+
+// The overall status: the worst finding, and how many of each; acknowledgements do not change it,
+// but are counted apart (unacknowledged: the findings to review or failing that no one has
+// acknowledged).
 export function overall(findings) {
   const counts = { fail: 0, review: 0, pass: 0, na: 0 };
   for (const f of findings) counts[f.status] += 1;
-  return { status: counts.fail ? 'fail' : counts.review ? 'review' : 'pass', counts, blocking: findings.filter((f) => f.blocking && f.status === 'fail').map((f) => f.id) };
+  const open = (status) => findings.filter((f) => f.status === status && !f.acknowledged?.current).length;
+  return {
+    status: counts.fail ? 'fail' : counts.review ? 'review' : 'pass',
+    counts,
+    blocking: findings.filter((f) => f.blocking && f.status === 'fail').map((f) => f.id),
+    acknowledged: findings.filter((f) => f.acknowledged?.current).map((f) => f.id),
+    unacknowledged: { fail: open('fail'), review: open('review') },
+  };
 }

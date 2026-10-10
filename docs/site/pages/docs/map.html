@@ -4,9 +4,9 @@ description: MaveScape's variant-effect map (positions across, substitutions dow
 lede: The map shows a run's single substitutions, positions across and substitutions down, on a scale centered on the wild type. Click any cell for its evidence in the inspector.
 ---
       <h2 id="reading">Reading the map</h2>
-      <shot name="map" alt="The map of the GRB2 SH3 domain colored by score, with the legend of states and p.Trp36Ala's evidence in the inspector">GRB2's map colored by score: blue is loss of function, red gain, white like the wild type.</shot>
+      <shot name="map" alt="The map of the GRB2 SH3 domain colored by score, with the legend of states and p.Trp36Ala's evidence in the inspector">GRB2's map colored by score: in this abundance assay blue is less function, red more, white like the wild type.</shot>
       <ul>
-        <li><strong>Scored</strong> cells are colored by score on a diverging scale centered on the wild type and symmetric about it.</li>
+        <li><strong>Scored</strong> cells are colored by score on a diverging scale centered on the wild type and symmetric about it. Low scores are blue and high scores red. Which end is loss of function depends on the assay, so the legend names the ends from the readout ("less function", "more function") when the design states its direction, and says only "lower" and "higher" otherwise (<a href="experiment.html#readout">What the assay measures</a>).</li>
         <li><strong>Low confidence</strong> cells (fewer replicates than expected, or a zero count) are drawn paler, with a corner mark.</li>
         <li><strong>Filtered</strong> cells are hatched; <strong>missing</strong> cells (not in the table) are gray with a dot; cells outside the designed tiles are left empty. None of them is ever drawn as "no effect": each is at least ΔE 10 from the neutral color in both themes and both palettes.</li>
         <li>The <strong>reference residue</strong> at each position is outlined.</li>

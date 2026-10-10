@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/robert-mcdermott/mavescape/docs/schemas/design.v1.json",
   "title": "MaveScape experiment design, version 1",
-  "description": "What each column of a count table is: samples, their roles, conditions and replicates, times or bins, tiles, targets and controls. Structural rules are here; the rules that depend on the model (two-population, time-series, bins, scores) and on the table are checked by validateDesign in web/lib/design.js. See mavescape-spec/conventions.md, 'Design'.",
+  "description": "What each column of a count table is: samples, their roles, conditions and replicates, times or bins, tiles, targets, controls and what the assay measures. Structural rules are here; the rules that depend on the model (two-population, time-series, bins, scores) and on the table are checked by validateDesign in web/lib/design.js. See mavescape-spec/conventions.md, 'Design'.",
   "type": "object",
   "required": ["format", "version", "model", "targets", "variants", "samples", "replicates"],
   "additionalProperties": false,
@@ -14,6 +14,18 @@
     "model": {
       "description": "two-population: input and output of a selection; time-series: the same library sampled at two or more times; bins: cells sorted into ordered bins; scores: a table of precomputed scores (no counts).",
       "enum": ["two-population", "time-series", "bins", "scores"]
+    },
+    "readout": {
+      "description": "What the assay measures (MaveScape 0.2). The method, mechanism and model system are MaveDB's controlled keywords for an experiment (the MAVE minimum information's vocabulary, Claussnitzer et al. 2024). Until the direction is stated, MaveScape takes a higher score to mean more of the function measured, and says so.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phenotype": { "type": "string", "description": "What was measured, in words (\"cellular abundance of the domain\")." },
+        "method": { "type": "string", "description": "MaveDB's Phenotypic Assay Method (Reporter, Cell fitness, Binding assay…)." },
+        "mechanism": { "type": "string", "description": "MaveDB's Phenotypic Assay Mechanism: the variants the assay detects (Loss of function, Gain of function…)." },
+        "modelSystem": { "type": "string", "description": "MaveDB's Phenotypic Assay Model System (Yeast, Immortalized human cells…)." },
+        "direction": { "enum": ["higher-more", "higher-less", "unsigned"], "description": "What a higher score means: more of the function measured, less of it, or a larger change either way (no sign)." }
+      }
     },
     "source": {
       "description": "Where the table came from, when it is public.",
@@ -46,6 +58,7 @@
       "properties": {
         "level": { "enum": ["variant", "barcode"], "description": "variant: one row per variant; barcode: one row per barcode, each naming the variant it carries (many barcodes per variant)." },
         "barcodeColumn": { "type": "string", "minLength": 1, "description": "For a table of barcodes: the column of barcode identifiers (each on one row)." },
+        "method": { "type": "string", "minLength": 1, "description": "How the library was made, in MaveDB's terms (In Vitro Construct Library Method System: Error-prone PCR, Doped oligo synthesis, Oligo pool synthesis…). Libraries made by error-prone PCR or doped oligos reach mostly the substitutions one nucleotide change makes, and coverage is judged against those (MaveScape 0.2)." },
         "tiles": { "type": "array", "items": { "$ref": "#/$defs/tile" } }
       }
     },
@@ -121,6 +134,21 @@
               "source": { "type": "string" }
             }
           }
+        },
+        "positions": {
+          "description": "Where a class serves as a control, in target positions (MaveScape 0.2): nonsense variants are loss-of-function controls only where a stop loses the function assayed.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "synonymous": { "$ref": "#/$defs/range" },
+            "nonsense": { "$ref": "#/$defs/range" }
+          }
+        },
+        "why": {
+          "description": "Why each class is a control in this assay, in words (MaveScape 0.2).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "wildType": { "type": "string" }, "synonymous": { "type": "string" }, "nonsense": { "type": "string" } }
         }
       }
     },
@@ -142,6 +170,11 @@
   },
   "$defs": {
     "id": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "start": { "type": "integer", "minimum": 1 }, "end": { "type": "integer", "minimum": 1 } }
+    },
     "target": {
       "type": "object",
       "required": ["id", "name", "sequenceType", "sequence"],

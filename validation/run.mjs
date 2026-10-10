@@ -15,7 +15,7 @@
 // validation/cache/ (wave 1, slice 2); without them the suite is skipped, and fails with
 // --require-data, as in CI. The harness follows CytoWeave 0.8.0's validation/run.mjs.
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { textPairs, themeTokens } from './accessibility-cases.mjs';
@@ -32,7 +32,7 @@ import { parseFasta, targetFromSequence } from '../web/lib/target.js';
 import { createRandom, shuffle } from '../web/lib/random.js';
 import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
 import { designFromSampleSheet } from '../web/lib/samplesheet.js';
-import { addSource, addTarget, createWorkspace, parseWorkspace, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
+import { acknowledgeFinding, addSource, addTarget, createWorkspace, parseWorkspace, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
 const formatCount = (n) => n.toLocaleString('en-US');
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
@@ -46,15 +46,15 @@ import { cbsCase, compareLimma, mutscanReference, twoConditionCase } from './dif
 import { DIFFERENTIAL_REASON_NAMES } from '../web/lib/differential.js';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
-import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS, withDefaults } from '../web/lib/score.js';
+import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS, SCORING_VERSION, withDefaults } from '../web/lib/score.js';
 import { scoreDimsumGroup } from '../web/lib/score-dimsum.js';
 import { combineFixed, combineREML, heterogeneity } from '../web/lib/replicates.js';
 import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE, REPLICATE_STATE_NAMES } from '../web/lib/filters.js';
-import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs } from '../web/lib/runs.js';
+import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs, reproduction } from '../web/lib/runs.js';
 import { median } from '../web/lib/score-ratio.js';
 import { QC_FIXTURES, QC_SEEDS, matches, raised, runFixture } from './qc-cases.mjs';
 import { computeQC } from '../web/lib/qc.js';
-import { checkThresholds, defaultThresholds, findingsFrom, overall } from '../web/lib/findings.js';
+import { checkThresholds, defaultThresholds, findingsFrom, measuresOf, overall, withDefaultThresholds } from '../web/lib/findings.js';
 import { simulateExperiment } from '../web/lib/simulate.js';
 import { setQcThresholds } from '../web/lib/workspace.js';
 import { buildMapModel, cellAt, cellName, colorPosition, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../web/lib/map-model.js';
@@ -1505,13 +1505,81 @@ const suites = {
       check('qc', 'thresholds whose fail level is on the wrong side of the review level are refused', bad[0] ?? 'accepted', bad.length === 1, 'refused');
     }
 
+    // Findings in context (wave 2, slice 8). Every finding a planted problem raises says which
+    // causes fit it and what to do next.
+    {
+      const missingAdvice = [];
+      let raisedCount = 0;
+      for (const [name, options] of QC_FIXTURES) {
+        for (const f of runFixture(options, QC_SEEDS[0]).findings) {
+          if (f.status !== 'review' && f.status !== 'fail') continue;
+          raisedCount += 1;
+          if (!f.advice?.causes.length || !f.advice?.next.length) missingAdvice.push(`${name}: ${f.id}`);
+        }
+      }
+      check('qc', 'every finding the planted problems raise names the causes that fit it and what to do next (look, change the analysis, or the experiment)', `${raisedCount - missingAdvice.length} of ${raisedCount}${missingAdvice.length ? `; without: ${missingAdvice.join(', ')}` : ''}`, raisedCount > 0 && !missingAdvice.length, 'all');
+    }
+    // A selection that enriches loss of function: the clean experiment with each replicate's input
+    // and output swapped, so that a variant that loses the function now scores high.
+    {
+      const rows = QC_SEEDS.map((seed) => {
+        const base = runFixture(QC_FIXTURES[0][1], seed);
+        const swapped = { ...base.sim.design, replicates: base.sim.design.replicates.map((r) => ({ ...r, input: r.output, output: r.input })) };
+        const separationOf = (design) => {
+          const scored = scoreExperiment({ names: base.names, columns: base.columns, design, parameters: defaultParameters(design) });
+          return findingsFrom(computeQC({ names: base.names, columns: base.columns, design, results: scored.results }), defaultThresholds()).find((f) => f.id === 'separation');
+        };
+        return { clean: base.findings.find((f) => f.id === 'separation'), stated: separationOf({ ...swapped, readout: { direction: 'higher-less' } }), assumed: separationOf(swapped) };
+      });
+      const auc = (f) => Number(/AUC ([0-9.]+)/.exec(f.value)?.[1]);
+      check('qc', 'a selection that enriches loss of function (inputs and outputs swapped), 3 seeds: with the readout\'s direction stated, the controls separate as in the clean experiment; not stated, separation fails, says the direction may be the other way round, and asks for it', rows.map((r) => `stated ${r.stated.status} (AUC ${auc(r.stated)}), not stated ${r.assumed.status} (AUC ${auc(r.assumed)})`).join(' | '),
+        rows.every((r) => r.stated.status === 'pass' && auc(r.stated) >= 0.9 && r.clean.status === 'pass' && r.assumed.status === 'fail' && /higher score may mean less of the function/.test(r.assumed.explanation) && r.assumed.advice.next.some((x) => x.kind === 'analysis' && /direction/.test(x.text))), 'stated: pass; not stated: fail, saying so');
+      // No late-stop warning where the stops all lose the function.
+      check('qc', 'a clean experiment (3 seeds): no warning that late stops keep the function', rows.map((r) => (/score like the reference/.test(r.clean.explanation) ? 'warned' : 'none')).join(', '), rows.every((r) => !/score like the reference/.test(r.clean.explanation)), 'none');
+    }
+    // A library of single-base changes (error-prone PCR) on the two-population fixture's DNA target:
+    // a table of exactly the substitutions one base away from each wild-type codon, counted here
+    // independently. Coverage is low against all substitutions; against what the library can make
+    // it is whole.
+    {
+      const code = {};
+      const bases = 'TCAG';
+      const aa = 'FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG';
+      let k = 0;
+      for (const a of bases) for (const b of bases) for (const c of bases) code[a + b + c] = aa[k++];
+      const design = fixtureDesign();
+      const dna = design.targets[0].sequence.slice((design.targets[0].codingStart ?? 1) - 1);
+      const three = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter' };
+      const reachable = new Set();
+      for (let p = 1; 3 * p <= dna.length; p += 1) {
+        const codon = dna.slice(3 * p - 3, 3 * p);
+        for (let j = 0; j < 3; j += 1) for (const b of 'ACGT') {
+          const alt = code[codon.slice(0, j) + b + codon.slice(j + 1)];
+          if (b !== codon[j] && alt !== code[codon]) reachable.add(`p.${three[code[codon]]}${p}${three[alt]}`);
+        }
+      }
+      // A table of every such substitution and the wild type, each counted in every sample.
+      const columnNames = design.samples.flatMap((x) => x.columns);
+      const rowsOut = ['p.=', ...reachable].map((n) => [n, ...columnNames.map(() => (n === 'p.=' ? 10000 : 100))].join(','));
+      const single = parseTable(new TextEncoder().encode(`${[[design.variants.column, ...columnNames].join(','), ...rowsOut].join('\n')}\n`));
+      const coverageOf = (d) => {
+        const input = engineInput(single, d);
+        return findingsFrom(computeQC({ ...input, design: d }), defaultThresholds()).find((f) => f.id === 'coverage');
+      };
+      const without = coverageOf(design);
+      const withMethod = coverageOf({ ...design, library: { ...(design.library ?? { level: 'variant' }), method: 'Error-prone PCR' } });
+      check('qc', `a library of single-base changes (the fixture's 20 codons: ${reachable.size} substitutions one base away, counted independently): judged against all substitutions coverage fails; with the library made by error-prone PCR, it is judged against what that can make, and passes`, `without: ${without.status} (${without.value}); with: ${withMethod.status} (${withMethod.value})`,
+        without.status === 'fail' && withMethod.status === 'pass' && withMethod.value.startsWith(`100% of the substitutions one base change makes (${reachable.size} of ${reachable.size})`) && /error-prone PCR/.test(withMethod.explanation), 'fail, then pass');
+    }
+
     // The feasibility data (external): findings as found, with MaveScape's default scoring for each
     // design (weighted regression for BRCA1's time series, from wave 2).
     const expectations = [
       ['grb2-sh3', 'mavedb-grb2-sh3', 'counts.csv', { 'excess-variance': 'fail' }, 'replicate differences vary about 11× more than counting predicts: the input bottleneck DiMSum\'s error model found in these data'],
-      ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { dropout: 'review', coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'time-points': 'review', 'time-fit': 'fail' }, 'an error-prone-PCR library (76% of single substitutions); variants that dropped out in the last round written as missing (no 0 in the table), so a quarter of the weighted-regression fits miss their last points; time courses that scatter about their lines about 10× more than counting predicts (noise at each round of selection)'],
+      ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { dropout: 'review', coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'time-points': 'review', 'time-fit': 'fail' }, '76% of single substitutions in the library (most of those two and three bases from the wild-type codon too: not a library of single-base changes); variants that dropped out in the last round written as missing (no 0 in the table), so a quarter of the weighted-regression fits miss their last points; time courses that scatter about their lines about 10× more than counting predicts (noise at each round of selection)'],
       ['brca1-ring-e2', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'time-fit': 'fail' }, 'with the later rounds\' missing counts read as 0 (the design\'s missingMeansZero): the dropouts are counted, every fit uses every round, and the time courses scatter about 7× more than counting predicts', (design) => ({ ...design, samples: design.samples.map((x) => (design.replicates.some((r) => r.timepoints.slice(1).some((t) => t.sample === x.id)) ? { ...x, missingMeansZero: true } : x)) })],
       ['brca1-ring-y2h', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'outlier-replicate': 'review', separation: 'fail', resolution: 'review', 'time-fit': 'fail' }, 'nonsense variants are not separated from the wild type in the Y2H assay: those before residue 61 score about −3.7, those after residue 110 about +0.5 (truncations that keep the RING domain keep binding BARD1), so most are not loss-of-function controls here; its time courses scatter about 30× more than counting predicts'],
+      ['brca1-ring-y2h', 'mavedb-brca1-ring', 'aa/counts.csv', { coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'outlier-replicate': 'review', 'time-fit': 'fail' }, 'with its nonsense controls limited to positions up to 93, where the unlimited finding finds the stops stop losing BARD1 binding (wave 2, slice 8): the controls separate, and with their gap wider the scores\' resolution passes too', (design) => ({ ...design, controls: { ...design.controls, positions: { nonsense: { end: 93 } }, why: { nonsense: 'Stops before residue 94 lose the RING domain\'s helices that bind BARD1.' } } })],
       ['factor9', 'mavedb-factor9', 'counts.csv', { 'excess-variance': 'fail' }, 'sorted bins, scored by their weighted average (wave 2): replicates of a tile agree, but differ about 2,000× more than counting predicts, since about 10,000 reads per variant per bin far exceed the cells sorted; bin occupancy passes, and the cells per bin are not recorded'],
     ];
     for (const [name, data, path, expected, note, transform] of expectations) {
@@ -1527,6 +1595,14 @@ const suites = {
       const ms = performance.now() - t0;
       const got = raised(findingsFrom(qc, defaultThresholds()));
       check('qc', `${name} (${parameters.model === 'ratio' ? 'log ratio' : parameters.model.toUpperCase()}, scored and checked in ${ms.toFixed(0)} ms): ${note}`, show(got), matches(got, expected), show(expected));
+      // Where BRCA1's Y2H stops stop losing the function (wave 2, slice 8): the finding says, and
+      // what to limit the controls to.
+      if (name === 'brca1-ring-y2h' && !transform) {
+        const sep = findingsFrom(qc, defaultThresholds()).find((f) => f.id === 'separation');
+        const change = qc.scores[0].separation?.change;
+        check('qc', 'brca1-ring-y2h: the separation finding finds where the stops stop losing BARD1 binding (between residues 61 and 110, as the Y2H data show) and suggests limiting the nonsense controls to the positions before it', change ? `stops up to position ${change.lastControl} median ${change.before.median.toFixed(2)} (${change.before.n}); after it ${change.after.median.toFixed(2)} (${change.after.n}); ${sep.advice.next.find((x) => /Limit the nonsense controls/.test(x.text))?.text ?? 'no suggestion'}` : 'no change point',
+          change && change.lastControl >= 60 && change.lastControl < 110 && change.before.median < -3 && Math.abs(change.after.median) < 1 && sep.advice.next.some((x) => x.text.includes(`up to ${change.lastControl}`)), 'a position between 60 and 110, and the suggestion');
+      }
     }
   },
   // The variant-effect map (wave 1, slice 7): its SVG against a golden file, every state where the
@@ -1752,6 +1828,84 @@ const suites = {
       const expectedQc = example.findings ?? {};
       const minimum = differential ? 0.95 : 0.98;
       check('roundtrip', `the example "${example.title}": the same data from its seed, labeled simulated, scored by ${MODELS[parameters.model]}${differential ? `, its conditions compared by ${parameters.differential},` : ''} close to the true ${differential ? 'differences' : 'effects'}, and QC raises exactly the findings it teaches (${simQc.length} findings)`, `${sim.csv === simAgain.csv ? 'deterministic' : 'not deterministic'}; Pearson r ${pearson(a, b).toFixed(3)} over ${a.length} variants; QC ${Object.keys(raisedSim).length ? Object.entries(raisedSim).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`, sim.csv === simAgain.csv && /simulated/i.test(sim.design.name) && /not real data/.test(sim.design.description) && pearson(a, b) > minimum && JSON.stringify(raisedSim) === JSON.stringify(expectedQc), `r > ${minimum}; ${Object.keys(expectedQc).length ? Object.entries(expectedQc).map(([k, v]) => `${k}: ${v}`).join(', ') : 'all pass'}`);
+    }
+    // An acknowledged finding (wave 2, slice 8): GRB2's variance beyond counting, which the
+    // Domainome's analysis expected. Its status stays; the reason survives the archive and is in the
+    // history, the methods, the QC findings and the provenance; withdrawn, it is gone.
+    {
+      const built = buildWorkspace(cases[1][1]);
+      const run = built.ws.runs[0];
+      const thresholds = withDefaultThresholds(built.ws.qc?.thresholds);
+      const qc = computeQC({ ...inputFor(built.table, run.inputs.design), design: run.inputs.design, results: built.results, measures: measuresOf(thresholds) });
+      const plain = findingsFrom(qc, thresholds);
+      const finding = plain.find((f) => f.id === 'excess-variance');
+      const reason = 'The input bottleneck the Domainome\'s own analysis reported; DiMSum\'s error model carries it into the SEs';
+      const acked = acknowledgeFinding(built.ws, finding, reason, '2026-10-09T12:10:00.000Z');
+      const archive = await writeArchive(acked, { software: SOFTWARE, sources: new Map([[acked.sources[0].sha256, built.bytes]]), results: new Map([[run.id, built.results]]), methods: null });
+      const reopened = await readArchive(archive.bytes);
+      const after = findingsFrom(qc, thresholds, { acknowledged: reopened.ws.qc?.acknowledged });
+      const f = after.find((x) => x.id === 'excess-variance');
+      const [o0, o1] = [overall(plain), overall(after)];
+      const made = allExports(reopened.ws, built.table, built.results);
+      const kept = {
+        status: f.status === finding.status && o1.status === o0.status,
+        current: Boolean(f.acknowledged?.current),
+        counted: o1.unacknowledged.fail === o0.counts.fail - 1 && o1.acknowledged.includes('excess-variance'),
+        history: reopened.ws.history.at(-1).detail.includes(reason) && verifyHistory(reopened.ws).ok && !reopened.problems.length,
+        methods: made['methods.md'].includes(`("${reason}")`),
+        csv: made['qc_findings.csv'].split('\n').find((l) => l.startsWith('excess-variance,'))?.includes(reason),
+        provenance: JSON.parse(made['provenance.json']).qc.findings.find((x) => x.id === 'excess-variance').acknowledged?.reason === reason,
+      };
+      const withdrawn = acknowledgeFinding(reopened.ws, f, '');
+      const refused = [plain.find((x) => x.status === 'pass')].map((x) => { try { acknowledgeFinding(built.ws, x, 'why'); return 'accepted'; } catch (e) { return 'refused'; } });
+      check('roundtrip', 'an acknowledged finding (GRB2\'s variance beyond counting) keeps its status; the reason survives the archive and is in the history, the methods, the QC findings and the provenance; withdrawn, it is gone; a finding that passes cannot be acknowledged', `${Object.entries(kept).map(([k, v]) => `${k} ${v ? 'yes' : 'NO'}`).join(', ')}; withdrawn: ${withdrawn.qc?.acknowledged ? 'still there' : 'gone'}; a pass: ${refused[0]}`,
+        Object.values(kept).every(Boolean) && !withdrawn.qc?.acknowledged && withdrawn.qc?.thresholds && refused[0] === 'refused', 'all');
+    }
+    // Archives that keep opening (roadmap, "In every wave"): a workspace saved by each release
+    // (validation/archives/), opened by this MaveScape, each run recomputed from its recorded
+    // inputs, and everything a reopened workspace makes made again.
+    for (const file of readdirSync(new URL('./archives/', import.meta.url)).filter((f) => f.endsWith('.msz')).sort()) {
+      const opened = await readArchive(new Uint8Array(readFileSync(new URL(`./archives/${file}`, import.meta.url))));
+      const release = opened.manifest.software?.version ?? '?';
+      const chain = verifyHistory(opened.ws);
+      check('roundtrip', `${file}, saved by MaveScape ${release}, opens: every file's SHA-256 as its manifest records, the history's chain unbroken`, `${opened.ws.runs.length} runs, ${opened.ws.selections.length} selections, ${chain.entries} history entries; ${opened.problems.length ? opened.problems[0] : 'no problems'}`, !opened.problems.length && chain.ok, 'no problems');
+      let last = null;
+      for (const run of opened.ws.runs) {
+        const recorded = recordedInputs(run);
+        const t = parseTable(opened.sources.get(recorded.source.sha256), { fileName: run.inputs.source.fileName });
+        const again = scoreTable(t, recorded.design, recorded.parameters, recorded.mapping.mode);
+        if (!again.ok) {
+          check('roundtrip', `${file}: ${run.name} is recomputed`, again.errors[0], false, 'scored');
+          continue;
+        }
+        last ??= { run, table: t, results: again.results };
+        const verdict = reproduction(run, outputDigest(again.results), 'this version');
+        // Against the scores the archive holds for the run (results/<run>.csv), when it holds them.
+        const held = opened.results.get(`results/${run.id}.csv`);
+        let worst = 0;
+        if (held) {
+          const scores = parseTable(new TextEncoder().encode(held));
+          const col = (name) => scores.columns.find((c) => c.name === name).numeric;
+          const [score, se] = [col('score'), col('SE')];
+          const c = again.results.conditions[0];
+          for (let i = 0; i < c.score.length; i += 1) {
+            if (Number.isFinite(score[i]) !== Number.isFinite(c.score[i])) worst = Infinity;
+            else if (Number.isFinite(score[i])) worst = Math.max(worst, Math.abs(c.score[i] - score[i]) / Math.max(1, Math.abs(score[i])), Math.abs(c.se[i] - se[i]) / Math.max(1, se[i]));
+          }
+        }
+        const older = run.inputs.scoring !== SCORING_VERSION;
+        const ok = verdict.status === 'reproduced' || (older && /differ only in their last digits/.test(verdict.message) && worst <= 1e-12);
+        // Scoring engine 1 (0.1.0) took its logarithms from the JavaScript engine: Node's are
+        // fdlibm's, as dmath.js's, so here its runs reproduce; scored in another browser, they
+        // would differ in their last digits, and say so.
+        check('roundtrip', `${file}: ${run.name} recomputed from its recorded inputs has its recorded output hash${older ? ` (or, scored with engine ${run.inputs.scoring}'s browser logarithms, differs only in its last digits and says so)` : ''}`, `${verdict.status}${held ? `; against the archived scores, largest relative difference ${worst.toExponential(1)}` : ''}`, ok, older ? 'reproduced, or says so and ≤ 1e-12 from the archived scores' : 'reproduced');
+      }
+      if (last) {
+        // The reopened workspace makes its QC (with its own thresholds), exports and methods.
+        const made = allExports({ ...opened.ws, runs: [last.run] }, last.table, last.results);
+        const thresholds = withDefaultThresholds(opened.ws.qc?.thresholds);
+        check('roundtrip', `${file}: the reopened workspace keeps its QC thresholds and selection, and makes its exports and methods`, `replicate agreement review at ${thresholds.agreement.review}; selection "${opened.ws.selections[0]?.name}" of ${opened.ws.selections[0]?.keys.length} variants; ${Object.keys(made).length - 1} files`, Object.values(made).every((x) => x) && made['methods.md'].includes(last.run.output.sha256) && opened.ws.qc?.thresholds?.agreement?.review === thresholds.agreement.review, 'all made');
+      }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
     // The blank layouts: filled in as they say, they make a valid design.

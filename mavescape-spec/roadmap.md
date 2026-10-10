@@ -778,47 +778,81 @@ measures, and intervals checked against the truth.
        design's check; it is now said once, by the design.
      - The requirement numbers: `mavescape run` is M1 and `validate` M2 (this slice's heading said
        M2, M3).
-8. **What the assay measures, and findings in context (E7, Q11; E2, V2, Q5, Q9, R4, T7).** A
-   score's sign means nothing without the selection. Today the map's palettes say "loss – gain",
-   and the separation finding expects nonsense variants to score low. A selection that enriches
-   loss of function would be drawn and judged the wrong way round.
-   - **First, the 0.1.0 archive as a fixture** (In every wave), because this slice and the next
-     change the design and the scoring.
-   - **The readout.** The design gains `readout`, with five parts:
-     - the phenotype measured, and how;
-     - the biological system;
-     - the score's units;
-     - its direction: higher means more of the function, or less of it, or the score has no sign;
-     - the reference state: WT = 0, or nonsense = 0 and WT = 1.
+8. **What the assay measures, and findings in context (E7, Q11; E2, V2, Q5, Q9, R4, T7): done.**
+   - **The 0.1.0 archive as a fixture.** `validation/archives/grb2-0.1.0.msz` was written by 0.1.0's
+     own code from a v0.1.0 checkout (`archives/make-0.1.0.mjs`): GRB2 scored twice, a selection, a
+     changed threshold. The `roundtrip` suite opens every archive there and recomputes its runs
+     through `reproduction` (`web/lib/runs.js`, now shared with the window).
+   - **The readout.** `web/lib/readout.js` holds MaveDB's controlled keywords and the design's
+     `readout`: `phenotype`, `method`, `mechanism`, `modelSystem` and `direction`
+     (`higher-more`, `higher-less`, `unsigned`). `library.method` records how the library was made.
+     They are checked by `validateDesign` (a term outside MaveDB's lists is kept, with a warning),
+     edited in the Experiment view's *What the assay measures*, and described in the design's
+     summary and the methods. The readout drives the map's legend ("blue is less function, red more
+     function", or plain "lower" and "higher"; the palettes are named by color only), and the side
+     the separation finding expects. GRB2's example states its readout, MaveDB's tags for a
+     DHFR-PCA abundance assay (Reporter, loss of function, yeast); the simulated examples state
+     theirs.
+   - **Controls that fit the assay.** `controls.positions` limits a class to the positions where it
+     serves, and `controls.why` says why. `controlRows` applies the limits, so normalization,
+     rescaling and QC use them.
+   - **Findings in context.** `web/lib/advice.js` gives every finding to review or failing its
+     causes (experiment, analysis, expected) and next steps (look, analysis, experiment), read with
+     the design's context (`qc.context`). The separation finding:
+     - reads the direction, and when it is not stated and the nonsense variants score on the other
+       side, says so;
+     - finds where stops stop losing the function, by one change point in the stops' scores along
+       the target, and suggests the limit.
 
-     Its terms come from the MAVE minimum information (Claussnitzer et al. 2024), as MaveDB's
-     experiment keywords use them, checked against MaveDB's own list when the slice starts. The
-     readout is set in the Experiment view, from a sample sheet, or from MaveDB's metadata (wave
-     3), and it stays "not stated" rather than guessed. It replaces every place the direction is
-     assumed today:
-     - the legend reads "less function – more function" only when the direction is stated, and
-       "lower – higher" otherwise;
-     - the separation finding expects nonsense variants on the stated side;
-     - the methods, the exports and wave 4's comparisons carry it.
-   - **Controls that fit the assay.** Each control class says why it is a control and where it
-     applies. Nonsense variants count as loss-of-function controls only up to a position the user
-     sets. BRCA1's Y2H assay needs this: its truncations after residue 110 still bind.
-   - **Findings in context.** Each finding says what to do next: the plot to inspect, the analysis
-     choice that would change it, or what only another experiment can settle. It also says which
-     causes fit: a technical failure, a model that does not suit the data, or a property expected
-     from the library or the assay. Coverage, for instance, is judged against what the library's
-     construction can make.
-
-     A finding can be acknowledged with a reason. The status stays the same, and the reason is
-     kept on the record, in the methods and in the QC exports. `mavescape run --strict` reports
-     acknowledged failures but does not fail on them.
+     Coverage of a single-base library (error-prone PCR, doped oligos) with a DNA target is judged
+     against the substitutions one base change makes.
+   - **Acknowledgements** (`ws.qc.acknowledged`, `acknowledgeFinding`) keep a finding's status and
+     hold while it is no worse. They are recorded in the history, the methods, the provenance and
+     the new `qc_findings.csv` export. They are made in the QC view, by `acknowledge_finding` and by
+     `mavescape run --acknowledge id=reason`; `--strict` fails only on unacknowledged failures.
    - Validation:
-     - a simulated selection that enriches loss of function: separation passes when the direction
-       is stated, and is reported as assumed when it is not;
-     - BRCA1 Y2H's separation, with its nonsense controls limited;
-     - an action named by every finding of the planted-problem fixtures;
-     - acknowledgements that survive the archive and appear in the methods;
-     - the 0.1.0 archive opens, and its runs reproduce to their last digits and say so.
+     - `qc` 33 checks:
+       - every raised finding of the planted problems has causes and next steps;
+       - a selection enriching loss of function (inputs and outputs swapped, three seeds) passes
+         with the direction stated, and fails saying why without it;
+       - no late-stop warning on a clean experiment;
+       - a table of exactly the single-base substitutions (counted independently) fails coverage
+         without the library's method and passes with it;
+       - BRCA1 Y2H's change point at position 93 (between residues 61 and 110), and the controls
+         limited to it separate (AUC 1.000).
+     - `roundtrip` 41 checks: an acknowledged finding through the archive, the methods, the
+       findings export and the provenance; the 0.1.0 archive opened, both runs reproduced, its
+       scores equal to the archived ones.
+     - `remote-session.mjs` 75 checks: advice, `acknowledge_finding` and the findings export, byte
+       for byte Node's.
+     - `headless-run.mjs` 20 checks: `--strict --acknowledge` exits 0 with the reason in `run.json`,
+       the findings and the methods; `--acknowledge` without a reason exits 2.
+     - Unit tests 193, including `readout.test.mjs` and `advice.test.mjs`.
+   - Found by slice 8:
+     - **The vocabulary is MaveDB's, not the minimum information's file.** MaveDB's controlled
+       keywords (from its API) implement the MAVE vocabulary and add terms laboratories use
+       (Reporter, Cell fitness, Protein stability assay); a design uses MaveDB's, so that wave 3
+       can deposit it.
+     - **The units and the reference state are the run's, not the design's.** The scoring model,
+       normalization and rescaling fix them, and the run records them, so the readout does not
+       repeat them.
+     - **The separation of the controls ignored the design's controls:** it took every nonsense
+       variant by kind, even where the design named others or none. It now uses `controlRows`, as
+       scoring does.
+     - **BRCA1's library is not one of single-base changes.** An earlier validation note called it
+       error-prone PCR, but it holds 71% of the substitutions two or three bases from the wild-type
+       codon. The note is corrected. MaveDB could not be reached to check how it was made.
+     - **0.1.0's runs reproduce exactly in Node:** engine 1 took the JavaScript engine's logarithms,
+       and Node's are fdlibm's, as `dmath.js`'s. A run scored in another browser would differ in
+       its last digits and say so.
+     - **A sample sheet does not carry the readout:** it is one row per sample. The design file,
+       the Experiment view and (wave 3) MaveDB's metadata do.
+     - **Acknowledging a finding that passes changes nothing, and is not refused** by remote control
+       or `--acknowledge`, so that a pipeline can name what it expects on every data set. Only an
+       unknown finding stops the run.
+     - **Comparing the cells recorded with the bottleneck the data imply** is left to slice 10 (the
+       readiness model); the bottleneck finding says how to do it by hand (a ratio of about
+       1 + D/(2N)).
 9. **Intervals that hold the truth (S13; S2, S7, S9, S10, S11, T2, T3).** The reference
    comparisons show that MaveScape computes what Enrich2, DiMSum, mutscan and metafor compute. They
    do not show that a 95% interval holds the true effect 95% of the time. With three replicates,

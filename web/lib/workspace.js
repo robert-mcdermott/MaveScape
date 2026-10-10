@@ -193,10 +193,35 @@ export function removeSelection(ws, id) {
   return change(ws, { selections: ws.selections.filter((s) => s.id !== id) }, 'remove-selection', `Removed the selection "${selection.name}"`);
 }
 
+// The QC record with a field set (null or undefined: removed), null when nothing is left.
+function qcWith(ws, key, value) {
+  const next = { ...(ws.qc ?? {}) };
+  if (value === null || value === undefined) delete next[key];
+  else next[key] = value;
+  return Object.keys(next).length ? next : null;
+}
+
 // Sets the QC thresholds (null: the defaults), with what changed in the history.
 export function setQcThresholds(ws, thresholds, detail) {
   if (JSON.stringify(thresholds ?? null) === JSON.stringify(ws.qc?.thresholds ?? null)) return ws;
-  return change(ws, { qc: thresholds ? { ...(ws.qc ?? {}), thresholds } : null }, 'qc', detail);
+  return change(ws, { qc: qcWith(ws, 'thresholds', thresholds) }, 'qc', detail);
+}
+
+// Acknowledges a QC finding with a reason (wave 2, slice 8): { reason, status, value, time } kept
+// by the finding's id, in the history. The finding keeps its status; the acknowledgement holds
+// while it is no worse (findings.js). An empty reason withdraws it.
+export function acknowledgeFinding(ws, finding, reason, time = clockNow()) {
+  const text = String(reason ?? '').trim();
+  const all = { ...(ws.qc?.acknowledged ?? {}) };
+  if (!text) {
+    if (!all[finding.id]) return ws;
+    delete all[finding.id];
+    return change(ws, { qc: qcWith(ws, 'acknowledged', Object.keys(all).length ? all : null) }, 'qc', `Withdrew the acknowledgement of "${finding.title}"`, time);
+  }
+  if (finding.blocking) throw new Error(`"${finding.title}" blocks the analysis and cannot be acknowledged: fix the table or the design.`);
+  if (finding.status !== 'review' && finding.status !== 'fail') throw new Error(`"${finding.title}" is ${finding.status === 'pass' ? 'a pass' : 'not assessed'}: only a finding to review or failing is acknowledged.`);
+  all[finding.id] = { reason: text, status: finding.status, value: finding.value, time };
+  return change(ws, { qc: qcWith(ws, 'acknowledged', all) }, 'qc', `Acknowledged "${finding.title}" (${finding.status}): ${text}`, time);
 }
 
 // Sets (or clears) the design, and the table it describes.

@@ -155,6 +155,16 @@ try {
   check('qc_findings shows the finding asked for in the QC view', await browser.eval('window.mavescape.qcView?.finding'), (await browser.eval(`window.mavescape.qcView?.finding`)) === 'excess-variance' && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'qc');
   const countsQc = await act('qc_findings', { run: 'counts' });
   check('qc_findings of the counts alone: the run-level findings are not assessed', countsQc.message, countsQc.data.findings.find((f) => f.id === 'separation')?.status === 'na');
+  // Findings in context (wave 2, slice 8): what to do, and an acknowledgement that keeps the status.
+  const variance = qc.data.findings.find((f) => f.id === 'excess-variance');
+  check('qc_findings: a finding not passing says what could cause it and what to do next', `${variance.causes.length} causes, ${variance.next.length} next steps: ${variance.next.map((x) => x.kind).join(', ')}`, variance.causes.length > 0 && variance.next.some((x) => x.kind === 'analysis') && variance.next.some((x) => x.kind === 'experiment'));
+  const acked = await act('acknowledge_finding', { finding: 'excess-variance', reason: 'The input bottleneck the Domainome\'s analysis reported' });
+  const afterAck = await act('qc_findings', {});
+  const ackedFinding = afterAck.data.findings.find((f) => f.id === 'excess-variance');
+  check('acknowledge_finding: GRB2\'s variance beyond counting acknowledged with a reason; it still fails, and the overall status counts it apart', `${acked.message} | ${afterAck.message}`, acked.ok && ackedFinding.status === 'fail' && ackedFinding.acknowledged?.current && afterAck.data.overall.status === 'fail' && afterAck.data.overall.unacknowledged.fail === 0 && afterAck.data.overall.acknowledged.includes('excess-variance'));
+  const passing = await act('acknowledge_finding', { finding: 'depth', reason: 'Expected' });
+  const unknownFinding = await send('acknowledge_finding', { finding: 'nonsense', reason: 'Expected' });
+  check('acknowledging a finding that passes changes nothing and says so; an unknown one lists the findings', `${passing.message} | ${unknownFinding.message}`, passing.ok && /nothing to acknowledge/.test(passing.message) && !unknownFinding.ok && /Separation of controls/.test(unknownFinding.message));
 
   // Scoring: a second preset, the same run not computed twice, refused parameters.
   const enrich2 = await act('score', { preset: 'Enrich2' });
@@ -202,7 +212,7 @@ try {
   const noToken = await send('export', { what: 'scores', path: join(out, 'x.csv') }, { withToken: false });
   check('export without the token is refused', `${noToken.status}: ${noToken.error}`, noToken.status === 401);
   const files = {
-    scores: 'scores.csv', counts: 'counts.csv', 'qc-samples': 'qc_samples.csv', 'qc-variants': 'qc_variants.csv',
+    scores: 'scores.csv', counts: 'counts.csv', 'qc-samples': 'qc_samples.csv', 'qc-variants': 'qc_variants.csv', 'qc-findings': 'qc_findings.csv',
     provenance: 'provenance.json', methods: 'methods.md', references: 'references.bib', map: 'map.svg',
   };
   for (const [what, file] of Object.entries(files)) await act('export', { what, path: join(out, file), run: 'Run 1' });
@@ -221,7 +231,7 @@ try {
   check('the exported archive opens', `${archived.message} ${archive.problems.length} problems`, archive.problems.length === 0 && archive.ws.runs.length === 3 && archive.ws.selections.length === 1);
   const { table, scored } = recompute(archive.ws, archive.sources);
   const expected = allExports(archive.ws, table, scored.results);
-  for (const name of ['scores.csv', 'counts.csv', 'qc_samples.csv', 'qc_variants.csv', 'methods.md', 'references.bib', 'map.svg', 'selection.csv', 'selection.json']) {
+  for (const name of ['scores.csv', 'counts.csv', 'qc_samples.csv', 'qc_variants.csv', 'qc_findings.csv', 'methods.md', 'references.bib', 'map.svg', 'selection.csv', 'selection.json']) {
     const written = readFileSync(join(out, name), 'utf8');
     check(`export ${name}: the same bytes as Node's from the archive`, `${written.length} bytes`, written === expected[name], `${expected[name].length} bytes`);
   }

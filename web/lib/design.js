@@ -8,6 +8,8 @@
 // any particular data set. Checked on three public data sets of different designs (validation
 // suite `designs`, wave 1 slice 2).
 
+import { checkReadout, describeReadout, inText } from './readout.js';
+
 export const DESIGN_FORMAT = 'mavescape-design';
 export const DESIGN_VERSION = 1;
 export const MODELS = ['two-population', 'time-series', 'bins', 'scores'];
@@ -316,7 +318,23 @@ export function validateDesign(design, table = null) {
   for (const key of ['synonymous', 'nonsense']) {
     const value = controls[key];
     if (value !== undefined && value !== 'auto' && value !== 'none' && !(Array.isArray(value) && value.every((v) => typeof v === 'string'))) error(`controls.${key}`, `${key} controls are "auto", "none" or a list of variants.`);
+    // Where the class serves as a control (MaveScape 0.2): positions start…end of the target.
+    const range = controls.positions?.[key];
+    if (range !== undefined) {
+      const length = targets.length === 1 ? targetLength(targets[0], level) : Infinity;
+      const ok = (x) => x === undefined || (Number.isInteger(x) && x >= 1 && x <= length);
+      if (!isObject(range) || !ok(range.start) || !ok(range.end)) error(`controls.positions.${key}`, `The positions of the ${key} controls are whole numbers within the target (1–${length}).`);
+      else if (range.start !== undefined && range.end !== undefined && range.end < range.start) error(`controls.positions.${key}`, `The ${key} controls end (${range.end}) before they start (${range.start}).`);
+    }
   }
+  for (const key of Object.keys(controls.positions ?? {})) if (!['synonymous', 'nonsense'].includes(key)) error(`controls.positions.${key}`, 'Positions are given for the synonymous and nonsense controls.');
+  for (const [key, why] of Object.entries(controls.why ?? {})) {
+    if (!['wildType', 'synonymous', 'nonsense'].includes(key)) error(`controls.why.${key}`, 'Reasons are given for the wild type, synonymous and nonsense controls.');
+    else if (typeof why !== 'string') error(`controls.why.${key}`, 'A reason is text.');
+  }
+
+  // --- What the assay measures (MaveScape 0.2) ---
+  checkReadout(design, error, warn);
 
   return { ok: errors.length === 0, errors, warnings };
 }
@@ -388,8 +406,22 @@ export function summarizeDesign(design) {
     }
     lines.push(`${plural(counts.ignoredColumns, 'column')} not used: ${[...reasons].map(([reason, n]) => `${n} ${reason}`).join('; ')}.`);
   }
+  if (design.library?.method) lines.push(`The library was made by ${inText(design.library.method)}.`);
+  lines.push(describeReadout(design));
   const controls = design.controls ?? {};
-  const named = (value) => (value === undefined || value === 'auto' ? 'found automatically' : value === 'none' ? 'none' : plural(value.length, 'variant'));
-  lines.push(`Controls: wild type ${controls.wildType && controls.wildType !== 'auto' ? `"${controls.wildType}"` : 'found automatically'}; synonymous ${named(controls.synonymous)}; nonsense ${named(controls.nonsense)}.`);
+  const where = (key) => {
+    const r = controls.positions?.[key];
+    if (!r || (r.start === undefined && r.end === undefined)) return '';
+    return r.start !== undefined && r.end !== undefined ? ` at positions ${r.start}–${r.end}` : r.start !== undefined ? ` from position ${r.start}` : ` up to position ${r.end}`;
+  };
+  const named = (key) => {
+    const value = controls[key];
+    return `${value === undefined || value === 'auto' ? 'found automatically' : value === 'none' ? 'none' : plural(value.length, 'variant')}${value === 'none' ? '' : where(key)}`;
+  };
+  lines.push(`Controls: wild type ${controls.wildType && controls.wildType !== 'auto' ? `"${controls.wildType}"` : 'found automatically'}; synonymous ${named('synonymous')}; nonsense ${named('nonsense')}.`);
+  for (const [key, label] of [['wildType', 'The wild type'], ['synonymous', 'Synonymous controls'], ['nonsense', 'Nonsense controls']]) {
+    const why = controls.why?.[key]?.trim();
+    if (why) lines.push(`  ${label}: ${why.replace(/[.\s]+$/, '')}.`);
+  }
   return { model: design.model, counts, lines };
 }

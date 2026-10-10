@@ -6,10 +6,11 @@
 // computed in the score worker. Thresholds are kept in the workspace, each change in its history.
 
 import { h, icon, clear, formatCount } from './dom.js';
-import { toast } from './overlays.js';
+import { promptDialog, toast } from './overlays.js';
 import { validateDesign } from '../lib/design.js';
 import { checkThresholds, findingsFrom, measuresOf, overall, THRESHOLDS, withDefaultThresholds } from '../lib/findings.js';
-import { canonicalJSON, setQcThresholds } from '../lib/workspace.js';
+import { acknowledgeFinding, canonicalJSON, setQcThresholds } from '../lib/workspace.js';
+import { CAUSE_KINDS, NEXT_KINDS } from '../lib/advice.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { KIND } from '../lib/variants.js';
 import { STAGE_BY_ID } from '../lib/filters.js';
@@ -311,7 +312,40 @@ export function mountQcMode(app, container) {
     return h('div.pane', h('h3', icon('stethoscope'), 'Findings'),
       h('ul.findings', ...list.map((f) => h('li', h(`button.finding${view.finding === f.id ? '.selected' : ''}.${f.status}`, { type: 'button', 'aria-pressed': view.finding === f.id ? 'true' : 'false', onclick: () => { view.finding = f.id; render(); } },
         h(`span.badge${STATUS[f.status].badge}`, STATUS[f.status].label),
-        h('span.finding-text', h('span.finding-title', f.title, f.blocking && f.status === 'fail' ? h('span.badge.danger', { style: { marginLeft: '6px' } }, 'blocking') : null, f.level === 'scores' ? h('span.muted', { style: { fontWeight: 400, marginLeft: '6px', fontSize: '11px' } }, 'from scores') : null), h('span.finding-value', f.value)))))));
+        h('span.finding-text', h('span.finding-title', f.title, f.blocking && f.status === 'fail' ? h('span.badge.danger', { style: { marginLeft: '6px' } }, 'blocking') : null, f.acknowledged?.current ? h('span.badge', { style: { marginLeft: '6px' }, title: f.acknowledged.reason }, 'acknowledged') : null, f.level === 'scores' ? h('span.muted', { style: { fontWeight: 400, marginLeft: '6px', fontSize: '11px' } }, 'from scores') : null), h('span.finding-value', f.value)))))));
+  }
+
+  // Acknowledging a finding (wave 2, slice 8): a reason, kept on the record; the status stays.
+  async function acknowledge(f) {
+    const reason = await promptDialog({
+      title: `Acknowledge "${f.title}"`,
+      label: 'Why it is expected here',
+      value: f.acknowledged?.reason ?? '',
+      placeholder: f.id === 'coverage' ? 'The library was made by error-prone PCR' : f.id === 'separation' ? 'Stops after the RING domain keep binding in this construct' : 'What makes it expected in this experiment',
+      confirm: 'Acknowledge',
+      hint: 'The finding keeps its status. The reason goes into the history, the methods and the QC exports, and holds while the finding is no worse than now.',
+    });
+    if (!reason) return;
+    try {
+      store.commit(acknowledgeFinding(store.ws, f, reason), `Acknowledge "${f.title}"`);
+    } catch (error) {
+      toast(error.message, { kind: 'error' });
+    }
+  }
+
+  // What could cause a finding and what to do next, and its acknowledgement.
+  function contextBlock(f) {
+    const { causes, next } = f.advice ?? { causes: [], next: [] };
+    const ack = f.acknowledged;
+    const canAcknowledge = (f.status === 'review' || f.status === 'fail') && !f.blocking;
+    return h('div.finding-context',
+      causes.length ? [h('h4', 'What could cause it'), h('ul.advice', ...causes.map((c) => h('li', h(`span.advice-kind.${c.kind}`, CAUSE_KINDS[c.kind]), h('span', c.text))))] : null,
+      next.length ? [h('h4', f.status === 'na' ? 'To assess it' : 'What to do'), h('ul.advice', ...next.map((x) => h('li', h(`span.advice-kind.${x.kind}`, NEXT_KINDS[x.kind]), h('span', x.text))))] : null,
+      ack?.current ? h('div.callout.ok.acknowledged', icon('check'), h('span', h('b', 'Acknowledged: '), ack.reason, h('span.muted', ` (when it was ${ack.status}; the status stays ${f.status})`)),
+        h('span.spacer'), h('button.btn.small', { type: 'button', onclick: () => acknowledge(f) }, 'Edit'), h('button.btn.small', { type: 'button', onclick: () => store.commit(acknowledgeFinding(store.ws, f, ''), `Withdraw the acknowledgement of "${f.title}"`) }, 'Withdraw')) : null,
+      ack && !ack.current ? h('div.callout.warn.acknowledged', icon('warning'), h('span', h('b', 'No longer acknowledged: '), `acknowledged when it was ${ack.status} ("${ack.reason}"); it is now ${f.status === 'na' ? 'not assessed' : f.status}.`),
+        h('span.spacer'), canAcknowledge ? h('button.btn.small', { type: 'button', onclick: () => acknowledge(f) }, 'Acknowledge again') : null, h('button.btn.small', { type: 'button', onclick: () => store.commit(acknowledgeFinding(store.ws, f, ''), `Withdraw the acknowledgement of "${f.title}"`) }, 'Withdraw')) : null,
+      canAcknowledge && !ack ? h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => acknowledge(f), title: 'Say why this finding is expected here; its status stays' }, icon('check'), 'Acknowledge…'), h('span.muted', { style: { fontSize: '11.5px' } }, 'When it is expected here: the reason goes on the record.')) : null);
   }
 
   function detailPane(f, qc, t) {
@@ -321,6 +355,7 @@ export function mountQcMode(app, container) {
       h('dl.kv.finding-kv', h('dt', 'Found'), h('dd', f.value), h('dt', 'Threshold'), h('dd', f.threshold), h('dt', 'Why'), h('dd', f.rationale),
         f.affected.samples.length ? [h('dt', 'Samples'), h('dd', f.affected.samples.join(', '))] : null,
         f.affected.replicates.length ? [h('dt', 'Replicates'), h('dd', f.affected.replicates.join(', '))] : null),
+      contextBlock(f),
       h('div.finding-plot', ...plotFor(f, qc, t).filter(Boolean)));
   }
 
@@ -378,11 +413,11 @@ export function mountQcMode(app, container) {
     if (cached?.status === 'failed') right.append(h('div.pane', h('div.callout.danger', icon('warning'), h('span', `Quality control failed: ${cached.message}`))));
     if (cached?.status === 'done') {
       const t = thresholds();
-      const findings = findingsFrom(cached.qc, t);
+      const findings = findingsFrom(cached.qc, t, { acknowledged: store.ws.qc?.acknowledged });
       const o = overall(findings);
       // The workflow strip: this run's QC has been read.
       if (sub.run) markQcSeen(app, sub.run, o);
-      head.append(h(`span.badge${STATUS[o.status].badge}.qc-overall`, { title: 'The worst finding' }, `${o.status === 'pass' ? 'All pass' : `${o.counts.fail} fail · ${o.counts.review} review`} · ${o.counts.pass} pass${o.counts.na ? ` · ${o.counts.na} not assessed` : ''}`),
+      head.append(h(`span.badge${STATUS[o.status].badge}.qc-overall`, { title: 'The worst finding; acknowledged findings keep their status' }, `${o.status === 'pass' ? 'All pass' : `${o.counts.fail} fail · ${o.counts.review} review`} · ${o.counts.pass} pass${o.counts.na ? ` · ${o.counts.na} not assessed` : ''}${o.acknowledged.length ? ` · ${o.acknowledged.length} acknowledged` : ''}`),
         o.blocking.length ? h('span.badge.danger', { style: { marginLeft: '6px' } }, 'blocking') : null);
       if (!view.finding || !findings.some((f) => f.id === view.finding)) view.finding = (findings.find((f) => f.status === 'fail') ?? findings.find((f) => f.status === 'review') ?? findings[0]).id;
       left.append(findingsPane(findings));

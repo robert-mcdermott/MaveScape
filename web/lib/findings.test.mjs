@@ -51,3 +51,24 @@ test('dropout: a sample with no zeros whose missing variants had been depleted i
   assert.equal(at({ ...base, missingTrend: 0.3 }).status, 'pass', 'not depleted before going missing');
   assert.equal(at({ ...base, missing: 20 }).status, 'pass', 'too few to matter');
 });
+
+test('an acknowledgement keeps the status, holds while the finding is no worse, and is counted apart', () => {
+  const at = (r, acknowledged) => findingsFrom(qc({ conditions: [{ name: 'All', pairs: [{ a: 'r1', b: 'r2', n: 100, pearson: r, spearman: r, ratio: 1, bins: [] }], leaveOneOut: null, synonymous: [] }] }), defaultThresholds(), { acknowledged });
+  const ack = { agreement: { reason: 'A narrow range of effects', status: 'review', value: 'r 0.7', time: 't' } };
+  const review = at(0.7, ack);
+  const agreement = review.find((f) => f.id === 'agreement');
+  assert.deepEqual([agreement.status, agreement.acknowledged.current, agreement.acknowledged.reason], ['review', true, 'A narrow range of effects']);
+  assert.deepEqual([overall(review).status, overall(review).acknowledged, overall(review).unacknowledged], ['review', ['agreement'], { fail: 0, review: 0 }]);
+  const worse = at(0.4, ack).find((f) => f.id === 'agreement');
+  assert.deepEqual([worse.status, worse.acknowledged.current], ['fail', false], 'worse than when acknowledged: it no longer holds');
+  assert.equal(overall(at(0.4, ack)).unacknowledged.fail, 1);
+  assert.equal(at(0.9, ack).find((f) => f.id === 'agreement').acknowledged.current, false, 'a pass needs none');
+  assert.equal(at(0.7).find((f) => f.id === 'agreement').acknowledged, null);
+});
+
+test('every finding carries what could cause it and what to do', () => {
+  for (const f of findingsFrom(qc({ coverage: { ...qc().coverage, fraction: 0.4, observed: 40 } }), defaultThresholds())) {
+    assert.ok(f.advice && Array.isArray(f.advice.causes) && Array.isArray(f.advice.next), f.id);
+    if (f.status === 'fail' || f.status === 'review') assert.ok(f.advice.next.length, f.id);
+  }
+});

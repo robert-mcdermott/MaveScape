@@ -17,11 +17,11 @@ lede: Quality control says whether the experiment supports reliable scores. Each
             <tr><td><strong>Low counts before selection</strong></td><td>Input variants below 10 reads</td><td>above 20% / 50%</td></tr>
             <tr><td><strong>Missing counts</strong></td><td>Variants missing in a sample beyond the others</td><td>above 20% / 50%</td></tr>
             <tr><td><strong>Missing after selection</strong></td><td>Variants that dropped out during selection but are written as missing rather than 0</td><td>review only</td></tr>
-            <tr><td><strong>Coverage of designed substitutions</strong></td><td>Substitutions observed, by position and class</td><td>below 90% / 50%</td></tr>
+            <tr><td><strong>Coverage of designed substitutions</strong></td><td>Substitutions observed, by position and class; of those a library of single-base changes can make, when the design says it is one</td><td>below 90% / 50%</td></tr>
             <tr><td><strong>Replicate agreement</strong></td><td>Pearson and Spearman correlation of the replicates' log ratios</td><td>below 0.8 / 0.5</td></tr>
             <tr><td><strong>Variance beyond counting</strong></td><td>Replicate differences against the variance counting predicts: above 1, a bottleneck or noise between replicates</td><td>above 2× / 5×</td></tr>
             <tr><td><strong>Outlier replicates</strong></td><td>A replicate's leave-one-out variance against the others'</td><td>above 2× / 4×</td></tr>
-            <tr><td><strong>Separation of controls</strong></td><td>How well scores tell nonsense from wild-type-like controls (AUC)</td><td>below 0.9 / 0.75</td></tr>
+            <tr><td><strong>Separation of controls</strong></td><td>How well scores tell nonsense from wild-type-like controls (AUC), in the direction the readout gives; where late stops stop losing the function</td><td>below 0.9 / 0.75</td></tr>
             <tr><td><strong>Resolution of scores</strong></td><td>The median SE against the controls' gap</td><td>above 0.25 / 0.5</td></tr>
             <tr><td><strong>Variants scored</strong></td><td>Measured variants that pass the filters</td><td>below 80% / 50%</td></tr>
             <tr><td><strong>Occupancy of the bins</strong> (sorted bins)</td><td>Each bin's share of its replicate's cells, or of its reads when the cells are not recorded</td><td>below 5% / 1%</td></tr>
@@ -52,8 +52,27 @@ lede: Quality control says whether the experiment supports reliable scores. Each
       <shot name="time-series-qc" alt="The QC view of the simulated time series: every finding passes, and the fit of the time courses is 1.0 times what counting predicts in each replicate">A clean simulated time series: the time courses scatter about their lines as counting predicts.</shot>
       <p>On real data: BRCA1's E2-binding time series (MaveDB urn:mavedb:00000003-a-1) writes variants that dropped out in the last round as missing, so a quarter of its fits miss their last points; with its later samples' missing counts read as 0 ("Missing = 0" in the Experiment view), every fit uses every round and 595 more variants are scored. Its time courses scatter about 7× more than counting predicts, and those of its yeast two-hybrid assay about 30×.</p>
 
+      <h2 id="context">Findings in context</h2>
+      <p>A "fail" can be a failed experiment, an analysis that does not suit the data, or what the library or the assay makes expected. The next step differs. Every finding to review or failing says <strong>what could cause it</strong>, each cause marked as one of three:</p>
+      <ul>
+        <li><strong>experiment:</strong> in the experiment or the counting;</li>
+        <li><strong>analysis:</strong> in the analysis;</li>
+        <li><strong>expected:</strong> expected from the library or the assay.</li>
+      </ul>
+      <p>It also says <strong>what to do</strong>:</p>
+      <ul>
+        <li><strong>look:</strong> the plot or table to inspect;</li>
+        <li><strong>analysis:</strong> the choice that would change it, and where to make it;</li>
+        <li><strong>experiment:</strong> what only another experiment can settle.</li>
+      </ul>
+      <p>A finding not assessed says what it needs.</p>
+      <shot name="qc-advice" alt="The QC view of the GRB2 example: the variance beyond counting failing, what could cause it (too few cells, or noise between replicates), what to do, and the finding acknowledged as the bottleneck the Domainome reported, its status still fail">GRB2's bottleneck: what could cause it, what to do, and the finding acknowledged with a reason.</shot>
+      <p>The findings read the design. <strong>Coverage</strong> of a library made by error-prone PCR or doped oligos is judged against the substitutions one base change makes from each wild-type codon (with a DNA target). <strong>Separation of the controls</strong> expects loss of function on the side the readout's direction gives. When the direction is not stated and the nonsense variants score on the other side, the finding says the direction may be the other way round. When the stops after some position score like the wild type, it names the position and suggests limiting the nonsense controls to the positions before it. For BRCA1's yeast two-hybrid assay that position is 93, in the region between residues 61 and 110 where the published scores change (<a href="experiment.html#controls">The design</a>).</p>
+      <h3 id="acknowledge">Acknowledging a finding</h3>
+      <p>When a finding is expected here (a library that cannot reach every substitution, a bottleneck the experiment's authors reported), <strong>Acknowledge…</strong> records why. The finding keeps its status, and the overall status stays the worst finding. The reason goes into the history, the methods paragraph, the QC findings export and the provenance. An acknowledgement holds while the finding is no worse than when it was acknowledged: a review that becomes a fail asks again. A blocking finding cannot be acknowledged. Headless runs take <code>--acknowledge id=reason</code>, and <code>--strict</code> does not fail on an acknowledged finding (<a href="scripting.html#headless">Headless runs</a>).</p>
+
       <h2 id="thresholds">Thresholds</h2>
       <p>Every threshold is editable in the QC view and kept in the workspace; each change goes into its history and the methods paragraph reports the thresholds used. <strong>Reset to the defaults</strong> restores MaveScape's.</p>
 
       <h2 id="tested">How the findings are tested</h2>
-      <p>Simulated experiments with one problem each (poor replicate agreement, one failing replicate, a severe bottleneck, a low-count tail, a missing sample, and for time series a bottleneck at every passage) raise exactly their findings, and clean experiments (two populations, a time series and a sort) none, on three seeds; sorts with too few cells or a nearly empty bin raise theirs. The variance ratio follows a simulated bottleneck. <a href="../science.html#validation">Validation</a> has the details.</p>
+      <p>Simulated experiments with one problem each (poor replicate agreement, one failing replicate, a severe bottleneck, a low-count tail, a missing sample, and for time series a bottleneck at every passage) raise exactly their findings, and clean experiments (two populations, a time series and a sort) none, on three seeds; sorts with too few cells or a nearly empty bin raise theirs. The variance ratio follows a simulated bottleneck. Every finding the planted problems raise says what to do. A selection that enriches loss of function (inputs and outputs swapped) separates its controls with the direction stated, and fails, saying why, without it. A library of exactly the single-base substitutions passes coverage when the design says it was made by error-prone PCR. <a href="../science.html#validation">Validation</a> has the details.</p>

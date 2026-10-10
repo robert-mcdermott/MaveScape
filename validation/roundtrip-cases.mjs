@@ -11,7 +11,7 @@ import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../web/lib/findings.js';
 import { addRun, makeRun, recordedInputs, runInputs } from '../web/lib/runs.js';
 import { addSelection, addSource, addTarget, createWorkspace, setDesign, setQcThresholds } from '../web/lib/workspace.js';
-import { barcodesCSV, countsCSV, differentialCSV, provenanceJSON, provenanceText, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../web/lib/exports.js';
+import { barcodesCSV, countsCSV, differentialCSV, provenanceJSON, provenanceText, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../web/lib/exports.js';
 import { writeMethods } from '../web/lib/methods.js';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
@@ -70,7 +70,7 @@ export function allExports(ws, table, results) {
   const run = ws.runs[0];
   const thresholds = withDefaultThresholds(ws.qc?.thresholds);
   const qc = computeQC({ ...inputFor(table, run.inputs.design), design: run.inputs.design, results, measures: measuresOf(thresholds) });
-  const findings = findingsFrom(qc, thresholds);
+  const findings = findingsFrom(qc, thresholds, { acknowledged: ws.qc?.acknowledged });
   const methods = writeMethods(ws, run, { findings, thresholds });
   const scores = scoresCSV(results, run);
   const selection = ws.selections[0];
@@ -79,6 +79,7 @@ export function allExports(ws, table, results) {
     'counts.csv': countsCSV(table, run.inputs.design),
     'qc_samples.csv': qcSamplesCSV(qc),
     'qc_variants.csv': qcVariantsCSV(results, run),
+    'qc_findings.csv': qcFindingsCSV(findings),
     'provenance.json': provenanceText(provenanceJSON(run, ws, { qc, findings, thresholds, files: [{ path: 'scores.csv', sha256: sha256(new TextEncoder().encode(scores)) }] })),
     'methods.md': methods.markdown,
     'references.bib': methods.bibtex,

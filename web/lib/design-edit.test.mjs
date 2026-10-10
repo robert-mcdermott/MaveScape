@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  addCondition, addReplicate, addTile, assignColumn, columnAssignments, emptyDesign, removeCondition, removeReplicate, removeTile,
-  setBinValue, setModel, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample,
-} from './design-edit.js';
+import { addCondition, addReplicate, addTile, assignColumn, columnAssignments, emptyDesign, removeCondition, removeReplicate, removeTile, setBinValue, setControlPositions, setControlWhy, setLibraryMethod, setModel, setReadout, setSlot, setTime, slotSample, slotsOf, updateCondition, updateReplicate, updateSample } from './design-edit.js';
 import { designFromSampleSheet } from './samplesheet.js';
 import { parseTable } from './csv.js';
 import { summarizeDesign, validateDesign } from './design.js';
@@ -143,4 +140,20 @@ test('columns the design neither uses nor sets aside are set aside with a reason
   assert.deepEqual(d.ignoredColumns, [{ column: 'y2h_c_0', reason: 'not a count column (left out at import)' }, { column: 'notes', reason: 'not a count column (left out at import)' }]);
   const complete = built();
   assert.equal(setAsideOtherColumns(complete, ['hgvs_pro', 'in1', 'out1', 'in2', 'out2', 'in2b']), complete, 'nothing to set aside: the same design');
+});
+
+test('the readout, the library\'s method and where controls serve: set, and removed when emptied', () => {
+  const base = { model: 'two-population', library: { level: 'variant' }, controls: { nonsense: 'auto' } };
+  let d = setReadout(base, { direction: 'higher-less', phenotype: 'Toxicity' });
+  assert.deepEqual(d.readout, { direction: 'higher-less', phenotype: 'Toxicity' });
+  d = setReadout(setReadout(d, { phenotype: '' }), { direction: '' });
+  assert.equal(d.readout, undefined);
+  assert.deepEqual(setLibraryMethod(base, 'Error-prone PCR').library, { level: 'variant', method: 'Error-prone PCR' });
+  assert.deepEqual(setLibraryMethod(setLibraryMethod(base, 'Error-prone PCR'), '').library, { level: 'variant' });
+  d = setControlPositions(base, 'nonsense', { start: null, end: 93 });
+  assert.deepEqual(d.controls.positions, { nonsense: { end: 93 } });
+  assert.equal(setControlPositions(d, 'nonsense', {}).controls.positions, undefined);
+  d = setControlWhy(base, 'nonsense', ' Late stops keep binding ');
+  assert.deepEqual(d.controls.why, { nonsense: 'Late stops keep binding' });
+  assert.equal(setControlWhy(d, 'nonsense', '').controls.why, undefined);
 });
