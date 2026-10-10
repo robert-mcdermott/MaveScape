@@ -29,7 +29,30 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > can drive the window (`--remote-control`), and `mavescape run` does a whole analysis without one,
 > the same bytes every time. Six examples are on the Start page;
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with more examples.
+> [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with what the assay measures, calibrated
+> uncertainty and more examples.
+
+## What is a MAVE?
+
+A **multiplexed assay of variant effect** (MAVE) measures what thousands of variants of a gene or
+protein do, in one experiment. A library of variants is put through a selection (cells grow, a
+protein binds, or cells are sorted by a fluorescent reporter), and sequencing counts every variant
+before and after. In a selection for function, a variant that becomes rarer has probably lost some
+of it; what a score means always depends on what the assay selects for. Protein **deep mutational
+scanning** (DMS) is the most common MAVE, and the one MaveScape starts with; other MAVEs test
+regulatory sequences or edit variants into the genome.
+
+The path from the bench to a result:
+
+**experiment → sequencing reads → variant counts → MaveScape → (optionally) MaveDB**
+
+Tools such as Enrich2, DiMSum or dms_variants turn the reads into counts. MaveScape starts from those
+counts, the target's sequence and the experiment's design (which column is which sample, replicate,
+time point or bin). It turns them into scores with their uncertainty, quality control and a map.
+[MaveDB](https://www.mavedb.org) is the public repository of MAVE data. MaveScape is a separate
+program that needs no MaveDB account, and it writes scores in MaveDB's columns. Published scores
+without their counts can be explored, but they cannot be rescored or checked by count-based quality
+control.
 
 ## Install
 

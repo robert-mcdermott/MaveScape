@@ -16,7 +16,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG) |
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 
-Coming later: Excel workbooks and GenBank files (0.3), structures (0.4).
+Coming later: Excel workbooks and GenBank files (0.3), structures (0.5).
 
 ## Count tables
 

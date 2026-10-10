@@ -46,7 +46,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | D9 | One million rows imported in under 15 s, under 1 GB of memory | done (wave 2, slice 4: a million barcodes and their million-line map in 3.5 s, the process at most 830 MB, in Node; 3–4 s and about +600 MB in the window; both in CI) |
 | D10 | Variants beyond single substitutions: multi-substitutions, insertions, deletions, delins, stop, nucleotide-to-protein translation, splice; optional GA4GH VRS identifiers | planned (wave 3) |
 | D12 | Built-in import templates for the layouts in common use, none of them required: MaveDB score and count CSVs, DiMSum count tables, generic per-variant tables (HGVS or `A12V`-style identifiers); later dms_variants and Enrich2 count files | done (wave 1, slice 3: MaveDB, DiMSum and generic tables; wave 2, slice 4: dms_variants' `variant_counts`, Enrich2's counts files and barcode maps, tables of barcodes) |
-| D13 | Standard files for everything that is not counts: targets from FASTA (single or multi-record) or GenBank; designs from a sample sheet (CSV/XLSX); one count table or one file per sample; barcode maps as CSV/TSV; structures as PDB, mmCIF or BinaryCIF; alignments as FASTA or A3M; custom tracks as CSV or GFF3; predictor scores as CSV/TSV. Every format documented in `docs/FORMATS.md`, with blank layouts on the Start page | partial (wave 1: FASTA, per-sample files, sample sheets in CSV/TSV, DiMSum's design file, slices 3–4; `docs/FORMATS.md` and the blank layouts, slice 8; XLSX and GenBank wave 3; structures wave 4) |
+| D13 | Standard files for everything that is not counts: targets from FASTA (single or multi-record) or GenBank; designs from a sample sheet (CSV/XLSX); one count table or one file per sample; barcode maps as CSV/TSV; structures as PDB, mmCIF or BinaryCIF; alignments as FASTA or A3M; custom tracks as CSV or GFF3; predictor scores as CSV/TSV. Every format documented in `docs/FORMATS.md`, with blank layouts on the Start page | partial (wave 1: FASTA, per-sample files, sample sheets in CSV/TSV, DiMSum's design file, slices 3–4; `docs/FORMATS.md` and the blank layouts, slice 8; XLSX and GenBank wave 3; structures wave 5) |
 | D11 | Hardened readers: fuzzed CSV, HGVS and archive parsing with no crash or hang and a clear message for every refusal | planned (wave 9) |
 
 ## Experiment design
@@ -54,11 +54,12 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | done (wave 1, slice 2: three MaveDB data sets of different designs, four designs, no data-set code; validation `designs`). Barcode libraries: done (wave 2, slice 4: `library.barcodeColumn`) |
-| E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | done (wave 1, slice 4: every model, conditions and tiles; validation `experiment`; wave 2 slice 2: "Missing = 0" per sample). Barcode libraries done (wave 2, slice 4: each row a variant or a barcode); named control classes planned (wave 6) |
+| E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | done (wave 1, slice 4: every model, conditions and tiles; validation `experiment`; wave 2 slice 2: "Missing = 0" per sample). Barcode libraries done (wave 2, slice 4: each row a variant or a barcode); named control classes, with why each is a control and where it applies: planned (wave 2, slice 8) |
 | E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | done (wave 1, slices 3–4: from FASTA files or pasted; name, offset, coding start and identifiers edited in the Experiment view). Offsets found from UniProt: wave 3 |
 | E4 | Role suggestions shown as suggestions, never applied silently | done (wave 1, slice 3: suggested from column names, drafts equal the hand-written designs' shape on all four feasibility designs) |
 | E5 | A human-readable design summary and validation before scoring | done (wave 1, slice 4) |
 | E6 | Every material change undoable and recorded in a hash-chained history | done (wave 1, slice 4: verified in the drawer; validation `experiment`) |
+| E7 | The assay's readout: the phenotype measured and how, the biological system, the score's units, its direction (higher means more of the function, less of it, or not signed) and the reference state, in the MAVE minimum information's terms; "not stated" never guessed; used by the map's legend, the QC's expected directions, the methods, exports and comparisons | planned (wave 2, slice 8) |
 
 ## Quality control
 
@@ -74,6 +75,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | Q8 | Barcode agreement within variants and outlier barcodes | done (wave 2, slice 4: barcodes the map names, barcodes per variant, φ and the split-half r, outlier barcodes; checked on simulated libraries) |
 | Q9 | Findings with status (pass/review/fail), explanation, affected samples or variants, threshold and rationale, link to the visual, advisory or blocking; thresholds configurable and recorded | done (wave 1, slice 6: thresholds in the workspace and its history; validation `qc`) |
 | Q10 | Time-series fit diagnostics (usable points, residuals) and bin diagnostics (cells per bin, bin occupancy) | time series done (wave 2, slice 2: "Time points used" and "Fit of the time courses", each time course in the inspector; checked on simulated passage bottlenecks and BRCA1); bins done (wave 2, slice 3: "Occupancy of the bins" and "Cells sorted per variant"; replicate agreement, variance beyond counting and outlier replicates from the bins' weighted averages within each tile) |
+| Q11 | Findings in context: each says what to do next (inspect a plot, change an analysis choice, or what needs another experiment) and which causes fit (technical, the model, or expected from the library or assay); controls say why they are controls and where they apply; a finding can be acknowledged with a reason, kept on the record with its status unchanged | planned (wave 2, slice 8) |
 
 ## Scoring
 
@@ -91,6 +93,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | S10 | Differential scores between compatible conditions, with a model that accounts for a shared input | done (wave 2, slice 6: limma's moderated t as mutscan's calculateRelativeFC, equal to it within 2 × 10⁻¹⁰ on a fixture and CBS; replicates paired by their shared input; Enrich2's z within 5 × 10⁻¹³; validation `scoring`) |
 | S11 | Score rescaling conventions (WT = 0; nonsense = 0 and WT = 1; synonymous and nonsense medians) recorded in the run | done (wave 1, slice 5: none, nonsense 0 and WT 1, synonymous 0 and nonsense −1; anchors recorded; factor IX's lowest-5%-of-missense convention to add with its data, wave 2) |
 | S12 | 100,000 variants × 6 samples scored in under 10 s | done (wave 2, slice 4: 105,000 × 6 in 0.5 s; a million barcodes in 1.3 s; in CI) |
+| S13 | Intervals that hold the truth: nominal 95% intervals hold 93–97% of true effects across simulated depth, replicate number, bottlenecks, shared inputs and model mismatch (with an independent simulator), and are checked on real data by held-out replicates, or the exception is documented; replicates sharing an input combined with their covariance; the rescaling anchors' uncertainty reported | planned (wave 2, slice 9) |
 
 ## Views
 
@@ -98,7 +101,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | --- | --- | --- |
 | V1 | Shell: Start, Experiment, QC, Score, Map, Compare, Structure, Calibrate, Figures, Report; left dataset tree, right inspector, bottom drawer, top command bar | planned (wave 1, views added by later waves) |
 | V2 | Variant-effect map: pan and zoom, color by score, differential, uncertainty, missingness, depth or QC status; distinct missing, filtered, low-confidence and not-designed states; WT marks; row orders; row and column summaries | done (wave 1, slice 7: score, SE, replicates, input count; wave 2, slice 6: the differential score of each comparison of conditions) |
-| V3 | Selection by click, rectangle, freeform and query; named selection sets that propagate across views | partial (wave 1, slice 7: click, rectangle and keyboard; named selections in the workspace; wave 5: freeform and query) |
+| V3 | Selection by click, rectangle, freeform and query; named selection sets that propagate across views | partial (wave 1, slice 7: click, rectangle and keyboard; named selections in the workspace; wave 4: freeform and query) |
 | V4 | Variant inspector: identifiers, score and CI, counts by sample, replicate scores, filters and warnings, sequence context, position distribution, provenance; later barcodes, conditions, annotations, structure | done for wave 1 (slice 7); extended by waves 2–4 |
 | V5 | Sequence tracks synchronized with the map: reference, coverage, position effect and uncertainty, domains and motifs, secondary structure, conservation, ClinVar, population frequency, custom tracks, structure availability; show, hide, reorder, filter, export | planned (wave 3) |
 | V6 | Undo, history and a visible filter bar; analysis-changing actions distinct from view-only actions | done (wave 1: undo and the history, slice 4; the filter bar in the Score view, slice 5) |
@@ -108,21 +111,21 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| C1 | Compare replicates, conditions, assays, score runs, local against MaveDB, and experiment against an imported predictor | planned (wave 5) |
-| C2 | Synchronized maps, difference maps, scatter plots with agreement statistics, discordant-variant tables, position-level disagreement, confidence and depth filters | planned (wave 5) |
-| C3 | Compatibility report (target, coordinates, matched and unmatched variants); invalid comparisons blocked or qualified | planned (wave 5) |
-| C4 | Robustness to analysis choices: scores and classes recomputed across pseudocounts, normalizations, filters and combination methods | planned (wave 5) |
+| C1 | Compare replicates, conditions, assays, score runs, local against MaveDB, and experiment against an imported predictor | planned (wave 4) |
+| C2 | Synchronized maps, difference maps, scatter plots with agreement statistics, discordant-variant tables, position-level disagreement, confidence and depth filters | planned (wave 4) |
+| C3 | Compatibility report (target, coordinates, matched and unmatched variants, and the readouts: direction, units, reference state and rescaling); invalid comparisons blocked or qualified | planned (wave 4) |
+| C4 | Robustness to analysis choices: effect sizes, ranks, uncertainty, inclusion and classes recomputed across pseudocounts, normalizations, filters, combination and uncertainty models, each replicate left out and low-depth measurements removed; which conclusions hold under every reasonable choice | planned (wave 4) |
 
 ## Structure
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| X1 | A Structure view in MaveScape, needing no other program: open PDB, mmCIF and BinaryCIF files, fetch PDB entries and AlphaFold models, assemblies; cartoon, surface and stick styles; WebGPU with a Canvas fallback (copied from Proteoscope) | planned (wave 4) |
-| X2 | Target positions mapped to residues (SIFTS, alignment, UniProt offsets), with unmapped, ambiguous and mismatched positions reported; experimental and AlphaFold models interchangeable | planned (wave 4) |
-| X3 | Residues colored by position summary, substitution, uncertainty, disagreement or QC state, with a legend and the map's visual grammar; selections shared both ways with the map and inspector | planned (wave 4) |
-| X4 | Structure as evidence: secondary structure, solvent accessibility, exposure and disorder, pLDDT, interface and ligand distance as tracks; effects by structural class; spatial clusters of sensitive positions | planned (wave 4) |
-| X5 | Structures, mappings and saved views in the library and archive; structure images as figure panels | planned (wave 4) |
-| X6 | Optional handoff to Proteoscope for deeper structural analysis, when installed, using only what it already accepts; nothing else depends on it | planned (wave 4) |
+| X1 | A Structure view in MaveScape, needing no other program: open PDB, mmCIF and BinaryCIF files, fetch PDB entries and AlphaFold models, assemblies; cartoon, surface and stick styles; WebGPU with a Canvas fallback (copied from Proteoscope) | planned (wave 5) |
+| X2 | Target positions mapped to residues (SIFTS, alignment, UniProt offsets), with unmapped, ambiguous and mismatched positions reported; experimental and AlphaFold models interchangeable | planned (wave 5) |
+| X3 | Residues colored by position summary, substitution, uncertainty, disagreement or QC state, with a legend and the map's visual grammar; selections shared both ways with the map and inspector | planned (wave 5) |
+| X4 | Structure as evidence: secondary structure, solvent accessibility, exposure and disorder, pLDDT, interface and ligand distance as tracks; effects by structural class; spatial clusters of sensitive positions | planned (wave 5) |
+| X5 | Structures, mappings and saved views in the library and archive; structure images as figure panels | planned (wave 5) |
+| X6 | Optional handoff to Proteoscope for deeper structural analysis, when installed, using only what it already accepts; nothing else depends on it | planned (wave 5) |
 
 ## Calibration (research use)
 
@@ -143,7 +146,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | R4 | Methods text from the operations actually performed, with numbered references and BibTeX, parameter tables, input checksums, software version and commit, research-use statement; regenerated when a setting changes | partial (wave 1, slice 8: scoring and QC, with references and BibTeX; parameter tables and the rest with wave 6) |
 | R5 | Figure builder: multi-panel figures from live views; SVG, high-resolution PNG, vector PDF, clipboard; embedded analysis metadata and a figure manifest; reopened figures rebuilt with differences reported | planned (wave 6) |
 | R6 | Analysis decision log, checkpoints and semantic diff of analyses | planned (wave 6) |
-| R7 | Reproducibility certificate re-computing every reported number (`mavescape verify`) and a self-contained review report | planned (wave 6) |
+| R7 | Reproducibility certificate re-computing every reported number (`mavescape verify`), saying that it proves reproducibility (recorded inputs give recorded outputs), not that the scores are right, and a self-contained review report | planned (wave 6) |
 
 ## Interchange
 
@@ -175,5 +178,5 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | T4 | Bundled examples (five to seven), each with a question, source and license, expected findings, opening view, known QC outcomes, reference scores, citation and a guided workflow under ten minutes; simulated data labeled as such | partial (wave 1, slice 8: two, GRB2 SH3 and a simulated experiment; wave 2: a simulated time series, sort and barcoded library so far; wave 3: seven) |
 | T5 | Security: loopback binding, Host check, tokens, file-access restriction, response and decompression limits, archive path traversal, CSP, no remote code, escaped labels; `--offline` and `--no-remote-control`; tested | planned (wave 1; reviewed in wave 9) |
 | T6 | WCAG AA contrast in both themes, color-vision-safe palettes, patterns besides colors, full keyboard operation, screen-reader descriptions and tabular alternatives for every chart, adjustable scale | partial (wave 1: contrast and palettes, slice 1; the map's states as marks, keyboard, description and table, slice 7; wave 9 audit) |
-| T7 | Workspace migrations, opening at least two previous schema versions | planned (wave 9) |
+| T7 | Workspace migrations, opening at least two previous schema versions; an archive from every release kept as a fixture, opened and its runs reproduced by every later version | archive fixtures planned (wave 2, slice 8, then every release); migrations planned (wave 9) |
 | T8 | Crash-safe writes; network failure cannot corrupt local work | planned (wave 1) |

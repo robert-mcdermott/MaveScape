@@ -14,6 +14,12 @@ The order follows CytoWeave's principle, adapted:
 3. **then what no single tool combines**: robustness to analysis choices, a provable record,
    agents, research-use calibration.
 
+The first users are laboratories that have their own counts. They need to know whether to trust
+them, compare reasonable analyses and produce results they can defend. Other tools serve other
+needs: MaveDB shows published maps with their structures, and CountESS offers graphical DMS
+workflows. A graphical interface or a colored structure does not set MaveScape apart. Checking an
+experiment, and showing which conclusions survive other analysis choices, does.
+
 ## How the waves map to the PRD's phases
 
 | PRD phase | Waves | Releases |
@@ -23,17 +29,24 @@ The order follows CytoWeave's principle, adapted:
 | Phase 2, research beta | waves 2–6 | 0.2.0–0.6.0 |
 | Phase 3, 1.0 | waves 7–9, then 1.0 | 0.7.0–0.9.0, 1.0.0 |
 
-The PRD puts MaveDB import in phase 2 and the MCP server in phase 3. This plan keeps that, with two
-changes:
+The PRD puts MaveDB import in phase 2 and the MCP server in phase 3. This plan keeps that, with
+these changes:
 - the remote-control hub arrives first in wave 2, because the documentation's screenshots, headless
   runs and later agents all drive the page through it (as in CytoWeave, `mavescape run` and the
   capture script drive the same page agents will);
 - the product site (GitHub Pages) and its screenshot capture start in wave 2 and grow with every
   wave, rather than arriving in wave 9;
-- structure viewing is a full part of MaveScape (wave 4), not the PRD's "lightweight view", because
+- structure viewing is a full part of MaveScape (wave 5), not the PRD's "lightweight view", because
   MaveScape must stand on its own. The viewer is copied from Proteoscope; Proteoscope is never
   required. The PRD's first milestone ends with "open selected residues in Proteoscope"; here wave 1
-  ends with the record and examples, and residues on a structure arrive with wave 4.
+  ends with the record and examples, and residues on a structure arrive with wave 5;
+- comparison and robustness to analysis choices (wave 4) come before structure (wave 5). The order
+  was changed on 2026-10-09 after a researcher's review: robustness is what no other DMS tool
+  shows, and a laboratory checking its own experiment needs it sooner than a structure, while MaveDB
+  already shows published maps on structures;
+- also from that review, wave 2 gains two slices before its examples. One records what the assay
+  measures. The other checks that the intervals hold the truth as often as they claim, since
+  matching the reference tools shows only that MaveScape computes what they compute.
 
 ## Decisions taken in this plan
 
@@ -46,7 +59,7 @@ The PRD lists decisions to make before implementation. Proposed answers, to conf
 | First scoring reference | **Enrich2 2.0.2** (Python 3, BSD-3, `pip install enrich2`): ratio, WLS and random-effects combination. Cross-checked by dms_variants `func_scores`. DiMSum 1.4 for its error model (wave 2). |
 | Three feasibility datasets | Done (wave 1, slice 2): all CC0 on MaveDB, with counts, deliberately different (`research.md` §3): **GRB2 SH3** (Domainome, `urn:mavedb:00000835-a-1`; two populations × 3 replicates; scored by DiMSum), **BRCA1 RING** (`urn:mavedb:00000003-a-1`/`-a-2`; 6 replicates × 6 rounds, inputs shared, plus a Y2H assay in the same table; scored by Enrich2, so its published scores are a reference too; legacy HGVS), **Factor IX MultiSTEP** (`urn:mavedb:00001200-a-1`; 4 FACS bins × 3 overlapping tiles × 3 replicates). |
 | Design schema before UI forms | Yes: wave 1, slice 2 writes `mavescape-design` v1 and represents the three datasets in it before slice 4 builds the editor. |
-| Structure viewing and Proteoscope code | A full Structure view in MaveScape (wave 4), copied from Proteoscope (Apache-2.0, same author): its parser, WebGPU renderer with Canvas fallback, cartoon, surfaces, DSSP, selection language, coloring and alignment. No runtime dependency on Proteoscope; an optional "Open in Proteoscope" for its deeper analyses. |
+| Structure viewing and Proteoscope code | A full Structure view in MaveScape (wave 5), copied from Proteoscope (Apache-2.0, same author): its parser, WebGPU renderer with Canvas fallback, cartoon, surfaces, DSSP, selection language, coloring and alignment. No runtime dependency on Proteoscope; an optional "Open in Proteoscope" for its deeper analyses. |
 | MAVE-HGVS | Port `mavehgvs` 0.8.1's regular-expression grammar to JavaScript (BSD-3; no JS implementation exists; keep its notice) with a **strict** mode (the spec, for export) and a **lenient** mode (legacy MaveDB data and lab tables: `_wt`/`_sy`, duplicated components, `p.A12V`, `A12V`, `*`), always keeping the original string. Validate against `mavehgvs`'s own test cases and outputs, committed as a reference. |
 | Terminology | "Functional score", "WT-like / intermediate / abnormal-like", "evidence strength (research use)"; never pathogenic or benign (`conventions.md`). |
 | Default port | 8820 (8820–8839), clear of CytoWeave (8770–8789) and Proteoscope (8765–8814). |
@@ -64,6 +77,13 @@ The PRD lists decisions to make before implementation. Proposed answers, to conf
   grows with every file read or written.
 - **Release.** Screenshots re-captured, the site built (no broken link, anchor or image) and
   published with the release.
+- **Archives that keep opening.** Researchers keep workspaces from the first release, so every
+  release saves a workspace archive (an example, scored, with a selection and changed QC
+  thresholds) as a fixture under `validation/archives/`. Every later version must open each fixture
+  and reproduce its runs to their recorded hashes. The exception is 0.1.0's runs: that release
+  used the browser's own logarithms, so its runs reproduce only to their last digits, and they must
+  say so. Wave 9's migrations (T7) build on these fixtures; they do not start them. The 0.1.0
+  fixture comes first, in wave 2, slice 8.
 
 ## 0.1.0: counts to a trustworthy map (wave 1)
 
@@ -345,7 +365,7 @@ raw counts, exports with methods and provenance, and a saved workspace that reop
    FASTA, annotated), `docs/FORMATS.md`. Examples: **GRB2 SH3** (MaveDB's CC0 counts, unchanged,
    with its notice; opens in QC) and **a simulated experiment** (40 residues, three replicates,
    seed 20261009, labeled simulated; its true effects downloadable and compared with the scores in
-   the guide; opens in the map). Structure 2VWF joins GRB2's example with wave 4.
+   the guide; opens in the map). Structure 2VWF joins GRB2's example with wave 5.
    - Validation (suite `roundtrip`, 25 checks): the fixture and GRB2, as workspaces with a run, a
      selection and changed QC thresholds, saved as `.msz`, reopened (scores recomputed from the
      archived table, with the recorded output hash) and saved again: the same bytes; every export
@@ -382,7 +402,8 @@ of slice 8** (validation suites `roundtrip`, `map`, `scoring`, `enrich2`; 211 ch
 ## 0.2.0: every design, checked (wave 2)
 
 The other experiment designs of version 1, each against an independent reference, plus headless
-runs and the performance targets.
+runs and the performance targets. Then the scores are given their meaning: what the assay
+measures, and intervals checked against the truth.
 
 ### Wave 2
 
@@ -753,13 +774,89 @@ runs and the performance targets.
        design's check; it is now said once, by the design.
      - The requirement numbers: `mavescape run` is M1 and `validate` M2 (this slice's heading said
        M2, M3).
-8. **Examples (T4).** Two more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
+8. **What the assay measures, and findings in context (E7, Q11; E2, V2, Q5, Q9, R4, T7).** A
+   score's sign means nothing without the selection. Today the map's palettes say "loss – gain",
+   and the separation finding expects nonsense variants to score low. A selection that enriches
+   loss of function would be drawn and judged the wrong way round.
+   - **First, the 0.1.0 archive as a fixture** (In every wave), because this slice and the next
+     change the design and the scoring.
+   - **The readout.** The design gains `readout`, with five parts:
+     - the phenotype measured, and how;
+     - the biological system;
+     - the score's units;
+     - its direction: higher means more of the function, or less of it, or the score has no sign;
+     - the reference state: WT = 0, or nonsense = 0 and WT = 1.
+
+     Its terms come from the MAVE minimum information (Claussnitzer et al. 2024), as MaveDB's
+     experiment keywords use them, checked against MaveDB's own list when the slice starts. The
+     readout is set in the Experiment view, from a sample sheet, or from MaveDB's metadata (wave
+     3), and it stays "not stated" rather than guessed. It replaces every place the direction is
+     assumed today:
+     - the legend reads "less function – more function" only when the direction is stated, and
+       "lower – higher" otherwise;
+     - the separation finding expects nonsense variants on the stated side;
+     - the methods, the exports and wave 4's comparisons carry it.
+   - **Controls that fit the assay.** Each control class says why it is a control and where it
+     applies. Nonsense variants count as loss-of-function controls only up to a position the user
+     sets. BRCA1's Y2H assay needs this: its truncations after residue 110 still bind.
+   - **Findings in context.** Each finding says what to do next: the plot to inspect, the analysis
+     choice that would change it, or what only another experiment can settle. It also says which
+     causes fit: a technical failure, a model that does not suit the data, or a property expected
+     from the library or the assay. Coverage, for instance, is judged against what the library's
+     construction can make.
+
+     A finding can be acknowledged with a reason. The status stays the same, and the reason is
+     kept on the record, in the methods and in the QC exports. `mavescape run --strict` reports
+     acknowledged failures but does not fail on them.
+   - Validation:
+     - a simulated selection that enriches loss of function: separation passes when the direction
+       is stated, and is reported as assumed when it is not;
+     - BRCA1 Y2H's separation, with its nonsense controls limited;
+     - an action named by every finding of the planted-problem fixtures;
+     - acknowledgements that survive the archive and appear in the methods;
+     - the 0.1.0 archive opens, and its runs reproduce to their last digits and say so.
+9. **Intervals that hold the truth (S13; S2, S7, S9, S10, S11, T2, T3).** The reference
+   comparisons show that MaveScape computes what Enrich2, DiMSum, mutscan and metafor compute. They
+   do not show that a 95% interval holds the true effect 95% of the time. With three replicates,
+   the simulations so far say it does not:
+   - sorted bins: 87%;
+   - time series: 90%;
+   - two populations through a bottleneck, combined by REML: 87–88%;
+   - paired differential scores with selection noise: 82–94%.
+
+   In that last case, limma's variances, moderated across variants, hold 93–98%.
+   - **A coverage suite** (`validation/coverage.mjs`; not to be confused with wave 8's
+     calibration of scores against known variants):
+     - simulated experiments over a grid of depth, replicate number (2 to 6), bottleneck size,
+       shared inputs and model mismatch: selection noise between replicates, overdispersion, and a
+       time course that is not a line;
+     - every model: ratio, regression, bins, barcodes, DiMSum's and differential;
+     - an independent simulator beside MaveScape's own, so a mistake both share is caught:
+       dms_variants' simulation (GPL, so as an external reference only), or Rosette from Rosace's
+       authors (its license checked first);
+     - on real data, where there is no truth: each replicate predicted from the others, with the
+       spread and tails of the held-out z-scores reported for GRB2, BRCA1, Hsp90 and Factor IX.
+   - **Replicates that share an input** (BRCA1). Today a run only warns. They will be combined with
+     the covariance the shared input implies: generalized least squares, from the input's counting
+     variance and its normalizer's.
+   - **Few replicates.** REML's τ² from two or three replicates is unreliable. The suite chooses
+     between two fixes: a moderated τ² (each variant's shrunk toward a trend across variants, as
+     limma moderates variances), or Knapp–Hartung's t intervals. The present combination stays a
+     named choice, so agreement with Enrich2 and metafor holds. Runs saved before keep theirs: a
+     parameter they lack means the old behavior, so their hashes still reproduce.
+   - **Rescaling.** The anchors are the medians of WT, synonymous or nonsense variants. Their
+     uncertainty moves every score together. It is propagated (delta method) and reported as a
+     shared term of its own, apart from each variant's SE.
+   - Validation: the suite runs in CI. Nominal 95% intervals hold 93–97% of the truth across the
+     grid, or the exception is documented with its reason in `science.html`. These gates replace
+     today's "85% or more".
+10. **Examples (T4).** Three more: Hsp90 (`00000011-a-1`, 8 generations, 568 variants) as the
    growth time series; Factor IX MultiSTEP (one readout) as the FACS-bin assay; and a simulated
    problematic experiment (a bottleneck and a failing replicate), labeled simulated. (The simulated
    barcode map with conflicts came with slice 4. No barcode-level counts are on MaveDB; Enrich2's
    example data are CC BY-SA, whose ShareAlike term should not enter an Apache-2.0 binary.) Each
-   with its question, source and license, expected findings, opening view and a guided workflow
-   under ten minutes.
+   with its question, source and license, its readout and direction (slice 8), expected findings,
+   opening view and a guided workflow under ten minutes.
 
 ## 0.3.0: public data in and out (wave 3)
 
@@ -777,8 +874,19 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
 2. **MaveDB import (I1).** Search (`POST /score-sets/search`, 100 per page) and fetch by URN
    (`mavescape --mavedb urn:mavedb:…`): scores, counts, metadata, targets (sequence or
    accession, with UniProt/RefSeq/Ensembl offsets), license and citation, published
-   calibrations; counts mapped into a design with the same wizard; retries with backoff; cached
-   for offline use. Records under CC BY-NC-SA or "other" licenses are shown with their terms.
+   calibrations; counts mapped into a design with the same wizard; the readout (wave 2, slice 8)
+   taken from the record's experiment keywords; retries with backoff; cached for offline use.
+   Records under CC BY-NC-SA or "other" licenses are shown with their terms.
+
+   **What you can do with what you have:** a checklist for the record, or for one's own files.
+   - It lists what is present: scores only, counts, replicates, a target, a design.
+   - It lists what each piece allows. Scores alone support the map, exploration and comparison.
+     Counts allow rescoring and count-based QC.
+   - It lists what is missing and where it is usually found: the paper's methods, the supplement,
+     the laboratory's sample sheet.
+
+   Rebuilding a published experiment's design from scattered records is often the hardest part.
+   The Start page's "What to bring" becomes this checklist for the open workspace.
    - Validation: the three feasibility records import through the UI with no dataset-specific
      code; imported scores equal MaveDB's; the PRD's phase-0 exit ("score agreement within
      documented tolerances") re-checked from the live import.
@@ -789,8 +897,8 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
    optional VRS identifiers from MaveDB's mapped variants.
    - Validation: every `mavehgvs` test case; every variant of the imported records parses.
 4. **MaveDB export (I2, M2).** A MaveDB-ready package (scores and counts CSV, metadata JSON) from
-   any run, with the analysis description written from the methods; `mavescape export --format
-   mavedb`.
+   any run, with the analysis description written from the methods and the experiment's keywords
+   from the design's readout (the MAVE minimum information); `mavescape export --format mavedb`.
    - Validation: the package passes MaveDB's own validators (the `mavedb` package's models and
      `mavehgvs` strict mode, pinned; results committed as a reference); export → import → export
      is identical. Never sent to MaveDB's `/hgvs/validate` (unpublished data stay local).
@@ -805,16 +913,53 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
    providers behind one interface (`web/lib/providers/*.js`), cached and usable offline.
 6. **Examples (T4).** The two-condition differential map (DHFR with Lon protease functional and
    deficient, `00000063-a-1`/`-b-1`) and the MaveDB round trip (BRCA1 RING), bringing the set to
-   seven.
+   eleven.
 
-## 0.4.0: variants in 3D (wave 4)
+## 0.4.0: compare (wave 4)
+
+Comparison comes before structure ("How the waves map to the PRD's phases"). A laboratory's first
+questions about its own experiment are about comparison: does an effect survive another reasonable
+analysis, does one replicate drive it, and do two assays really disagree or only use different
+scales?
+
+### Wave 4
+
+1. **Comparisons (C1–C3).** A comparison engine that matches variants across replicates,
+   conditions, assays, runs, local and MaveDB data, and predictors.
+   - **A compatibility report** comes first: target, coordinates, matched and unmatched variants,
+     and the readouts (wave 2, slice 8: direction, units, reference state and rescaling). Two
+     assays on different scales are then not read as disagreeing.
+   - **Views:** synchronized and difference maps, scatter plots with Pearson, Spearman, Lin's
+     concordance and Bland–Altman, discordant-variant tables, position-level disagreement, and
+     confidence and depth filters.
+   - Invalid comparisons are blocked or qualified.
+2. **Robustness to analysis choices (C4).** A run is repeated across variations, following
+   CytoWeave's `multiverse.js` pattern:
+   - pseudocounts, normalizations, filters, combination methods and uncertainty models;
+   - each replicate left out in turn;
+   - low-depth measurements removed.
+
+   For each variant and position, it shows what changes: the effect size, its rank, its
+   uncertainty, whether it is scored at all, and its class. It shows more than which threshold a
+   variant crosses. It says which conclusions hold under every reasonable choice and which depend
+   on one. No DMS tool shows this.
+   - Validation: simulated experiments with a planted fragile result: one replicate driving an
+     effect, and an effect that appears at only one pseudocount. The variants reported as fragile
+     are exactly the planted ones, and a robust result is reported as robust.
+3. **Selections (V3).** Freeform and query selections ("missense at 40–80 with SE < 0.2",
+   "variants whose class depends on the pseudocount"; structural classes such as "buried
+   positions" with wave 5), named sets, set operations, export.
+
+## 0.5.0: variants in 3D (wave 5)
 
 Structure viewing as a full part of MaveScape: a variant-effect map seen on the protein, and the
 structure used as evidence. The viewer is copied from Proteoscope (Apache-2.0, same author), with
 an origin comment in each file, and runs without Proteoscope installed. It needs the fetcher of
 wave 3 for PDB IDs and AlphaFold models; local files work offline.
+MaveDB already shows published maps on structures, so the view must earn its place in two ways:
+as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
 
-### Wave 4
+### Wave 5
 
 1. **The structure engine, copied from Proteoscope (X1).** From Proteoscope's `web/lib`, with
    their tests: `parse.js` (PDB, mmCIF), `bcif.js` (BinaryCIF), `structure.js`, `residues.js`,
@@ -836,7 +981,7 @@ wave 3 for PDB IDs and AlphaFold models; local files work offline.
      Hsp90 2CG9, DHFR 1RX2, Factor IX 1RFN) and their AlphaFold models.
 3. **Scores on the structure (X3).** Residues colored by a position summary (median, mean,
    minimum, fraction abnormal-like, number of scored substitutions), one substitution, the
-   uncertainty, a comparison's disagreement or the QC state, with the map's visual grammar:
+   uncertainty, a comparison's disagreement (wave 4's difference coloring) or the QC state, with the map's visual grammar:
    missing and filtered positions never in the neutral color; a legend; AlphaFold confidence
    shown beside. Selections are shared both ways: a map selection highlights residues, a picked
    residue selects its map column and fills the inspector. The view follows the active run and
@@ -863,22 +1008,6 @@ wave 3 for PDB IDs and AlphaFold models; local files work offline.
    - Validation: Go tests against a fake Proteoscope (tested version, unknown version, no remote
      control, absent).
 
-## 0.5.0: compare (wave 5)
-
-### Wave 5
-
-1. **Comparisons (C1–C3).** A comparison engine that matches variants across replicates,
-   conditions, assays, runs, local and MaveDB data, and predictors, with a compatibility report;
-   synchronized and difference maps (and difference coloring on the structure), scatter plots
-   with Pearson, Spearman, Lin's concordance and Bland–Altman, discordant-variant tables,
-   position-level disagreement, confidence and depth filters; invalid comparisons blocked or
-   qualified.
-2. **Robustness to analysis choices (C4).** A run repeated across pseudocounts, normalizations,
-   filters and combination methods (CytoWeave's `multiverse.js` pattern): which variants change
-   class, which positions are sensitive. No DMS tool shows this.
-3. **Selections (V3).** Freeform and query selections ("missense at 40–80 with SE < 0.2",
-   "buried positions"), named sets, set operations, export.
-
 ## 0.6.0: figures and a provable record (wave 6)
 
 ### Wave 6
@@ -896,7 +1025,9 @@ wave 3 for PDB IDs and AlphaFold models; local files work offline.
    which variants it moved.
 4. **Certificate and review report (R7).** A certificate that recomputes every reported number
    (`mavescape verify`, exit status as the verdict) and a self-contained HTML review report with
-   every number traced.
+   every number traced. The certificate says what it proves: that the recorded inputs give the
+   recorded outputs. That is reproducibility. Whether the scores are right still rests on the
+   experiment's design and the model's assumptions, which the report states beside it.
 
 ## 0.7.0: agents and scripts (wave 7)
 
@@ -941,8 +1072,8 @@ The 1.0 candidate: what the PRD's phase 3 asks for beyond features.
 
 1. **Accessibility audit (T6).** axe-core on every view in both themes, keyboard operation of the
    map, structure view and tables, screen-reader descriptions, UI scaling.
-2. **Workspace migrations (T7).** Schema version 2 if needed, with migrations and tests opening
-   0.1–0.8 archives.
+2. **Workspace migrations (T7).** Schema version 2 if needed, with migrations, tested on the
+   archive fixtures each release has kept since wave 2 (0.1–0.8).
 3. **Security review (T5, D11).** Fuzzing of CSV, FASTA, GenBank, HGVS, PDB/mmCIF, ZIP and design
    parsing (CytoWeave's `fuzz.mjs` pattern), request-forgery and token tests, path handling, a
    written review.
@@ -964,6 +1095,18 @@ The 1.0 candidate: what the PRD's phase 3 asks for beyond features.
 
 Beside waves 2–9, and what 1.0 most needs: find the two laboratories early (wave 2), and let what
 they hit reorder the waves.
+
+How to judge their use. Each laboratory brings a dataset MaveScape has not seen and analyzes it
+without the developer guiding each step. Record:
+- the time to a result they would defend;
+- the mistakes made in import and design, and where;
+- how they read the QC findings, and whether they acted on them;
+- how MaveScape's scores agree with their established pipeline's, and why they differ where they
+  do;
+- whether a second person reproduces the analysis from the archive alone.
+
+The most persuasive outcome: MaveScape uncovers a problem in an analysis, or clarifies a biological
+conclusion that the laboratory's previous workflow obscured.
 
 ## Parking lot
 
@@ -992,4 +1135,6 @@ they hit reorder the waves.
 | Public APIs change | Broken imports and tracks | Provider adapters, cached records with retrieval metadata, recorded fixtures, graceful degradation |
 | Color maps overstate certainty | Misinterpretation | Separate state patterns and uncertainty channels; missing never neutral |
 | Licensing of reference code | GPL tools (dms_variants, dms_tools2) in an Apache-2.0 project; CytoWeave's `limma.js` follows GPL limma closely (an open decision there) | GPL tools used only as external references in validation; no code ported from GPL sources. Settled in wave 2, slice 6: CytoWeave's `limma.js` is not used; MaveScape's `limma.js` is written from the publications and checked against R's limma as a black box |
+| Intervals that look right but do not hold | Scores that match the reference tools while their 95% intervals hold the truth less often (87–90% with three replicates in wave 2's simulations) | A coverage suite over depth, replicates, bottlenecks, shared inputs and model mismatch, with an independent simulator, as an acceptance gate (wave 2, slice 9) |
+| Scores read the wrong way round | A selection that enriches loss of function is drawn as "gain" and its controls judged failed | The readout's direction stated in the design and used by legends, QC and comparisons; "not stated" never guessed (wave 2, slice 8) |
 | One developer | Adoption and continuity | Validation and documentation that let others check and continue; external labs from wave 2 |
