@@ -9,6 +9,7 @@ import { NORMALIZATIONS } from './score-ratio.js';
 import { RESCALINGS, withDefaults } from './score.js';
 import { describeFilters } from './filters.js';
 import { barcodeSentence, binSentence, differentialSentence, dimsumSentence, regressionSentence } from './runs.js';
+import { anchorUncertainty } from './anchors.js';
 
 export const REFERENCES = {
   enrich2: { type: 'article', authors: ['Rubin, Alan F', 'Gelman, Hannah', 'Lucas, Nathan', 'Bajjalieh, Sandra M', 'Papenfuss, Anthony T', 'Speed, Terence P', 'Fowler, Douglas M'], title: 'A statistical framework for analyzing deep mutational scanning data', journal: 'Genome Biology', year: 2017, volume: 18, pages: '150', doi: '10.1186/s13059-017-1272-5' },
@@ -55,7 +56,7 @@ export function toBibTeX(refs) {
 }
 
 // Writes the methods of a run. options: { software: { version, commit }, findings (QC, optional),
-// thresholds }. Returns { paragraphs, references: [{ n, key, text }], markdown, bibtex }.
+// thresholds, results (the run's scores, optional: the rescaling anchors' SEs) }. Returns { paragraphs, references: [{ n, key, text }], markdown, bibtex }.
 export function writeMethods(ws, run, options = {}) {
   const cited = [];
   const cite = (key, ref = REFERENCES[key]) => {
@@ -107,13 +108,27 @@ export function writeMethods(ws, run, options = {}) {
   else scoring.push(binSentence(p, { average: cite('vampseq'), mle: cite('peterman') }).replace(/ \((\[\d+\])\)/, ' $1'));
   if (design.library?.level === 'barcode') scoring.push(barcodeSentence(p, p.aggregation === 'sum' ? { enrich2: cite('enrich2') } : { dmsVariants: cite('dmsVariants') }).replace(/ \((\[\d+\])\)/, ' $1'));
   scoring.push('Technical replicates were summed before scoring; biological replicates were scored separately.');
-  if (p.combination === 'reml') scoring.push(`Replicate scores were combined by inverse-variance weighting with a between-replicate variance τ² estimated by restricted maximum likelihood ${cite('reml')}, by Fisher scoring as in metafor ${cite('metafor')}.`);
+  if (p.combination === 'moderated') {
+    // The fitted model, from the run record (wave 2, slice 9).
+    const models = run.output.conditions.filter((c) => c.errorModel);
+    const g = (x) => String(Number(x.toPrecision(3)));
+    const fitted = models.map((c) => {
+      const m = c.errorModel;
+      return `${models.length > 1 ? `in ${c.name}, ` : ''}${m.fitted ? `a = ${g(m.a)} and b = ${g(m.b)}` : 'a = 1 and b = 0 (too few pairs of replicates to fit)'}${m.bReference > 0 ? `, the replicates' shared shift adding ${g(m.bReference)}` : ''}, and a prior dispersion of ${g(m.phiPrior)} on ${Number.isFinite(m.dfPrior) ? g(m.dfPrior) : 'infinite'} degrees of freedom`;
+    });
+    scoring.push(`Replicate scores were combined under a shared error model, each replicate score's variance a·s² + b with s² its counting variance${p.model === 'wls' || p.model === 'ols' ? ' (a slope\'s from counting alone)' : ''}, fitted to the differences between replicates of the same variant as DiMSum's multiplicative and additive error terms ${cite('dimsum')}; the variation of each replicate's shared shift (its median departure from the variants' means) was added to every replicate's variance. Each variant's dispersion about the model was moderated across variants by empirical Bayes, as limma moderates variances ${cite('limma')}, and 95% intervals use t with the prior's degrees of freedom plus the variant's${models.length ? `: ${fitted.join('; ')}` : ''}.${(run.info ?? []).some((x) => /covariance its counting error implies/.test(x)) ? ' Replicates sharing an input sample were combined with the covariance of its counting error (generalized least squares).' : ''}`);
+  } else if (p.combination === 'reml') scoring.push(`Replicate scores were combined by inverse-variance weighting with a between-replicate variance τ² estimated by restricted maximum likelihood ${cite('reml')}, by Fisher scoring as in metafor ${cite('metafor')}.`);
   else if (p.combination === 'fixed') scoring.push('Replicate scores were combined by inverse-variance weighting (fixed effects).');
   else if (p.combination === 'mean') scoring.push('Replicate scores were combined by their mean, with SE their standard deviation over the square root of their number.');
   else scoring.push(`Replicate scores were combined by Enrich2's random-effects estimator ${cite('enrich2')} as implemented in Enrich2 2.0.2 (50 iterations from its starting value).`);
   scoring.push(`Heterogeneity is reported as Cochran's Q and I² ${cite('higgins')}, with the largest change in a score when one replicate is left out.`);
   scoring.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols', design.library?.level === 'barcode').filter((x) => x.active !== false).map((x) => x.text.charAt(0).toLowerCase() + x.text.slice(1)).join('; ')}. A filtered variant's score is reported as NA with the stage that removed it.`);
-  if (p.rescale !== 'none') scoring.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}${run.output.conditions[0]?.rescale ? ` (${run.output.conditions[0].rescale.anchors.map((a) => `${a.what} ${Number(a.from.toFixed(4))} to ${a.to}`).join(', ')})` : ''}; the anchors' own uncertainty is not propagated.`);
+  if (p.rescale !== 'none') {
+    // The anchors' uncertainty, shared by every score, reported apart (wave 2, slice 9).
+    const scale = options.results ? anchorUncertainty(options.results, design, 0) : null;
+    const g = (x) => String(Number(x.toPrecision(2)));
+    scoring.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}${run.output.conditions[0]?.rescale ? ` (${run.output.conditions[0].rescale.anchors.map((a) => `${a.what} ${Number(a.from.toFixed(4))} to ${a.to}`).join(', ')})` : ''}. The anchors' own uncertainty${scale && scale.anchors.every((a) => Number.isFinite(a.se)) ? ` (SE ${scale.anchors.map((a) => `${g(a.se)} at the ${a.what}${a.what === 'wild type' ? '' : ' median'}`).join(', ')})` : ''}, which moves every score together, was propagated by the delta method and is reported apart from each score's SE (SE_scale).`);
+  }
   if (p.differential && (design.conditions?.length ?? 0) >= 2) {
     const strip = (text) => text.replace(/ \((\[\d+\])\)/g, ' $1');
     const keys = p.differential === 'limma' ? { limma: 'limma', voom: 'voom', mutscan: 'mutscan' } : p.differential === 'independent' ? { enrich2: 'enrich2' } : {};

@@ -15,6 +15,7 @@ import { BIN_SCALES, BIN_SE, BIN_SIGMA } from '../lib/score-bins.js';
 import { AGGREGATIONS, BARCODE_COMBINATIONS, OUTLIER_Z } from '../lib/score-barcodes.js';
 import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
+import { intervalOf } from '../lib/exports.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
 import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, removeRun, runId, runInputs } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
@@ -397,12 +398,12 @@ export function mountScoreMode(app, container) {
     const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
     const body = h('tbody');
     for (const i of shown) {
-      const z = 1.959963984540054;
+      const [lo, hi] = Number.isFinite(c.se[i]) && !c.reason[i] ? intervalOf(c, i) : [Number.NaN, Number.NaN];
       body.append(h(`tr${view.open === i ? '.selected' : ''}`, { style: { cursor: 'pointer' }, onclick: () => { view.open = view.open === i ? -1 : i; if (v.key[i]) app.focusItem({ kind: 'variant', id: v.key[i], run: run.id, condition: view.condition }); render(); } },
         h('td', h('span.mono', v.key[i] || v.original[i]), v.original[i] !== v.key[i] && v.key[i] ? h('div.muted', { style: { fontSize: '10.5px' } }, `as written: ${v.original[i]}`) : null),
         h('td', KIND_NAMES[v.kind[i]] ?? ''),
         h('td.r', fmt(c.score[i])), h('td.r', fmt(c.se[i])),
-        h('td.r', Number.isFinite(c.se[i]) && !c.reason[i] ? `${fmt(c.score[i] - z * c.se[i], 2)} to ${fmt(c.score[i] + z * c.se[i], 2)}` : '—'),
+        h('td.r', Number.isFinite(lo) ? `${fmt(lo, 2)} to ${fmt(hi, 2)}` : '—'),
         h('td.r', `${c.k[i]}/${c.expected[i]}`), h('td.r', Number.isFinite(c.i2[i]) ? `${Math.round(c.i2[i] * 100)}%` : '—'), h('td.r', fmt(c.loo[i])),
         h('td', status(c, i))));
       if (view.open === i) {

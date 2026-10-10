@@ -61,6 +61,8 @@ jobs:
         run: node validation/fetch.mjs
       - name: Validation against reference values
         run: node validation/run.mjs --require-data
+      - name: Coverage of 95% intervals (simulated, dms_variants, real data held out)
+        run: node validation/coverage.mjs --verbose --require-data
       - name: Performance budgets (scoring, the map, a million-row import)
         run: node validation/bench.mjs
       - name: The website builds, with every link, anchor and screenshot

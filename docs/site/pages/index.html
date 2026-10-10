@@ -111,12 +111,13 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
           <div class="feature-text">
             <span class="kicker">Scoring</span>
             <h3>Scores with standard errors, and the reasons for every gap</h3>
-            <p>Log ratios with wild-type, complete-case, all-read or synonymous normalization, for a time series the slope of a weighted regression on every time point, and for sorted bins their weighted average or a maximum-likelihood fit; replicates combined by REML random effects, fixed effects or Enrich2's own estimator; eight ordered filters, each variant left out with its reason. Every run is immutable and kept with everything needed to repeat it.</p>
+            <p>Log ratios with wild-type, complete-case, all-read or synonymous normalization, for a time series the slope of a weighted regression on every time point, and for sorted bins their weighted average or a maximum-likelihood fit; replicates combined under a shared error model whose 95% intervals hold the truth, or by REML, fixed effects or Enrich2's own estimator; eight ordered filters, each variant left out with its reason. Every run is immutable and kept with everything needed to repeat it.</p>
             <ul class="checklist">
               <li>Equal to Enrich2 2.0.2 and dms_variants 1.6.0 to 5 × 10⁻¹³</li>
               <li>Time series by weighted regression on every time point</li>
               <li>Sorted bins (FACS) by their weighted average or by maximum likelihood</li>
               <li>Barcodes summed per variant, or each scored and combined, outlier barcodes found</li>
+              <li>95% intervals that hold the truth 94–97% of the time, in 26 kinds of simulated experiment</li>
               <li>REML equal to metafor 5.2 to 3.4 × 10⁻¹²</li>
               <li>An Enrich2-compatible preset to compare with published scores</li>
             </ul>
@@ -215,6 +216,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
               <tr><td><strong>Sorted bins</strong></td><td>Factor IX's published scores (MaveDB); fitdistrplus on a simulated sort</td><td class="agree">within 1.3 × 10⁻¹⁵; 3 × 10⁻⁷</td></tr>
               <tr><td><strong>Barcodes</strong></td><td>dms_variants' <code>func_scores</code> by barcode and by substitution, on a simulated library read three ways</td><td class="agree">within 5 × 10⁻¹³</td></tr>
               <tr><td><strong>Replicates</strong></td><td>metafor 5.2 REML on 2,865 variants</td><td class="agree">within 3.4 × 10⁻¹²</td></tr>
+              <tr><td><strong>Intervals</strong></td><td>1,040 simulated experiments of 26 kinds, and dms_variants' simulated libraries</td><td class="agree">hold the truth 94–97% of the time</td></tr>
               <tr><td><strong>Variant names</strong></td><td>mavehgvs 0.8.1 on 16,959 strings</td><td class="agree">every decision and canonical form</td></tr>
               <tr><td><strong>Quality control</strong></td><td>Simulated experiments with one planted problem each</td><td class="agree">exactly their findings, three seeds</td></tr>
               <tr><td><strong>The map</strong></td><td>BRCA1's RING domain</td><td class="agree">the zinc ligands least tolerant</td></tr>

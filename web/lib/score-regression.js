@@ -80,7 +80,10 @@ export function fitLine(x, y, w, v, use, seMethod = 'counting-floor') {
   const seResidual = df > 0 ? Math.sqrt(rss / df / sxx) : Number.NaN;
   const seCounting = Math.sqrt(counting) / sxx;
   const se = seMethod === 'residual' ? seResidual : (df > 0 ? Math.max(seResidual, seCounting) : Number.NaN);
-  return { slope, intercept, se, seResidual, seCounting, fit: df > 0 ? chi2 / df : Number.NaN, n };
+  // The slope's coefficient on the first point, w₀(x₀ − x̄)/Sxx: how much of its counting error a
+  // replicate that shares that sample shares (wave 2, slice 9).
+  const firstCoef = use[0] ? (w[0] * (x[0] - mx)) / sxx : 0;
+  return { slope, intercept, se, seResidual, seCounting, fit: df > 0 ? chi2 / df : Number.NaN, n, firstCoef };
 }
 
 // One variant's time course in one replicate, as the regression saw it: { points: [[t, y]], line:
@@ -116,7 +119,9 @@ export function timeCourse(counts, times, r, { weighted = true, pseudocount, met
 // options: { weighted, pseudocount, method ('wt' | 'complete' | 'full' | 'synonymous'), se,
 // reference (synonymous rows, for 'synonymous'), label }.
 // Returns { score, se, fit, points } (Float64Array, Float64Array, Float64Array, Uint8Array), and
-// for 'synonymous' { median, references }.
+// for 'synonymous' { median, references }; with `firstCoef` and `firstVar`, each slope's
+// coefficient on the first sample and that sample's counting variance (for replicates sharing it),
+// and `seCounting`, the slope's SE from counting alone (the moderated combination's covariate).
 export function regressionScores(samples, times, r, use, options) {
   const { weighted = true, pseudocount, method, se: seMethod = 'counting-floor', reference = null, label = 'this replicate' } = options;
   const T = samples.length;
@@ -128,6 +133,9 @@ export function regressionScores(samples, times, r, use, options) {
   const se = new Float64Array(n).fill(Number.NaN);
   const fit = new Float64Array(n).fill(Number.NaN);
   const points = new Uint8Array(n);
+  const firstCoef = new Float64Array(n);
+  const seCounting = new Float64Array(n).fill(Number.NaN);
+  const firstVar = new Float64Array(n).fill(Number.NaN);
   const y = new Float64Array(T);
   const w = new Float64Array(T);
   const v = new Float64Array(T);
@@ -151,6 +159,9 @@ export function regressionScores(samples, times, r, use, options) {
     se[i] = f.se;
     fit[i] = f.fit;
     points[i] = f.n;
+    firstCoef[i] = f.firstCoef ?? 0;
+    seCounting[i] = f.seCounting;
+    if (at[0]) firstVar[i] = v[0];
   }
   if (synonymous) {
     const values = (reference ?? []).filter((i) => use[i] && Number.isFinite(score[i])).map((i) => score[i]);
@@ -158,7 +169,7 @@ export function regressionScores(samples, times, r, use, options) {
     const sorted = Float64Array.from(values).sort();
     const m = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
     for (let i = 0; i < n; i += 1) if (use[i]) score[i] -= m;
-    return { score, se, fit, points, median: m, references: values.length };
+    return { score, se, fit, points, firstCoef, firstVar, seCounting, median: m, references: values.length };
   }
-  return { score, se, fit, points };
+  return { score, se, fit, points, firstCoef, firstVar, seCounting };
 }

@@ -249,6 +249,15 @@ saved by earlier releases keep opening: the validation keeps one from each relea
 ([`validation/archives/`](../validation/archives/), from 0.1.0) and reproduces its runs. Its `output.replicates` keep each replicate's normalizers and, for
 DiMSum's model, `dimsum`: the scale, shift, multiplicative `input` and `output` terms, additive
 `reperror` (a variance), and `intervals` (the 10th and 90th percentiles of their bootstrap).
+Combined by the moderated combination (MaveScape 0.2, the default; the parameter `combination`:
+`moderated`, `reml`, `fixed`, `mean` or `enrich2`), each of its `output.conditions` keeps the
+`errorModel`: `a` and `b` (a replicate score's variance is `a` × counting + `b`), `pairs` (the
+pairs of replicate scores it was fitted to) and `fitted` (false when there were too few: counting
+alone), `bReference` (the variance of the replicates' shared shift) and `shifts` (each replicate's, by
+its id), `phiPrior` and `dfPrior` (the moderated dispersions' prior; `null` for infinite degrees
+of freedom). Runs that combined by another method record it, and
+runs made before 0.2 recorded `reml`; they reopen to their hashes. A run's output hash covers each
+score's degrees of freedom when it has them.
 
 ## Exports
 
@@ -263,11 +272,13 @@ MaveDB's score layout, one row per variant of the table, in the table's order:
 | --- | --- |
 | `hgvs_nt`, `hgvs_splice`, `hgvs_pro` | the variant in MAVE-HGVS, in its level's column (`NA` in the others) |
 | `score`, `SE` | the combined score and its standard error; `NA` when not scored |
-| `ci95_lower`, `ci95_upper` | score ± 1.96 SE |
+| `ci95_lower`, `ci95_upper` | the 95% interval: score ± t × SE, t at the score's degrees of freedom (from MaveScape 0.2, with the moderated combination); ± 1.96 SE with the other combinations |
+| `df` | the score's degrees of freedom (moderated combination, MaveScape 0.2); `Inf` for a score whose replicates' variance is known; `NA` with the other combinations |
+| `SE_scale` | for rescaled scores (MaveScape 0.2), the rescaling anchors' uncertainty at this score, shared by every score and not in `SE`: needed to compare a score with another assay's or with the anchors' true values; `NA` without rescaling |
 | `replicates`, `replicates_expected` | biological replicates used, and that could have measured it |
 | `status` | `scored`, `low confidence`, `filtered: <stage>` (`identifier`, `class`, `excluded`, `input-count`, `total-count`, `barcodes`, `replicates`, `se`) or `not measured` |
 | `flags` | why a score has low confidence |
-| `tau2`, `I2`, `leave_one_out` | between-replicate variance, I², and the largest change when one replicate is left out |
+| `tau2`, `I2`, `leave_one_out` | between-replicate variance (REML and Enrich2's estimator; `NA` with the others), I², and the largest change when one replicate is left out |
 | `variant_as_written`, `variant_class` | the name as in the table, and its class |
 | `score_<replicate>`, `SE_<replicate>` | each replicate's score and SE (kept for filtered variants too) |
 
@@ -297,7 +308,8 @@ With conditions compared (MaveScape 0.2; the parameter `differential`: `limma`, 
 `independent`; `null` for none), one row per variant of the table: `hgvs_nt`, `hgvs_splice`,
 `hgvs_pro`, `variant_as_written`, then for each contrast (each condition against the reference,
 `<condition>-vs-<reference>`): `difference_<contrast>` (natural log; limma's log₂ fold change
-times ln 2), `SE_`, `ci95_lower_`, `ci95_upper_`, `t_` (limma) or `z_`, `p_`, `q_`
+times ln 2), `SE_`, `ci95_lower_`, `ci95_upper_`, `t_` (limma, and pairs combined by the moderated
+combination, whose intervals and p-values use t) or `z_`, `p_`, `q_`
 (Benjamini–Hochberg within the contrast), `replicates_` (limma) or `pairs_`, and `status_`
 (`estimated`, or why not: not scored in the reference condition or in the condition, no pair of
 replicates measuring it, not counted in every sample for limma). `NA` where there is none.

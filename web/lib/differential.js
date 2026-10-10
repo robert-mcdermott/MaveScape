@@ -19,10 +19,11 @@
 // p-values are two-sided (normal for paired and independent, t for limma) and adjusted by
 // Benjamini and Hochberg within each contrast.
 
-import { adjustBH } from './distributions.js';
+import { adjustBH, tQuantile, tUpper } from './distributions.js';
 import { exp, log, normalUpper } from './dmath.js';
 import { contrastFit, lmFit, moderatedT, voom } from './limma.js';
 import { combine } from './replicates.js';
+import { moderatedCombination } from './moderate.js';
 
 export const DIFFERENTIAL_METHODS = {
   paired: 'replicates paired by their shared input',
@@ -69,20 +70,24 @@ export function transformOf(condition) {
   return { offset: r.anchors[0].to - r.anchors[0].from * r.slope, slope: r.slope };
 }
 
-// Normal z-tests: two-sided p and BH-adjusted q over the estimated variants.
+// Normal z-tests (t-tests with the moderated combination's degrees of freedom, `df`): two-sided p
+// and BH-adjusted q over the estimated variants.
 function finish(out) {
-  const { delta, se, reason } = out;
+  const { delta, se, reason, df = null } = out;
   const n = delta.length;
   const z = new Float64Array(n).fill(Number.NaN);
   const p = new Float64Array(n).fill(Number.NaN);
   const ciLow = new Float64Array(n).fill(Number.NaN);
   const ciHigh = new Float64Array(n).fill(Number.NaN);
+  const quantiles = new Map();
   for (let i = 0; i < n; i += 1) {
     if (reason[i]) continue;
     z[i] = delta[i] / se[i];
-    p[i] = 2 * normalUpper(Math.abs(z[i]));
-    ciLow[i] = delta[i] - Z95 * se[i];
-    ciHigh[i] = delta[i] + Z95 * se[i];
+    const d = df ? df[i] : Infinity;
+    p[i] = Number.isFinite(d) ? 2 * tUpper(Math.abs(z[i]), d) : 2 * normalUpper(Math.abs(z[i]));
+    if (!quantiles.has(d)) quantiles.set(d, Number.isFinite(d) ? tQuantile(0.975, d) : Z95);
+    ciLow[i] = delta[i] - quantiles.get(d) * se[i];
+    ciHigh[i] = delta[i] + quantiles.get(d) * se[i];
   }
   return { ...out, z, p, q: adjustBH(p), ciLow, ciHigh };
 }
@@ -151,17 +156,21 @@ export function differentialContrast(contrast, { replicates, conditions, p, meth
   const pairs = pairing.pairs;
   const ys = new Array(n);
   const vs = new Array(n);
+  const which = new Array(n);
   let complete = 0;
   for (let i = 0; i < n; i += 1) {
     if (reason[i]) continue;
     const y = [];
     const v = [];
-    for (const [a, b] of pairs) {
+    const w = [];
+    for (const [j, [a, b]] of pairs.entries()) {
       const t = pairDifference(a, b, i, terms);
       if (!t) continue;
       y.push(t.d);
       v.push(t.v);
+      w.push(j);
     }
+    which[i] = w;
     if (!y.length) {
       reason[i] = DIFFERENTIAL_REASON.UNPAIRED;
       continue;
@@ -170,15 +179,32 @@ export function differentialContrast(contrast, { replicates, conditions, p, meth
     vs[i] = v;
     if (y.length === pairs.length) complete += 1;
   }
-  for (let i = 0; i < n; i += 1) {
-    if (reason[i]) continue;
-    const c = combine(p.combination, ys[i], vs[i], complete);
-    delta[i] = c.estimate;
-    se[i] = c.se;
-    tau2[i] = c.tau2;
-    k[i] = ys[i].length;
+  // The pairs' differences combined as the run combines replicates: moderated, all variants at
+  // once (wave 2, slice 9), with the pairs' t degrees of freedom; else one variant at a time.
+  let df = null;
+  let errorModel = null;
+  if (p.combination === 'moderated') {
+    const m = moderatedCombination(ys.map((y, i) => (y && !reason[i] ? { y, v: vs[i], rep: which[i], share: null, u: null } : null)));
+    df = new Float64Array(n).fill(Number.NaN);
+    errorModel = m.model;
+    for (let i = 0; i < n; i += 1) {
+      if (reason[i]) continue;
+      delta[i] = m.estimate[i];
+      se[i] = m.se[i];
+      df[i] = m.df[i];
+      k[i] = ys[i].length;
+    }
+  } else {
+    for (let i = 0; i < n; i += 1) {
+      if (reason[i]) continue;
+      const c = combine(p.combination, ys[i], vs[i], complete);
+      delta[i] = c.estimate;
+      se[i] = c.se;
+      tau2[i] = c.tau2;
+      k[i] = ys[i].length;
+    }
   }
-  return finish({ ...base, method: 'paired', note, pairs: pairs.map(([a, b]) => [a.id, b.id]), unpaired: pairing.unpaired.map((r) => r.id) });
+  return finish({ ...base, method: 'paired', note, pairs: pairs.map(([a, b]) => [a.id, b.id]), unpaired: pairing.unpaired.map((r) => r.id), ...(df ? { df, errorModel } : {}) });
 }
 
 // The limma model of a two-population design: one column for each input library and one for

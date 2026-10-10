@@ -42,14 +42,14 @@ export const EXAMPLES = [
     simulation: { seed: 20261009, readsPerVariant: 150, libraryLogSd: 0.7, replicateNoise: 0.08 },
     opens: 'map',
     expected: [
-      'Scores track the true effects closely (the guide shows the correlation once the run is scored).',
+      'Scores track the true effects closely, and their 95% intervals hold about 95% of them (the guide shows both once the run is scored).',
       'The least certain scores are the variants with the fewest reads before selection: their SEs are largest.',
       'Quality control passes: the counts vary as counting predicts.',
     ],
     steps: [
       ['map', 'Look at the map: nonsense (the * row) is uniformly low, synonymous cells (outlined) are white, missense varies by position.'],
       ['qc', 'Read the QC: a clean experiment passes everything. Change the "Variance beyond counting" threshold and see the finding react.'],
-      ['score', 'In Score, rerun with fixed effects instead of REML: with replicates that agree, the scores barely move.'],
+      ['score', 'In Score, rerun with REML instead of the moderated combination (the default): the scores barely move, but REML judges each variant from its three replicates alone, and its intervals are narrow wherever they happen to agree.'],
       ['map', 'Color the map by standard error: the uncertain cells are the variants rare in the library.'],
     ],
   },

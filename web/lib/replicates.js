@@ -210,13 +210,16 @@ export function combineMean(y, v) {
 }
 
 export const COMBINATIONS = {
+  moderated: 'a shared error model with moderated variances (MaveScape)',
   reml: 'REML random effects',
   fixed: 'fixed effects (inverse variance)',
   enrich2: 'Enrich2\'s estimator (compatible)',
   mean: 'the mean of the replicates, SE their SD over √k (VAMP-seq)',
 };
 
-// One variant's combination by method ('reml', 'fixed', 'mean' or 'enrich2', which needs V).
+// One variant's combination by method ('reml', 'fixed', 'mean' or 'enrich2', which needs V). The
+// moderated combination needs every variant at once (moderate.js); one variant alone, as in the
+// leave-one-out sensitivity, is combined by REML.
 export function combine(method, y, v, V) {
   if (method === 'fixed') return combineFixed(y, v);
   if (method === 'mean') return combineMean(y, v);

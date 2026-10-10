@@ -71,7 +71,7 @@ export function allExports(ws, table, results) {
   const thresholds = withDefaultThresholds(ws.qc?.thresholds);
   const qc = computeQC({ ...inputFor(table, run.inputs.design), design: run.inputs.design, results, measures: measuresOf(thresholds) });
   const findings = findingsFrom(qc, thresholds, { acknowledged: ws.qc?.acknowledged });
-  const methods = writeMethods(ws, run, { findings, thresholds });
+  const methods = writeMethods(ws, run, { findings, thresholds, results });
   const scores = scoresCSV(results, run);
   const selection = ws.selections[0];
   return {

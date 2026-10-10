@@ -32,6 +32,7 @@ import { createRandom } from './random.js';
 import { scoreDimsumGroup, substitutionsOf } from './score-dimsum.js';
 import { contrastsOf, differentialContrast, DIFFERENTIAL_METHODS, limmaDesign, limmaDifferential } from './differential.js';
 import { combine, COMBINATIONS, heterogeneity, leaveOneOut, sampleCounts } from './replicates.js';
+import { moderatedCombination } from './moderate.js';
 import {
   checkFilters, DEFAULT_FILTERS, FLAG, filterFlow, kindCodes, REPLICATE_STATE, replicateState, STAGE_BY_ID, variantStage,
 } from './filters.js';
@@ -73,7 +74,7 @@ export const DEFAULT_PARAMETERS = {
   dimsumNormalise: true,
   dimsumErrorModel: true,
   dimsumDropout: 0,
-  combination: 'reml',
+  combination: 'moderated',
   rescale: 'none',
   // Differential scores between conditions (null: none; runs made before 0.2 have none).
   differential: null,
@@ -483,6 +484,14 @@ class Refused extends Error {
 // Float64Array } (count columns, NaN where missing), design, mode ('lenient' | 'strict'),
 // parameters, onProgress(fraction, message) }. Returns { ok: true, results } or { ok: false,
 // errors }.
+// The moderated combination's model as the run keeps it (JSON): each replicate's shift by its id,
+// and an infinite prior's degrees of freedom as null.
+const storedModel = (m, replicates) => ({
+  ...m,
+  shifts: Object.fromEntries(Object.entries(m.shifts).map(([k, x]) => [replicates[Number(k)].id, x])),
+  dfPrior: Number.isFinite(m.dfPrior) ? m.dfPrior : null,
+});
+
 export function scoreExperiment(input) {
   try {
     return { ok: true, results: run(input) };
@@ -717,6 +726,17 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       // filter is on); φ; each variant's barcodes measured; and, scored by barcode, the variance
       // between a variant's barcodes (τ²).
       barcodes: bc,
+      // The first sample's counting error each score carries, for replicates that share that
+      // sample (wave 2, slice 9): its coefficient in the score (−1 in a log ratio, the slope's
+      // weight on it in a regression) and that sample's counting variance. Not part of the output.
+      // A regression's SE from counting alone: the moderated combination models the variance beyond
+      // it across variants, rather than from each fit's few residuals.
+      seCounting: regression && !byBarcode ? scored.seCounting : null,
+      shared: byBarcode ? null : {
+        sample: slots[0].sample,
+        coef: regression ? scored.firstCoef : null,
+        variance: regression ? scored.firstVar : Float64Array.from(samples[0], (c) => 1 / (c + p.pseudocount) + (p.normalization === 'synonymous' ? 0 : 1 / r[0])),
+      },
     };
     replicates.push(entry);
     repById.set(replicate.id, entry);
@@ -741,7 +761,11 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   // Run-level notes on the design.
   if (design.model === 'time-series' && !regression) warnings.push({ code: 'time-series-ratio', message: 'A time series scored by the ratio of its first and last time points (as Enrich2\'s "ratios"): the time points between them are not used. Weighted regression uses every one.' });
   const shared = sharedSamples(design, { withinCondition: true });
-  if (shared.size) warnings.push({ code: 'shared-samples', message: `${shared.size} sample${shared.size > 1 ? 's are' : ' is'} shared between replicates${design.conditions?.length > 1 ? ' of one condition' : ''} (${[...shared.keys()].join(', ')}): those replicates' scores are not independent, so the combined SE is likely too small.` });
+  // Moderated combination takes the covariance of a shared input into account, for log ratios and
+  // regressions (wave 2, slice 9); the other combinations treat the replicates as independent.
+  const covariance = p.combination === 'moderated' && replicates.every((r) => r.shared);
+  if (shared.size && covariance) info.push(`${shared.size} sample${shared.size > 1 ? 's are' : ' is'} shared between replicates${design.conditions?.length > 1 ? ' of one condition' : ''} (${[...shared.keys()].join(', ')}): the scores that share one were combined with the covariance its counting error implies (generalized least squares).`);
+  else if (shared.size) warnings.push({ code: 'shared-samples', message: `${shared.size} sample${shared.size > 1 ? 's are' : ' is'} shared between replicates${design.conditions?.length > 1 ? ' of one condition' : ''} (${[...shared.keys()].join(', ')}): those replicates' scores are not independent, so the combined SE is likely too small${p.combination === 'moderated' ? '' : '; the moderated combination (MaveScape\'s default) takes the covariance into account'}.` });
 
   // Per condition.
   const conditionList = design.conditions?.length ? design.conditions : [{ id: 'all', name: 'All replicates' }];
@@ -817,12 +841,43 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     // Combination.
     let notConverged = 0;
     let notConvergedEnrich2 = 0;
+    // Moderated (wave 2, slice 9): every variant of the condition at once, with the shared error
+    // model and, for replicates sharing an input, its covariance (moderate.js).
+    const df = p.combination === 'moderated' ? new Float64Array(n).fill(Number.NaN) : null;
+    let moderated = null;
+    if (df) {
+      const rows = new Array(n).fill(null);
+      for (let i = 0; i < n; i += 1) {
+        const these = used[i];
+        if (!these) continue;
+        rows[i] = {
+          y: these.map((rep) => rep.score[i]),
+          v: these.map((rep) => { const s = rep.seCounting ? rep.seCounting[i] : rep.se[i]; return s * s; }),
+          rep: these.map((rep) => replicates.indexOf(rep)),
+          // Fewer than 5 reads before or after selection in a replicate: at the counts' floor.
+          informative: sorted || these.every((rep) => !(rep.first[i] < 5 || rep.last[i] < 5)),
+          share: covariance ? these.map((rep) => rep.shared.sample) : null,
+          u: covariance ? these.map((rep) => {
+            const variance = rep.shared.variance[i];
+            return variance > 0 ? (rep.shared.coef ? rep.shared.coef[i] : -1) * Math.sqrt(variance) : 0;
+          }) : null,
+        };
+      }
+      moderated = moderatedCombination(rows);
+      const m = moderated.model;
+      const g = (x) => String(Number(x.toPrecision(3)));
+      info.push(`${conditionList.length > 1 ? `${condition.name}: ` : ''}replicates combined under a shared error model, each replicate score's variance ${m.fitted ? `${g(m.a)} × counting + ${g(m.b)}` : 'its counting variance (too few pairs of replicates to fit a model)'}${m.bReference > 0 ? `, plus ${g(m.bReference)} from the replicates' shared shift` : ''}; variants' dispersions moderated toward ${g(m.phiPrior)} (${Number.isFinite(m.dfPrior) ? `${g(m.dfPrior)} prior degrees of freedom` : 'infinite prior degrees of freedom'}).`);
+    }
     for (let i = 0; i < n; i += 1) {
       const these = used[i];
       if (!these) continue;
       const y = these.map((rep) => rep.score[i]);
       const v = these.map((rep) => rep.se[i] * rep.se[i]);
-      if (p.combination === 'enrich2' && p.normalization === 'wt' && i === controls.wt) {
+      if (moderated) {
+        score[i] = moderated.estimate[i];
+        se[i] = moderated.se[i];
+        df[i] = moderated.df[i];
+      } else if (p.combination === 'enrich2' && p.normalization === 'wt' && i === controls.wt) {
         // Enrich2 sets the wild type to 0 ± 0 in wild-type normalization.
         score[i] = 0;
         se[i] = 0;
@@ -876,9 +931,17 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       const from = [anchorValue(a), anchorValue(b)];
       if (!(Math.abs(from[1] - from[0]) > 0)) throw new Refused([`The rescaling anchors (${a[0]} and ${b[0]}) have the same score: scores cannot be rescaled by them.`]);
       const slope = (b[1] - a[1]) / (from[1] - from[0]);
+      // A median of controls shifts with the replicates' shared shift as every score does, so on
+      // the rescaled scale it cancels: the moderated SEs leave out the reference's part (wave 2,
+      // slice 9); the anchors' own error is reported apart (anchors.js).
+      const cancels = moderated && (a[0] !== 'wild type' || b[0] !== 'wild type');
       for (let i = 0; i < n; i += 1) {
         if (reason[i]) continue;
         score[i] = a[1] + (score[i] - from[0]) * slope;
+        if (cancels) {
+          se[i] = moderated.seWithin[i];
+          df[i] = moderated.dfWithin[i];
+        }
         se[i] *= Math.abs(slope);
         loo[i] *= Math.abs(slope);
         tau2[i] *= slope * slope;
@@ -894,6 +957,9 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       name: condition.name,
       replicates: reps.map((r) => r.id),
       score, se, tau2, i2, q, loo, looReplicate, epsilon, k, expected, reason, flags,
+      // Moderated: each score's degrees of freedom (its interval uses t), and the condition's error
+      // model (a, b, the reference's share, the prior φ₀ on d₀ degrees of freedom).
+      ...(moderated ? { df, errorModel: storedModel(moderated.model, replicates) } : {}),
       rescale,
       flow: filterFlow(reason, Boolean(groups)),
       scored: scoredCount,

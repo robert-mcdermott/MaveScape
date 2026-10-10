@@ -74,7 +74,7 @@ function nodeFiles(dir) {
   const thresholds = withDefaultThresholds(ws.qc?.thresholds);
   const qc = computeQC({ ...inputFor(table, run.inputs.design), design: run.inputs.design, results: r, measures: measuresOf(thresholds) });
   const findings = findingsFrom(qc, thresholds, { acknowledged: ws.qc?.acknowledged });
-  const methods = writeMethods(ws, run, { findings, thresholds });
+  const methods = writeMethods(ws, run, { findings, thresholds, results: r });
   const out = {
     'counts.csv': countsCSV(table, run.inputs.design),
     'qc_samples.csv': qcSamplesCSV(qc),

@@ -12,6 +12,8 @@ import { DIFFERENTIAL_REASON_NAMES } from './differential.js';
 import { canonicalJSON } from './workspace.js';
 import { sha256 } from './sha256.js';
 import { columnText } from './csv.js';
+import { tQuantile } from './distributions.js';
+import { anchorUncertainty } from './anchors.js';
 
 export const EXPORT_VERSION = 1;
 const Z = 1.959963984540054;
@@ -42,21 +44,35 @@ export function statusOf(c, i) {
   return c.flags[i] ? 'low confidence' : 'scored';
 }
 
+// A score's 95% interval: [low, high], with t's quantile at the moderated combination's degrees
+// of freedom (wave 2, slice 9), else the normal's.
+const QUANTILES = new Map();
+export function intervalOf(c, i) {
+  const d = c.df ? c.df[i] : Infinity;
+  if (!QUANTILES.has(d)) QUANTILES.set(d, Number.isFinite(d) ? tQuantile(0.975, d) : Z);
+  const q = QUANTILES.get(d);
+  return [c.score[i] - q * c.se[i], c.score[i] + q * c.se[i]];
+}
+
 // The scores of one condition of a run, one row per variant of the table, in table order.
 export function scoresCSV(results, run, condition = 0) {
   const c = results.conditions[condition];
   const level = run.inputs.design.variants.level;
   const v = results.variants;
   const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
-  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'score', 'SE', 'ci95_lower', 'ci95_upper', 'replicates', 'replicates_expected', 'status', 'flags', 'tau2', 'I2', 'leave_one_out', 'variant_as_written', 'variant_class',
+  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'score', 'SE', 'ci95_lower', 'ci95_upper', 'df', 'SE_scale', 'replicates', 'replicates_expected', 'status', 'flags', 'tau2', 'I2', 'leave_one_out', 'variant_as_written', 'variant_class',
     ...reps.flatMap((r) => [`score_${safe(r.id)}`, `SE_${safe(r.id)}`])];
+  // The rescaling anchors' shared uncertainty, apart from each score's SE (SE_scale).
+  const scale = anchorUncertainty(results, run.inputs.design, condition);
   const rows = [];
   for (let i = 0; i < results.rows; i += 1) {
     const scored = !c.reason[i];
+    const [low, high] = scored ? intervalOf(c, i) : [Number.NaN, Number.NaN];
     rows.push([
       ...hgvsColumns(level, v.key[i]),
       num(scored ? c.score[i] : Number.NaN), num(scored ? c.se[i] : Number.NaN),
-      num(scored ? c.score[i] - Z * c.se[i] : Number.NaN), num(scored ? c.score[i] + Z * c.se[i] : Number.NaN),
+      num(low), num(high),
+      scored && c.df ? (Number.isFinite(c.df[i]) ? num(c.df[i]) : 'Inf') : 'NA', num(scored && scale ? scale.at(c.score[i]) : Number.NaN),
       String(c.k[i]), String(c.expected[i]), statusOf(c, i), c.flags[i] ? flagNames(c.flags[i]).join('; ') : '',
       num(c.tau2[i]), num(c.i2[i]), num(c.loo[i]), v.original[i], v.status[i] === 3 ? 'invalid' : KIND_NAMES[v.kind[i]],
       ...reps.flatMap((r) => [num(r.score[i]), num(r.se[i])]),
@@ -120,14 +136,14 @@ export function barcodesCSV(results, run) {
 
 // Differential scores between conditions, one row per variant of the table: for each contrast
 // (each condition against the reference) the difference, its SE, 95% interval, p and BH-adjusted
-// q, the method, the pairs or replicates behind it (limma: t), and why there is none. NA where
-// there is none.
+// q, the method, the pairs or replicates behind it (limma, and pairs combined by the moderated
+// combination: t), and why there is none. NA where there is none.
 export function differentialCSV(results, run) {
   const ds = results.differential;
   if (!ds?.length) throw new Error(`${run.name} compares no conditions.`);
   const level = run.inputs.design.variants.level;
   const v = results.variants;
-  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'variant_as_written', ...ds.flatMap((d) => ['difference', 'SE', 'ci95_lower', 'ci95_upper', d.method === 'limma' ? 't' : 'z', 'p', 'q', d.method === 'limma' ? 'replicates' : 'pairs', 'status'].map((x) => `${x}_${safe(d.id)}`))];
+  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'variant_as_written', ...ds.flatMap((d) => ['difference', 'SE', 'ci95_lower', 'ci95_upper', d.method === 'limma' || d.df ? 't' : 'z', 'p', 'q', d.method === 'limma' ? 'replicates' : 'pairs', 'status'].map((x) => `${x}_${safe(d.id)}`))];
   const rows = [];
   for (let i = 0; i < results.rows; i += 1) {
     rows.push([...hgvsColumns(level, v.key[i]), v.original[i], ...ds.flatMap((d) => {

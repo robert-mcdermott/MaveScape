@@ -33,6 +33,14 @@
 // separate barcode-to-variant map, in which a fraction `conflicts` of barcodes is given a second,
 // different variant (both are wrong to trust) and a fraction `unmapped` is missing.
 //
+// For the coverage suite (wave 2, slice 9): `sharedInput` sequences one input sample for every
+// replicate (each still transformed and selected on its own), as many experiments do; with a time
+// series, one sample at time 0. `readDispersion` k makes reads overdispersed (gamma-Poisson: each
+// count's mean times a gamma variable of mean 1 and variance 1/k), as PCR jackpots do. `timeCourse:
+// 'saturating'` makes a time series' selection act early, (1 − e^(−3t/T)) / (1 − e^(−3)) of the
+// effect by time t, so that the course is not a line (the truth is still its whole change).
+// Each is off by default, and a simulation without them draws the same numbers as before.
+//
 // With `conditions` (wave 2, slice 6), two conditions selected from one input: each replicate's
 // input library and transformed cells (with any bottleneck) are shared, then split into a
 // selection under each condition, each with its own noise and output. In the second condition,
@@ -40,7 +48,7 @@
 // matters only there); every other variant's effect is the same in both, so the true differential
 // is known and 0 for most variants.
 
-import { exp, log, normalCdf } from './dmath.js';
+import { exp, log, normalCdf, pow } from './dmath.js';
 import { createRandom, poisson } from './random.js';
 
 const THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val' };
@@ -71,7 +79,27 @@ export const DEFAULT_SIMULATION = {
   sort: null, // { gates: [log offsets from the wild type's μ], sigma, effectScale, cellsPerVariant, wtFluorescence, values }
   barcodes: null, // { perVariant, wildType, readsPerBarcode, noise, outliers, conflicts, unmapped, doubles, length }
   conditions: null, // { names: [reference, other], site: [positions], shift, siteSd }
+  sharedInput: false, // one input sample (time 0) for every replicate
+  readDispersion: null, // k: reads gamma-Poisson with variance 1/k beyond Poisson's (null: Poisson)
+  timeCourse: 'line', // 'line' or 'saturating'
 };
+
+// A gamma variable of shape k and mean 1 (Marsaglia and Tsang 2000; for k < 1, boosted).
+function gammaMeanOne(random, k) {
+  if (k < 1) return gammaMeanOne(random, k + 1) * ((k + 1) / k) * pow(random(), 1 / k);
+  const d = k - 1 / 3;
+  const c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    const x = random.gaussian();
+    const v = (1 + c * x) * (1 + c * x) * (1 + c * x);
+    if (v <= 0) continue;
+    const u = random();
+    if (log(u) < 0.5 * x * x + d - d * v + d * log(v)) return (d * v) / k;
+  }
+}
+
+// Reads with mean `mean`: Poisson, or gamma-Poisson with readDispersion.
+const readsOf = (o, random) => (mean) => (o.readDispersion ? poisson(random, mean * gammaMeanOne(random, o.readDispersion)) : poisson(random, mean));
 
 // The variants of a protein: the wild type, then by position a synonymous variant, a nonsense
 // variant and every missense substitution, with true effects (natural-log fitness, WT = 0).
@@ -109,8 +137,10 @@ export function simulateExperiment(options = {}) {
   if (o.barcodes) return simulateBarcodes(o, random, variants);
   if (o.conditions) return simulateConditions(o, random, variants, f, noise, outDepth);
   const columns = [];
+  const reads = readsOf(o, random);
+  let sharedInput = null;
   for (let r = 0; r < o.replicates; r += 1) {
-    const input = f.map((x) => poisson(random, o.readsPerVariant * V * x));
+    const input = o.sharedInput ? (sharedInput ??= f.map((x) => reads(o.readsPerVariant * V * x))) : f.map((x) => reads(o.readsPerVariant * V * x));
     const cells = Number.isFinite(o.inputCells) ? f.map((x) => poisson(random, o.inputCells * V * x)) : f.map((x) => x);
     const grown = cells.map((c, i) => c * exp(variants[i].effect + noise(r) * random.gaussian()));
     const grownTotal = grown.reduce((a, b) => a + b, 0);
@@ -120,9 +150,10 @@ export function simulateExperiment(options = {}) {
       const s = sampled.reduce((a, b) => a + b, 0);
       after = sampled.map((x) => x / s);
     }
-    const output = after.map((x) => poisson(random, outDepth * V * x));
+    const output = after.map((x) => reads(outDepth * V * x));
     const missing = (sample) => o.missing.some((m) => m.replicate === r + 1 && m.sample === sample);
-    columns.push({ name: `input_rep${r + 1}`, values: missing('input') ? null : input });
+    if (!o.sharedInput) columns.push({ name: `input_rep${r + 1}`, values: missing('input') ? null : input });
+    else if (r === 0) columns.push({ name: 'input', values: input });
     columns.push({ name: `output_rep${r + 1}`, values: missing('output') ? null : output });
   }
   const lines = [['hgvs_pro', ...columns.map((c) => c.name)].join(',')];
@@ -137,7 +168,7 @@ export function simulateExperiment(options = {}) {
     targets: [{ id: 'simulated', name: 'Simulated protein', sequenceType: 'protein', sequence: o.protein }],
     library: { level: 'variant' },
     samples: columns.map((c) => ({ id: c.name, name: c.name, columns: [c.name] })),
-    replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, input: `input_rep${r + 1}`, output: `output_rep${r + 1}` })),
+    replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, input: o.sharedInput ? 'input' : `input_rep${r + 1}`, output: `output_rep${r + 1}` })),
     controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
   };
   return { csv: `${lines.join('\n')}\n`, design, variants, options: o };
@@ -351,13 +382,16 @@ function simulateTimeSeries(o, random, variants, f, noise) {
   const V = variants.length;
   const tMax = Math.max(...o.times);
   const columns = [];
+  const reads = readsOf(o, random);
+  // The share of the effect realized by time t: a line, or saturating.
+  const course = o.timeCourse === 'saturating' ? (t) => (1 - exp((-3 * t) / tMax)) / (1 - exp(-3)) : null;
   for (let r = 0; r < o.replicates; r += 1) {
     const rate = variants.map((v) => v.effect + noise(r) * random.gaussian());
     let frequency = f.slice();
     let previous = o.times[0];
     for (const t of o.times) {
       if (t > previous) {
-        const grown = frequency.map((x, i) => x * exp((rate[i] * (t - previous)) / tMax));
+        const grown = frequency.map((x, i) => x * exp(course ? rate[i] * (course(t) - course(previous)) : (rate[i] * (t - previous)) / tMax));
         const total = grown.reduce((a, b) => a + b, 0);
         frequency = grown.map((g) => g / total);
         if (Number.isFinite(o.passageCells)) {
@@ -367,9 +401,14 @@ function simulateTimeSeries(o, random, variants, f, noise) {
         }
       }
       previous = t;
+      if (o.sharedInput && t === o.times[0]) {
+        // One sample at time 0 for every replicate.
+        if (r === 0) columns.push({ name: `shared_t${t}`, values: frequency.map((x) => reads(o.readsPerVariant * V * x)) });
+        continue;
+      }
       const name = `rep${r + 1}_t${t}`;
       const missing = o.missing.some((m) => m.replicate === r + 1 && m.time === t);
-      columns.push({ name, values: missing ? null : frequency.map((x) => poisson(random, o.readsPerVariant * V * x)) });
+      columns.push({ name, values: missing ? null : frequency.map((x) => reads(o.readsPerVariant * V * x)) });
     }
   }
   const lines = [['hgvs_pro', ...columns.map((c) => c.name)].join(',')];
@@ -385,7 +424,7 @@ function simulateTimeSeries(o, random, variants, f, noise) {
     library: { level: 'variant' },
     time: { unit: o.timeUnit },
     samples: columns.map((c) => ({ id: c.name, name: c.name, columns: [c.name] })),
-    replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, timepoints: o.times.map((t) => ({ sample: `rep${r + 1}_t${t}`, time: t })) })),
+    replicates: Array.from({ length: o.replicates }, (_, r) => ({ id: `rep${r + 1}`, name: `Replicate ${r + 1}`, biological: r + 1, timepoints: o.times.map((t) => ({ sample: o.sharedInput && t === o.times[0] ? `shared_t${t}` : `rep${r + 1}_t${t}`, time: t })) })),
     controls: { wildType: 'p.=', synonymous: 'auto', nonsense: 'auto' },
   };
   return { csv: `${lines.join('\n')}\n`, design, variants, options: o };

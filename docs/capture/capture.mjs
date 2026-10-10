@@ -194,6 +194,16 @@ const scenes = {
     await act('render_map', { color_by: 'se' });
     await act('inspect_variant', { variant: 'p.Gly10Trp' });
   },
+  // Intervals that hold the truth (wave 2, slice 9): the simulated example rescaled to nonsense 0
+  // and wild type 1, a variant's interval by t at its degrees of freedom and the anchors' shared
+  // uncertainty (SE_scale) in the inspector.
+  async intervals() {
+    await example('simulated');
+    await act('score', { parameters: { rescale: 'nonsense-wt' } });
+    await act('render_map', { color_by: 'score', rows: 'biochemical' });
+    await act('inspect_variant', { variant: 'p.Lys3Glu' });
+    await sleep(600);
+  },
   // A time series: a nonsense variant's time course in each replicate, with its fitted lines.
   async 'time-course'() {
     await example('simulated-time-series');

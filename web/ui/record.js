@@ -32,7 +32,8 @@ async function qcOf(app, run) {
 // The methods of a run, with its QC findings.
 export async function methodsOf(app, run) {
   const q = await qcOf(app, run).catch(() => null);
-  return writeMethods(app.store.ws, run, { findings: q?.findings ?? null, thresholds: q?.thresholds ?? null });
+  const entry = await ensureResults(app, run).catch(() => null);
+  return writeMethods(app.store.ws, run, { findings: q?.findings ?? null, thresholds: q?.thresholds ?? null, results: entry?.results ?? null });
 }
 
 // --- A run's files ------------------------------------------------------------------------------

@@ -13,13 +13,14 @@ import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.
 import { describeParameters, isBarcodeRun } from '../lib/runs.js';
 import { DIFFERENTIAL_REASON_NAMES, pairDifference, transformOf } from '../lib/differential.js';
 import { withDefaults } from '../lib/score.js';
+import { intervalOf } from '../lib/exports.js';
+import { anchorUncertainty } from '../lib/anchors.js';
 import { timeCourse } from '../lib/score-regression.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { cssVar, legend, lineChart } from './plots.js';
 
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
-const Z = 1.959963984540054;
 const ONE = { Ala: 'A', Arg: 'R', Asn: 'N', Asp: 'D', Cys: 'C', Gln: 'Q', Glu: 'E', Gly: 'G', His: 'H', Ile: 'I', Leu: 'L', Lys: 'K', Met: 'M', Phe: 'F', Pro: 'P', Ser: 'S', Thr: 'T', Trp: 'W', Tyr: 'Y', Val: 'V', Ter: '*' };
 
 function proteinOf(target) {
@@ -175,9 +176,10 @@ export function variantSection(app, focus) {
       const stage = STAGE_BY_CODE.get(c.reason[row]);
       parts.push(h(`div.callout.${stage.id === 'measured' ? 'accent' : 'warn'}`, { style: { margin: '8px 0', fontSize: '12px' } }, stage.id === 'measured' ? `Not measured: ${stage.reason}. Its score is NA.` : `Filtered at "${stage.label}": ${stage.reason}. Its score is NA; its measurements are below.`));
     } else {
-      const lo = c.score[row] - Z * c.se[row];
-      const hi = c.score[row] + Z * c.se[row];
-      parts.push(h('div.variant-score', h('span.variant-score-value', fmt(c.score[row])), h('span.muted', ` ± ${fmt(c.se[row])} SE · 95% CI ${fmt(lo, 2)} to ${fmt(hi, 2)}`)),
+      const [lo, hi] = intervalOf(c, row);
+      const scale = anchorUncertainty(results, run.inputs.design, focus.condition ?? 0);
+      parts.push(h('div.variant-score', h('span.variant-score-value', fmt(c.score[row])), h('span.muted', ` ± ${fmt(c.se[row])} SE · 95% CI ${fmt(lo, 2)} to ${fmt(hi, 2)}${c.df && Number.isFinite(c.df[row]) ? ` (t, ${Number(c.df[row].toFixed(1))} df)` : ''}`)),
+        scale ? h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 4px' } }, `The rescaling anchors add ±${fmt(scale.at(c.score[row]), 3)} shared by every score (SE_scale): needed against another assay or the anchors' true values, not between variants of this run.`) : null,
         h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 6px' } }, `From ${c.k[row]} of ${c.expected[row]} replicates${Number.isFinite(c.tau2[row]) ? `; τ² ${fmt(c.tau2[row], 4)}, I² ${Math.round(c.i2[row] * 100)}%` : ''}${Number.isFinite(c.loo[row]) ? `; leaving one replicate out moves it by up to ${fmt(c.loo[row])}` : ''}.`));
       if (c.flags[row]) parts.push(h('div.callout.accent', { style: { margin: '0 0 8px', fontSize: '12px' } }, `Low confidence: ${flagNames(c.flags[row]).join('; ')}.`));
     }

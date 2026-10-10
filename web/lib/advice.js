@@ -72,13 +72,13 @@ const ADVICE = {
   },
   agreement: () => ({
     causes: [technical('Too few cells per variant at some step (a bottleneck): replicates then disagree by chance.'), technical('A sample swap or a mislabeled column.'), expected('Most variants with effects near the wild type\'s: a narrow range of true effects lowers the correlation of good replicates too.')],
-    next: [inspect('The replicates\' log ratios against each other.'), analysis('Check which column is which replicate in Experiment. REML\'s τ² or DiMSum\'s error model carry the disagreement into the SEs.'), experiment('Carry more cells per variant through each step, or add a replicate.')],
+    next: [inspect('The replicates\' log ratios against each other.'), analysis('Check which column is which replicate in Experiment. The moderated combination (the default) or DiMSum\'s error model carry the disagreement into the SEs.'), experiment('Carry more cells per variant through each step, or add a replicate.')],
   }),
   'excess-variance': (f, qc, ctx) => ({
     causes: [technical('Too few cells carried through a step (transformation, selection, recovery) when the variance grows with the counting variance (a multiplicative term).'), technical('Noise between replicates (selection of different strength) when the excess is the same at every depth (an additive term).')],
     next: [
       inspect('The variance plot: observed against counting, by depth.'),
-      analysis('Score with REML (the default) or DiMSum\'s error model (Score, preset), so that the SEs carry the excess.'),
+      analysis('Score with the moderated combination (the default) or DiMSum\'s error model (Score, preset), so that the SEs carry the excess.'),
       inspect('The cells carried into selection, if known: N cells per variant raise the ratio to about 1 + D/(2N) for D reads per variant, so the ratio says roughly how few cells there were.'),
       experiment('Carry more cells than reads per variant through every step.'),
     ],

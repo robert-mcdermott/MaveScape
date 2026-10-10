@@ -46,7 +46,9 @@ export function outputDigest(results) {
     keys: results.variants.key,
     replicates: results.replicates.map((r) => ({ id: r.id, normalizers: r.normalizers, score: list(r.score), se: list(r.se), state: Array.from(r.state) })),
     conditions: results.conditions.map((c) => ({ id: c.id, score: list(c.score), se: list(c.se), k: Array.from(c.k), reason: Array.from(c.reason), flags: Array.from(c.flags), rescale: c.rescale })),
-    // Only when there are some, so that runs without them keep their hashes.
+    // Only when there are some, so that runs without them keep their hashes: each score's degrees of
+    // freedom (moderated combination, wave 2 slice 9), and differential scores.
+    ...(results.conditions.some((c) => c.df) ? { df: results.conditions.map((c) => (c.df ? list(c.df) : null)) } : {}),
     ...(results.differential ? { differential: results.differential.map((d) => ({ id: d.id, method: d.method, delta: list(d.delta), se: list(d.se), p: list(d.p), reason: Array.from(d.reason) })) } : {}),
   });
 }
@@ -64,7 +66,7 @@ export function makeRun({ inputs, source, results, software, name, created = now
       sha256: outputDigest(results),
       variants: results.rows,
       replicates: results.replicates.map((r) => ({ id: r.id, normalizers: r.normalizers, synonymousMedian: r.synonymousMedian ?? null, ...(r.dimsum ? { dimsum: r.dimsum } : {}) })),
-      conditions: results.conditions.map((c) => ({ id: c.id, name: c.name, replicates: c.replicates, scored: c.scored, flow: c.flow, rescale: c.rescale, combinedFromAll: c.combinedFromAll })),
+      conditions: results.conditions.map((c) => ({ id: c.id, name: c.name, replicates: c.replicates, scored: c.scored, flow: c.flow, rescale: c.rescale, combinedFromAll: c.combinedFromAll, ...(c.errorModel ? { errorModel: c.errorModel } : {}) })),
     },
     warnings: results.warnings,
     info: results.info,
@@ -105,6 +107,8 @@ export function removeRun(ws, id) {
 // Whether a run scored a table of barcodes.
 export const isBarcodeRun = (run) => run.inputs.design.library?.level === 'barcode';
 
+const combinationShort = (c) => ({ moderated: 'moderated', reml: 'REML', fixed: 'fixed effects', mean: 'mean of replicates' }[c] ?? 'Enrich2\'s estimator');
+
 // One line of parameters, for lists and the history. barcodes: whether the table is of barcodes.
 export function describeParameters(parameters, barcodes = false) {
   const p = withDefaults(parameters);
@@ -115,18 +119,18 @@ export function describeParameters(parameters, barcodes = false) {
     ? [
       `DiMSum's fitness${p.dimsumNormalise ? ', replicates scaled and shifted' : ''}, ${p.dimsumErrorModel ? 'its error model' : 'counting error'}`,
       ...(p.dimsumDropout ? [`dropout pseudocount ${p.dimsumDropout}`] : []),
-      p.combination === 'reml' ? 'REML' : p.combination === 'fixed' ? 'fixed effects' : p.combination === 'mean' ? 'mean of replicates' : 'Enrich2\'s estimator',
+      combinationShort(p.combination),
     ]
     : bins
     ? [
       p.model === 'bins' ? `weighted bin average, ${p.binSE === 'bootstrap' ? `bootstrap SE (${p.bootstrapSamples}, seed ${p.seed})` : 'analytic SE'}` : `maximum likelihood, σ ${p.binSigma === 'wild-type' ? 'the wild type\'s' : 'per variant'}`,
       p.binScale === 'none' ? 'unscaled' : p.binScale === 'nonsense-wt' ? 'nonsense 0, wild type 1' : 'lowest 5% 0, wild type 1',
-      p.combination === 'reml' ? 'REML' : p.combination === 'fixed' ? 'fixed effects' : p.combination === 'mean' ? 'mean of replicates' : 'Enrich2\'s estimator',
+      combinationShort(p.combination),
     ]
     : [
       `${regression ? `${p.model.toUpperCase()} on time` : 'log ratio'}, ${p.normalization === 'wt' ? 'wild-type' : p.normalization === 'synonymous' ? 'synonymous-median' : `${p.normalization}-library`} normalization`,
       `pseudocount ${p.pseudocount}`,
-      p.combination === 'reml' ? 'REML' : p.combination === 'fixed' ? 'fixed effects' : p.combination === 'mean' ? 'mean of replicates' : 'Enrich2\'s estimator',
+      combinationShort(p.combination),
     ];
   if (regression) {
     parts.push(p.regressionSE === 'residual' ? 'residual-scaled SE' : 'SE at least counting\'s');
@@ -192,6 +196,18 @@ export function differentialSentence(p, design, cite) {
 }
 
 // The run's method in sentences (the methods paragraph of slice 8 builds on it).
+// The moderated combination's fitted model, in words: each condition's a, b, the reference's
+// shift and the prior.
+export function moderatedSummary(run) {
+  const g = (x) => String(Number(x.toPrecision(3)));
+  const models = run.output.conditions.filter((c) => c.errorModel);
+  if (!models.length) return 'a shared error model and moderated variances';
+  return models.map((c) => {
+    const m = c.errorModel;
+    return `${models.length > 1 ? `${c.name}: ` : ''}variance ${m.fitted ? `${g(m.a)}·counting + ${g(m.b)}` : 'counting alone (too few replicate pairs to fit a model)'}${m.bReference > 0 ? `, the reference's shift ${g(m.bReference)}` : ''}; dispersion prior ${g(m.phiPrior)} on ${Number.isFinite(m.dfPrior) ? `${g(m.dfPrior)} degrees of freedom` : 'infinite degrees of freedom'}`;
+  }).join('; ');
+}
+
 export function describeMethod(run) {
   const p = withDefaults(run.inputs.parameters);
   const design = run.inputs.design;
@@ -201,7 +217,7 @@ export function describeMethod(run) {
   else if (p.model === 'wls' || p.model === 'ols') lines.push(regressionSentence(p, 'Rubin et al. 2017'));
   else lines.push(binSentence(p, { average: 'Matreyek et al. 2018', mle: 'Peterman and Levine 2016' }));
   if (design.library?.level === 'barcode') lines.push(barcodeSentence(p, { enrich2: 'Rubin et al. 2017', dmsVariants: 'the Bloom lab\'s dms_variants' }));
-  lines.push(`Biological replicates were scored separately and combined by ${COMBINATIONS[p.combination]}${p.combination === 'enrich2' ? ' (Enrich2 2.0.2\'s random-effects estimator, 50 iterations)' : p.combination === 'reml' ? ' (Fisher scoring as metafor\'s REML)' : ''}; technical replicates were summed before scoring.`);
+  lines.push(`Biological replicates were scored separately and combined by ${COMBINATIONS[p.combination]}${p.combination === 'enrich2' ? ' (Enrich2 2.0.2\'s random-effects estimator, 50 iterations)' : p.combination === 'reml' ? ' (Fisher scoring as metafor\'s REML)' : p.combination === 'moderated' ? ` (${moderatedSummary(run)})` : ''}; technical replicates were summed before scoring.`);
   lines.push(`Filters, in order: ${describeFilters(p.filters, null, p.model === 'wls' || p.model === 'ols', design.library?.level === 'barcode').filter((x) => x.active !== false).map((x) => x.text.toLowerCase()).join('; ')}.`);
   if (p.rescale !== 'none') lines.push(`Scores were rescaled so that ${RESCALINGS[p.rescale].label}.`);
   const differential = differentialSentence(p, design, { limma: 'Smyth 2004', voom: 'Law et al. 2014', mutscan: 'Soneson et al. 2023', enrich2: 'Rubin et al. 2017', bh: 'Benjamini and Hochberg 1995' });

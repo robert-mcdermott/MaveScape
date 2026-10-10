@@ -28,10 +28,11 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > saves to one archive that reopens identically. A million rows import in a few seconds. Scripts
 > can drive the window (`--remote-control`), and `mavescape run` does a whole analysis without one,
 > the same bytes every time. A design says what the assay measures, and every QC finding what could
-> cause it and what to do. Six examples are on the Start page;
+> cause it and what to do. Replicates are combined under a shared error model whose 95% intervals
+> hold the truth 94–97% of the time in 26 kinds of simulated experiment. Six examples are on the Start page;
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with calibrated uncertainty, help assembling a
-> complete analysis package, and more examples.
+> [roadmap](mavescape-spec/roadmap.md) finishes 0.2 with help assembling a complete analysis
+> package, and more examples.
 
 ## What is a MAVE?
 

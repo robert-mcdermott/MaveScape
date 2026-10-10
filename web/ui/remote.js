@@ -26,6 +26,8 @@ import { ensureResults, forgetResults } from './run-results.js';
 import { runScore, workerInput } from './score-input.js';
 import { computeQc, markQcSeen, qcInputsOf, qcSubjects } from './mode-qc.js';
 import { archiveFile, RUN_FILES, runFile, selectionFile } from './record.js';
+import { intervalOf } from '../lib/exports.js';
+import { anchorUncertainty } from '../lib/anchors.js';
 
 export class ActionError extends Error {}
 
@@ -580,7 +582,10 @@ export function installRemote(app) {
         condition: c.name,
         score: reasons ? null : round(c.score[row]),
         se: reasons ? null : round(c.se[row]),
-        ci95: reasons ? null : [round(c.score[row] - 1.959964 * c.se[row]), round(c.score[row] + 1.959964 * c.se[row])],
+        ci95: reasons ? null : intervalOf(c, row).map((x) => round(x)),
+        ...(c.df && !reasons ? { df: Number.isFinite(c.df[row]) ? round(c.df[row]) : null } : {}),
+        // Rescaled: the anchors' uncertainty at this score, shared by every score (SE_scale).
+        ...(c.rescale && !reasons ? { seScale: round(anchorUncertainty(results, run.inputs.design, condition).at(c.score[row])) } : {}),
         replicatesUsed: c.k[row],
         replicatesExpected: c.expected[row],
         tau2: round(c.tau2[row]),

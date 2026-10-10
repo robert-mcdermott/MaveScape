@@ -44,6 +44,7 @@ import { dmsVariantsName } from '../web/lib/barcodes.js';
 import { compareDimsum, demoCase, dimsumReference, fixtureCase, grb2Case } from './dimsum-cases.mjs';
 import { cbsCase, compareLimma, mutscanReference, twoConditionCase } from './differential-cases.mjs';
 import { DIFFERENTIAL_REASON_NAMES } from '../web/lib/differential.js';
+import { tQuantile } from '../web/lib/distributions.js';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
 import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS, SCORING_VERSION, withDefaults } from '../web/lib/score.js';
@@ -701,14 +702,17 @@ const suites = {
             combinedN += 1;
             a.push(c.score[i]);
             b.push(truth.get(key));
-            if (Math.abs(c.score[i] - truth.get(key)) < 1.959964 * c.se[i]) combined += 1;
+            // Each score's own interval: t with its degrees of freedom when moderated.
+            const q = c.df ? (Number.isFinite(c.df[i]) ? tQuantile(0.975, c.df[i]) : 1.959964) : 1.959964;
+            if (Math.abs(c.score[i] - truth.get(key)) < q * c.se[i]) combined += 1;
           });
           return { replicate: replicate / replicateN, combined: combined / combinedN, r: pearson(a, b) };
         };
-        const floor = coverage(defaultsTs);
-        const resid = coverage(score(ts, tsDesign, { ...DEFAULT_PARAMETERS, model: 'wls', regressionSE: 'residual' }));
+        const floor = coverage(score(ts, tsDesign, { ...DEFAULT_PARAMETERS, model: 'wls', combination: 'reml' }));
+        const resid = coverage(score(ts, tsDesign, { ...DEFAULT_PARAMETERS, model: 'wls', regressionSE: 'residual', combination: 'reml' }));
+        const moderatedTs = coverage(defaultsTs);
         check('scoring', 'time series against the simulated truth: weighted-regression slopes track the true effects', `Pearson r ${floor.r.toFixed(4)}`, floor.r >= 0.995, '≥ 0.995');
-        check('scoring', 'time series against the simulated truth: 95% intervals with the counting floor hold the true slope more often than with Enrich2\'s residual-scaled SE (the rest of the gap is the replicate noise planted)', `replicates ${(100 * floor.replicate).toFixed(0)}% against ${(100 * resid.replicate).toFixed(0)}%; combined by REML ${(100 * floor.combined).toFixed(0)}% against ${(100 * resid.combined).toFixed(0)}%`, floor.replicate >= resid.replicate + 0.1 && floor.combined >= 0.85 && floor.combined >= resid.combined + 0.05, 'floor higher by ≥ 10 points per replicate; combined ≥ 85%');
+        check('scoring', 'time series against the simulated truth: 95% intervals with the counting floor hold the true slope more often than with Enrich2\'s residual-scaled SE, per replicate and combined by REML; the moderated combination (the default), which models the noise beyond counting across variants, holds it more often still', `replicates ${(100 * floor.replicate).toFixed(0)}% against ${(100 * resid.replicate).toFixed(0)}%; combined by REML ${(100 * floor.combined).toFixed(0)}% against ${(100 * resid.combined).toFixed(0)}%; moderated ${(100 * moderatedTs.combined).toFixed(1)}%`, floor.replicate >= resid.replicate + 0.1 && floor.combined >= resid.combined && moderatedTs.combined > floor.combined && moderatedTs.combined >= 0.9, 'floor higher by ≥ 10 points per replicate; moderated ≥ 90% (one data set)');
       }
       {
         // Refusals: regression where it cannot be done, said why.
@@ -1056,14 +1060,16 @@ const suites = {
         r.variants.original.forEach((name, i) => {
           if (r.conditions[0].reason[i] || name === 'p.=') return;
           total += 1;
-          if (Math.abs(r.conditions[0].score[i] - truth.get(name)) < 1.959964 * r.conditions[0].se[i]) k += 1;
+          const df = r.conditions[0].df?.[i];
+          if (Math.abs(r.conditions[0].score[i] - truth.get(name)) < (Number.isFinite(df) ? tQuantile(0.975, df) : 1.959964) * r.conditions[0].se[i]) k += 1;
         });
         return k / total;
       });
       const ds = coverage(PRESETS.dimsum.parameters);
       const counting = coverage({ ...DEFAULT_PARAMETERS, combination: 'fixed' });
-      const reml = coverage(DEFAULT_PARAMETERS);
-      check('scoring', 'a simulated bottleneck (25 cells per variant before selection, three seeds): DiMSum\'s error model puts it into each variant\'s SE, and its 95% intervals hold the true effects', `DiMSum ${ds.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; counting alone (fixed effects) ${counting.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; counting with REML ${reml.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}`, ds.every((x, i) => x >= 0.9 && x > counting[i] && x > reml[i]), '≥ 90%, above counting\'s');
+      const reml = coverage({ ...DEFAULT_PARAMETERS, combination: 'reml' });
+      const moderatedDs = coverage(DEFAULT_PARAMETERS);
+      check('scoring', 'a simulated bottleneck (25 cells per variant before selection, three seeds): DiMSum\'s error model puts it into each variant\'s SE, and its 95% intervals hold the true effects; so does the moderated combination (MaveScape\'s default), whose shared model finds the bottleneck too', `DiMSum ${ds.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; counting alone (fixed effects) ${counting.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; counting with REML ${reml.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}; moderated ${moderatedDs.map((x) => `${(100 * x).toFixed(0)}%`).join(', ')}`, ds.every((x, i) => x >= 0.9 && x > counting[i] && x > reml[i]) && moderatedDs.every((x) => x >= 0.92), 'DiMSum ≥ 90%, above counting\'s and REML\'s; moderated ≥ 92%');
     }
 
     // Differential scores (wave 2, slice 6): the two-condition fixture (one input per replicate
@@ -1168,17 +1174,22 @@ const suites = {
           sim.variants.forEach((v, i) => {
             if (out.reason[i] || v.kind === 'wild type') return;
             total += 1;
-            if (Math.abs(out.delta[i] - v.differential) <= 1.959964 * out.se[i]) inside += 1;
+            // Each method's own 95% interval (t, with moderated pairs' or limma's degrees of freedom).
+            if (v.differential >= out.ciLow[i] && v.differential <= out.ciHigh[i]) inside += 1;
             if (v.differential === 0) { nulls += 1; if (out.q[i] < 0.05) falseCalls += 1; } else { site += 1; if (out.q[i] < 0.05) found += 1; }
           });
-          return [method, { coverage: inside / total, falseCalls: falseCalls / nulls, found: found / site }];
+          return [method, { coverage: inside / total, falseCalls: falseCalls / nulls, found: found / site, foundCount: found, se: [...out.se].filter(Number.isFinite).sort((a, b) => a - b)[Math.floor(total / 2)] }];
         }));
       });
       const summary = (rows) => ['paired', 'independent', 'limma'].map((m) => `${m} ${rows.map((r) => `${(100 * r[m].coverage).toFixed(0)}%`).join('/')} (site found ${rows.map((r) => `${(100 * r[m].found).toFixed(0)}%`).join('/')}, nulls called ${rows.map((r) => `${(100 * r[m].falseCalls).toFixed(1)}%`).join('/')})`).join('; ');
       const counting = truthRun(0);
-      check('scoring', 'differential against the truth, counting noise and a shared bottleneck (25 cells), three seeds: the paired 95% intervals hold the true differential; treated as independent, the input counted twice, they are too wide and find fewer of the site\'s variants', summary(counting), counting.every((r) => r.paired.coverage >= 0.93 && r.paired.coverage <= 0.985 && r.independent.coverage > r.paired.coverage + 0.015 && r.independent.found < r.paired.found && r.limma.coverage >= 0.93 && r.paired.falseCalls <= 0.01 && r.limma.falseCalls <= 0.01), 'paired 93–98.5%; independent wider and finds fewer; limma ≥ 93%; ≤ 1% of nulls called');
+      const total = (rows, m) => rows.reduce((a, r) => a + r[m].foundCount, 0);
+      check('scoring', 'differential against the truth, counting noise and a shared bottleneck (25 cells), three seeds: the paired 95% intervals hold the true differential; treated as independent, the input counted twice, they are too wide (and over the three seeds find no more of the site\'s variants)', `${summary(counting)}; median SE paired ${counting.map((r) => r.paired.se.toFixed(3)).join('/')}, independent ${counting.map((r) => r.independent.se.toFixed(3)).join('/')}; site variants found in all: paired ${total(counting, 'paired')}, independent ${total(counting, 'independent')}`,
+        counting.every((r) => r.paired.coverage >= 0.93 && r.paired.coverage <= 0.985 && r.independent.coverage > r.paired.coverage + 0.015 && r.independent.se > 1.5 * r.paired.se && r.limma.coverage >= 0.93 && r.paired.falseCalls <= 0.01 && r.limma.falseCalls <= 0.01) && total(counting, 'independent') <= total(counting, 'paired'), 'paired 93–98.5%; independent wider (SE > 1.5×); limma ≥ 93%; ≤ 1% of nulls called');
       const noisy = truthRun(0.1);
-      check('scoring', 'differential against the truth with selection noise between replicates (SD 0.1 per condition), three seeds: three pairs give REML little to estimate τ² from, so paired intervals hold less and call more nulls; limma\'s moderated variances, shared across variants, hold up', summary(noisy), noisy.every((r) => r.limma.coverage >= 0.8 && r.limma.falseCalls <= 0.02), 'limma ≥ 80%, ≤ 2% of nulls called (reported)');
+      const average = (rows, m) => rows.reduce((a, r) => a + r[m].coverage, 0) / rows.length;
+      check('scoring', 'differential against the truth with selection noise between replicates (SD 0.1 per condition), three seeds: the moderated pairs and limma, each borrowing their variance across variants, hold the truth (one seed\'s coverage moves with the wild type\'s own shift, which every variant shares)', `${summary(noisy)}; mean coverage paired ${(100 * average(noisy, 'paired')).toFixed(1)}%, limma ${(100 * average(noisy, 'limma')).toFixed(1)}%`,
+        average(noisy, 'paired') >= 0.92 && average(noisy, 'limma') >= 0.93 && noisy.reduce((a, r) => a + r.paired.falseCalls, 0) / noisy.length <= 0.02 && noisy.every((r) => r.limma.falseCalls <= 0.02), 'mean ≥ 92% paired, ≥ 93% limma; nulls called ≤ 2% on average');
     }
 
     // The PRD's edge cases, as planted in the fixture, under MaveScape's defaults.
@@ -1289,7 +1300,11 @@ const suites = {
       const shuffled = byKey(score(shuffledTable(table, createRandom(9)), e2, DEFAULT_PARAMETERS));
       const differing = [...byKey(results)].filter(([key, value]) => shuffled.get(key) !== value).length;
       const codes = results.warnings.map((w) => w.code);
-      check('scoring', `BRCA1 E2 (${formatCount(results.rows)} rows × 6 replicates, MaveScape defaults, ${ms.toFixed(0)} ms): rows and columns shuffled give the same scores; warned that inputs are shared and the time series is scored by its ends`, `${differing} differences; warnings: ${codes.join(', ')}`, differing === 0 && codes.includes('shared-samples') && codes.includes('time-series-ratio'), '0; both warnings');
+      // Its shared inputs: combined with their covariance by the moderated combination (wave 2, slice
+      // 9), and only warned about by REML, which treats replicates as independent.
+      const remlCodes = score(table, e2, { ...DEFAULT_PARAMETERS, combination: 'reml' }).warnings.map((w) => w.code);
+      const said = results.info.some((x) => /shared between replicates.*covariance/.test(x));
+      check('scoring', `BRCA1 E2 (${formatCount(results.rows)} rows × 6 replicates, MaveScape defaults, ${ms.toFixed(0)} ms): rows and columns shuffled give the same scores; its shared inputs combined with their covariance (REML warns instead), and the time series scored by its ends warned about`, `${differing} differences; warnings: ${codes.join(', ')}; covariance ${said ? 'said' : 'not said'}; REML's warnings: ${remlCodes.join(', ')}`, differing === 0 && said && !codes.includes('shared-samples') && remlCodes.includes('shared-samples') && codes.includes('time-series-ratio'), '0; covariance; the warnings');
       // The whole table drafted from its column names: two assays, two conditions, scored apart;
       // the E2 condition scores as the hand-written E2 design does.
       const layout = detectLayout(table);
@@ -1802,7 +1817,7 @@ const suites = {
     const numbered = [...m.markdown.matchAll(/\[(\d+)\]/g)].map((x) => Number(x[1]));
     const firstUse = [...new Set(numbered)];
     check('roundtrip', 'the methods name the table\'s SHA-256, every scoring parameter and the run\'s output hash; references numbered in order of first use, each with a BibTeX entry', `${m.references.length} references (${m.references.map((r) => r.key).join(', ')}); first cited in the order ${firstUse.join(', ')}; ${(m.bibtex.match(/^@/gm) ?? []).length} BibTeX entries`,
-      m.markdown.includes(built.ws.sources[0].sha256) && m.markdown.includes('pseudocount of 0.5') && m.markdown.includes('restricted maximum likelihood') && m.markdown.includes(built.run.output.sha256) && JSON.stringify(firstUse) === JSON.stringify(firstUse.slice().sort((a, b) => a - b)) && (m.bibtex.match(/^@/gm) ?? []).length === m.references.length, 'all');
+      m.markdown.includes(built.ws.sources[0].sha256) && m.markdown.includes('pseudocount of 0.5') && m.markdown.includes('moderated across variants by empirical Bayes') && m.markdown.includes(built.run.output.sha256) && JSON.stringify(firstUse) === JSON.stringify(firstUse.slice().sort((a, b) => a - b)) && (m.bibtex.match(/^@/gm) ?? []).length === m.references.length, 'all');
 
     // The examples.
     const bundled = sources.datasets['mavedb-grb2-sh3'].files.find((f) => f.path === 'counts.csv');

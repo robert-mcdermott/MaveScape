@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="224" height="318" viewBox="0 0 224 318" font-family="Helvetica, Arial, sans-serif" role="img">
 <title>Variant-effect map: Synthetic 20-codon target</title>
-<desc>Variant-effect map of Synthetic 20-codon target: 20 positions by 21 substitutions (the 20 amino acids and stop), 419 designed. 193 scored, 5 scored with low confidence, 2 filtered, 219 missing. Positions least tolerant of substitution (lowest median score): L15 -1.61, V11 -1.04, S2 -0.90, G4 -0.89, G20 -0.86. Most tolerant: M1 0.04, P13 -0.03, V16 -0.04, L18 -0.07, I14 -0.18. Colors run from -2.62 to 2.62, centered on the wild type (0.00).</desc>
+<desc>Variant-effect map of Synthetic 20-codon target: 20 positions by 21 substitutions (the 20 amino acids and stop), 419 designed. 193 scored, 5 scored with low confidence, 2 filtered, 219 missing. Positions least tolerant of substitution (lowest median score): L15 -1.61, V11 -1.04, S2 -0.90, G4 -0.89, G20 -0.86. Most tolerant: M1 0.04, P13 -0.03, V16 -0.04, L18 -0.07, I14 -0.17. Colors run from -2.62 to 2.62, centered on the wild type (0.00).</desc>
 <defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="#c8c6c2"/><line x1="0" y1="0" x2="0" y2="4" stroke="#6e6c68" stroke-width="1.2"/></pattern></defs>
 <rect width="224" height="318" fill="#ffffff"/>
 <text x="34" y="15" font-size="12" font-weight="bold" fill="#171b26">Synthetic 20-codon target</text>
@@ -20,7 +20,7 @@
 <rect x="130" y="22" width="7" height="10" fill="#f5f6f7"/>
 <rect x="138" y="22" width="7" height="10" fill="#eaf1f5"/>
 <rect x="146" y="22" width="7" height="10" fill="#408fc1"/>
-<rect x="154" y="22" width="7" height="10" fill="#f3f5f6"/>
+<rect x="154" y="22" width="7" height="10" fill="#f5f6f7"/>
 <rect x="162" y="22" width="7" height="10" fill="#b8d8e9"/>
 <rect x="170" y="22" width="7" height="10" fill="#f2f5f6"/>
 <rect x="178" y="22" width="7" height="10" fill="#d5e7f1"/>
@@ -89,7 +89,7 @@
 <rect x="42" y="132" width="7" height="9" fill="#c8c6c2"><title>S2Q (missing)</title></rect><rect x="44.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="42" y="142" width="7" height="9" fill="#f6f7f7"><title>S2S</title></rect>
 <rect x="42.5" y="142.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
-<rect x="42" y="152" width="7" height="9" fill="#2f79b5"><title>S2T</title></rect>
+<rect x="42" y="152" width="7" height="9" fill="#307ab6"><title>S2T</title></rect>
 <rect x="42" y="162" width="7" height="9" fill="#c8c6c2"><title>S2A (missing)</title></rect><rect x="44.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="42" y="172" width="7" height="9" fill="#a7d0e4"><title>S2I</title></rect>
 <rect x="42" y="182" width="7" height="9" fill="#a5cee3"><title>S2L</title></rect>
@@ -100,7 +100,7 @@
 <rect x="42" y="232" width="7" height="9" fill="#276eb0"><title>S2G</title></rect>
 <rect x="42" y="242" width="7" height="9" fill="#c8c6c2"><title>S2P (missing)</title></rect><rect x="44.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="42" y="252" width="7" height="9" fill="#08366a"><title>S2*</title></rect>
-<rect x="50" y="52" width="7" height="9" fill="#93c6de"><title>K3H</title></rect>
+<rect x="50" y="52" width="7" height="9" fill="#96c7df"><title>K3H</title></rect>
 <rect x="50" y="62" width="7" height="9" fill="#f7f6f6"><title>K3K</title></rect>
 <rect x="50.5" y="62.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
 <rect x="50" y="72" width="7" height="9" fill="#8da0aa"><title>K3R (low confidence)</title></rect><path d="M53.5 72H57V76Z" fill="#171b26"/>
@@ -111,7 +111,7 @@
 <rect x="50" y="122" width="7" height="9" fill="#f2f5f6"><title>K3N</title></rect>
 <rect x="50" y="132" width="7" height="9" fill="#c8c6c2"><title>K3Q (missing)</title></rect><rect x="52.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="50" y="142" width="7" height="9" fill="#c8c6c2"><title>K3S (missing)</title></rect><rect x="52.5" y="145.5" width="2" height="2" fill="#6e6c68"/>
-<rect x="50" y="152" width="7" height="9" fill="#a9d1e5"><title>K3T</title></rect>
+<rect x="50" y="152" width="7" height="9" fill="#acd2e5"><title>K3T</title></rect>
 <rect x="50" y="162" width="7" height="9" fill="#c8c6c2"><title>K3A (missing)</title></rect><rect x="52.5" y="165.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="50" y="172" width="7" height="9" fill="#c8c6c2"><title>K3I (missing)</title></rect><rect x="52.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="50" y="182" width="7" height="9" fill="#2b73b3"><title>K3L</title></rect>
@@ -125,7 +125,7 @@
 <rect x="58" y="52" width="7" height="9" fill="#c8c6c2"><title>G4H (missing)</title></rect><rect x="60.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="58" y="62" width="7" height="9" fill="#4393c3"><title>G4K</title></rect>
 <rect x="58" y="72" width="7" height="9" fill="#c8c6c2"><title>G4R (missing)</title></rect><rect x="60.5" y="75.5" width="2" height="2" fill="#6e6c68"/>
-<rect x="58" y="82" width="7" height="9" fill="#4b6f90"><title>G4D (low confidence)</title></rect><path d="M61.5 82H65V86Z" fill="#171b26"/>
+<rect x="58" y="82" width="7" height="9" fill="#4b6e8f"><title>G4D (low confidence)</title></rect><path d="M61.5 82H65V86Z" fill="#171b26"/>
 <rect x="58" y="92" width="7" height="9" fill="#c8c6c2"><title>G4E (missing)</title></rect><rect x="60.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="58" y="102" width="7" height="9" fill="#c8c6c2"><title>G4C (missing)</title></rect><rect x="60.5" y="105.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="58" y="112" width="7" height="9" fill="#c8c6c2"><title>G4M (missing)</title></rect><rect x="60.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
@@ -197,7 +197,7 @@
 <rect x="82" y="112" width="7" height="9" fill="#c8c6c2"><title>L7M (missing)</title></rect><rect x="84.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="82" y="122" width="7" height="9" fill="#c8c6c2"><title>L7N (missing)</title></rect><rect x="84.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="82" y="132" width="7" height="9" fill="#90c4dd"><title>L7Q</title></rect>
-<rect x="82" y="142" width="7" height="9" fill="#81bad8"><title>L7S</title></rect>
+<rect x="82" y="142" width="7" height="9" fill="#7eb8d7"><title>L7S</title></rect>
 <rect x="82" y="152" width="7" height="9" fill="#eff3f5"><title>L7T</title></rect>
 <rect x="82" y="162" width="7" height="9" fill="#fae8de"><title>L7A</title></rect>
 <rect x="82" y="172" width="7" height="9" fill="#c8c6c2"><title>L7I (missing)</title></rect><rect x="84.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
@@ -229,7 +229,7 @@
 <rect x="90.5" y="202.5" width="6" height="8" fill="none" stroke="#171b26" stroke-width="1"/>
 <rect x="90" y="212" width="7" height="9" fill="#c8c6c2"><title>F8W (missing)</title></rect><rect x="92.5" y="215.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="90" y="222" width="7" height="9" fill="#c8c6c2"><title>F8Y (missing)</title></rect><rect x="92.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
-<rect x="90" y="232" width="7" height="9" fill="#fce0d0"><title>F8G</title></rect>
+<rect x="90" y="232" width="7" height="9" fill="#fcdfcf"><title>F8G</title></rect>
 <rect x="90" y="242" width="7" height="9" fill="#edf2f5"><title>F8P</title></rect>
 <rect x="90" y="252" width="7" height="9" fill="#0e4179"><title>F8*</title></rect>
 <rect x="98" y="52" width="7" height="9" fill="#c8c6c2"><title>T9H (missing)</title></rect><rect x="100.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
@@ -281,7 +281,7 @@
 <rect x="114" y="72" width="7" height="9" fill="#f2f5f6"><title>V11R</title></rect>
 <rect x="114" y="82" width="7" height="9" fill="#c8c6c2"><title>V11D (missing)</title></rect><rect x="116.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="114" y="92" width="7" height="9" fill="#f8f4f2"><title>V11E</title></rect>
-<rect x="114" y="102" width="7" height="9" fill="#84bcd9"><title>V11C</title></rect>
+<rect x="114" y="102" width="7" height="9" fill="#87beda"><title>V11C</title></rect>
 <rect x="114" y="112" width="7" height="9" fill="#c8c6c2"><title>V11M (missing)</title></rect><rect x="116.5" y="115.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="114" y="122" width="7" height="9" fill="#c8c6c2"><title>V11N (missing)</title></rect><rect x="116.5" y="125.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="114" y="132" width="7" height="9" fill="#c8c6c2"><title>V11Q (missing)</title></rect><rect x="116.5" y="135.5" width="2" height="2" fill="#6e6c68"/>
@@ -344,7 +344,7 @@
 <rect x="130" y="252" width="7" height="9" fill="#053061"><title>P13*</title></rect>
 <rect x="138" y="52" width="7" height="9" fill="#c8c6c2"><title>I14H (missing)</title></rect><rect x="140.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="138" y="62" width="7" height="9" fill="#c8c6c2"><title>I14K (missing)</title></rect><rect x="140.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
-<rect x="138" y="72" width="7" height="9" fill="#e3edf3"><title>I14R</title></rect>
+<rect x="138" y="72" width="7" height="9" fill="#e4eef4"><title>I14R</title></rect>
 <rect x="138" y="82" width="7" height="9" fill="#c8c6c2"><title>I14D (missing)</title></rect><rect x="140.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="138" y="92" width="7" height="9" fill="#c8c6c2"><title>I14E (missing)</title></rect><rect x="140.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="138" y="102" width="7" height="9" fill="#d2e6f0"><title>I14C</title></rect>
@@ -388,7 +388,7 @@
 <rect x="146" y="252" width="7" height="9" fill="#08366a"><title>L15*</title></rect>
 <rect x="154" y="52" width="7" height="9" fill="#c8c6c2"><title>V16H (missing)</title></rect><rect x="156.5" y="55.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="154" y="62" width="7" height="9" fill="#c8c6c2"><title>V16K (missing)</title></rect><rect x="156.5" y="65.5" width="2" height="2" fill="#6e6c68"/>
-<rect x="154" y="72" width="7" height="9" fill="#f3f5f6"><title>V16R</title></rect>
+<rect x="154" y="72" width="7" height="9" fill="#f5f6f7"><title>V16R</title></rect>
 <rect x="154" y="82" width="7" height="9" fill="#c8c6c2"><title>V16D (missing)</title></rect><rect x="156.5" y="85.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="154" y="92" width="7" height="9" fill="#c8c6c2"><title>V16E (missing)</title></rect><rect x="156.5" y="95.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="154" y="102" width="7" height="9" fill="#eff3f5"><title>V16C</title></rect>
@@ -470,7 +470,7 @@
 <rect x="178" y="192" width="7" height="9" fill="#f7f6f6"><title>D19V</title></rect>
 <rect x="178" y="202" width="7" height="9" fill="#c8c6c2"><title>D19F (missing)</title></rect><rect x="180.5" y="205.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="178" y="212" width="7" height="9" fill="#408fc1"><title>D19W</title></rect>
-<rect x="178" y="222" width="7" height="9" fill="#2065ab"><title>D19Y</title></rect>
+<rect x="178" y="222" width="7" height="9" fill="#2267ac"><title>D19Y</title></rect>
 <rect x="178" y="232" width="7" height="9" fill="#c8c6c2"><title>D19G (missing)</title></rect><rect x="180.5" y="235.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="178" y="242" width="7" height="9" fill="#c8c6c2"><title>D19P (missing)</title></rect><rect x="180.5" y="245.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="178" y="252" width="7" height="9" fill="#1d5fa2"><title>D19*</title></rect>
@@ -489,7 +489,7 @@
 <rect x="186" y="172" width="7" height="9" fill="#c8c6c2"><title>G20I (missing)</title></rect><rect x="188.5" y="175.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="186" y="182" width="7" height="9" fill="#f0f4f6"><title>G20L</title></rect>
 <rect x="186" y="192" width="7" height="9" fill="#dae9f2"><title>G20V</title></rect>
-<rect x="186" y="202" width="7" height="9" fill="#68abd0"><title>G20F</title></rect>
+<rect x="186" y="202" width="7" height="9" fill="#6bacd1"><title>G20F</title></rect>
 <rect x="186" y="212" width="7" height="9" fill="#e9f0f4"><title>G20W</title></rect>
 <rect x="186" y="222" width="7" height="9" fill="#c8c6c2"><title>G20Y (missing)</title></rect><rect x="188.5" y="225.5" width="2" height="2" fill="#6e6c68"/>
 <rect x="186" y="232" width="7" height="9" fill="#f9efe9"><title>G20G</title></rect>

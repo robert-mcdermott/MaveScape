@@ -68,6 +68,43 @@ pipeline would (headless Chrome: `CHROME`, else one installed):
 
 20 checks, in CI's `remote` job; about 20 s.
 
+## Coverage of intervals (`coverage.mjs`, wave 2 slice 9)
+
+`node validation/coverage.mjs [--verbose] [--seeds N] [--require-data]` asks whether MaveScape's
+95% intervals hold the truth 95% of the time. The comparisons above show that MaveScape computes
+what the reference tools compute; this shows whether the intervals mean what they say.
+
+- **MaveScape's simulator** (`web/lib/simulate.js`): 26 kinds of experiment, each simulated 40
+  times (seeds 1000 on), since the wild type's own counting noise moves every score of an
+  experiment together and one experiment's coverage swings by several points. Depth from 30 to
+  2,000 reads per variant; two to six replicates; bottlenecks of 100 and 25 cells per variant;
+  selection noise up to 0.3; one input sample shared by every replicate, with and without a
+  bottleneck; overdispersed reads (gamma-Poisson, k = 20); time series by weighted regression, with
+  a bottleneck at every passage, with one time-0 sample, and a course that bends scored by the
+  ratio of its ends; sorted bins by maximum likelihood; barcodes summed and scored each; DiMSum's
+  fitness; scores rescaled to nonsense 0 and wild type 1; paired and limma differential scores.
+  The defaults must hold 93–97%; REML is reported beside them. Found: 93.6–96.5% (REML
+  81.8–95.5%). The exception is named with its reason: a bending time course scored by its slope
+  holds 78.9%, because a slope is not the whole change of such a course; QC's "Fit of the time
+  courses" flags it in 39 of 40 experiments (required), and the ratio of its ends holds 95.0%.
+- **An independent simulator**, dms_variants 1.6.0 (below): three experiments of 800 variants
+  (single substitutions and the wild type), three selections sharing one input sample, with
+  counting noise alone, a bottleneck and selection noise. Variants with 5 reads or more in every
+  sample must hold 92–98% (one experiment's sampling error is about ±1.5 points). Found: 94.1%,
+  97.6%, 96.2% (REML 86.0%, 83.4%, 84.3%). Counting every variant, 90.1%, 96.4% and 95.9%: about a
+  fifth have fewer reads somewhere, and the pseudocount biases their scores toward 0.
+- **Real data**, which has no truth (with the external data): each replicate held out and
+  predicted from the others, combined as the run combines them, each held-out score's departure
+  over the SD the model predicts (the others' combined SE and the held-out score's variance under
+  the model, less the covariance of a shared input; the departures centered per replicate, since a
+  replicate's reference shift is not a variant's error). About 5% should
+  fall beyond ±1.96. Found: GRB2 6.1% (robust SD 0.88), CBS 5.6% (0.98), factor IX 10.0% (1.05),
+  BRCA1's E2 assay 12.3% (1.20); REML 22.6%, 3.5%, 26.3%, 17.7%. Each must be nearer 5% than
+  REML's and under 15%. BRCA1's two libraries were selected with strengths 10–15% apart, every
+  score of one proportionally larger, which no model of counting describes.
+
+34 checks; about 35 s; in CI's `web` job with the external data.
+
 ## Public data (`sources.json`)
 
 | Data set | Design | Why it is here |
@@ -119,6 +156,19 @@ its canonical form is the string itself. `web/lib/hgvs.js` is written to the sam
 rules, not ported from mavehgvs's regular expressions, and agrees on every string.
 
 ## Reference outputs (`reference/`)
+
+`reference/dms_variants-simulation.json` (wave 2, slice 9; 175 KB) is made by
+
+```sh
+uv run --python 3.12 --with dms_variants==1.6.0 python validation/reference/generate_dms_variants_simulation.py
+```
+
+dms_variants' `simulate_CodonVariantTable` (a 40-codon gene, 40,000 barcodes, a mean of one codon
+mutation per variant), `SigmoidPhenotypeSimulator` and `simulateSampleCounts` (one pre-selection
+sample of a million reads; three selections, each with its own bottleneck and noise): the counts
+summed over each amino-acid variant's barcodes, the wild type and single substitutions kept, the
+truth the logarithm of each variant's observed enrichment. Its noise and bottleneck are its own,
+independent of MaveScape's simulator. dms_variants is GPLv3, used only to make this file.
 
 `reference/enrich2.json` is made by
 
@@ -296,8 +346,9 @@ Rscript validation/reference/generate_metafor.R
   statsmodels' SE and numpy's counting SE (raised in 245 to 414 of 595 fits).
 - **The counting floor holds the truth more often**: the fixture's 95% intervals hold the true
   slope 83% of the time per replicate and 90% combined, against 69% and 81% with Enrich2's
-  residual-scaled SE (the rest is the replicate noise the simulation plants, which REML takes up
-  only partly with three replicates).
+  residual-scaled SE, combined by REML (the rest is the replicate noise the simulation plants,
+  which REML takes up only partly with three replicates). Combined by the moderated combination
+  (wave 2, slice 9), which learns that noise from every variant, 93%.
 
 ## The barcode fixture (`fixtures/barcodes.*`, wave 2 slice 4)
 
@@ -389,7 +440,8 @@ merge given DiMSum's parameters; for the fixture also with a dropout pseudocount
 - **Coverage:** on a simulated two-population experiment with 25 cells per variant into selection
   (three seeds), DiMSum's 95% intervals hold the true effects 96%, 93% and 95% of the time;
   counting alone with fixed effects 67–69%, with REML 87–88% (τ² sees the replicates' disagreement,
-  not the noise they share).
+  not the noise they share). The moderated combination (wave 2, slice 9), from the log ratios'
+  counting error alone, fits the bottleneck in its shared model: 97%, 95% and 97%.
 
 ## Quality control (wave 1, slice 6)
 
@@ -550,12 +602,15 @@ CBS's and its reference rows. limma is GPL: it is the reference here only, and M
 - **Paired, from first principles:** each pair's difference is the log ratio of its two outputs,
   each relative to the wild type's, with the variance of their counts alone: within 10⁻¹⁵.
 - **Against the truth** (three seeds, three replicates, 25 cells per variant shared by both
-  selections, counting noise only): 95% intervals hold the true difference 95–97% of the time
-  paired, 97–98% by limma, 99–100% as independent (the shared input counted twice: too wide, and
-  88–92% of the site's variants found against 93–96%); at most 0.3% of unchanged variants called
-  at q < 0.05. With noise between replicates (SD 0.1 per condition): limma 93–98% and at most
-  0.4% called; paired 82–94% and 1–11% (three pairs give REML little to estimate τ² from);
-  independent 96–99%.
+  selections, counting noise only): 95% intervals hold the true difference 93–97% of the time
+  paired (combined by the moderated combination, the default since wave 2 slice 9), 98–99% by
+  limma, 100% as independent (the shared input counted twice: too wide, median SE 2.7× the
+  paired, and 256 of the site's variants found over the three seeds against 269 paired); at most
+  0.3% of unchanged variants called at q < 0.05. With noise between replicates (SD 0.1 per
+  condition): limma 95–99% and at most 0.4% called; paired 88–99% (a mean of 94.7%; one seed's
+  coverage moves with the wild type's own shift, which every variant shares) and at most 2.7%;
+  independent 100%. Combined by REML, three pairs gave it little to estimate τ² from: 82–94% and
+  1–11% called. Over 40 experiments (`coverage.mjs`), paired 95.0% and limma 96.5%.
 - **CBS:** the inputs are 16% of a replicate's counting variance (median); as independent, the
   SEs are a median 1.11× the paired. At q < 0.05: 3,643 variants by limma, 2,417 paired, 1,687
   as independent.

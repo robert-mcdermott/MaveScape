@@ -853,41 +853,101 @@ measures, and intervals checked against the truth.
      - **Comparing the cells recorded with the bottleneck the data imply** is left to slice 10 (the
        readiness model); the bottleneck finding says how to do it by hand (a ratio of about
        1 + D/(2N)).
-9. **Intervals that hold the truth (S13; S2, S7, S9, S10, S11, T2, T3).** The reference
+9. **Intervals that hold the truth (S13; S2, S7, S9, S10, S11, T2, T3): done.** The reference
    comparisons show that MaveScape computes what Enrich2, DiMSum, mutscan and metafor compute. They
-   do not show that a 95% interval holds the true effect 95% of the time. With three replicates,
-   the simulations so far say it does not:
-   - sorted bins: 87%;
-   - time series: 90%;
-   - two populations through a bottleneck, combined by REML: 87–88%;
-   - paired differential scores with selection noise: 82–94%.
+   did not show that a 95% interval holds the true effect 95% of the time, and with three
+   replicates it did not: sorted bins 87%, time series 90%, two populations through a bottleneck
+   combined by REML 87–88%, paired differential scores with selection noise 82–94%. REML estimates
+   each variant's noise between replicates from its own two to six scores, and often finds 0.
+   - **The moderated combination** (`web/lib/moderate.js`; `combination: 'moderated'`, the new
+     default), for every variant of a condition at once:
+     - a shared error model: a replicate score's variance is *a* × counting + *b*, fitted to the
+       pairs of replicate scores (each pair centered, the median standardized square per range of
+       counts, reweighted ten times), on variants with 5 reads or more before and after selection
+       in every replicate;
+     - the reference's shift, which moves every score of a replicate together, measured apart from
+       each replicate's median departure and added to every variance with the replicates' degrees
+       of freedom;
+     - each variant's dispersion over the model moderated by empirical Bayes (limma's prior, with a
+       degrees of freedom per variant), its interval by t at the prior's degrees of freedom plus
+       its own, combined with the reference's by Satterthwaite;
+     - replicates sharing a sample (an input, a time-0 sample) combined by generalized least
+       squares with the covariance of its counting error, for log ratios (coefficient −1) and
+       regressions (the slope's weight on the first point), so that the shared-samples warning
+       becomes a note;
+     - paired differential scores combined the same way, with t.
 
-   In that last case, limma's variances, moderated across variants, hold 93–98%.
-   - **A coverage suite** (`validation/coverage.mjs`; not to be confused with wave 8's
-     calibration of scores against known variants):
-     - simulated experiments over a grid of depth, replicate number (2 to 6), bottleneck size,
-       shared inputs and model mismatch: selection noise between replicates, overdispersion, and a
-       time course that is not a line;
-     - every model: ratio, regression, bins, barcodes, DiMSum's and differential;
-     - an independent simulator beside MaveScape's own, so a mistake both share is caught:
-       dms_variants' simulation (GPL, so as an external reference only), or Rosette from Rosace's
-       authors (its license checked first);
-     - on real data, where there is no truth: each replicate predicted from the others, with the
-       spread and tails of the held-out z-scores reported for GRB2, BRCA1, Hsp90 and Factor IX.
-   - **Replicates that share an input** (BRCA1). Today a run only warns. They will be combined with
-     the covariance the shared input implies: generalized least squares, from the input's counting
-     variance and its normalizer's.
-   - **Few replicates.** REML's τ² from two or three replicates is unreliable. The suite chooses
-     between two fixes: a moderated τ² (each variant's shrunk toward a trend across variants, as
-     limma moderates variances), or Knapp–Hartung's t intervals. The present combination stays a
-     named choice, so agreement with Enrich2 and metafor holds. Runs saved before keep theirs: a
-     parameter they lack means the old behavior, so their hashes still reproduce.
-   - **Rescaling.** The anchors are the medians of WT, synonymous or nonsense variants. Their
-     uncertainty moves every score together. It is propagated (delta method) and reported as a
-     shared term of its own, apart from each variant's SE.
-   - Validation: the suite runs in CI. Nominal 95% intervals hold 93–97% of the truth across the
-     grid, or the exception is documented with its reason in `science.html`. These gates replace
-     today's "85% or more".
+     REML, fixed effects, the mean and Enrich2's estimator stay choices, so agreement with Enrich2
+     and metafor holds. Runs keep their parameters, so earlier runs reproduce; an output hash
+     covers each score's degrees of freedom only when it has them.
+   - **Rescaling** (`web/lib/anchors.js`): rescaled to medians of controls, the reference's shift
+     cancels, and the scores' SEs leave it out. The anchors' own uncertainty (the wild type's SE, a
+     median's sampling error from its members' SEs) is propagated by the delta method and reported
+     apart as `SE_scale`: in the inspector, the scores export and the methods.
+   - **Exports and display:** the scores export gains `df` and `SE_scale`, and its intervals use t;
+     the differential export names the paired statistic `t_`; the inspector shows "(t, N df)"; the
+     run's notes and the methods give the fitted model; `inspect_variant` returns `df`.
+   - **The simulator** gains a shared input sample, overdispersed reads (gamma-Poisson) and a time
+     course that saturates; its defaults, and so the fixtures and examples, are unchanged.
+   - Validation:
+     - `coverage` (`validation/coverage.mjs`, CI job `web`), 34 checks:
+       - 26 kinds of simulated experiment, 40 seeds each: depth 30 to 2,000 reads per variant, two
+         to six replicates, bottlenecks of 25 and 100 cells, selection noise, a shared input with
+         and without a bottleneck, overdispersed reads, time series (with a bottleneck at every
+         passage, one time-0 sample, a course that bends scored by its ends), sorted bins by
+         maximum likelihood, barcodes summed and scored each, DiMSum's fitness, rescaled scores,
+         paired and limma differential scores. The defaults hold 93.6–96.5% in every kind (gate
+         93–97%); REML 81.8–95.5%. The exception is named: a bending time course scored by its
+         slope, 78.9%, flagged by QC in 39 of 40 experiments;
+       - an independent simulator, dms_variants 1.6.0
+         (`validation/reference/generate_dms_variants_simulation.py`, GPL, run outside MaveScape):
+         three selections sharing one input, with counting noise, a bottleneck and noise. Variants
+         with 5 reads or more in every sample: 94.1%, 97.6%, 96.2% (gate 92–98%); REML 83–86%;
+       - real data, each replicate held out and predicted from the others: beyond ±1.96 predicted
+         SDs, GRB2 6.1%, CBS 5.6%, factor IX 10.0%, BRCA1 E2 12.3% (REML 22.6%, 3.5%, 26.3%,
+         17.7%); gated nearer 5% than REML and under 15%.
+     - `scoring` (342 checks in all): the time series, DiMSum's bottleneck and the differential
+       checks report the moderated combination beside REML (93%; 95–97%; paired 93–97%, with noise
+       a mean of 95%), and BRCA1's shared inputs are combined with their covariance.
+     - Unit tests 202, including `moderate.test.mjs` (the model recovers *a* and *b*; shifts are
+       not taken for noise; the prior equals limma's; coverage near 95%; GLS for a shared input;
+       Satterthwaite; any row order gives the same bits) and `anchors.test.mjs`.
+     - `remote-session.mjs` 75 and `headless-run.mjs` 20 checks, as before.
+   - Found by slice 9:
+     - **One experiment is not enough to measure coverage.** The wild type's own counting noise
+       shifts every score of an experiment together, so one seed's coverage moves by several
+       points. The suite runs 40 seeds per kind, and the single-seed checks of `scoring` gate on
+       their average.
+     - **The reference's shift is not any variant's noise.** Taking it to be the model's *b* made
+       intervals too wide where the wild type is steady (a prior dispersion of 0.38 on the
+       fixture). It is measured from the replicates' median departures instead.
+     - **Variants with few reads distort a shared model:** the pseudocount flattens their
+       differences, which pulled dms_variants' prior dispersion to 0.28. Only variants with 5
+       reads or more in every replicate fit the model.
+     - **The pseudocount biases variants depleted to a few reads toward 0**, about a fifth of
+       dms_variants' library. No variance makes up for a bias; the suite reports them apart, and
+       the minimum counts leave them out.
+     - **A regression's residual SE cannot be the model's covariate:** it already holds the noise
+       between replicates, and the fit put *a* near 0. The model uses the slope's SE from counting.
+     - **A shared input's covariance is its counting error alone.** Scaled by *a*, it overstated
+       BRCA1's shared part (*a* = 35: its excess comes from selection, not from counting the
+       input), so the covariance takes min(*a*, 1). Sorted bins, DiMSum's fitness and barcodes
+       scored each are combined as independent.
+     - **Rescaled to medians, the shift cancels.** Counting it in each SE and in `SE_scale` too
+       held 98.6%; rescaled scores' SEs now leave it out, and `SE_scale` comes from the anchors'
+       measurement error.
+     - **Knapp–Hartung's intervals were rejected:** 97–100% coverage, at about twice the width.
+     - **A time course that bends** biases a slope; the interval cannot fix that, QC finds it, and
+       the ratio of the ends holds 95%.
+     - **BRCA1's two libraries were selected with strengths 10–15% apart:** every score of one is
+       proportionally larger, which no model of counting describes, so its held-out predictions
+       miss 12% of the time. Scaling each replicate, as DiMSum does, is a candidate for wave 4's
+       robustness to analysis choices.
+     - **Sums in row order made the last bits depend on the table's order:** the model's sums are
+       taken in sorted order, so a table in any order gives the same scores.
+     - **Data:** CBS took Hsp90's place among the real data sets (its four replicates from shared
+       inputs are already in the validation data), and dms_variants was the independent simulator
+       (already the barcodes' reference; Rosette was not needed).
 10. **A complete analysis package (E8; D13, E5, Q4, M2).** The hardest part of an analysis is
     often gathering what the experiment was, not scoring it: which sample is which, what the assay
     selects for, and numbers kept at the bench that never reach the count table. This slice shows,
@@ -1183,6 +1243,6 @@ report is taken in when it comes, and may reorder the waves.
 | Public APIs change | Broken imports and tracks | Provider adapters, cached records with retrieval metadata, recorded fixtures, graceful degradation |
 | Color maps overstate certainty | Misinterpretation | Separate state patterns and uncertainty channels; missing never neutral |
 | Licensing of reference code | GPL tools (dms_variants, dms_tools2) in an Apache-2.0 project; CytoWeave's `limma.js` follows GPL limma closely (an open decision there) | GPL tools used only as external references in validation; no code ported from GPL sources. Settled in wave 2, slice 6: CytoWeave's `limma.js` is not used; MaveScape's `limma.js` is written from the publications and checked against R's limma as a black box |
-| Intervals that look right but do not hold | Scores that match the reference tools while their 95% intervals hold the truth less often (87–90% with three replicates in wave 2's simulations) | A coverage suite over depth, replicates, bottlenecks, shared inputs and model mismatch, with an independent simulator, as an acceptance gate (wave 2, slice 9) |
+| Intervals that look right but do not hold | Scores that match the reference tools while their 95% intervals hold the truth less often (87–90% with three replicates in wave 2's simulations) | A coverage suite over depth, replicates, bottlenecks, shared inputs and model mismatch, with an independent simulator, as an acceptance gate (wave 2, slice 9: done; the defaults hold 93.6–96.5% in 26 kinds, REML 81.8–95.5%) |
 | Scores read the wrong way round | A selection that enriches loss of function is drawn as "gain" and its controls judged failed | The readout's direction stated in the design and used by legends, QC and comparisons; "not stated" never guessed (wave 2, slice 8) |
 | One developer | Adoption and continuity | Validation and documentation that let others check and continue |

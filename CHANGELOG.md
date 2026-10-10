@@ -168,6 +168,32 @@ each.
 - **Archives that keep opening:** a workspace saved by MaveScape 0.1.0 is kept as a fixture
   (`validation/archives/`); this version opens it and reproduces its runs, and each release adds
   one.
+- **Intervals that hold the truth (wave 2, slice 9; S13).** A new way to combine replicates, the
+  *moderated combination*, learns the noise beyond counting from every variant at once: a replicate
+  score's variance is *a* × counting + *b*, fitted robustly to how far replicates disagree (as
+  DiMSum's error model), with the reference's shared shift measured apart, and each variant's own
+  dispersion moderated toward the others' by empirical Bayes (as limma moderates variances). Its
+  95% intervals use t at each score's degrees of freedom (Satterthwaite's, when the reference's
+  shift counts); the inspector shows them. Replicates that share a sample (one input selected
+  several times, one time-0 sample) are combined by generalized least squares with its covariance,
+  so the shared sample is counted once. The run's notes and methods give the fitted model.
+- **The rescaling anchors' uncertainty (S11):** rescaled scores report the anchors' own error, which
+  moves every score together, apart from each score's SE (`SE_scale`, by the delta method), in the
+  inspector, the scores export and the methods.
+- **Scores export:** `df` and `SE_scale` columns; `ci95_lower` and `ci95_upper` use t at `df`.
+- **The coverage suite** (`validation/coverage.mjs`, in CI): 40 simulated experiments of each of 26
+  kinds, from 30 to 2,000 reads per variant, two to six replicates, bottlenecks, selection noise,
+  shared inputs, overdispersed reads, time series, sorted bins, barcodes, DiMSum's fitness, rescaled
+  and differential scores. With the defaults, 95% intervals hold the truth 93.6–96.5% of the time in
+  every kind (REML 81.8–95.5%); on dms_variants' simulated libraries, an independent simulator,
+  94–98% (REML 83–86%); on real data, each replicate held out and predicted from the others, GRB2
+  6.1% and CBS 5.6% beyond ±1.96 SD (REML 22.6% and 3.5%), factor IX 10.0% (26.3%) and BRCA1 12.3%
+  (17.7%). It names what no variance fixes: a time course that is not a line, scored by its slope
+  (QC flags it); variants depleted to a few reads, biased by the pseudocount; replicates selected
+  with different strengths (BRCA1's).
+- **The simulator** can share one input sample between replicates, draw overdispersed reads
+  (gamma-Poisson) and run a time course that saturates; its defaults and the bundled examples are
+  unchanged.
 
 ### Changed
 
@@ -181,6 +207,15 @@ each.
   has, and what is missing and where to find it. Outside laboratories no longer gate any wave or
   release. Comparison and robustness to analysis choices move ahead of structure (0.4 and 0.5).
   Each release keeps a workspace archive that later versions must reopen and reproduce.
+
+- **Replicates are combined by the moderated combination by default** (MaveScape 0.1 used REML).
+  REML estimates each variant's noise between replicates from its own two to six scores; often 0
+  by chance, it left intervals too narrow (as little as 82% coverage where 95% was claimed). Runs
+  keep their parameters, so earlier runs are unchanged and reproduce; score again to use it. REML
+  and the others remain choices. Replicates paired by a shared input are combined the same way, so
+  their differential scores have t statistics (`t_` in the differential export, in place of `z_`).
+- **The shared-samples warning** is a note when the moderated combination accounts for the shared
+  sample, and with the other combinations points to it.
 
 - **The map's legend names its ends from the readout** ("blue is less function, red more
   function") and says "lower" and "higher" until the direction is stated; the palettes are named by

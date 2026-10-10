@@ -15,6 +15,7 @@ import { defaultParameters } from '../lib/score.js';
 import { addSource, addTarget, change, createWorkspace, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { pearson } from '../lib/stats.js';
+import { intervalOf } from '../lib/exports.js';
 import { runScore, workerInput } from './score-input.js';
 import { runEntry } from './run-results.js';
 
@@ -108,6 +109,8 @@ export async function openExample(app, id) {
   }
 }
 
+const percent = (x, n) => `${(100 * x / n).toFixed(1)}%`;
+
 // The guide of the open example, as an inspector section (null when the workspace is not one).
 export function exampleGuide(app) {
   const info = app.store.ws.example;
@@ -126,10 +129,12 @@ export function exampleGuide(app) {
       let found = 0;
       let others = 0;
       let called = 0;
+      let held = 0;
       results.variants.key.forEach((k, i) => {
         if (d.reason[i] || !(k in info.truth) || k === 'p.=') return;
         a.push(d.delta[i]);
         b.push(info.truth[k]);
+        if (d.ciLow[i] <= info.truth[k] && info.truth[k] <= d.ciHigh[i]) held += 1;
         if (info.truth[k] !== 0) {
           site += 1;
           if (d.q[i] < 0.05) found += 1;
@@ -138,17 +143,23 @@ export function exampleGuide(app) {
           if (d.q[i] < 0.05) called += 1;
         }
       });
-      truthLine = h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s differences (${d.method}) against the simulated true ones: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants; at q < 0.05, ${found} of the site's ${site} variants called, and ${called} of the ${others} others.`));
+      truthLine = h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s differences (${d.method}) against the simulated true ones: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants; their 95% intervals hold ${percent(held, a.length)} of the true differences; at q < 0.05, ${found} of the site's ${site} variants called, and ${called} of the ${others} others.`));
     } else if (results) {
       const c = results.conditions[0];
       const a = [];
       const b = [];
+      let held = 0;
       results.variants.key.forEach((k, i) => {
         if (c.reason[i] || !(k in info.truth) || k === 'p.=') return;
         a.push(c.score[i]);
         b.push(info.truth[k]);
+        const [low, high] = intervalOf(c, i);
+        if (low <= info.truth[k] && info.truth[k] <= high) held += 1;
       });
-      truthLine = h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s scores against the simulated true effects: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants.`));
+      // Rescaled scores, and sorted bins' (scaled per replicate), are on another scale than the true
+      // effects: their intervals are not compared.
+      const comparable = !c.rescale && !example.simulation?.sort;
+      truthLine = h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s scores against the simulated true effects: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants${comparable ? `; their 95% intervals hold ${percent(held, a.length)} of them` : ''}.`));
     }
   }
   return h('section.inspector-section.example-guide',
