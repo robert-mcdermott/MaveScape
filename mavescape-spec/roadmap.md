@@ -1376,12 +1376,84 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
      - **The deposited counts of a saturation genome editing screen do not record its normalization**:
        Findlay et al. normalized each exon apart and corrected for position within it; scored
        globally, BRCA1's counts agree with the published scores at r 0.76.
-4. **MaveDB export (I2, M2).** A MaveDB-ready package (scores and counts CSV, metadata JSON) from
-   any run, with the analysis description written from the methods and the experiment's keywords
-   from the design's readout (the MAVE minimum information); `mavescape export --format mavedb`.
-   - Validation: the package passes MaveDB's own validators (the `mavedb` package's models and
-     `mavehgvs` strict mode, pinned; results committed as a reference); export → import → export
-     is identical. Never sent to MaveDB's `/hgvs/validate` (unpublished data stay local).
+4. **MaveDB export (I2, M2): done.** `web/lib/mavedb-export.js` writes a run (one condition) as
+   MaveDB takes a score set: `scores.csv` and `counts.csv` as MaveDB's upload reads them (strict
+   MAVE-HGVS on the target; a run's score, SE, 95% interval, replicates, status and flags, its
+   counts by sample of the condition's replicates; published scores passed through, the design's
+   score column as `score`, with the record's counts), MaveDB's column descriptions
+   (`score_columns.json`, `count_columns.json`), and the experiment and score set as the bodies of
+   MaveDB's API (`experiment.json`, `score_set.json`): the methods as the score set's method text,
+   the design's readout and library method as the experiment's keywords in MaveDB's controlled
+   vocabulary (`MAVEDB_KEYWORDS`, the MAVE minimum information's, "Other" described where a term is
+   not in it), the target as MaveDB holds one (`mode`: protein; coding, the sequence from its
+   coding start, c. names beside their protein changes; noncoding, n. names on the whole sequence;
+   accession, the RefSeq or Ensembl transcript it was fetched as, each name prefixed by it), the
+   license by MaveDB's id. A README and `mavescape.json` say what was written, left out, chosen and
+   missing. **The MaveDB details** (`ws.deposit`, `setDeposit`): title, descriptions, abstract,
+   method note, license, publications, DOIs, raw reads, contributors, an experiment's URN, a score
+   set superseded, the taxonomy id, MaveDB's target category, the other keywords; checked as MaveDB
+   checks them (URNs, ORCID iDs, publication identifiers). Defaults come from the record (published
+   scores; the experiment of a MaveDB record), the design, CC0 or a sentence MaveScape writes, each
+   said; what MaveDB requires and nothing gives is `missing`, and the tables are written all the
+   same. In the window: the run's Export menu, *Deposit in MaveDB…* (`ui/mavedb-export.js`: what the
+   deposit holds and lacks, the details, the download). **A MaveDB package opens** (a folder or a
+   ZIP; `readDeposit`, `importMaveDBPackage`) as a record from MaveDB does, its details kept.
+   `mavescape export --format mavedb|tables` (`export.go`: `--details`, `--condition`, `--strict`,
+   `--time`; `export.json`); remote actions `mavedb_deposit`, `set_mavedb_details`, `export` of
+   `mavedb`. A design's target gives its `taxonomyId`. The GRB2 example's guide prepares a
+   deposit; the guide's *Depositing in MaveDB*; a screenshot scene (`mavedb-deposit`).
+   - Validation:
+     - `mavedb-export` (8 checks; `validation/mavedb-export-cases.mjs`): 19 deposits (GRB2 with and
+       without its details, Hsp90, factor IX, the five simulated designs, two conditions each a
+       deposit, CBS's codon variants scored at two vitamin B6 levels, PTEN's, BRCA1 RING's
+       nucleotide and BRCA1's and BAP1's saturation genome editing published scores, BRCA1's counts
+       scored on NM_007294.3, BRCA1 RING's variants named n.) checked by MaveDB's own validators
+       (`reference/generate_mavedb_export.py`: the `mavedb` package 2026.2.7.4, AGPL-3.0, as an
+       external reference, its `csv_data_to_df` and `validate_and_standardize_dataframe_pair` with
+       the column descriptions and targets, mavehgvs 0.8.1 strict, biocommons hgvs 1.5.7 given each
+       transcript by a data provider of its own; `ExperimentCreate` with `validate_keyword_list` and
+       MaveDB's vocabulary, `ScoreSetCreate`; results with each file's SHA-256 in
+       `reference/mavedb-export.json`): every table accepted (92,253 rows, 133,173 names), the
+       metadata accepted where MaveScape says nothing is missing and refused for the abstract
+       where it says that is; all four modes, 14 scored and 5 published; export → import → export
+       the same bytes for all 19; MaveScape's keyword vocabulary MaveDB's (13 keys, 119 labels,
+       `fixtures/public-data/mavedb-keywords.json`).
+     - Never sent: `TestNoRequestSendsADepositToMaveDB` (no request asks MaveDB's validators or
+       upload, or POSTs but a search); `docs/NETWORK.md` says so.
+     - `remote-session.mjs` (96 checks): BAP1's deposit from the window the same bytes as Node's,
+       opened again from its folder and its ZIP and written again the same; GRB2's details set by
+       `set_mavedb_details` (in the history), an unknown detail refused. `headless-run.mjs` (29):
+       `mavescape export` twice the same bytes and as Node writes the deposit from the archive,
+       `--strict`, `--details`, a folder per condition, `--format tables` as `mavescape run` wrote
+       them, wrong command lines (exit 2). Go tests: `mavescape export`'s arguments; the program's
+       file kinds.
+     - Unit tests 271: `mavedb-export.test.mjs` (the four modes, the details and their checks, the
+       keywords and MaveDB's rules for them, published scores passed through, a package read back,
+       the ZIP), a record's deposit fields and "Other" read as its description, GenBank's taxonomy
+       id.
+   - Found by slice 4:
+     - **MaveDB's validator stops at a gap in `hgvs_pro`**: a protein name missing on any row (a
+       UTR or intronic variant beside c. names) ends it with "'float' object has no attribute
+       'split'" (mavedb 2026.2.7.4), and c. names are refused without protein names. Such variants
+       of a target given by its sequence are left out of a deposit, and said; a target named by its
+       transcript keeps them (its names alone, checked by biocommons hgvs).
+     - **MaveDB counts a target sequence from its first base**, c. and p. alike (it translates the
+       DNA from there): a transcript with a 5′ UTR is given from its coding start.
+     - **MaveDB reads an upload with `'` as its quote character**, and refuses a column without a
+       value or of numbers and text mixed: MaveScape's own exports quote with `"` and write
+       `hgvs_splice` and τ² empty. A deposit writes no quotes (a column holding a comma or quote is
+       left out, and said) and no empty column.
+     - **MaveDB's vocabulary had grown** since wave 2: one assay method was missing from
+       MaveScape's list; "Molecular Mechanism Assessed" has no "Other", so a design's free-text
+       phenotype is chosen on MaveDB. CC BY-NC-SA 4.0 is no longer offered for a new score set.
+     - **The program did not open JSON files** (`fileKind`) though the page reads them: a package's
+       folder arrived without its `score_set.json`. Its four JSON files open now; others still
+       do not.
+     - **A record kept with the workspace dropped its abstract**, which a deposit of it needs; and
+       a keyword "Other" read as "Other" rather than what it describes.
+     - **MaveDB's own checks of a transcript need no database**: given each transcript by a data
+       provider holding only its sequence and coding region, biocommons hgvs validates every name
+       offline (BRCA1's 3,893, a wrong reference base refused).
 5. **Sequence tracks and annotations (V5, I3, I4).** Tracks synchronized with the map:
    reference, coverage, position effect and uncertainty, UniProt domains, motifs and secondary
    structure, conservation (Jensen–Shannon divergence, Proteoscope's `conservation.js` and

@@ -10,7 +10,7 @@
 // Exits with status 1 when a check fails.
 
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,9 @@ import { exampleById, simulatedExample } from '../web/lib/examples.js';
 import { assembleTable } from '../web/lib/assemble.js';
 import { barcodesCSV, differentialCSV, proteinScoresCSV } from '../web/lib/exports.js';
 import { proteinView } from '../web/lib/collapse.js';
+import { readZip } from '../web/lib/zip.js';
+import { MAVEDB_FILES } from '../web/lib/mavedb-export.js';
+import { depositPackages } from './mavedb-export-cases.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -384,6 +387,41 @@ try {
   check('export protein-scores: the run\'s scores at the protein level, the same bytes as Node\'s', `${proteinWritten.split('\n').length - 2} protein variants`, proteinWritten === proteinScoresCSV(view));
   const tMap = await act('render_map', {});
   check('render_map of a nucleotide run: drawn at the protein level, saying how the variants were read and what is beside the map', tMap.message.slice(0, 200), /Read at the protein level/.test(JSON.stringify(tMap.data)) && /not on the map/.test(JSON.stringify(tMap.data)));
+
+  // Wave 3, slice 4: MaveDB deposits. BAP1's published scores as MaveDB takes them, the same files
+  // as Node writes; written as a ZIP, opened again from a folder and from the ZIP, and written
+  // again the same; then GRB2 rescored from its counts, its MaveDB details set.
+  const bDeposit = await act('mavedb_deposit', {});
+  check('mavedb_deposit: BAP1\'s published scores as MaveDB takes them, named by the transcript MaveScape checked them on (ENST00000460680.6), the record\'s abstract, license and method text kept: nothing missing', bDeposit.message, bDeposit.data.mode === 'accession' && bDeposit.data.target.targetAccession?.accession === 'ENST00000460680.6' && bDeposit.data.variants.exported === 620 && !bDeposit.data.missing.length);
+  const bZip = await act('export', { what: 'mavedb', path: join(out, 'bap1-mavedb.zip') });
+  const bFiles = await readZip(new Uint8Array(readFileSync(join(out, 'bap1-mavedb.zip'))));
+  const nodeBap1 = depositPackages(['bap1']).packages[0].deposit;
+  const mavedbFiles = (files) => Object.fromEntries([...files].filter(([n]) => MAVEDB_FILES.includes(n)).map(([n, b]) => [n, typeof b === 'string' ? b : new TextDecoder().decode(b)]));
+  const nodeFiles = mavedbFiles(new Map(nodeBap1.files.map((f) => [f.name, f.text])));
+  const sameAsNode = Object.keys(nodeFiles).length && Object.entries(nodeFiles).every(([n, t]) => mavedbFiles(bFiles)[n] === t) && Object.keys(mavedbFiles(bFiles)).length === Object.keys(nodeFiles).length;
+  check('export mavedb: the deposit as one ZIP, the files MaveDB reads the same bytes as Node\'s (validated by MaveDB\'s own validators, suite mavedb-export)', `${bZip.message} ${[...bFiles.keys()].join(', ')}`, sameAsNode && bFiles.has('README.md') && bFiles.has('mavescape.json'));
+  const folder = join(out, 'bap1-package');
+  mkdirSync(folder, { recursive: true });
+  for (const [name, bytes] of bFiles) writeFileSync(join(folder, name), bytes);
+  const fromFolder = await act('open_files', { paths: [folder] });
+  const pkgState = await act('get_state');
+  await act('export', { what: 'mavedb', path: join(out, 'bap1-again.zip') });
+  const bAgain = mavedbFiles(await readZip(new Uint8Array(readFileSync(join(out, 'bap1-again.zip')))));
+  check('a MaveDB package opened from its folder: a workspace of its published scores (its transcript fetched), its MaveDB details kept; written again, the files MaveDB reads the same bytes (export → import → export)', `${fromFolder.message} Records: ${pkgState.data.tables.map((t) => t.origin?.database).join(', ')}`, pkgState.data.tables.some((t) => t.origin?.database === 'package') && Object.entries(nodeFiles).every(([n, t]) => bAgain[n] === t));
+  const fromZip = await act('open_files', { paths: [join(out, 'bap1-mavedb.zip')] });
+  const zipState = await act('get_state');
+  check('a MaveDB package opened as its ZIP', fromZip.message, zipState.data.tables.some((t) => t.origin?.database === 'package' && /bap1-mavedb/.test(t.origin?.package ?? '')));
+  await act('open_example', { id: 'grb2' });
+  const gDeposit = await act('mavedb_deposit', {});
+  const gSet = await act('set_mavedb_details', { details: { abstract: 'Abundance of every substitution in the SH3 domain of GRB2.', publications: ['doi:10.1038/s41586-024-08370-4'], contributors: '0000-0002-1825-0097', license: 'CC BY 4.0' } });
+  const gAfter = await act('mavedb_deposit', {});
+  const gBad = await send('set_mavedb_details', { details: { abstrct: 'x' } });
+  check('a run rescored from counts: mavedb_deposit says MaveDB needs an abstract; set_mavedb_details gives it (with a DOI, an ORCID iD and a license), kept with the workspace and in its history; an unknown detail refused', `${gDeposit.data.missing.map((m) => m.field).join(', ')} → ${gAfter.data.missing.map((m) => m.field).join(', ') || 'nothing'}; ${gSet.message} ${gBad.message}`, gDeposit.data.missing.some((m) => m.field === 'abstract') && !gAfter.data.missing.length && gAfter.data.details.license === 'CC BY 4.0' && gAfter.data.details.publications[0]?.db === 'Crossref' && (await browser.eval('window.mavescape.store.ws.history.at(-1).action')) === 'deposit' && !gBad.ok && /abstrct/.test(gBad.message));
+  await act('export', { what: 'mavedb', path: join(out, 'grb2-mavedb.zip') });
+  const gFiles = await readZip(new Uint8Array(readFileSync(join(out, 'grb2-mavedb.zip'))));
+  const gSetJSON = JSON.parse(new TextDecoder().decode(gFiles.get('score_set.json')));
+  const gScores = parseTable(gFiles.get('scores.csv'), { fileName: 'scores.csv' });
+  check('the deposit of a run rescored from counts: its scores, SEs, intervals and replicates, its counts by sample, the methods as MaveDB\'s method text, the details given', `${gScores.rows} rows; ${gScores.columns.map((c) => c.name).join(', ')}; license ${gSetJSON.licenseId}`, gScores.rows === 1121 && gScores.columns[0].name === 'hgvs_pro' && gScores.columns.some((c) => c.name === 'SE') && gFiles.has('counts.csv') && /^Variant counts were read from/.test(gSetJSON.methodText) && gSetJSON.licenseId === 3 && gSetJSON.abstractText.startsWith('Abundance'));
 
   const foreign = requested.filter((u) => !u.startsWith(URL) && !/^(data|blob):/.test(u));
   check('the page asked nothing of any origin but its own, public data through the program\'s /api/fetch/ only', `${requested.length} requests, ${requested.filter((u) => u.includes('/api/fetch/')).length} for public data; beyond the origin: ${foreign.slice(0, 3).join(', ') || 'none'}`, requested.length > 50 && !foreign.length && requested.some((u) => u.includes('/api/fetch/uniprot/P62993')));

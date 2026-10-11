@@ -22,6 +22,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `readiness` | What each analysis can do with what a workspace holds (wave 2, slice 10; `readiness-cases.mjs`): the six examples, the five fixtures and a simulated bottleneck with its cells recorded, whole and with one part taken away (the wild-type row, a replicate, the gates, the cells, the times in generations, the middle time points, the readout, the nonsense or synonymous controls), 74 workspaces. The readiness model must name exactly what was taken away, and its verdict on every analysis must agree with the engine: each scoring analysis scored or refused with the parameters that use it, each QC finding assessed or not, and an analysis it leaves out for a design one the engine cannot do there either. An empty workspace and a broken design | `web/examples/`, `fixtures/`, simulated |
 | `examples` | Every bundled example opened as the window opens it (wave 2, slice 11; `example-cases.mjs`): assembled (Hsp90's codon variants read at the protein level), scored with its parameters, raising exactly the QC findings it teaches, its readout stated and its readiness naming what its guide points to, at most six guided steps; the published examples' counts MaveDB's, byte for byte. Hsp90's codons (568 rows, 188 protein variants, the wild type's nine copies read once) and its per-generation scores against the published fitness; a single replicate's own SEs; factor IX against MultiSTEP's scores; the simulated problems against their truth, with and without replicate 3 | `web/examples/`; MaveDB, external (`mavedb-hsp90`, `mavedb-factor9`, and `mavedb-pten-vampseq` for the PTEN example opened from MaveDB, wave 3 slice 2) |
 | `public-data` | UniProt's and MaveDB's answers as MaveScape's fetcher cached them (wave 3, slices 1 and 2): every cached answer with its retrieval record; each published example's target where its design says in its UniProt entry (identical, at one place, the entry changing nothing in the design); GRB2's whole sequence looked up, P62993 first; the GRB2 example checked as its guide says, the design unchanged and the methods naming the check and citing UniProt; the feasibility records (four MaveDB score sets) read with no code for any of them, their published scores read as published equal to MaveDB's columns row for row, their counts drafted into valid designs (GRB2's and factor IX's as documented, but for the bins' values); keywords as the readout; a record whose target is an accession, and a record of scores alone, its readiness naming the counts and where they may be; a workspace of published scores through its archive, its run reproduced; GRB2's mapped variants (wave 3, slice 3) each joined to its row of scores, its protein on NP_002077.1 the table's at the target's position plus the UniProt offset | `fixtures/public-data/`; MaveDB, external |
+| `mavedb-export` | MaveDB deposits (wave 3, slice 4; `mavedb-export-cases.mjs`): 19 deposits (`web/lib/mavedb-export.js`) of every kind of run and target, from the examples and published records, checked by MaveDB's own validators: every table accepted by `validate_and_standardize_dataframe_pair` with its column descriptions and targets (mavehgvs against a sequence, biocommons hgvs against a transcript), every name strict MAVE-HGVS, the experiment and score set taken by MaveDB's models where MaveScape says nothing is missing and refused for what it says is; the files written now those the reference checked (each SHA-256); export → import → export the same bytes; MaveScape's keyword vocabulary MaveDB's | `reference/mavedb-export.json`; `fixtures/public-data/` (`mavedb-keywords.json`, the transcripts); MaveDB, external |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -54,7 +55,12 @@ and (slice 3) GRB2 opened with MaveDB's mapped variants, `inspect_variant` givin
 reference HGVS (NP_002077.1:p.Thr159Ter) and VRS identifier; BAP1's exon 1 opened on Ensembl's
 cached transcript, its version said, its run Node's, a merged protein variant inspected (its
 nucleotide variants listed in the inspector), the scores at the protein level exported as Node
-writes them, and the map described at the protein level. 90 checks; in CI as the `remote` job.
+writes them, and the map described at the protein level; and (slice 4) `mavedb_deposit` on BAP1's
+published scores (named by ENST00000460680.6, nothing missing), `export` of `mavedb` the same
+bytes as Node writes it (suite `mavedb-export`), the deposit opened again from its folder and from
+its ZIP and written again the same, and GRB2's MaveDB details set by `set_mavedb_details` (an
+unknown one refused), its deposit's scores, counts and method text. 96 checks; in CI as the
+`remote` job.
 
 ## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3)
 
@@ -112,7 +118,13 @@ pipeline would (headless Chrome: `CHROME`, else one installed):
 - BAP1's published nucleotide variants on its Ensembl transcript (wave 3, slice 3): `mavescape run`
   draws the map at the protein level and writes `protein_scores.csv` as Node merges the variants.
 
-24 checks, in CI's `remote` job; about 25 s.
+- `mavescape export` (wave 3, slice 4) of the GRB2 run's archive: `--format mavedb` twice the same
+  bytes, the files MaveDB reads as Node writes them from the archive, `export.json` naming the
+  abstract as missing; `--strict` exit 1, and 0 once `--details` gives it; the two-condition
+  fixture's run a folder per condition; `--format tables` the same bytes as `mavescape run` wrote;
+  wrong command lines (exit 2).
+
+29 checks, in CI's `remote` job; about 30 s.
 
 ## Coverage of intervals (`coverage.mjs`, wave 2 slice 9)
 
@@ -151,7 +163,7 @@ what the reference tools compute; this shows whether the intervals mean what the
 
 34 checks; about 35 s; in CI's `web` job with the external data.
 
-## Public data's answers, as the fetcher caches them (`fixtures/public-data/`, wave 3 slices 1–3)
+## Public data's answers, as the fetcher caches them (`fixtures/public-data/`, wave 3 slices 1–4)
 
 A cache of public data in the layout MaveScape's fetcher writes (`docs/FORMATS.md`, "The cache of
 public data"), so that the tests, the `public-data` suite, the remote-control session (started
@@ -176,6 +188,7 @@ retrieval record:
 | `ncbi/ON605209.1.gb`, `MK476504.1.gb` | a plasmid map with three coding features, one on the reverse strand, and HBB's gene joined from three exons: the GenBank reader against Biopython |
 | `ensembl/ENST00000460680.json`, `ENST00000269305.json` | Ensembl's sequences of BAP1's (version 6) and TP53's (version 9) transcripts, the coding part in capitals |
 | `mavedb-search/2f0e48c8….json`, `253d595f….json` | MaveDB's answers to the searches "GRB2" (1 score set) and "VAMP-seq" (22) |
+| `mavedb-keywords.json` | MaveDB's controlled keywords for experiments, every key with its labels (retrieved 2026-10-10): the vocabulary a deposit's keywords are checked against (wave 3, slice 4) |
 
 UniProt's data are under CC BY 4.0; MaveDB's records are CC0 but for BAP1's (CC BY 4.0, its
 authors cited in its record); NCBI's and Ensembl's records have no restriction on use.
@@ -265,6 +278,49 @@ applying DiMSum's rule for mixed substitutions as `dimsum__process_merged_varian
 - **DiMSum's merge** gives 7,561 amino-acid variants from CBS's codon variants (2,522 of them from
   6,065 codons); MaveScape's agree within 5 × 10⁻¹³, the order of summation. The 1,034 synonymous
   codon variants DiMSum keeps apart are each a member of MaveScape's synonymous cell.
+
+## MaveDB's validators (`reference/mavedb-export.json`, wave 3 slice 4)
+
+`generate_mavedb_export.py` runs MaveDB's own checks on the deposits MaveScape writes (`node
+validation/mavedb-export-cases.mjs --write DIR` writes them; the script's docstring has the commands).
+MaveDB's server, the `mavedb` package 2026.2.7.4 (AGPL-3.0), is used only here, as an external
+reference: nothing of it is in MaveScape. Its server modules need their dependencies installed
+(fastapi and others), and hgvs and cdot need psycopg2, which they do not use here and which may not
+build: they are installed without it, psycopg2 as its binary package. For each deposit:
+
+- the tables as MaveDB's upload reads them (`csv_data_to_df`: `'` as the quote character, its
+  missing values) and as its variant-creation job checks them (`validate_and_standardize_dataframe_pair`,
+  with the column descriptions and the score set's targets): mavehgvs checks each name against a
+  target's sequence; biocommons hgvs 1.5.7 checks the names on a transcript, given each transcript
+  (NM_007294.3, NM_000546.6, ENST00000460680.6, ENST00000269305.9, from MaveScape's cached answers)
+  by a data provider of its own that holds only its sequence and coding region, so no database is
+  consulted;
+- every name by mavehgvs 0.8.1 in strict mode;
+- the column descriptions as MaveDB's `DatasetColumnMetadata` and `DatasetColumnsCreate`;
+- `experiment.json` as `ExperimentCreate`, its keywords by `validate_keyword_list` and each in
+  MaveDB's controlled vocabulary (`fixtures/public-data/mavedb-keywords.json`, its answers to
+  `/api/v1/controlled-keywords/{key}`, retrieved 2026-10-10);
+- `score_set.json` as `ScoreSetCreate`, a new experiment's URN (which MaveDB gives when the
+  experiment is created) replaced by a temporary one.
+
+Each result is kept with the SHA-256 of every file checked: the suite fails when MaveScape writes
+other bytes, until the reference is made again.
+
+### What the comparisons showed (wave 3, slice 4)
+
+- **Every table is accepted**: 19 deposits, 92,253 rows, 133,173 names strict MAVE-HGVS, 16 with
+  their counts. The metadata of 18 is accepted; the one written without MaveDB details is refused
+  for its abstract, which MaveScape names as missing.
+- **MaveDB's validator stops at a gap in `hgvs_pro`** ("'float' object has no attribute 'split'"),
+  and refuses c. names without protein names: c. variants with no protein change (in a UTR or an
+  intron) of a target given by its sequence are left out of a deposit, and said.
+- **A target sequence counts from its first base**, and a DNA one is translated from there: a
+  transcript with a 5′ UTR is given from its coding start.
+- **MaveDB reads an upload with `'` as its quote character**, and refuses a column without a value:
+  a deposit writes no quotes and no empty column (MaveScape's own exports do both).
+- **The names on a transcript are checked without a database**: biocommons hgvs given only each
+  transcript's sequence and coding region validates BRCA1's 3,893 names, and refuses a wrong
+  reference base.
 
 ## Reference outputs (`reference/`)
 

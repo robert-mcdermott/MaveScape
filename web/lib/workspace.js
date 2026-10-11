@@ -246,3 +246,20 @@ export function setDesign(ws, design, detail, sourceId = ws.designSource) {
   if (design?.targets?.some((t) => t.reference || t.origin)) design = { ...design, targets: design.targets.map(({ reference, origin, ...t }) => t) };
   return change(ws, { design, designSource: design ? sourceId : null }, 'design', detail);
 }
+
+// Sets the MaveDB details (ws.deposit, absent until stated; lib/mavedb-export.js, DEPOSIT_FIELDS):
+// the fields given replace the workspace's, an empty one removes it; the change is in the history,
+// named by its fields.
+export function setDeposit(ws, patch, detail = null) {
+  const next = { ...(ws.deposit ?? {}) };
+  const changed = [];
+  for (const [key, value] of Object.entries(patch)) {
+    const empty = value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length);
+    if (canonicalJSON(next[key] ?? null) === canonicalJSON(empty ? null : value)) continue;
+    changed.push(key);
+    if (empty) delete next[key];
+    else next[key] = value;
+  }
+  if (!changed.length) return ws;
+  return change(ws, { deposit: Object.keys(next).length ? next : null }, 'deposit', detail ?? `MaveDB details: ${changed.join(', ')} ${changed.length === 1 ? 'was' : 'were'} changed`);
+}

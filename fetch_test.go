@@ -706,3 +706,18 @@ func TestMaveDBSearchPostsTheWords(t *testing.T) {
 		t.Fatal("an invalid search reached the service")
 	}
 }
+
+// A MaveDB deposit stays on this computer (wave 3, slice 4): MaveScape writes it from what the
+// workspace holds and checks it itself, and none of the requests it can make sends variants to
+// MaveDB's validators (/hgvs/validate and the like) or writes to MaveDB (only searches are POSTed).
+func TestNoRequestSendsADepositToMaveDB(t *testing.T) {
+	for _, request := range publicRequests {
+		upstream := strings.ToLower(request.Upstream)
+		if request.Service == "MaveDB" && (strings.Contains(upstream, "/hgvs/") || strings.Contains(upstream, "validate") || strings.Contains(upstream, "/variants/data") || strings.HasSuffix(strings.TrimSuffix(upstream, "/"), "/score-sets") || strings.HasSuffix(strings.TrimSuffix(upstream, "/"), "/experiments")) {
+			t.Errorf("%s asks MaveDB %s", request.Route, request.Upstream)
+		}
+		if request.Method != "" && request.Method != "GET" && !strings.Contains(upstream, "/search") {
+			t.Errorf("%s sends a %s to %s", request.Route, request.Method, request.Upstream)
+		}
+	}
+}

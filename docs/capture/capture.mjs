@@ -237,6 +237,16 @@ const scenes = {
     await waitFor(`Boolean(document.querySelector('.dialog .cds-list'))`);
     await sleep(500);
   },
+  // A MaveDB deposit (wave 3, slice 4): the GRB2 example's run, what the deposit holds and what
+  // MaveDB still requires (an abstract), and the MaveDB details to give.
+  async 'mavedb-deposit'() {
+    await example('grb2-sh3');
+    await act('set_mode', { mode: 'score' });
+    await js(`import('/ui/mavedb-export.js').then((m) => { const ws = window.mavescape.store.ws; m.openDepositDialog(window.mavescape, ws.runs.at(-1)); return true; })`);
+    await waitFor(`Boolean(document.querySelector('.dialog .deposit-report'))`);
+    await clearToasts();
+    await sleep(600);
+  },
   // What the analysis can do (wave 2, slice 10): GRB2's readiness in the Experiment view, and what
   // the published counts leave out.
   async readiness() {

@@ -70,6 +70,10 @@ test('a target from a coding feature: a plasmid\'s is its coding sequence, read 
   const mrna = parseGenBank(PLASMID.replace('DNA     circular', 'mRNA    linear').replace('ACCESSION   pTEST', 'ACCESSION   NM_000001').replace('VERSION     pTEST', 'VERSION     NM_000001.1')).records[0];
   const m = targetFromGenBank(mrna, codingFeatures(mrna)[0]);
   assert.deepEqual([m.target.sequence.length, m.target.codingStart, m.target.identifiers.refseq, m.origin.whole], [60, 4, 'NM_000001.1', true]);
+  // The organism's NCBI Taxonomy id, from the source feature (wave 3, slice 4).
+  assert.equal(a.target.taxonomyId, undefined);
+  const tagged = parseGenBank(PLASMID.replace('     source          1..60\n', '     source          1..60\n                     /db_xref="taxon:32630"\n')).records[0];
+  assert.equal(targetFromGenBank(tagged, codingFeatures(tagged)[0]).target.taxonomyId, 32630);
 });
 
 test('records that cannot be read say why', () => {

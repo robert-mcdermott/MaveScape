@@ -148,7 +148,22 @@ export function readScoreSet(json) {
     })),
     keywords: (experiment.keywords ?? []).map((k) => ({ key: k.keyword?.key, label: k.keyword?.label, description: k.description ?? null })),
     calibrations: (json.scoreCalibrations ?? []).map(calibrationOf),
-    experiment: { urn: experiment.urn ?? null, title: experiment.title ?? null, rawReads: (experiment.rawReadIdentifiers ?? []).map((r) => ({ id: r.identifier, url: r.url ?? null })) },
+    // What a deposit of the record says again (wave 3, slice 4): its publications as identifiers,
+    // its data DOIs, contributors (ORCID iDs), the experiment's texts and the descriptions of its
+    // columns.
+    publications: [...(json.primaryPublicationIdentifiers ?? []), ...(json.secondaryPublicationIdentifiers ?? [])].map((p) => ({ db: p.dbName ?? null, id: String(p.identifier) })),
+    dois: (json.doiIdentifiers ?? []).map((d) => d.identifier),
+    contributors: (json.contributors ?? []).map((c) => c.orcidId).filter(Boolean),
+    columns: { scores: columns.scoreColumnsMetadata ?? {}, counts: columns.countColumnsMetadata ?? {} },
+    experiment: {
+      urn: experiment.urn ?? null,
+      title: experiment.title ?? null,
+      shortDescription: experiment.shortDescription ?? null,
+      abstract: experiment.abstractText ?? null,
+      method: experiment.methodText ?? null,
+      rawReads: (experiment.rawReadIdentifiers ?? []).map((r) => ({ id: r.identifier, url: r.url ?? null })),
+      publications: [...(experiment.primaryPublicationIdentifiers ?? []), ...(experiment.secondaryPublicationIdentifiers ?? [])].map((p) => ({ db: p.dbName ?? null, id: String(p.identifier) })),
+    },
     superseded: json.supersedingScoreSet?.urn ?? null,
     // MaveDB's mapping of the variants to the human reference: complete, incomplete, failed…
     mapping: json.mappingState ?? null,
@@ -225,6 +240,7 @@ export function targetsOf(record, options = {}) {
         sequenceType: dna ? 'dna' : 'protein', sequence: t.sequence.toUpperCase(),
         ...(dna ? { codingStart: 1 } : {}), offset,
         ...(t.organism ? { organism: t.organism } : {}),
+        ...(t.taxonomyId ? { taxonomyId: t.taxonomyId } : {}),
         ...(Object.keys(identifiers).length ? { identifiers } : {}),
       });
     } else if (kind === 'refseq' || kind === 'ensembl') {
@@ -297,7 +313,11 @@ const termIn = (list, label) => list.find((x) => x.toLowerCase() === String(labe
 // (what a higher score means) is no keyword: it stays unstated until given, and the readiness
 // names it. A keyword outside MaveScape's lists is kept as written.
 export function readoutOf(record) {
-  const keyword = (key) => record.keywords.find((k) => k.key === key)?.label ?? null;
+  // A keyword's term: its label, or what an "Other" describes.
+  const keyword = (key) => {
+    const k = record.keywords.find((x) => x.key === key);
+    return k && /^other$/i.test(k.label ?? '') && k.description?.trim() ? k.description.trim() : k?.label ?? null;
+  };
   const readout = {};
   const unknown = [];
   for (const [field, key, list] of [['method', 'Phenotypic Assay Method', ASSAY_METHODS], ['mechanism', 'Phenotypic Assay Mechanism', ASSAY_MECHANISMS], ['modelSystem', 'Phenotypic Assay Model System', MODEL_SYSTEMS]]) {
@@ -314,7 +334,15 @@ export function readoutOf(record) {
 }
 
 // The design's source: the record's URN, citation and license.
-const sourceOf = (record) => ({ mavedb: record.urn, ...(record.citation ? { citation: record.citation } : {}), license: record.license.short });
+const sourceOf = (record) => ({ ...(record.urn ? { mavedb: record.urn } : {}), ...(record.citation ? { citation: record.citation } : {}), license: record.license.short });
+
+// What the workspace keeps of a record (workspace.records): enough to cite, license and describe it
+// offline, with its calibrations, and to deposit it again (wave 3, slice 4: its abstract, methods,
+// experiment and column descriptions). A MaveDB package opened from files (mavedb-export.js) is
+// kept the same way, named by its package instead of a URN.
+export function recordSummary(record, retrieval = null) {
+  return { database: record.urn ? 'MaveDB' : 'package', ...record, retrieved: retrieval?.retrieved ?? null, url: retrieval?.source ?? null };
+}
 
 // The common part of a record's designs.
 function base(record, { layout, target }, model) {

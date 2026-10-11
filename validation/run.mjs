@@ -84,6 +84,8 @@ import { readArchive, writeArchive } from '../web/lib/archive.js';
 import { createZip } from '../web/lib/zip.js';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLES, exampleById, simulatedExample } from '../web/lib/examples.js';
+import { depositPackages, mavedbHashes, roundTrip } from './mavedb-export-cases.mjs';
+import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
@@ -2527,6 +2529,54 @@ const suites = {
       const status = Object.fromEntries(r.analyses.map((a) => [a.id, a.status]));
       check('public-data', 'a record of scores alone: the map, QC of what scores show and comparison possible; rescoring and QC of the counts not, the counts named with where they may be (the record names its raw reads)', `${JSON.stringify(r.base)}; rescore ${status['score.rescore']}, map ${status['record.scores']}, compare ${status['record.compare']}; counts: ${counts?.where}`, r.base.scores && status['score.rescore'] === 'unavailable' && status['qc.counts'] === 'unavailable' && status['record.scores'] === 'ready' && status['record.compare'] === 'ready' && /MaveDB has no counts for urn:mavedb:00000013-a-1/.test(counts?.where) && /PRJNA428380/.test(counts?.where), 'as said');
     }
+  },
+
+  // Wave 3, slice 4: MaveDB deposits, as MaveDB's own validators take them (the mavedb package,
+  // AGPL-3.0, as an external reference: reference/generate_mavedb_export.py), and read back.
+  'mavedb-export'() {
+    const reference = JSON.parse(readFileSync(new URL('./reference/mavedb-export.json', import.meta.url), 'utf8'));
+    const { packages, missing } = depositPackages();
+    if (missing.length) throw new MissingData(missing.join('; '));
+    const t = reference.tools;
+    check('mavedb-export', 'reference made with', `mavedb ${t.mavedb}, mavehgvs ${t.mavehgvs}, biocommons hgvs ${t.hgvs}, pandas ${t.pandas}, pydantic ${t.pydantic}; transcripts ${reference.transcripts.join(', ')}`, t.mavedb === '2026.2.7.4' && t.mavehgvs === '0.8.1' && t.hgvs === '1.5.7', 'mavedb 2026.2.7.4, mavehgvs 0.8.1, hgvs 1.5.7');
+    // The files written now are the ones the validators checked.
+    const same = (a, b) => b && Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
+    const stale = packages.filter((p) => !same(mavedbHashes(p.deposit), reference.packages[p.id]?.files));
+    const files = packages.reduce((n, p) => n + Object.keys(mavedbHashes(p.deposit)).length, 0);
+    check('mavedb-export', 'every deposit written now is the one MaveDB\'s validators checked: each file\'s SHA-256 as in reference/mavedb-export.json', `${packages.length} deposits, ${files} files${stale.length ? `; changed: ${stale.map((p) => p.id).join(', ')} (regenerate the reference)` : ''}`, !stale.length && packages.length === Object.keys(reference.packages).length, 'all the same');
+    // The tables, as MaveDB's upload reads them and its variant-creation job checks them.
+    const of = (p) => reference.packages[p.id];
+    const tablesBad = packages.filter((p) => !of(p)?.tables.ok || of(p).tables.scores.rows !== p.deposit.report.variants.exported);
+    const rows = packages.reduce((n, p) => n + p.deposit.report.variants.exported, 0);
+    check('mavedb-export', 'the scores and counts pass MaveDB\'s validate_and_standardize_dataframe_pair with their column descriptions and target (mavehgvs against a target\'s sequence, biocommons hgvs against a transcript), every row read', `${packages.length - tablesBad.length} of ${packages.length} (${rows.toLocaleString('en-US')} rows; ${packages.filter((p) => p.deposit.files.some((f) => f.name === 'counts.csv')).length} with counts)${tablesBad.length ? `; refused: ${tablesBad.map((p) => `${p.id} ${of(p)?.tables.error ?? 'not checked'}`).join('; ')}` : ''}`, !tablesBad.length, 'all');
+    const names = packages.reduce((n, p) => n + (of(p)?.names.checked ?? 0), 0);
+    const namesBad = packages.filter((p) => !of(p)?.names.ok);
+    check('mavedb-export', 'every name in the tables valid MAVE-HGVS by mavehgvs 0.8.1 in strict mode', `${names.toLocaleString('en-US')} names${namesBad.length ? `; invalid in ${namesBad.map((p) => `${p.id}: ${of(p).names.invalid.slice(0, 2).join(', ')}`).join('; ')}` : ''}`, !namesBad.length && names >= rows, 'all');
+    // The experiment and the score set: MaveDB's models take them when MaveScape says nothing is
+    // missing, and refuse them, for what MaveScape names, when it says something is.
+    const metadata = packages.map((p) => {
+      const r = of(p);
+      const ok = r?.experiment.ok && r?.scoreSet.ok;
+      const expected = p.expect === 'ok';
+      const said = p.deposit.report.missing.map((m) => m.field);
+      const agrees = expected ? ok && !said.length : !ok && said.includes(p.expect) && new RegExp(`${p.expect}Text|${p.expect}`).test(`${r?.experiment.error ?? ''} ${r?.scoreSet.error ?? ''}`);
+      return { p, ok, agrees };
+    });
+    const disagree = metadata.filter((m) => !m.agrees);
+    check('mavedb-export', 'experiment.json as MaveDB\'s ExperimentCreate (keywords by its validate_keyword_list and in its vocabulary), score_set.json as its ScoreSetCreate: taken when MaveScape reports nothing missing, refused for what it names when it does (a deposit without an abstract)', `${metadata.filter((m) => m.ok).length} taken, ${metadata.filter((m) => !m.ok).length} refused as said${disagree.length ? `; disagree: ${disagree.map((m) => m.p.id).join(', ')}` : ''}`, !disagree.length && metadata.filter((m) => !m.ok).length === 1, 'all as said');
+    // Every kind of run and target MaveDB takes.
+    const modes = Object.fromEntries(['protein', 'coding', 'noncoding', 'accession'].map((m) => [m, packages.filter((p) => p.deposit.report.mode === m).length]));
+    const passed = packages.filter((p) => JSON.parse(p.deposit.files.find((f) => f.name === 'mavescape.json').text).run.published).length;
+    check('mavedb-export', 'the kinds of deposit: protein variants; c. names with their protein changes on the coding sequence; n. names on the whole sequence; names prefixed by a RefSeq or Ensembl transcript; runs scored from counts (two populations, a time series, sorted bins, barcodes, two conditions) and published scores passed through', `${Object.entries(modes).map(([k, v]) => `${k} ${v}`).join(', ')}; ${packages.length - passed} scored, ${passed} published`, Object.values(modes).every((n) => n > 0) && passed >= 4 && packages.length - passed >= 10, 'each');
+    // Export → import → export: the files MaveDB reads, the same bytes.
+    const trips = packages.map((p) => ({ p, ...roundTrip(p.deposit) }));
+    const differ = trips.filter((x) => !x.same);
+    check('mavedb-export', 'export → import → export: each deposit read back as MaveScape opens a MaveDB package (its published scores read as published, its counts beside them, its MaveDB details kept) and written again, the files MaveDB reads the same bytes', `${trips.length - differ.length} of ${trips.length} the same${differ.length ? `; differ: ${differ.map((x) => `${x.p.id} (${x.differ.join(', ')})`).join('; ')}` : ''}`, !differ.length, 'all');
+    // MaveDB's controlled vocabulary, as MaveScape writes the experiment's keywords.
+    const vocabulary = JSON.parse(readFileSync(new URL('./fixtures/public-data/mavedb-keywords.json', import.meta.url), 'utf8'));
+    const keys = Object.keys(vocabulary.keywords);
+    const vocabDiffer = keys.filter((k) => JSON.stringify([...(MAVEDB_KEYWORDS[k] ?? [])].sort()) !== JSON.stringify(vocabulary.keywords[k].map((x) => x.label).sort()));
+    check('mavedb-export', `MaveScape's keyword vocabulary (readout.js, MAVEDB_KEYWORDS) is MaveDB's: every key and label of /api/v1/controlled-keywords (retrieved ${vocabulary.retrieved})`, `${keys.length} keys, ${keys.reduce((n, k) => n + vocabulary.keywords[k].length, 0)} labels${vocabDiffer.length ? `; differ: ${vocabDiffer.join(', ')}` : ''}`, !vocabDiffer.length && keys.length === Object.keys(MAVEDB_KEYWORDS).length, 'the same');
   },
 };
 

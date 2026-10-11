@@ -113,7 +113,7 @@ export const GAPS = {
   },
   'readout-terms': {
     label: 'The assay in MaveDB\'s terms', kind: 'description', place: 'readout',
-    why: 'MaveDB records every assay\'s method, mechanism and model system; a deposit (MaveScape 0.3) needs them.',
+    why: 'MaveDB records every assay\'s method, mechanism and model system; a MaveDB deposit writes them as its keywords.',
     where: 'The assay\'s protocol: its method (a reporter, cell fitness, binding), what it detects (loss or gain of function) and the cells or organism it was done in.',
     how: 'Experiment, What the assay measures.',
   },
@@ -244,7 +244,7 @@ function scoresAnalysesOf(f) {
   add('Record', 'record.scores', 'The published scores on the map, explored and exported', { improves: [['score-se', !f.scoreSE]] });
   add('Record', 'record.compare', 'Compared with a rescoring or another assay (comparisons come with MaveScape 0.4)');
   add('Record', 'record.methods', 'The methods paragraph and its references', { improves: [['readout', !f.readout]] });
-  add('Record', 'record.deposit', 'Everything a MaveDB deposit asks for (deposits come with MaveScape 0.3)', { needs: [['readout', !f.readout], ['readout-terms', !f.readoutTerms], ['target-identifiers', !f.identifiers]] });
+  add('Record', 'record.deposit', 'A MaveDB deposit with all the MAVE minimum information asks for (Export, Deposit in MaveDB)', { needs: [['readout', !f.readout], ['readout-terms', !f.readoutTerms], ['target-identifiers', !f.identifiers]] });
   return out;
 }
 
@@ -366,7 +366,7 @@ function analysesOf(f) {
   add('Record', 'record.scores', 'Scores in MaveDB\'s columns, with their SEs and intervals');
   add('Record', 'record.methods', 'The methods paragraph and its references', { improves: [['readout', !f.readout]] });
   add('Record', 'record.package', 'The analysis package: counts, target, design, sample sheet and parameters');
-  add('Record', 'record.deposit', 'Everything a MaveDB deposit asks for (deposits come with MaveScape 0.3)', {
+  add('Record', 'record.deposit', 'A MaveDB deposit with all the MAVE minimum information asks for (Export, Deposit in MaveDB)', {
     needs: [['readout', !f.readout], ['readout-terms', !f.readoutTerms], ['library-method', !f.libraryMethod], ['target-identifiers', !f.identifiers]],
   });
   return out;

@@ -154,7 +154,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | I1 | MaveDB: search, fetch score sets by URN with scores, counts, metadata, license and citation; cached with retrieval metadata | done (wave 3, slice 2: search and URNs, `mavescape --mavedb`; the record with its license and terms, citation, target, keywords and calibrations; published scores read as published, on the map; counts with a drafted design; cached for offline use; the feasibility records checked live) |
-| I2 | MaveDB-ready export (scores and counts CSV, metadata) that passes MaveDB's own validators | planned (wave 3) |
+| I2 | MaveDB-ready export (scores and counts CSV, metadata) that passes MaveDB's own validators | done (wave 3, slice 4: scores and counts as MaveDB's upload reads them, column descriptions, the experiment and score set as its API takes them, the methods as the analysis and the readout as MAVE minimum information keywords, what MaveDB requires that is missing named; 19 deposits of every kind accepted by MaveDB's own validators, the `mavedb` package and mavehgvs strict; export → import → export the same bytes; never sent) |
 | I3 | Annotation providers behind one interface (UniProt features, ClinVar, gnomAD, conservation, AlphaMissense and other predictors, custom tables), each record with source, version, identifiers and retrieval date | in progress: wave 3, slice 1 (the fetcher and cache: every answer with its source, release and retrieval date; a target's UniProt entry); the providers with slice 5 |
 | I4 | Imported predictor scores as variant-level tracks | planned (wave 3) |
 
@@ -163,7 +163,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | # | Requirement | Status |
 | --- | --- | --- |
 | M1 | `mavescape run`: a versioned design, validation before execution, deterministic outputs (scores, QC, figures, methods, provenance), structured JSON logs, non-zero exit on blocking errors, exact reruns from a workspace run | done (wave 2, slice 7: headless Chrome on the remote-control hub; every file the same bytes with `--time` or SOURCE_DATE_EPOCH; `--log json`; exit 1 or 2 with run.json saying why; `--from-workspace` reproduces exactly; `validation/headless-run.mjs`) |
-| M2 | `mavescape validate` (a score or count table, a design) and `mavescape export` (an archive to MaveDB or tables) | validate done (wave 2, slice 7: tables, a design and parameters checked as scoring would, exit 1 with what blocks scoring, `--json`; slice 10: the readiness, in words and in `--json`); export planned (wave 3) |
+| M2 | `mavescape validate` (a score or count table, a design) and `mavescape export` (an archive to MaveDB or tables) | done: validate (wave 2, slice 7: tables, a design and parameters checked as scoring would, exit 1 with what blocks scoring, `--json`; slice 10: the readiness, in words and in `--json`); export (wave 3, slice 4: `--format mavedb` or `tables` from a workspace archive, `--details`, `--strict`, the same bytes with `--time`, `export.json`) |
 | M3 | Remote-control API with per-session tokens | done (wave 2, slice 1: `--remote-control`, 14 actions, a per-run token for files in `remote.json`; the MCP server on it in wave 7) |
 | M4 | MCP server with the PRD's tools; changes to design, filters, scoring, calibration or exports arrive as reviewable proposals; read-only queries run directly | planned (wave 7) |
 | M5 | Python and R clients generated from the tool list | planned (wave 7) |

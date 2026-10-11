@@ -132,6 +132,7 @@ export function validateDesign(design, table = null) {
       error(`${path}.sequenceType`, 'The sequence type must be dna or protein.');
     }
     if (target.offset !== undefined && !Number.isInteger(target.offset)) error(`${path}.offset`, 'The offset is a whole number.');
+    if (target.taxonomyId !== undefined && !(Number.isInteger(target.taxonomyId) && target.taxonomyId > 0)) error(`${path}.taxonomyId`, 'The NCBI Taxonomy id is a positive whole number (9606 for Homo sapiens).');
     for (const [j, d] of (target.differences ?? []).entries()) {
       if (!Number.isInteger(d.position) || d.position < 1 || d.position > targetLength(target, level)) error(`${path}.differences[${j}]`, 'A known difference must name a position in the target.');
     }

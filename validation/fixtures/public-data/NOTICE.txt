@@ -28,3 +28,10 @@ Ensembl's answers (ensembl/), retrieved 2026-10-11 from rest.ensembl.org, unchan
 of ENST00000460680 (version 6) and ENST00000269305 (version 9). Ensembl's data have no restriction
 on use. Harrison PW, et al. Ensembl 2024. Nucleic Acids Research 2024;52(D1):D891-D899.
 doi:10.1093/nar/gkad1049
+
+MaveDB's controlled keywords for experiments (mavedb-keywords.json), retrieved 2026-10-10 from
+api.mavedb.org (/api/v1/controlled-keywords/{key}, one answer per key, the fields MaveScape reads):
+MaveDB's implementation of the MAVE minimum information's controlled vocabulary (Claussnitzer M, et
+al. Minimum information and guidelines for reporting a multiplexed assay of variant effect. Genome
+Biology 2024;25:100. doi:10.1186/s13059-024-03223-9; the vocabulary ave-dcd/mave_vocabulary, CC BY
+4.0).

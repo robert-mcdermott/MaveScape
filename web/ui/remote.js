@@ -11,7 +11,7 @@ import { validateDesign, summarizeDesign } from '../lib/design.js';
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
 import { addRun, makeRun, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
-import { acknowledgeFinding, addSelection, addTarget, createWorkspace, rename, setDesign } from '../lib/workspace.js';
+import { acknowledgeFinding, addSelection, addTarget, createWorkspace, rename, setDeposit, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
 import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
@@ -34,6 +34,8 @@ import { anchorUncertainty } from '../lib/anchors.js';
 import { readiness, readinessText } from '../lib/readiness.js';
 import { applyCheck, checkTarget, fetchPublic, placementText } from './public-data.js';
 import { importMaveDB } from './mavedb.js';
+import { depositFile, runDeposit } from './mavedb-export.js';
+import { DEPOSIT_FIELDS, depositDetails, readPublication } from '../lib/mavedb-export.js';
 import { searchHits } from '../lib/mavedb.js';
 import { retrievalText } from '../lib/uniprot.js';
 
@@ -236,7 +238,7 @@ export function installRemote(app) {
       const data = {
         workspace: { id: w.id, name: w.name, example: w.example?.id ?? null },
         mode: store.ui.mode === 'welcome' ? 'start' : store.ui.mode,
-        tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, sha256: s.sha256, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source, ...(s.origin ? { origin: { database: s.origin.database, urn: s.origin.urn, file: s.origin.file, retrieved: s.origin.retrieved, license: s.origin.license } } : {}) })),
+        tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, sha256: s.sha256, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source, ...(s.origin ? { origin: { database: s.origin.database, urn: s.origin.urn, ...(s.origin.package ? { package: s.origin.package } : {}), file: s.origin.file, retrieved: s.origin.retrieved, license: s.origin.license } } : {}) })),
         targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0, ...(t.sequenceType === 'dna' ? { codingStart: t.codingStart ?? 1 } : {}), ...(t.origin ? { from: t.origin.service ?? t.origin.format, accession: t.origin.accession } : {}) })),
         design: w.design ? designSummary(w.design, source) : null,
         runs: w.runs.map(runSummary),
@@ -283,11 +285,13 @@ export function installRemote(app) {
         if (!response.ok) throw new ActionError(`${file.name} could not be read (HTTP ${response.status}).`);
         items.push(Object.assign(new File([await response.arrayBuffer()], file.name), { folder: file.folder ?? null }));
       }
-      const before = { sources: ws().sources.length, targets: ws().targets.length };
+      const before = { id: ws().id, sources: ws().sources.length, targets: ws().targets.length };
       const { problems } = await app.importFiles(items, { accept: !args.review });
       await settle();
       const w = ws();
-      const added = { tables: w.sources.slice(before.sources).map((s) => s.name), targets: w.targets.slice(before.targets).map((t) => t.name) };
+      // A MaveDB package opens as a workspace of its own (wave 3, slice 4).
+      const fresh = w.id !== before.id;
+      const added = { tables: w.sources.slice(fresh ? 0 : before.sources).map((s) => s.name), targets: w.targets.slice(fresh ? 0 : before.targets).map((t) => t.name) };
       if (problems.length && !added.tables.length && !added.targets.length && !args.review) throw new ActionError(problems.join(' '));
       const parts = [];
       if (added.tables.length) parts.push(`the table${added.tables.length > 1 ? 's' : ''} ${added.tables.join(', ')}`);
@@ -380,6 +384,45 @@ export function installRemote(app) {
     // The target checked against its UniProt entry (wave 3, slice 1), through the program's fetcher:
     // only the accession is sent. A lookup by sequence is not offered here: it sends the sequence,
     // and only the person at the window may decide that.
+    // A MaveDB deposit (wave 3, slice 4): what one of a run would hold and what MaveDB requires
+    // that the workspace lacks. Read-only.
+    async mavedb_deposit(args) {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      const condition = resolveCondition(results, args.condition);
+      let made;
+      try {
+        made = await runDeposit(app, run, condition);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const r = made.report;
+      const left = r.variants.leftOut.reduce((a, x) => a + x.count, 0);
+      const message = [
+        `A MaveDB deposit of ${run.name}${results.conditions.length > 1 ? ` (${r.condition})` : ''}: ${r.variants.exported} of ${r.variants.of} variants${left ? ` (${left} left out)` : ''}, the target ${r.target.targetAccession ? `named by ${r.target.targetAccession.accession}` : 'given by its sequence'}.`,
+        r.missing.length ? `MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.text).join(' ')}` : 'Nothing MaveDB requires is missing.',
+      ].join(' ');
+      return { message, data: { run: run.name, condition: r.condition, conditions: results.conditions.map((c) => c.name), mode: r.mode, target: r.target, variants: r.variants, scored: r.scored, columns: r.columns, keywords: r.keywords, missing: r.missing, defaulted: r.defaulted, notes: r.notes, ready: r.ready, details: depositDetails(ws(), run).details } };
+    },
+
+    // Sets the MaveDB details (ws.deposit): the fields given replace the workspace's (an empty one
+    // removes it), undoable and in the history.
+    async set_mavedb_details(args) {
+      const given = typeof args.details === 'object' && args.details ? args.details : null;
+      if (!given) throw new ActionError(`Give "details": an object of ${DEPOSIT_FIELDS.filter((k) => k !== 'columns').join(', ')}.`);
+      const unknown = Object.keys(given).filter((k) => !DEPOSIT_FIELDS.includes(k) || k === 'columns');
+      if (unknown.length) throw new ActionError(`No MaveDB detail ${unknown.map((k) => `"${k}"`).join(', ')}; the details are ${DEPOSIT_FIELDS.filter((k) => k !== 'columns').join(', ')}.`);
+      const patch = { ...given };
+      // Publications as written ("PubMed 29785012", a DOI) or as { db, id }.
+      if (Array.isArray(patch.publications)) patch.publications = patch.publications.map((p) => (typeof p === 'string' ? readPublication(p) : { db: p.db ?? null, id: String(p.id ?? '') }));
+      for (const key of ['rawReads', 'contributors', 'dois']) if (typeof patch[key] === 'string') patch[key] = patch[key].split(/[;,\s]+/).filter(Boolean);
+      if (patch.taxonomyId !== undefined && patch.taxonomyId !== null && patch.taxonomyId !== '') patch.taxonomyId = Number(patch.taxonomyId);
+      const next = setDeposit(ws(), patch, `MaveDB details set by ${author}: ${Object.keys(patch).join(', ')}`);
+      const changed = next !== ws();
+      if (changed) store.commit(next, 'Change the MaveDB details');
+      return { message: changed ? `Set the MaveDB details: ${Object.keys(patch).join(', ')}.` : 'The MaveDB details are as they were.', data: { details: ws().deposit ?? {} } };
+    },
+
     async check_target(args) {
       const w = ws();
       const designTarget = w.design?.targets?.[0]?.id;
@@ -719,7 +762,7 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb'];
       const what = choose(args.what, kinds, 'export');
       let file;
       // The analysis package (wave 2, slice 10): of a run when named, else of the current run, else
@@ -728,6 +771,20 @@ export function installRemote(app) {
         const run = args.run ? resolveRun(args.run) : currentRun(ws());
         file = await packageFile(app, run);
         return { file: file.bytes, message: `The analysis package of "${ws().name}"${run ? `, ${run.name}` : ' (the design, with the default parameters)'}: counts, target, design, sample sheet, parameters and what is missing.` };
+      }
+      // A MaveDB deposit (wave 3, slice 4): one ZIP of the files MaveDB reads.
+      if (what === 'mavedb') {
+        const run = resolveRun(args.run);
+        const { results } = await resultsOf(run);
+        const condition = resolveCondition(results, args.condition);
+        let made;
+        try {
+          made = await depositFile(app, run, condition);
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+        const r = made.deposit.report;
+        return { file: made.bytes, message: `${run.name}'s MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
       }
       if (what === 'archive') {
         file = await archiveFile(app, { includeTables: args.include_tables !== false });

@@ -15,12 +15,14 @@ import { progressToast, showDialog, toast } from './overlays.js';
 import { fetchPublic, publicDataState } from './public-data.js';
 import { storeBytes } from './import.js';
 import { runScore, workerInput } from './score-input.js';
-import { accessionTarget, countsDesign, mappedCSV, mappedVariants, normalizeUrn, readScoreSet, scoresDesign, searchHits, targetsOf } from '../lib/mavedb.js';
+import { accessionTarget, countsDesign, mappedCSV, mappedVariants, normalizeUrn, readScoreSet, recordSummary, scoresDesign, searchHits, targetsOf } from '../lib/mavedb.js';
 import { detectLayout, reviewImport, suggestRoles } from '../lib/importer.js';
 import { addRun, makeRun, runInputs } from '../lib/runs.js';
 import { defaultParameters } from '../lib/score.js';
 import { addSource, addTarget, change, createWorkspace, setDesign } from '../lib/workspace.js';
 import { retrievalText } from '../lib/retrieval.js';
+import { readDeposit } from '../lib/mavedb-export.js';
+import { isZip, readZip } from '../lib/zip.js';
 import { now } from '../lib/clock.js';
 
 const exact = (n) => n.toLocaleString('en-US');
@@ -62,13 +64,6 @@ function sourceOf(part, { name, target, origin }) {
   };
 }
 
-// What the workspace keeps of a record (workspace.records): enough to cite, license and describe it
-// offline, with its calibrations.
-function recordSummary(record, retrieval) {
-  const { abstract, ...kept } = record;
-  return { database: 'MaveDB', ...kept, retrieved: retrieval?.retrieved ?? null, url: retrieval?.source ?? null };
-}
-
 // The target of a record: its own sequence, or the transcript its accession names, fetched.
 // Returns { target, origin, notes } (origin: where a fetched target came from).
 async function recordTarget(app, record, choice, busy) {
@@ -85,6 +80,55 @@ async function recordTarget(app, record, choice, busy) {
   const made = accessionTarget(p, p.kind === 'refseq' ? got.text : got.json, { retrieval: got.retrieval });
   if (made.problem) throw new Error(made.problem);
   return { target: made.target, origin: made.origin, notes: made.messages.map((m) => m.message) };
+}
+
+// The workspace of a record and its tables (a score set from MaveDB, or a MaveDB package opened from
+// files): the target, the record kept, the published scores read as published (a run of their own),
+// the counts with a design drafted from their column names. Loaded into the window. Returns
+// { ws, target, published, result, draft, changed }.
+async function openRecordWorkspace(app, { record, retrieval, recordsTarget, targetOrigin, scores, scoresRetrieval, countsPart, countsRetrieval, origin, example = null, deposit = null, busy, label, named, history }) {
+  await app.saveNow();
+  let ws = createWorkspace(record.title);
+  const added = addTarget(ws, targetOrigin ? { ...recordsTarget, origin: targetOrigin } : recordsTarget);
+  ws = added.ws;
+  const target = ws.targets.find((t) => t.id === added.id);
+  ws = change(ws, { records: [...(ws.records ?? []), recordSummary(record, retrieval)], ...(deposit ? { deposit } : {}) }, ...history);
+  // The published scores, read as published: a run of their own.
+  const scoresSource = addSource(ws, sourceOf(scores, { name: `${record.title}: scores (${label})`, target: target.id, origin: origin('scores', scoresRetrieval) }));
+  const design = scoresDesign(record, { table: scores.table, layout: scores.layout, target });
+  if (example?.readout) design.readout = { ...(design.readout ?? {}), ...example.readout };
+  ws = setDesign(scoresSource.ws, design, `The published scores of ${named}, read as published${example?.readout ? ' (the readout\'s direction as the example states it, from the paper)' : ''}`, scoresSource.id);
+  // An example's table is the one it was made with, or the guide's numbers may not hold.
+  const changed = Boolean(example?.mavedb?.scores?.sha256 && scores.stored.sha256 !== example.mavedb.scores.sha256) || Boolean(example?.mavedb?.counts?.sha256 && countsPart && countsPart.stored.sha256 !== example.mavedb.counts.sha256);
+  if (example) ws = change(ws, { example: { id: example.id, simulated: false } }, 'example', `Opened the example "${example.title}" (${example.source}, ${example.license})${changed ? `; MaveDB's table has changed since the example was made (SHA-256 ${scores.stored.sha256.slice(0, 12)}…, not ${example.mavedb.scores.sha256.slice(0, 12)}…)` : ''}`);
+  busy.update(0.6, 'Reading the scores as published');
+  const input = workerInput(scores.table, ws.design);
+  const parameters = defaultParameters(ws.design, ws.sources.find((s) => s.id === scoresSource.id));
+  const result = await runScore(app, { names: input.names, barcodes: input.barcodes, columns: input.columns, design: ws.design, parameters, mode: 'lenient' }, { transfer: input.transfer }).promise;
+  let published = null;
+  if (result.ok) {
+    const source = ws.sources.find((s) => s.id === scoresSource.id);
+    published = makeRun({ inputs: runInputs({ source, design: ws.design, parameters }), source, results: result.results, software: { version: app.version, commit: app.commit }, name: 'Published scores' });
+    ws = addRun(ws, published).ws;
+    app.runResults ??= new Map();
+    app.runResults.set(published.id, { results: result.results, status: 'computed' });
+  }
+  // The counts, with a design drafted from their column names: to check, then score.
+  let countsId = null;
+  let draft = null;
+  if (countsPart) {
+    const countsSource = addSource(ws, sourceOf(countsPart, { name: `${record.title}: counts (${label})`, target: target.id, origin: origin('counts', countsRetrieval) }));
+    countsId = countsSource.id;
+    draft = countsDesign(record, { table: countsPart.table, layout: countsPart.layout, target });
+    ws = setDesign(countsSource.ws, draft.design, `A design drafted from the column names of ${named}'s counts`, countsId);
+  }
+  await app.loadWorkspace(ws);
+  app.tables.set(scoresSource.id, { table: scores.table, review: scores.review });
+  if (countsPart) app.tables.set(countsId, { table: countsPart.table, review: countsPart.review });
+  app.store.markSaved(null);
+  await app.saveNow();
+  await app.setMode(published ? 'map' : 'experiment');
+  return { ws: app.store.ws, target, published, result, draft, changed };
 }
 
 // Opens a published score set as a new workspace. counts: also its counts, when it has them.
@@ -134,48 +178,14 @@ export async function importMaveDB(app, text, { counts = true, example = null, t
       mappedFile = { fileName: `${stem}.mapped.csv`, sha256: stored.sha256, size: stored.size, variants: rows.length, retrieved: got2.retrieval?.retrieved ?? null, url: got2.retrieval?.source ?? null };
     }
 
-    await app.saveNow();
-    let ws = createWorkspace(record.title);
-    const added = addTarget(ws, targetOrigin ? { ...recordsTarget, origin: targetOrigin } : recordsTarget);
-    ws = added.ws;
-    const target = ws.targets.find((t) => t.id === added.id);
     const origin = (file, retrieval) => ({ database: 'MaveDB', urn, file, url: retrieval?.source ?? null, retrieved: retrieval?.retrieved ?? null, license: record.license.short, hasCounts: record.hasCounts, rawReads: record.experiment.rawReads.map((r) => r.id), ...(mappedFile ? { mapped: mappedFile } : {}) });
-    ws = change(ws, { records: [...(ws.records ?? []), recordSummary(record, got.retrieval)] }, 'mavedb', `Opened ${urn} from MaveDB: "${record.title}" (${record.license.short}; ${retrievalText(got.retrieval) || 'retrieved now'})`);
-    // The published scores, read as published: a run of their own.
-    const scoresSource = addSource(ws, sourceOf(scores, { name: `${record.title}: scores (MaveDB)`, target: target.id, origin: origin('scores', scoresFile.retrieval) }));
-    const design = scoresDesign(record, { table: scores.table, layout: scores.layout, target });
-    if (example?.readout) design.readout = { ...(design.readout ?? {}), ...example.readout };
-    ws = setDesign(scoresSource.ws, design, `The published scores of ${urn}, read as published${example?.readout ? ' (the readout\'s direction as the example states it, from the paper)' : ''}`, scoresSource.id);
-    // An example's table is the one it was made with, or the guide's numbers may not hold.
-    changed = Boolean(example?.mavedb?.scores?.sha256 && scores.stored.sha256 !== example.mavedb.scores.sha256) || Boolean(example?.mavedb?.counts?.sha256 && countsPart && countsPart.stored.sha256 !== example.mavedb.counts.sha256);
-    if (example) ws = change(ws, { example: { id: example.id, simulated: false } }, 'example', `Opened the example "${example.title}" (${example.source}, ${example.license})${changed ? `; MaveDB's table has changed since the example was made (SHA-256 ${scores.stored.sha256.slice(0, 12)}…, not ${example.mavedb.scores.sha256.slice(0, 12)}…)` : ''}`);
-    busy.update(0.6, 'Reading the scores as published');
-    const input = workerInput(scores.table, ws.design);
-    const parameters = defaultParameters(ws.design, ws.sources.find((s) => s.id === scoresSource.id));
-    const result = await runScore(app, { names: input.names, barcodes: input.barcodes, columns: input.columns, design: ws.design, parameters, mode: 'lenient' }, { transfer: input.transfer }).promise;
-    let published = null;
-    if (result.ok) {
-      const source = ws.sources.find((s) => s.id === scoresSource.id);
-      published = makeRun({ inputs: runInputs({ source, design: ws.design, parameters }), source, results: result.results, software: { version: app.version, commit: app.commit }, name: 'Published scores' });
-      ws = addRun(ws, published).ws;
-      app.runResults ??= new Map();
-      app.runResults.set(published.id, { results: result.results, status: 'computed' });
-    }
-    // The counts, with a design drafted from their column names: to check, then score.
-    let countsId = null;
-    let draft = null;
-    if (countsPart) {
-      const countsSource = addSource(ws, sourceOf(countsPart, { name: `${record.title}: counts (MaveDB)`, target: target.id, origin: origin('counts', countsRetrieval) }));
-      countsId = countsSource.id;
-      draft = countsDesign(record, { table: countsPart.table, layout: countsPart.layout, target });
-      ws = setDesign(countsSource.ws, draft.design, `A design drafted from the column names of ${urn}'s counts`, countsId);
-    }
-    await app.loadWorkspace(ws);
-    app.tables.set(scoresSource.id, { table: scores.table, review: scores.review });
-    if (countsPart) app.tables.set(countsId, { table: countsPart.table, review: countsPart.review });
-    app.store.markSaved(null);
-    await app.saveNow();
-    await app.setMode(published ? 'map' : 'experiment');
+    const opened = await openRecordWorkspace(app, {
+      record, retrieval: got.retrieval, recordsTarget, targetOrigin, scores, scoresRetrieval: scoresFile.retrieval, countsPart, countsRetrieval, origin, example, busy,
+      label: 'MaveDB', named: urn,
+      history: ['mavedb', `Opened ${urn} from MaveDB: "${record.title}" (${record.license.short}; ${retrievalText(got.retrieval) || 'retrieved now'})`],
+    });
+    const { ws, target, published, result, draft } = opened;
+    changed = opened.changed;
     const scored = published ? published.output.conditions[0].scored : 0;
     const message = [
       `Opened ${urn} from MaveDB: "${record.title}" (${record.license.short}).`,
@@ -192,6 +202,81 @@ export async function importMaveDB(app, text, { counts = true, example = null, t
   } catch (error) {
     busy.fail(`${urn} could not be opened: ${error.message}`);
     return { ok: false, message: `${urn} could not be opened: ${error.message}` };
+  }
+}
+
+// Opens a MaveDB package (wave 3, slice 4): experiment.json, score_set.json, scores.csv and
+// counts.csv, as MaveScape writes one (lib/mavedb-export.js) or as one is written for MaveDB's API,
+// from a folder or a ZIP. It is read as a record from MaveDB is: its published scores as published,
+// its counts with a design drafted from their column names, and the MaveDB details it states kept
+// with the workspace (ws.deposit), so that a deposit of its published scores says the same again.
+// Its target is its own sequence, or the transcript it names (fetched). files: Map(name → bytes).
+// Returns { ok, message, data }.
+export async function importMaveDBPackage(app, { name, files }) {
+  const busy = progressToast(`Opening the MaveDB package ${name}…`);
+  try {
+    const texts = new Map([...files].map(([file, bytes]) => [file, /\.json$/.test(file) ? new TextDecoder().decode(bytes) : '']));
+    const { record, details, problems } = readDeposit(texts, { name });
+    if (!record || problems.length) throw new Error(problems.join(' '));
+    const { target: recordsTarget, origin: targetOrigin, notes: targetNotes } = await recordTarget(app, record, null, busy);
+    busy.update(0.15, 'Reading the scores');
+    const scores = await readTable(app, `${name}/scores.csv`, files.get('scores.csv'), recordsTarget);
+    const countsPart = files.has('counts.csv') ? await readTable(app, `${name}/counts.csv`, files.get('counts.csv'), recordsTarget) : null;
+    const origin = (file) => ({ database: 'package', package: name, file, license: record.license.short });
+    const { ws, target, published, result, draft } = await openRecordWorkspace(app, {
+      record, retrieval: null, recordsTarget, targetOrigin, scores, countsPart, origin, deposit: details, busy,
+      label: 'MaveDB package', named: name,
+      history: ['mavedb', `Opened the MaveDB package ${name}: "${record.title}" (${record.license.short})`],
+    });
+    const scored = published ? published.output.conditions[0].scored : 0;
+    const message = [
+      `Opened the MaveDB package ${name}: "${record.title}" (${record.license.short}).`,
+      targetOrigin ? `Its target, ${target.name}, is the transcript ${targetOrigin.accession} (${targetOrigin.service ?? targetOrigin.format}).` : '',
+      ...targetNotes,
+      published ? `Its scores are on the map, read as published: ${exact(scored)} of ${exact(scores.table.rows)} variants have one.` : `Its scores could not be read: ${result.errors.join(' ')}`,
+      countsPart ? `Its counts have a design drafted from their column names (${{ 'two-population': 'two populations', 'time-series': 'a time series', bins: 'sorted bins' }[draft.design.model] ?? draft.design.model}).` : '',
+      `Its MaveDB details are kept: a deposit of "${published?.name ?? 'Published scores'}" says them again (Record, MaveDB).`,
+    ].filter(Boolean).join(' ');
+    busy.done(`Opened ${name}.`);
+    return { ok: true, message, data: { package: name, title: record.title, license: record.license.short, target: { name: target.name, ...(targetOrigin ? { accession: targetOrigin.accession } : {}) }, published: published ? { run: published.name, scored, variants: scores.table.rows } : null, counts: countsPart ? { columns: countsPart.layout.countColumns.length, design: draft.design.model } : null, design: ws.design?.model ?? null } };
+  } catch (error) {
+    busy.fail(`${name} could not be opened: ${error.message}`);
+    return { ok: false, message: `${name} could not be opened: ${error.message}` };
+  }
+}
+
+// The MaveDB packages among opened files: a folder (or the files opened together) holding
+// score_set.json and scores.csv. Returns { packages: [{ name, items }], rest }.
+export function findPackages(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = item.folder ?? '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const packages = [];
+  const taken = new Set();
+  for (const [folder, group] of groups) {
+    const names = new Set(group.map((x) => x.name));
+    if (!names.has('score_set.json') || !names.has('scores.csv')) continue;
+    const parts = group.filter((x) => ['experiment.json', 'score_set.json', 'scores.csv', 'counts.csv', 'score_columns.json', 'count_columns.json', 'README.md', 'mavescape.json'].includes(x.name));
+    for (const x of parts) taken.add(x);
+    packages.push({ name: folder || 'MaveDB package', items: parts });
+  }
+  return { packages, rest: items.filter((x) => !taken.has(x)) };
+}
+
+// Opens .zip files: a MaveDB package (score_set.json and scores.csv inside), else says what a .zip
+// MaveScape opens is.
+export async function openZips(app, items) {
+  for (const item of items) {
+    const bytes = await app.readBytes(item);
+    const files = isZip(bytes) ? await readZip(bytes) : null;
+    const flat = files ? new Map([...files].map(([path, data]) => [path.split('/').pop(), data])) : null;
+    if (!flat?.has('score_set.json') || !flat.has('scores.csv')) throw new Error(`${item.name}: MaveScape opens a .zip that is a MaveDB package (score_set.json and scores.csv inside); a workspace is a .msz.`);
+    const result = await importMaveDBPackage(app, { name: item.name.replace(/\.zip$/i, ''), files: flat });
+    app.log(result.message);
+    if (!result.ok) throw new Error(result.message);
   }
 }
 

@@ -441,6 +441,7 @@ func TestFileKinds(t *testing.T) {
 		"msa.a3m": "alignment", "features.gff3": "annotation",
 		"2vwf.cif": "structure", "1jm7.pdb": "structure", "AF-P62993.bcif": "structure",
 		"package.zip": "archive", "other.json": "", "notes.docx": "", "reads.fastq": "",
+		"score_set.json": "json", "Experiment.json": "json", "count_columns.json": "json", "mavescape.json": "",
 	}
 	for name, want := range cases {
 		if got := fileKind(name); got != want {

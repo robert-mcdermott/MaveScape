@@ -154,3 +154,51 @@ func TestHeadlessCommandsWithoutABrowser(t *testing.T) {
 		t.Errorf("a wrong command line: exit %d, want %d", code, exitUsage)
 	}
 }
+
+// mavescape export (wave 3, slice 4): its command line.
+func TestExportArguments(t *testing.T) {
+	dir := t.TempDir()
+	archive := writeFile(t, dir, "analysis.msz", "PK")
+	notArchive := writeFile(t, dir, "counts.csv", "hgvs_pro,a\n")
+	details := writeFile(t, dir, "details.json", `{"abstract": "A."}`)
+	notObject := writeFile(t, dir, "list.json", `[1]`)
+	out := filepath.Join(dir, "out")
+	full := filepath.Join(dir, "full")
+	os.MkdirAll(full, 0o755)
+	writeFile(t, full, "scores.csv", "x")
+
+	parse := func(args ...string) (exportOptions, error) {
+		var stderr bytes.Buffer
+		return parseExportArgs(args, &stderr)
+	}
+	opts, err := parse("--out", out, "--details", details, archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.format != "mavedb" || opts.workspace != archive || string(opts.detailsJSON) != `{"abstract": "A."}` || opts.strict {
+		t.Errorf("defaults and files read: %+v", opts)
+	}
+	if opts, err := parse("--format", "tables", "--out", out, archive); err != nil || opts.format != "tables" {
+		t.Errorf("tables: %v %v", opts.format, err)
+	}
+	refused := map[string][]string{
+		"format":            {"--format", "csv", "--out", out, archive},
+		"no workspace":      {"--out", out},
+		"two workspaces":    {"--out", out, archive, archive},
+		"not an archive":    {"--out", out, notArchive},
+		"no out":            {archive},
+		"out not empty":     {"--out", full, archive},
+		"details not JSON":  {"--out", out, "--details", notObject, archive},
+		"details of tables": {"--format", "tables", "--details", details, "--out", out, archive},
+		"strict of tables":  {"--format", "tables", "--strict", "--out", out, archive},
+		"missing details":   {"--out", out, "--details", filepath.Join(dir, "none.json"), archive},
+	}
+	for name, args := range refused {
+		if _, err := parse(args...); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, err := parse("--out", full, "--overwrite", archive); err != nil {
+		t.Errorf("--overwrite: %v", err)
+	}
+}

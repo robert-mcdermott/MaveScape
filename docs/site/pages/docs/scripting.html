@@ -1,6 +1,6 @@
 ---
 title: Remote control, headless runs and scripting
-description: Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), and check them before scoring (mavescape validate).
+description: Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), check them before scoring (mavescape validate), and write a saved run as a MaveDB deposit or tables (mavescape export).
 lede: Started with --remote-control, MaveScape accepts actions from programs on your computer: open an example or your files, score, read the quality control, select variants, export. Each action happens in the open window, where you see it; its changes go into the history and can be undone. For pipelines, mavescape run does a whole analysis without a window, and mavescape validate checks the files first.
 ---
       <h2 id="start">Turn it on</h2>
@@ -42,7 +42,9 @@ lede: Started with --remote-control, MaveScape accepts actions from programs on 
             <tr><td><code>select_variants</code></td><td>Selects <code>variants</code> or <code>positions</code> on the map, optionally only those scored, low, filtered or missing, and saves the selection (<code>save_as</code>)</td></tr>
             <tr><td><code>inspect_variant</code></td><td>A variant's score, SE and interval (with the moderated combination, its degrees of freedom, <code>df</code>; rescaled, the anchors' uncertainty, <code>seScale</code>), flags, replicates and counts (for a regression, each replicate's time points and departure from a line; with conditions compared, each difference with its SE, interval and q); a nucleotide variant's protein change (<code>protein</code>); a protein variant of a nucleotide run, its nucleotide variants each with its score (<code>nucleotideVariants</code>); a variant MaveDB mapped, its HGVS on the reference, VRS identifier and ClinGen allele (<code>mapped</code>)</td></tr>
             <tr><td><code>render_map</code></td><td>Shows the map with the given coloring (<code>differential</code> for a comparison of conditions, and <code>contrast</code> to choose one), row order, palette and zoom, and returns it in words</td></tr>
-            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>protein-scores</code> (a nucleotide run's scores at the protein level), <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>qc-findings</code>, <code>barcodes</code> (a table of barcodes), <code>differential</code> (conditions compared), <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG), <code>selection</code>, <code>archive</code> or <code>package</code> (the analysis package of a run, or of the design with the default parameters) to <code>path</code>. Needs the token</td></tr>
+            <tr><td><code>mavedb_deposit</code></td><td>What a MaveDB deposit of a run (and <code>condition</code>) would hold: the variants and those left out with why, the target as MaveDB holds it, the columns, the keywords, and what MaveDB requires that the workspace lacks (<code>missing</code>). Writes nothing (<a href="record.html#mavedb">Depositing in MaveDB</a>)</td></tr>
+            <tr><td><code>set_mavedb_details</code></td><td>Sets the MaveDB details (<code>details</code>: title, abstract, license, publications such as <code>"PubMed 29785012"</code> or a DOI, raw reads, contributors' ORCID iDs, the experiment's URN, keywords…); undoable, in the history</td></tr>
+            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>protein-scores</code> (a nucleotide run's scores at the protein level), <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>qc-findings</code>, <code>barcodes</code> (a table of barcodes), <code>differential</code> (conditions compared), <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG), <code>selection</code>, <code>archive</code>, <code>package</code> (the analysis package of a run, or of the design with the default parameters) or <code>mavedb</code> (a run's MaveDB deposit, a ZIP) to <code>path</code>. Needs the token</td></tr>
           </tbody>
         </table>
       </div>
@@ -126,6 +128,12 @@ Done in 1.2 s: 9 files written to results (run.json lists them).</code></pre></d
   …
   What is missing:
   - Cells carried into selection: QC infers a bottleneck from how much replicates disagree; …</code></pre></div>
+
+      <h2 id="export">Exporting a saved run</h2>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>mavescape export --format mavedb --out deposit/ --details details.json analysis.msz</code></pre></div>
+      <p><code>mavescape export</code> writes a run of a saved workspace (the latest, or <code>--run</code>) without a window. <code>--format mavedb</code> writes it as a MaveDB deposit: the scores, counts, column descriptions, experiment and score set as MaveDB takes them (<a href="record.html#mavedb">Depositing in MaveDB</a>), one folder per condition when there are several (or <code>--condition</code>). <code>--details details.json</code> sets the MaveDB details first, as the <code>set_mavedb_details</code> action takes them:</p>
+      <div class="code wrap"><pre><code>{"abstract": "…", "license": "CC0", "publications": ["PubMed 29785012"], "contributors": ["0000-0002-1825-0097"]}</code></pre></div>
+      <p>What MaveDB requires that the workspace lacks is said on standard error and in <code>export.json</code>, and named in the deposit's README; the files are written all the same, and <code>--strict</code> exits 1 instead. <code>--format tables</code> writes the run's tables, methods and record as <code>mavescape run</code> does, from the saved workspace. With <code>--time</code> (or <code>SOURCE_DATE_EPOCH</code>) every file is the same bytes for the same workspace. Nothing is sent to MaveDB: upload the deposit yourself.</p>
 
       <h2 id="later">Coming</h2>
       <p>An MCP server for AI agents on the same actions (<a href="{{github}}/blob/main/mavescape-spec/roadmap.md">roadmap</a>).</p>

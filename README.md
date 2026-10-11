@@ -39,7 +39,11 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > to score again. The whole of MAVE-HGVS is read: nucleotide variants are read for the protein
 > changes they make (checked against biocommons hgvs) and drawn at the protein level as DiMSum
 > merges them, everything a map of substitutions cannot show listed beside it; targets come from
-> GenBank files, or from the RefSeq or Ensembl transcript a MaveDB record names.
+> GenBank files, or from the RefSeq or Ensembl transcript a MaveDB record names. A run becomes a
+> MaveDB deposit (scores, counts, what each column is, the experiment and score set, the methods as
+> the analysis and the readout as the MAVE minimum information's keywords) that MaveDB's own
+> validators accept, written on your computer and never sent; `mavescape export` writes one from a
+> saved workspace, and a deposit opens again as a MaveDB record does.
 
 ## What is a MAVE?
 
@@ -59,9 +63,9 @@ Tools such as Enrich2, DiMSum or dms_variants turn the reads into counts. MaveSc
 counts, the target's sequence and the experiment's design (which column is which sample, replicate,
 time point or bin). It turns them into scores with their uncertainty, quality control and a map.
 [MaveDB](https://www.mavedb.org) is the public repository of MAVE data. MaveScape is a separate
-program that needs no MaveDB account, and it writes scores in MaveDB's columns. Published scores
-without their counts can be explored, but they cannot be rescored or checked by count-based quality
-control.
+program that needs no MaveDB account; it writes scores in MaveDB's columns, and a run as a deposit
+MaveDB takes. Published scores without their counts can be explored, but they cannot be rescored or
+checked by count-based quality control.
 
 ## Install
 
@@ -110,6 +114,7 @@ MaveScape starts from counts; reads (FASTQ) are counted by those upstream tools.
 | `--version` | Print the version |
 | `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/mavescape/docs/scripting.html#headless)) |
 | `mavescape validate [--design D] [tables]` | Check tables and a design as scoring would; exit 1 when something blocks scoring |
+| `mavescape export --format mavedb --out DIR W.msz` | Write a saved run as a MaveDB deposit (or `--format tables`); `--details` gives what MaveDB asks for, `--strict` fails while it is missing ([depositing in MaveDB](https://robert-mcdermott.github.io/mavescape/docs/record.html#mavedb)) |
 
 A second `mavescape <files>` hands its files to the window already open.
 
@@ -144,6 +149,7 @@ mavescape validate --design design.json counts.csv
 mavescape run --design design.json --out results/ --time 2026-10-09T12:00:00Z counts.csv
 mavescape run --from-workspace results/workspace.msz --out rerun/
 mavescape run --design design.json --out strict/ --strict --acknowledge "coverage=an error-prone PCR library" counts.csv
+mavescape export --format mavedb --details details.json --out deposit/ results/workspace.msz
 ```
 
 ## Privacy and security
@@ -182,6 +188,7 @@ with the workspace library in the browser.
 ```
 main.go, security.go, local.go, store.go, records.go, window.go   the Go host
 remote.go, actions.go, connection.go, output.go                   remote control
+run.go, export.go                                                 mavescape run, validate, export
 web/index.html, web/styles.css, web/app.js                        the app shell
 web/lib/       pure modules (no DOM): parsing, scoring, QC; run in Node, workers and the page
 web/ui/        views and components

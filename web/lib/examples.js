@@ -34,7 +34,7 @@ export const EXAMPLES = [
       ['score', 'In Score, the run with MaveScape\'s defaults is ready. Run it again with the DiMSum-compatible preset: its error model carries the bottleneck into every SE. Compare the runs\' tables of replicates.'],
       ['map', 'Open the map. The darkest columns are the positions that tolerate nothing; click a cell to see its replicates in the inspector. Shift-drag over a stretch of positions, save the selection, and export the map as SVG.'],
       ['experiment', 'In Experiment, Target, "Check against UniProt" fetches GRB2\'s entry (P62993) through the MaveScape program and finds the SH3 domain at positions 159–214, identical: the design\'s offset is the entry\'s. "Record the check" keeps the release and the date with the workspace, and the methods cite them. Only the accession is sent.'],
-      ['score', 'Export the scores (MaveDB columns) and the methods paragraph from the run\'s menu.'],
+      ['score', 'From the run\'s Export menu, "Deposit in MaveDB" writes the run as MaveDB takes a score set: the scores and counts, what each column is, and the experiment and score set, the methods as the analysis and the readout as the MAVE minimum information\'s keywords. It names what MaveDB still requires (an abstract): give it there, and download the package.'],
       ['experiment', 'In Experiment, read "What the analysis can do": the published counts do not say how the library was made or how many cells were carried into selection. With the cells recorded, QC would check the bottleneck it finds against them.'],
     ],
   },

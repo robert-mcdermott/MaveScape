@@ -98,6 +98,33 @@ this section grows with each.
   Findlay et al. 2018), opened from MaveDB with its counts, its target the RefSeq transcript fetched
   from NCBI: the map at the protein level, the splice-site variants beside it, and the deposited
   counts scored against the published scores. Eleven examples now.
+- **A run as a MaveDB deposit (wave 3, slice 4).** *Deposit in MaveDB…*, in a run's Export menu,
+  writes the run as MaveDB takes a score set: `scores.csv` and `counts.csv` as MaveDB's upload
+  reads them (every variant in strict MAVE-HGVS on the target; a run's score, SE, 95% interval,
+  replicates and status, its counts by sample; published scores passed through), what each column
+  is (`score_columns.json`, `count_columns.json`), and the experiment and score set as MaveDB's API
+  takes them (`experiment.json`, `score_set.json`): MaveScape's methods as the analysis, the
+  design's readout and library method as the experiment's keywords in MaveDB's vocabulary (the MAVE
+  minimum information's), the target as MaveDB holds one (its sequence from the coding start, or
+  the RefSeq or Ensembl transcript it was fetched as, each name prefixed by it). A README says how
+  to deposit it and `mavescape.json` what was written and left out. The dialog shows what the
+  deposit holds and what MaveDB requires that the workspace lacks (usually an abstract), and takes
+  the **MaveDB details** (title, descriptions, abstract, license, publications, raw reads,
+  contributors' ORCID iDs, an experiment of yours on MaveDB, the other MAVE minimum information
+  keywords), kept with the workspace and in its history. Nothing is sent: you upload it.
+- **`mavescape export` (wave 3, slice 4).** `--format mavedb` writes a saved workspace's run as a
+  MaveDB deposit (a folder per condition; `--details` sets the MaveDB details from a JSON file;
+  `--strict` exits 1 while MaveDB's requirements are not met); `--format tables` writes its tables,
+  methods and record as `mavescape run` does. `export.json` records what was read and written.
+  Remote actions `mavedb_deposit` (what a deposit holds and lacks) and `set_mavedb_details`;
+  `export` writes `mavedb`.
+- **A MaveDB package opens (wave 3, slice 4).** A deposit's folder or ZIP (or a package written for
+  MaveDB's API) opens as a record from MaveDB does: its published scores on the map, its counts with
+  a drafted design, its MaveDB details kept; written again, its MaveDB files are the same bytes.
+- A design's target may give its organism's NCBI Taxonomy id (`taxonomyId`), as MaveDB keeps one;
+  read from MaveDB records and GenBank records' `/db_xref="taxon:…"`.
+- The guide's *Depositing in MaveDB* (Exports and the record), `mavescape export` (Scripting), and
+  a screenshot of the deposit dialog; the GRB2 example's guide prepares a deposit.
 - **The Network dialog** (the status bar's *Public data*): the services MaveScape may contact,
   what it asks each, the cache's folder, and what the cache holds.
 - The guide page *Public data*; the GRB2 example's guide checks its target against UniProt; a
@@ -121,6 +148,13 @@ this section grows with each.
 - The map's description, the inspector and `inspect_variant` say "as published" of published
   scores, not "from 0 of 0 replicates" (wave 3, slice 3).
 - The GRB2 example's two map steps are one, so that its guide keeps six steps.
+- A MaveDB record kept with the workspace keeps its abstract, publications, contributors, column
+  descriptions and its experiment's texts, for a deposit of it (wave 3, slice 4). A keyword given as
+  "Other" with a description reads as the description.
+- MaveScape's keyword vocabulary is MaveDB's whole controlled vocabulary for experiments, as of
+  2026-10-10 (one assay method added) (wave 3, slice 4).
+- The program opens a MaveDB package's JSON files (`score_set.json`, `experiment.json`,
+  `score_columns.json`, `count_columns.json`) with its tables, from a folder too (wave 3, slice 4).
 
 ### Validation
 
@@ -165,6 +199,21 @@ this section grows with each.
   nucleotide variants run without a window, `protein_scores.csv` as Node writes it.
   `mavedb-live.mjs` (18 checks): BRCA1's saturation genome editing and BAP1's exon 1 opened live,
   their transcripts from NCBI and Ensembl.
+- `mavedb-export` validation suite (8 checks; wave 3, slice 4): MaveDB's own validators (its
+  `mavedb` package 2026.2.7.4, AGPL-3.0, used only as an external reference, with mavehgvs 0.8.1
+  and biocommons hgvs 1.5.7 given each transcript from the cache) on 19 deposits of every kind of
+  run and target, from the examples and published records: every table accepted
+  (`validate_and_standardize_dataframe_pair`, 92,253 rows), every name strict MAVE-HGVS (133,173),
+  the experiment and score set accepted by MaveDB's models, or refused for exactly what MaveScape
+  says is missing; each deposit read back as MaveScape opens a package and written again, the same
+  bytes; MaveScape's keyword vocabulary MaveDB's. The reference records the SHA-256 of every file it
+  checked (`reference/mavedb-export.json`, `generate_mavedb_export.py`).
+- Go tests: no request sends a deposit to MaveDB or writes to it; `mavescape export`'s command line.
+- The remote-control session (96 checks): BAP1's deposit the same bytes as Node's, opened again
+  from its folder and its ZIP and written again the same; GRB2's MaveDB details set and its deposit
+  written. Headless runs (29 checks): `mavescape export` twice the same bytes, as Node writes the
+  deposit from the archive; `--strict`, `--details`, a folder per condition, `--format tables` the
+  same bytes as `mavescape run` wrote, and wrong command lines.
 
 ## 0.2.0 (2026-10-10)
 

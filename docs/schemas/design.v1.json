@@ -188,6 +188,7 @@
         "codingStart": { "type": "integer", "minimum": 1, "description": "DNA targets: the first base of the reading frame (1-based)." },
         "offset": { "type": "integer", "description": "Added to target positions to give positions in the reference protein (UniProt numbering)." },
         "organism": { "type": "string" },
+        "taxonomyId": { "type": "integer", "minimum": 1, "description": "The organism's NCBI Taxonomy id (9606 for Homo sapiens), as MaveDB keeps it with a target sequence." },
         "identifiers": {
           "type": "object",
           "additionalProperties": false,

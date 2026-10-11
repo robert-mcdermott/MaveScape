@@ -16,6 +16,7 @@ import { change } from '../lib/workspace.js';
 import { newId } from '../lib/clock.js';
 import { ensureResults } from './run-results.js';
 import { workerInput } from './score-input.js';
+import { openDepositDialog } from './mavedb-export.js';
 
 const encoder = new TextEncoder();
 const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'export';
@@ -98,6 +99,7 @@ export function runExportItems(app, run, condition = 0) {
   const published = run.inputs.design.model === 'scores';
   return [
     { section: 'MaveDB columns' },
+    { label: 'Deposit in MaveDB: scores, counts, metadata (.zip)…', icon: 'download', onSelect: () => openDepositDialog(app, run, condition) },
     { label: 'Scores (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'scores', condition) },
     ...(run.inputs.design.variants.level !== 'protein' && run.inputs.design.targets?.[0]?.sequenceType === 'dna' ? [{ label: 'Scores at the protein level, nucleotide variants merged (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'protein-scores', condition) }] : []),
     ...(published ? [] : [{ label: 'Counts scored (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'counts', condition) }]),

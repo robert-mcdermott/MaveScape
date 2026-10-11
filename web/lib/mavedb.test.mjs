@@ -57,8 +57,8 @@ test('a record: its title, license and terms, citation, columns, target, keyword
   assert.match(licenseOf({ shortName: 'Other', longName: 'Custom terms', link: 'https://example.org/terms' }).terms, /read its terms before using the data \(https:\/\/example\.org\/terms\)/);
 });
 
-test('targets: the sequence, organism and identifiers, the UniProt offset as the target\'s', () => {
-  assert.deepEqual(targetsOf(record(GRB2)).targets, [{ id: 'GRB2-SH3-domain', name: 'GRB2 SH3 domain', sequenceType: 'protein', sequence: 'TYVQALFDFDPQEDGELGFRRGDFIHVMDNSDPNWWKGACHGQTGMFPRNYVTPVN', offset: 158, organism: 'Homo sapiens', identifiers: { uniprot: 'P62993' } }]);
+test('targets: the sequence, organism (with its taxonomy id) and identifiers, the UniProt offset as the target\'s', () => {
+  assert.deepEqual(targetsOf(record(GRB2)).targets, [{ id: 'GRB2-SH3-domain', name: 'GRB2 SH3 domain', sequenceType: 'protein', sequence: 'TYVQALFDFDPQEDGELGFRRGDFIHVMDNSDPNWWKGACHGQTGMFPRNYVTPVN', offset: 158, organism: 'Homo sapiens', taxonomyId: 9606, identifiers: { uniprot: 'P62993' } }]);
   const hsp90 = targetsOf(record('urn:mavedb:00000011-a-1')).targets[0];
   assert.equal(hsp90.sequenceType, 'dna');
   assert.equal(hsp90.codingStart, 1);
@@ -72,6 +72,19 @@ test('the readout and library method from the experiment\'s keywords; none from 
   assert.equal(pten.libraryMethod, 'Oligo-directed mutagenic PCR');
   assert.equal(pten.readout.phenotype, 'Regulation of protein stability');
   assert.deepEqual(readoutOf(record(GRB2)), { readout: {}, libraryMethod: null, unknown: [] });
+  // "Other", described: the description is the term (wave 3, slice 4).
+  const other = readoutOf({ keywords: [{ key: 'Phenotypic Assay Method', label: 'Other', description: 'Yeast two-hybrid' }] });
+  assert.deepEqual(other, { readout: { method: 'Yeast two-hybrid' }, libraryMethod: null, unknown: ['Phenotypic Assay Method: Yeast two-hybrid'] });
+});
+
+test('what a deposit of a record says again: its texts, publications, contributors and columns', () => {
+  const grb2 = record(GRB2);
+  assert.match(grb2.experiment.method, /^Oligonucleotide libraries encoding the domains/);
+  assert.equal(grb2.experiment.urn, 'urn:mavedb:00000835-a');
+  assert.ok(grb2.abstract.length > 100);
+  assert.deepEqual(grb2.columns, { scores: {}, counts: {} });
+  assert.ok(grb2.publications.length >= 1 && grb2.publications.every((p) => p.db && p.id));
+  assert.ok(Array.isArray(grb2.contributors) && Array.isArray(grb2.dois));
 });
 
 test('the published scores\' design and the counts\' draft, each valid for its table', () => {

@@ -10,6 +10,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Count tables | CSV, TSV, TXT, gzip of these; one table or one file per sample; tables of barcodes with their barcode-to-variant maps; dms_variants' `variant_counts`; Enrich2's counts files and barcode maps | the counts a run scored (CSV); a barcode table's barcodes, one by one (CSV) |
 | Score tables | MaveDB's score layout, and any table with a column of scores: read as published by a design of model `scores`, as a run on the map (0.3) | a run's scores (CSV) |
 | MaveDB score sets (0.3) | a record (JSON), its scores and counts (CSV), its mapped variants (JSON) and searches, through the program's fetcher | (kept in the workspace: the record, each table's origin; the mapped variants as CSV beside the tables) |
+| MaveDB deposits (0.3) | a MaveDB package (a folder or `.zip` of `score_set.json`, `experiment.json`, `scores.csv` and `counts.csv`), as MaveScape writes one or as MaveDB's API takes one: opened as a record is | a run as MaveDB takes a score set (`*_mavedb.zip`, or a folder from `mavescape export`): scores, counts, column descriptions, experiment and score set |
 | Targets | FASTA, DNA or protein, one or several records; GenBank (`.gb`, `.gbk`, `.gbff`, `.genbank`, `.ape`), a coding feature chosen (0.3); a RefSeq or Ensembl transcript a MaveDB record names, fetched (0.3) | (in the workspace and its archive, with where it came from) |
 | Designs | `*.design.json`; sample sheets (CSV, TSV); DiMSum's experiment design file | `*.design.json` |
 | Import templates | `*.import.json` | `*.import.json` |
@@ -245,7 +246,10 @@ bins can be scored by maximum likelihood, whose reads are reweighted by the cell
 control checks the bottleneck it infers against them (MaveScape 0.2). A target may have a `label`, the
 name its variants give it when that is not its id, name or an accession (MaveDB's label in a score
 set of several targets), and among its `identifiers` a `genbank` (INSDC) and a `protein` (RefSeq
-or Ensembl) accession, with `refseq`, `ensembl`, `uniprot` and `gene` (MaveScape 0.3). Written by
+or Ensembl) accession, with `refseq`, `ensembl`, `uniprot` and `gene` (MaveScape 0.3), and a
+`taxonomyId`, its organism's NCBI Taxonomy id (9606 for *Homo sapiens*), which MaveDB keeps with a
+target sequence (MaveScape 0.3: read from a MaveDB record and from a GenBank record's
+`/db_xref="taxon:…"`). Written by
 the Experiment view; the validation designs are examples
 ([`validation/designs/`](../validation/designs/)).
 
@@ -372,6 +376,16 @@ it (its title, short description and method text, license and its terms, citatio
 target, columns, the experiment's keywords and raw-read identifiers, and its published calibrations:
 each with its functional classes, their ranges and the evidence strength each assigns), with when
 and from where it was retrieved, so that the methods can cite it and the inspector show it offline.
+From MaveScape 0.3 it also keeps what a MaveDB deposit of it says again: its abstract, its
+publications as identifiers (`{ db, id }`), data DOIs, contributors (ORCID iDs), the descriptions of
+its columns (`columns: { scores, counts }`), and its experiment's title, descriptions, method text,
+raw reads and publications. A MaveDB package opened from files is kept the same way, with `package`
+(its name) in place of the URN, its tables' `origin` `{ database: "package", package, file,
+license }`.
+
+`deposit` (MaveScape 0.3, absent until given) holds the **MaveDB details**: what a MaveDB deposit
+says that the workspace does not hold otherwise (below, "A MaveDB deposit"). Each change is in the
+history.
 
 A **target** (in `targets`, and as the design's copy in `design.targets`) is as in a design
 file (above). A target made from a GenBank record or fetched for a MaveDB record keeps `origin`,
@@ -604,6 +618,75 @@ modification time, in UTC):
 Scored from a run's package alone, `mavescape run --design design.json --parameters parameters.json
 --out results counts/<file>` gives that run's output hash.
 
+### A MaveDB deposit (`*_mavedb.zip`; `mavescape export --format mavedb`)
+
+MaveScape 0.3 (`web/lib/mavedb-export.js`): a run written as MaveDB takes a score set, one deposit
+per condition. A ZIP dated with the workspace's modification time, or the same files in a folder
+(`mavescape export`, a folder per condition when there are several):
+
+| File | |
+| --- | --- |
+| `README.md` | what each file is, how to deposit them (on mavedb.org, or through MaveDB's API), what MaveDB requires that the workspace lacks, what was chosen to confirm, the notes |
+| `scores.csv` | MaveDB's `scores_file`: the variant columns, `score`, and the other columns (below) |
+| `counts.csv` | MaveDB's `counts_file`: the same variants, one column of counts per sample of the condition's replicates (technical replicates summed; a table of barcodes' summed per variant); for published scores, the record's counts as they are |
+| `score_columns.json`, `count_columns.json` | MaveDB's `score_columns_metadata` and `count_columns_metadata`: each column beyond the standard ones, `{ "description", "details" }` |
+| `experiment.json` | the experiment, the body of MaveDB's `POST /api/v1/experiments/` (its `ExperimentCreate`, in camelCase): `title`, `shortDescription`, `abstractText`, `methodText`, `keywords`, publications, `rawReadIdentifiers`, `contributors` |
+| `score_set.json` | the score set, the body of `POST /api/v1/score-sets/` (`ScoreSetCreate`): `title`, `shortDescription`, `abstractText`, `methodText`, `licenseId` (MaveDB's: 1 CC0, 3 CC BY 4.0, 6 CC BY-SA 4.0), `experimentUrn` (`null` for a new experiment: MaveDB gives it one), `supersededScoreSetUrn`, `targetGenes`, publications, `doiIdentifiers`, `contributors` |
+| `mavescape.json` | format `mavescape-mavedb`, version 1: the software, workspace, run (`outputSha256`, `published`), condition, `mode`, each file with its SHA-256, the variants exported and left out (each reason with its count and examples), `missing`, `defaulted`, `notes` |
+
+The tables are written as MaveDB's validator checks them (MaveDB's own validators pass them:
+validation suite `mavedb-export`): commas between values, no quoting (MaveDB reads a CSV with `'`
+as its quote character, so no value or column name holds a comma or a quote), `NA` where missing,
+numbers in their shortest exact form; no column without a value; one name per variant, strict
+MAVE-HGVS. How the variants are named follows the target (`mode`):
+
+| `mode` | Target in `score_set.json` | Variant columns |
+| --- | --- | --- |
+| `protein` | its sequence: the protein, or a DNA target from its coding start to its stop codon | `hgvs_pro` |
+| `coding` | its sequence, a DNA target from its coding start to its stop codon (MaveDB counts from a target's first base) | `hgvs_nt` (c.) and `hgvs_pro`, each variant's protein change; a variant with none (in a UTR or an intron) is left out, as MaveDB takes c. names only beside a protein name and its validator stops at a missing one |
+| `noncoding` | its whole sequence | `hgvs_nt`, written n. (g., m. and o. names count from the first base as n. does) |
+| `accession` | `targetAccession`: the RefSeq or Ensembl transcript it was fetched as (the version checked), its gene | `hgvs_nt`, each name prefixed by the accession (`NM_007294.3:c.5565A>T`) |
+
+For a run scored from counts, `scores.csv` holds `score`, `SE`, `ci95_lower`, `ci95_upper`,
+`SE_scale` (with rescaling), `replicates` (combined), `tau2` and `I2` (when estimated), each
+replicate's `score_<id>` and `SE_<id>`, `status` (scored, low confidence, filtered: the stage, not
+measured) and `flags`; MaveScape's methods (paragraphs and references, in Markdown) are the score
+set's `methodText`, after the researcher's note. Published scores pass through: the design's score
+column is `score`, the table's other columns as they are (one MaveDB would refuse is left out and
+said). The experiment's `keywords` are the design's readout and library method in MaveDB's
+controlled vocabulary (the MAVE minimum information's; a term outside it is `Other`, described),
+then the MaveDB details' for the other keys. Its `methodText` is the details' experiment method, or
+the design's summary.
+
+The **MaveDB details** (`ws.deposit`; `set_mavedb_details`; `mavescape export --details file.json`),
+each optional:
+
+```json
+{
+  "title": "GRB2 SH3 domain, abundance", "shortDescription": "…", "abstract": "…",
+  "method": "A note before MaveScape's methods (for published scores: the whole method text)",
+  "experiment": { "title": null, "shortDescription": null, "abstract": null, "method": "The assay, in the researcher's words" },
+  "license": "CC0", "publications": [{ "db": "PubMed", "id": "29785012" }, { "db": "Crossref", "id": "10.1038/s41586-024-08370-4" }],
+  "dois": [], "rawReads": ["PRJNA428380"], "contributors": ["0000-0002-1825-0097"],
+  "experimentUrn": "urn:mavedb:00000835-a", "supersedes": null,
+  "taxonomyId": 9606, "category": "protein_coding",
+  "keywords": [{ "key": "Delivery Method", "label": "Electroporation" }]
+}
+```
+
+The first publication is the primary one; `db` is `PubMed`, `Crossref` (a DOI), `bioRxiv` or
+`medRxiv` (remote control and `--details` also take `"PubMed 29785012"` or `"doi:10.…"`).
+`category` is MaveDB's `protein_coding` (the default), `regulatory` or `other_noncoding`. Where a
+detail is not given, the deposit takes the record's (for published scores, or the experiment of a
+MaveDB record), the design's (title, description, the data's license), CC0 (MaveDB's default), or a
+sentence MaveScape writes (the short description), and says so (`defaulted`). What MaveDB requires
+and nothing gives (an abstract; a target sequence's taxonomy id; a detail in a form MaveDB refuses)
+is `missing`: the tables are written all the same.
+
+A package opens again (Open files: its folder or ZIP) as a MaveDB record does: its published scores
+read as published, its counts with a design drafted, its details kept; written again, its MaveDB
+files are the same bytes (validation suite `mavedb-export`).
+
 ### The readiness (`readiness.json`; `mavescape validate --json`'s `readiness`)
 
 What each analysis can do with what a workspace holds, and what is missing (MaveScape 0.2,
@@ -647,6 +730,11 @@ QC (with `qc_findings.csv`), differential scores, barcodes and map exports above
 | `outputs` | each file written: `role`, `path`, `bytes`, `sha256` |
 
 With a fixed time, the same inputs write the same bytes in every file but `run.json`.
+
+`mavescape export` (MaveScape 0.3) writes `export.json` beside its files: format
+`mavescape-export`, version 1, the fields of `run.json` (its `inputs` the workspace archive and the
+`--details` file), with `deposit` (`--format mavedb`: what the deposit holds and lacks, as the
+`mavedb_deposit` action gives it) or `run` (`--format tables`).
 
 ## Remote control: `remote.json`
 

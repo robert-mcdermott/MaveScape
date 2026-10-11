@@ -83,6 +83,14 @@ answers HTTP 428 with the exact request it would make, and sends nothing. A look
 cache is answered from it, sending nothing. No remote-control action sends a sequence: only the
 person at the window can decide to.
 
+## A MaveDB deposit stays here
+
+A MaveDB deposit (MaveScape 0.3: the run's Export menu, **Deposit in MaveDB**; `mavescape export
+--format mavedb`) is written on your computer from what the workspace holds, and checked there:
+MaveScape never sends your scores, counts or variant names to MaveDB (not to its `/hgvs/validate`,
+not to its upload). You upload the package yourself, on mavedb.org or through its API, when you
+decide to. None of the requests above writes to MaveDB; only the search is a POST.
+
 ## What every request carries
 
 - `User-Agent: MaveScape/<version> (local research software; docs/NETWORK.md)`
@@ -150,6 +158,7 @@ variant's reference base against the sequence it got.
   only, an unknown one "not found", an answer of the wrong kind refused);
   revalidation by ETag; stale copies; `--offline` and `--no-fetch`; the sequence sent only once
   confirmed; this page lists every request and host (`TestNetworkDocumentListsEveryRequest`); no
+  request sends a deposit to MaveDB or writes to it (`TestNoRequestSendsADepositToMaveDB`); no
   script in the page names another origin in a request.
 - `validation/remote-session.mjs` drives a whole session offline, and records every request the
   page makes: none goes beyond its own origin.

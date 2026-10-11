@@ -1,6 +1,6 @@
 ---
 title: Exports and the record
-description: Export MaveScape's scores and counts in MaveDB's columns, QC tables, provenance and a methods paragraph with references, and save the whole workspace as an archive that reopens identically.
+description: Export MaveScape's scores and counts in MaveDB's columns, QC tables, provenance and a methods paragraph with references; write a run as a MaveDB deposit that MaveDB's own validators accept; and save the whole workspace as an archive that reopens identically.
 lede: What leaves MaveScape is meant to be checked: scores in MaveDB's columns, the counts they came from, quality control, provenance with every checksum, and the methods with their references. The workspace archive holds all of it, and reopens identically.
 ---
       <h2 id="run-files">A run's files</h2>
@@ -18,11 +18,35 @@ lede: What leaves MaveScape is meant to be checked: scores in MaveDB's columns, 
             <tr><td><code>*_differential.csv</code></td><td>With conditions compared: every variant's difference against the reference condition, its SE, 95% interval, z or t, p and q, the pairs or replicates behind it, and why there is none</td></tr>
             <tr><td><code>*_provenance.json</code></td><td>The inputs with their SHA-256 checksums, the parameters, the software and its commit, the QC findings (with any acknowledgement) and thresholds, and the files exported</td></tr>
             <tr><td><code>*_methods.md</code>, <code>*_references.bib</code></td><td>A methods paragraph written from the run (the design, what the assay measures and what was not recorded, the scoring, the QC with any acknowledged finding and its reason), with its references in order and as BibTeX</td></tr>
+            <tr><td><code>*_mavedb.zip</code></td><td>The run as a MaveDB deposit: the scores and counts as MaveDB's upload reads them, what each column is, and the experiment and score set as MaveDB's API takes them (<a href="#mavedb">below</a>)</td></tr>
             <tr><td><code>*_package.zip</code></td><td>The analysis package: the count table as imported, the target, the design, the design as a sample sheet, the parameters, the readiness, and a README with the <code>mavescape run</code> command and what is missing (<a href="experiment.html#package">The design</a>). Scored from its own files, it gives the run's output hash</td></tr>
           </tbody>
         </table>
       </div>
       <p>Exported scores are read back to the last bit and open in MaveScape again as MaveDB score tables.</p>
+
+      <h2 id="mavedb">Depositing in MaveDB</h2>
+      <shot name="mavedb-deposit" alt="The Deposit in MaveDB dialog for the GRB2 example's run: what MaveDB still requires (an abstract); 1,121 variants, 1,118 scored; the target given by its sequence (protein, 56 residues, NCBI Taxonomy 9606); the score and count columns; the keywords from the design's readout; what was chosen to confirm; and the MaveDB details to give: title, short description, license, abstract, publications, raw reads, contributors">The GRB2 example's run, ready for MaveDB but for its abstract.</shot>
+      <p><strong>Deposit in MaveDB…</strong>, in a run's Export menu, writes the run as MaveDB takes a score set, one ZIP for MaveDB's upload or its API. Nothing is sent: you upload it when you decide to.</p>
+      <ul>
+        <li><strong><code>scores.csv</code> and <code>counts.csv</code></strong>: every variant named on the target in strict MAVE-HGVS. A run scored from counts gives its score, SE, 95% interval, the replicates' scores and each variant's status, and its counts by sample. Published scores pass through as published, with the record's counts.</li>
+        <li><strong>What each column is</strong> (<code>score_columns.json</code>, <code>count_columns.json</code>), as MaveDB shows it beside the data.</li>
+        <li><strong>The experiment and the score set</strong> (<code>experiment.json</code>, <code>score_set.json</code>). MaveScape's methods are the analysis. The design's readout and library method become the experiment's keywords, the MAVE minimum information's, in MaveDB's vocabulary. The target is given as MaveDB holds one.</li>
+      </ul>
+      <p>The dialog shows what the deposit holds and what MaveDB requires that the workspace lacks, usually an abstract. Give it below, with the license (CC0 unless the data have another), the publications (a PubMed id or a DOI), raw reads, contributors' ORCID iDs and, to add to an experiment of yours on MaveDB, its URN. The details are kept with the workspace and in its history. <em>More of the MAVE minimum information</em> adds the keywords the design does not hold: how the library was delivered, the profiling strategy, the reads. Values MaveScape chose, such as a title from the design or the data's license, are listed to confirm.</p>
+      <p>MaveDB's own validators (its <code>mavedb</code> package, with mavehgvs and biocommons hgvs) accept what MaveScape writes: the validation checks the deposits of every kind of run it makes, from the examples and from published records. How the variants are named follows the target:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Target</th><th>In the deposit</th></tr></thead>
+          <tbody>
+            <tr><td>A protein, or protein variants of a DNA target</td><td>The sequence (a DNA target from its coding start to its stop codon) and <code>hgvs_pro</code></td></tr>
+            <tr><td>Nucleotide variants of a coding sequence</td><td>The coding sequence, and each <code>c.</code> name beside its protein change. A variant in a UTR or an intron is left out and said: MaveDB takes <code>c.</code> names only beside a protein name. Name the target by its transcript to keep them.</td></tr>
+            <tr><td>Nucleotide variants without protein names</td><td>The whole sequence, the names written <code>n.</code> (as MaveDB asks of nucleotide variants given alone)</td></tr>
+            <tr><td>A RefSeq or Ensembl transcript (fetched for a MaveDB record, or from a GenBank file of one)</td><td>The transcript's accession, each name prefixed by it (<code>NM_007294.3:c.5565A&gt;T</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A deposit opens again in MaveScape: open its folder or ZIP (or a package written for MaveDB's API) and it reads as a record from MaveDB does, its published scores on the map, its counts with a drafted design, and its MaveDB details kept. Written again, its MaveDB files are the same bytes. From the command line, <code>mavescape export --format mavedb</code> writes a saved workspace's run as a deposit (<a href="scripting.html#export">Scripting</a>).</p>
 
       <h2 id="archive">The workspace archive</h2>
       <p><strong>Workspace archive (.msz)…</strong> in the workspace menu writes one file with everything needed to reopen the analysis on another computer: the workspace (targets, design, runs, selections, QC thresholds and acknowledgements, and the chained history), each run's scores, the methods with references, and the count tables (or, if you prefer, only their checksums), and MaveDB's mapped variants when a table was opened with them. Opened again, each run is recomputed from the archived table and must reproduce its recorded output hash.</p>

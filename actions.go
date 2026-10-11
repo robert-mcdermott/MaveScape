@@ -80,6 +80,13 @@ var remoteActions = []remoteAction{
 		"target":    textArg("A target by name; the design's if not given."),
 		"apply":     flagArg("Use what the entry gives and record the check."),
 	})},
+	{Name: "mavedb_deposit", Description: "What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and those left out, with why), the target (its sequence, or the transcript that names it), the columns of scores and counts, the experiment's keywords from the design's readout, and what MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id). Writes nothing: export with what mavedb writes the package.", InputSchema: schema(map[string]any{
+		"run":       runArg,
+		"condition": conditionArg,
+	}), long: true},
+	{Name: "set_mavedb_details", Description: "Sets what a MaveDB deposit says that the workspace does not hold (title, shortDescription, abstract, method, experiment, license, publications, dois, rawReads, contributors, experimentUrn, supersedes, taxonomyId, category, keywords): the fields given replace the workspace's, an empty one removes it. Undoable, and in the history.", InputSchema: schema(map[string]any{
+		"details": map[string]any{"type": "object", "description": "The details to set: license one of CC0, CC BY 4.0, CC BY-SA 4.0; publications as \"PubMed 29785012\" or a DOI (the first the primary one); rawReads and contributors (ORCID iDs) as lists; keywords as [{key, label, description}] in MaveDB's vocabulary."},
+	}, "details")},
 	{Name: "check", Description: "Checks a table as scoring would, without scoring: its variant names against the design's target, its problems, the design against its columns, and the parameters against the design. Returns valid (nothing blocks scoring), what blocks it, and the warnings. mavescape validate and mavescape run use it.", InputSchema: schema(map[string]any{
 		"table":      textArg("The table by name; the one the design describes, or the first, if not given."),
 		"design":     map[string]any{"type": "object", "description": "A design to check against the table (a mavescape-design document); the workspace's own if not given."},
@@ -124,8 +131,8 @@ var remoteActions = []remoteAction{
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
 	})},
-	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG), the selection, the whole workspace as an archive (.msz), or the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing). Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, selection, archive or package."),
+	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), or a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them). Needs the token.", InputSchema: schema(map[string]any{
+		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, selection, archive, package or mavedb."),
 		"path":           textArg("The absolute path of the file to write."),
 		"overwrite":      flagArg("Replace the file if it exists."),
 		"run":            runArg,

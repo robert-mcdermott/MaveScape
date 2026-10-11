@@ -223,6 +223,13 @@ function checkTranslation(protein, given, table, feature) {
   return { status: 'differs', message: `It differs from the record's translation from residue ${k + 1} (${ours[k] ?? 'end'} here, ${given[k] ?? 'end'} in the record; ${ours.length} and ${given.length} residues).` };
 }
 
+// The NCBI Taxonomy id of a record's source feature (/db_xref="taxon:9606"), or null.
+function taxonOf(record) {
+  const source = record.features.find((f) => f.type === 'source');
+  const xref = [].concat(source?.qualifiers?.db_xref ?? []).map(String).find((x) => /^taxon:\d+$/.test(x));
+  return xref ? Number(xref.slice(6)) : null;
+}
+
 // A design target from a coding feature, with where it came from (origin, kept with the
 // workspace's target) and the check of its translation. options: { id, name, file, retrieval }.
 export function targetFromGenBank(record, coding, options = {}) {
@@ -261,6 +268,9 @@ export function targetFromGenBank(record, coding, options = {}) {
     codingStart,
     offset: 0,
     ...(record.organism ? { organism: record.organism } : {}),
+    // The organism's NCBI Taxonomy id, from the source feature's /db_xref="taxon:9606" (wave 3,
+    // slice 4: MaveDB keeps one with a target).
+    ...(taxonOf(record) ? { taxonomyId: taxonOf(record) } : {}),
     ...(Object.keys(identifiers).length ? { identifiers } : {}),
   };
   const origin = {

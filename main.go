@@ -80,13 +80,15 @@ func init() {
 }
 
 func main() {
-	// Headless commands (run.go).
+	// Headless commands (run.go, export.go).
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "run":
 			os.Exit(runHeadless(os.Args[2:], os.Stdout, os.Stderr))
 		case "validate":
 			os.Exit(validateHeadless(os.Args[2:], os.Stdout, os.Stderr))
+		case "export":
+			os.Exit(exportHeadless(os.Args[2:], os.Stdout, os.Stderr))
 		}
 	}
 	cfg, err := parseConfig(os.Args[1:])
@@ -292,6 +294,7 @@ func parseConfig(args []string) (config, error) {
 		fmt.Fprintln(flags.Output(), "Usage: mavescape [flags] [count or score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif), workspaces (.msz) or folders of them, MaveDB URNs...]")
 		fmt.Fprintln(flags.Output(), "       mavescape run --design design.json --out results/ counts.csv   (scores without a window; mavescape run -h)")
 		fmt.Fprintln(flags.Output(), "       mavescape validate [--design design.json] [tables...]         (checks them as scoring would; mavescape validate -h)")
+		fmt.Fprintln(flags.Output(), "       mavescape export --format mavedb --out deposit/ analysis.msz  (a run as a MaveDB deposit, or tables; mavescape export -h)")
 		flags.PrintDefaults()
 	}
 	files, err := parseArgs(flags, args)

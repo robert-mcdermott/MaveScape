@@ -17,7 +17,7 @@ import { chooseArchiveExport, openArchives } from './ui/record.js';
 import { exampleGuide } from './ui/examples.js';
 import { mountWorkflow } from './ui/workflow.js';
 import { showNetwork } from './ui/public-data.js';
-import { importMaveDB, openMaveDBDialog } from './ui/mavedb.js';
+import { findPackages, importMaveDB, importMaveDBPackage, openMaveDBDialog, openZips } from './ui/mavedb.js';
 import { fixClock } from './lib/clock.js';
 
 const VERSION = '0.2.0';
@@ -106,6 +106,7 @@ async function start() {
   app.log = (message) => app.drawer.log(message);
   installImport(app);
   app.importers.set('workspace', (items) => openArchives(app, items));
+  app.importers.set('archive', (items) => openZips(app, items));
   app.inspector.setSection('example', exampleGuide);
 
   // --- Views -------------------------------------------------------------------------------------
@@ -184,7 +185,17 @@ async function start() {
   // options.accept: tables are imported with the mapping MaveScape detects, without the wizard
   // (remote control). Returns { problems: [messages] }; each is also shown and logged.
   app.importFiles = async (files, options = {}) => {
-    const items = files.map((file, order) => ({ file, name: file.name, folder: file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(-2, -1)[0] : file.folder ?? null, order }));
+    const all = files.map((file, order) => ({ file, name: file.name, folder: file.webkitRelativePath ? file.webkitRelativePath.split('/').slice(-2, -1)[0] : file.folder ?? null, order }));
+    // MaveDB packages (wave 3, slice 4): a folder of score_set.json and scores.csv, opened whole.
+    const { packages, rest: items } = findPackages(all);
+    const messages = [];
+    for (const p of packages) {
+      const parts = new Map();
+      for (const x of p.items) parts.set(x.name, await app.readBytes(x));
+      const result = await importMaveDBPackage(app, { name: p.name, files: parts });
+      app.log(result.message);
+      if (!result.ok) messages.push(result.message);
+    }
     const unread = new Map();
     const unknown = [];
     const byKind = new Map();
@@ -202,7 +213,6 @@ async function start() {
       byKind.get(kind).push(item);
     }
     // Sequences first, so a table opened with its target's FASTA (or GenBank file) finds the target.
-    const messages = [];
     const first = (k) => (k === 'sequence' || k === 'genbank' ? 0 : 1);
     for (const kind of [...byKind.keys()].sort((a, b) => first(a) - first(b))) {
       try {
