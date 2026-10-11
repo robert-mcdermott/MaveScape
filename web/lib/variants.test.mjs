@@ -77,3 +77,28 @@ test('kind names cover every kind', () => {
 test('columns with no values are not reported identical', () => {
   assert.deepEqual(identicalColumns({ rows: 0, columns: [{ name: 'a', values: [] }, { name: 'b', values: [] }] }, ['a', 'b']), []);
 });
+
+// Wave 3, slice 3: nucleotide variants of a DNA target read for their protein changes.
+test('nucleotide variants of a DNA target: their kind is what they do to the protein, with its change', () => {
+  const dna = { id: 'tx', name: 'BRCA1', sequenceType: 'dna', sequence: 'GGGATGGCTAAAAAAGGCTGGTAACCC', codingStart: 4, identifiers: { refseq: 'NM_000001.1' } };
+  const v = buildVariants(['c.4G>T', 'c.6T>C', 'c.17G>A', 'c.6del', 'c.7_9del', 'c.-1G>A', 'c.12+1G>A', 'c.12+6G>A', 'c.*2C>T', 'NM_000001.1:c.1A>G', 'c.='], { level: 'nucleotide', target: dna });
+  assert.deepEqual([...v.kind].map((k) => KIND_NAMES[k]), ['missense', 'synonymous', 'nonsense', 'frameshift', 'deletion', '5\' UTR', 'splice site', 'intronic', '3\' UTR', 'start lost', 'wild type']);
+  assert.deepEqual(v.proKey, ['p.Ala2Ser', 'p.Ala2=', 'p.Trp6Ter', 'p.Gly5fs', 'p.Lys4del', '', '', '', '', 'p.Met1Val', 'p.=']);
+  assert.deepEqual([v.proPosition[0], aminoAcidOf(v.proRef[0]), aminoAcidOf(v.proAlt[0])], [2, 'A', 'S']);
+  assert.deepEqual([...v.position].slice(0, 3), [4, 6, 17], 'the position stays the base\'s');
+  assert.equal(v.status[9], STATUS.VALID, 'prefixed by the target\'s accession');
+  // Without a target, what a nucleotide position says alone.
+  const bare = buildVariants(['c.12+1G>A', 'c.-5A>G', 'c.*3T>C'], { level: 'nucleotide' });
+  assert.deepEqual([...bare.kind].map((k) => KIND_NAMES[k]), ['splice site', '5\' UTR', '3\' UTR']);
+  assert.equal(bare.proKey, undefined);
+});
+
+test('a name on another of a score set\'s targets is set aside, not counted invalid', () => {
+  const lmna = { id: 'LMNA', name: 'LMNA', sequenceType: 'dna', sequence: 'ATGGAGACCCCG', codingStart: 1 };
+  const v = buildVariants(['LMNA:n.4G>A', 'CCM2:n.4G>A', 'LMNA:n.4C>A'], { level: 'nucleotide', target: lmna });
+  assert.deepEqual([...v.status], [STATUS.VALID, STATUS.INVALID, STATUS.INVALID]);
+  assert.deepEqual([...v.otherTarget], [0, 1, 0]);
+  assert.match(v.messages.get(1)[0], /named on CCM2, not on the design's target/);
+  const s = summarizeVariants(v);
+  assert.deepEqual([s.valid, s.invalid, s.otherTarget], [1, 1, 1]);
+});

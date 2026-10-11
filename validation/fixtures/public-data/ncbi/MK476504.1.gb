@@ -1,0 +1,82 @@
+LOCUS       MK476504                1824 bp    DNA     linear   PRI 05-MAR-2019
+DEFINITION  Homo sapiens voucher Yoruba_19_1 hemoglobin subunit beta (HBB)
+            gene, complete cds.
+ACCESSION   MK476504
+VERSION     MK476504.1
+KEYWORDS    .
+SOURCE      Homo sapiens (human)
+  ORGANISM  Homo sapiens
+            Eukaryota; Metazoa; Chordata; Craniata; Vertebrata; Euteleostomi;
+            Mammalia; Eutheria; Euarchontoglires; Primates; Haplorrhini;
+            Catarrhini; Hominidae; Homo.
+REFERENCE   1  (bases 1 to 1824)
+  AUTHORS   Laval,G., Peyregne,S., Zidane,N., Harmant,C., Patin,E. and
+            Quintana-Murci,L.
+  TITLE     Recent Adaptive Acquisition by Rainforest Hunter-Gatherers of the
+            Late Pleistocene Sickle-Cell Mutation Suggests Past Ecological
+            Differences in Exposure to Malaria in Africa
+  JOURNAL   Am. J. Hum. Genet. (2019) In press
+REFERENCE   2  (bases 1 to 1824)
+  AUTHORS   Laval,G., Peyregne,S., Zidane,N., Harmant,C., Patin,E. and
+            Quintana-Murci,L.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (31-JAN-2019) Human Evolutionary Genetics, Institut
+            Pasteur, 28 rue du Dr. Roux, Paris 75724, France
+COMMENT     ##Assembly-Data-START##
+            Sequencing Technology :: Sanger dideoxy sequencing
+            ##Assembly-Data-END##
+FEATURES             Location/Qualifiers
+     source          1..1824
+                     /organism="Homo sapiens"
+                     /mol_type="genomic DNA"
+                     /specimen_voucher="Yoruba_19_1"
+                     /db_xref="taxon:9606"
+                     /pop_variant="Yoruba"
+                     /geo_loc_name="Nigeria"
+     gene            <138..>1561
+                     /gene="HBB"
+     mRNA            join(<138..229,360..582,1433..>1561)
+                     /gene="HBB"
+                     /product="hemoglobin subunit beta"
+     CDS             join(138..229,360..582,1433..1561)
+                     /gene="HBB"
+                     /codon_start=1
+                     /product="hemoglobin subunit beta"
+                     /protein_id="QBH68943.1"
+                     /translation="MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFE
+                     SFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPE
+                     NFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH"
+ORIGIN      
+        1 cctagggttg gccaatctac tcccaggagc agggagggca ggagccaggg ctgggcataa
+       61 aagtcagggc agagccatct attgcttaca tttgcttctg acacaactgt gttcactagc
+      121 aacctcaaac agacaccatg gtgcacctga ctcctgagga gaagtctgcc gttactgccc
+      181 tgtggggcaa ggtgaacgtg gatgaagttg gtggtgaggc cctgggcagg ttggtatcaa
+      241 ggttacaaga caggtttaag gagaccaata gaaactgggc atgtggagac agagaagact
+      301 cttgggtttc tgataggcac tgactctctc tgcctattgg tctattttcc cacccttagg
+      361 ctgctggtgg tctacccttg gacccagagg ttctttgagt cctttgggga tctgtccact
+      421 cctgatgctg ttatgggcaa ccctaaggtg aaggctcatg gcaagaaagt gctcggtgcc
+      481 tttagtgatg gcctggctca cctggacaac ctcaagggca cctttgccac actgagtgag
+      541 ctgcactgtg acaagctgca cgtggatcct gagaacttca gggtgagtct atgggaccct
+      601 tgatgttttc tttccccttc ttttctatgg ttaagttcat gtcataggaa ggggataagt
+      661 aacagggtac agtttagaat gggaaacaga cgaatgattg catcagtgtg gaagtctcag
+      721 gatcgtttta gtttctttta tttgctgttc ataacaattg ttttcttttg tttaattctt
+      781 gctttctttt tttttcttct ccgcaatttt tactattata cttaatgcct taacattgtg
+      841 tataacaaaa ggaaatatct ctgagataca ttaagtaact taaaaaaaaa ctttacacag
+      901 tctgcctagt acattactat ttggaatata tgtgtgctta tttgcatatt cataatctcc
+      961 ctactttatt ttcttttatt tttaattgat acataatcat tatacatatt tatgggttaa
+     1021 agtgtaatgt tttaatatgt gtacacatat tgaccaaatc agggtaattt tgcatttgta
+     1081 attttaaaaa atgctttctt cttttaatat acttttttgt ttatcttatt tctaatactt
+     1141 tccctaatct ctttctttca gggcaataat gatacaatgt atcatgcctc tttgcaccat
+     1201 tctaaagaat aacagtgata atttctgggt taaggcaata gcaatatttc tgcatataaa
+     1261 tatttctgca tataaattgt aactgatgta agaggtttca tattgctaat agcagctaca
+     1321 atccagctac cattctgctt ttattttatg gttgggataa ggctggatta ttctgagtcc
+     1381 aagctaggcc cttttgctaa tcatgttcat acctcttatc ttcctcccac agctcctggg
+     1441 caacgtgctg gtctgtgtgc tggcccatca ctttggcaaa gaattcaccc caccagtgca
+     1501 ggctgcctat cagaaagtgg tggctggtgt ggctaatgcc ctggcccaca agtatcacta
+     1561 agctcgcttt cttgctgtcc aatttctatt aaaggttcct ttgttcccta agtccaacta
+     1621 ctaaactggg ggatattatg aagggccttg agcatctgga ttctgcctaa taaaaaacat
+     1681 ttattttcat tgcaatgatg tatttaaatt atttctgaat attttactaa aaagggaatg
+     1741 tgggaggtca gtgcatttaa aacataaaga aatgaagagc tagttcaaac cttgggaaaa
+     1801 tacactatat cttaaactcc atga
+//
+

@@ -25,6 +25,23 @@ export const REFERENCES = {
   voom: { type: 'article', authors: ['Law, Charity W', 'Chen, Yunshun', 'Shi, Wei', 'Smyth, Gordon K'], title: 'voom: precision weights unlock linear model analysis tools for RNA-seq read counts', journal: 'Genome Biology', year: 2014, volume: 15, pages: 'R29', doi: '10.1186/gb-2014-15-2-r29' },
   mutscan: { type: 'article', authors: ['Soneson, Charlotte', 'Bendel, Alexandra M', 'Diss, Guillaume', 'Stadler, Michael B'], title: 'mutscan—a flexible R package for efficient end-to-end analysis of multiplexed assays of variant effect data', journal: 'Genome Biology', year: 2023, volume: 24, pages: '132', doi: '10.1186/s13059-023-02967-0' },
   bh: { type: 'article', authors: ['Benjamini, Yoav', 'Hochberg, Yosef'], title: 'Controlling the false discovery rate: a practical and powerful approach to multiple testing', journal: 'Journal of the Royal Statistical Society: Series B (Methodological)', year: 1995, volume: 57, number: 1, pages: '289--300', doi: '10.1111/j.2517-6161.1995.tb02031.x' },
+  uniprot: { type: 'article', authors: ['{The UniProt Consortium}'], title: 'UniProt: the Universal Protein Knowledgebase in 2025', journal: 'Nucleic Acids Research', year: 2025, volume: 53, number: 'D1', pages: 'D609--D617', doi: '10.1093/nar/gkae1010' },
+  // Wave 3, slice 3: nucleotide variants' protein changes, targets named by a transcript, and
+  // MaveDB's mapped variants. Long author lists end with "others" (BibTeX's et al.).
+  hgvs: { type: 'article', authors: ['Hart, Reece K', 'Rico, Rudolph', 'Hare, Emily', 'Garcia, John', 'Westbrook, Jody', 'Fusaro, Vincent A'], title: 'A Python package for parsing, validating, mapping and formatting sequence variants using HGVS nomenclature', journal: 'Bioinformatics', year: 2015, volume: 31, number: 2, pages: '268--270', doi: '10.1093/bioinformatics/btu630' },
+  refseq: { type: 'article', authors: ['O\'Leary, Nuala A', 'Wright, Mathew W', 'Brister, J Rodney', 'Ciufo, Stacy', 'Haddad, Diana', 'McVeigh, Rich', 'Rajput, Bhanu', 'others'], title: 'Reference sequence (RefSeq) database at NCBI: current status, taxonomic expansion, and functional annotation', journal: 'Nucleic Acids Research', year: 2016, volume: 44, number: 'D1', pages: 'D733--D745', doi: '10.1093/nar/gkv1189' },
+  ensembl: { type: 'article', authors: ['Harrison, Peter W', 'Amode, M Ridwan', 'Austine-Orimoloye, Olanrewaju', 'Azov, Andrey G', 'Barba, Matthieu', 'Barnes, If', 'Becker, Arne', 'others'], title: 'Ensembl 2024', journal: 'Nucleic Acids Research', year: 2024, volume: 52, number: 'D1', pages: 'D891--D899', doi: '10.1093/nar/gkad1049' },
+  vrs: { type: 'article', authors: ['Wagner, Alex H', 'Babb, Lawrence', 'Alterovitz, Gil', 'Baudis, Michael', 'Brush, Matthew', 'Cameron, Daniel L', 'Cline, Melissa', 'others'], title: 'The GA4GH Variation Representation Specification: a computational framework for variation representation and federated identification', journal: 'Cell Genomics', year: 2021, volume: 1, number: 2, pages: '100027', doi: '10.1016/j.xgen.2021.100027' },
+  mavedbMapping: { type: 'article', authors: ['Arbesfeld, Jeremy A', 'Da, Estelle Y', 'Stevenson, James S', 'Kuzma, Kori', 'Paul, Anika', 'Farris, Tierra', 'Capodanno, Benjamin J', 'others'], title: 'Mapping MAVE data for use in human genomics applications', journal: 'Genome Biology', year: 2025, volume: 26, pages: '179', doi: '10.1186/s13059-025-03647-x' },
+  // Wave 3, slice 5: the annotations beside the map.
+  clinvar: { type: 'article', authors: ['Landrum, Melissa J', 'Lee, Jennifer M', 'Benson, Mark', 'Brown, Garth R', 'Chao, Chen', 'Chitipiralla, Shanmuga', 'Gu, Baoshan', 'others'], title: 'ClinVar: improving access to variant interpretations and supporting evidence', journal: 'Nucleic Acids Research', year: 2018, volume: 46, number: 'D1', pages: 'D1062--D1067', doi: '10.1093/nar/gkx1153' },
+  gnomad: { type: 'article', authors: ['Chen, Siwei', 'Francioli, Laurent C', 'Goodrich, Julia K', 'Collins, Ryan L', 'Wang, Qingbo', 'Alf{\\"o}ldi, Jessica', 'Watts, Nicholas A', 'others'], title: 'A genomic mutational constraint map using variation in 76,156 human genomes', journal: 'Nature', year: 2024, volume: 625, pages: '92--100', doi: '10.1038/s41586-023-06045-0' },
+  alphamissense: { type: 'article', authors: ['Cheng, Jun', 'Novati, Guido', 'Pan, Joshua', 'Bycroft, Clare', 'Žemgulytė, Akvilė', 'Applebaum, Taylor', 'Pritzel, Alexander', 'others'], title: 'Accurate proteome-wide missense variant effect prediction with AlphaMissense', journal: 'Science', year: 2023, volume: 381, number: 6664, pages: 'eadg7492', doi: '10.1126/science.adg7492' },
+  alphafolddb: { type: 'article', authors: ['Varadi, Mihaly', 'Bertoni, Damian', 'Magana, Paulyna', 'Paramval, Urmila', 'Pidruchna, Ivanna', 'Radhakrishnan, Malarvizhi', 'Tsenkov, Maxim', 'others'], title: 'AlphaFold Protein Structure Database in 2024: providing structure coverage for over 214 million protein sequences', journal: 'Nucleic Acids Research', year: 2024, volume: 52, number: 'D1', pages: 'D368--D375', doi: '10.1093/nar/gkad1011' },
+  pdbekb: { type: 'article', authors: ['{PDBe-KB consortium}'], title: 'PDBe-KB: collaboratively defining the biological context of structural data', journal: 'Nucleic Acids Research', year: 2022, volume: 50, number: 'D1', pages: 'D534--D542', doi: '10.1093/nar/gkab988' },
+  threedpatch: { type: 'article', authors: ['Jakubec, David', 'Vondrášek, Jiří', 'Finn, Robert D'], title: '3DPatch: fast 3D structure visualization with residue conservation', journal: 'Bioinformatics', year: 2019, volume: 35, number: 2, pages: '332--334', doi: '10.1093/bioinformatics/bty464' },
+  capra2007: { type: 'article', authors: ['Capra, John A', 'Singh, Mona'], title: 'Predicting functionally important residues from sequence conservation', journal: 'Bioinformatics', year: 2007, volume: 23, number: 15, pages: '1875--1882', doi: '10.1093/bioinformatics/btm270' },
+  henikoff1994: { type: 'article', authors: ['Henikoff, Steven', 'Henikoff, Jorja G'], title: 'Position-based sequence weights', journal: 'Journal of Molecular Biology', year: 1994, volume: 243, number: 4, pages: '574--578', doi: '10.1016/0022-2836(94)90032-9' },
   mavedb: { type: 'article', authors: ['Esposito, Daniel', 'Weile, Jochen', 'Shendure, Jay', 'Starita, Lea M', 'Papenfuss, Anthony T', 'Roth, Frederick P', 'Fowler, Douglas M', 'Rubin, Alan F'], title: 'MaveDB: an open-source platform to distribute and interpret data from multiplexed assays of variant effect', journal: 'Genome Biology', year: 2019, volume: 20, pages: '223', doi: '10.1186/s13059-019-1845-6' },
 };
 
@@ -77,12 +94,38 @@ export function writeMethods(ws, run, options = {}) {
   // The data.
   const summary = source?.summary;
   const data = [];
-  data.push(`Variant counts were read from ${run.inputs.source.name} (SHA-256 ${run.inputs.source.sha256}${run.inputs.source.rows ? `; ${run.inputs.source.rows} rows` : ''}).`);
+  const published = p.model === 'published';
+  data.push(`${published ? 'Published scores' : 'Variant counts'} were read from ${run.inputs.source.name} (SHA-256 ${run.inputs.source.sha256}${run.inputs.source.rows ? `; ${run.inputs.source.rows} rows` : ''}).`);
+  // A table retrieved from MaveDB (wave 3, slice 2): which record and file, and when.
+  const origin = source?.origin;
+  if (origin?.database === 'MaveDB' && origin.urns) data.push(`The table is MaveDB's counts of ${origin.urns.join(' and ')}${origin.license ? ` (${origin.license})` : ''}, retrieved ${String(origin.retrieved ?? '').slice(0, 10)}, joined on their variants, each score set's counts a condition.`);
+  else if (origin?.database === 'MaveDB') data.push(`The table is MaveDB's ${origin.file} of ${origin.urn}${origin.license ? ` (${origin.license})` : ''}, retrieved ${String(origin.retrieved ?? '').slice(0, 10)}.`);
   if (summary) {
     const kinds = Object.entries(summary.byKind ?? {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ');
     data.push(`Variant identifiers in the ${design.variants.column} column were read as MAVE-HGVS, MaveDB's nomenclature ${cite('mavedb')}${run.inputs.mapping.mode === 'lenient' ? ', accepting common legacy forms,' : ' (strict),'} and checked against the target: ${summary.valid} valid${summary.warning ? `, ${summary.warning} read leniently` : ''}${summary.invalid ? `, ${summary.invalid} not valid (not scored)` : ''}${kinds ? ` (${kinds})` : ''}.`);
   }
   if (target) data.push(`The target was ${target.name} (${target.sequenceType === 'dna' ? `${target.sequence.length} nt` : `${target.sequence.length} residues`}${target.offset ? `; position 1 is position ${1 + target.offset} of the reference` : ''}${target.identifiers?.uniprot ? `; UniProt ${target.identifiers.uniprot}` : ''}).`);
+  // Where its sequence came from (wave 3, slice 3), kept with the workspace's target: a GenBank
+  // file, NCBI's RefSeq record or Ensembl's transcript.
+  const from = target ? (ws.targets ?? []).find((t) => t.id === target.id && t.sequence === target.sequence)?.origin : null;
+  if (from) {
+    const day = String(from.retrieval?.retrieved ?? '').slice(0, 10);
+    if (from.service === 'NCBI') data.push(`Its sequence is the RefSeq transcript ${from.accession} ${cite('refseq')}${day ? `, retrieved from NCBI ${day}` : ''}, numbered from its coding sequence (${from.feature.replace(/^CDS /, '')})${from.check?.status === 'identical' ? ', whose translation is the record\'s protein' : ''}.`);
+    else if (from.service === 'Ensembl') data.push(`Its sequence is the Ensembl transcript ${from.accession} ${cite('ensembl')}${day ? `, retrieved ${day}` : ''}${from.versionDiffers ? `; the data name ${from.named}, an earlier version, and every variant's reference base was checked against the one retrieved` : ''}.`);
+    else data.push(`Its sequence is ${from.whole ? 'the GenBank record' : `the coding sequence (${from.feature.replace(/^CDS /, '')}) of the GenBank record`} ${from.accession}${from.file ? ` (${from.file})` : ''}${from.check?.status === 'identical' ? ', whose translation is the record\'s protein' : ''}.`);
+  }
+  // Nucleotide variants read at the protein level (wave 3, slice 3).
+  if (design.variants.level !== 'protein' && target?.sequenceType === 'dna') {
+    data.push(`Each nucleotide variant was read for the protein change it makes: applied to the target's sequence, the two coding sequences translated and compared as HGVS describes protein changes, as biocommons hgvs does ${cite('hgvs')}. For the map, the nucleotide variants making the same protein change were merged as DiMSum merges them ${cite('dimsum')}: their scores weighted by 1/SE², the merged SE √(1/Σ 1/SE²)${published ? ' (averaged unweighted where the table gives no SE)' : ''}; those changing one amino acid and leaving another codon synonymous were left out, and frameshifts, splice-site, intronic and UTR variants are reported beside the map.`);
+  }
+  // MaveDB's mapping of the variants to the human reference, kept with the table.
+  if (origin?.mapped) data.push(`MaveDB's mapping of the variants to the human reference ${cite('mavedbMapping')}, with each one's GA4GH VRS identifier ${cite('vrs')}, was kept with the table (${origin.mapped.variants} variants${origin.mapped.retrieved ? `, retrieved ${String(origin.mapped.retrieved).slice(0, 10)}` : ''}).`);
+  // Its check against its UniProt entry (wave 3, slice 1), kept with the workspace's target, when
+  // the run's target is still as it was checked.
+  const checked = target ? (ws.targets ?? []).find((t) => t.id === target.id)?.reference : null;
+  if (checked && checked.accession === target.identifiers?.uniprot && checked.offset === (target.offset ?? 0)) {
+    data.push(`Its position in the reference was checked against UniProt ${checked.accession} ${cite('uniprot')}${checked.release ? `, release ${checked.release}` : ''}${checked.retrieved ? `, retrieved ${checked.retrieved.slice(0, 10)}` : ''}: residues ${checked.start}–${checked.end}${checked.identical ? ', identical' : `, ${checked.differences} difference${checked.differences === 1 ? '' : 's'}`}.`);
+  }
   if (design.source?.citation) {
     data.push(`The data are from ${design.source.citation.replace(/,?\s*doi:\s*\S+$/i, '')} ${cite('data', { type: 'misc', text: `${design.source.citation}${design.source.mavedb ? `. MaveDB ${design.source.mavedb}` : ''}${design.source.license ? ` (${design.source.license})` : ''}.`, title: design.source.citation, note: design.source.mavedb ?? null })}${design.source.mavedb ? `, MaveDB ${design.source.mavedb}` : ''}.`);
   }
@@ -95,7 +138,15 @@ export function writeMethods(ws, run, options = {}) {
 
   // Scoring.
   const scoring = [];
-  if (p.model === 'dimsum') {
+  if (published) {
+    // Published scores (wave 3, slice 2): read, not computed.
+    const sc = design.scores ?? {};
+    const f = p.filters;
+    const left = [f.maxSE !== null ? `SE above ${f.maxSE}` : null, f.excludeKinds.length ? `classes ${f.excludeKinds.join(', ')}` : null, f.exclude.length ? `${f.exclude.length} variants by name` : null].filter(Boolean);
+    scoring.push(`Scores are as published, read from the column "${sc.score}"${sc.se ? ` with standard errors from "${sc.se}"` : ' (the table gives no standard errors)'}${sc.ciLow ? ` and 95% intervals from "${sc.ciLow}" and "${sc.ciHigh}"` : sc.se ? '; 95% intervals are ±1.96 SE' : ''}: MaveScape did not rescore them. A variant whose name is not valid against the target, or to which the table gives no score, is reported as NA${left.length ? `, as are those left out by filter (${left.join('; ')})` : ''}.`);
+    scoring.push(`${run.output.conditions[0]?.scored ?? 0} of ${run.output.variants} variants have a score.`);
+    if (run.warnings.length) scoring.push(`Notes: ${run.warnings.map((w) => w.message).join(' ')}`);
+  } else if (p.model === 'dimsum') {
     scoring.push(dimsumSentence(p, cite('dimsum')).replace(/ \((\[\d+\])\)/, ' $1'));
     // The fitted model, from the run record.
     const fits = (run.output.replicates ?? []).filter((r) => r.dimsum);
@@ -109,6 +160,12 @@ export function writeMethods(ws, run, options = {}) {
   else if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ` (the first and last time points${p.timeScale === 'unit' ? `, over the time between them: a score per ${unitOf(design)}` : ''})` : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
   else if (p.model === 'wls' || p.model === 'ols') scoring.push(regressionSentence(p, cite('enrich2'), design).replace(/ \((\[\d+\])\)/, ' $1'));
   else scoring.push(binSentence(p, { average: cite('vampseq'), mle: cite('peterman') }).replace(/ \((\[\d+\])\)/, ' $1'));
+  if (!published) countsScoring();
+  paragraphs.push(scoring.join(' '));
+
+  // The rest of a run scored from counts: technical and biological replicates, their combination,
+  // heterogeneity, filters, rescaling, conditions, and the counts of scored variants.
+  function countsScoring() {
   if (design.library?.level === 'barcode') scoring.push(barcodeSentence(p, p.aggregation === 'sum' ? { enrich2: cite('enrich2') } : { dmsVariants: cite('dmsVariants') }).replace(/ \((\[\d+\])\)/, ' $1'));
   scoring.push('Technical replicates were summed before scoring; biological replicates were scored separately.');
   if (p.combination === 'moderated') {
@@ -141,7 +198,7 @@ export function writeMethods(ws, run, options = {}) {
   const conditions = run.output.conditions.map((c) => `${run.output.conditions.length > 1 ? `${c.name}: ` : ''}${c.scored} of ${run.output.variants} variants scored`).join('; ');
   scoring.push(`${conditions}.`);
   if (run.warnings.length) scoring.push(`Notes: ${run.warnings.map((w) => w.message).join(' ')}`);
-  paragraphs.push(scoring.join(' '));
+  }
 
   // Quality control.
   if (options.findings) {
@@ -152,6 +209,14 @@ export function writeMethods(ws, run, options = {}) {
     paragraphs.push(`Quality control: ${f.filter((x) => x.status === 'pass').length} findings passed, ${f.filter((x) => x.status === 'review').length} were to review and ${f.filter((x) => x.status === 'fail').length} failed${f.some((x) => x.status === 'na') ? ` (${f.filter((x) => x.status === 'na').length} not assessed)` : ''}.${flagged.length ? ` ${flagged.map((x) => `${x.title}: ${x.value} (${x.status}; ${x.threshold})`).join('. ')}.` : ''}${acknowledged.length ? ` ${acknowledged.length === 1 ? 'One finding was' : `${acknowledged.length} findings were`} acknowledged, ${acknowledged.length === 1 ? 'its status' : 'their statuses'} unchanged: ${acknowledged.map((x) => `${x.title.charAt(0).toLowerCase()}${x.title.slice(1)} ("${x.acknowledged.reason.replace(/[.\s]+$/, '')}")`).join('; ')}.` : ''}${bottleneck ? ` Variance beyond counting is read as in DiMSum's error model ${cite('dimsum')}.` : ''} Thresholds are recorded with the workspace.`);
   }
 
+  // The annotations beside the map (wave 3, slice 5): each one's source, release and date, and
+  // how MaveScape read it.
+  const annotations = ws.annotations ?? [];
+  if (annotations.length) {
+    const lines = annotations.map((a) => annotationSentence(a, cite)).filter(Boolean);
+    if (lines.length) paragraphs.push(`Annotations shown beside the map: ${lines.join(' ')}`);
+  }
+
   // Software.
   const sw = run.software;
   const mavescape = { type: 'software', authors: ['McDermott, Robert'], title: 'MaveScape', version: sw.version, year: Number((run.created ?? '').slice(0, 4)) || null, url: 'https://github.com/robert-mcdermott/mavescape' };
@@ -160,5 +225,33 @@ export function writeMethods(ws, run, options = {}) {
   const references = cited.map(({ key, ref }, i) => ({ n: i + 1, key, text: referenceText(ref) }));
   const markdown = `# Methods\n\n${paragraphs.join('\n\n')}\n\n## References\n\n${references.map((r) => `${r.n}. ${r.text}`).join('\n')}\n`;
   return { paragraphs, references, markdown, bibtex: toBibTeX(cited) };
+}
+
+// An annotation in the methods: what it is, where from and when, and what MaveScape did with it.
+function annotationSentence(a, cite) {
+  const r = a.record ?? {};
+  const day = r.retrieved ? `, retrieved ${String(r.retrieved).slice(0, 10)}` : '';
+  switch (a.provider) {
+    case 'uniprot-features':
+      return `UniProt ${r.accession}'s features ${cite('uniprot')}${r.release ? ` (release ${r.release}${day})` : day.replace(/^, /, ' (') + (day ? ')' : '')}, placed by the target's offset.`;
+    case 'pdbe-conservation':
+      return `conservation from PDBe-KB's profile of ${r.accession}'s homologues ${cite('pdbekb')} ${cite('threedpatch')}${day}, each position scored as the Jensen–Shannon divergence of its amino-acid probabilities from the BLOSUM62 background ${cite('capra2007')}.`;
+    case 'alphamissense':
+      return `AlphaMissense's pathogenicity of ${r.accession}'s substitutions ${cite('alphamissense')}, from AlphaFold DB ${cite('alphafolddb')}${day} (CC BY 4.0; not for clinical use).`;
+    case 'clinvar':
+      return `ClinVar's records of ${r.gene}'s missense, nonsense and synonymous variants ${cite('clinvar')}${day} (${r.kept ?? '?'} of ${r.records ?? '?'} records read), placed where their protein's residues agree with the target's.`;
+    case 'gnomad':
+      return `gnomAD v4's allele frequencies of ${r.gene}'s variants on ${r.transcript}${r.mane ? ` (MANE Select, ${r.mane})` : ''} ${cite('gnomad')}${day}, exomes and genomes joined, variants failing gnomAD's filters left out.`;
+    case 'mavedb-annotations':
+      return `MaveDB's annotations of ${r.urn}'s variants ${cite('mavedbMapping')}${r.clinvar ? `: ClinVar ${r.clinvar} ${cite('clinvar')} and gnomAD ${cite('gnomad')}` : `: gnomAD ${cite('gnomad')}`}${day}.`;
+    case 'alignment':
+      return `conservation from the alignment ${r.file ?? a.file?.fileName} (SHA-256 ${a.file?.sha256}), scored as Capra and Singh's score_conservation.py scores it by default ${cite('capra2007')}: the Jensen–Shannon divergence from the BLOSUM62 background, with position-based sequence weights ${cite('henikoff1994')}, a gap penalty, columns of more than 30% gaps unscored and a window of 3.`;
+    case 'predictor':
+      return `a predictor's scores from ${r.file ?? a.file?.fileName} (SHA-256 ${a.file?.sha256}).`;
+    case 'custom':
+      return `the custom track ${r.file ?? a.file?.fileName} (SHA-256 ${a.file?.sha256}).`;
+    default:
+      return null;
+  }
 }
 

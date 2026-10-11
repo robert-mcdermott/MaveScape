@@ -305,7 +305,7 @@ const REAL = [
     const c = DESIGN_CASES.find((x) => x.name === 'grb2-sh3');
     return { design: readDesign(c.design), table: parseTable(d.bytes(c.counts)) };
   }],
-  ['BRCA1 RING, E2 binding (6 replicates, time series sharing inputs)', 'mavedb-brca1-ring', (d) => {
+  ['BRCA1 RING, E3 ligase activity by phage (6 replicates, time series sharing inputs)', 'mavedb-brca1-ring', (d) => {
     const c = DESIGN_CASES.find((x) => x.name === 'brca1-ring-e2');
     return { design: readDesign(c.design), table: parseTable(d.bytes(c.counts)) };
   }],

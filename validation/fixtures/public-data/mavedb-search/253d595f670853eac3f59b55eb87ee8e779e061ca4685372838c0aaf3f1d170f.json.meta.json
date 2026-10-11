@@ -1,0 +1,8 @@
+{
+  "contentType": "application/json",
+  "service": "MaveDB",
+  "source": "https://api.mavedb.org/api/v1/score-sets/search",
+  "method": "POST",
+  "request": "{\"text\":\"VAMP-seq\",\"published\":true,\"limit\":100,\"offset\":0}",
+  "retrieved": "2026-10-11T02:31:03Z"
+}

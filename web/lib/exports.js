@@ -26,11 +26,12 @@ const cell = (value) => {
 export const csv = (header, rows) => `${[header, ...rows].map((r) => r.map(cell).join(',')).join('\n')}\n`;
 
 // The MaveDB identifier columns for a design's variants: the name in its own column, NA in the
-// others.
-function hgvsColumns(level, key) {
+// others; a nucleotide variant's protein change (wave 3, slice 3) in hgvs_pro, as MaveDB's tables
+// give both.
+function hgvsColumns(level, key, protein = '') {
   if (level === 'protein') return ['NA', 'NA', key || 'NA'];
-  if (level === 'splice') return ['NA', key || 'NA', 'NA'];
-  return [key || 'NA', 'NA', 'NA'];
+  if (level === 'splice') return ['NA', key || 'NA', protein || 'NA'];
+  return [key || 'NA', 'NA', protein || 'NA'];
 }
 
 const safe = (id) => String(id).replace(/[^A-Za-z0-9_.-]+/g, '_');
@@ -48,6 +49,8 @@ export function statusOf(c, i) {
 // of freedom (wave 2, slice 9), else the normal's.
 const QUANTILES = new Map();
 export function intervalOf(c, i) {
+  // Published scores with their own 95% interval (a design of model 'scores'): as given.
+  if (c.ciLow) return [c.ciLow[i], c.ciHigh[i]];
   const d = c.df ? c.df[i] : Infinity;
   if (!QUANTILES.has(d)) QUANTILES.set(d, Number.isFinite(d) ? tQuantile(0.975, d) : Z);
   const q = QUANTILES.get(d);
@@ -69,7 +72,7 @@ export function scoresCSV(results, run, condition = 0) {
     const scored = !c.reason[i];
     const [low, high] = scored ? intervalOf(c, i) : [Number.NaN, Number.NaN];
     rows.push([
-      ...hgvsColumns(level, v.key[i]),
+      ...hgvsColumns(level, v.key[i], v.proKey?.[i]),
       num(scored ? c.score[i] : Number.NaN), num(scored ? c.se[i] : Number.NaN),
       num(low), num(high),
       scored && c.df ? (Number.isFinite(c.df[i]) ? num(c.df[i]) : 'Inf') : 'NA', num(scored && scale ? scale.at(c.score[i]) : Number.NaN),
@@ -77,6 +80,23 @@ export function scoresCSV(results, run, condition = 0) {
       num(c.tau2[i]), num(c.i2[i]), num(c.loo[i]), v.original[i], v.status[i] === 3 ? 'invalid' : KIND_NAMES[v.kind[i]],
       ...reps.flatMap((r) => [num(r.score[i]), num(r.se[i])]),
     ]);
+  }
+  return csv(header, rows);
+}
+
+// A nucleotide run's scores at the protein level (wave 3, slice 3): one row per protein variant its
+// nucleotide variants make, the score merged as DiMSum merges them (collapse.js), with the
+// nucleotide variants behind it. view: proteinView(results).
+export function proteinScoresCSV(view, condition = 0) {
+  const c = view.conditions[condition];
+  const nt = view.collapse.nucleotide.variants;
+  const v = view.variants;
+  const header = ['hgvs_pro', 'score', 'SE', 'ci95_lower', 'ci95_upper', 'status', 'flags', 'variant_class', 'nucleotide_variants', 'hgvs_nt'];
+  const rows = [];
+  for (let i = 0; i < view.rows; i += 1) {
+    const scored = !c.reason[i];
+    const [low, high] = scored ? intervalOf(c, i) : [Number.NaN, Number.NaN];
+    rows.push([v.key[i], num(scored ? c.score[i] : Number.NaN), num(scored ? c.se[i] : Number.NaN), num(low), num(high), statusOf(c, i), c.flags[i] ? flagNames(c.flags[i]).join('; ') : '', KIND_NAMES[v.kind[i]], String(v.members[i].length), Array.from(v.members[i], (r) => nt.key[r]).join(' ')]);
   }
   return csv(header, rows);
 }

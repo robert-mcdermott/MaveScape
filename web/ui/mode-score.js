@@ -17,7 +17,7 @@ import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
 import { intervalOf } from '../lib/exports.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
-import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, removeRun, runId, runInputs, unitOf } from '../lib/runs.js';
+import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, nextRunName, removeRun, runId, runInputs, unitOf } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { classHistogram, cssVar, flowBars, legend, scatter, scoreGroups } from './plots.js';
@@ -40,10 +40,14 @@ export function mountScoreMode(app, container) {
   const source = () => store.ws.sources.find((s) => s.id === (store.ws.designSource ?? store.ws.sources[0]?.id)) ?? null;
 
   // --- Parameters (a draft per workspace, until it is run) ----------------------------------
+  // Published scores (a design of model 'scores') are read with the model "published"; counts with
+  // the others: a draft, and the last run it starts from, of the design's kind.
+  const publishedDesign = () => store.ws.design?.model === 'scores';
   function draft() {
     const ws = store.ws;
-    if (!app.scoreDrafts.has(ws.id)) {
-      const last = ws.runs.at(-1)?.inputs.parameters;
+    const kindOf = (p) => (p?.model === 'published') === publishedDesign();
+    if (!app.scoreDrafts.has(ws.id) || !kindOf(app.scoreDrafts.get(ws.id))) {
+      const last = ws.runs.filter((r) => kindOf(r.inputs.parameters)).at(-1)?.inputs.parameters;
       app.scoreDrafts.set(ws.id, withDefaults(last ?? defaultParameters(ws.design, source())));
     }
     return app.scoreDrafts.get(ws.id);
@@ -132,8 +136,7 @@ export function mountScoreMode(app, container) {
       render();
       return;
     }
-    const n = store.ws.runs.length + 1;
-    const run = makeRun({ inputs, source: s, results: result.results, software: { version: app.version, commit: app.commit }, name: `Run ${n}` });
+    const run = makeRun({ inputs, source: s, results: result.results, software: { version: app.version, commit: app.commit }, name: nextRunName(store.ws) });
     app.runResults.set(run.id, { results: result.results, status: 'computed' });
     const added = addRun(store.ws, run);
     store.commit(added.ws, `Score: ${run.name}`);
@@ -164,6 +167,13 @@ export function mountScoreMode(app, container) {
 
   function parametersPane() {
     const p = draft();
+    if (publishedDesign()) {
+      // Published scores (wave 3, slice 2): read, not computed.
+      const sc = store.ws.design.scores ?? {};
+      return h('div.pane', h('h3', icon('settings'), 'Published scores'),
+        h('p', { style: { margin: '0 0 6px' } }, `This design holds published scores: MaveScape reads them as they are, from the column "${sc.score}"${sc.se ? `, with their standard errors from "${sc.se}"` : ' (no standard errors given)'}${sc.ciLow ? ` and 95% intervals from "${sc.ciLow}" and "${sc.ciHigh}"` : ''}, and does not rescore them.`),
+        h('p.muted', { style: { fontSize: '11.5px', margin: 0 } }, 'Rescoring needs the counts and a design that says which column is which sample: open the counts (MaveDB offers them beside the scores when the authors deposited them). The filters below can leave variants out of the run.'));
+    }
     const preset = presetOf(p);
     const designModel = store.ws.design?.model;
     const bins = designModel === 'bins';
@@ -247,6 +257,21 @@ export function mountScoreMode(app, container) {
     const exclude = h('textarea.input', { rows: 2, placeholder: 'One identifier per line', 'aria-label': 'Variants excluded by name', onchange: () => setDraft({}, { exclude: exclude.value.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean) }) }, f.exclude.join('\n'));
     const all = f.minReplicates === 'all';
     const stage = (n, title, control, rule = false) => h('li.filter-stage', h('span.filter-step', String(n)), h('div', h('div.filter-title', title, rule ? h('span.badge', { style: { marginLeft: '6px' } }, 'always') : null), control));
+    const classes = () => h('div.btn-row', { style: { marginTop: '4px' } }, ...kinds.map((k) => {
+      const out = f.excludeKinds.includes(k);
+      return h(`button.chip${out ? '' : '.active'}`, { type: 'button', 'aria-pressed': out ? 'false' : 'true', title: out ? `${k}: left out` : `${k}: scored`, onclick: () => setDraft({}, { excludeKinds: out ? f.excludeKinds.filter((x) => x !== k) : [...f.excludeKinds, k] }) }, k);
+    }));
+    if (publishedDesign()) {
+      return h('div.pane', h('h3', icon('filter'), 'Filters, in order'),
+        h('ol.filter-bar',
+          stage(1, 'A score in the table', null, true),
+          stage(2, 'Written once (a row repeating an earlier one\'s variant and scores is read once)', null, true),
+          stage(3, 'Identifier valid against the target', null, true),
+          stage(4, 'Variant classes', classes()),
+          stage(5, 'Exclusion list', exclude),
+          stage(6, 'Maximum SE', number('Maximum SE (blank: none)', f.maxSE, (v) => setDraft({}, { maxSE: v }), { min: 0, step: 0.05, placeholder: 'none' }))),
+        h('p.muted', { style: { fontSize: '11.5px', margin: '6px 0 0' } }, 'A variant left out has NA with the stage that left it out; its published score stays in the table.'));
+    }
     const binned = p.model === 'bins' || p.model === 'bins-mle';
     // A table of barcodes adds a stage: barcodes measured per variant, outliers left out.
     const barcodes = store.ws.design?.library?.level === 'barcode';
@@ -293,7 +318,7 @@ export function mountScoreMode(app, container) {
       ready.ok ? h('p', { style: { margin: '0 0 8px' } }, describeParameters(draft(), store.ws.design?.library?.level === 'barcode')) : h('div', ...ready.problems.map((m) => h('div.callout.danger', { style: { marginBottom: '6px' } }, icon('warning'), h('span', m)))),
       ready.ok && ready.warnings?.length ? h('div', ...ready.warnings.map((m) => h('div.callout.warn', { style: { marginBottom: '6px' } }, icon('warning'), h('span', `The design: ${m}`)))) : null,
       view.refused ? h('div', ...view.refused.map((m) => h('div.callout.danger', { style: { marginBottom: '6px' } }, icon('warning'), h('span', m)))) : null,
-      h('div.btn-row', h('button.btn.primary', { type: 'button', disabled: !ready.ok || !!view.job, onclick: runScoring }, icon('play'), 'Score'),
+      h('div.btn-row', h('button.btn.primary', { type: 'button', disabled: !ready.ok || !!view.job, onclick: runScoring }, icon('play'), publishedDesign() ? 'Read as published' : 'Score'),
         ready.experiment ? h('button.btn', { type: 'button', onclick: () => app.setMode('experiment') }, icon('experiment'), 'Open Experiment') : null),
       progressEl);
   }

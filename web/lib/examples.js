@@ -4,7 +4,10 @@
 // assembled as at import (`assembly`: Hsp90's codon variants read at the protein level), and its
 // first run can set parameters beyond MaveScape's defaults (`parameters`). Simulated data are
 // labeled simulated everywhere they appear. The published example's files are in web/examples/;
-// the simulated one is made from its seed (lib/simulate.js), with its true effects.
+// the simulated one is made from its seed (lib/simulate.js), with its true effects. An example
+// opened from MaveDB (`mavedb`: one record, or `records` opened together, each table with the
+// checksum it had) may give its counts the design they need (`files.design`, from the paper) and is
+// scored with it (wave 3, slice 6).
 
 import { simulateExperiment } from './simulate.js';
 
@@ -27,13 +30,15 @@ export const EXAMPLES = [
       'Quality control: everything passes except the variance beyond counting, about 11× (a bottleneck). DiMSum\'s error model puts it at the input, 20–38× counting, as the Domainome\'s own analysis found.',
       'Nonsense variants score about −4.6 against the wild type\'s 0: the assay separates loss of function cleanly.',
       'The least tolerant positions are buried hydrophobic and glycine residues of the fold (A163, G196, G203, I183 on GRB2\'s numbering).',
+      'Checked against UniProt, the domain is residues 159–214 of P62993, identical: the offset of 158 the design gives.',
+      'Beside the map, AlphaMissense calls the eight least tolerant positions likely pathogenic (a mean above 0.9 each), while conservation follows the position effects only in part (Spearman ρ about −0.4): abundance is not all a residue is conserved for.',
     ],
     steps: [
       ['qc', 'Read the QC findings. Open "Variance beyond counting" and its plot: replicate differences sit above the dashed line of counting noise, in parallel, as a bottleneck does. DiMSum\'s terms below it show where: the inputs.'],
       ['score', 'In Score, the run with MaveScape\'s defaults is ready. Run it again with the DiMSum-compatible preset: its error model carries the bottleneck into every SE. Compare the runs\' tables of replicates.'],
-      ['map', 'Open the map. The darkest columns are the positions that tolerate nothing; hover one, then click a cell to see its replicates in the inspector.'],
-      ['map', 'Shift-drag over a stretch of positions, save the selection, and export the map as SVG.'],
-      ['score', 'Export the scores (MaveDB columns) and the methods paragraph from the run\'s menu.'],
+      ['map', 'Open the map. The darkest columns are the positions that tolerate nothing; click a cell to see its replicates in the inspector. Below it, Tracks, "Add a track": UniProt\'s features, conservation (PDBe-KB) and AlphaMissense line up with the positions, asked for by GRB2\'s accession only. Shift-drag over a stretch, save the selection, and export the map with its tracks as SVG.'],
+      ['experiment', 'In Experiment, Target, "Check against UniProt" fetches GRB2\'s entry (P62993) through the MaveScape program and finds the SH3 domain at positions 159–214, identical: the design\'s offset is the entry\'s. "Record the check" keeps the release and the date with the workspace, and the methods cite them. Only the accession is sent.'],
+      ['score', 'From the run\'s Export menu, "Deposit in MaveDB" writes the run as MaveDB takes a score set: the scores and counts, what each column is, and the experiment and score set, the methods as the analysis and the readout as the MAVE minimum information\'s keywords. It names what MaveDB still requires (an abstract): give it there, and download the package.'],
       ['experiment', 'In Experiment, read "What the analysis can do": the published counts do not say how the library was made or how many cells were carried into selection. With the cells recorded, QC would check the bottleneck it finds against them.'],
     ],
   },
@@ -93,6 +98,146 @@ export const EXAMPLES = [
       ['qc', 'In QC, open "Variance beyond counting": the replicates of each tile differ about 2,300× more than counting predicts, because the cells sorted, not the reads, limit what is known.'],
       ['experiment', 'In Experiment, read "What the analysis can do": the gates and the cells sorted into each bin are missing, and would unlock maximum likelihood and the cells per bin.'],
       ['score', 'In Score, set the bins\' scale to the lowest 5% and the replicates combined by their mean, and score again: MultiSTEP\'s own settings, close to the published scores.'],
+    ],
+  },
+  {
+    id: 'pten-mavedb',
+    title: 'PTEN abundance, opened from MaveDB (published scores)',
+    summary: 'VAMP-seq abundance of 4,409 PTEN variants, opened from MaveDB as published: scores alone, no counts, with the record\'s license, citation, assay and six calibrations.',
+    question: 'What can a published record of scores alone show, what does it leave out, and where would the rest be found?',
+    source: 'MaveDB urn:mavedb:00000013-a-1 (the scores, downloaded when opened; SHA-256 checked)',
+    license: 'CC0 1.0',
+    citation: 'Matreyek KA, et al. Multiplex assessment of protein variant abundance by massively parallel sequencing. Nat Genet 2018;50:874–882. doi:10.1038/s41588-018-0122-z',
+    simulated: false,
+    // Opened from MaveDB through the program's fetcher (wave 3, slice 2), its table checked against
+    // the checksum it had when the example was made.
+    mavedb: { urn: 'urn:mavedb:00000013-a-1', scores: { sha256: 'ceaf3f0720af8aa06012d60959efbcd7ab54a5317d2bebdace8a0f49de4b2b97', size: 1735960 } },
+    // The record gives the assay in MaveDB's terms, not what a higher score means: from the paper,
+    // more abundance.
+    readout: { direction: 'higher-more' },
+    findings: { coverage: 'review' },
+    teaches: ['counts'],
+    opens: 'map',
+    expected: [
+      'All 4,409 variants have a score, with the standard error and 95% interval the record gives: synonymous median 1.00, nonsense 0.06 (the separation of the controls, AUC 0.98). MaveScape reads them as published and does not rescore them.',
+      'About a quarter of missense variants (25%) score below 0.5; the least tolerant positions are spread through both the phosphatase and the C2 domain, as a stability readout expects.',
+      'QC passes what it can assess from scores alone, but coverage: 53% of all possible substitutions, the library made by oligo-directed mutagenic PCR. Every finding about counts is not assessed.',
+      'What the analysis can do: rescoring and QC of the counts need counts, which MaveDB does not hold for this record; the readiness says where they may be found.',
+    ],
+    steps: [
+      ['map', 'The map shows PTEN\'s abundance as MaveDB publishes it, the wild type at 1 and nonsense near 0, in the run "Published scores". Click a cell: its score, SE and 95% interval are the record\'s own.'],
+      ['experiment', 'Select the table in the sidebar: the inspector shows the MaveDB record, its license and citation, and the assay in MaveDB\'s terms (a reporter, loss of function, human cells), which became the design\'s readout. The record does not say what a higher score means: the example states it, from the paper.'],
+      ['experiment', 'Below the record, its six calibrations: the investigators\' classes, and ExCALIBR\'s evidence strengths for research use only. MaveScape shows them as published and classifies no variant.'],
+      ['qc', 'In QC, what scores alone show: the controls separate (AUC 0.98) and the scores resolve them; coverage is 53% of all substitutions. The findings about counts are not assessed.'],
+      ['experiment', 'In Experiment, read "What the analysis can do": the map and comparison need only the scores; rescoring and QC of the counts need the counts, and the readiness says where they may be (the paper\'s supplement, the authors\' repository, the raw reads PRJNA428380).'],
+      ['score', 'In Score, set a maximum SE of 0.15 and read the scores again: the second run leaves the uncertain variants out, each with the stage that left it out.'],
+    ],
+  },
+  {
+    id: 'brca1-sge',
+    title: 'BRCA1 saturation genome editing, opened from MaveDB (nucleotide variants)',
+    summary: '3,893 single-nucleotide variants of 13 exons of BRCA1 and their flanking introns, edited into the genome of HAP1 cells, named on the RefSeq transcript (fetched from NCBI) and read at the protein level, with the counts the authors deposited.',
+    question: 'What do nucleotide variants of a gene do to its protein, which of them can a map of substitutions not show, and how close do the deposited counts come to the published scores?',
+    source: 'MaveDB urn:mavedb:00000097-0-2 (its scores and counts, downloaded when opened; SHA-256 checked) and NCBI\'s RefSeq NM_007294.3',
+    license: 'CC0 1.0',
+    citation: 'Findlay GM, et al. Accurate classification of BRCA1 variants with saturation genome editing. Nature 2018;562:217–222. doi:10.1038/s41586-018-0461-z',
+    simulated: false,
+    // Opened from MaveDB through the program's fetcher (wave 3, slice 3), its target the transcript
+    // its record names, fetched from NCBI as GenBank.
+    mavedb: { urn: 'urn:mavedb:00000097-0-2', scores: { sha256: '906dc152f28b4c8261e4e532a03c9c42f2e45e211aa3ada12e3c826c151580ec', size: 610024 }, counts: { sha256: '9d2e8281ff55d87e6ef0ada99a8fc6973073741d9c97ce6bea70e62eca7cdabc', size: 368636 } },
+    // Function scores: from the paper, a lower score is less of the function (depletion from the
+    // cells, which need BRCA1).
+    readout: { direction: 'higher-more' },
+    findings: { coverage: 'fail' },
+    teaches: [],
+    opens: 'map',
+    expected: [
+      'Every one of the 3,893 variants is valid on NM_007294.3: 2,077 missense, 579 synonymous, 138 nonsense and 9 at the start codon, with 891 intronic, 143 at splice sites and 56 in the 5′ UTR. MaveScape reads their scores as published.',
+      'On the map, the coding variants read at the protein level: 2,251 protein variants, 391 of them made by more than one nucleotide variant and merged as DiMSum merges them. The 1,090 variants with no protein change to draw (intronic, splice-site, UTR) are listed beside the map.',
+      'Nonsense variants score far below synonymous ones (medians −2.12 and −0.01; AUC 0.99); splice-site variants score like nonsense (median −2.02, 92% below −1), intronic ones a few bases further in like synonymous ones (median −0.18).',
+      'QC fails coverage: 17% of the substitutions one base change makes, on the whole protein. The variants lie in two stretches, positions 1–101 and 1631–1855, the exons the experiment edited.',
+      'The counts open with a design drafted from their names: two replicates, day 5 to day 11. Scored, they agree with the published scores at r ≈ 0.76: the authors normalized each exon apart and corrected for position within it, which the counts do not record.',
+    ],
+    steps: [
+      ['map', 'The map shows BRCA1\'s function scores as published, each coding variant read for the protein change it makes. Click the stop at codon 1853 (p.Tyr1853Ter): two nucleotide variants make it, each with its score, merged into the cell.'],
+      ['map', 'Open "Not on the map" beside it and choose splice site: the variants at the exons\' edges (c.5194-2A>G), scoring as low as stops. Intronic ones, a few bases further in, mostly score like synonymous variants.'],
+      ['experiment', 'Select the target in the sidebar: the RefSeq transcript NM_007294.3, fetched from NCBI as GenBank, numbered from its coding sequence (233–5,824), its translation the record\'s protein.'],
+      ['qc', 'In QC, the stops separate from the synonymous variants (AUC 0.99), but coverage fails: the whole protein counts as designed. The variants lie in two stretches (1–101, 1631–1855), the exons edited: given as the library\'s tiles in Experiment, coverage is judged within them.'],
+      ['experiment', 'Select the counts table: its design was drafted from the column names, two replicates from day 5 to day 11, the library and RNA counts set aside.'],
+      ['score', 'Score the counts and compare with the published scores: they agree at r ≈ 0.76. The published scores were normalized exon by exon and corrected for position within each exon, which the deposited counts do not record.'],
+    ],
+  },
+  {
+    id: 'dhfr-lon',
+    title: 'DHFR with and without the Lon protease, opened from MaveDB (two conditions)',
+    summary: 'Growth of E. coli that depends on each substitution of its dihydrofolate reductase, over 18 hours in a turbidostat, in a strain without the Lon protease and again with Lon restored: two MaveDB score sets, their counts opened together as one experiment of two conditions.',
+    question: 'Which substitutions does the Lon protease penalize, how sure is each difference, and where in the protein are they?',
+    source: 'MaveDB urn:mavedb:00000063-b-1 (−Lon) and urn:mavedb:00000063-a-1 (+Lon) (their scores and counts, downloaded when opened; SHA-256 checked)',
+    license: 'CC0 1.0',
+    citation: 'Thompson S, Zhang Y, Ingle C, Reynolds KA, Kortemme T. Altered expression of a quality control protease in E. coli reshapes the in vivo mutational landscape of a model enzyme. eLife 2020;9:e53476. doi:10.7554/eLife.53476',
+    simulated: false,
+    // Two score sets opened together (wave 3, slice 6): their counts joined, a condition each, with
+    // the design the paper describes (four sub-libraries, two grown in each repeat), which the
+    // column names do not say.
+    mavedb: {
+      records: [
+        { urn: 'urn:mavedb:00000063-b-1', scores: { sha256: 'adbc659430f09e964d04ddcc234d98fbd70123703edbd8ca53009726b371c04f', size: 242193 }, counts: { sha256: '297484d87b619aee5d0c408bf75a82b8988be9e5c66169a5758b69b1b19364fc', size: 968272 } },
+        { urn: 'urn:mavedb:00000063-a-1', scores: { sha256: 'd39a97f64c378d7d102b0cbc8c5151fe202a1258f229c7cdd58b048a0e85b90e', size: 239726 }, counts: { sha256: 'c63e1d4e521b4246b2b2588f2d999856521261dd772062282da1f71498124e49', size: 974798 } },
+      ],
+    },
+    files: { design: 'examples/dhfr-lon/design.json' },
+    // Growth: a higher score is a faster-growing variant (the paper's selection coefficients).
+    readout: { direction: 'higher-more' },
+    findings: { missingness: 'review', dropout: 'review', agreement: 'review', 'excess-variance': 'fail', 'outlier-replicate': 'review', separation: 'review', 'time-points': 'fail', 'time-fit': 'fail' },
+    teaches: [],
+    // The map opens on the difference between the conditions.
+    map: { colorBy: 'differential' },
+    opens: 'map',
+    expected: [
+      'Opened together, the two score sets become one experiment: 24 time series under two conditions (−Lon the reference), four sub-libraries of 40 positions each grown three times, two sub-libraries in each repeat. Each replicate measures only its own sub-library\'s positions, though its samples hold two.',
+      'With MaveScape\'s defaults (weighted regression) the scores follow the published ones at r ≈ 0.90 without Lon and 0.96 with it; with the authors\' unweighted regression (ordinary least squares), r ≈ 0.96 and 0.98, on the same scale (the published scores are Enrich2\'s slopes over the whole 18 hours).',
+      'Without Lon about twice as many substitutions grow faster than the wild type (a score above 0.2) as with it, as the paper found (736 and 384 published). The difference +Lon − −Lon is negative almost everywhere it is called, most at native hydrophobic residues (V, I, L, M, F, W, Y), as the paper found for the buried core.',
+      'QC fails the variance beyond counting and the fit of the time courses, and reviews the time points used and the dropout: a variant below 2 × 10⁻⁵ of the reads was not reported at a time point, so the most depleted drop out and their slopes rest on the early time points, as the authors\' did.',
+    ],
+    steps: [
+      ['map', 'The map shows the difference +Lon − −Lon (Run 1): blue where Lon penalizes a substitution. Click a dark blue cell: the inspector shows the variant\'s time courses in its sub-library\'s three replicates, its score in each condition, and the difference with its interval and q.'],
+      ['experiment', 'In Experiment, the design the paper describes: two conditions, four sub-libraries (tiles) of 40 positions, each grown three times, two in each repeat; the transformation and outgrowth samples set aside. MaveDB keeps the conditions as two score sets; opened together, their counts are joined, each record\'s columns named by its URN.'],
+      ['qc', 'In QC, read "Missing after selection" and "Fit of the time courses": counts below the reporting frequency are missing, not zero, so depleted variants are fitted on their early time points.'],
+      ['score', 'In Score, choose ordinary least squares (the authors\' unweighted regression) and score again: compare the runs with the published scores in the inspector.'],
+      ['map', 'Color the map by each condition\'s scores, or open the published runs: the substitutions that grow faster than the wild type without Lon (red) mostly lose that advantage with it.'],
+    ],
+  },
+  {
+    id: 'brca1-ring',
+    title: 'BRCA1 RING domain, from MaveDB and back (round trip)',
+    summary: 'E3 ubiquitin ligase activity of 12,316 amino-acid variants of the BRCA1 RING domain, phage-displayed and selected for their own ubiquitination over five rounds: opened from MaveDB with its counts, scored, deposited in MaveDB\'s format and opened again.',
+    question: 'Does rescoring the counts reproduce the published scores, and does a deposit carry the scores and their record back to MaveDB without loss?',
+    source: 'MaveDB urn:mavedb:00000003-a-2 (its scores and counts, downloaded when opened; SHA-256 checked)',
+    license: 'CC0 1.0',
+    citation: 'Starita LM, et al. Massively parallel functional analysis of BRCA1 RING domain variants. Genetics 2015;200:413–422. doi:10.1534/genetics.115.175802; scored by Enrich2: Rubin AF, et al. A statistical framework for analyzing deep mutational scanning data. Genome Biol 2017;18:150. doi:10.1186/s13059-017-1272-5',
+    simulated: false,
+    // Opened from MaveDB with the design the record's method text and the paper describe (the
+    // counts' names hold the yeast two-hybrid assay too, a separate experiment).
+    mavedb: { urn: 'urn:mavedb:00000003-a-2', scores: { sha256: '4f18e53106ce809bc2fea09f7af21b70e6f08faf4f46efdd2a79183168d573a5', size: 3193620 }, counts: { sha256: 'c6afef9deec861cea25f879473fc9de3d718e0bd1109b1860fdfc77e4c1973a3', size: 4607317 } },
+    files: { design: 'examples/brca1-ring/design.json' },
+    readout: { direction: 'higher-more' },
+    findings: { dropout: 'review', coverage: 'review', agreement: 'review', 'excess-variance': 'fail', 'time-points': 'review', 'time-fit': 'fail' },
+    teaches: [],
+    opens: 'map',
+    expected: [
+      'MaveDB\'s counts read as 12,316 amino-acid variants with Enrich2\'s _wt and _sy rows; the design gives two library preparations of three replicates, rounds 0–5, the replicates of a preparation sharing its input, and sets the yeast two-hybrid columns aside.',
+      'The RING\'s eight zinc ligands are among its twelve least tolerant positions (median scores about −3, against −0.7 for a typical position).',
+      'With MaveScape\'s defaults every replicate score equals the published one (about 50,000, within 2 × 10⁻¹⁴): weighted regression with wild-type normalization is Enrich2\'s. The combined scores differ a little (r ≈ 0.99): the moderated combination against Enrich2\'s random effects.',
+      'With the Enrich2-compatible preset the combined scores follow the published ones exactly where Enrich2\'s estimator converged (r 1.000), and 6,847 variants are scored, as many as MaveDB\'s.',
+      'Deposited in MaveDB\'s format and opened again, the run\'s scores come back exactly and the deposit written again is the same bytes: nothing is lost on the round trip.',
+    ],
+    steps: [
+      ['map', 'The map shows Run 1, the counts scored with MaveScape\'s defaults: the RING\'s eight zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64 on BRCA1\'s numbering) are among its twelve least tolerant positions. Click a cell: its six replicate scores, and the published score in the run "Published scores".'],
+      ['experiment', 'In Experiment, the design: two library preparations, three replicates each, rounds 0 to 5, the inputs shared; the yeast two-hybrid columns, BARD1 binding, set aside with the reason.'],
+      ['score', 'In Score, choose the Enrich2-compatible preset and score again: the combined scores now equal the published ones, made by Enrich2 in 2017.'],
+      ['score', 'From Run 1\'s Export menu, "Deposit in MaveDB": the scores, counts and methods as MaveDB takes a score set, the experiment described as the record\'s (give its URN, urn:mavedb:00000003-a, to add the score set to it). Download the package as a ZIP.'],
+      ['experiment', 'Drop the ZIP on the window: it opens as a record from MaveDB does, and its scores, read as published, are Run 1\'s exactly.'],
+      ['qc', 'In QC, the dropout and the fit of the time courses: over five rounds most variants that lose activity fall below detection, as stops do.'],
     ],
   },
   {

@@ -18,7 +18,7 @@
 // Needs Go (to build MaveScape) and Chrome, Chromium, Edge or Brave (CHROME=path).
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +41,25 @@ const wanted = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--t
 const audit = args.includes('--audit');
 const shots = !args.includes('--no-shots');
 const AXE = join(ROOT, 'validation/cache/axe-core/axe.min.js');
+const PTEN = join(ROOT, 'validation/cache/mavedb-pten-vampseq/scores.csv');
+if (wanted.length === 0 || wanted.includes('pten-mavedb')) {
+  if (!existsSync(PTEN)) throw new Error('The PTEN example\'s scene needs MaveDB\'s table: run node validation/fetch.mjs mavedb-pten-vampseq');
+}
+// BRCA1's saturation genome editing (wave 3, slice 3): its scores and counts.
+const BRCA1_SGE = join(ROOT, 'validation/cache/mavedb-brca1-sge');
+if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant'].includes(w))) {
+  if (!existsSync(join(BRCA1_SGE, 'counts.csv'))) throw new Error('The BRCA1 example\'s scenes need MaveDB\'s tables: run node validation/fetch.mjs mavedb-brca1-sge');
+}
+// The examples opened from MaveDB with their counts (wave 3, slice 6): DHFR's two score sets, BRCA1
+// RING's amino-acid score set; each record's tables and the folder that holds them.
+const MAVEDB_TABLES = [
+  ['urn:mavedb:00000063-b-1', join(ROOT, 'validation/cache/mavedb-dhfr/minus-lon'), 'dhfr-lon'],
+  ['urn:mavedb:00000063-a-1', join(ROOT, 'validation/cache/mavedb-dhfr/plus-lon'), 'dhfr-lon'],
+  ['urn:mavedb:00000003-a-2', join(ROOT, 'validation/cache/mavedb-brca1-ring/aa'), 'brca1-ring'],
+];
+for (const [, dir, scene] of MAVEDB_TABLES) {
+  if ((wanted.length === 0 || wanted.includes(scene)) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
+}
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
 
 // --- MaveScape ------------------------------------------------------------------------------------
@@ -53,7 +72,30 @@ let token = '';
 // Started per scene on an empty library, so that no scene sees another's workspaces.
 async function startMaveScape() {
   const library = mkdtempSync(join(temp, 'library-'));
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  // UniProt's answers as the fetcher cached them (validation/fixtures/public-data), copied fresh,
+  // so the scenes that check a target are answered from the cache and send nothing.
+  const cache = mkdtempSync(join(temp, 'cache-'));
+  cpSync(join(ROOT, 'validation/fixtures/public-data'), cache, { recursive: true });
+  // The PTEN example's table, from the validation's external data (node validation/fetch.mjs
+  // mavedb-pten-vampseq), with the retrieval record the fetcher would write.
+  if (existsSync(PTEN)) {
+    cpSync(PTEN, join(cache, 'mavedb', 'urn_mavedb_00000013-a-1.scores.csv'));
+    writeFileSync(join(cache, 'mavedb', 'urn_mavedb_00000013-a-1.scores.csv.meta.json'), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: 'https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000013-a-1/scores', retrieved: '2026-10-11T02:24:52Z' }, null, 2)}\n`);
+  }
+  for (const table of ['scores', 'counts']) {
+    if (!existsSync(join(BRCA1_SGE, `${table}.csv`))) continue;
+    cpSync(join(BRCA1_SGE, `${table}.csv`), join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv`));
+    writeFileSync(join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/${table}`, retrieved: '2026-10-11T04:13:31Z' }, null, 2)}\n`);
+  }
+  for (const [urn, dir] of MAVEDB_TABLES) {
+    for (const table of ['scores', 'counts']) {
+      if (!existsSync(join(dir, `${table}.csv`))) continue;
+      const name = `${urn.replaceAll(':', '_')}.${table}.csv`;
+      cpSync(join(dir, `${table}.csv`), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
+    }
+  }
+  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   const stop = async () => {
@@ -141,6 +183,88 @@ const scenes = {
     await act('set_mode', { mode: 'experiment' });
     await scrollTo('.readout-pane', 'center');
   },
+  // The target checked against its UniProt entry (wave 3, slice 1): GRB2's SH3 domain at
+  // positions 159–214 of P62993, from the cache.
+  async 'target-uniprot'() {
+    await example('grb2-sh3');
+    await act('set_mode', { mode: 'experiment' });
+    await scrollTo('[data-place="target"]', 'start');
+    await click('Check against UniProt');
+    await waitFor(`Boolean(document.querySelector('.dialog .entry-card'))`);
+    await clearToasts();
+    await sleep(600);
+  },
+  // Open from MaveDB (wave 3, slice 2): a search for VAMP-seq, MaveDB's answer from the cache.
+  async 'mavedb-search'() {
+    await act('set_mode', { mode: 'start' });
+    await js(`import('/ui/mavedb.js').then((m) => { m.openMaveDBDialog(window.mavescape, { query: 'VAMP-seq' }); return true; })`);
+    await waitFor(`document.querySelectorAll('.mavedb-hit').length > 3`);
+    await sleep(500);
+  },
+  // A record before it is opened: PTEN's VAMP-seq, its license, the assay in MaveDB's terms, and
+  // its calibrations.
+  async 'mavedb-record'() {
+    await act('set_mode', { mode: 'start' });
+    await js(`import('/ui/mavedb.js').then((m) => { m.openMaveDBDialog(window.mavescape, { query: 'urn:mavedb:00000013-a-1' }); return true; })`);
+    await waitFor(`Boolean(document.querySelector('.dialog .record-view .calibration'))`);
+    await js(`document.querySelector('.dialog .record-view .section-title:nth-of-type(3)')?.scrollIntoView({ block: 'start' })`);
+    await sleep(500);
+  },
+  // GRB2 opened from MaveDB: its published scores on the map, the record in the inspector.
+  async 'mavedb-published'() {
+    await act('open_mavedb', { urn: 'urn:mavedb:00000835-a-1' });
+    await act('set_mode', { mode: 'map' });
+    await act('focus', { kind: 'table', name: 'scores' });
+    await clearToasts();
+    await sleep(800);
+  },
+  // A record whose target is a transcript (wave 3, slice 3): BRCA1's saturation genome editing,
+  // before it is opened.
+  async 'mavedb-transcript'() {
+    await act('set_mode', { mode: 'start' });
+    await js(`import('/ui/mavedb.js').then((m) => { m.openMaveDBDialog(window.mavescape, { query: 'urn:mavedb:00000097-0-2' }); return true; })`);
+    await waitFor(`Boolean(document.querySelector('.dialog .record-view .calibration'))`);
+    await sleep(500);
+  },
+  // Nucleotide variants at the protein level (wave 3, slice 3): BRCA1's saturation genome editing on
+  // the map, and beside it the splice-site variants a map of substitutions cannot show.
+  async 'brca1-sge'() {
+    await example('brca1-sge');
+    await act('set_mode', { mode: 'map' });
+    await clearToasts();
+    await js(`(() => { const d = document.querySelector('details.off-map'); d.open = true; d.dispatchEvent(new Event('toggle')); return true; })()`);
+    await sleep(300);
+    await js(`(() => { const s = document.querySelector('details.off-map select'); s.value = 'splice site'; s.dispatchEvent(new Event('change')); return true; })()`);
+    await sleep(400);
+    // The map's lower part, what it says in words, and the table's first rows.
+    await js(`(() => { const d = document.querySelector('details.off-map'); d.scrollIntoView({ block: 'start' }); const c = d.closest('.view-body'); if (c) c.scrollTop -= 560; return true; })()`);
+    await sleep(500);
+  },
+  // A protein variant of a nucleotide run in the inspector: BRCA1's p.Tyr1853Ter, made by two.
+  async 'merged-variant'() {
+    await example('brca1-sge');
+    await act('inspect_variant', { variant: 'p.Tyr1853Ter' });
+    await clearToasts();
+    await sleep(600);
+  },
+  // A GenBank plasmid map with three coding features (wave 3, slice 3): the chooser.
+  async 'genbank-cds'() {
+    await act('set_mode', { mode: 'start' });
+    const gb = readFileSync(join(ROOT, 'validation/fixtures/public-data/ncbi/ON605209.1.gb'), 'utf8');
+    await js(`(window.mavescape.importFiles([new File([${JSON.stringify(gb)}], 'pMK-RQ-BCD_LacZ-cmyc-EB2-H6.gb')]), true)`);
+    await waitFor(`Boolean(document.querySelector('.dialog .cds-list'))`);
+    await sleep(500);
+  },
+  // A MaveDB deposit (wave 3, slice 4): the GRB2 example's run, what the deposit holds and what
+  // MaveDB still requires (an abstract), and the MaveDB details to give.
+  async 'mavedb-deposit'() {
+    await example('grb2-sh3');
+    await act('set_mode', { mode: 'score' });
+    await js(`import('/ui/mavedb-export.js').then((m) => { const ws = window.mavescape.store.ws; m.openDepositDialog(window.mavescape, ws.runs.at(-1)); return true; })`);
+    await waitFor(`Boolean(document.querySelector('.dialog .deposit-report'))`);
+    await clearToasts();
+    await sleep(600);
+  },
   // What the analysis can do (wave 2, slice 10): GRB2's readiness in the Experiment view, and what
   // the published counts leave out.
   async readiness() {
@@ -189,6 +313,20 @@ const scenes = {
     await act('inspect_variant', { variant: 'p.Trp36Ala' });
     await sleep(600);
   },
+  // Sequence tracks (wave 3, slice 5): GRB2's map with UniProt's features, conservation (PDBe-KB's
+  // and an alignment's), AlphaMissense, ClinVar and gnomAD below it, from the cached answers; the
+  // Tracks panel; a variant's annotations in the inspector.
+  async 'map-tracks'() {
+    await example('grb2-sh3');
+    for (const provider of ['uniprot-features', 'pdbe-conservation', 'alphamissense', 'clinvar', 'gnomad']) await act('add_track', { provider });
+    await act('add_track', { name: 'grb2-sh3.sto', text: readFileSync(join(ROOT, 'validation/fixtures/annotations/grb2-sh3.sto'), 'utf8') });
+    await act('set_track', { track: 'Conservation (grb2-sh3.sto)', position: 9 });
+    await act('render_map', { color_by: 'score', rows: 'biochemical' });
+    await act('inspect_variant', { variant: 'p.Trp36Ala' });
+    await clearToasts();
+    await scrollTo('.map-pane .map-legend', 'start');
+    await sleep(800);
+  },
   // A position selected and saved, on the map zoomed in.
   async 'map-selection'() {
     await example('grb2-sh3');
@@ -220,6 +358,14 @@ const scenes = {
     await sleep(600);
   },
   // Factor IX: 461 positions in three overlapping tiles, a variant's distribution over the bins.
+  // PTEN opened from MaveDB (wave 3, slice 2): its published scores on the map, the record and its
+  // calibrations in the inspector.
+  async 'pten-mavedb'() {
+    await example('pten-mavedb');
+    await act('focus', { kind: 'table', name: 'scores' });
+    await clearToasts();
+    await sleep(800);
+  },
   async factor9() {
     await example('factor9');
     await act('render_map', { color_by: 'score', rows: 'biochemical' });
@@ -313,6 +459,23 @@ const scenes = {
     await act('inspect_variant', { variant: 'p.Pro13Ala' });
     await sleep(600);
     await scrollTo('#inspector h4.inspector-sub:nth-of-type(2)', 'start');
+  },
+  // Two MaveDB score sets opened together (wave 3, slice 6): DHFR's map of +Lon − −Lon, a variant
+  // Lon penalizes in the inspector, its sub-library's three replicates.
+  async 'dhfr-lon'() {
+    await example('dhfr-lon');
+    await act('render_map', { color_by: 'differential' });
+    await act('inspect_variant', { variant: 'p.Met20Ala', condition: '+Lon' });
+    await clearToasts();
+    await sleep(600);
+  },
+  // BRCA1 RING from MaveDB (wave 3, slice 6): its counts scored (Run 1) on the map, a zinc ligand
+  // of the RING (C61 on BRCA1's numbering) in the inspector, its six replicates.
+  async 'brca1-ring'() {
+    await example('brca1-ring');
+    await act('inspect_variant', { variant: 'p.Cys60Tyr', run: 'Run 1' });
+    await clearToasts();
+    await sleep(600);
   },
   // The Score view's comparison of the conditions: how, how many differ, the volcano plot.
   async 'differential-score'() {

@@ -5,6 +5,7 @@
 
 import { columnText, parseTable } from '../web/lib/csv.js';
 import { assembleTable } from '../web/lib/assemble.js';
+import { engineColumns } from '../web/lib/design.js';
 import { reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { scoreExperiment, DEFAULT_PARAMETERS } from '../web/lib/score.js';
 import { computeQC } from '../web/lib/qc.js';
@@ -15,13 +16,14 @@ import { barcodesCSV, countsCSV, differentialCSV, provenanceJSON, provenanceText
 import { writeMethods } from '../web/lib/methods.js';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
+import { proteinView } from '../web/lib/collapse.js';
 import { sha256 } from '../web/lib/sha256.js';
 
 export const SOFTWARE = { version: '0.1.0', commit: '0123456789abcdef' };
 
 const columnsFor = (table, design) => {
   const out = {};
-  for (const s of design.samples) for (const c of s.columns) out[c] = table.columns.find((x) => x.name === c).numeric;
+  for (const c of engineColumns(design)) out[c] = table.columns.find((x) => x.name === c).numeric;
   return out;
 };
 
@@ -85,7 +87,8 @@ export function allExports(ws, table, results) {
     'references.bib': methods.bibtex,
     'selection.csv': selectionCSV(selection.keys, results, run, selection.condition),
     'selection.json': selectionJSON(selection, run),
-    'map.svg': mapSVG(buildMapModel(results, run.inputs.design), { results }),
+    // A run of nucleotide variants is drawn at the protein level (ui/remote.js, export map).
+    'map.svg': mapSVG(buildMapModel(proteinView(results) ?? results, run.inputs.design), { results: proteinView(results) ?? results }),
     ...(results.barcodes ? { 'barcodes.csv': barcodesCSV(results, run) } : {}),
     ...(results.differential ? { 'differential.csv': differentialCSV(results, run) } : {}),
     methods,

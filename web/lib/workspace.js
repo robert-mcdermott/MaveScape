@@ -180,6 +180,20 @@ export function updateTarget(ws, id, patch, detail = null) {
   return change(ws, { targets: next, design }, 'target', detail ?? `Changed the target ${target.name}: ${fields.join(', ')}`);
 }
 
+// A target checked against its reference entry (wave 3, slice 1): the design's fields the check
+// changes (offset, identifiers, organism, differences), and its record (uniprot.js, referenceOf),
+// kept with the workspace's target only, as provenance. A check that changes nothing leaves the
+// design, and so its runs, as they were. One entry in the history.
+export function recordTargetCheck(ws, id, patch, reference, detail) {
+  const target = ws.targets.find((t) => t.id === id);
+  if (!target) return ws;
+  const fields = Object.keys(patch).filter((k) => JSON.stringify(patch[k]) !== JSON.stringify(target[k]));
+  const patched = (t) => (t.id === id ? { ...t, ...Object.fromEntries(fields.map((k) => [k, patch[k]])), id } : t);
+  const design = fields.length && ws.design ? { ...ws.design, targets: ws.design.targets.map(patched) } : ws.design;
+  const targets = ws.targets.map((t) => (t.id === id ? { ...patched(t), reference } : t));
+  return change(ws, { targets, design }, 'target', detail);
+}
+
 // Adds a named selection of variants (by their MAVE-HGVS keys), made on the map of a run.
 export function addSelection(ws, selection) {
   const id = uniqueId(selection.name ?? 'selection', ws.selections);
@@ -226,5 +240,57 @@ export function acknowledgeFinding(ws, finding, reason, time = clockNow()) {
 
 // Sets (or clears) the design, and the table it describes.
 export function setDesign(ws, design, detail, sourceId = ws.designSource) {
+  // A target's check against its entry (recordTargetCheck), and where its sequence came from (a
+  // GenBank record, NCBI or Ensembl: origin, wave 3 slice 3), are the workspace's, never the
+  // design's, even when the design takes its target from the workspace.
+  if (design?.targets?.some((t) => t.reference || t.origin)) design = { ...design, targets: design.targets.map(({ reference, origin, ...t }) => t) };
   return change(ws, { design, designSource: design ? sourceId : null }, 'design', detail);
 }
+
+// Sets the MaveDB details (ws.deposit, absent until stated; lib/mavedb-export.js, DEPOSIT_FIELDS):
+// the fields given replace the workspace's, an empty one removes it; the change is in the history,
+// named by its fields.
+export function setDeposit(ws, patch, detail = null) {
+  const next = { ...(ws.deposit ?? {}) };
+  const changed = [];
+  for (const [key, value] of Object.entries(patch)) {
+    const empty = value === null || value === undefined || value === '' || (Array.isArray(value) && !value.length);
+    if (canonicalJSON(next[key] ?? null) === canonicalJSON(empty ? null : value)) continue;
+    changed.push(key);
+    if (empty) delete next[key];
+    else next[key] = value;
+  }
+  if (!changed.length) return ws;
+  return change(ws, { deposit: Object.keys(next).length ? next : null }, 'deposit', detail ?? `MaveDB details: ${changed.join(', ')} ${changed.length === 1 ? 'was' : 'were'} changed`);
+}
+
+// --- Annotations and tracks (wave 3, slice 5) ------------------------------------------------------
+
+// Adds an annotation (ws.annotations, absent until the first): { id, provider, name, file: {
+// fileName, sha256, size }, record (the source: service, url, retrieved, release, license…),
+// added }. Its file is kept in the library and the archive, so its tracks reopen offline.
+export function addAnnotation(ws, annotation, detail = null) {
+  const list = ws.annotations ?? [];
+  const id = uniqueId(annotation.id ?? annotation.provider, list);
+  const entry = { ...annotation, id };
+  return { ws: change(ws, { annotations: [...list, entry] }, 'annotation', detail ?? `Added the annotation "${entry.name}"`), id };
+}
+
+export function removeAnnotation(ws, id) {
+  const list = ws.annotations ?? [];
+  const gone = list.find((a) => a.id === id);
+  if (!gone) return ws;
+  const rest = list.filter((a) => a.id !== id);
+  // Its tracks leave the arrangement too.
+  const prefix = `${id}:`;
+  const layout = ws.tracks ? { ...ws.tracks, order: (ws.tracks.order ?? []).filter((t) => !t.startsWith(prefix)), hidden: (ws.tracks.hidden ?? []).filter((t) => !t.startsWith(prefix)), filters: Object.fromEntries(Object.entries(ws.tracks.filters ?? {}).filter(([t]) => !t.startsWith(prefix))) } : undefined;
+  return change(ws, { annotations: rest.length ? rest : undefined, ...(layout ? { tracks: layout } : {}) }, 'annotation', `Removed the annotation "${gone.name}"`);
+}
+
+// The arrangement of tracks (ws.tracks: { order, hidden, filters }; lib/tracks.js, arrangement): a
+// view of the analysis, not a change to it, so not in the history.
+export function setTrackLayout(ws, layout) {
+  if (canonicalJSON(ws.tracks ?? null) === canonicalJSON(layout ?? null)) return ws;
+  return change(ws, { tracks: layout ?? undefined });
+}
+

@@ -1102,52 +1102,569 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
 
 ### Wave 3
 
-1. **The allowlisted fetcher (P3, I3).** Port Proteoscope's `cache.go` and the download, limit
-   and serve parts of `fetch.go` with one explicit host list (MaveDB, UniProt, RCSB, PDBe,
-   AlphaFold DB, NCBI E-utilities, Ensembl, gnomAD); retrieval time and ETag in each record;
-   `--offline`, `--no-fetch`, `--cache-dir`; size and decompression limits; confirmation before
-   any request that would send a sequence; `docs/NETWORK.md` listing every request.
-   - Validation: Go tests for the allowlist, redirects, limits, gzip bombs, offline and stale
-     serving; a test that the page makes no request outside `/api/`.
-2. **MaveDB import (I1).** Search (`POST /score-sets/search`, 100 per page) and fetch by URN
-   (`mavescape --mavedb urn:mavedb:…`): scores, counts, metadata, targets (sequence or
-   accession, with UniProt/RefSeq/Ensembl offsets), license and citation, published
-   calibrations; counts mapped into a design with the same wizard; the readout (wave 2, slice 8)
-   taken from the record's experiment keywords; retries with backoff; cached for offline use.
-   Records under CC BY-NC-SA or "other" licenses are shown with their terms.
+1. **The allowlisted fetcher (P3, I3): done.** `cache.go` and the download, limit and serve parts
+   of `fetch.go`, adapted from Proteoscope 0.10.0, with one explicit host list (`publicHosts`:
+   MaveDB, UniProt, RCSB, PDBe, AlphaFold DB, NCBI E-utilities, Ensembl, gnomAD, each with the
+   paths it may be asked for), checked as every request is sent, redirects included
+   (`guardedTransport`): HTTPS on the default port, no user name, no dot segments; redirects on
+   the same host only, and without the `Referer` Go adds. The requests are listed once
+   (`publicRequests`: the route the page asks, the request upstream, what is sent and why, the
+   cache folder, age and size limit) and served at `/api/fetch/…`; `/api/fetch` describes them and
+   `/api/fetch/cache` lists the cache. Each answer is cached with its retrieval record (the
+   service, the URL, when retrieved and last confirmed, the ETag, date and release), confirmed by
+   ETag or date once older than its age, served stale only when the service cannot be reached;
+   retries on 429/502/503/504 (twice, after 1 and 3 s, or `Retry-After` up to 10 s); per-request
+   size limits applied after decompression; JSON only. `--offline` (cached copies only; the
+   fetcher has no way to send), `--no-fetch` (off), `--cache-dir` (default
+   `<user cache dir>/MaveScape`); `/api/info` and the banner say which; a second launch with
+   another setting is told the running one keeps its own; headless runs have public data off.
+   A request that would send a sequence is refused with HTTP 428 and the exact request it would
+   make, until the page confirms it (`X-MaveScape-Confirm: send-sequence`), which it does only
+   when the person clicks *Send it* in a dialog showing the whole request; a lookup already
+   cached is answered sending nothing, and its record names the request with `{sequence}` in place
+   of the sequence, so the cache holds public answers only; no remote action sends a sequence. `docs/NETWORK.md` lists
+   every host and request, and what each sends.
 
-   **Readiness** (wave 2, slice 10) applied to a MaveDB record. A record with scores alone supports
-   the map, exploration and comparison; counts allow rescoring and count-based QC. What the record
-   lacks (counts, replicates, a design, the readout) is named with where it is usually found: the
-   paper's methods, its supplement, the authors' repository. Rebuilding a published experiment's
-   design from scattered records is often the hardest part of a reanalysis.
-   - Validation: the three feasibility records import through the UI with no dataset-specific
-     code; imported scores equal MaveDB's; the PRD's phase-0 exit ("score agreement within
-     documented tolerances") re-checked from the live import.
-3. **Full MAVE-HGVS and variant mapping (D3, D10).** Multi-variants, insertions, deletions,
-   delins, duplications, stop and start loss, splice; nucleotide-to-protein translation for
-   nucleotide-level libraries (and synonymous collapsing, as DiMSum's); targets from GenBank
-   files (a plasmid or construct map: the coding feature chosen, its translation checked);
-   optional VRS identifiers from MaveDB's mapped variants.
-   - Validation: every `mavehgvs` test case; every variant of the imported records parses.
-4. **MaveDB export (I2, M2).** A MaveDB-ready package (scores and counts CSV, metadata JSON) from
-   any run, with the analysis description written from the methods and the experiment's keywords
-   from the design's readout (the MAVE minimum information); `mavescape export --format mavedb`.
-   - Validation: the package passes MaveDB's own validators (the `mavedb` package's models and
-     `mavehgvs` strict mode, pinned; results committed as a reference); export → import → export
-     is identical. Never sent to MaveDB's `/hgvs/validate` (unpublished data stay local).
-5. **Sequence tracks and annotations (V5, I3, I4).** Tracks synchronized with the map:
-   reference, coverage, position effect and uncertainty, UniProt domains, motifs and secondary
-   structure, conservation (Jensen–Shannon divergence, Proteoscope's `conservation.js` and
-   `msa.js`, from the AlphaFold DB alignment or the user's FASTA or A3M alignment), ClinVar
-   observations, gnomAD frequencies, AlphaMissense and other imported predictors (their CSV/TSV
-   downloads), custom tracks from CSV or GFF3 (UniProt's feature format) (for MaveDB
-   records, MaveDB's own `clinvar`, `gnomad` and `vep` namespaces first); show, hide,
-   reorder, filter, export; each record with source, version and retrieval date. Annotation
-   providers behind one interface (`web/lib/providers/*.js`), cached and usable offline.
-6. **Examples (T4).** The two-condition differential map (DHFR with Lon protease functional and
-   deficient, `00000063-a-1`/`-b-1`) and the MaveDB round trip (BRCA1 RING), bringing the set to
-   eleven.
+   The first requests, and what they serve: **a target checked against its UniProt entry**
+   (`web/lib/uniprot.js`, `web/ui/public-data.js`). Experiment, Target: *Check against UniProt*
+   fetches the entry its accession names and places the target (or the protein a DNA target
+   encodes) in it, ungapped, a few residues allowed to hang over either end (a tag or linker),
+   80% of residues agreeing at least, and a placement that fits equally well elsewhere left to
+   the person; it shows the entry, where it came from and when, where the target sits and how it
+   differs, and each field the entry would change (offset, accession and gene, species,
+   differences, with notes kept). *Use these* changes them in the design; the check's record
+   (`target.reference`: entry, release, retrieval, placement) is kept with the workspace's target,
+   not in the design, so a check that changes nothing leaves the design and its runs current
+   (`recordTargetCheck`). The history, the target pane and the inspector show it; the methods name
+   the entry, release and date, citing UniProt, while the target is as checked. A target with no
+   accession is found by its exact sequence (UniParc, active UniProtKB entries, reviewed first).
+   An inactive accession is reported with the entries that replaced it. The status bar's
+   *Public data* opens the Network dialog: the hosts, the requests, the cache's folder and what it
+   holds. The remote action `check_target` (with `apply`). The GRB2 example's guide checks its
+   target (six steps: the two map steps merged); a screenshot scene (`target-uniprot`); the guide
+   page *Public data*.
+   - Validation:
+     - Go tests (`fetch_test.go`): the allowlist (allowed and refused URLs: look-alike hosts,
+       other ports and schemes, user names, paths outside a host's, dot segments); nothing sent to
+       an unlisted host; redirects on the same host followed, to another refused and never
+       contacted; answers beyond the limit refused when declared, streamed, compressed by the
+       transport, compressed in the body and both (a 4 KB answer expanding to 4 MB stops at
+       1 MB); JSON only; retries, and none for HTTP 500; revalidation by ETag (304: the copy
+       confirmed, `checked` recorded, fresh again); stale copies when the service is down; a 404
+       not served from the cache; `--offline` serving cached copies and sending nothing;
+       `--no-fetch`; the sequence sent only once confirmed, the request it would send shown first,
+       cached lookups sending nothing, and no file of the cache holding the sequence; `docs/NETWORK.md` naming
+       every host, route and upstream (`TestNetworkDocumentListsEveryRequest`); no script in
+       `web/` naming another origin in a request, and the CSP's `connect-src 'self'`.
+     - `public-data` (6 checks) on UniProt's answers as the fetcher cached them
+       (`validation/fixtures/public-data/`, release 2026_03): each record complete; each published
+       example's target where its design says in its entry, identical, at one place, the entry
+       changing nothing (GRB2 159–214 of P62993, Hsp90 582–590 of P02829, factor IX 1–461 of
+       P00740); GRB2's whole sequence finding P62993 first; the GRB2 example checked as its guide
+       says, the design unchanged and the methods naming the check.
+     - `remote-session.mjs` 81 checks, the session now offline on the cached answers:
+       `check_target` (identical, from the cache; another protein refused; an uncached entry
+       refused offline; applied, the design and its run unchanged); the methods and the archive
+       keep the check; and every request the page made in the whole session recorded through the
+       DevTools protocol: none beyond its own origin.
+     - Unit tests: `uniprot.test.mjs` (8), a check kept outside the design in
+       `workspace.test.mjs`, the methods' sentence in `methods.test.mjs`.
+   - Found by slice 1:
+     - **Go's HTTP client adds a `Referer` header to a redirected request**, naming the URL
+       redirected from, which for a sequence's lookup holds the sequence (the tests' fake service
+       refused requests carrying one). Redirects stay on their host, but a redirected request now
+       carries nothing the first did not.
+     - **UniProt answers an inactive accession with HTTP 200** and an entry of type "Inactive"
+       naming where it went (P29354: split into P62993 and P62994), not a 404 or a redirect: the
+       page reads it as such.
+     - **A sequence's lookup returns every database's cross-reference** unless asked otherwise:
+       1,147 for GRB2 (232 KB), of which 120 are active UniProtKB entries. The request asks for
+       those only (30 KB).
+     - **UniProt names an organism with its reference strain** ("Saccharomyces cerevisiae (strain
+       ATCC 204508 / S288c)"), which need not be the experiment's: organisms are compared and set
+       by species.
+     - **Any change to the design makes its runs no longer current**, so recording a check in the
+       design would have asked for a rescore that changes nothing: the record is kept with the
+       workspace's target instead.
+     - The three published examples' targets are exactly where their designs say in UniProt.
+2. **MaveDB import (I1): done.** Through the fetcher of slice 1: a score set's record
+   (`GET /score-sets/{urn}`, cached 7 days), its scores and counts (CSV, 30 days; CSV answers accepted
+   where asked, a page refused), and the search (`POST /score-sets/search`, its words and page, 100 a
+   page, a day); URNs of published score sets only (`tmp:` refused); cache names without colons.
+   `web/lib/mavedb.js` reads a record: title and descriptions, license and what it allows (CC0, CC BY,
+   CC BY-SA open; CC BY-NC-SA and "other" with a warning and their terms), citation (MaveDB's
+   reference, rewritten from the publication's fields where it holds placeholders), target (a
+   sequence; UniProt's offset as the target's, RefSeq and Ensembl as identifiers), what it holds, the
+   experiment's controlled keywords (giving the design's readout and library method in MaveDB's
+   terms; the direction is no keyword and stays unstated), raw-read identifiers, and published
+   calibrations (functional classes as WT-like and abnormal-like, ranges, the evidence strength each
+   assigns, research use flagged). *Open from MaveDB* (`web/ui/mavedb.js`; the Start page, the
+   workspace menu, ⌘K) searches or takes a URN or MaveDB address and shows the record before opening
+   it; `mavescape urn:mavedb:…` and `--mavedb` open one at start or hand it to the running window
+   (`/api/info`'s `mavedb`, `/api/open`). Opened, a record becomes a workspace: its published
+   scores, its counts (when deposited) with a design drafted from their column names by the same
+   draft as any table (`countsDesign`), the record kept in `workspace.records` and each table's
+   `origin`, shown in the inspector and named in the methods. A target named by an accession, or
+   several targets, is shown and not opened (full MAVE-HGVS, slice 3). Remote actions
+   `search_mavedb` and `open_mavedb`.
+
+   **Published scores, read as published.** The design model `scores` (in the schema since wave 1)
+   now has a run: the model `published` reads each score, SE and 95% interval as given (the scores
+   export writes the given interval; the output hash covers it), with the stages `given` (no score in
+   the table) and `copy` (a row repeating an earlier row's variant and scores, read once; different
+   scores refused), and the classes, exclusions and maximum SE a person sets. It serves the map, QC
+   (separation, resolution, coverage of substitutions with a score; the findings about counts not
+   assessed), the inspector, the exports (no counts or package), the methods ("as published, not
+   rescored") and the workflow. *Draft the design* reads any table with a column of scores this way
+   (`draftScoresDesign`), and the Experiment and Score views show its columns and filters.
+
+   **Readiness** applied to a MaveDB record: for published scores, the base is the scores, target and
+   design; the map, exploration, QC of what scores show and comparison are ready; rescoring and QC of
+   the counts need the counts, named with where they usually are: MaveDB when it keeps them, else
+   the paper's supplement, the authors' repository, or the raw reads the record names, counted again
+   with the design the paper's methods describe. The readout's where names the record's method text.
+
+   The example: PTEN's VAMP-seq abundance (`urn:mavedb:00000013-a-1`), scores alone, opened from
+   MaveDB when opened and checked against its checksum (pinned in `sources.json`), its direction
+   stated from the paper; ten examples.
+   - Validation:
+     - Go tests: MaveDB's records, tables and search (URNs only, temporary ones refused, CSV accepted,
+       a page of HTML refused, the search's words POSTed, cached by words and page, its record
+       keeping the body); `--mavedb`, URNs among the arguments, forwarded to a running MaveScape.
+     - `public-data` (15 checks): the feasibility records (four score sets) read with no code for any
+       of them; their published scores read as published equal MaveDB's columns row for row (score
+       and SE; 1,108, 11,530, 6,847 and 9,009 scored, the rest NA in MaveDB); their counts drafted
+       into valid designs, GRB2's and factor IX's as documented but for the bins' values; factor IX's
+       keywords as its readout; a target named by an accession (BAP1, CC BY 4.0) shown with its
+       terms; PTEN's readiness naming the counts and its raw reads; a workspace of published scores saved as an archive, reopened and its run reproduced.
+     - `validation/mavedb-live.mjs` (15 checks, in CI): the feasibility records opened from MaveDB,
+       live, through the window: the tables MaveDB sends are the ones `sources.json` pins, the
+       published scores equal MaveDB's, and the PRD's phase-0 exit holds again from the live import,
+       at the suites' tolerances: GRB2 by DiMSum's model on the drafted design, r 0.994 (≥ 0.99);
+       BRCA1 E2 with the documented design and Enrich2's weighted least squares, 50,043 published
+       replicate scores reproduced to 1.8 × 10⁻¹⁴ (≤ 10⁻¹⁰); factor IX with MultiSTEP's settings,
+       r 0.9995 (≥ 0.999). `--offline` repeats it from the cache.
+     - `remote-session.mjs` 85 checks: `search_mavedb` and `open_mavedb` offline on the cached answers
+       (GRB2 by its MaveDB address; the published run with Node's output hash; a record whose table is
+       not cached refused offline).
+     - `examples` (29 checks), unit tests 235: `mavedb.test.mjs`, the published model in
+       `score.test.mjs`, the stages in `filters.test.mjs`, the SE ranking in `importer.test.mjs`.
+   - Found by slice 2:
+     - **PTEN's record lists `sd` before `se`**, and the importer took the first column with a
+       standard-error-like name: the standard deviation across experiments would have been read as
+       each score's SE. SE names are now ranked, `se` first; intervals are found too.
+     - **MaveDB's references hold placeholders** ("(None). 2024; (Unknown volume):(Unknown pages)" for
+       a preprint, "9:None", a title repeated as the journal), and some titles HTML (`<i>G6PD</i>`):
+       such references are written again from the publication's fields.
+     - **Hsp90's score table writes its wild type nine times** (`c.[1=;2=;3=]`, one per position),
+       each scoring 0.0: copies, read once, as its counts were in slice 11.
+     - **MaveDB answers a score set without counts** with a counts table of identifier columns alone
+       (HTTP 200), not a 404: the record's list of count columns decides whether there are counts.
+     - **MaveDB sends no ETag, date or release**: a cached copy is checked by its age, and a record's
+       own dates say which version it is.
+     - **A record's calibrations can be many**: PTEN has six (the investigators' classes by a class
+       column; ExCALIBR's twice, research use only; a Gaussian mixture; IGVF's twice, one primary).
+     - **BRCA1's counts table holds two assays**: its draft is one time series of two conditions (E2
+       and Y2H), where the documented designs keep them apart; both are valid.
+     - **The workflow said "the design or the table changed"** when another table (the published
+       scores) had the only run, and the Score view's draft took that run's parameters for the counts:
+       a run of the same table, and parameters of the same kind, are now what count.
+3. **Full MAVE-HGVS and variant mapping (D3, D10): done.** The parser has read the whole grammar
+   since wave 1; now every form is carried through. `web/lib/consequence.js` reads a nucleotide
+   variant of a DNA target for its protein change: the variant applied to the target's sequence
+   (c. counted from the coding start, c.-N and c.*N in the UTRs; n., g., m., o. from the first
+   base), both coding sequences translated (a frameshift's to its first stop; one in frame codon by
+   codon, into the 3′ UTR when its stop is lost), compared as HGVS describes protein changes and as
+   biocommons hgvs computes them, in MAVE-HGVS's forms (frameshifts short, a lost stop as the
+   substitution at it, a methionine start's change "start lost", substitutions of several codons a
+   multi-variant, nothing after a stop the variant makes); intronic positions are splice sites
+   within two bases of the exon (or across its edge), else intronic. The variant table
+   (`variants.js`) gives a nucleotide variant its consequence as its kind (new kinds: splice site,
+   intronic, 5′ UTR, 3′ UTR) and its protein change (`proKey`, `proPosition`, `proRef`,
+   `proAlt`, DiMSum's `mixed`); a name prefixed by another target is set aside (`otherTarget`, the
+   filter stage `target`). A DNA target's protein is its coding sequence to its first stop.
+
+   **Nucleotide runs at the protein level** (`web/lib/collapse.js`): the variants making the same
+   protein change merged as DiMSum merges them by default (inverse-variance; mixed substitutions
+   left out; synonymous codons merged into their codon's cell; frameshifts and variants with no
+   protein change apart), for the map, the inspector (a cell's nucleotide variants, each scored),
+   QC's coverage, remote control and a new export, the scores at the protein level
+   (`protein_scores.csv`, from `mavescape run` too). Beside every map, **Not on the map** lists what
+   a map of substitutions cannot show, by class and in order along the target.
+
+   **Targets from GenBank** (`web/lib/genbank.js`, `web/ui/genbank.js`): LOCUS, definition,
+   accession and version, organism, features with their locations (ranges, partial ends,
+   complement, join, order) and qualifiers, and the sequence; a coding feature chosen when there are
+   several (the longest whose translation checks offered first), its translation checked against
+   the record's; a plasmid's target its coding sequence on its strand, an mRNA's the whole record
+   from its coding start. The target's origin is kept with the workspace (not the design), shown in
+   the Experiment view and the inspector, and named in the methods (RefSeq, Ensembl and biocommons
+   hgvs cited).
+
+   **MaveDB records whose target is a transcript**, through the fetcher: NCBI's GenBank record of a
+   RefSeq transcript (`/api/fetch/ncbi/nuccore/{accession}`) and Ensembl's sequence of one of its
+   own (`/api/fetch/ensembl/transcript/{id}`, its current version said where the record names
+   another); a transcript named beside its protein is one target; a score set of several targets
+   opens one target at a time; a genome is not fetched. **MaveDB's mapped variants**
+   (`/api/fetch/mavedb/score-sets/{urn}/mapped-variants`), when asked for, kept as a CSV beside the
+   tables (and in the archive): the inspector shows each variant's HGVS on the reference, VRS
+   identifier and ClinGen allele. `open_mavedb` takes `target` and `mapped`; `inspect_variant` gives
+   `protein`, `nucleotideVariants` and `mapped`.
+
+   The example: BRCA1's saturation genome editing (`urn:mavedb:00000097-0-2`, CC0; Findlay et al.
+   2018), opened from MaveDB with its counts, its RefSeq transcript fetched from NCBI; eleven
+   examples.
+   - Validation:
+     - `consequences` (8 checks; `validation/consequence-cases.mjs`): each nucleotide variant's
+       protein change as biocommons hgvs 1.5.7's (`reference/consequences.json`,
+       `generate_consequences.py`, its own data provider holding each transcript), 16,188 variants
+       on NM_007294.3, NM_000546.6 and ENST00000460680 (every name of BRCA1's, TP53's and BAP1's
+       score sets, and generated substitutions, deletions, insertions, duplications and
+       deletion-insertions): all agree; GenBank records as Biopython 1.88 reads them (two RefSeq
+       mRNAs, a plasmid of three coding features, HBB joined from three exons; 143 features, 6 coding
+       sequences): all agree; every variant of thirteen imported tables valid on its target
+       (GRB2, BRCA1 RING aa and nt, factor IX, Hsp90, CBS low and high, PTEN, BRCA1 SGE scores and
+       counts, TP53's DNA-binding domain, BAP1, TP53 base editing); 71,005 protein names, all strict
+       MAVE-HGVS; the protein names five records publish beside their nucleotide names the same
+       protein (22,280 of CBS's written alike); VarChAMP's 28 targets each read on its own; DDX3X's
+       genome target refused; the merge at the protein level as DiMSum 1.4's own
+       `dimsum__aggregate_AA_variants_fitness` merges CBS's 11,478 codon variants
+       (`generate_dimsum_aggregate.R`): 7,561 amino-acid variants within 5 × 10⁻¹³, the 1,034
+       synonymous ones it keeps apart each in its codon's cell.
+     - `hgvs` (6 checks): every mavehgvs test case, its 54 tests against a target sequence now too.
+     - `public-data` (16 checks): GRB2's 1,120 mapped variants each joined to its row of scores, each
+       VRS identifier well formed, each protein on NP_002077.1 the table's at the target's position
+       plus 158.
+     - `examples` (33 checks): the BRCA1 example opens as the window opens it (QC coverage failing, as
+       its guide teaches); its counts drafted (two replicates, day 5 to day 11) and scored agree with
+       the published scores at r 0.76.
+     - `remote-session.mjs` (90 checks), `headless-run.mjs` (24), `mavedb-live.mjs` (18, live and
+       offline): MaveDB's mapping kept and shown; BAP1 opened on Ensembl's transcript, a merged
+       protein variant inspected, the scores at the protein level as Node writes them, by the window
+       and by `mavescape run`; BRCA1's saturation genome editing and BAP1 opened live, their
+       transcripts from NCBI and Ensembl.
+     - Go tests: the new requests (accessions only; NCBI's and Ensembl's HTTP 400 for an unknown
+       accession read as not found; an answer of the wrong kind refused). Unit tests 260:
+       `consequence.test.mjs`, `genbank.test.mjs`, `collapse.test.mjs`, kinds and prefixes in
+       `variants.test.mjs`, transcripts, several targets and mapped variants in `mavedb.test.mjs`,
+       the mapped variants carried by the archive in `archive.test.mjs`.
+   - Found by slice 3:
+     - **biocommons hgvs names the residues an in-frame insertion holds after the stop it makes**
+       (`p.Lys1171delinsGluTerGlu`): they are not made, and MaveScape names nothing after a stop
+       (`p.Lys1171delinsGluTer`); 12 of 16,188 variants, the only difference.
+     - **A duplicated stop codon is in the coding sequence** (the copy follows it, past the stop): no
+       amino acid changes (`p.=`), where a first reading placed it in the 3′ UTR.
+     - **MaveScape translated a DNA target past its stop**: a transcript's 3′ UTR would have been
+       drawn on the map. A target's protein now ends at its first stop.
+     - **Ensembl serves its current release only**: BAP1's record names ENST00000460680.5, Ensembl
+       serves .6; every one of the record's reference bases agrees with .6. NCBI and Ensembl answer
+       an unknown accession with HTTP 400, not 404.
+     - **Base-editing screens name the same edit from several guides** (TP53's: 95 of 351 names
+       repeated, with different scores): MaveScape refuses to merge them silently, so the record's
+       published run is not made; which guide is right is not for MaveScape to guess.
+     - **BRCA1's saturation genome editing counts a library beside day 5 and day 11**: the draft made
+       it a replicate of one time point, which nothing can score. A lone sample is set aside now.
+     - **A saturation genome editing screen covers exons, not the protein**: coverage of the whole
+       protein is 5% (17% of the substitutions one base change makes). The finding names the
+       stretches the variants lie in (BRCA1: 1–101, 1631–1855), to give as tiles.
+     - **Published protein names differ in form from MAVE-HGVS's**: BRCA1's RING record names changes
+       after a stop (`p.[Gly182Ter;Leu217Phe]`), TP53's base-editing record a codon left synonymous
+       (`p.[Ser96Ser;Val97Ala]`) and `p.Asp41Asp`; each describes the protein MaveScape's translation
+       makes.
+     - **MaveDB's mapping confirms the UniProt offset independently**: each of GRB2's 1,120 mapped
+       variants sits at its target position plus 158 on NP_002077.1.
+     - **The deposited counts of a saturation genome editing screen do not record its normalization**:
+       Findlay et al. normalized each exon apart and corrected for position within it; scored
+       globally, BRCA1's counts agree with the published scores at r 0.76.
+4. **MaveDB export (I2, M2): done.** `web/lib/mavedb-export.js` writes a run (one condition) as
+   MaveDB takes a score set: `scores.csv` and `counts.csv` as MaveDB's upload reads them (strict
+   MAVE-HGVS on the target; a run's score, SE, 95% interval, replicates, status and flags, its
+   counts by sample of the condition's replicates; published scores passed through, the design's
+   score column as `score`, with the record's counts), MaveDB's column descriptions
+   (`score_columns.json`, `count_columns.json`), and the experiment and score set as the bodies of
+   MaveDB's API (`experiment.json`, `score_set.json`): the methods as the score set's method text,
+   the design's readout and library method as the experiment's keywords in MaveDB's controlled
+   vocabulary (`MAVEDB_KEYWORDS`, the MAVE minimum information's, "Other" described where a term is
+   not in it), the target as MaveDB holds one (`mode`: protein; coding, the sequence from its
+   coding start, c. names beside their protein changes; noncoding, n. names on the whole sequence;
+   accession, the RefSeq or Ensembl transcript it was fetched as, each name prefixed by it), the
+   license by MaveDB's id. A README and `mavescape.json` say what was written, left out, chosen and
+   missing. **The MaveDB details** (`ws.deposit`, `setDeposit`): title, descriptions, abstract,
+   method note, license, publications, DOIs, raw reads, contributors, an experiment's URN, a score
+   set superseded, the taxonomy id, MaveDB's target category, the other keywords; checked as MaveDB
+   checks them (URNs, ORCID iDs, publication identifiers). Defaults come from the record (published
+   scores; the experiment of a MaveDB record), the design, CC0 or a sentence MaveScape writes, each
+   said; what MaveDB requires and nothing gives is `missing`, and the tables are written all the
+   same. In the window: the run's Export menu, *Deposit in MaveDB…* (`ui/mavedb-export.js`: what the
+   deposit holds and lacks, the details, the download). **A MaveDB package opens** (a folder or a
+   ZIP; `readDeposit`, `importMaveDBPackage`) as a record from MaveDB does, its details kept.
+   `mavescape export --format mavedb|tables` (`export.go`: `--details`, `--condition`, `--strict`,
+   `--time`; `export.json`); remote actions `mavedb_deposit`, `set_mavedb_details`, `export` of
+   `mavedb`. A design's target gives its `taxonomyId`. The GRB2 example's guide prepares a
+   deposit; the guide's *Depositing in MaveDB*; a screenshot scene (`mavedb-deposit`).
+   - Validation:
+     - `mavedb-export` (8 checks; `validation/mavedb-export-cases.mjs`): 19 deposits (GRB2 with and
+       without its details, Hsp90, factor IX, the five simulated designs, two conditions each a
+       deposit, CBS's codon variants scored at two vitamin B6 levels, PTEN's, BRCA1 RING's
+       nucleotide and BRCA1's and BAP1's saturation genome editing published scores, BRCA1's counts
+       scored on NM_007294.3, BRCA1 RING's variants named n.) checked by MaveDB's own validators
+       (`reference/generate_mavedb_export.py`: the `mavedb` package 2026.2.7.4, AGPL-3.0, as an
+       external reference, its `csv_data_to_df` and `validate_and_standardize_dataframe_pair` with
+       the column descriptions and targets, mavehgvs 0.8.1 strict, biocommons hgvs 1.5.7 given each
+       transcript by a data provider of its own; `ExperimentCreate` with `validate_keyword_list` and
+       MaveDB's vocabulary, `ScoreSetCreate`; results with each file's SHA-256 in
+       `reference/mavedb-export.json`): every table accepted (92,253 rows, 133,173 names), the
+       metadata accepted where MaveScape says nothing is missing and refused for the abstract
+       where it says that is; all four modes, 14 scored and 5 published; export → import → export
+       the same bytes for all 19; MaveScape's keyword vocabulary MaveDB's (13 keys, 119 labels,
+       `fixtures/public-data/mavedb-keywords.json`).
+     - Never sent: `TestNoRequestSendsADepositToMaveDB` (no request asks MaveDB's validators or
+       upload, or POSTs but a search); `docs/NETWORK.md` says so.
+     - `remote-session.mjs` (96 checks): BAP1's deposit from the window the same bytes as Node's,
+       opened again from its folder and its ZIP and written again the same; GRB2's details set by
+       `set_mavedb_details` (in the history), an unknown detail refused. `headless-run.mjs` (29):
+       `mavescape export` twice the same bytes and as Node writes the deposit from the archive,
+       `--strict`, `--details`, a folder per condition, `--format tables` as `mavescape run` wrote
+       them, wrong command lines (exit 2). Go tests: `mavescape export`'s arguments; the program's
+       file kinds.
+     - Unit tests 271: `mavedb-export.test.mjs` (the four modes, the details and their checks, the
+       keywords and MaveDB's rules for them, published scores passed through, a package read back,
+       the ZIP), a record's deposit fields and "Other" read as its description, GenBank's taxonomy
+       id.
+   - Found by slice 4:
+     - **MaveDB's validator stops at a gap in `hgvs_pro`**: a protein name missing on any row (a
+       UTR or intronic variant beside c. names) ends it with "'float' object has no attribute
+       'split'" (mavedb 2026.2.7.4), and c. names are refused without protein names. Such variants
+       of a target given by its sequence are left out of a deposit, and said; a target named by its
+       transcript keeps them (its names alone, checked by biocommons hgvs).
+     - **MaveDB counts a target sequence from its first base**, c. and p. alike (it translates the
+       DNA from there): a transcript with a 5′ UTR is given from its coding start.
+     - **MaveDB reads an upload with `'` as its quote character**, and refuses a column without a
+       value or of numbers and text mixed: MaveScape's own exports quote with `"` and write
+       `hgvs_splice` and τ² empty. A deposit writes no quotes (a column holding a comma or quote is
+       left out, and said) and no empty column.
+     - **MaveDB's vocabulary had grown** since wave 2: one assay method was missing from
+       MaveScape's list; "Molecular Mechanism Assessed" has no "Other", so a design's free-text
+       phenotype is chosen on MaveDB. CC BY-NC-SA 4.0 is no longer offered for a new score set.
+     - **The program did not open JSON files** (`fileKind`) though the page reads them: a package's
+       folder arrived without its `score_set.json`. Its four JSON files open now; others still
+       do not.
+     - **A record kept with the workspace dropped its abstract**, which a deposit of it needs; and
+       a keyword "Other" read as "Other" rather than what it describes.
+     - **MaveDB's own checks of a transcript need no database**: given each transcript by a data
+       provider holding only its sequence and coding region, biocommons hgvs validates every name
+       offline (BRCA1's 3,893, a wrong reference base refused).
+5. **Sequence tracks and annotations (V5, I3, I4): done.** Tracks synchronized with the map
+   (`web/lib/tracks.js`, drawn by `track-render.js` into the map's canvas and its SVG): one row
+   each below the grid, on its positions, panned and zoomed with it, its name in the margin; hover
+   for what it holds at a position, click to select that position's variants (a feature's, every
+   position it covers). Four kinds: the reference's residues; values by position; features
+   (domains, sites, secondary structure: boxes in lanes, a helix, a strand's arrow); variants
+   (classes stacked by position, or a value as a bar, an allele frequency on a log scale), given to
+   each variant in the inspector. The run's own: reference, coverage, position effect (the median
+   score from the wild type's) and uncertainty (the median SE), hidden until shown, so a map
+   without tracks draws and exports as before. **Annotation providers behind one interface**
+   (`web/lib/providers/`: `needs`, `fetch` through the fetcher, `accepts` a file, `read` → tracks),
+   each annotation kept in `ws.annotations` with its record (service, URL, release, retrieval date,
+   license) and its file in the library and the archive by SHA-256, so its tracks reopen offline:
+   UniProt's features (`/api/fetch/uniprot/{accession}/features`; domains and regions, sites and
+   motifs, secondary structure); conservation from PDBe-KB's profile
+   (`/api/fetch/pdbe/conservation/{accession}`; each position's Jensen–Shannon divergence from the
+   BLOSUM62 background, `distributionDivergence`) or the person's alignment (A3M, FASTA, Stockholm,
+   Clustal; Proteoscope's `conservation.js`, Capra & Singh's defaults, the query placed by its
+   residues); AlphaMissense (`/api/fetch/alphafold/{accession}/missense`); ClinVar
+   (`/api/fetch/clinvar/search` and `/summary`, kept as one table of what MaveScape reads;
+   classes, review status as stars); gnomAD v4 (`/api/fetch/gnomad/gene/{symbol}` and
+   `/transcript/{id}`, GraphQL; the MANE Select transcript's variants, exomes and genomes joined);
+   MaveDB's own join of ClinVar's latest release and gnomAD to a record's variants
+   (`/api/fetch/mavedb/score-sets/{urn}/namespaces` and `/annotations`), found in the run by
+   accession; predictors' downloads (AlphaMissense's, EVE's, ESM1b-style matrices, any table of
+   variants and scores) and custom tracks (GFF3, tables of values or stretches). Every annotation
+   numbered on a reference is placed by the target's offset where the target has the residues it
+   names, refused when they disagree. The Map view's Tracks panel: show, hide, reorder, filter
+   (features by kind, ClinVar by class and stars, gnomAD by frequency), remove, each with its
+   source (`ws.tracks`, the arrangement: a view, not in the history); export of the tracks shown
+   (CSV) and the map with them (SVG, PNG); the map's words and the methods name and cite each;
+   alignments and GFF3 files dropped on the window. Remote actions `list_tracks`, `add_track`,
+   `set_track`, `remove_track`, `export` of `tracks`; `inspect_variant`'s `annotations`. The GRB2
+   example's guide adds tracks to its map; a screenshot scene (`map-tracks`); the guide's *Tracks*
+   and *Annotations beside the map*. Structure availability as a track comes with the structures
+   (wave 5).
+   - Validation:
+     - `annotations` (12 checks; `validation/annotation-cases.mjs`, served the fetcher's cached
+       answers by `cached-fetch.mjs`): conservation from an alignment (Pfam PF00018's seed with the
+       human GRB2 SH3 first, 56 sequences, `fixtures/annotations/`) as Capra & Singh's
+       `score_conservation.py` scores it by default, the query's 46 residues on positions 4–49,
+       within 4.8 × 10⁻¹³ (the tool prints 12 decimals), Stockholm and FASTA the same; PDBe-KB's
+       profiles of GRB2, factor IX and Hsp90 as the tool's divergence gives them (1,382 positions,
+       within 3.3 × 10⁻¹⁶; `reference/annotations.json`, `generate_annotations.py`, the tool
+       GPL and only an external reference); UniProt's features the same from its JSON and its
+       GFF3 for the three examples, GRB2's SH3 2 over the whole target, a wrong offset refused;
+       AlphaMissense's every substitution of GRB2's and factor IX's targets as AlphaFold DB's
+       tables give it (9,823), each class the authors' threshold on the score; ClinVar's records
+       of GRB2 (10) and F9 (553, two pages of summaries) read with ClinVar's own classification and
+       review status, those placed agreeing with the targets' residues; gnomAD's frequencies of
+       BRCA1's variants equal MaveDB's own join of gnomAD v4.1 to its saturation genome editing
+       score set, 41 of 41 exactly; MaveDB's annotations of that score set (1,376 ClinVar
+       classifications, 41 gnomAD frequencies) joined to the BRCA1 example's run by accession, all
+       found; seven annotations of GRB2 kept through an archive, the same 11 tracks, each naming its
+       source; the tracks' table read back as custom tracks; what each provider asks the fetcher
+       (accessions, a gene's symbol, ClinVar's record numbers, a transcript; never a sequence);
+       the GRB2 example as its guide says (AlphaMissense calls its eight least tolerant positions
+       likely pathogenic; conservation follows the position effect only in part, ρ −0.43).
+     - Go tests (`annotations_test.go`): each new request asks what `docs/NETWORK.md` says, is
+       cached under its own name, and refuses anything but public identifiers before a byte is
+       sent (an isoform for AlphaMissense, a gene's symbol with a query in it, more than 500
+       ClinVar records, a transcript of another species); gnomAD's GraphQL errors read as "not
+       found" or refused, never cached; no request writes to MaveDB.
+     - `remote-session.mjs` (105 checks): the tracks added offline from the cached answers and
+       from files, refused twice or for a run not from MaveDB, shown, moved and filtered (not in
+       the history), a variant's annotations, the tracks' table and the map with its tracks the
+       same bytes as Node's from the archive, the methods citing each source, an annotation
+       removed with its tracks.
+     - Unit tests 302: `tracks.test.mjs`, `providers.test.mjs` (every provider on the fixtures),
+       `conservation.test.mjs` (Proteoscope's, with the profile's divergence).
+   - Found by slice 5:
+     - **AlphaFold DB lists an alignment for each entry but refuses to send it** (HTTP 403 from its
+       storage, for GRB2, factor IX, BRCA1, PTEN, TP53, Hsp90), as Proteoscope found: conservation
+       is read from PDBe-KB's profile of the protein's homologues, on a path the fetcher already
+       allowed, or from the person's own alignment. PDBe-KB's profile leaves out a protein's
+       ends where its HMM has no match state (GRB2's last residue; factor IX's first three and
+       last): said, not filled.
+     - **gnomAD's GraphQL API answers an unknown gene with HTTP 200 and an error**: the fetcher
+       now checks an answer's body where a service says "not found" so (`answer`), and caches
+       neither that nor any other error as data.
+     - **ClinVar keeps records with no classification at all** (two of GRB2's ten), and writes
+       "1/01/01 00:00" where a record was never evaluated: read as not classified, with no date.
+       A gene's summaries are about 2.4 KB a record (BRCA1's 9,384 coding records about 23 MB):
+       MaveScape keeps one table of what it reads (about 150 bytes a record) with the workspace,
+       the raw answers only in the cache.
+     - **MaveDB annotates only the variants it maps at the nucleotide level**: GRB2's
+       protein-level score set has no ClinVar or gnomAD annotation; BRCA1's saturation genome
+       editing has 1,376 ClinVar classifications and 41 gnomAD frequencies. MaveDB's frequencies
+       are gnomAD v4.1's, exomes and genomes joined, exactly as MaveScape reads gnomAD's own.
+     - **UniProt's GFF3 and JSON name some features differently** ("Signal peptide" and
+       "Signal"), and only the JSON names a binding site's ligand: otherwise the same features,
+       read into the same tracks.
+     - **Conservation and the position effect agree only in part** on GRB2's SH3 domain (Spearman
+       ρ −0.43 with PDBe-KB's profile, −0.49 with AlphaMissense's mean): abundance is not all a
+       residue is conserved for. The guide says so.
+     - **Proteoscope's `conservation.js` used `Math.log`**, which MaveScape's determinism rule
+       forbids in code that computes results: `dmath.js`'s log and exp in its place (within the
+       tool's agreement either way).
+     - **Built-in tracks shown by default would have changed every map export** (the headless
+       `mavescape run` writes the map through the window): the run's own tracks are hidden until
+       shown, an annotation's shown once added.
+6. **Examples (T4): done.** The two-condition differential map (DHFR with Lon protease functional
+   and deficient, `00000063-a-1`/`-b-1`) and the MaveDB round trip (BRCA1 RING), bringing the set to
+   thirteen. **Several score sets opened together** (`importMaveDB` with several URNs; the MaveDB
+   dialog's *Open together*, `open_mavedb` with several URNs in `urn`): each record kept, each one's
+   published scores a run named for what tells the records apart (`distinctNames`), their counts
+   joined into one source assembled from every record's file (`assemble.js`, each file named by its
+   URN's number, `00000063-a-1:Repeat1_t_00hrs`; `origin.urns`, `joined`), with a design drafted
+   from their names as a condition each, the first the reference (`countsDesignTogether`); their
+   targets the same sequence. An example opened from MaveDB can give the design its counts need
+   (`files.design`, the paper's) and its first run (`ui/examples.js`, `scoreExampleCounts`, through
+   `importMaveDB`'s `prepare`), and states the target's offset and identifiers. *DHFR with and
+   without the Lon protease* (`dhfr-lon`; Thompson et al., eLife 2020): four sub-libraries of 40
+   positions, each grown three times, two in each of six repeats per condition, eight time points
+   over 18 hours, the transformation and outgrowth samples set aside; the map opens on +Lon − −Lon.
+   *BRCA1 RING domain, from MaveDB and back* (`brca1-ring`; urn:mavedb:00000003-a-2): the phage
+   assay's design (two library preparations, shared inputs, the two-hybrid columns set aside), Run 1,
+   the guide's deposit and its package opened again. **A replicate of a tile measures only its
+   tile's positions** (`tileRows`, `tileView`, `coversPosition` in `design.js`; the scorer and QC
+   read each replicate's samples through its tile; the state `OUTSIDE_TILE`); samples held by
+   replicates of tiles that do not overlap are not shared (`sharedSamples`, `multiTileSamples`, the
+   summary says so); the inspector and `inspect_variant` list a variant's tile's replicates.
+   Conditions that share no input are compared as independent by default. A drafted time series
+   takes its unit from its names (`t_02hrs`, `day5`, `gen10`). The examples page's two sections and
+   screenshot scenes (`dhfr-lon`, `brca1-ring`); the guide's *Several score sets as conditions*.
+   - Validation:
+     - `examples` (46 checks): both examples opened as the window opens them, their tables
+       MaveDB's as pinned (`mavedb-dhfr`, a new data set in `sources.json`; the DHFR records in
+       `fixtures/public-data/mavedb`), QC raising exactly their findings. DHFR: 96 samples holding
+       two tiles, 0 measurements used outside their tile, no variant combined from more than its
+       three replicates; against the published scores r 0.898 and 0.959 with the defaults, 0.961 and
+       0.983 with ordinary least squares, median ratios within 5% of 1; the published 736 and 384
+       advantageous substitutions, here 877 and 391 (2.24×); 376 differences called at q < 0.05,
+       346 negative; a mean difference of −0.48 at the 53 native hydrophobic positions, −0.20 at the
+       others. BRCA1 RING: 12,316 variants, 6 replicates of rounds 0–5, 2 shared inputs, 24
+       two-hybrid columns set aside; 50,055 replicate scores within 1.8 × 10⁻¹⁴ of the published with
+       the defaults (combined r 0.992), the Enrich2-compatible preset's combined r 1.00000 with
+       6,847 scored, as MaveDB's; the eight zinc ligands ranked 3–12 of 291 positions; Run 1
+       deposited, its 11,618 scores read back exactly, written again the same bytes, its experiment
+       described as the record's.
+     - `remote-session.mjs` (108 checks): DHFR's two URNs opened together offline (the tables
+       copied into the session's cache from `mavedb-dhfr`; CI's `remote` job fetches them and runs
+       with `--require-data`): both records, a published run each (2,543 and 2,378 scored), the
+       joined counts with a design drafted in hours, a condition each; `open_example "dhfr-lon"`,
+       Run 1 with Node's output hash, its map on +Lon − −Lon; Run 1 reproduced from the two files.
+     - `mavedb-live.mjs` (19 checks): DHFR's two score sets opened together live, each record's
+       tables the ones `sources.json` pins.
+     - `mavedb-export`: the reference regenerated by MaveDB's own validators (BRCA1's saturation
+       genome editing counts now draft in days, which its deposit's descriptions say); all 19
+       deposits accepted as before.
+     - Unit tests 308: two tiles in one sample's variants (each replicate's own, none twice, the
+       same scores as alone), the default comparison of conditions with and without a shared input,
+       samples of non-overlapping tiles not shared, the draft's time unit, several URNs and a joined
+       design.
+   - Found by slice 6:
+     - **A sample holding two tiles counted twice.** DHFR's repeats grew two sub-libraries each, so
+       each replicate's samples held another tile's variants, which it scored, and the combination
+       took every replicate that counted a variant: one measurement combined twice, its SE too
+       small. 1,284 differences between the conditions were called at q < 0.05; measured once, 377.
+       QC compared the same measurements twice too. Factor IX's tiles have samples of their own, so
+       its scores are the same bytes.
+     - **"Paired by their shared input" with no input shared** fell back to independent, and the
+       run's parameters said paired: conditions that share no input are now independent by default.
+     - **The draft read `t_02hrs` as a time with no unit**, though its pattern names hours.
+     - **MaveDB's DHFR records disagree with themselves and the paper in places**: the +Lon record's
+       method text says the library was transformed into the Lon-deficient strain (copied from the
+       −Lon record); both name E. coli BL21(DE3) where the paper used ER2566 ΔfolA ΔthyA (both B
+       strains, both without Lon). Neither says which sub-libraries each repeat holds: the counts
+       do, and the conditions pair them differently. A count below 2 × 10⁻⁵ of the reads is `NA`,
+       and the 4 double mutants of the −Lon record are off the map.
+     - **The published DHFR scores are Enrich2's unweighted regression** over the whole 18 hours,
+       which the record does not say (the paper does): r 0.96–0.98 with ordinary least squares,
+       0.90–0.96 with MaveScape's weighted regression, whose weights follow each time point's counts.
+     - **The BRCA1 RING design called its phage assay E2 binding.** The record and the paper: E3
+       ubiquitin ligase activity, by autoubiquitination of the displayed RING with the E2 present
+       ("PlusE2"); the two-hybrid assay measures BARD1 binding. The validation design, data set and
+       checks say so now; earlier entries of this roadmap and the CHANGELOG keep the old words.
+     - **An example's map view was not applied when the map was already shown** (the map keeps one
+       view object): a two-condition example opened from the map showed its first condition, not
+       the difference.
+     - **The inspector listed every replicate of a condition**: 9 of DHFR's 12 (6 of factor IX's 9)
+       do not measure a given variant. It lists the variant's tile's now.
+     - Wave 3 is complete with slice 6.
+
+**Released 0.3.0 on 2026-10-11.** Each workspace opened from MaveDB is a workspace of its own, so
+0.3 leaves three archives (`validation/archives/release-0.3.0-*.msz`, 2.5 MB together). They were
+saved by 0.3.0 itself, its window driven through remote control offline by `make-0.3.0.mjs`:
+- GRB2 opened from MaveDB: the record, the published scores, MaveDB's mapped variants, the counts
+  scored, the UniProt check, and seven annotations arranged and filtered;
+- DHFR's two score sets opened together: the counts joined, two tiles in each sample, time in
+  hours, the conditions independent;
+- BRCA1's saturation genome editing: a RefSeq target, nucleotide variants, the counts scored, and
+  MaveDB's annotations and gnomAD.
+
+Every later version must reopen them, reproduce their seven runs and read their annotations' tracks
+again.
+- Found by the release:
+  - **A run's tracks kept the identifiers its target had when it was scored.** Checking the target
+    against UniProt after the run gave the target its gene, yet that run's ClinVar and gnomAD still
+    asked for one. A run's tracks now take the identifiers the workspace's target has, while its
+    sequence and offset are the run's (`trackTarget`).
+  - **The archive replay assumed what 0.3's runs do not have**: standard errors (published scores
+    may have none), a map at the level of the variants (a nucleotide run's is drawn at the protein
+    level), and tracks read without the run's record (MaveDB's annotations join by its variants and
+    accessions, which the Node tracks now give as the window does).
+  - **The first run scored after opening a MaveDB record was Run 2**: the published scores counted
+    as a run. They take no number now (`nextRunName`), and a name already taken is skipped.
+  - **CI had never run wave 3**: it runs on pull requests and `main`, so the release's pull request
+    was the first. Its remote job lacked BAP1's MaveDB table, which the session's deposit has been
+    compared with since slice 4 (cached on this computer, so every local run passed). The job
+    fetches it now, and the session names a missing table instead of stopping.
 
 ## 0.4.0: compare (wave 4)
 

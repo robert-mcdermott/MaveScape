@@ -11,7 +11,7 @@
 
 import { DEFAULT_MEASURES } from './qc.js';
 import { adviceFor } from './advice.js';
-import { inText } from './readout.js';
+import { inText, SINGLE_NUCLEOTIDE_LIBRARIES } from './readout.js';
 import { log } from './dmath.js';
 
 const pct = (x) => `${(100 * x).toFixed(x < 0.1 ? 1 : 0)}%`;
@@ -101,8 +101,8 @@ export function findingsFrom(qc, thresholds, options = {}) {
   const empty = qc.samples.filter((s) => s.counted === 0 || s.total === 0);
   add({
     id: 'missing-sample', title: 'Every sample has counts', plot: 'missingness',
-    status: empty.length ? 'fail' : 'pass', blocking: empty.length > 0,
-    value: empty.length ? `${empty.length} without counts: ${empty.map((s) => s.name).join(', ')}` : `${qc.samples.length} samples, each with counts`,
+    status: !qc.samples.length ? 'na' : empty.length ? 'fail' : 'pass', blocking: empty.length > 0,
+    value: !qc.samples.length ? 'not assessed: no samples (published scores, without their counts)' : empty.length ? `${empty.length} without counts: ${empty.map((s) => s.name).join(', ')}` : `${qc.samples.length} samples, each with counts`,
     explanation: empty.length ? `${empty.map((s) => s.name).join(', ')} ${empty.length > 1 ? 'have' : 'has'} no counts at all (every value missing or 0). The replicates that use ${empty.length > 1 ? 'them' : 'it'} cannot be scored: check the table's columns and the design.` : 'No sample is empty.',
     threshold: 'fail when a sample has no counts', rationale: 'A sample with no counts is a missing file, a misnamed column or a failed library, never a result.',
     affected: { samples: empty.map((s) => s.id), replicates: [...new Set(empty.flatMap((s) => s.roles.map((r) => r.replicate)))] },
@@ -131,7 +131,7 @@ export function findingsFrom(qc, thresholds, options = {}) {
   const maxLow = inputs.reduce((a, s) => Math.max(a, s.lowFraction), 0);
   add({
     id: 'low-count', title: 'Low counts before selection', plot: 'counts', status: inputs.length ? worst(lowStatus) : 'na',
-    value: inputs.length ? `up to ${pct(maxLow)} of input variants below ${t.lowCount} reads` : 'not assessed: no sample before selection (sorted bins)',
+    value: inputs.length ? `up to ${pct(maxLow)} of input variants below ${t.lowCount} reads` : qc.samples.length ? 'not assessed: no sample before selection (sorted bins)' : 'not assessed: no samples (published scores, without their counts)',
     explanation: lowOnes.length ? `In ${lowOnes.map((s) => `${s.name} (${pct(s.lowFraction)})`).join(', ')}, many variants have fewer than ${t.lowCount} reads before selection: their scores rest on a few molecules. A low-count tail shared by every input points to the library; one replicate's alone, to that replicate.` : `Few variants have fewer than ${t.lowCount} reads before selection.`,
     threshold: `${thresholdText(lf, 'above', pct)} of the input's variants below ${t.lowCount} reads`,
     rationale: 'The input count sets how precisely a variant\'s starting frequency is known; scores of variants seen a handful of times are mostly noise. The fraction of variants with at least 10 input reads is a common coverage measure.',
@@ -175,7 +175,7 @@ export function findingsFrom(qc, thresholds, options = {}) {
   add({
     id: 'coverage', title: 'Coverage of designed substitutions', plot: 'coverage', status: cov.assessed ? statusOf(reach ? reach.fraction : cov.fraction, cv, 'below') : 'na',
     value: cov.assessed ? `${reach ? `${pct(reach.fraction)} of the substitutions one base change makes (${reach.observed} of ${reach.designed}); ` : ''}${pct(cov.fraction)}${reach ? ' of all' : ''} (${cov.observed} of ${cov.designed}; missense ${cov.byClass.missense[0]}/${cov.byClass.missense[1]}, nonsense ${cov.byClass.nonsense[0]}/${cov.byClass.nonsense[1]})` : `not assessed: ${cov.reason}`,
-    explanation: cov.assessed ? `Of the ${cov.designed} single amino-acid substitutions and stops possible across ${cov.length} positions, ${cov.observed} were seen before selection; ${cov.inTable - cov.observed} are in the table with no input reads, ${cov.designed - cov.inTable} are not in it.${reach ? ` The library was made by ${inText(cov.method)}, which reaches mostly the ${reach.designed} substitutions one base change away from each wild-type codon: ${reach.observed} of those were seen, and coverage is judged on them.` : cov.reach && !cov.reach.known ? ` The library was made by ${inText(cov.method)}, which reaches mostly the substitutions one base change makes (about a third of all); with the target's DNA sequence, coverage would be judged against those.` : ''} Unmeasured substitutions are missing on the map, never "no effect".` : `Coverage is not assessed: ${cov.reason}.`,
+    explanation: cov.assessed ? `Of the ${cov.designed} single amino-acid substitutions and stops possible across ${cov.length} positions, ${cov.observed} ${cov.basis === 'scores' ? 'have a score in the table' : 'were seen before selection'}; ${cov.inTable - cov.observed} are in the table with ${cov.basis === 'scores' ? 'no score' : 'no input reads'}, ${cov.designed - cov.inTable} are not in it.${reach ? ` ${cov.singleBase && !(cov.method && SINGLE_NUCLEOTIDE_LIBRARIES.has(cov.method)) ? 'The table\'s variants are single-base substitutions, which reach' : `The library was made by ${inText(cov.method)}, which reaches`} mostly the ${reach.designed} substitutions one base change away from each wild-type codon: ${reach.observed} of those were ${cov.basis === 'scores' ? 'scored' : 'seen'}, and coverage is judged on them.` : cov.reach && !cov.reach.known ? ` The library was made by ${inText(cov.method)}, which reaches mostly the substitutions one base change makes (about a third of all); with the target's DNA sequence, coverage would be judged against those.` : ''}${cov.stretches ? ` The substitutions in the table lie in ${cov.stretches.length === 1 ? 'one stretch' : `${cov.stretches.length} stretches`} of the protein (positions ${cov.stretches.slice(0, 6).map(([a, b]) => (a === b ? `${a}` : `${a}–${b}`)).join(', ')}${cov.stretches.length > 6 ? ', …' : ''}): if the library was designed for ${cov.stretches.length === 1 ? 'it' : 'those'} alone (an exon, a domain, tiles), give ${cov.stretches.length === 1 ? 'it' : 'them'} as the library's tiles in Experiment, and coverage is judged within them.` : ''} Unmeasured substitutions are missing on the map, never "no effect".` : `Coverage is not assessed: ${cov.reason}.`,
     threshold: `${thresholdText(cv, 'below', pct)}${reach ? ', of the substitutions the library can make' : ''}`,
     rationale: 'The fraction of designed variants observed. A library of single-base changes (error-prone PCR, doped oligos) reaches about a third of the substitutions, and a tiled one covers its tiles: coverage is judged against what the library could make when the design says how it was made. The threshold is a prompt to check, not a standard.',
   });

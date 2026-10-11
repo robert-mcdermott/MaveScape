@@ -35,6 +35,20 @@ test('the methods say what the run did, cite in order, and change with the param
   assert.match(m.markdown, /does not classify variants as pathogenic or benign/);
 });
 
+test('a target checked against UniProt: the methods say so, cite UniProt, and drop it once the target has changed', () => {
+  const checkedDesign = { ...design, targets: [{ ...design.targets[0], offset: 158, identifiers: { uniprot: 'P62993' } }] };
+  const source = { id: 's', name: 'c.csv', sha256: 'f'.repeat(64), rows: 2, mapping: { mode: 'lenient' } };
+  const results = scoreExperiment({ names: ['p.=', 'p.Ser2Ala'], columns: { in: Float64Array.of(10, 10), out: Float64Array.of(10, 5) }, design: checkedDesign, parameters: PRESETS.enrich2.parameters }).results;
+  const run = makeRun({ inputs: runInputs({ source, design: checkedDesign, parameters: PRESETS.enrich2.parameters }), source, results, software: { version: '0.3.0', commit: '' }, name: 'Run 1', created: '2026-10-10T00:00:00.000Z' });
+  const reference = { database: 'UniProtKB', accession: 'P62993', release: '2026_03', retrieved: '2026-10-10T17:35:33Z', offset: 158, start: 159, end: 162, identical: true, differences: 0 };
+  const ws = { ...createWorkspace('m'), sources: [source], targets: [{ ...checkedDesign.targets[0], reference }] };
+  const m = writeMethods(ws, run);
+  assert.match(m.markdown, /checked against UniProt P62993 \[\d\], release 2026_03, retrieved 2026-10-10: residues 159–162, identical\./);
+  assert.ok(m.references.some((r) => /The UniProt Consortium\. UniProt: the Universal Protein Knowledgebase in 2025\. Nucleic Acids Research\. 2025;53\(D1\):D609–D617/.test(r.text)), m.references.map((r) => r.text).join('\n'));
+  const moved = { ...ws, targets: [{ ...ws.targets[0], reference: { ...reference, offset: 160 } }] };
+  assert.doesNotMatch(writeMethods(moved, run).markdown, /checked against UniProt/);
+});
+
 test('a run scored by DiMSum\'s model: the methods give its fitted scales, shifts and error terms', () => {
   const sim = simulateExperiment({ seed: 5, inputCells: 25 });
   const table = parseTable(sim.csv);

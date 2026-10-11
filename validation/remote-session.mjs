@@ -10,7 +10,7 @@
 // Exits with status 1 when a check fails.
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,11 +23,25 @@ import { FINGERPRINT } from '../web/lib/dmath.js';
 import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
 import { exampleById, simulatedExample } from '../web/lib/examples.js';
 import { assembleTable } from '../web/lib/assemble.js';
-import { barcodesCSV, differentialCSV } from '../web/lib/exports.js';
+import { barcodesCSV, differentialCSV, proteinScoresCSV } from '../web/lib/exports.js';
+import { proteinView } from '../web/lib/collapse.js';
+import { readZip } from '../web/lib/zip.js';
+import { MAVEDB_FILES } from '../web/lib/mavedb-export.js';
+import { depositPackages } from './mavedb-export-cases.mjs';
+import { nodeTracks } from './annotation-cases.mjs';
+import { buildMapModel } from '../web/lib/map-model.js';
+import { mapSVG } from '../web/lib/map-svg.js';
+import { tracksCSV } from '../web/lib/tracks.js';
+import { openExampleInNode } from './example-cases.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
 const verbose = process.argv.includes('--verbose');
+const requireData = process.argv.includes('--require-data');
+// DHFR's MaveDB tables (wave 3, slice 6), as node validation/fetch.mjs mavedb-dhfr keeps them: copied
+// into the fetcher's cache, so that its two score sets open together offline.
+const DHFR = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-dhfr');
+const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:00000063-a-1', 'plus-lon']];
 const results = [];
 function check(name, value, ok, required = '') {
   results.push({ name, ok });
@@ -40,13 +54,26 @@ let URL = `http://127.0.0.1:${PORT}/`;
 const temp = mkdtempSync(join(tmpdir(), 'mavescape-remote-'));
 const library = join(temp, 'library');
 const out = join(temp, 'out');
+const cache = join(temp, 'cache');
 mkdirSync(out);
 let token = '';
 
 async function startMaveScape() {
   const binary = join(temp, process.platform === 'win32' ? 'mavescape.exe' : 'mavescape');
   await new Promise((done, fail) => spawn('go', ['build', '-o', binary, '.'], { cwd: ROOT, stdio: 'inherit' }).on('exit', (code) => (code ? fail(new Error('go build failed (is Go installed?)')) : done())));
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  // Offline, with UniProt's answers as the fetcher cached them (validation/fixtures/public-data):
+  // the session makes no request beyond this computer.
+  cpSync(join(ROOT, 'validation/fixtures/public-data'), cache, { recursive: true });
+  if (existsSync(join(DHFR, 'plus-lon', 'counts.csv'))) {
+    for (const [urn, dir] of DHFR_TABLES) {
+      for (const table of ['scores', 'counts']) {
+        const name = `${urn.replaceAll(':', '_')}.${table}.csv`;
+        cpSync(join(DHFR, dir, `${table}.csv`), join(cache, 'mavedb', name));
+        writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
+      }
+    }
+  }
+  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   for (let i = 0; i < 300; i += 1) {
@@ -101,6 +128,10 @@ try {
   browser = await launch({ width: 1440, height: 900, scale: 1 });
   const errors = [];
   browser.on('Runtime.exceptionThrown', (e) => errors.push(e.exceptionDetails?.exception?.description ?? e.exceptionDetails?.text));
+  // Every request the page makes in the whole session (wave 3, slice 1: none beyond its origin).
+  const requested = [];
+  await browser.send('Network.enable');
+  browser.on('Network.requestWillBeSent', (e) => requested.push(e.request.url));
   await browser.goto(URL, 1500);
   for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);
   await sleep(500);
@@ -123,6 +154,18 @@ try {
   const opened = await act('open_example', { id: 'grb2' });
   state = await act('get_state');
   check('open_example "grb2": the GRB2 example, scored, in QC', opened.message, opened.data.id === 'grb2-sh3' && state.data.runs.length === 1 && state.data.mode === 'qc' && state.data.design?.valid);
+  // The target checked against UniProt (wave 3, slice 1), offline, from the cache.
+  const placed = await act('check_target');
+  check('check_target: GRB2\'s SH3 domain is residues 159–214 of UniProt P62993, identical, from the cache (release 2026_03); nothing to change', placed.message, placed.data.placement.start === 159 && placed.data.placement.end === 214 && placed.data.placement.identical && !Object.keys(placed.data.changes).length && placed.data.retrieval.cache === 'hit' && placed.data.retrieval.version === '2026_03' && !placed.data.applied);
+  const elsewhere = await send('check_target', { accession: 'P00740' });
+  check('check_target against another protein\'s entry: refused, saying why', elsewhere.message, !elsewhere.ok && /fewer than 80%/.test(elsewhere.message));
+  const uncached = await send('check_target', { accession: 'Q9Y6K9' });
+  check('check_target offline, for an entry not in the cache: refused, saying MaveScape is offline', uncached.message, !uncached.ok && /--offline/.test(uncached.message));
+  const designBefore = await browser.eval('JSON.stringify(window.mavescape.store.ws.design)');
+  const recorded = await act('check_target', { apply: true });
+  const kept = await browser.eval('window.mavescape.store.ws.targets[0].reference');
+  const stillCurrent = await act('get_state');
+  check('check_target with apply: the check kept with the workspace\'s target, the design (and so its run) unchanged', `${recorded.message} Kept: ${JSON.stringify(kept)}; next ${stillCurrent.data.next?.step}`, kept?.accession === 'P62993' && kept.release === '2026_03' && kept.start === 159 && (await browser.eval('JSON.stringify(window.mavescape.store.ws.design)')) === designBefore && stillCurrent.data.steps.find((x) => x.id === 'score')?.state === 'done');
   const examplesListed = await send('open_example', { id: 'nothing-like-it' });
   check('an unknown example lists the examples', examplesListed.message, !examplesListed.ok && /grb2-sh3/.test(examplesListed.message) && /simulated/.test(examplesListed.message));
 
@@ -235,11 +278,61 @@ try {
     const written = readFileSync(join(out, name), 'utf8');
     check(`export ${name}: the same bytes as Node's from the archive`, `${written.length} bytes`, written === expected[name], `${expected[name].length} bytes`);
   }
+  const methodsWritten = readFileSync(join(out, 'methods.md'), 'utf8');
+  check('the methods name the target\'s check against UniProt, cite UniProt, and the archive keeps the check', /checked against UniProt P62993 \[\d+\], release 2026_03, retrieved 2026-10-10: residues 159–214, identical/.exec(methodsWritten)?.[0] ?? 'not named', /checked against UniProt P62993/.test(methodsWritten) && /UniProt Consortium/.test(readFileSync(join(out, 'references.bib'), 'utf8')) && archive.ws.targets[0].reference?.release === '2026_03');
   const provenance = JSON.parse(readFileSync(join(out, 'provenance.json'), 'utf8'));
   const expectedProvenance = JSON.parse(expected['provenance.json']);
   delete provenance.files;
   delete expectedProvenance.files;
   check('export provenance.json: Node\'s, but for the file names', `${Object.keys(provenance).length} fields`, JSON.stringify(provenance) === JSON.stringify(expectedProvenance));
+
+  // Sequence tracks (wave 3, slice 5), offline, from the cached answers: the run's own, hidden until
+  // shown; annotations from public data and from files; shown, moved, filtered; beside a variant;
+  // in the exports, the archive and the methods, as Node makes them.
+  const bare = await act('list_tracks', { run: 'Run 1' });
+  const why = Object.fromEntries(bare.data.available.map((p) => [p.provider, p.unavailable ?? null]));
+  check('list_tracks: the run\'s own four (reference, coverage, position effect, uncertainty), hidden until shown; what can be added, and why a MaveDB record\'s annotations cannot', `${bare.message} mavedb-annotations: ${why['mavedb-annotations']}`, bare.data.tracks.length === 4 && bare.data.tracks.every((t) => !t.shown) && why.clinvar === null && why['uniprot-features'] === null && /not of a MaveDB record/.test(why['mavedb-annotations'] ?? ''));
+  const historyBefore = await browser.eval('window.mavescape.store.ws.history.length');
+  const addedPublic = [];
+  for (const provider of ['uniprot-features', 'pdbe-conservation', 'alphamissense', 'clinvar', 'gnomad']) addedPublic.push(await act('add_track', { provider, run: 'Run 1' }));
+  check('add_track from public data, offline from the cache: UniProt\'s features, PDBe-KB\'s conservation, AlphaMissense, ClinVar and gnomAD for GRB2\'s SH3 domain, each in the history', addedPublic.map((a) => `${a.data.name}: ${a.data.tracks.map((t) => t.label).join(', ')}`).join('; '), addedPublic.length === 5 && addedPublic.map((a) => a.data.tracks.length).join() === '3,1,1,1,1' && (await browser.eval('window.mavescape.store.ws.history.length')) === historyBefore + 5);
+  const twice = await send('add_track', { provider: 'clinvar' });
+  const notMaveDB = await send('add_track', { provider: 'mavedb-annotations' });
+  check('the same annotation twice, and MaveDB\'s annotations of a run not from MaveDB: refused, saying why', `${twice.message} ${notMaveDB.message}`, !twice.ok && /already/.test(twice.message) && !notMaveDB.ok && /not of a MaveDB record/.test(notMaveDB.message));
+  const fromAlignment = await act('add_track', { name: 'grb2-sh3.sto', text: readFileSync(join(ROOT, 'validation/fixtures/annotations/grb2-sh3.sto'), 'utf8') });
+  const fromGFF = await act('add_track', { name: 'P62993.gff', text: readFileSync(join(ROOT, 'validation/fixtures/annotations/P62993.gff'), 'utf8') });
+  const notATrack = await send('add_track', { name: 'notes.txt', text: 'Nothing to draw.' });
+  check('add_track from files: an alignment (conservation, the query on positions 4–49) and UniProt\'s GFF3; a file that is neither refused', `${fromAlignment.message.slice(0, 160)}… ${fromGFF.data.tracks.length} tracks from the GFF3; ${notATrack.message.slice(0, 80)}`, /4–49/.test(fromAlignment.message) && fromGFF.data.tracks.length === 3 && !notATrack.ok);
+  const historyAfterAdding = await browser.eval('window.mavescape.store.ws.history.length');
+  const shownCoverage = await act('set_track', { track: 'Coverage', shown: true });
+  const moved = await act('set_track', { track: 'ClinVar', position: 1 });
+  const uncertain = await act('set_track', { track: 'ClinVar', filter: { classes: ['uncertain'] } });
+  const frequent = await act('set_track', { track: 'gnomAD', filter: { min: 1e-5 } });
+  const wrongFilter = await send('set_track', { track: 'Coverage', filter: { stars: 2 } });
+  const arranged = await act('list_tracks');
+  const clinvarNow = arranged.data.tracks[0];
+  check('set_track: coverage shown, ClinVar moved to the top and filtered to uncertain significance, gnomAD to AF ≥ 10⁻⁵; a filter a track does not offer refused; none of it in the history (a view)', `${shownCoverage.message} ${moved.message} ${uncertain.message} ${frequent.message} ${wrongFilter.message}`, clinvarNow.label === 'ClinVar' && clinvarNow.variants === 1 && /uncertain/.test(clinvarNow.filtered ?? '') && arranged.data.tracks.find((t) => t.label === 'Coverage').shown && !wrongFilter.ok && (await browser.eval('window.mavescape.store.ws.history.length')) === historyAfterAdding);
+  const annotated = await act('inspect_variant', { variant: 'W36A', run: 'Run 1' });
+  const notes = Object.fromEntries((annotated.data.annotations ?? []).map((a) => [a.track, a.text]));
+  check('inspect_variant: a variant\'s annotations, from the tracks (AlphaMissense\'s score and class, the domain and strand it lies in, its conservation)', JSON.stringify(notes).slice(0, 300), /likely pathogenic/.test(notes.AlphaMissense ?? '') && /SH3 2/.test(notes['Domains and regions'] ?? '') && /Beta strand/.test(notes['Secondary structure'] ?? '') && /bits/.test(notes['Conservation (PDBe-KB)'] ?? ''));
+  await act('export', { what: 'tracks', run: 'Run 1', path: join(out, 'tracks.csv') });
+  await act('export', { what: 'map', run: 'Run 1', path: join(out, 'map-tracks.svg') });
+  await act('export', { what: 'methods', run: 'Run 1', path: join(out, 'methods-tracks.md') });
+  await act('export', { what: 'archive', path: join(out, 'grb2-tracks.msz') });
+  const withTracks = await readArchive(readFileSync(join(out, 'grb2-tracks.msz')));
+  const tRun = withTracks.ws.runs[0];
+  const { scored: tScored } = recompute(withTracks.ws, withTracks.sources);
+  const tModel = buildMapModel(proteinView(tScored.results) ?? tScored.results, tRun.inputs.design);
+  const tShown = nodeTracks(withTracks.ws, tRun, tModel, withTracks.sources).filter((t) => t.shown);
+  const tracksWritten = readFileSync(join(out, 'tracks.csv'), 'utf8');
+  const svgWritten = readFileSync(join(out, 'map-tracks.svg'), 'utf8');
+  check('the archive keeps the annotations\' files and the arrangement; the tracks exported (CSV) and the map with its tracks (SVG) are the same bytes as Node\'s from the archive', `${withTracks.ws.annotations.length} annotations, ${withTracks.problems.length} problems; ${tShown.length} tracks shown (${tShown.map((t) => t.label).join(', ')}); tracks.csv ${tracksWritten === tracksCSV(tShown, tModel) ? 'Node\'s' : 'different'}; map ${svgWritten === mapSVG(tModel, { results: proteinView(tScored.results) ?? tScored.results, tracks: tShown }) ? 'Node\'s' : 'different'}`, withTracks.ws.annotations.length === 7 && !withTracks.problems.length && tracksWritten === tracksCSV(tShown, tModel) && svgWritten === mapSVG(tModel, { results: proteinView(tScored.results) ?? tScored.results, tracks: tShown }) && /ClinVar/.test(svgWritten));
+  const tMethods = readFileSync(join(out, 'methods-tracks.md'), 'utf8');
+  check('the methods name each annotation with its source and date, and cite ClinVar, gnomAD, AlphaMissense, PDBe-KB and Capra & Singh', /Annotations shown beside the map: [^\n]{0,200}/.exec(tMethods)?.[0] ?? 'not named', /Annotations shown beside the map/.test(tMethods) && ['Landrum', 'Chen S', 'Cheng J', 'PDBe-KB consortium', 'Capra JA'].every((who) => tMethods.includes(who)));
+  const gffId = fromGFF.data.annotation;
+  const removedTrack = await act('remove_track', { annotation: gffId });
+  const afterRemoval = await act('list_tracks');
+  check('remove_track: the GFF3\'s annotation and its tracks gone', `${removedTrack.message} ${afterRemoval.data.tracks.length} tracks`, !afterRemoval.data.tracks.some((t) => t.annotation === gffId) && afterRemoval.data.tracks.length === 4 + 3 + 1 + 1 + 1 + 1 + 1);
 
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.
   const noTokenOpen = await send('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] }, { withToken: false });
@@ -302,6 +395,26 @@ try {
   const outlying = await act('inspect_variant', { variant: 'p.Glu6Gln', run: byBarcode.data.name });
   check('inspect_variant on a barcode run: each replicate\'s barcodes measured and its outliers, and the barcodes listed in the inspector', `${outlying.message} ${outlying.data.replicates.map((r) => `${r.name}: ${r.barcodesMeasured} measured, outliers ${r.outlierBarcodes.join(', ') || 'none'}`).join('; ')}`, outlying.data.replicates.every((r) => r.barcodesMeasured >= 3) && outlying.data.replicates.some((r) => r.outlierBarcodes.length === 1) && (await browser.eval(`Boolean(document.querySelector('#inspector .barcode-table'))`)));
 
+  // Several score sets opened together (wave 3, slice 6), offline from MaveDB's tables as the
+  // validation keeps them: DHFR without and with Lon, their counts joined with a design drafted as
+  // a condition each; then the example, with the paper's design, scored as Node scores it.
+  if (existsSync(join(DHFR, 'plus-lon', 'counts.csv'))) {
+    const together = await act('open_mavedb', { urn: 'urn:mavedb:00000063-b-1, urn:mavedb:00000063-a-1' });
+    const tState = await act('get_state');
+    const tWs = await browser.eval('({ records: window.mavescape.store.ws.records.map((r) => r.urn), runs: window.mavescape.store.ws.runs.map((r) => r.name), design: window.mavescape.store.ws.design, joined: window.mavescape.store.ws.sources.find((s) => s.origin?.joined) })');
+    check('open_mavedb with two URNs: DHFR\'s score sets opened together, both records kept, each one\'s published scores a run, their counts joined into one table (each record\'s columns named by its URN) with a design drafted as a condition each, the first the reference, in hours', `${together.message.slice(0, 260)}… Runs ${tWs.runs.join(', ')}; conditions ${tWs.design?.conditions?.map((c) => `${c.name}${c.reference ? ' (reference)' : ''}`).join(', ')}; time in ${tWs.design?.time?.unit}s; joined from ${tWs.joined?.files.map((f) => f.fileName).join(' and ')}`, tWs.records.join() === 'urn:mavedb:00000063-b-1,urn:mavedb:00000063-a-1' && tWs.runs.join() === 'Published scores (deficient Lon),Published scores (functioning Lon)' && together.data.published.map((p) => p.scored).join() === '2543,2378' && tWs.design?.conditions?.map((c) => c.id).join() === '00000063-b-1,00000063-a-1' && tWs.design.conditions[0].reference === true && tWs.design.time.unit === 'hour' && tWs.joined?.files.map((f) => f.fileName).join() === '00000063-b-1.csv,00000063-a-1.csv' && tState.data.tables.length === 3);
+    const dhfr = await act('open_example', { id: 'dhfr-lon' });
+    const dRun = await browser.eval('window.mavescape.store.ws.runs.find((r) => r.name === "Run 1")');
+    const dNode = openExampleInNode(exampleById('dhfr-lon'));
+    const dMap = await act('render_map', {});
+    check('open_example "dhfr-lon": the two score sets opened together, the paper\'s design in place of the draft, Run 1 with Node\'s output hash, the map colored by +Lon − −Lon', `${dhfr.message.slice(0, 160)}…; ${dRun?.output.sha256.slice(0, 16)}… and ${outputDigest(dNode.scored.results).slice(0, 16)}…; ${dMap.data.contrast}, colored by ${dMap.data.colorBy}`, dhfr.ok !== false && dRun?.output.sha256 === outputDigest(dNode.scored.results) && dRun.inputs.design.library.tiles.length === 4 && dMap.data.colorBy === 'differential' && dMap.data.contrast === '+Lon vs −Lon' && (await browser.eval('document.getElementById(\'app\').dataset.mode')) === 'map');
+    const reproducedDhfr = await act('reproduce_run', { run: 'Run 1' });
+    check('reproduce_run on the joined table: DHFR\'s Run 1 recomputed from its two files, its recorded output hash', reproducedDhfr.message, reproducedDhfr.data.status === 'reproduced');
+  } else {
+    console.log('  DHFR\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-dhfr (the checks of score sets opened together skipped)');
+    if (requireData) check('DHFR\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
+  }
+
   // Two conditions (wave 2, slice 6): the example opens on its differential map; scored in the
   // window with Node's hash; the map, a variant and the differential export as Node makes them.
   await act('open_example', { id: 'simulated-conditions' });
@@ -325,6 +438,92 @@ try {
   const paired = await act('score', { parameters: { differential: 'paired' } });
   check('score with the paired differential: a second run, summarized per contrast', paired.message, paired.data.name === 'Run 2' && paired.data.differential?.[0]?.method === 'paired' && paired.data.differential[0].compared > 800);
 
+  // MaveDB (wave 3, slice 2), offline on the fetcher's cached answers: a search, and GRB2's record
+  // opened as a workspace by its address, its published scores read as Node reads them.
+  const found = await act('search_mavedb', { text: 'grb2' });
+  check('search_mavedb: MaveDB\'s published score sets matching "grb2", from the cache', found.message, found.data.total === 1 && found.data.hits[0].urn === 'urn:mavedb:00000835-a-1' && found.data.retrieval.cache === 'hit');
+  const fromMaveDB = await act('open_mavedb', { urn: 'https://www.mavedb.org/score-sets/urn:mavedb:00000835-a-1' });
+  const mState = await act('get_state');
+  const mTables = Object.fromEntries(mState.data.tables.map((t) => [t.origin?.file, t]));
+  check('open_mavedb: GRB2\'s record as a workspace: its published scores read as published, its counts with a two-population design drafted from their names, both tables MaveDB\'s as pinned', `${fromMaveDB.message} Tables ${mState.data.tables.map((t) => `${t.origin?.file} ${t.sha256.slice(0, 12)}…`).join(', ')}; design ${mState.data.design?.model}`, fromMaveDB.data.published?.scored === 1108 && fromMaveDB.data.counts?.design === 'two-population' && mTables.scores?.sha256 === 'f04ee5723ab52c6d470925e3300c4b198f75f836afd42dd33f7c1eb08c5bb7c0' && mTables.counts?.sha256 === 'd4c966d5e7b9605227b5931904685358b68f1952818cb7523e606d86dff9e016' && mState.data.design?.model === 'two-population');
+  const pRun = await browser.eval('window.mavescape.store.ws.runs.find((r) => r.name === "Published scores")');
+  const pTable = parseTable(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv')), { fileName: 'scores.csv' });
+  const pNode = scoreTable(pTable, pRun.inputs.design, pRun.inputs.parameters);
+  check('the published scores\' run: Node\'s output hash, read as published (model "published"), and the record kept with the workspace', `${pRun.output.sha256.slice(0, 16)}… and ${outputDigest(pNode.results).slice(0, 16)}…; ${pRun.inputs.parameters.model}`, pRun.output.sha256 === outputDigest(pNode.results) && pRun.inputs.parameters.model === 'published' && (await browser.eval('window.mavescape.store.ws.records?.[0]?.urn')) === 'urn:mavedb:00000835-a-1');
+  // The target checked against UniProt after the run (0.3.0's release): the run's tracks are found
+  // by the identifiers the check gave, its sequence and offset the same (lib/tracks.js, trackTarget).
+  const noGene = await send('add_track', { provider: 'clinvar', run: 'Published scores' });
+  await act('check_target', { apply: true });
+  const withGene = await send('add_track', { provider: 'clinvar', run: 'Published scores' });
+  check('a target checked against UniProt after its run: the run\'s tracks found by the gene the check gave (ClinVar refused before it, added after)', `${noGene.message} | ${withGene.message.slice(0, 120)}`, !noGene.ok && /names no gene/.test(noGene.message) && withGene.ok && /GRB2/.test(withGene.data?.name ?? ''));
+  const ptenOffline = await send('open_mavedb', { urn: 'urn:mavedb:00000013-a-1' });
+  check('open_mavedb offline, for a record whose table is not in the cache: refused, saying MaveScape is offline', ptenOffline.message, !ptenOffline.ok && /--offline/.test(ptenOffline.message));
+
+  // Wave 3, slice 3: GRB2 opened with MaveDB's mapped variants (VRS); a record whose target is an
+  // Ensembl transcript (BAP1, CC BY 4.0), its nucleotide variants read at the protein level.
+  const mappedOpen = await act('open_mavedb', { urn: 'urn:mavedb:00000835-a-1', counts: false, mapped: true });
+  const thr1 = await act('inspect_variant', { variant: 'p.Thr1Ter' });
+  check('open_mavedb with mapped: MaveDB\'s mapping kept beside the table; inspect_variant gives a variant\'s VRS identifier and HGVS on the reference, its position the target\'s plus the UniProt offset (1 + 158)', `${mappedOpen.data.mapped} mapped; p.Thr1Ter: ${thr1.data.mapped?.hgvs} ${thr1.data.mapped?.vrs}`, mappedOpen.data.mapped === 1120 && thr1.data.mapped?.hgvs === 'NP_002077.1:p.Thr159Ter' && /^ga4gh:VA\.[A-Za-z0-9_-]{32}$/.test(thr1.data.mapped?.vrs ?? ''));
+  const bap1 = await act('open_mavedb', { urn: 'urn:mavedb:00000662-a-2' });
+  const bState = await act('get_state');
+  const bRun = await browser.eval('window.mavescape.store.ws.runs.find((r) => r.name === "Published scores")');
+  const bTable = parseTable(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000662-a-2.scores.csv')), { fileName: 'scores.csv' });
+  const bNode = scoreTable(bTable, bRun.inputs.design, bRun.inputs.parameters);
+  check('open_mavedb, a target named by a transcript (BAP1 exon 1, ENST00000460680.5): Ensembl\'s cached transcript, its current version (.6) said and used, every variant\'s reference base agreeing with it, the run Node\'s', `${bap1.message} Target: ${JSON.stringify(bState.data.targets[0])}`, bap1.data.target?.accession === 'ENST00000460680.6' && /Ensembl's current release has ENST00000460680\.6/.test(bap1.message) && bState.data.targets[0]?.from === 'Ensembl' && bRun.inputs.design.targets[0].identifiers.ensembl === 'ENST00000460680.5' && bRun.output.sha256 === outputDigest(bNode.results) && bap1.data.published?.scored === 620);
+  const view = proteinView(bNode.results);
+  const mergedAt = view.variants.members.findIndex((m) => m.length > 1);
+  const mergedKey = view.variants.key[mergedAt];
+  const cell = await act('inspect_variant', { variant: mergedKey });
+  check(`inspect_variant on a protein variant of a nucleotide run (${mergedKey}): its score merged from its nucleotide variants as Node merges them, each listed`, cell.message, mergedAt >= 0 && cell.data.score === +view.conditions[0].score[mergedAt].toPrecision(4) && cell.data.nucleotideVariants?.length === view.variants.members[mergedAt].length && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Nucleotide variants')`)));
+  await act('export', { what: 'protein-scores', path: join(out, 'protein_scores.csv') });
+  const proteinWritten = readFileSync(join(out, 'protein_scores.csv'), 'utf8');
+  check('export protein-scores: the run\'s scores at the protein level, the same bytes as Node\'s', `${proteinWritten.split('\n').length - 2} protein variants`, proteinWritten === proteinScoresCSV(view));
+  const tMap = await act('render_map', {});
+  check('render_map of a nucleotide run: drawn at the protein level, saying how the variants were read and what is beside the map', tMap.message.slice(0, 200), /Read at the protein level/.test(JSON.stringify(tMap.data)) && /not on the map/.test(JSON.stringify(tMap.data)));
+
+  // Wave 3, slice 4: MaveDB deposits. BAP1's published scores as MaveDB takes them, the same files
+  // as Node writes; written as a ZIP, opened again from a folder and from the ZIP, and written
+  // again the same; then GRB2 rescored from its counts, its MaveDB details set.
+  const bDeposit = await act('mavedb_deposit', {});
+  check('mavedb_deposit: BAP1\'s published scores as MaveDB takes them, named by the transcript MaveScape checked them on (ENST00000460680.6), the record\'s abstract, license and method text kept: nothing missing', bDeposit.message, bDeposit.data.mode === 'accession' && bDeposit.data.target.targetAccession?.accession === 'ENST00000460680.6' && bDeposit.data.variants.exported === 620 && !bDeposit.data.missing.length);
+  const bZip = await act('export', { what: 'mavedb', path: join(out, 'bap1-mavedb.zip') });
+  const bFiles = await readZip(new Uint8Array(readFileSync(join(out, 'bap1-mavedb.zip'))));
+  // Node's deposit of the same record needs BAP1's MaveDB table (validation/cache, as
+  // node validation/fetch.mjs mavedb-bap1-sge keeps it).
+  const nodeBap1 = depositPackages(['bap1']).packages[0]?.deposit ?? null;
+  if (!nodeBap1) {
+    console.log('  BAP1\'s MaveDB table is not in validation/cache: node validation/fetch.mjs mavedb-bap1-sge (the deposit compared with Node\'s skipped)');
+    if (requireData) check('BAP1\'s MaveDB table present', 'not in validation/cache', false, 'present (--require-data)');
+  }
+  const mavedbFiles = (files) => Object.fromEntries([...files].filter(([n]) => MAVEDB_FILES.includes(n)).map(([n, b]) => [n, typeof b === 'string' ? b : new TextDecoder().decode(b)]));
+  const nodeFiles = nodeBap1 ? mavedbFiles(new Map(nodeBap1.files.map((f) => [f.name, f.text]))) : null;
+  const sameAsNode = !nodeFiles || (Object.keys(nodeFiles).length && Object.entries(nodeFiles).every(([n, t]) => mavedbFiles(bFiles)[n] === t) && Object.keys(mavedbFiles(bFiles)).length === Object.keys(nodeFiles).length);
+  check('export mavedb: the deposit as one ZIP, the files MaveDB reads the same bytes as Node\'s (validated by MaveDB\'s own validators, suite mavedb-export)', `${bZip.message} ${[...bFiles.keys()].join(', ')}${nodeFiles ? '' : ' (not compared with Node\'s)'}`, sameAsNode && bFiles.has('README.md') && bFiles.has('mavescape.json'));
+  const folder = join(out, 'bap1-package');
+  mkdirSync(folder, { recursive: true });
+  for (const [name, bytes] of bFiles) writeFileSync(join(folder, name), bytes);
+  const fromFolder = await act('open_files', { paths: [folder] });
+  const pkgState = await act('get_state');
+  await act('export', { what: 'mavedb', path: join(out, 'bap1-again.zip') });
+  const bAgain = mavedbFiles(await readZip(new Uint8Array(readFileSync(join(out, 'bap1-again.zip')))));
+  check('a MaveDB package opened from its folder: a workspace of its published scores (its transcript fetched), its MaveDB details kept; written again, the files MaveDB reads the same bytes (export → import → export)', `${fromFolder.message} Records: ${pkgState.data.tables.map((t) => t.origin?.database).join(', ')}`, pkgState.data.tables.some((t) => t.origin?.database === 'package') && Object.entries(nodeFiles).every(([n, t]) => bAgain[n] === t));
+  const fromZip = await act('open_files', { paths: [join(out, 'bap1-mavedb.zip')] });
+  const zipState = await act('get_state');
+  check('a MaveDB package opened as its ZIP', fromZip.message, zipState.data.tables.some((t) => t.origin?.database === 'package' && /bap1-mavedb/.test(t.origin?.package ?? '')));
+  await act('open_example', { id: 'grb2' });
+  const gDeposit = await act('mavedb_deposit', {});
+  const gSet = await act('set_mavedb_details', { details: { abstract: 'Abundance of every substitution in the SH3 domain of GRB2.', publications: ['doi:10.1038/s41586-024-08370-4'], contributors: '0000-0002-1825-0097', license: 'CC BY 4.0' } });
+  const gAfter = await act('mavedb_deposit', {});
+  const gBad = await send('set_mavedb_details', { details: { abstrct: 'x' } });
+  check('a run rescored from counts: mavedb_deposit says MaveDB needs an abstract; set_mavedb_details gives it (with a DOI, an ORCID iD and a license), kept with the workspace and in its history; an unknown detail refused', `${gDeposit.data.missing.map((m) => m.field).join(', ')} → ${gAfter.data.missing.map((m) => m.field).join(', ') || 'nothing'}; ${gSet.message} ${gBad.message}`, gDeposit.data.missing.some((m) => m.field === 'abstract') && !gAfter.data.missing.length && gAfter.data.details.license === 'CC BY 4.0' && gAfter.data.details.publications[0]?.db === 'Crossref' && (await browser.eval('window.mavescape.store.ws.history.at(-1).action')) === 'deposit' && !gBad.ok && /abstrct/.test(gBad.message));
+  await act('export', { what: 'mavedb', path: join(out, 'grb2-mavedb.zip') });
+  const gFiles = await readZip(new Uint8Array(readFileSync(join(out, 'grb2-mavedb.zip'))));
+  const gSetJSON = JSON.parse(new TextDecoder().decode(gFiles.get('score_set.json')));
+  const gScores = parseTable(gFiles.get('scores.csv'), { fileName: 'scores.csv' });
+  check('the deposit of a run rescored from counts: its scores, SEs, intervals and replicates, its counts by sample, the methods as MaveDB\'s method text, the details given', `${gScores.rows} rows; ${gScores.columns.map((c) => c.name).join(', ')}; license ${gSetJSON.licenseId}`, gScores.rows === 1121 && gScores.columns[0].name === 'hgvs_pro' && gScores.columns.some((c) => c.name === 'SE') && gFiles.has('counts.csv') && /^Variant counts were read from/.test(gSetJSON.methodText) && gSetJSON.licenseId === 3 && gSetJSON.abstractText.startsWith('Abundance'));
+
+  const foreign = requested.filter((u) => !u.startsWith(URL) && !/^(data|blob):/.test(u));
+  check('the page asked nothing of any origin but its own, public data through the program\'s /api/fetch/ only', `${requested.length} requests, ${requested.filter((u) => u.includes('/api/fetch/')).length} for public data; beyond the origin: ${foreign.slice(0, 3).join(', ') || 'none'}`, requested.length > 50 && !foreign.length && requested.some((u) => u.includes('/api/fetch/uniprot/P62993')));
   check('every action listed was exercised', `${[...called].length} of ${names.length}: missing ${names.filter((n) => !called.has(n)).join(', ') || 'none'}`, names.every((n) => called.has(n)));
   check('no uncaught errors in the page', errors.join(' | ') || 'none', errors.length === 0);
 } catch (error) {

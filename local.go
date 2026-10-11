@@ -64,7 +64,7 @@ func fileKind(name string) string {
 		return "table"
 	case has(".fasta", ".fa", ".fna", ".faa", ".fas", ".seq"):
 		return "sequence"
-	case has(".gb", ".gbk", ".genbank"):
+	case has(".gb", ".gbk", ".gbff", ".genbank", ".ape"):
 		return "genbank"
 	case has(".a3m", ".aln", ".sto", ".stockholm"):
 		return "alignment"
@@ -73,7 +73,12 @@ func fileKind(name string) string {
 	case has(".pdb", ".ent", ".cif", ".mmcif", ".bcif"):
 		return "structure"
 	case has(".zip"):
+		// A MaveDB package (wave 3, slice 4), or another archive the page names.
 		return "archive"
+	case lower == "score_set.json" || lower == "experiment.json" || lower == "score_columns.json" || lower == "count_columns.json":
+		// A MaveDB package's descriptions, opened with its tables (wave 3, slice 4); other JSON
+		// files are not opened.
+		return "json"
 	}
 	return ""
 }

@@ -17,7 +17,7 @@ export const ASSAY_METHODS = [
   'Cell proliferation assay with genetic complementation', 'Direct protein function', 'Electrophysiological method',
   'Flow cytometry assay', 'Fluorescence in-situ hybridization (FISH) assay', 'Genetic complementation',
   'Homology-directed DNA repair frequency measurement', 'Imaging mass cytometry assay', 'Ion channel assay',
-  'Localization assay', 'Multiplexed fluorescent antibody imaging', 'One-hybrid assay', 'Posttranslation modification assay',
+  'Ion channel assay with electrophysicological method', 'Localization assay', 'Multiplexed fluorescent antibody imaging', 'One-hybrid assay', 'Posttranslation modification assay',
   'Promoter activity detection by reporter gene assay', 'Protein stability assay', 'Reporter', 'Reporter gene assay',
   'Single cell imaging', 'Single-cell RNA sequencing assay', 'Survival assessment assay',
   'Systematic evolution of ligands by exponential enrichment assay', 'Other',
@@ -38,6 +38,47 @@ export const LIBRARY_METHODS = [
   'Doped oligo synthesis', 'Error-prone PCR', 'Microarray synthesis', 'Nicking mutagenesis', 'Oligo-directed mutagenic PCR',
   'Oligo pool synthesis', 'Proprietary method', 'Site-directed mutagenesis', 'Other',
 ];
+
+// MaveDB's controlled keywords for an experiment (the MAVE minimum information's), every key with its
+// labels, in the order MaveDB's deposit form asks for them (api.mavedb.org,
+// /api/v1/controlled-keywords/{key}, retrieved 2026-10-10; "electrophysicological" is MaveDB's
+// spelling). A MaveDB deposit (mavedb-export.js) writes a label as listed here, or "Other" with the
+// term as its description; "Molecular Mechanism Assessed" has no "Other".
+export const MAVEDB_KEYWORDS = {
+  'Variant Library Creation Method': ['Endogenous locus library method', 'In vitro construct library method', 'N/A (meta-analysis)', 'Other'],
+  'Endogenous Locus Library Method System': ['AsCas12a', 'Other', 'RfsCas13d', 'SaCas9', 'SpCas9'],
+  'Endogenous Locus Library Method Mechanism': ['Base editor', 'Nuclease', 'Other', 'Prime editor'],
+  'In Vitro Construct Library Method System': LIBRARY_METHODS,
+  'In Vitro Construct Library Method Mechanism': ['Episomal delivery', 'Extra-local construct insertion', 'Native locus replacement', 'Other', 'Plasmid (not integrated)', 'Random locus viral integration', 'Transfection of RNA'],
+  'Delivery Method': ['Adeno-associated virus transduction', 'Chemical-based transfection', 'Chemical or heat shock transformation', 'Electroporation', 'Lentivirus transduction', 'Nucleofection', 'Other'],
+  'Phenotypic Assay Method': [...ASSAY_METHODS, 'Not applicable (trained predictor)'],
+  'Phenotypic Assay Mechanism': ASSAY_MECHANISMS,
+  'Phenotypic Assay Model System': [...MODEL_SYSTEMS, 'Not applicable'],
+  'Phenotypic Assay Profiling Strategy': ['Barcode sequencing', 'Direct sequencing', 'Other', 'Shotgun sequencing'],
+  'Phenotypic Assay Sequencing Read Type': ['Multi-segment', 'Other', 'Single-segment (long read)', 'Single-segment (short read)'],
+  'Phenotypic Assay Dimensionality': ['Combined functional data', 'High-dimensional data', 'Other', 'Single-dimensional data'],
+  'Molecular Mechanism Assessed': [
+    'Calcium-mediated signaling', 'Catalytic activity and Ornithine carbamoyltransferase activity', 'Catalytic and Cysteine synthase activity',
+    'Catalytic and Gluconokinase activity', 'Catalytic and Hydroxymethylbilane synthase activity', 'Catalytic and Lipid phosphatase activity',
+    'Catalytic and Thiamine diphosphokinase activity', 'Cellular response to cisplatin, DNA repair and Double-strand break repair via homologous recombination',
+    'Core promoter sequence-specific DNA binding', 'DNA and Mismatch repair', 'DNA damage checkpoint signaling',
+    'DNA damage response, signal transduction by p53 class mediator and MDM2/MDM4 family protein binding',
+    'DNA repair and Double-strand break repair via homologous recombination',
+    'Double-strand break repair, damage response, signal transduction by p53 class mediator and Response to etoposide',
+    'Molecular condensate scaffold activity', 'Molecular function', 'Monoatomic ion transport and Potassium channel activity',
+    'Monoatomic ion transport and Sodium ion transport', 'Oxidative phosphorylation', 'Protein carboxylation', 'Protein glycosylation',
+    'Protein localization to plasma membrane', 'Regulation of protein stability', 'Response to misfolded protein', 'Sodium channel activity',
+  ],
+};
+
+// The design's fields MaveDB keeps as keywords: { key: [where in the design] }.
+export const DESIGN_KEYWORDS = {
+  'Phenotypic Assay Method': ['readout', 'method'],
+  'Phenotypic Assay Mechanism': ['readout', 'mechanism'],
+  'Phenotypic Assay Model System': ['readout', 'modelSystem'],
+  'Molecular Mechanism Assessed': ['readout', 'phenotype'],
+  'In Vitro Construct Library Method System': ['library', 'method'],
+};
 
 // Libraries whose variants are mostly one nucleotide away from the wild type: they reach the
 // amino-acid substitutions a single base change makes (about a third of all), and the others

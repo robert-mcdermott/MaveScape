@@ -4,11 +4,20 @@
 // course in each replicate with the fitted line), the sequence around it, where it falls among the
 // substitutions at its position, and the run it comes from; for a table of barcodes, each of its
 // barcodes in each replicate (counts, score, departure from the others, outliers); with conditions
-// compared, its score in each and each difference (with the pairs of replicates behind it). Focus:
-// { kind: 'variant', id: MAVE-HGVS key, run, condition }.
+// compared, its score in each and each difference (with the pairs of replicates behind it). A
+// nucleotide variant of a DNA target shows its protein change; a protein variant of a nucleotide
+// run (a cell of its map) its score merged from the nucleotide variants that make it, and each of
+// theirs (wave 3, slice 3); its annotations from the tracks beside the map: ClinVar, gnomAD,
+// predictors, the features at its position (wave 3, slice 5). Focus: { kind: 'variant', id:
+// MAVE-HGVS key, run, condition }.
 
 import { h, icon } from './dom.js';
 import { KIND_NAMES } from '../lib/variants.js';
+import { targetProtein } from '../lib/target.js';
+import { coversPosition } from '../lib/design.js';
+import { proteinView } from '../lib/collapse.js';
+import { mappedBlock } from './mapped.js';
+import { annotationBlock } from './tracks.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { describeParameters, isBarcodeRun, unitOf } from '../lib/runs.js';
 import { DIFFERENTIAL_REASON_NAMES, pairDifference, transformOf } from '../lib/differential.js';
@@ -23,18 +32,7 @@ import { cssVar, legend, lineChart } from './plots.js';
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const ONE = { Ala: 'A', Arg: 'R', Asn: 'N', Asp: 'D', Cys: 'C', Gln: 'Q', Glu: 'E', Gly: 'G', His: 'H', Ile: 'I', Leu: 'L', Lys: 'K', Met: 'M', Phe: 'F', Pro: 'P', Ser: 'S', Thr: 'T', Trp: 'W', Tyr: 'Y', Val: 'V', Ter: '*' };
 
-function proteinOf(target) {
-  if (target.sequenceType === 'protein') return target.sequence.toUpperCase();
-  const order = 'TCAG';
-  const aas = 'FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG';
-  const codons = {};
-  let k = 0;
-  for (const a of order) for (const b of order) for (const c of order) codons[a + b + c] = aas[k++];
-  const dna = target.sequence.toUpperCase().slice((target.codingStart ?? 1) - 1);
-  let out = '';
-  for (let i = 0; i + 3 <= dna.length; i += 3) out += codons[dna.slice(i, i + 3)] ?? 'X';
-  return out;
-}
+const proteinOf = targetProtein;
 
 // The scores of every substitution at a position, as dots on a line, this one ringed.
 function positionStrip(results, c, row, position, key) {
@@ -143,6 +141,23 @@ function barcodesBlock(results, reps, row, binned) {
   return h('details.inspector-details', { open: members.length <= 30 }, h('summary', `Barcodes (${members.length})`), ...blocks);
 }
 
+// The nucleotide variants that make a protein variant, each with its score: merged as DiMSum
+// merges them (collapse.js).
+function membersBlock(app, own, members, focus, run) {
+  const c = own.conditions[focus.condition ?? 0];
+  const v = own.variants;
+  const rows = Array.from(members);
+  const used = rows.filter((r) => !c.reason[r] && Number.isFinite(c.score[r]));
+  const weighted = used.length > 1 && used.every((r) => c.se[r] > 0);
+  return [
+    h('h4.inspector-sub', 'Nucleotide variants'),
+    h('table.data.compact', h('thead', h('tr', h('th', 'Variant'), h('th.r', 'Score'), h('th', 'Used'))),
+      h('tbody', ...rows.map((r) => h('tr', { style: { cursor: 'pointer' }, title: 'Inspect it', onclick: () => app.focusItem({ kind: 'variant', id: v.key[r], run: run.id, condition: focus.condition ?? 0 }) },
+        h('td.mono', { title: v.key[r] }, v.key[r].replace(/^[A-Za-z0-9_.-]+:(?=[cgmnopr]\.)/, '')), h('td.r', c.reason[r] ? '—' : Number.isFinite(c.se[r]) ? `${fmt(c.score[r], 2)} ± ${fmt(c.se[r], 2)}` : fmt(c.score[r], 2)), h('td', c.reason[r] ? STAGE_BY_CODE.get(c.reason[r])?.label.toLowerCase() ?? 'no' : 'yes'))))),
+    h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, used.length > 1 ? (weighted ? `Their scores merged as DiMSum merges them: each weighted by 1/SE², the SE √(1/Σ 1/SE²).` : 'Their scores averaged: not every one has an SE to weight it by, so the merged SE is unknown.') : used.length === 1 ? 'The score is this nucleotide variant\'s.' : 'None of them is scored.'),
+  ];
+}
+
 export function variantSection(app, focus) {
   const run = app.store.ws.runs.find((r) => r.id === focus.run);
   if (!run) return null;
@@ -151,7 +166,11 @@ export function variantSection(app, focus) {
     if (!entry) ensureResults(app, run);
     return h('section.inspector-section', h('h3', icon('score'), focus.id), h('p.muted', entry?.status === 'failed' ? entry.message : 'Recomputing the run\'s scores…'));
   }
-  const results = entry.results;
+  const own = entry.results;
+  // A protein variant of a nucleotide run: its row in the run's protein view.
+  const view = proteinView(own);
+  const inView = own.variants.key.indexOf(focus.id) < 0 && view?.variants.key.includes(focus.id);
+  const results = inView ? view : own;
   const c = results.conditions[focus.condition ?? 0];
   const v = results.variants;
   const row = v.key.indexOf(focus.id);
@@ -159,15 +178,23 @@ export function variantSection(app, focus) {
   const target = design.targets?.[0];
   const offset = target?.offset ?? 0;
   const match = /^p\.([A-Z][a-z]{2})(\d+)/.exec(focus.id);
-  const position = row >= 0 ? v.position[row] : match ? Number(match[2]) : -1;
+  // The protein position (a nucleotide variant's from its protein change).
+  const position = row >= 0 ? (v.proPosition ? v.proPosition[row] : v.position[row]) : match ? Number(match[2]) : -1;
   const parts = [];
   parts.push(h('h3', icon('target'), h('span.mono', focus.id)));
   if (row < 0) {
     parts.push(h('p', { style: { margin: '0 0 8px', fontSize: '12.5px' } }, 'Not in the table: this substitution was not measured (missing on the map, not "no effect").'));
+    const annotations = annotationBlock(app, run, [focus.id], position);
+    if (annotations) parts.push(...annotations);
   } else {
-    const kv = [
+    const kv = inView ? [
+      ['Class', KIND_NAMES[v.kind[row]]],
+      ['Position', position > 0 ? `${position}${offset ? ` (reference ${position + offset})` : ''}` : '—'],
+      ['Made by', `${v.members[row].length} nucleotide variant${v.members[row].length > 1 ? 's' : ''}`],
+    ] : [
       ['As written', v.original[row]],
       ['Class', KIND_NAMES[v.kind[row]]],
+      ...(v.proKey ? [['Protein', v.proKey[row] || 'no change named'], ['Base', v.position[row] ? String(v.position[row]) : '—']] : []),
       ['Position', position > 0 ? `${position}${offset ? ` (reference ${position + offset})` : ''}` : '—'],
     ];
     if (results.conditions.length > 1) kv.push(['Condition', c.name]);
@@ -178,13 +205,18 @@ export function variantSection(app, focus) {
     } else {
       const [lo, hi] = intervalOf(c, row);
       const scale = anchorUncertainty(results, run.inputs.design, focus.condition ?? 0);
-      parts.push(h('div.variant-score', h('span.variant-score-value', fmt(c.score[row])), h('span.muted', ` ± ${fmt(c.se[row])} SE · 95% CI ${fmt(lo, 2)} to ${fmt(hi, 2)}${c.df && Number.isFinite(c.df[row]) ? ` (t, ${Number(c.df[row].toFixed(1))} df)` : ''}`)),
+      parts.push(h('div.variant-score', h('span.variant-score-value', fmt(c.score[row])), h('span.muted', Number.isFinite(c.se[row]) ? ` ± ${fmt(c.se[row])} SE · 95% CI ${fmt(lo, 2)} to ${fmt(hi, 2)}${c.df && Number.isFinite(c.df[row]) ? ` (t, ${Number(c.df[row].toFixed(1))} df)` : ''}` : ' (no SE)')),
         scale ? h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 4px' } }, `The rescaling anchors add ±${fmt(scale.at(c.score[row]), 3)} shared by every score (SE_scale): needed against another assay or the anchors' true values, not between variants of this run.`) : null,
-        h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 6px' } }, `From ${c.k[row]} of ${c.expected[row]} replicates${Number.isFinite(c.tau2[row]) ? `; τ² ${fmt(c.tau2[row], 4)}, I² ${Math.round(c.i2[row] * 100)}%` : ''}${Number.isFinite(c.loo[row]) ? `; leaving one replicate out moves it by up to ${fmt(c.loo[row])}` : ''}.`));
+        h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 6px' } }, c.published ? 'As published, not rescored.' : `From ${c.k[row]} of ${c.expected[row]} replicates${Number.isFinite(c.tau2[row]) ? `; τ² ${fmt(c.tau2[row], 4)}, I² ${Math.round(c.i2[row] * 100)}%` : ''}${Number.isFinite(c.loo[row]) ? `; leaving one replicate out moves it by up to ${fmt(c.loo[row])}` : ''}.`));
       if (c.flags[row]) parts.push(h('div.callout.accent', { style: { margin: '0 0 8px', fontSize: '12px' } }, `Low confidence: ${flagNames(c.flags[row]).join('; ')}.`));
     }
-    // Replicates.
-    const reps = results.replicates.filter((r) => c.replicates.includes(r.id));
+    if (inView) parts.push(...membersBlock(app, own, v.members[row], focus, run));
+    // Replicates: those of the variant's tile (a replicate of another tile does not measure it, though
+    // its samples may hold it; wave 3, slice 6), the others counted below.
+    const tiles = new Map((run.inputs.design.library?.tiles ?? []).map((t) => [t.id, t]));
+    const ofCondition = inView ? [] : results.replicates.filter((r) => c.replicates.includes(r.id));
+    const reps = ofCondition.filter((r) => coversPosition(r, tiles, v.position[row]));
+    const otherTiles = ofCondition.length - reps.length;
     const sampleCounts = new Map((results.samples ?? []).map((x) => [x.id, x.counts]));
     if (reps.some((r) => r.bins)) {
       // Sorted bins: each replicate's reads in each bin, and the variant's distribution over the bins
@@ -212,10 +244,11 @@ export function variantSection(app, focus) {
         lineChart({ series, xLabel: 'bin', yLabel: 'share of the variant', label: `${focus.id}: its share in each bin, by replicate, with the wild type's`, width: 300, height: 160 }),
         legend(items),
         h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, `Each bin's share of the variant: its reads there over the bin's reads, as a fraction of their sum.${reps[0].bins?.sigma ? ` The maximum-likelihood fit shares the wild type's spread σ = ${fmt(reps[0].bins.sigma, 2)} (log fluorescence).` : ''}`));
-    } else {
+    } else if (reps.length) {
       parts.push(h('h4.inspector-sub', 'Replicates'), h('table.data.compact', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Before'), h('th.r', 'After'), h('th.r', 'Score'), h('th', 'Used'))),
         h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r', fmt(r.first[row], 0)), h('td.r', fmt(r.last[row], 0)), h('td.r', Number.isFinite(r.score[row]) ? `${fmt(r.score[row], 2)} ± ${fmt(r.se[row], 2)}` : '—'), h('td', r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'yes'))))));
     }
+    if (otherTiles) parts.push(h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, `${otherTiles} replicate${otherTiles === 1 ? '' : 's'} of other tiles, which do not measure position ${v.position[row]}, not listed.`));
     if (results.barcodes) {
       const block = barcodesBlock(results, reps, row, reps.some((r) => r.bins));
       if (block) parts.push(block);
@@ -239,13 +272,19 @@ export function variantSection(app, focus) {
         legend(items.map(([color, label]) => ({ color, label }))),
         h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, `Points: ln(count + pseudocount) − ln(normalizer) at each time; dashed: the fitted line, whose slope ${p.timeScale === 'unit' ? `per ${unitOf(run.inputs.design)}` : 'on time scaled to 0–1'} is the replicate's score. Departure: scatter about the line over what counting predicts (1 is typical).`));
     }
-    if (results.differential?.length) parts.push(...differentialBlock(results, row, run));
+    if (results.differential?.length && !inView) parts.push(...differentialBlock(results, row, run));
     // Every sample's counts.
     if (results.samples?.length) {
       parts.push(h('details.inspector-details', h('summary', `Counts in all ${results.samples.length} samples`),
         h('table.data.compact', h('tbody', ...results.samples.map((s) => h('tr', h('td', s.name), h('td.r', Number.isFinite(s.counts[row]) ? String(s.counts[row]) : 'missing')))))));
     }
-    const strip = position > 0 ? positionStrip(results, c, row, position, focus.id) : null;
+    if (!inView) {
+      const mapped = mappedBlock(app, run, row);
+      if (mapped) parts.push(...mapped);
+    }
+    const annotations = annotationBlock(app, run, [focus.id, v.proKey?.[row] ?? null], position);
+    if (annotations) parts.push(...annotations);
+    const strip = position > 0 && !v.proKey ? positionStrip(results, c, row, position, focus.id) : null;
     if (strip) parts.push(h('h4.inspector-sub', `Position ${position}`), strip);
   }
   // Sequence context.

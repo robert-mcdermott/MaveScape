@@ -2,16 +2,42 @@
 // as written, its canonical MAVE-HGVS key, what kind of variant it is, where, and whether it
 // agrees with the target (requirements D3, D5). Built once per import; never rewrites the
 // original identifiers.
+//
+// Nucleotide variants of a DNA target are also read for what they do to its protein (wave 3,
+// slice 3; consequence.js): their kind is their consequence (a codon change that keeps the amino
+// acid is synonymous; a deletion of one base in the coding sequence a frameshift; c.67+1G>A a
+// splice site), and proKey, proPosition, proRef and proAlt hold the protein change (p.Ala12Val),
+// mixed the substitutions that change one amino acid and leave another codon synonymous (DiMSum's
+// "mixed substitutions"). A name prefixed by a target (NM_007294.3:c.68A>G, LMNA:n.127G>A) must
+// name the design's target; one naming another of a score set's targets is set aside (otherTarget).
 
 import { AA1, THREE_TO_ONE, parseHgvs, targetMismatches } from './hgvs.js';
 import { targetProtein } from './target.js';
+import { codingFrame, consequenceOf, nucleotideMismatches } from './consequence.js';
 
 export const KIND = {
   NONE: 0, WT: 1, SYNONYMOUS: 2, MISSENSE: 3, NONSENSE: 4, START_LOST: 5, STOP_LOST: 6, MULTI: 7,
   DELETION: 8, INSERTION: 9, DUPLICATION: 10, DELINS: 11, FRAMESHIFT: 12, NT_SUBSTITUTION: 13, OTHER: 14,
+  SPLICE: 15, INTRONIC: 16, UTR5: 17, UTR3: 18,
 };
 export const KIND_NAMES = ['none', 'wild type', 'synonymous', 'missense', 'nonsense', 'start lost', 'stop lost', 'multi-variant',
-  'deletion', 'insertion', 'duplication', 'deletion-insertion', 'frameshift', 'nucleotide substitution', 'other'];
+  'deletion', 'insertion', 'duplication', 'deletion-insertion', 'frameshift', 'nucleotide substitution', 'other',
+  'splice site', 'intronic', '5\' UTR', '3\' UTR'];
+
+// A consequence's class (consequence.js) as a kind.
+const KIND_OF_CLASS = {
+  'wild type': KIND.WT, synonymous: KIND.SYNONYMOUS, missense: KIND.MISSENSE, nonsense: KIND.NONSENSE, 'start lost': KIND.START_LOST,
+  'stop lost': KIND.STOP_LOST, 'multi-variant': KIND.MULTI, deletion: KIND.DELETION, insertion: KIND.INSERTION, duplication: KIND.DUPLICATION,
+  'deletion-insertion': KIND.DELINS, frameshift: KIND.FRAMESHIFT, 'splice site': KIND.SPLICE, intronic: KIND.INTRONIC, '5\' UTR': KIND.UTR5, '3\' UTR': KIND.UTR3,
+};
+
+// The names a target may be given in a variant's prefix: its id and name, and its accessions
+// (versioned as written).
+export function targetLabels(target) {
+  if (!target) return [];
+  const ids = target.identifiers ?? {};
+  return [target.id, target.name, target.label, ids.refseq, ids.ensembl, ids.genbank, ids.protein].filter(Boolean);
+}
 
 export const STATUS = { VALID: 1, WARNING: 2, INVALID: 3, UNMAPPED: 4 };
 export const STATUS_NAMES = ['', 'valid', 'read leniently', 'invalid', 'unmapped'];
@@ -25,6 +51,14 @@ const PREFIX_FOR_LEVEL = { protein: 'p', nucleotide: 'c', splice: 'c' };
 const BLANK = new Set(['', 'NA', 'N/A', 'NaN', 'null', 'None']);
 
 function kindOf(v) {
+  // Nucleotide positions say what they are without the target: in an intron, a UTR.
+  if (v.prefix !== 'p') {
+    const positions = v.components.flatMap((c) => [c.start, c.end]).filter(Boolean);
+    const offsets = positions.map((p) => p.intron).filter((x) => x !== null && x !== undefined);
+    if (offsets.length) return offsets.some((x) => Math.abs(x) <= 2) || offsets.length < positions.length ? KIND.SPLICE : KIND.INTRONIC;
+    if (v.prefix === 'c' && positions.length && positions.every((p) => p.position < 0)) return KIND.UTR5;
+    if (v.prefix === 'c' && positions.length && positions.every((p) => p.utr && p.position > 0)) return KIND.UTR3;
+  }
   if (v.multi) return KIND.MULTI;
   const c = v.components[0];
   if (c.type === 'equal') return v.prefix === 'p' && (c.start || c.equal === '(=)') ? KIND.SYNONYMOUS : KIND.WT;
@@ -61,9 +95,19 @@ export function buildVariants(names, options = {}) {
     alt: new Uint8Array(n),
     status: new Uint8Array(n),
     messages: new Map(),
+    // Rows named on another of a score set's targets (1).
+    otherTarget: new Uint8Array(n),
   };
   const protein = options.target ? targetProtein(options.target) : null;
-  const dna = options.target?.sequenceType === 'dna' ? options.target.sequence.toUpperCase() : null;
+  const frame = level !== 'protein' ? codingFrame(options.target) : null;
+  if (frame) {
+    out.proKey = new Array(n).fill('');
+    out.proPosition = new Int32Array(n).fill(-1);
+    out.proRef = new Uint8Array(n);
+    out.proAlt = new Uint8Array(n);
+    out.mixed = new Uint8Array(n);
+  }
+  const labels = new Set(targetLabels(options.target));
   const cache = new Map();
   const note = (row, message) => {
     if (!out.messages.has(row)) out.messages.set(row, []);
@@ -106,18 +150,39 @@ export function buildVariants(names, options = {}) {
       note(row, isProtein ? 'a protein variant in a column of nucleotide variants' : 'a nucleotide variant in a column of protein variants');
       continue;
     }
+    if (parsed.target && options.target && !labels.has(parsed.target)) {
+      out.status[row] = STATUS.INVALID;
+      out.otherTarget[row] = 1;
+      note(row, `named on ${parsed.target}, not on the design's target (${[...labels].slice(0, 3).join(', ')})`);
+      continue;
+    }
     if (options.target) {
-      const sequence = isProtein ? protein : dna;
-      if (!sequence) {
+      if (!isProtein && !frame) {
         out.status[row] = STATUS.INVALID;
         note(row, 'a nucleotide variant cannot be checked against a protein target');
         continue;
       }
-      const problems = targetMismatches(parsed, sequence);
+      const problems = isProtein ? targetMismatches(parsed, protein) : nucleotideMismatches(parsed, frame);
       if (problems.length) {
         out.status[row] = STATUS.INVALID;
         for (const p of problems) note(row, p.message);
+        continue;
       }
+    }
+    if (frame) {
+      const c = consequenceOf(parsed, frame);
+      if (c.problem) {
+        note(row, `its protein change cannot be read: ${c.problem}`);
+        continue;
+      }
+      out.kind[row] = KIND_OF_CLASS[c.class] ?? out.kind[row];
+      out.proKey[row] = c.protein ?? '';
+      out.proPosition[row] = c.position;
+      if (c.ref && c.alt && c.ref.length === 1 && c.alt.length === 1) {
+        out.proRef[row] = AA_CODE[c.ref];
+        out.proAlt[row] = AA_CODE[c.alt];
+      }
+      out.mixed[row] = c.mixed ? 1 : 0;
     }
   }
   return out;
@@ -142,6 +207,14 @@ export function selectVariants(variants, rows) {
     alt: pick(variants.alt, Uint8Array),
     status: pick(variants.status, Uint8Array),
     messages,
+    otherTarget: variants.otherTarget ? pick(variants.otherTarget, Uint8Array) : new Uint8Array(n),
+    ...(variants.proKey ? {
+      proKey: rows.map((r) => variants.proKey[r]),
+      proPosition: pick(variants.proPosition, Int32Array),
+      proRef: pick(variants.proRef, Uint8Array),
+      proAlt: pick(variants.proAlt, Uint8Array),
+      mixed: pick(variants.mixed, Uint8Array),
+    } : {}),
   };
 }
 
@@ -168,10 +241,15 @@ export function summarizeVariants(variants) {
   let valid = 0;
   let warning = 0;
   let invalid = 0;
+  let otherTarget = 0;
   let min = Infinity;
   let max = -Infinity;
   for (let i = 0; i < variants.n; i += 1) {
     const status = variants.status[i];
+    if (variants.otherTarget?.[i]) {
+      otherTarget += 1;
+      continue;
+    }
     if (status === STATUS.VALID) valid += 1;
     else if (status === STATUS.WARNING) warning += 1;
     else invalid += 1;
@@ -184,5 +262,5 @@ export function summarizeVariants(variants) {
       max = Math.max(max, p);
     }
   }
-  return { total: variants.n, valid, warning, invalid, byKind, positions: Number.isFinite(min) ? [min, max] : null };
+  return { total: variants.n, valid, warning, invalid, otherTarget, byKind, positions: Number.isFinite(min) ? [min, max] : null };
 }

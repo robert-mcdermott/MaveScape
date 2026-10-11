@@ -1,0 +1,7 @@
+{
+  "contentType": "application/json",
+  "service": "UniProt",
+  "source": "https://rest.uniprot.org/uniparc/sequence?sequence={sequence}&fields=upi,accession,organism,protein,gene&dbTypes=UniProtKB/Swiss-Prot,UniProtKB/Swiss-Prot%20protein%20isoforms,UniProtKB/TrEMBL&active=true",
+  "retrieved": "2026-10-10T17:48:58Z",
+  "version": "2026_03"
+}

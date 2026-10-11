@@ -1,0 +1,6 @@
+{
+  "contentType": "application/json",
+  "service": "MaveDB",
+  "source": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000013-a-1",
+  "retrieved": "2026-10-11T02:08:40Z"
+}

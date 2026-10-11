@@ -22,7 +22,7 @@
 // rescaling anchor missing) is refused with the reasons, never quietly done another way.
 
 import { buildVariants, duplicateKeys, KIND, STATUS } from './variants.js';
-import { replicateSamples, sharedSamples, validateDesign } from './design.js';
+import { engineColumns, replicateSamples, sharedSamples, tileRows, tileView, validateDesign } from './design.js';
 import { parseHgvs } from './hgvs.js';
 import { median, normalizers, ratioScores, NORMALIZATIONS } from './score-ratio.js';
 import { MODELS as TIME_MODELS, REGRESSION_SE, regressionScores } from './score-regression.js';
@@ -56,6 +56,8 @@ export const MODELS = {
   dimsum: 'DiMSum\'s fitness and error model',
   bins: 'weighted average of the bins\' values',
   'bins-mle': 'maximum likelihood (censored log-normal, from the gates)',
+  // A design of published scores (model 'scores'; wave 3, slice 2): read, not scored.
+  published: 'the scores as published (read, not scored)',
 };
 const BIN_MODELS = new Set(['bins', 'bins-mle']);
 // A time series' scores: over the whole time course, or per unit of time (wave 2, slice 10).
@@ -120,6 +122,8 @@ export const PRESETS = {
 // nonsense variants (else to the lowest 5%), unscaled without the wild type (both scales need it).
 // Controls the design names as none count as absent (wave 2, slice 10).
 export function defaultParameters(design, source = null, preset = 'mavescape') {
+  // Published scores are read as published: no normalization, rescaling or comparison applies.
+  if (design?.model === 'scores') return withDefaults({ ...DEFAULT_PARAMETERS, model: 'published', filters: { ...DEFAULT_FILTERS, minInputCount: 0 } });
   const controls = design?.controls ?? {};
   const hasWildType = controls.wildType === 'none' ? false : source ? (source.summary?.byKind?.['wild type'] ?? 0) > 0 || Boolean(controls.wildType && controls.wildType !== 'auto' && !/^(p\.=|c\.=|n\.=|_wt)$/i.test(controls.wildType)) : true;
   if (design?.model === 'bins') {
@@ -136,13 +140,17 @@ export function defaultParameters(design, source = null, preset = 'mavescape') {
 // Differential scores for a design with two or more conditions: limma's moderated t where it
 // applies (two populations relative to the wild type or the synonymous variants, with residual
 // degrees of freedom), whose variances, shared across variants, keep calls calibrated with few
-// replicates; replicates paired by their shared inputs otherwise; Enrich2's comparison of
-// conditions for the Enrich2-compatible preset.
+// replicates; replicates paired by their shared inputs otherwise, or, where the conditions share
+// no input (DHFR's two strains, each transformed apart; wave 3 slice 6), the conditions as
+// independent; Enrich2's comparison of conditions for the Enrich2-compatible preset.
 export function defaultDifferential(design, preset = 'mavescape', normalization = 'wt') {
   if ((design?.conditions?.length ?? 0) < 2) return null;
   if (preset === 'enrich2') return 'independent';
   if (design.model === 'two-population' && (normalization === 'wt' || normalization === 'synonymous') && !limmaDesign(design).refused) return 'limma';
-  return 'paired';
+  const reference = design.conditions.find((c) => c.reference) ?? design.conditions[0];
+  const first = (r) => orderedSlots(r)[0]?.sample;
+  const inputs = new Set(design.replicates.filter((r) => r.condition === reference.id).map(first).filter(Boolean));
+  return design.replicates.some((r) => r.condition !== reference.id && inputs.has(first(r))) ? 'paired' : 'independent';
 }
 
 export function withDefaults(parameters = {}) {
@@ -188,7 +196,10 @@ export function checkParameters(parameters, design) {
         if (short.length) errors.push(`A regression on time needs three or more time points in every replicate; ${short.map((r) => r.name ?? r.id).slice(0, 4).join(', ')} ${short.length > 1 ? 'have' : 'has'} fewer: score by the log ratio of the first and last samples.`);
       }
     }
-    if (design.model === 'scores') errors.push('This design holds precomputed scores: there are no counts to score.');
+    if (design.model === 'scores' && p.model !== 'published') errors.push('This design holds published scores: they are read as published, not scored from counts (the model "published").');
+    if (design.model === 'scores' && p.rescale !== 'none') errors.push('Published scores are read as published: rescaling them comes with comparisons between assays (MaveScape 0.4).');
+    if (design.model === 'scores' && p.differential) errors.push('Published scores have no counts to compare conditions with.');
+    if (p.model === 'published' && design.model !== 'scores') errors.push('Scores as published need a design of published scores (model "scores"); this design describes counts.');
     if (p.timeScale === 'unit' && design.model !== 'time-series') errors.push('Scores per unit of time need a time series; this design is not one: score over the time course (the default).');
     if (p.model === 'dimsum') {
       if (design.model !== 'two-population') errors.push(`DiMSum scores an input and an output; this design is ${design.model === 'time-series' ? 'a time series: score it by regression, or by the log ratio of its first and last samples' : `of kind "${design.model}"`}.`);
@@ -208,7 +219,7 @@ export function checkParameters(parameters, design) {
       }
     }
   }
-  if (p.pseudocount === 0 && p.model !== 'dimsum') errors.push('A pseudocount of 0 leaves every variant with a zero count unscorable (log 0); use a positive pseudocount.');
+  if (p.pseudocount === 0 && p.model !== 'dimsum' && p.model !== 'published') errors.push('A pseudocount of 0 leaves every variant with a zero count unscorable (log 0); use a positive pseudocount.');
   return { errors, warnings: [] };
 }
 
@@ -256,11 +267,17 @@ function binSlots(replicate) {
   return [...(replicate.bins ?? [])].sort((a, b) => a.order - b.order);
 }
 
+// Rows outside the tile that the replicate's samples counted: said so, not "not counted".
+function markOutsideTile(state, mask, samples) {
+  if (!mask) return;
+  for (let i = 0; i < state.length; i += 1) if (!mask[i] && samples.some((s) => s && !Number.isNaN(s[i]))) state[i] = REPLICATE_STATE.OUTSIDE_TILE;
+}
+
 // One replicate of sorted bins (score-bins.js): its variants' states, scores and SEs, scaled.
-function scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings }) {
+function scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings, mask = null }) {
   const f = p.filters;
   const slots = binSlots(replicate);
-  const samples = slots.map((x) => pooled.get(x.sample));
+  const samples = slots.map((x) => tileView(pooled, mask).get(x.sample));
   const label = `replicate ${replicate.name ?? replicate.id}`;
   const B = samples.length;
   const totals = binTotals(samples);
@@ -306,6 +323,7 @@ function scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, w
   }
   // No reads in any bin (with no minimum count): nothing to estimate.
   for (let i = 0; i < n; i += 1) if (state[i] === REPLICATE_STATE.USED && !Number.isFinite(scored.score[i])) state[i] = REPLICATE_STATE.NOT_ESTIMABLE;
+  markOutsideTile(state, mask, slots.map((x) => pooled.get(x.sample)));
   // The replicate's scale (VAMP-seq: nonsense 0, wild type 1), from the variants used.
   let anchors = null;
   if (p.binScale !== 'none') {
@@ -398,7 +416,7 @@ function barcodeVariantStates(groups, barcodeState, measured, minimum) {
 // together, their scales and shifts and the error model fitted on them, on the measurements the
 // count filters keep. Returns { entries: Map(replicate id → entry), fits: [{ replicates,
 // condition, tile, threshold, variants, bootstrap, normalised, errorModel }] }.
-function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info }) {
+function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info, tiles }) {
   const f = p.filters;
   const groups = new Map();
   for (const r of design.replicates) {
@@ -421,8 +439,10 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info 
     const states = [];
     for (const r of reps) {
       const slots = orderedSlots(r);
-      const inp = pooled.get(slots[0].sample);
-      const out = pooled.get(slots[slots.length - 1].sample);
+      const mask = tileRows(r, tiles, variants.position);
+      const view = tileView(pooled, mask);
+      const inp = view.get(slots[0].sample);
+      const out = view.get(slots[slots.length - 1].sample);
       const state = new Uint8Array(n);
       const mi = new Float64Array(n);
       const mo = new Float64Array(n);
@@ -433,7 +453,7 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info 
         mi[i] = use ? inp[i] : Number.NaN;
         mo[i] = use ? out[i] : Number.NaN;
       }
-      raw.push({ r, inp, out, slots });
+      raw.push({ r, inp, out, slots, mask });
       inputs.push(mi);
       outputs.push(mo);
       states.push(state);
@@ -446,9 +466,10 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info 
     const negative = m.scale.map((a, k) => (a < 0 ? reps[k].name ?? reps[k].id : null)).filter(Boolean);
     if (negative.length) warnings.push({ code: 'dimsum-negative-scale', message: `DiMSum's normalisation turns ${negative.join(', ')} upside down (a negative scale): are an input and an output swapped in the design?` });
     fits.push({ replicates: reps.map((r) => r.id), condition: reps[0].condition ?? null, tile: reps[0].tile ?? null, threshold: m.threshold, variants: m.variants, bootstrap: m.bootstrap, normalised: m.normalised, errorModel: m.input !== null });
-    raw.forEach(({ r, inp, out, slots }, k) => {
+    raw.forEach(({ r, inp, out, slots, mask }, k) => {
       const state = states[k];
       for (let i = 0; i < n; i += 1) if (state[i] === REPLICATE_STATE.USED && Number.isNaN(res.score[k][i])) state[i] = REPLICATE_STATE.NOT_ESTIMABLE;
+      markOutsideTile(state, mask, [pooled.get(slots[0].sample), pooled.get(slots[slots.length - 1].sample)]);
       const pick = (x) => (x ? x[k] : null);
       entries.set(r.id, {
         id: r.id,
@@ -482,6 +503,89 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info 
     });
   }
   return { entries, fits };
+}
+
+// Published scores (a design of model 'scores'; wave 3, slice 2): each variant's score, standard
+// error and 95% interval as the table gives them, read, not computed; one condition, no
+// replicates. A variant is left out when its name is not valid against the target, its class or
+// itself is excluded, the table gives it no score, or its SE is above the maximum.
+function publishedResults({ variants, n, columns, design, p, controls, warnings, info, copies }) {
+  const s = design.scores;
+  const column = (key) => {
+    if (!s[key]) return null;
+    if (!columns[s[key]]) throw new Refused([`The table has no column "${s[key]}" of ${key === 'score' ? 'scores' : key === 'se' ? 'standard errors' : 'intervals'}.`]);
+    return columns[s[key]];
+  };
+  const given = column('score');
+  const givenSE = column('se');
+  const low = column('ciLow');
+  const high = column('ciHigh');
+  const f = p.filters;
+  const excludeKinds = kindCodes(f.excludeKinds);
+  const excluded = new Set(f.exclude);
+  const score = new Float64Array(n).fill(Number.NaN);
+  const se = new Float64Array(n).fill(Number.NaN);
+  const ciLow = low ? new Float64Array(n).fill(Number.NaN) : null;
+  const ciHigh = high ? new Float64Array(n).fill(Number.NaN) : null;
+  const reason = new Uint8Array(n);
+  const none = STAGE_BY_ID.get('given').code;
+  for (let i = 0; i < n; i += 1) {
+    const stage = variantStage(i, variants, excludeKinds, excluded);
+    if (copies?.has(i)) reason[i] = STAGE_BY_ID.get('copy').code;
+    else if (stage) reason[i] = stage;
+    else if (!Number.isFinite(given[i])) reason[i] = none;
+    else if (f.maxSE !== null && !(givenSE?.[i] <= f.maxSE)) reason[i] = STAGE_BY_ID.get('se').code;
+    if (reason[i]) continue;
+    score[i] = given[i];
+    if (givenSE) se[i] = givenSE[i];
+    if (ciLow) {
+      ciLow[i] = low[i];
+      ciHigh[i] = high[i];
+    }
+  }
+  const scored = reason.reduce((a, r) => a + (r ? 0 : 1), 0);
+  const without = reason.reduce((a, r) => a + (r === none ? 1 : 0), 0);
+  info.push(`Scores as published, read from "${s.score}"${givenSE ? `, with standard errors from "${s.se}"` : ' (no standard errors given)'}${ciLow ? ` and 95% intervals from "${s.ciLow}" and "${s.ciHigh}"` : ''}: not rescored.`);
+  if (without) info.push(`${without} row${without > 1 ? 's give' : ' gives'} no score (NA in the table).`);
+  if (copies?.size) info.push(`${copies.size} row${copies.size > 1 ? 's repeat' : ' repeats'} an earlier row's variant and scores (${[...new Set([...copies].map((i) => variants.key[i]))].slice(0, 3).join(', ')}): read once.`);
+  if (!givenSE) warnings.push({ code: 'no-se', message: 'The table gives no standard errors: the scores\' uncertainty is unknown, and QC cannot judge their resolution.' });
+  const nan = () => new Float64Array(n).fill(Number.NaN);
+  return {
+    format: 'mavescape-scores',
+    version: 1,
+    rows: n,
+    variants: resultVariants(variants),
+    controls: { wt: controls.wt, synonymous: controls.synonymous.length, nonsense: controls.nonsense.length },
+    parameters: p,
+    replicates: [],
+    conditions: [{
+      id: 'published', name: 'Published', replicates: [],
+      score, se, tau2: nan(), i2: nan(), q: nan(), loo: nan(), looReplicate: new Int16Array(n).fill(-1), epsilon: null,
+      k: new Uint8Array(n), expected: new Uint8Array(n), reason, flags: new Uint8Array(n),
+      ...(ciLow ? { ciLow, ciHigh } : {}),
+      rescale: null,
+      flow: filterFlow(reason, false, true),
+      scored,
+      combinedFromAll: 0,
+      published: true,
+    }],
+    samples: [],
+    barcodes: null,
+    dimsum: null,
+    differential: null,
+    warnings,
+    info,
+  };
+}
+
+// The variant table a run's results carry: the columns every view reads, and, for nucleotide
+// variants of a DNA target, their protein changes (wave 3, slice 3).
+function resultVariants(v) {
+  return {
+    key: v.key, original: v.original, kind: v.kind, position: v.position, ref: v.ref, alt: v.alt, status: v.status,
+    ...(v.otherTarget?.some((x) => x) ? { otherTarget: v.otherTarget } : {}),
+    ...(v.proKey ? { proKey: v.proKey, proPosition: v.proPosition, proRef: v.proRef, proAlt: v.proAlt, mixed: v.mixed } : {}),
+  };
 }
 
 class Refused extends Error {
@@ -526,13 +630,23 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   const groups = design.library?.level === 'barcode' ? barcodeGroups(names, barcodes, design, mode, target) : null;
   const variants = groups ? groups.variants : buildVariants(names, { level: design.variants.level, mode, target });
   const n = variants.n;
+  // Published scores (a design of model 'scores') may write a variant on several rows with the same
+  // scores (Hsp90's record writes its wild type once per position): copies, read once.
+  let copies = null;
   if (!groups) {
-    const duplicates = duplicateKeys(variants);
-    if (duplicates.length) throw new Refused([`${duplicates.length} variant${duplicates.length > 1 ? 's are' : ' is'} on more than one row (${duplicates.slice(0, 3).map((d) => d.key).join(', ')}): resolve them at import before scoring.`]);
+    let duplicates = duplicateKeys(variants);
+    if (duplicates.length && design.model === 'scores') {
+      const read = engineColumns(design).map((c) => columns[c]).filter(Boolean);
+      const same = (a, b) => read.every((x) => Object.is(x[a], x[b]) || (Number.isNaN(x[a]) && Number.isNaN(x[b])));
+      copies = new Set(duplicates.filter((d) => d.rows.every((r) => same(d.rows[0], r))).flatMap((d) => d.rows.slice(1)));
+      duplicates = duplicates.filter((d) => !d.rows.every((r) => same(d.rows[0], r)));
+    }
+    if (duplicates.length) throw new Refused([`${duplicates.length} variant${duplicates.length > 1 ? 's are' : ' is'} on more than one row (${duplicates.slice(0, 3).map((d) => d.key).join(', ')})${design.model === 'scores' ? ' with different scores' : ''}: resolve them at import before scoring.`]);
   }
   const controls = controlRows(design, variants);
   const warnings = [];
   const info = [];
+  if (design.model === 'scores') return publishedResults({ variants, n, columns, design, p, controls, warnings, info, copies });
   if (p.normalization === 'wt' && controls.wtProblem) throw new Refused([controls.wtProblem]);
 
   // Samples: technical replicates summed; a barcode table's counts also summed per variant.
@@ -562,11 +676,15 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   const sorted = BIN_MODELS.has(p.model);
   const synonymousRow = new Uint8Array(n);
   for (const i of controls.synonymous) synonymousRow[i] = 1;
+  const tiles = new Map((design.library?.tiles ?? []).map((t) => [t.id, t]));
   // DiMSum: the replicates of each experiment fitted together, first.
   if (p.model === 'dimsum') onProgress(0.05, 'Fitting DiMSum\'s error model');
-  const dimsum = p.model === 'dimsum' ? scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info }) : null;
+  const dimsum = p.model === 'dimsum' ? scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info, tiles }) : null;
   design.replicates.forEach((replicate, index) => {
     onProgress((index / design.replicates.length) * 0.6, `Scoring ${replicate.name ?? replicate.id}`);
+    // A replicate of a tile measures its tile's positions only (its samples may hold others').
+    const mask = tileRows(replicate, tiles, variants.position);
+    const view = tileView(pooled, mask);
     if (dimsum) {
       const entry = dimsum.entries.get(replicate.id);
       replicates.push(entry);
@@ -574,7 +692,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       return;
     }
     if (sorted) {
-      const entry = scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings });
+      const entry = scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings, mask });
       if (groups) {
         // A variant's barcodes measured: those counted in every bin, with reads.
         const rows = binSlots(replicate).map((x) => pooledRows.get(x.sample));
@@ -653,14 +771,16 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
         throw new Refused([error.message]);
       }
     };
-    let samples = slots.map((s) => pooled.get(s.sample));
+    let samples = slots.map((s) => view.get(s.sample));
     let m = measure(samples);
+    // A barcode's rows, seen as its variant's tile sees them.
+    const rowView = groups && mask ? tileView(pooledRows, Uint8Array.from(groups.variantOf, (g) => (g < 0 ? 1 : mask[g]))) : pooledRows;
     let scored = null;
     let bc = null;
     if (groups) {
       // Every barcode scored against the replicate's normalizers, and compared with its variant's
       // other barcodes.
-      const rows = slots.map((s) => pooledRows.get(s.sample));
+      const rows = slots.map((s) => rowView.get(s.sample));
       const mb = measure(rows, m.r);
       for (let b = 0; b < groups.rows; b += 1) {
         if (groups.variantOf[b] >= 0) continue;
@@ -684,7 +804,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       if (outliers) info.push(`${outliers} barcode${outliers > 1 ? 's' : ''} of ${label} departing from ${outliers > 1 ? 'their' : 'its'} variant's others by more than ${f.maxBarcodeZ} (z/√φ, φ = ${d.phi.toFixed(2)}) left out.`);
       if (p.aggregation === 'sum') {
         if (outliers) {
-          samples = slots.map((s) => sumByVariant(pooledRows.get(s.sample), groups, outlier));
+          samples = slots.map((s) => sumByVariant(rowView.get(s.sample), groups, outlier));
           m = measure(samples);
         }
         for (let i = 0; i < n; i += 1) if (m.state[i] === REPLICATE_STATE.USED && measured[i] < f.minBarcodes) m.state[i] = REPLICATE_STATE.FEW_BARCODES;
@@ -762,6 +882,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
         variance: regression ? scored.firstVar : Float64Array.from(samples[0], (c) => 1 / (c + p.pseudocount) + (p.normalization === 'synonymous' ? 0 : 1 / r[0])),
       },
     };
+    markOutsideTile(entry.state, mask, slots.map((s) => pooled.get(s.sample)));
     replicates.push(entry);
     repById.set(replicate.id, entry);
   });
@@ -796,7 +917,6 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   const conditionList = design.conditions?.length ? design.conditions : [{ id: 'all', name: 'All replicates' }];
   const excludeKinds = kindCodes(f.excludeKinds);
   const excluded = new Set(f.exclude);
-  const tiles = new Map((design.library?.tiles ?? []).map((t) => [t.id, t]));
   const conditions = [];
   // Enrich2 starts its estimator from the variance over every variant in its table of variants
   // scored in every replicate of at least one condition (scores_shared): with several conditions,
@@ -847,7 +967,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       for (const rep of reps) {
         if (coversRow(rep, i)) exp += 1;
         const s = rep.state[i];
-        if (s !== REPLICATE_STATE.NOT_COUNTED && s !== REPLICATE_STATE.FEW_POINTS && s !== REPLICATE_STATE.NOT_ESTIMABLE) anyCounted = true;
+        if (s !== REPLICATE_STATE.NOT_COUNTED && s !== REPLICATE_STATE.FEW_POINTS && s !== REPLICATE_STATE.NOT_ESTIMABLE && s !== REPLICATE_STATE.OUTSIDE_TILE) anyCounted = true;
         if (s === REPLICATE_STATE.USED || s === REPLICATE_STATE.TOTAL_COUNT || s === REPLICATE_STATE.LOW_FREQUENCY || s === REPLICATE_STATE.FEW_BARCODES) anyPastInput = true;
         if (s === REPLICATE_STATE.FEW_BARCODES) anyFewBarcodes = true;
         if (s === REPLICATE_STATE.USED) these.push(rep);
@@ -1034,7 +1154,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     format: 'mavescape-scores',
     version: 1,
     rows: n,
-    variants: { key: variants.key, original: variants.original, kind: variants.kind, position: variants.position, ref: variants.ref, alt: variants.alt, status: variants.status },
+    variants: resultVariants(variants),
     controls: { wt: controls.wt, synonymous: controls.synonymous.length, nonsense: controls.nonsense.length },
     parameters: p,
     replicates,

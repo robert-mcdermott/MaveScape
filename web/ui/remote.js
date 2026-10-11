@@ -7,15 +7,17 @@
 
 import { toast } from './overlays.js';
 import { EXAMPLES } from '../lib/examples.js';
-import { validateDesign, summarizeDesign } from '../lib/design.js';
+import { coversPosition, validateDesign, summarizeDesign } from '../lib/design.js';
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
-import { addRun, makeRun, outputDigest, runId, runInputs } from '../lib/runs.js';
+import { addRun, makeRun, nextRunName, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
-import { acknowledgeFinding, addSelection, addTarget, createWorkspace, rename, setDesign } from '../lib/workspace.js';
+import { acknowledgeFinding, addSelection, addTarget, createWorkspace, rename, setDeposit, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
 import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
 import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { proteinView } from '../lib/collapse.js';
+import { mappedFor } from './mapped.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
@@ -30,6 +32,15 @@ import { archiveFile, packageFile, RUN_FILES, runFile, selectionFile } from './r
 import { intervalOf } from '../lib/exports.js';
 import { anchorUncertainty } from '../lib/anchors.js';
 import { readiness, readinessText } from '../lib/readiness.js';
+import { applyCheck, checkTarget, fetchPublic, placementText } from './public-data.js';
+import { importMaveDB } from './mavedb.js';
+import { depositFile, runDeposit } from './mavedb-export.js';
+import { DEPOSIT_FIELDS, depositDetails, readPublication } from '../lib/mavedb-export.js';
+import { searchHits } from '../lib/mavedb.js';
+import { retrievalText } from '../lib/uniprot.js';
+import { addFileTrack, addPublicTrack, arrangeTrack, removeTrack, runTrackState } from './tracks.js';
+import { annotationsOf, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
+import { PROVIDERS } from '../lib/providers/index.js';
 
 export class ActionError extends Error {}
 
@@ -63,6 +74,9 @@ export function variantName(text) {
   if (three) return `p.${three[1]}${three[2]}${three[3] === '*' ? 'Ter' : three[3]}`;
   return t;
 }
+
+// A design's shape in a few words: its kind and replicates, or its column of published scores.
+const shapeOf = (d) => (d.model === 'scores' ? `published scores in "${d.scoreColumn ?? 'score'}"` : `${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')}`);
 
 export function installRemote(app) {
   const { store } = app;
@@ -111,8 +125,20 @@ export function installRemote(app) {
     return conditions.findIndex((c) => c.name === name);
   }
 
+  // A run's map: a nucleotide run's drawn from its protein view (collapse.js).
   function modelOf(run, results, condition, view = app.mapView ?? {}) {
-    return buildMapModel(results, run.inputs.design, { condition, contrast: view.contrast ?? 0, rowOrder: view.rowOrder ?? 'biochemical', colorBy: view.colorBy ?? 'score' });
+    return buildMapModel(proteinView(results) ?? results, run.inputs.design, { condition, contrast: view.contrast ?? 0, rowOrder: view.rowOrder ?? 'biochemical', colorBy: view.colorBy ?? 'score' });
+  }
+
+  // A track as remote control describes it.
+  function trackData(t, notes = new Map()) {
+    const filters = trackFilters(t).map((f) => ({ filter: f.id, label: f.label, options: f.options }));
+    return {
+      id: t.id, label: t.label, kind: t.kind, shown: t.shown, annotation: t.annotation ?? null, source: t.source ?? null, summary: describeTrack(t),
+      filter: ws().tracks?.filters?.[t.id] ?? null, ...(t.filtered ? { filtered: t.filtered } : {}), filters,
+      ...(t.kind === 'variants' ? { variants: t.entries.length } : {}), ...(t.kind === 'features' ? { features: t.features.map((f) => ({ type: f.type, label: f.label, start: f.start, end: f.end })) } : {}),
+      ...(t.annotation ? { notes: notes.get(t.annotation) ?? [] } : {}),
+    };
   }
 
   // A run's differential scores in brief: per contrast, how they were made and how many differ.
@@ -150,6 +176,7 @@ export function installRemote(app) {
       model: design.model,
       samples: design.samples?.length ?? 0,
       replicates: design.replicates?.length ?? 0,
+      ...(design.model === 'scores' ? { scoreColumn: design.scores?.score ?? null } : {}),
       valid: result.ok,
       problems: result.errors.map((e) => e.message),
       warnings: result.warnings.map((w) => w.message),
@@ -171,7 +198,11 @@ export function installRemote(app) {
       conditions: run.output.conditions.map((c) => c.name),
       comparesConditions: Boolean(run.inputs.parameters?.differential) && run.output.conditions.length > 1,
       barcodes: run.inputs.design.library?.level === 'barcode',
-      map: run.inputs.design.variants?.level === 'protein' && (run.inputs.design.targets?.length ?? 0) === 1,
+      map: (run.inputs.design.targets?.length ?? 0) === 1 && (run.inputs.design.variants?.level === 'protein' || run.inputs.design.targets[0].sequenceType === 'dna'),
+      // Nucleotide variants of a DNA target, read at the protein level too (wave 3, slice 3).
+      proteinLevel: run.inputs.design.variants?.level !== 'protein' && run.inputs.design.targets?.[0]?.sequenceType === 'dna',
+      // Published scores (wave 3, slice 2): read as published, with no counts or samples.
+      published: run.inputs.design.model === 'scores',
     };
   }
 
@@ -221,8 +252,8 @@ export function installRemote(app) {
       const data = {
         workspace: { id: w.id, name: w.name, example: w.example?.id ?? null },
         mode: store.ui.mode === 'welcome' ? 'start' : store.ui.mode,
-        tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source })),
-        targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0 })),
+        tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, sha256: s.sha256, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source, ...(s.origin ? { origin: { database: s.origin.database, urn: s.origin.urn, ...(s.origin.urns ? { urns: s.origin.urns } : {}), ...(s.origin.package ? { package: s.origin.package } : {}), file: s.origin.file, retrieved: s.origin.retrieved, license: s.origin.license } } : {}) })),
+        targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0, ...(t.sequenceType === 'dna' ? { codingStart: t.codingStart ?? 1 } : {}), ...(t.origin ? { from: t.origin.service ?? t.origin.format, accession: t.origin.accession } : {}) })),
         design: w.design ? designSummary(w.design, source) : null,
         runs: w.runs.map(runSummary),
         selections: w.selections.map((s) => ({ name: s.name, run: w.runs.find((r) => r.id === s.run)?.name ?? s.run, variants: s.keys.length })),
@@ -268,11 +299,13 @@ export function installRemote(app) {
         if (!response.ok) throw new ActionError(`${file.name} could not be read (HTTP ${response.status}).`);
         items.push(Object.assign(new File([await response.arrayBuffer()], file.name), { folder: file.folder ?? null }));
       }
-      const before = { sources: ws().sources.length, targets: ws().targets.length };
+      const before = { id: ws().id, sources: ws().sources.length, targets: ws().targets.length };
       const { problems } = await app.importFiles(items, { accept: !args.review });
       await settle();
       const w = ws();
-      const added = { tables: w.sources.slice(before.sources).map((s) => s.name), targets: w.targets.slice(before.targets).map((t) => t.name) };
+      // A MaveDB package opens as a workspace of its own (wave 3, slice 4).
+      const fresh = w.id !== before.id;
+      const added = { tables: w.sources.slice(fresh ? 0 : before.sources).map((s) => s.name), targets: w.targets.slice(fresh ? 0 : before.targets).map((t) => t.name) };
       if (problems.length && !added.tables.length && !added.targets.length && !args.review) throw new ActionError(problems.join(' '));
       const parts = [];
       if (added.tables.length) parts.push(`the table${added.tables.length > 1 ? 's' : ''} ${added.tables.join(', ')}`);
@@ -315,7 +348,7 @@ export function installRemote(app) {
       await settle();
       const design = ws().design;
       const summary = designSummary(design, source);
-      return { message: `Drafted the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')} of ${plural(summary.samples, 'sample')}. ${summary.valid ? 'It is valid.' : `${plural(summary.problems.length, 'problem')}: ${summary.problems.join(' ')}`}`, data: { design, ...summary } };
+      return { message: `Drafted the design of ${source.name}: ${shapeOf(summary)}. ${summary.valid ? 'It is valid.' : `${plural(summary.problems.length, 'problem')}: ${summary.problems.join(' ')}`}`, data: { design, ...summary } };
     },
 
     async set_design(args) {
@@ -343,6 +376,90 @@ export function installRemote(app) {
       return { message: `Set the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')}.${summary.warnings.length ? ` Warnings: ${summary.warnings.join(' ')}` : ''}`, data: summary };
     },
 
+    // MaveDB (wave 3, slice 2): a search, and a score set opened as a workspace.
+    async search_mavedb(args) {
+      const text = String(args.text ?? '').trim();
+      if (!text) throw new ActionError('Give the words to search MaveDB for.');
+      const page = Number.isInteger(args.page) && args.page > 0 ? args.page : 1;
+      const got = await fetchPublic(app, `mavedb/search?text=${encodeURIComponent(text)}&page=${page}`);
+      if (!got.ok) throw new ActionError(got.message);
+      const { total, hits } = searchHits(got.json);
+      const listed = hits.map((x) => `${x.urn} "${x.title}" (${[x.targets.join(', '), x.organism, x.variants !== null ? `${x.variants} variants` : null, x.license].filter(Boolean).join('; ')})`);
+      return { message: `${total} published score set${total === 1 ? ' matches' : 's match'} "${text}"${total > hits.length ? ` (page ${page}: ${hits.length} shown)` : ''}${listed.length ? `: ${listed.slice(0, 10).join('; ')}${listed.length > 10 ? '; …' : ''}` : ''}.`, data: { total, page, hits, retrieval: got.retrieval } };
+    },
+
+    async open_mavedb(args) {
+      const opened = await importMaveDB(app, String(args.urn ?? ''), { counts: args.counts !== false, target: args.target ?? null, mapped: args.mapped === true });
+      if (!opened.ok) throw new ActionError(opened.message);
+      await settle();
+      return { message: opened.message, data: opened.data };
+    },
+
+    // The target checked against its UniProt entry (wave 3, slice 1), through the program's fetcher:
+    // only the accession is sent. A lookup by sequence is not offered here: it sends the sequence,
+    // and only the person at the window may decide that.
+    // A MaveDB deposit (wave 3, slice 4): what one of a run would hold and what MaveDB requires
+    // that the workspace lacks. Read-only.
+    async mavedb_deposit(args) {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      const condition = resolveCondition(results, args.condition);
+      let made;
+      try {
+        made = await runDeposit(app, run, condition);
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const r = made.report;
+      const left = r.variants.leftOut.reduce((a, x) => a + x.count, 0);
+      const message = [
+        `A MaveDB deposit of ${run.name}${results.conditions.length > 1 ? ` (${r.condition})` : ''}: ${r.variants.exported} of ${r.variants.of} variants${left ? ` (${left} left out)` : ''}, the target ${r.target.targetAccession ? `named by ${r.target.targetAccession.accession}` : 'given by its sequence'}.`,
+        r.missing.length ? `MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.text).join(' ')}` : 'Nothing MaveDB requires is missing.',
+      ].join(' ');
+      return { message, data: { run: run.name, condition: r.condition, conditions: results.conditions.map((c) => c.name), mode: r.mode, target: r.target, variants: r.variants, scored: r.scored, columns: r.columns, keywords: r.keywords, missing: r.missing, defaulted: r.defaulted, notes: r.notes, ready: r.ready, details: depositDetails(ws(), run).details } };
+    },
+
+    // Sets the MaveDB details (ws.deposit): the fields given replace the workspace's (an empty one
+    // removes it), undoable and in the history.
+    async set_mavedb_details(args) {
+      const given = typeof args.details === 'object' && args.details ? args.details : null;
+      if (!given) throw new ActionError(`Give "details": an object of ${DEPOSIT_FIELDS.filter((k) => k !== 'columns').join(', ')}.`);
+      const unknown = Object.keys(given).filter((k) => !DEPOSIT_FIELDS.includes(k) || k === 'columns');
+      if (unknown.length) throw new ActionError(`No MaveDB detail ${unknown.map((k) => `"${k}"`).join(', ')}; the details are ${DEPOSIT_FIELDS.filter((k) => k !== 'columns').join(', ')}.`);
+      const patch = { ...given };
+      // Publications as written ("PubMed 29785012", a DOI) or as { db, id }.
+      if (Array.isArray(patch.publications)) patch.publications = patch.publications.map((p) => (typeof p === 'string' ? readPublication(p) : { db: p.db ?? null, id: String(p.id ?? '') }));
+      for (const key of ['rawReads', 'contributors', 'dois']) if (typeof patch[key] === 'string') patch[key] = patch[key].split(/[;,\s]+/).filter(Boolean);
+      if (patch.taxonomyId !== undefined && patch.taxonomyId !== null && patch.taxonomyId !== '') patch.taxonomyId = Number(patch.taxonomyId);
+      const next = setDeposit(ws(), patch, `MaveDB details set by ${author}: ${Object.keys(patch).join(', ')}`);
+      const changed = next !== ws();
+      if (changed) store.commit(next, 'Change the MaveDB details');
+      return { message: changed ? `Set the MaveDB details: ${Object.keys(patch).join(', ')}.` : 'The MaveDB details are as they were.', data: { details: ws().deposit ?? {} } };
+    },
+
+    async check_target(args) {
+      const w = ws();
+      const designTarget = w.design?.targets?.[0]?.id;
+      const name = args.target ? choose(args.target, w.targets.map((t) => t.name), 'target') : null;
+      const target = name ? w.targets.find((t) => t.name === name) : w.targets.find((t) => t.id === designTarget) ?? w.targets[0];
+      if (!target) throw new ActionError('There is no target: open its FASTA first.');
+      const check = await checkTarget(app, target, args.accession ?? null);
+      if (!check.ok) throw new ActionError(check.message);
+      const changes = Object.keys(check.patch);
+      if (args.apply) applyCheck(app, target, check);
+      const p = check.placement;
+      const data = {
+        target: target.name,
+        entry: { accession: check.entry.accession, name: check.entry.name, gene: check.entry.gene, organism: check.entry.organism, length: check.entry.length, reviewed: check.entry.reviewed },
+        retrieval: check.retrieval,
+        placement: { offset: p.offset, start: p.start, end: p.end, identical: p.identical, differences: p.differences, outside: p.outside, places: p.places },
+        changes: check.patch,
+        applied: Boolean(args.apply),
+      };
+      const what = changes.length ? (args.apply ? ` Set ${changes.join(', ')}, and recorded the check.` : ` It would change ${changes.join(', ')} (apply: true to use them).`) : (args.apply ? ' Nothing to change; recorded the check.' : ' Nothing to change.');
+      return { message: `${placementText(target, check)}${what} (UniProt ${retrievalText(check.retrieval) || 'entry'}.)`, data };
+    },
+
     // Checks a table as scoring would, without scoring (mavescape validate; mavescape run checks
     // first): its names against the design's target, its problems, the design against its
     // columns, and the parameters against the design. design: one to check (else the
@@ -357,7 +474,7 @@ export function installRemote(app) {
         const blocking = d.problems.map((m) => `The design: ${m}`);
         const ready = readiness(ws(), { design });
         return {
-          message: blocking.length ? `Not valid: ${plural(blocking.length, 'problem')} in the design. ${blocking.join(' ')}` : `Valid: the design (${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')}), checked without its table.${d.warnings.length ? ` ${plural(d.warnings.length, 'warning')}: ${d.warnings.join(' ')}` : ''}`,
+          message: blocking.length ? `Not valid: ${plural(blocking.length, 'problem')} in the design. ${blocking.join(' ')}` : `Valid: the design (${shapeOf(d)}), checked without its table.${d.warnings.length ? ` ${plural(d.warnings.length, 'warning')}: ${d.warnings.join(' ')}` : ''}`,
           data: { valid: !blocking.length, table: null, design: d, blocking, warnings: d.warnings, readiness: ready, readinessText: readinessText(ready, { all: false }) },
         };
       }
@@ -405,7 +522,7 @@ export function installRemote(app) {
       };
       const message = blocking.length
         ? `Not valid: ${plural(blocking.length, 'problem')} ${blocking.length > 1 ? 'block' : 'blocks'} scoring. ${blocking.join(' ')}`
-        : `Valid: ${source.name}, ${plural(table.rows, 'row')} (${data.table.names.valid} names valid${data.table.names.readLeniently ? `, ${data.table.names.readLeniently} read leniently` : ''})${d ? `, with the design (${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')})` : ''}.${warnings.length ? ` ${plural(warnings.length, 'warning')}: ${warnings.join(' ')}` : ''}`;
+        : `Valid: ${source.name}, ${plural(table.rows, 'row')} (${data.table.names.valid} names valid${data.table.names.readLeniently ? `, ${data.table.names.readLeniently} read leniently` : ''})${d ? `, with the design (${shapeOf(d)})` : ''}.${warnings.length ? ` ${plural(warnings.length, 'warning')}: ${warnings.join(' ')}` : ''}`;
       return { message, data };
     },
 
@@ -454,7 +571,7 @@ export function installRemote(app) {
       }
       if (ws().id !== wsId) throw new ActionError('Another workspace was opened while scoring; the run was not added.');
       if (!result.ok) throw new ActionError(`Scoring is refused: ${result.errors.join(' ')}`);
-      const run = makeRun({ inputs, source, results: result.results, software: { version: app.version, commit: app.commit }, name: `Run ${ws().runs.length + 1}` });
+      const run = makeRun({ inputs, source, results: result.results, software: { version: app.version, commit: app.commit }, name: nextRunName(ws()) });
       app.runResults ??= new Map();
       app.runResults.set(run.id, { results: result.results, status: 'computed' });
       store.commit(addRun(ws(), run).ws, `Score: ${run.name} (${author})`);
@@ -563,17 +680,23 @@ export function installRemote(app) {
     async inspect_variant(args) {
       const run = resolveRun(args.run);
       const entry = await resultsOf(run);
-      const { results } = entry;
-      const condition = resolveCondition(results, args.condition);
+      const own = entry.results;
+      const condition = resolveCondition(own, args.condition);
+      const name = variantName(args.variant);
+      // A protein variant of a nucleotide run: its row in the run's protein view (wave 3, slice 3).
+      const view = proteinView(own);
+      const inView = view && own.variants.key.indexOf(name) < 0 && own.variants.original.indexOf(String(args.variant)) < 0 && view.variants.key.includes(name);
+      const results = inView ? view : own;
       const c = results.conditions[condition];
       const v = results.variants;
-      const name = variantName(args.variant);
       const row = v.key.indexOf(name) >= 0 ? v.key.indexOf(name) : v.original.indexOf(String(args.variant));
       app.focusItem({ kind: 'variant', id: row >= 0 ? v.key[row] : name, run: run.id, condition });
       await settle();
       if (row < 0) return { message: `${name} is not in ${run.name}'s table: it was not measured (missing on the map, not "no effect").`, data: { variant: name, measured: false } };
       const reasons = c.reason[row] ? STAGE_BY_CODE.get(c.reason[row]) : null;
-      const replicates = results.replicates.filter((r) => c.replicates.includes(r.id)).map((r) => ({
+      // The replicates of the variant's tile (wave 3, slice 6): another tile's do not measure it.
+      const tiles = new Map((run.inputs.design.library?.tiles ?? []).map((t) => [t.id, t]));
+      const replicates = results.replicates.filter((r) => c.replicates.includes(r.id) && coversPosition(r, tiles, v.position[row])).map((r) => ({
         name: r.name, before: round(r.first[row]), after: round(r.last[row]), score: round(r.score[row]), se: round(r.se[row]), used: !r.state[row], state: r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'used',
         // A regression's time points used and departure from a line (χ²/df against counting).
         ...(r.points ? { timePoints: r.points[row], departure: round(r.fit[row]) } : {}),
@@ -587,6 +710,9 @@ export function installRemote(app) {
         asWritten: v.original[row],
         class: KIND_NAMES[v.kind[row]],
         position: v.position[row] > 0 ? v.position[row] : null,
+        // A nucleotide variant's protein change; a protein variant's nucleotide variants, each scored.
+        ...(v.proKey ? { protein: v.proKey[row] || null, proteinPosition: v.proPosition[row] > 0 ? v.proPosition[row] : null } : {}),
+        ...(inView ? { nucleotideVariants: Array.from(v.members[row], (r) => ({ variant: own.variants.key[r], score: own.conditions[condition].reason[r] ? null : round(own.conditions[condition].score[r]), se: own.conditions[condition].reason[r] ? null : round(own.conditions[condition].se[r]) })), merged: v.members[row].length > 1 ? (Array.from(v.members[row]).every((r) => own.conditions[condition].reason[r] || own.conditions[condition].se[r] > 0) ? 'inverse-variance mean, as DiMSum merges them' : 'mean (not every one has an SE)') : null } : {}),
         condition: c.name,
         score: reasons ? null : round(c.score[row]),
         se: reasons ? null : round(c.se[row]),
@@ -609,9 +735,28 @@ export function installRemote(app) {
         run: run.name,
         reproduced: entry.status,
       };
+      // MaveDB's mapping of the variant to the human reference, when its table was opened with it.
+      if (!inView) {
+        const mapped = await mappedFor(app, run, row);
+        if (mapped !== undefined) data.mapped = mapped;
+      }
+      // Its annotations, from the tracks of the workspace's annotations (wave 3, slice 5).
+      if (ws().annotations?.length) {
+        const state = await runTrackState(app, run, { condition });
+        const position = v.proPosition ? v.proPosition[row] : v.position[row];
+        const seen = new Set();
+        data.annotations = [];
+        for (const key of [v.key[row], v.proKey?.[row]].filter(Boolean)) {
+          for (const item of annotationsOf(state.tracks.filter((t) => t.annotation), key, position)) {
+            if (seen.has(item.track.id)) continue;
+            seen.add(item.track.id);
+            data.annotations.push({ track: item.track.label, source: sourceText(item.track.source), text: item.text });
+          }
+        }
+      }
       const message = reasons
         ? `${data.variant} (${data.class}) is not scored: ${reasons.id === 'measured' ? 'not counted in every sample of any replicate' : `filtered at "${reasons.label}": ${reasons.reason}`}.`
-        : `${data.variant} (${data.class}): score ${data.score} ± ${data.se} (95% CI ${data.ci95[0]} to ${data.ci95[1]}) from ${data.replicatesUsed} of ${data.replicatesExpected} replicates${data.lowConfidence.length ? `; low confidence: ${data.lowConfidence.join('; ')}` : ''}.`;
+        : `${data.variant} (${data.class}${data.protein ? `, ${data.protein}` : ''}): score ${data.score}${data.se === null ? '' : ` ± ${data.se} (95% CI ${data.ci95[0]} to ${data.ci95[1]})`}${c.published ? ' as published' : ` from ${data.replicatesUsed} of ${data.replicatesExpected} replicates`}${data.nucleotideVariants ? `, from ${data.nucleotideVariants.length} nucleotide variant${data.nucleotideVariants.length > 1 ? `s (${data.merged})` : ''}` : ''}${data.lowConfidence.length ? `; low confidence: ${data.lowConfidence.join('; ')}` : ''}.`;
       return { message, data };
     },
 
@@ -642,12 +787,103 @@ export function installRemote(app) {
       }
       const model = modelOf(run, results, condition, view);
       const counts = Object.fromEntries(STATE_NAMES.map((name, i) => [name, model.counts[i]]));
-      const lines = describeMap(model, results);
+      const lines = describeMap(model, proteinView(results) ?? results);
       return { message: lines.join(' '), data: { run: run.name, condition: model.contrast ? null : results.conditions[condition].name, ...(model.contrast ? { contrast: model.contrast.name } : {}), colorBy: model.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines } };
     },
 
+    // --- Tracks (wave 3, slice 5) -------------------------------------------------------------------
+
+    // The tracks beside a run's map, in order: each one's id, kind, source, whether shown, its
+    // filter and what it holds; the annotations that could not be read; what can be added.
+    async list_tracks(args) {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      const state = await runTrackState(app, run, { condition: resolveCondition(proteinView(results) ?? results, args.condition) });
+      const target = trackTarget(run.inputs.design.targets?.[0], ws().targets);
+      const source = ws().sources.find((x) => x.sha256 === run.inputs.source.sha256);
+      const origin = source?.origin?.database === 'MaveDB' ? { urn: source.origin.urn } : null;
+      const available = PROVIDERS.map((p) => ({ provider: p.id, name: p.name, kind: p.kind, what: p.what, ...(p.kind === 'public' ? { unavailable: p.needs(target, { origin }) } : {}) }));
+      const tracks = state.arranged.map((t) => trackData(t, state.notes));
+      const shown = tracks.filter((t) => t.shown).length;
+      return { message: `${run.name}: ${plural(tracks.length, 'track')}, ${shown} shown (${tracks.filter((t) => t.shown).map((t) => t.label).join(', ') || 'none'}).${state.problems.length ? ` Not read: ${state.problems.map((p) => `${p.annotation.name}: ${p.message}`).join(' ')}` : ''}`, data: { run: run.name, tracks, problems: state.problems.map((p) => ({ annotation: p.annotation.id, name: p.annotation.name, problem: p.message })), available } };
+    },
+
+    // Adds an annotation's tracks: from public data (provider: uniprot-features, pdbe-conservation,
+    // alphamissense, clinvar, gnomad, mavedb-annotations), or a file given as name and text (an
+    // alignment, a predictor's table, a custom track).
+    async add_track(args) {
+      const run = resolveRun(args.run);
+      await resultsOf(run);
+      let result;
+      if (args.text !== undefined) {
+        if (!args.name) throw new ActionError('Give the file\'s name with its text (name: "grb2-sh3.sto").');
+        result = await addFileTrack(app, run, { name: String(args.name), text: String(args.text) });
+      } else {
+        const id = choose(args.provider, PROVIDERS.filter((p) => p.kind === 'public').map((p) => p.id), 'provider');
+        result = await addPublicTrack(app, run, id, { quiet: true });
+      }
+      if (!result.ok) throw new ActionError(result.message);
+      await settle();
+      return { message: result.message, data: { annotation: result.id, name: result.name, tracks: result.tracks.map((t) => ({ label: t.label, kind: t.kind, summary: describeTrack(t) })), notes: result.notes } };
+    },
+
+    // Shows or hides a track, moves it (position from 1), or filters it: { types }, { classes,
+    // stars }, { min } (list_tracks names each track's filters and their options).
+    async set_track(args) {
+      const run = resolveRun(args.run);
+      await resultsOf(run);
+      const state = await runTrackState(app, run);
+      const ids = state.arranged.map((t) => t.id);
+      const labels = state.arranged.map((t) => t.label);
+      const ref = String(args.track ?? '');
+      const track = state.arranged.find((t) => t.id === ref) ?? state.arranged[labels.indexOf(choose(ref, labels, 'track'))];
+      const change = { id: track.id };
+      if (args.shown !== undefined) change.shown = Boolean(args.shown);
+      if (args.position !== undefined) {
+        const to = Number(args.position);
+        if (!Number.isInteger(to) || to < 1 || to > ids.length) throw new ActionError(`position is from 1 to ${ids.length}.`);
+        change.to = to - 1;
+      }
+      if (args.filter !== undefined) {
+        const offered = trackFilters(track);
+        const filter = {};
+        for (const [key, value] of Object.entries(args.filter ?? {})) {
+          const f = offered.find((x) => x.id === key);
+          if (!f) throw new ActionError(`${track.label} has ${offered.length ? `the filters ${offered.map((x) => x.id).join(', ')}` : 'no filter'}; not "${key}".`);
+          if (key === 'types' || key === 'classes') {
+            const list = (Array.isArray(value) ? value : [value]).map((v) => choose(v, f.options.map(String), key === 'types' ? 'kind of feature' : 'class'));
+            filter[key] = f.options.filter((o) => list.includes(String(o)));
+          } else if (key === 'stars') {
+            if (!f.options.includes(Number(value))) throw new ActionError('stars is from 0 to 4.');
+            filter.stars = Number(value);
+          } else if (key === 'min') {
+            if (!(Number(value) > 0)) throw new ActionError('min is a positive number.');
+            filter.min = Number(value);
+          }
+        }
+        change.filter = filter;
+      }
+      if (Object.keys(change).length === 1) throw new ActionError('Say what to change: shown, position or filter.');
+      arrangeTrack(app, state.tracks, change);
+      await settle();
+      const after = await runTrackState(app, run);
+      const now = after.arranged.find((t) => t.id === track.id);
+      return { message: `${now.label}: ${now.shown ? 'shown' : 'hidden'}, ${after.arranged.indexOf(now) + 1} of ${after.arranged.length}${now.filtered ? `, filtered: ${now.filtered}` : ''}.`, data: { track: trackData(now, after.notes), order: after.arranged.map((t) => t.id) } };
+    },
+
+    // Removes an annotation and its tracks (by its id or name).
+    async remove_track(args) {
+      const list = ws().annotations ?? [];
+      if (!list.length) throw new ActionError('The workspace has no annotation to remove.');
+      const ref = String(args.annotation ?? args.track ?? '').replace(/:.*$/, '');
+      const a = list.find((x) => x.id === ref) ?? list.find((x) => x.name === choose(ref, list.map((y) => y.name), 'annotation'));
+      removeTrack(app, a.id);
+      await settle();
+      return { message: `Removed ${a.name} and its tracks.`, data: { removed: a.id } };
+    },
+
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks'];
       const what = choose(args.what, kinds, 'export');
       let file;
       // The analysis package (wave 2, slice 10): of a run when named, else of the current run, else
@@ -656,6 +892,20 @@ export function installRemote(app) {
         const run = args.run ? resolveRun(args.run) : currentRun(ws());
         file = await packageFile(app, run);
         return { file: file.bytes, message: `The analysis package of "${ws().name}"${run ? `, ${run.name}` : ' (the design, with the default parameters)'}: counts, target, design, sample sheet, parameters and what is missing.` };
+      }
+      // A MaveDB deposit (wave 3, slice 4): one ZIP of the files MaveDB reads.
+      if (what === 'mavedb') {
+        const run = resolveRun(args.run);
+        const { results } = await resultsOf(run);
+        const condition = resolveCondition(results, args.condition);
+        let made;
+        try {
+          made = await depositFile(app, run, condition);
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+        const r = made.deposit.report;
+        return { file: made.bytes, message: `${run.name}'s MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
       }
       if (what === 'archive') {
         file = await archiveFile(app, { includeTables: args.include_tables !== false });
@@ -673,7 +923,14 @@ export function installRemote(app) {
       const condition = resolveCondition(results, args.condition);
       if (what === 'map') {
         const model = modelOf(run, results, condition);
-        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results }), message: `${run.name}'s map (SVG).` };
+        const shown = (await runTrackState(app, run, { condition })).arranged.filter((t) => t.shown);
+        const tracks = shown.length && shown.every((t) => t.length === model.length) ? shown : [];
+        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results: proteinView(results) ?? results, tracks }), message: `${run.name}'s map (SVG)${tracks.length ? `, with ${plural(tracks.length, 'track')}` : ''}.` };
+      }
+      if (what === 'tracks') {
+        const state = await runTrackState(app, run, { condition });
+        const shown = state.arranged.filter((t) => t.shown);
+        return { file: tracksCSV(shown, state.model), message: `${run.name}'s tracks shown, position by position (CSV): ${shown.map((t) => t.label).join(', ') || 'none'}.` };
       }
       file = await runFile(app, run, what, condition);
       return { file: file.text, message: `${run.name}: ${what}.` };

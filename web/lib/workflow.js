@@ -40,8 +40,12 @@ export function workflowSteps(ws, seen = {}) {
   if (!source) {
     const target = ws.targets[0];
     add({ id: 'counts', label: 'Counts', state: 'next', detail: target ? `Now open the count table whose variants are named on ${target.name}: one row per variant, one column per sequenced sample.` : 'Open a count table: one row per variant, one column per sequenced sample (the Start page has a blank layout and two examples).', action: { kind: 'open', label: 'Open the counts' } });
+  } else if (!countColumns && source.mapping?.scoreColumns?.score) {
+    // Published scores (wave 3, slice 2): read as published by their own design, shown on the map;
+    // counts would allow rescoring.
+    add({ id: 'counts', label: 'Scores', state: blocking.length ? 'attention' : 'done', detail: blocking.length ? `${plural(blocking.length, 'problem')} in ${source.name}: ${blocking[0]}` : `${source.name}: ${source.summary?.total ?? source.rows} variants with published scores (counts would allow rescoring them)`, ...(blocking.length ? { action: { kind: 'focus', label: 'See the problems' } } : {}) });
   } else if (!countColumns) {
-    add({ id: 'counts', label: 'Counts', state: 'attention', detail: source.layout === 'mavedb-scores' ? `${source.name} holds scores, not counts. MaveScape scores from counts; showing imported scores on the map comes in 0.3. If the counts were published (MaveDB offers them beside the scores when the authors provided them), open those.` : `${source.name} has no columns of counts. MaveScape scores from counts: one column per sequenced sample, with the variants' names in another.`, action: { kind: 'open', label: 'Open a count table' } });
+    add({ id: 'counts', label: 'Counts', state: 'attention', detail: `${source.name} has no columns of counts${source.layout === 'mavedb-scores' ? ' and no column of scores MaveScape recognized' : ''}. MaveScape scores from counts: one column per sequenced sample, with the variants' names in another; or it reads published scores from a column named score.`, action: { kind: 'open', label: 'Open a count table' } });
   } else if (blocking.length) {
     add({ id: 'counts', label: 'Counts', state: 'attention', detail: `${plural(blocking.length, 'problem')} in ${source.name} block scoring: ${blocking[0]}`, action: { kind: 'focus', label: 'See the problems' } });
   } else {
@@ -53,16 +57,18 @@ export function workflowSteps(ws, seen = {}) {
   if (target) add({ id: 'target', label: 'Target', state: 'done', detail: `${target.name}, ${target.sequence.length} ${target.sequenceType === 'dna' ? 'nt' : 'residues'}` });
   else add({ id: 'target', label: 'Target', state: source ? 'attention' : 'todo', detail: 'Open the target\'s sequence (FASTA): variant names are checked against it, and the map is drawn on it.', action: { kind: 'open-fasta', label: 'Open the FASTA' } });
 
-  // 3. The design.
-  const countsReady = source && countColumns && !blocking.length;
+  // 3. The design. A table of published scores (wave 3, slice 2) has one too: which column holds
+  // the scores, their SEs and intervals.
+  const scoresTable = Boolean(source && !countColumns && source.mapping?.scoreColumns?.score);
+  const countsReady = source && (countColumns || scoresTable) && !blocking.length;
   if (!countsReady) {
     add({ id: 'design', label: 'Design', detail: 'Which column is which sample: after the counts.' });
   } else if (!ws.design) {
-    add({ id: 'design', label: 'Design', state: 'next', detail: `Say which column is which sample. MaveScape drafts the design from the column names${source.roleSuggestions?.length ? ` (it suggested roles for ${plural(source.roleSuggestions.length, 'column')})` : ''}; check it in the Experiment view.`, action: { kind: 'draft', label: 'Draft the design' } });
+    add({ id: 'design', label: 'Design', state: 'next', detail: scoresTable ? `Say which column holds the scores (MaveScape found "${source.mapping.scoreColumns.score}"${source.mapping.scoreColumns.se ? `, with SEs in "${source.mapping.scoreColumns.se}"` : ''}): the design reads them as published.` : `Say which column is which sample. MaveScape drafts the design from the column names${source.roleSuggestions?.length ? ` (it suggested roles for ${plural(source.roleSuggestions.length, 'column')})` : ''}; check it in the Experiment view.`, action: { kind: 'draft', label: 'Draft the design' } });
   } else {
     const result = validateDesign(ws.design, { columns: (source.columns ?? []).map((c) => c.name) });
     if (!result.ok) add({ id: 'design', label: 'Design', state: 'attention', detail: `${plural(result.errors.length, 'problem')} in the design: ${result.errors[0].message}`, action: { kind: 'mode', mode: 'experiment', label: 'Fix it in Experiment' } });
-    else add({ id: 'design', label: 'Design', state: 'done', detail: `${ws.design.model.replace('-', ' ')}, ${plural(ws.design.replicates.length, 'replicate')}` });
+    else add({ id: 'design', label: 'Design', state: 'done', detail: ws.design.model === 'scores' ? `published scores, column "${ws.design.scores?.score}"` : `${ws.design.model.replace('-', ' ')}, ${plural(ws.design.replicates.length, 'replicate')}` });
   }
 
   // 4. The score.
@@ -70,10 +76,12 @@ export function workflowSteps(ws, seen = {}) {
   const run = currentRun(ws);
   if (!designReady) {
     add({ id: 'score', label: 'Score', detail: 'Scores with standard errors: after the design.' });
-  } else if (ws.design.model === 'scores') {
-    add({ id: 'score', label: 'Score', state: 'attention', detail: 'This design holds precomputed scores: there is nothing to score.', action: { kind: 'mode', mode: 'qc', label: 'Open QC' } });
+  } else if (ws.design.model === 'scores' && !run) {
+    add({ id: 'score', label: 'Score', state: 'next', detail: 'Read the published scores as published: a run of their own, for the map, QC of what scores show and the exports.', action: { kind: 'mode', mode: 'score', label: 'Read them' } });
   } else if (!run) {
-    const stale = ws.runs.length > 0;
+    // Runs of this table with another design: the design changed. Runs of another table only (the
+    // published scores of a MaveDB record beside its counts) leave this table not scored yet.
+    const stale = ws.runs.some((r) => r.inputs.source.sha256 === source.sha256);
     add({ id: 'score', label: 'Score', state: stale ? 'attention' : 'next', detail: stale ? 'The design or the table changed since the last run: score again (earlier runs are kept).' : 'Score the counts with MaveScape\'s defaults, or choose the normalization, filters and replicate combination first.', action: { kind: 'mode', mode: 'score', label: stale ? 'Score again' : 'Score' } });
   } else {
     const scored = run.output.conditions.map((c) => c.scored).join(' / ');
@@ -88,7 +96,7 @@ export function workflowSteps(ws, seen = {}) {
   } else {
     const overall = qcSeen.get(run.id);
     if (overall) add({ id: 'qc', label: 'QC', state: 'done', detail: overall.status === 'pass' ? 'Every finding passes' : `${overall.counts.fail} fail, ${overall.counts.review} to review: read why before trusting the scores`, verdict: overall.status, action: { kind: 'mode', mode: 'qc', label: 'Open QC' } });
-    else add({ id: 'qc', label: 'QC', state: 'next', detail: 'Read the quality-control findings: depth, coverage, replicate agreement, bottlenecks, the controls.', action: { kind: 'mode', mode: 'qc', label: 'Read the findings' } });
+    else add({ id: 'qc', label: 'QC', state: 'next', detail: run.inputs.design.model === 'scores' ? 'Read what quality control can say of published scores: the controls\' separation, the scores\' resolution, coverage.' : 'Read the quality-control findings: depth, coverage, replicate agreement, bottlenecks, the controls.', action: { kind: 'mode', mode: 'qc', label: 'Read the findings' } });
     if (mapSeen.has(run.id)) add({ id: 'map', label: 'Map', state: 'done', detail: 'Explored; click a cell for its evidence', action: { kind: 'mode', mode: 'map', label: 'Open the map' } });
     else add({ id: 'map', label: 'Map', detail: 'Explore the scores by position and substitution; click a variant for its evidence.', action: { kind: 'mode', mode: 'map', label: 'Open the map' } });
     add({ id: 'record', label: 'Record', state: 'optional', detail: 'Export the scores (MaveDB columns), the methods and references, or the whole workspace as one archive.', action: { kind: 'export', label: 'Export…' } });

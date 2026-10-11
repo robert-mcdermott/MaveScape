@@ -4,6 +4,7 @@
 import { h, icon, clear, relativeTime, formatBytes } from './dom.js';
 import { prefs } from './storage.js';
 import { EXAMPLES, LAYOUTS, downloadLayout, openExample } from './examples.js';
+import { openMaveDBDialog } from './mavedb.js';
 import { BRING, GAPS, fillable, readiness, readinessLine } from '../lib/readiness.js';
 
 // What a researcher brings (requirements D12–D13, E8): the files MaveScape reads, then the records
@@ -34,6 +35,8 @@ export function mountWelcome(app, container) {
           h('button.btn.primary', { type: 'button', onclick: () => app.pickFiles() }, icon('table'), 'Open files'),
           h('button.btn', { type: 'button', onclick: () => app.pickFolder() }, icon('folder'), 'Open a folder'),
           h('button.btn', { type: 'button', onclick: () => app.openLibrary() }, icon('library'), 'Open a saved workspace'),
+          // Published data (wave 3, slice 2): only with the MaveScape program, and public data on.
+          app.info && app.info.fetch !== 'off' ? h('button.btn', { type: 'button', onclick: () => openMaveDBDialog(app) }, icon('globe'), 'Open from MaveDB') : null,
           h('span.muted', { style: { marginLeft: '6px' } }, 'or drop files anywhere'))),
       h('img', { src: 'favicon.svg', width: 132, height: 132, alt: '', style: { filter: 'drop-shadow(0 18px 40px rgba(42, 111, 219, 0.35))', borderRadius: '28px' } })),
     h('div.section-title', 'Recent workspaces'),

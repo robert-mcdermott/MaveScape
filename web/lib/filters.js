@@ -8,6 +8,11 @@ import { KIND, KIND_NAMES } from './variants.js';
 
 // The stages in the order they apply. `rule`: always on (not a parameter).
 export const STAGES = [
+  // Published scores (a design of model 'scores', wave 3 slice 2): the table gives no score.
+  { id: 'given', code: 10, label: 'A score in the table', rule: true, published: true, reason: 'the table gives it no score' },
+  { id: 'copy', code: 11, label: 'Written once', rule: true, published: true, reason: 'a copy of an earlier row (the same variant and the same scores): read once' },
+  // A score set of several targets opened one target at a time (wave 3, slice 3).
+  { id: 'target', code: 12, label: 'On the target', rule: true, reason: 'named on another of the score set\'s targets' },
   { id: 'measured', code: 1, label: 'Counted in a replicate', rule: true, reason: 'not measured in any replicate (not counted in enough of its samples; a zero count with no pseudocount, scored by DiMSum; or, from sorted bins, no estimate)' },
   { id: 'identifier', code: 2, label: 'Valid identifier', rule: true, reason: 'the identifier is not valid or does not agree with the target' },
   { id: 'class', code: 3, label: 'Variant class', reason: 'its class is not scored' },
@@ -28,8 +33,10 @@ export const STAGE_BY_ID = new Map(STAGES.map((s) => [s.id, s]));
 // pseudocount), or no maximum-likelihood estimate from the bins (all reads in an open outer bin, or
 // in fewer than three bins with σ fitted). FEW_BARCODES: a barcode table's
 // variant measured by fewer barcodes than the minimum (outlier barcodes left out not counting).
-export const REPLICATE_STATE = { USED: 0, NOT_COUNTED: 1, INPUT_COUNT: 2, TOTAL_COUNT: 3, FEW_POINTS: 4, LOW_FREQUENCY: 5, NOT_ESTIMABLE: 6, FEW_BARCODES: 7 };
-export const REPLICATE_STATE_NAMES = ['used', 'not counted in every sample', 'input count below the minimum', 'total count below the minimum', 'counted at too few time points', 'summed bin frequency below the minimum', 'no estimate (a zero count with no pseudocount, or no fit from the bins)', 'fewer barcodes than the minimum'];
+// OUTSIDE_TILE: counted by a sample that holds several tiles, at a position outside the replicate's
+// own tile (wave 3, slice 6): another tile's replicates measure it.
+export const REPLICATE_STATE = { USED: 0, NOT_COUNTED: 1, INPUT_COUNT: 2, TOTAL_COUNT: 3, FEW_POINTS: 4, LOW_FREQUENCY: 5, NOT_ESTIMABLE: 6, FEW_BARCODES: 7, OUTSIDE_TILE: 8 };
+export const REPLICATE_STATE_NAMES = ['used', 'not counted in every sample', 'input count below the minimum', 'total count below the minimum', 'counted at too few time points', 'summed bin frequency below the minimum', 'no estimate (a zero count with no pseudocount, or no fit from the bins)', 'fewer barcodes than the minimum', 'outside its tile (another tile\'s replicates measure it)'];
 
 // Flags on a scored variant (bits): measurements to read with care, shown as low confidence.
 export const FLAG = { OUTPUT_ZERO: 1, INPUT_ZERO: 2, FEWER_REPLICATES: 4, FEWER_POINTS: 8 };
@@ -112,6 +119,7 @@ export function replicateState(counted, c0, total, filters, fewPoints = false) {
 // The variant-level stage before scoring that leaves a variant out, or 0: its identifier, class
 // or the exclusion list. `kind` and `invalid` from variants.js; `excluded` a Set of identifiers.
 export function variantStage(row, variants, excludeKinds, excluded) {
+  if (variants.otherTarget?.[row]) return STAGE_BY_ID.get('target').code;
   if (variants.status[row] === 3) return STAGE_BY_ID.get('identifier').code;
   if (excludeKinds.has(variants.kind[row])) return STAGE_BY_ID.get('class').code;
   if (excluded.size && (excluded.has(variants.key[row]) || excluded.has(variants.original[row]))) return STAGE_BY_ID.get('excluded').code;
@@ -123,10 +131,13 @@ export const kindCodes = (names) => new Set(names.map((name) => KIND_NAMES.index
 // The filter flow: how many variants each stage leaves out, and how many remain after it.
 // reasons: per variant the code of the stage that left it out (0: scored). The barcode stage is
 // listed for a barcode table only.
-export function filterFlow(reasons, barcodes = false) {
-  const stages = STAGES.filter((s) => barcodes || !s.barcodes);
-  const removed = new Map(stages.map((s) => [s.code, 0]));
+export function filterFlow(reasons, barcodes = false, published = false) {
+  // Published scores pass no stage of counts.
+  const all = published ? STAGES.filter((s) => s.published || ['target', 'identifier', 'class', 'excluded', 'se'].includes(s.id)) : STAGES.filter((s) => !s.published && (barcodes || !s.barcodes));
+  const removed = new Map(all.map((s) => [s.code, 0]));
   for (const r of reasons) if (r) removed.set(r, removed.get(r) + 1);
+  // The target's stage is listed when it sets rows aside (a score set of several targets).
+  const stages = all.filter((s) => s.id !== 'target' || removed.get(s.code));
   let remaining = reasons.length;
   return stages.map((s) => {
     remaining -= removed.get(s.code);

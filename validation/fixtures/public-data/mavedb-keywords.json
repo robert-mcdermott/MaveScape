@@ -1,0 +1,746 @@
+{
+ "source": "https://api.mavedb.org/api/v1/controlled-keywords/{key}",
+ "retrieved": "2026-10-10",
+ "keywords": {
+  "Variant Library Creation Method": [
+   {
+    "key": "Variant Library Creation Method",
+    "label": "Endogenous locus library method",
+    "special": false,
+    "description": "A methodology for generating a variant library at an endogenous locus"
+   },
+   {
+    "key": "Variant Library Creation Method",
+    "label": "In vitro construct library method",
+    "special": false,
+    "description": "A methodology for generating a variant library at an endogenous locus"
+   },
+   {
+    "key": "Variant Library Creation Method",
+    "label": "N/A (meta-analysis)",
+    "special": false,
+    "description": "A methodology for generating a variant library at an endogenous locus"
+   },
+   {
+    "key": "Variant Library Creation Method",
+    "label": "Other",
+    "special": false,
+    "description": "A methodology for generating a variant library at an endogenous locus"
+   }
+  ],
+  "Endogenous Locus Library Method System": [
+   {
+    "key": "Endogenous Locus Library Method System",
+    "label": "AsCas12a",
+    "special": false,
+    "description": "The system used to generate the library"
+   },
+   {
+    "key": "Endogenous Locus Library Method System",
+    "label": "Other",
+    "special": false,
+    "description": "The system used to generate the library"
+   },
+   {
+    "key": "Endogenous Locus Library Method System",
+    "label": "RfsCas13d",
+    "special": false,
+    "description": "The system used to generate the library"
+   },
+   {
+    "key": "Endogenous Locus Library Method System",
+    "label": "SaCas9",
+    "special": false,
+    "description": "The system used to generate the library"
+   },
+   {
+    "key": "Endogenous Locus Library Method System",
+    "label": "SpCas9",
+    "special": false,
+    "description": "The system used to generate the library"
+   }
+  ],
+  "Endogenous Locus Library Method Mechanism": [
+   {
+    "key": "Endogenous Locus Library Method Mechanism",
+    "label": "Base editor",
+    "special": false,
+    "description": "The functional mechanism of the library generation method"
+   },
+   {
+    "key": "Endogenous Locus Library Method Mechanism",
+    "label": "Nuclease",
+    "special": false,
+    "description": "The functional mechanism of the library generation method"
+   },
+   {
+    "key": "Endogenous Locus Library Method Mechanism",
+    "label": "Other",
+    "special": false,
+    "description": "The functional mechanism of the library generation method"
+   },
+   {
+    "key": "Endogenous Locus Library Method Mechanism",
+    "label": "Prime editor",
+    "special": false,
+    "description": "The functional mechanism of the library generation method"
+   }
+  ],
+  "In Vitro Construct Library Method System": [
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Doped oligo synthesis",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   },
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Error-prone PCR",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   },
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Microarray synthesis",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   },
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Nicking mutagenesis",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   },
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Oligo-directed mutagenic PCR",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   },
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Oligo pool synthesis",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   },
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Other",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   },
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Proprietary method",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   },
+   {
+    "key": "In Vitro Construct Library Method System",
+    "label": "Site-directed mutagenesis",
+    "special": false,
+    "description": "The type of method used to generate the library"
+   }
+  ],
+  "In Vitro Construct Library Method Mechanism": [
+   {
+    "key": "In Vitro Construct Library Method Mechanism",
+    "label": "Episomal delivery",
+    "special": false,
+    "description": "The mechanism for integration or expression of an exogenous construct"
+   },
+   {
+    "key": "In Vitro Construct Library Method Mechanism",
+    "label": "Extra-local construct insertion",
+    "special": false,
+    "description": "The mechanism for integration or expression of an exogenous construct"
+   },
+   {
+    "key": "In Vitro Construct Library Method Mechanism",
+    "label": "Native locus replacement",
+    "special": false,
+    "description": "The mechanism for integration or expression of an exogenous construct"
+   },
+   {
+    "key": "In Vitro Construct Library Method Mechanism",
+    "label": "Other",
+    "special": false,
+    "description": "The mechanism for integration or expression of an exogenous construct"
+   },
+   {
+    "key": "In Vitro Construct Library Method Mechanism",
+    "label": "Plasmid (not integrated)",
+    "special": false,
+    "description": "The mechanism for integration or expression of an exogenous construct"
+   },
+   {
+    "key": "In Vitro Construct Library Method Mechanism",
+    "label": "Random locus viral integration",
+    "special": false,
+    "description": "The mechanism for integration or expression of an exogenous construct"
+   },
+   {
+    "key": "In Vitro Construct Library Method Mechanism",
+    "label": "Transfection of RNA",
+    "special": false,
+    "description": "The mechanism for integration or expression of an exogenous construct"
+   }
+  ],
+  "Delivery Method": [
+   {
+    "key": "Delivery Method",
+    "label": "Adeno-associated virus transduction",
+    "special": false,
+    "description": "How the variant library was delivered to the model system for phenotype evaluation."
+   },
+   {
+    "key": "Delivery Method",
+    "label": "Chemical-based transfection",
+    "special": false,
+    "description": "How the variant library was delivered to the model system for phenotype evaluation."
+   },
+   {
+    "key": "Delivery Method",
+    "label": "Chemical or heat shock transformation",
+    "special": false,
+    "description": "How the variant library was delivered to the model system for phenotype evaluation."
+   },
+   {
+    "key": "Delivery Method",
+    "label": "Electroporation",
+    "special": false,
+    "description": "How the variant library was delivered to the model system for phenotype evaluation."
+   },
+   {
+    "key": "Delivery Method",
+    "label": "Lentivirus transduction",
+    "special": false,
+    "description": "How the variant library was delivered to the model system for phenotype evaluation."
+   },
+   {
+    "key": "Delivery Method",
+    "label": "Nucleofection",
+    "special": false,
+    "description": "How the variant library was delivered to the model system for phenotype evaluation."
+   },
+   {
+    "key": "Delivery Method",
+    "label": "Other",
+    "special": false,
+    "description": "How the variant library was delivered to the model system for phenotype evaluation."
+   }
+  ],
+  "Phenotypic Assay Method": [
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Binding assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Bulk RNA-sequencing",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Cell fitness",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Cell morphology assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Cell proliferation assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Cell proliferation assay with genetic complementation",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Direct protein function",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Electrophysiological method",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Flow cytometry assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Fluorescence in-situ hybridization (FISH) assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Genetic complementation",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Homology-directed DNA repair frequency measurement",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Imaging mass cytometry assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Ion channel assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Ion channel assay with electrophysicological method",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Localization assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Multiplexed fluorescent antibody imaging",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Not applicable (trained predictor)",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "One-hybrid assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Other",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Posttranslation modification assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Promoter activity detection by reporter gene assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Protein stability assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Reporter",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Reporter gene assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Single cell imaging",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Single-cell RNA sequencing assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Survival assessment assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   },
+   {
+    "key": "Phenotypic Assay Method",
+    "label": "Systematic evolution of ligands by exponential enrichment assay",
+    "special": false,
+    "description": "The assay method, defining the molecular properties interrogated."
+   }
+  ],
+  "Phenotypic Assay Mechanism": [
+   {
+    "key": "Phenotypic Assay Mechanism",
+    "label": "Dominant-negative effect",
+    "special": false,
+    "description": "The Gene Ontology (GO) is a structured, standardized representation of biological knowledge."
+   },
+   {
+    "key": "Phenotypic Assay Mechanism",
+    "label": "Gain of function",
+    "special": false,
+    "description": "The Gene Ontology (GO) is a structured, standardized representation of biological knowledge."
+   },
+   {
+    "key": "Phenotypic Assay Mechanism",
+    "label": "Gain or loss of function",
+    "special": false,
+    "description": "The Gene Ontology (GO) is a structured, standardized representation of biological knowledge."
+   },
+   {
+    "key": "Phenotypic Assay Mechanism",
+    "label": "Loss of function",
+    "special": false,
+    "description": "The Gene Ontology (GO) is a structured, standardized representation of biological knowledge."
+   },
+   {
+    "key": "Phenotypic Assay Mechanism",
+    "label": "Loss of function or dominant-negative effect",
+    "special": false,
+    "description": "The Gene Ontology (GO) is a structured, standardized representation of biological knowledge."
+   },
+   {
+    "key": "Phenotypic Assay Mechanism",
+    "label": "Other",
+    "special": false,
+    "description": "The Gene Ontology (GO) is a structured, standardized representation of biological knowledge."
+   }
+  ],
+  "Phenotypic Assay Model System": [
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Bacteria",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Bacteriophage",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Immortalized human cells",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Induced pluripotent stem cells from human female",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Induced pluripotent stem cells from human male",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Molecular display",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Murine primary cells",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Not applicable",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Other",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Patient derived primary cells (e.g. T-cells, adipocytes)",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   },
+   {
+    "key": "Phenotypic Assay Model System",
+    "label": "Yeast",
+    "special": false,
+    "description": "The model system context that influences expression of the phenotype."
+   }
+  ],
+  "Phenotypic Assay Profiling Strategy": [
+   {
+    "key": "Phenotypic Assay Profiling Strategy",
+    "label": "Barcode sequencing",
+    "special": false,
+    "description": "The strategy used to profile the variant library"
+   },
+   {
+    "key": "Phenotypic Assay Profiling Strategy",
+    "label": "Direct sequencing",
+    "special": false,
+    "description": "The strategy used to profile the variant library"
+   },
+   {
+    "key": "Phenotypic Assay Profiling Strategy",
+    "label": "Other",
+    "special": false,
+    "description": "The strategy used to profile the variant library"
+   },
+   {
+    "key": "Phenotypic Assay Profiling Strategy",
+    "label": "Shotgun sequencing",
+    "special": false,
+    "description": "The strategy used to profile the variant library"
+   }
+  ],
+  "Phenotypic Assay Sequencing Read Type": [
+   {
+    "key": "Phenotypic Assay Sequencing Read Type",
+    "label": "Multi-segment",
+    "special": false,
+    "description": "The sequencing method used"
+   },
+   {
+    "key": "Phenotypic Assay Sequencing Read Type",
+    "label": "Other",
+    "special": false,
+    "description": "The sequencing method used"
+   },
+   {
+    "key": "Phenotypic Assay Sequencing Read Type",
+    "label": "Single-segment (long read)",
+    "special": false,
+    "description": "The sequencing method used"
+   },
+   {
+    "key": "Phenotypic Assay Sequencing Read Type",
+    "label": "Single-segment (short read)",
+    "special": false,
+    "description": "The sequencing method used"
+   }
+  ],
+  "Phenotypic Assay Dimensionality": [
+   {
+    "key": "Phenotypic Assay Dimensionality",
+    "label": "Combined functional data",
+    "special": false,
+    "description": "A coding defining the dimensionality of the assay as single or multiple functional readouts."
+   },
+   {
+    "key": "Phenotypic Assay Dimensionality",
+    "label": "High-dimensional data",
+    "special": false,
+    "description": "A coding defining the dimensionality of the assay as single or multiple functional readouts."
+   },
+   {
+    "key": "Phenotypic Assay Dimensionality",
+    "label": "Other",
+    "special": false,
+    "description": "A coding defining the dimensionality of the assay as single or multiple functional readouts."
+   },
+   {
+    "key": "Phenotypic Assay Dimensionality",
+    "label": "Single-dimensional data",
+    "special": false,
+    "description": "A coding defining the dimensionality of the assay as single or multiple functional readouts."
+   }
+  ],
+  "Molecular Mechanism Assessed": [
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Calcium-mediated signaling",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Catalytic activity and Ornithine carbamoyltransferase activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Catalytic and Cysteine synthase activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Catalytic and Gluconokinase activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Catalytic and Hydroxymethylbilane synthase activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Catalytic and Lipid phosphatase activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Catalytic and Thiamine diphosphokinase activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Cellular response to cisplatin, DNA repair and Double-strand break repair via homologous recombination",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Core promoter sequence-specific DNA binding",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "DNA and Mismatch repair",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "DNA damage checkpoint signaling",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "DNA damage response, signal transduction by p53 class mediator and MDM2/MDM4 family protein binding",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "DNA repair and Double-strand break repair via homologous recombination",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Double-strand break repair, damage response, signal transduction by p53 class mediator and Response to etoposide",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Molecular condensate scaffold activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Molecular function",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Monoatomic ion transport and Potassium channel activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Monoatomic ion transport and Sodium ion transport",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Oxidative phosphorylation",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Protein carboxylation",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Protein glycosylation",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Protein localization to plasma membrane",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Regulation of protein stability",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Response to misfolded protein",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   },
+   {
+    "key": "Molecular Mechanism Assessed",
+    "label": "Sodium channel activity",
+    "special": false,
+    "description": "The biological or molecular process investigated by the assay"
+   }
+  ]
+ }
+}

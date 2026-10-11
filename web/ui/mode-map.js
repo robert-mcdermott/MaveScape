@@ -3,11 +3,18 @@
 // state drawn its own way and named in the legend; the median of each position above and of each
 // substitution at the right; target and reference numbering. Select by click or rectangle (the
 // selection is shared, the inspector shows its first variant), save selections by name, export SVG
-// and PNG. The map is described in words, and every cell is in the table below it.
+// and PNG. The map is described in words, and every cell is in the table below it. A nucleotide
+// run is drawn from its protein view (collapse.js); every variant not on the map (frameshifts,
+// splice-site, intronic and UTR variants, insertions, deletions, multi-variants) is in a table
+// beside it (wave 3, slice 3). Sequence tracks below the grid (ui/tracks.js; wave 3, slice 5): the
+// run's own and the workspace's annotations, arranged in the Tracks panel, in the exports and in
+// words.
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { promptDialog, showMenu, toast } from './overlays.js';
-import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, NO_DIFFERENTIAL, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, NO_DIFFERENTIAL, offMapRows, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { proteinView } from '../lib/collapse.js';
+import { KIND_NAMES } from '../lib/variants.js';
 import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, STAGE_BY_CODE } from '../lib/filters.js';
@@ -15,6 +22,8 @@ import { addSelection, removeSelection } from '../lib/workspace.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { mountVariantMap } from './variant-map.js';
 import { exportSelection } from './record.js';
+import { annotationsSignature, exportTracks, runTracks, tracksPanel } from './tracks.js';
+import { arrangeTracks, describeTrack, describeTrackAt, sourceText } from '../lib/tracks.js';
 
 // Named by their colors only: which end is loss of function depends on the assay (the readout).
 const PALETTES = [['rdbu', 'Blue (lower) – red (higher)'], ['puor', 'Purple (lower) – orange (higher)']];
@@ -25,14 +34,21 @@ export function mountMapMode(app, container) {
   const { store } = app;
   const root = h('div.view');
   container.append(root);
-  app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0 };
+  app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0, offKind: 'all', offPage: 0 };
   const view = app.mapView;
   let map = null;
   let mapKey = '';
   let model = null;
   let results = null;
+  // The run's own results (a nucleotide run's, whose protein view is `results`).
+  let own = null;
   let run = null;
   let cellOfKey = new Map();
+  // The tracks read for the model shown: { run, model, all, tracks (arranged), problems, notes }.
+  let trackState = null;
+  let tracksToken = 0;
+  const panel = tracksPanel(app);
+  const shownTracks = () => (trackState && trackState.model === model ? trackState.tracks.filter((t) => t.shown) : []);
 
   function currentRun() {
     const ws = store.ws;
@@ -85,13 +101,50 @@ export function mountMapMode(app, container) {
     renderSelectionBar();
   }
 
+  // A click on a track selects the variants of its position (a feature's: every position it covers).
+  function onTrackClick(track, position, add) {
+    const spans = track.kind === 'features' ? track.features.filter((f) => position >= f.start && position <= f.end).map((f) => [f.start, f.end]) : [];
+    if (!spans.length) spans.push([position, position]);
+    const R = model.rows.length;
+    const cells = new Set(add ? selectionCells() : []);
+    for (const [a, b] of spans) {
+      for (let p = a; p <= b; p += 1) {
+        for (let r = 0; r < R; r += 1) {
+          const k = (p - 1) * R + r;
+          if (model.state[k] === STATE.SCORED || model.state[k] === STATE.LOW || model.state[k] === STATE.FILTERED) cells.add(k);
+        }
+      }
+    }
+    map?.setSelection([...cells]);
+    onSelect(cells, null);
+  }
+
+  const trackWordsEl = h('div');
+  // Reads the run's tracks (its own at once, the annotations' from the library) and shows them.
+  async function refreshTracks() {
+    const token = (tracksToken += 1);
+    const r = run;
+    const m = model;
+    const state = await runTracks(app, r, m);
+    if (token !== tracksToken || m !== model) return;
+    trackState = { run: r, model: m, all: state.tracks, tracks: arrangeTracks(state.tracks, store.ws.tracks), problems: state.problems, notes: state.notes, signature: annotationsSignature(store.ws) };
+    app.trackStates ??= new Map();
+    app.trackStates.set(r.id, trackState);
+    map?.setTracks(shownTracks());
+    panel.update(trackState);
+    clear(trackWordsEl);
+    const shown = shownTracks();
+    if (shown.length) trackWordsEl.append(h('p.map-description', `Tracks below the map: ${shown.map((t) => describeTrack(t)).join(' ')}`));
+    if (store.ui.focus?.kind === 'variant') store.notify(['tracks']);
+  }
+
   // --- Export ------------------------------------------------------------------------------------
   const fileBase = () => `${(model.target.name || 'map').replace(/[^\w.-]+/g, '_')}${results.conditions.length > 1 ? `_${model.condition.name.replace(/[^\w.-]+/g, '_')}` : ''}${model.contrast ? '_differential' : ''}_${run.name.replace(/\s+/g, '')}`;
   function exportSVG() {
-    downloadBlob(new Blob([mapSVG(model, { palette: view.palette, results })], { type: 'image/svg+xml' }), `${fileBase()}.svg`);
+    downloadBlob(new Blob([mapSVG(model, { palette: view.palette, results, tracks: shownTracks() })], { type: 'image/svg+xml' }), `${fileBase()}.svg`);
   }
   async function exportPNG() {
-    const svg = mapSVG(model, { palette: view.palette, results });
+    const svg = mapSVG(model, { palette: view.palette, results, tracks: shownTracks() });
     const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
     try {
       const img = new Image();
@@ -135,6 +188,7 @@ export function mountMapMode(app, container) {
       h('button.btn.small', { type: 'button', onclick: (event) => showMenu(event.currentTarget, [
         { label: 'SVG (vector, for figures)', icon: 'download', onSelect: exportSVG },
         { label: 'PNG (3× resolution)', icon: 'download', onSelect: exportPNG },
+        { label: 'The tracks shown (CSV)', icon: 'download', disabled: !shownTracks().length, onSelect: () => exportTracks(app, run, model, shownTracks()) },
       ]) }, icon('download'), 'Export'));
   }
 
@@ -221,6 +275,47 @@ export function mountMapMode(app, container) {
     clear(tableEl).append(tableOf());
   }
 
+  // The variants not on the map, from the run's own rows: what each is, its protein change, its
+  // score or why it has none.
+  function offMapTable() {
+    const v = own.variants;
+    // In order along the target (the 5′ UTR first; an intronic variant after its exon's base).
+    const rows = offMapRows(own, model, own === results ? null : results).sort((a, b) => v.position[a] - v.position[b] || (v.key[a] < v.key[b] ? -1 : 1));
+    if (!rows.length) return null;
+    // Names shown without the target's accession, which every one of them repeats.
+    const shortName = (key) => key.replace(/^[A-Za-z0-9_.-]+:(?=[cgmnopr]\.)/, '');
+    const ci = conditionIndex();
+    const c = own.conditions[Math.max(0, ci)];
+    const kinds = [...new Set(rows.map((i) => v.kind[i]))].sort((a, b) => a - b);
+    const shownRows = view.offKind === 'all' ? rows : rows.filter((i) => KIND_NAMES[v.kind[i]] === view.offKind);
+    const pages = Math.max(1, Math.ceil(shownRows.length / PAGE));
+    view.offPage = Math.min(view.offPage, pages - 1);
+    const pick = h('select.input.small', { 'aria-label': 'Classes shown', onchange: () => { view.offKind = pick.value; view.offPage = 0; renderOffMap(); } },
+      h('option', { value: 'all', selected: view.offKind === 'all' }, 'Every class'),
+      ...kinds.map((k) => h('option', { value: KIND_NAMES[k], selected: view.offKind === KIND_NAMES[k] }, `${KIND_NAMES[k]} (${formatCount(rows.filter((i) => v.kind[i] === k).length)})`)));
+    const state = (i) => {
+      if (!c.reason[i]) return c.flags[i] ? 'low confidence' : 'scored';
+      const stage = STAGE_BY_CODE.get(c.reason[i]);
+      return stage?.id === 'measured' ? 'missing' : `filtered (${stage?.label.toLowerCase() ?? 'no score'})`;
+    };
+    return h('details.off-map', { open: view.offOpen ?? false, ontoggle: (e) => { view.offOpen = e.target.open; } },
+      h('summary', `Not on the map (${formatCount(rows.length)})`),
+      h('div.btn-row', { style: { margin: '8px 0' } }, pick, h('span.spacer'), h('span.muted', { style: { fontSize: '12px' } }, `${formatCount(shownRows.length)} variants`),
+        h('button.btn.small', { type: 'button', disabled: view.offPage === 0, 'aria-label': 'Previous page', onclick: () => { view.offPage -= 1; renderOffMap(); } }, '‹'),
+        h('span.muted', { style: { fontSize: '12px' } }, `${view.offPage + 1} / ${pages}`),
+        h('button.btn.small', { type: 'button', disabled: view.offPage >= pages - 1, 'aria-label': 'Next page', onclick: () => { view.offPage += 1; renderOffMap(); } }, '›')),
+      h('div.table-scroll', h('table.data', h('thead', h('tr', h('th', 'Variant'), h('th', 'Class'), v.proKey ? h('th', 'Protein') : null, h('th.r', 'Score'), h('th.r', 'SE'), h('th', 'State'))),
+        h('tbody', ...shownRows.slice(view.offPage * PAGE, (view.offPage + 1) * PAGE).map((i) => h('tr', { style: { cursor: 'pointer' }, onclick: () => app.focusItem({ kind: 'variant', id: v.key[i], run: run.id, condition: Math.max(0, ci) }) },
+          h('td.mono', { title: v.key[i] }, shortName(v.key[i])), h('td', KIND_NAMES[v.kind[i]]), v.proKey ? h('td.mono', v.proKey[i] || '—') : null,
+          h('td.r', c.reason[i] ? '—' : fmt(c.score[i])), h('td.r', c.reason[i] ? '—' : fmt(c.se[i])), h('td', state(i))))))));
+  }
+  const offMapEl = h('div');
+  function renderOffMap() {
+    clear(offMapEl);
+    const table = offMapTable();
+    if (table) offMapEl.append(table);
+  }
+
   // --- The view ----------------------------------------------------------------------------------
   function render() {
     clear(root);
@@ -242,7 +337,9 @@ export function mountMapMode(app, container) {
       destroyMap();
       return;
     }
-    results = entry.results;
+    own = entry.results;
+    // A nucleotide run is drawn at the protein level.
+    results = proteinView(own) ?? own;
     view.condition = Math.min(view.condition, results.conditions.length - 1);
     try {
       view.contrast = Math.min(view.contrast ?? 0, Math.max(0, (results.differential?.length ?? 1) - 1));
@@ -262,7 +359,10 @@ export function mountMapMode(app, container) {
     const key = `${run.id}|${model.contrast ? `Δ${view.contrast}` : view.condition}`;
     if (!map || mapKey !== key) {
       destroyMap();
-      map = mountVariantMap({ model, palette: view.palette, selected: [], describe: describeCell, onSelect });
+      map = mountVariantMap({
+        model, palette: view.palette, selected: [], describe: describeCell, onSelect, onTrackClick,
+        describeTrack: (t, p) => (p ? describeTrackAt(t, p, model.target.offset) : `${t.label}${t.source ? `: ${sourceText(t.source)}` : ''}`),
+      });
       mapKey = key;
       // Remote control zooms the map shown (ui/remote.js, render_map).
       app.mapControl = map;
@@ -272,13 +372,16 @@ export function mountMapMode(app, container) {
     map.setSelection(selectionCells());
     const description = describeMap(model, results);
     root.append(h('div.view-body.map-body',
-      h('div.pane.map-pane', controls(), legendEl, map.el, selectionEl),
-      h('div.pane', h('h3', icon('info'), 'In words'), ...description.map((line) => h('p.map-description', line)),
+      h('div.pane.map-pane', controls(), legendEl, map.el, selectionEl, panel.el),
+      h('div.pane', h('h3', icon('info'), 'In words'), ...description.map((line) => h('p.map-description', line)), trackWordsEl,
+        offMapEl,
         h('details', h('summary', 'Every cell as a table'), tableEl))));
     map.el.setAttribute('aria-description', description.join(' '));
     renderLegend();
     renderSelectionBar();
     renderTable();
+    renderOffMap();
+    refreshTracks();
   }
   function destroyMap() {
     map?.destroy();

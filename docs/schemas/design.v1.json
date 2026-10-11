@@ -182,17 +182,21 @@
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1, "description": "The name variant names give the target when it is not its id, name or an accession (MaveDB's label in a score set of several targets: LMNA:n.127G>A)." },
         "sequenceType": { "enum": ["dna", "protein"] },
         "sequence": { "type": "string", "minLength": 1 },
         "codingStart": { "type": "integer", "minimum": 1, "description": "DNA targets: the first base of the reading frame (1-based)." },
         "offset": { "type": "integer", "description": "Added to target positions to give positions in the reference protein (UniProt numbering)." },
         "organism": { "type": "string" },
+        "taxonomyId": { "type": "integer", "minimum": 1, "description": "The organism's NCBI Taxonomy id (9606 for Homo sapiens), as MaveDB keeps it with a target sequence." },
         "identifiers": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "uniprot": { "type": "string" },
             "refseq": { "type": "string" },
+            "genbank": { "type": "string", "description": "An INSDC (GenBank, ENA, DDBJ) nucleotide accession, such as a plasmid's." },
+            "protein": { "type": "string", "description": "The protein's RefSeq or Ensembl accession (NP_009225.1, ENSP00000269305.4), as protein variant names may be prefixed." },
             "ensembl": { "type": "string" },
             "gene": { "type": "string" }
           }

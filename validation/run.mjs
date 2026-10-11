@@ -5,9 +5,10 @@
 //
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
-// Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
-// data), experiment (external data), scoring, qc, map and roundtrip (their last checks need
-// external data), readiness, examples (its last checks need external data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// Suites: accessibility, designs (external data), enrich2 (external data), hgvs, consequences
+// (external data), import (external data), experiment (external data), scoring, qc, map and
+// roundtrip (their last checks need external data), readiness, examples (its last checks need
+// external data), public-data; all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -22,24 +23,30 @@ import { textPairs, themeTokens } from './accessibility-cases.mjs';
 import { DESIGN_CASES, dataChecks, readDesign, readTable } from './design-cases.mjs';
 import { checkSchema } from './json-schema.mjs';
 import { enrich2Combination, normalizers, ratioScores, regressionScores, replicateCounts } from './enrich2-formulas.mjs';
-import { summarizeDesign, validateDesign } from '../web/lib/design.js';
-import { parseHgvs, formatPosition } from '../web/lib/hgvs.js';
+import { multiTileSamples, sharedSamples, summarizeDesign, validateDesign } from '../web/lib/design.js';
+import { parseHgvs, formatPosition, targetMismatches } from '../web/lib/hgvs.js';
+import { codingFrame, consequenceOf, nucleotideMismatches } from '../web/lib/consequence.js';
+import { compareConsequences, compareDimsumAggregate, compareGenBank, sameProtein, transcriptOf } from './consequence-cases.mjs';
+
 import { cellText, columnText, createTableParser, parseTable } from '../web/lib/csv.js';
 import { detectLayout, draftDesign, namesFromSequences, reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { buildCountSet, joinCountTables } from '../web/lib/counts.js';
-import { KIND_NAMES } from '../web/lib/variants.js';
-import { parseFasta, targetFromSequence } from '../web/lib/target.js';
+import { buildVariants, KIND, KIND_NAMES, summarizeVariants } from '../web/lib/variants.js';
+import { parseFasta, targetFromSequence, targetProtein } from '../web/lib/target.js';
 import { createRandom, shuffle } from '../web/lib/random.js';
 import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
 import { designFromSampleSheet, designStructure, sampleSheetCSV } from '../web/lib/samplesheet.js';
-import { readinessDatasets, REMOVALS, caseOf, probe } from './readiness-cases.mjs';
+import { readinessDatasets, REMOVALS, caseOf, probe, workspaceOf } from './readiness-cases.mjs';
 import { writePackage } from '../web/lib/package.js';
-import { EXAMPLE_DATASETS, openExampleInNode, raisedOf } from './example-cases.mjs';
+import { cachedRecord, EXAMPLE_DATASETS, exampleRecords, MissingExampleData, openExampleInNode, raisedOf, recordTable, recordTarget } from './example-cases.mjs';
 import { proteinChange } from '../web/lib/codons.js';
+import { placeTarget, placementPatch, readUniProtEntry, referenceOf, uniparcEntries } from '../web/lib/uniprot.js';
+import { countsDesign, mappedCSV, mappedVariants, readMapped, readoutOf, readScoreSet, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
+import { writeMethods } from '../web/lib/methods.js';
 import { intervalOf } from '../web/lib/exports.js';
 import { readZip } from '../web/lib/zip.js';
 import { readiness } from '../web/lib/readiness.js';
-import { acknowledgeFinding, addSource, addTarget, createWorkspace, parseWorkspace, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
+import { acknowledgeFinding, addSource, addTarget, createWorkspace, parseWorkspace, recordTargetCheck, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
 const formatCount = (n) => n.toLocaleString('en-US');
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
@@ -51,6 +58,16 @@ import { dmsVariantsName } from '../web/lib/barcodes.js';
 import { compareDimsum, demoCase, dimsumReference, fixtureCase, grb2Case } from './dimsum-cases.mjs';
 import { cbsCase, compareLimma, mutscanReference, twoConditionCase } from './differential-cases.mjs';
 import { DIFFERENTIAL_REASON_NAMES } from '../web/lib/differential.js';
+import { exampleContext, fixture as annotationFixture, nodeTracks, publicAnnotations, reference as annotationReference } from './annotation-cases.mjs';
+import { annotationTracks, providerById as annotationProvider } from '../web/lib/providers/index.js';
+import { readProfile } from '../web/lib/providers/pdbe.js';
+import { readClinVarTable } from '../web/lib/providers/clinvar.js';
+import { gnomadRows } from '../web/lib/providers/gnomad.js';
+import { clinvarClass, REVIEW_STARS, tracksCSV } from '../web/lib/tracks.js';
+import { addAnnotation } from '../web/lib/workspace.js';
+import { createHash } from 'node:crypto';
+import { proteinView } from '../web/lib/collapse.js';
+import { spearman } from '../web/lib/stats.js';
 import { tQuantile } from '../web/lib/distributions.js';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
@@ -77,6 +94,8 @@ import { readArchive, writeArchive } from '../web/lib/archive.js';
 import { createZip } from '../web/lib/zip.js';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLES, exampleById, simulatedExample } from '../web/lib/examples.js';
+import { depositPackages, exampleRoundTrip, mavedbHashes, roundTrip } from './mavedb-export-cases.mjs';
+import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
@@ -366,6 +385,141 @@ const suites = {
     check('hgvs', `the reason for refusing, word for word (${reference.counts.invalid} refused)`, `${show(disagree.reason)} differ`, !disagree.reason.length, '0');
     check('hgvs', `the canonical form (${reference.counts.valid} valid)`, `${show(disagree.canonical)} differ`, !disagree.canonical.length, '0');
     check('hgvs', 'the prefix, target, variant types, positions, sequences, synonymous and identical flags', `${show(disagree.parts)} differ`, !disagree.parts.length, '0');
+    // mavehgvs's own tests against a target sequence (wave 3, slice 3): protein variants by
+    // hgvs.js's check, nucleotide variants by consequence.js's (the target read from its first base).
+    const against = reference.targets.map((t) => {
+      const p = parseHgvs(t.s);
+      const ok = p.ok && !(p.prefix === 'p' ? targetMismatches(p, t.target) : nucleotideMismatches(p, codingFrame({ sequenceType: 'dna', sequence: t.target, codingStart: 1 }))).length;
+      return { ...t, ours: ok };
+    });
+    const differ = against.filter((t) => t.ours !== t.ok);
+    check('hgvs', `against a target sequence, valid or not as mavehgvs decides: its own tests (${against.length} pairs, ${against.filter((t) => t.ok).length} valid)`, `${differ.length ? `${differ.length}: ${differ.slice(0, 3).map((t) => `${t.s} on ${t.target}`).join('; ')}` : 0} disagree`, against.length >= 50 && !differ.length, '0');
+  },
+
+  // Full MAVE-HGVS (wave 3, slice 3): each nucleotide variant's protein change against biocommons
+  // hgvs's (reference/consequences.json), the targets from GenBank against Biopython's reading
+  // (reference/genbank.json), the merge at the protein level against DiMSum's own code
+  // (reference/dimsum-aggregate.json), the protein names published beside nucleotide names, and
+  // every variant of the imported records read against its target.
+  consequences() {
+    const reference = JSON.parse(readFileSync(new URL('./reference/consequences.json', import.meta.url), 'utf8'));
+    const counted = reference.transcripts.map((t) => `${t.transcript} ${t.published} published + ${t.generated} generated`).join('; ');
+    check('consequences', 'reference made with', `biocommons hgvs ${reference.versions.hgvs}, Biopython ${reference.versions.biopython}: ${counted}`, reference.versions.hgvs === '1.5.7', 'hgvs 1.5.7');
+    const compared = compareConsequences(reference);
+    check('consequences', `each nucleotide variant's protein change as biocommons hgvs's, in MAVE-HGVS's forms (${compared.compared} variants on three transcripts: substitutions, nonsense, frameshifts, start and stop lost, deletions, insertions, duplications, deletion-insertions, UTR and splice)`, `${compared.agree} agree (${Object.entries(compared.byForm).map(([k, v]) => `${k} ${v}`).join(', ')}); ${compared.disagree.length ? `${compared.disagree.length} differ: ${compared.disagree.slice(0, 3).map((d) => `${d.c} ${d.theirs} → ${d.ours}`).join('; ')}` : 'none differs'}`, compared.compared >= 16000 && !compared.disagree.length, 'all');
+
+    // GenBank: four records as Biopython reads them.
+    const genbank = compareGenBank(JSON.parse(readFileSync(new URL('./reference/genbank.json', import.meta.url), 'utf8')));
+    check('consequences', 'GenBank records read as Biopython reads them (two RefSeq mRNAs, a plasmid of three coding features, one on the reverse strand, and a gene joined from three exons): each record\'s fields and sequence, every feature\'s location, each coding feature\'s bases, translation and check against the record\'s own', `${genbank.records} records, ${genbank.features} features, ${genbank.coding} coding; ${genbank.differ.length ? `${genbank.differ.length} differ: ${genbank.differ.slice(0, 3).map((d) => `${d.record} ${d.field}`).join('; ')}` : 'none differs'}`, genbank.records === 4 && genbank.coding === 6 && !genbank.differ.length, 'all');
+
+    // Every variant of the imported records, against its target: the feasibility tables, the
+    // examples' and the records with a transcript for their target.
+    const rec = (urn) => readScoreSet(JSON.parse(readFileSync(new URL(`fixtures/public-data/mavedb/${urn.replaceAll(':', '_')}.json`, import.meta.url), 'utf8')));
+    const designs = Object.fromEntries(DESIGN_CASES.map((c) => [c.name, readDesign(c.design)]));
+    const example = (id) => JSON.parse(readFileSync(new URL(`../web/${exampleById(id).files.design}`, import.meta.url), 'utf8'));
+    const cbs = cbsCase(dataset('mavedb-cbs')).design.targets[0];
+    const tables = [
+      ['GRB2 SH3 (counts)', 'mavedb-grb2-sh3', 'counts.csv', 'protein', example('grb2-sh3').targets[0]],
+      ['BRCA1 RING, amino acids', 'mavedb-brca1-ring', 'aa/counts.csv', 'protein', designs['brca1-ring-e2'].targets[0]],
+      ['BRCA1 RING, nucleotides', 'mavedb-brca1-ring', 'nt/counts.csv', 'nucleotide', designs['brca1-ring-e2'].targets[0]],
+      ['factor IX', 'mavedb-factor9', 'counts.csv', 'protein', designs.factor9.targets[0]],
+      ['Hsp90 (codons)', 'mavedb-hsp90', 'counts.csv', 'nucleotide', example('hsp90').targets[0]],
+      ['CBS, low B6', 'mavedb-cbs', 'low-b6-counts.csv', 'nucleotide', cbs],
+      ['CBS, high B6', 'mavedb-cbs', 'high-b6-counts.csv', 'nucleotide', cbs],
+      ['PTEN (scores)', 'mavedb-pten-vampseq', 'scores.csv', 'protein', recordTarget(rec('urn:mavedb:00000013-a-1'))],
+      ['BRCA1 SGE (scores; NM_007294.3)', 'mavedb-brca1-sge', 'scores.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00000097-0-2'))],
+      ['BRCA1 SGE (counts)', 'mavedb-brca1-sge', 'counts.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00000097-0-2'))],
+      ['TP53 DNA-binding domain (NM_000546.6)', 'mavedb-tp53-dbd', 'scores.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00001277-a-1'))],
+      ['BAP1 exon 1 (ENST00000460680.5, read on .6)', 'mavedb-bap1-sge', 'scores.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00000662-a-2'))],
+      ['TP53 base editing (ENST00000269305.9)', 'mavedb-tp53-base-editing', 'scores.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00001245-a-1'))],
+    ];
+    const lines = [];
+    let all = true;
+    let names = 0;
+    let badNames = [];
+    const kinds = {};
+    const readTables = new Map();
+    for (const [label, set, path, level, target] of tables) {
+      const table = parseTable(dataset(set).bytes(path));
+      readTables.set(label, { table, target });
+      const column = level === 'protein' ? 'hgvs_pro' : 'hgvs_nt';
+      const v = buildVariants(columnText(table.columns.find((c) => c.name === column)), { level, target });
+      const s = summarizeVariants(v);
+      if (v.proKey) {
+        for (let i = 0; i < v.n; i += 1) {
+          if (!v.proKey[i]) continue;
+          names += 1;
+          if (!parseHgvs(v.proKey[i]).ok) badNames.push(v.proKey[i]);
+          kinds[KIND_NAMES[v.kind[i]]] = (kinds[KIND_NAMES[v.kind[i]]] ?? 0) + 1;
+        }
+      }
+      lines.push(`${label}: ${s.valid + s.warning} of ${s.total}${s.warning ? ` (${s.warning} leniently)` : ''}`);
+      all &&= s.invalid === 0 && s.total > 0;
+    }
+    check('consequences', 'every variant of the imported records parses and agrees with its target: the feasibility tables, the examples\' and the records whose target is a transcript (fetched as NCBI and Ensembl send them)', lines.join('; '), all, 'every one');
+    // Their protein changes, and the reference's, are MAVE-HGVS as mavehgvs reads it (strict).
+    for (const entry of reference.transcripts) {
+      const frame = codingFrame(transcriptOf(entry));
+      for (const [c] of entry.variants) {
+        const parsed = parseHgvs(c, { mode: 'lenient' });
+        const out = parsed.ok ? consequenceOf(parsed, frame) : null;
+        if (out?.protein) {
+          names += 1;
+          if (!parseHgvs(out.protein).ok) badNames.push(out.protein);
+        }
+      }
+    }
+    badNames = [...new Set(badNames)];
+    check('consequences', 'every protein change MaveScape names is MAVE-HGVS, strict (as mavehgvs reads it)', `${names} names (of the records: ${Object.entries(kinds).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ')}); ${badNames.length ? `${badNames.length} not: ${badNames.slice(0, 3).join(', ')}` : 'all are'}`, names > 20000 && !badNames.length, 'all');
+
+    // The protein names the records publish beside their nucleotide names: the same protein.
+    const published = [['TP53 base editing (ENST00000269305.9)', 465], ['CBS, low B6', 11478], ['CBS, high B6', 10802], ['BRCA1 RING, nucleotides', 20724], ['Hsp90 (codons)', 568]];
+    const pubLines = [];
+    let pubAll = true;
+    for (const [label, rows] of published) {
+      const { table, target } = readTables.get(label);
+      const nt = columnText(table.columns.find((c) => c.name === 'hgvs_nt'));
+      const pro = columnText(table.columns.find((c) => c.name === 'hgvs_pro'));
+      const v = buildVariants(nt, { level: 'nucleotide', target });
+      let exact = 0;
+      let same = 0;
+      const differ = [];
+      pro.forEach((p, i) => {
+        const theirs = p.replace(/^[^:]+:(?=p\.)/, '');
+        if (v.proKey[i] === theirs) exact += 1;
+        if (sameProtein(theirs, v.proKey[i], KIND_NAMES[v.kind[i]])) same += 1;
+        else differ.push(`${nt[i]}: ${theirs}, not ${v.proKey[i]}`);
+      });
+      pubLines.push(`${label}: ${same} of ${table.rows} (${exact} written alike)${differ.length ? `; ${differ.slice(0, 2).join('; ')}` : ''}`);
+      pubAll &&= table.rows === rows && same === rows;
+    }
+    check('consequences', 'the protein names the records publish beside their nucleotide names describe the protein MaveScape\'s translation makes (written alike, or as MaveScape writes them: p.Asp41= for p.Asp41Asp, a substitution\'s codon left synonymous unnamed, nothing after a stop, a change of the start codon start lost)', pubLines.join('; '), pubAll, 'every one');
+
+    // Several targets: VarChAMP's 28 genes, each opened on its own, the others' variants set aside.
+    {
+      const record = rec('urn:mavedb:00001237-a-1');
+      const table = parseTable(dataset('mavedb-varchamp').bytes('scores.csv'));
+      const names = columnText(table.columns.find((c) => c.name === 'hgvs_nt'));
+      const choices = targetsOf(record).choices;
+      let read = 0;
+      let elsewhere = true;
+      for (const choice of choices) {
+        const { targets, others } = targetsOf(record, { target: choice.label });
+        const v = buildVariants(names, { level: 'nucleotide', target: targets[0] });
+        const s = summarizeVariants(v);
+        read += s.valid + s.warning;
+        elsewhere &&= s.invalid === 0 && s.otherTarget + s.valid + s.warning === names.length && others.length === choices.length - 1;
+      }
+      const genome = targetsOf(rec('urn:mavedb:00001228-a-1'));
+      check('consequences', 'a score set of several targets (VarChAMP, 28 genes) opened one target at a time: each one\'s variants valid on it, the others\' set aside; a genome named as the target (DDX3X\'s saturation genome editing, NC_000023.11) is not fetched, and says so', `${choices.length} targets; ${read} of ${names.length} variants read on their own target${elsewhere ? ', the rest set aside each time' : ''}; the genome: ${genome.problems[0]?.slice(0, 80)}…`, choices.length === 28 && read === names.length && elsewhere && !genome.targets.length && !genome.pending.length && /does not fetch a genome/.test(genome.problems[0]), '28; all; refused');
+    }
+
+    // DiMSum's merge: CBS's codon variants with the fitness and sigma DiMSum was given.
+    {
+      const aggregate = JSON.parse(readFileSync(new URL('./reference/dimsum-aggregate.json', import.meta.url), 'utf8'));
+      const d = compareDimsumAggregate(aggregate, readTables.get('CBS, low B6').table, cbs);
+      check('consequences', 'nucleotide variants merged at the protein level as DiMSum 1.4 merges them (its dimsum__aggregate_AA_variants_fitness, mixedSubstitutions = FALSE): CBS\'s 11,478 codon variants, each amino-acid variant\'s fitness the inverse-variance mean of its codons\', its sigma √(1/Σ 1/σ²); synonymous codons, which DiMSum keeps apart, each a member of MaveScape\'s synonymous cell', `${d.merged} amino-acid variants (${d.view.collapse.merged} merged from ${d.view.collapse.mergedFrom} codon variants; ${d.unscored} with no fitness either side), largest relative difference ${d.worst.toExponential(1)}; ${d.missing.length} missing, ${d.extra.length} extra; ${d.synonymous - d.misplaced.length} of ${d.synonymous} synonymous in place`, d.merged === 7561 && d.worst <= 1e-12 && !d.missing.length && !d.extra.length && !d.misplaced.length, '≤ 1e-12; none');
+    }
   },
 
   // Import (wave 1, slice 3): the feasibility tables, DiMSum's demo and a table with one problem
@@ -1366,7 +1520,7 @@ const suites = {
         for (let i = 0; i < results.rows; i += 1) if (!c.reason[i]) pairs.push([results.variants.key[i], e2Condition.score[i], c.score[i]], [`${results.variants.key[i]} SE`, e2Condition.se[i], c.se[i]]);
       }
       const dd = worstDifference(pairs);
-      check('scoring', 'BRCA1, the whole table drafted from its column names: E2 binding (6 time points) and Y2H (4) become two conditions, scored apart; the E2 condition scores as the hand-written E2 design does', `${both.conditions.map((c) => `${c.name}: ${c.replicates.length} replicates, ${formatCount(c.scored)} scored`).join('; ')}; E2 against the hand-written design ${dd.worst.toExponential(2)} over ${pairs.length / 2} variants`, both.conditions.length === 2 && !!e2Condition && dd.worst <= 1e-12 && pairs.length > 0, 'two conditions; ≤ 1e-12');
+      check('scoring', 'BRCA1, the whole table drafted from its column names: the phage assay of E3 ligase activity ("PlusE2", 6 time points) and Y2H (4) become two conditions, scored apart; the phage condition scores as the hand-written design does', `${both.conditions.map((c) => `${c.name}: ${c.replicates.length} replicates, ${formatCount(c.scored)} scored`).join('; ')}; E2 against the hand-written design ${dd.worst.toExponential(2)} over ${pairs.length / 2} variants`, both.conditions.length === 2 && !!e2Condition && dd.worst <= 1e-12 && pairs.length > 0, 'two conditions; ≤ 1e-12');
       // Factor IX (MultiSTEP): its published replicate and combined scores from its counts.
       const f9Table = parseTable(dataset('mavedb-factor9').bytes('counts.csv'));
       const f9Design = readDesign('factor9.design.json');
@@ -1782,7 +1936,7 @@ const suites = {
     const zinc = new Set([24, 27, 39, 41, 44, 47, 61, 64]);
     const least = positions.slice(0, 5);
     const ligands = least.filter(([p]) => zinc.has(p)).length;
-    check('map', 'BRCA1 RING (E2 binding): the positions least tolerant of substitution are the RING domain\'s zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64)', `${least.map(([p, m, aa]) => `${aa}${p} ${m.toFixed(2)}`).join(', ')}; ${ligands} of 5 are zinc ligands; ${b.offMap} multi-variants off the map`, ligands >= 4, '≥ 4 of the 5');
+    check('map', 'BRCA1 RING (E3 ligase activity, phage autoubiquitination): the positions least tolerant of substitution are the RING domain\'s zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64)', `${least.map(([p, m, aa]) => `${aa}${p} ${m.toFixed(2)}`).join(', ')}; ${ligands} of 5 are zinc ligands; ${b.offMap} multi-variants off the map`, ligands >= 4, '≥ 4 of the 5');
   },
   // The record (wave 1, slice 8): a workspace saved as a .msz archive, reopened and exported again
   // gives the same bytes, for the archive and for every export; exported scores and counts import
@@ -1990,19 +2144,22 @@ const suites = {
           check('roundtrip', `${file}: ${run.name} is recomputed`, again.errors[0], false, 'scored');
           continue;
         }
-        last ??= { run, table: t, results: again.results };
+        // The run its first selection is of (or its first run): the one whose exports are made again.
+        if (!last || run.id === opened.ws.selections[0]?.run) last = { run, table: t, results: again.results };
         const verdict = reproduction(run, outputDigest(again.results), 'this version');
         // Against the scores the archive holds for the run (results/<run>.csv), when it holds them.
         const held = opened.results.get(`results/${run.id}.csv`);
         let worst = 0;
         if (held) {
           const scores = parseTable(new TextEncoder().encode(held));
-          const col = (name) => scores.columns.find((c) => c.name === name).numeric;
+          // Published scores may have no SE (0.3's): an SE is in both, or in neither.
+          const col = (name) => scores.columns.find((c) => c.name === name)?.numeric ?? null;
           const [score, se] = [col('score'), col('SE')];
           const c = again.results.conditions[0];
           for (let i = 0; i < c.score.length; i += 1) {
-            if (Number.isFinite(score[i]) !== Number.isFinite(c.score[i])) worst = Infinity;
-            else if (Number.isFinite(score[i])) worst = Math.max(worst, Math.abs(c.score[i] - score[i]) / Math.max(1, Math.abs(score[i])), Math.abs(c.se[i] - se[i]) / Math.max(1, se[i]));
+            const [heldSE, againSE] = [se?.[i] ?? NaN, c.se?.[i] ?? NaN];
+            if (Number.isFinite(score[i]) !== Number.isFinite(c.score[i]) || Number.isFinite(heldSE) !== Number.isFinite(againSE)) worst = Infinity;
+            else if (Number.isFinite(score[i])) worst = Math.max(worst, Math.abs(c.score[i] - score[i]) / Math.max(1, Math.abs(score[i])), Number.isFinite(heldSE) ? Math.abs(againSE - heldSE) / Math.max(1, heldSE) : 0);
           }
         }
         const older = run.inputs.scoring !== SCORING_VERSION;
@@ -2016,7 +2173,15 @@ const suites = {
         // The reopened workspace makes its QC (with its own thresholds), exports and methods.
         const made = allExports({ ...opened.ws, runs: [last.run] }, last.table, last.results);
         const thresholds = withDefaultThresholds(opened.ws.qc?.thresholds);
-        check('roundtrip', `${file}: the reopened workspace keeps its QC thresholds and selection, and makes its exports and methods`, `replicate agreement review at ${thresholds.agreement.review}; selection "${opened.ws.selections[0]?.name}" of ${opened.ws.selections[0]?.keys.length} variants; ${Object.keys(made).length - 1} files`, Object.values(made).every((x) => x) && made['methods.md'].includes(last.run.output.sha256) && opened.ws.qc?.thresholds?.agreement?.review === thresholds.agreement.review, 'all made');
+        check('roundtrip', `${file}: the reopened workspace keeps its QC thresholds (where changed) and selection, and makes its exports and methods`, `replicate agreement review at ${thresholds.agreement.review}; selection "${opened.ws.selections[0]?.name}" of ${opened.ws.selections[0]?.keys.length} variants; ${Object.keys(made).length - 1} files`, Object.values(made).every((x) => x) && made['methods.md'].includes(last.run.output.sha256) && (!opened.ws.qc?.thresholds || opened.ws.qc.thresholds.agreement?.review === thresholds.agreement.review), 'all made');
+        // The annotations beside the map (0.3's) read again from the archive's own files, arranged as
+        // the workspace keeps them.
+        if (opened.ws.annotations?.length) {
+          const tracks = nodeTracks(opened.ws, last.run, buildMapModel(proteinView(last.results) ?? last.results, last.run.inputs.design), opened.sources, { results: last.results, table: last.table });
+          const per = opened.ws.annotations.map((a) => [a.name, tracks.filter((t) => t.id.startsWith(`${a.id}:`)).length]);
+          const order = opened.ws.tracks?.order ?? [];
+          check('roundtrip', `${file}: its annotations' tracks read again from the archive's own files, in the order the workspace keeps`, `${per.map(([n, k]) => `${n} ${k}`).join(', ')}; first ${tracks[0]?.label}`, per.every(([, k]) => k > 0) && (!order.length || tracks[0]?.id === order[0]), 'each a track or more, in order');
+        }
       }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
@@ -2091,7 +2256,16 @@ const suites = {
     const pct = (x) => `${(100 * x).toFixed(1)}%`;
     const opened = new Map();
     for (const example of EXAMPLES) {
-      const o = openExampleInNode(example);
+      let o;
+      try {
+        o = openExampleInNode(example);
+      } catch (error) {
+        // An example opened from MaveDB needs its table (external data).
+        if (!(error instanceof MissingExampleData)) throw error;
+        console.log(`  ${example.title}: skipped (${error.message})`);
+        if (requireData) check('examples', `${example.title}: its table present`, error.message, false, 'present (--require-data)');
+        continue;
+      }
       opened.set(example.id, o);
       const valid = validateDesign(o.design, { columns: o.table.columns.map((c) => c.name) });
       const raised = raisedOf(o.findings);
@@ -2100,7 +2274,17 @@ const suites = {
       const missing = (example.teaches ?? []).filter((g) => !gaps.includes(g));
       check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
       check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
-      if (!example.simulated) {
+      if (example.mavedb) {
+        // Opened from MaveDB: its tables the ones the example was made with (and the validation
+        // pins), each record's license the example's (several records, wave 3 slice 6).
+        const set = sources.datasets[EXAMPLE_DATASETS[example.id]];
+        const tables = exampleRecords(example).flatMap((r) => ['scores', 'counts'].filter((f) => r[f]).map((f) => {
+          const t = recordTable(example, r.urn, f);
+          const pin = set?.files.find((x) => x.path === t.relative);
+          return { urn: r.urn, file: f, ok: sha256(t.bytes) === r[f].sha256 && pin?.sha256 === r[f].sha256 && t.bytes.length === r[f].size, license: cachedRecord(r.urn).license.short };
+        }));
+        check('examples', `${example.title}: MaveDB's tables are the ones the example was made with, and its records name the license and citation the example gives`, tables.map((t) => `${t.urn.replace('urn:mavedb:', '')} ${t.file} ${t.ok ? 'the same' : 'changed'} (${t.license})`).join('; '), tables.length > 0 && tables.every((t) => t.ok && example.license.startsWith(t.license)), 'the same; CC0');
+      } else if (!example.simulated) {
         const bytes = o.parts[0].bytes;
         const file = sources.datasets[EXAMPLE_DATASETS[example.id]]?.files.find((f) => f.path === 'counts.csv');
         const notice = readFileSync(new URL(`../web/${example.files.notice}`, import.meta.url), 'utf8');
@@ -2155,6 +2339,158 @@ const suites = {
       check('examples', 'the simulated problems: the recorded cells account for the excess between replicates 1 and 2, not with replicate 3; with replicate 3 the intervals are too wide and DiMSum\'s terms misplace the bottleneck after selection; without it the scores come closer to the truth, the intervals hold it about 95% of the time, and the bottleneck is placed before selection, where it was planted', `cells: rep1–rep2 ${verdict('rep1', 'rep2')}, rep1–rep3 ${verdict('rep1', 'rep3')}, rep2–rep3 ${verdict('rep2', 'rep3')}; all three r ${all.r.toFixed(3)}, intervals ${pct(all.held)}, DiMSum's terms at the ${placed(o)}; without replicate 3 r ${two.r.toFixed(3)}, ${pct(two.held)}, at the ${placed(without)}`, verdict('rep1', 'rep2') === 'explained' && verdict('rep1', 'rep3') === 'more' && verdict('rep2', 'rep3') === 'more' && all.held > 0.98 && two.held >= 0.93 && two.held <= 0.97 && two.r > all.r && placed(o) === 'output' && placed(without) === 'input', 'explained, more, more; > 98%, output; 93–97%, closer, input');
     }
 
+    // BRCA1's saturation genome editing (wave 3, slice 3): its counts, drafted from their names into
+    // two replicates of day 5 and day 11, scored, against the published scores (normalized exon by
+    // exon and for position within each, which the counts do not record).
+    if (opened.has('brca1-sge')) {
+      const o = opened.get('brca1-sge');
+      const record = readScoreSet(JSON.parse(readFileSync(new URL('fixtures/public-data/mavedb/urn_mavedb_00000097-0-2.json', import.meta.url), 'utf8')));
+      const counts = parseTable(dataset('mavedb-brca1-sge').bytes('counts.csv'));
+      const countsSha = sha256(dataset('mavedb-brca1-sge').bytes('counts.csv'));
+      const { design } = countsDesign(record, { table: counts, layout: detectLayout(counts), target: o.design.targets[0] });
+      const ws = workspaceOf(counts, design, { layout: 'mavedb-counts' });
+      const scored = scoreTable(counts, design, defaultParameters(design, ws.sources[0]));
+      const c = scored.results.conditions[0];
+      const published = new Map(columnText(o.table.columns.find((x) => x.name === 'hgvs_nt')).map((k, i) => [k, o.table.columns.find((x) => x.name === 'score').numeric[i]]));
+      const a = [];
+      const b = [];
+      scored.results.variants.original.forEach((k, i) => { if (!c.reason[i] && Number.isFinite(published.get(k))) { a.push(c.score[i]); b.push(published.get(k)); } });
+      const r = pearson(a, b);
+      const example = exampleById('brca1-sge');
+      check('examples', 'BRCA1\'s saturation genome editing: its counts (the example\'s table) drafted from their names into two replicates of day 5 and day 11, the library and RNA counts set aside, and scored with the defaults, agree with the published scores as the guide says (r ≈ 0.76): the published scores were normalized exon by exon and for position within each', `counts ${countsSha.slice(0, 12)}…; ${design.model}, ${design.replicates.map((x) => `${x.name}: ${x.timepoints.map((t) => t.time).join('→')}`).join(', ')}; set aside ${(design.ignoredColumns ?? []).map((x) => x.column).join(', ')}; ${c.scored} scored, r ${r.toFixed(3)} with ${a.length} published`, countsSha === example.mavedb.counts.sha256 && design.model === 'time-series' && design.replicates.length === 2 && design.replicates.every((x) => x.timepoints.length === 2) && r > 0.74 && r < 0.78, 'the example\'s; two replicates, 5→11; r 0.74–0.78');
+    }
+
+    // DHFR without and with Lon (wave 3, slice 6): two score sets opened together, their counts
+    // joined with the paper's design; the scores against the published ones, and the conditions
+    // against each other, as the paper found them.
+    if (opened.has('dhfr-lon')) {
+      const o = opened.get('dhfr-lon');
+      const example = exampleById('dhfr-lon');
+      const R = o.scored.results;
+      const tiles = new Map(o.design.library.tiles.map((t) => [t.id, t]));
+      let outside = 0;
+      let marked = 0;
+      for (const r of R.replicates) {
+        const t = tiles.get(o.design.replicates.find((x) => x.id === r.id).tile);
+        R.variants.position.forEach((p, i) => {
+          if (p < 1 || (p >= t.start && p <= t.end)) return;
+          if (r.state[i] === REPLICATE_STATE.USED) outside += 1;
+          if (r.state[i] === REPLICATE_STATE.OUTSIDE_TILE) marked += 1;
+        });
+      }
+      // The wild type, at no position, is every replicate's.
+      const kMax = Math.max(...R.conditions.map((c) => Math.max(...[...c.k].filter((k, i) => R.variants.position[i] >= 1))));
+      const prefixes = [...new Set(o.table.columns.slice(1).map((c) => c.name.split(':')[0]))];
+      const multi = multiTileSamples(o.design);
+      const summary = summarizeDesign(o.design).lines.join(' ');
+      check('examples', 'DHFR: the two score sets\' counts joined, each record\'s columns named by its URN; 24 time series under two conditions, four sub-libraries of 40 positions each grown three times, two in each repeat: each replicate measures only its own sub-library\'s positions (the other\'s, counted by the same samples, marked outside its tile), no variant combined from more than its three replicates, and the summary says so', `${o.table.rows} variants, columns of ${prefixes.join(' and ')}; ${o.design.replicates.length} replicates in ${o.design.conditions.map((c) => c.name).join(' and ')}; ${multi.size} samples holding two tiles; ${outside} measurements used outside their tile, ${marked} marked; at most ${kMax} replicates combined`, o.assembled.kind === 'joined' && prefixes.join() === '00000063-b-1,00000063-a-1' && o.design.replicates.length === 24 && multi.size === 96 && !outside && marked > 0 && kMax === 3 && /hold 2 tiles grown together: each replicate measures only its own tile's positions/.test(summary) && !/shared between replicates/.test(summary), 'joined; 24; 96; 0 used outside; ≤ 3; said');
+      // The published scores, condition by condition (−Lon is 00000063-b-1, +Lon -a-1).
+      const publishedOf = (urn) => {
+        const t = parseTable(recordTable(example, urn, 'scores').bytes);
+        const names = columnText(t.columns.find((c) => c.name === 'hgvs_pro'));
+        const score = t.columns.find((c) => c.name === 'score').numeric;
+        return new Map(names.map((k, i) => [k, score[i]]));
+      };
+      const pub = { 'minus-lon': publishedOf('urn:mavedb:00000063-b-1'), 'plus-lon': publishedOf('urn:mavedb:00000063-a-1') };
+      const against = (results) => results.conditions.map((c) => {
+        const a = [];
+        const b = [];
+        results.variants.original.forEach((k, i) => { const x = pub[c.id].get(k); if (!c.reason[i] && Number.isFinite(x) && k !== '_wt') { a.push(c.score[i]); b.push(x); } });
+        const ratios = a.map((x, i) => x / b[i]).filter((x) => Number.isFinite(x) && x > 0).sort((x, y) => x - y);
+        return { id: c.id, name: c.name, n: a.length, r: pearson(a, b), ratio: ratios[ratios.length >> 1] };
+      });
+      const ols = scoreTable(o.table, o.design, withDefaults({ ...o.parameters, model: 'ols' }));
+      const wls = against(R);
+      const olsAgainst = against(ols.results);
+      const line = (x) => x.map((c) => `${c.name} r ${c.r.toFixed(3)} (median ratio ${c.ratio.toFixed(2)}, ${c.n})`).join(', ');
+      check('examples', 'DHFR against the published scores, as the guide says: with MaveScape\'s defaults (weighted regression) r ≈ 0.90 without Lon and 0.96 with it; with the authors\' unweighted regression (ordinary least squares) r ≈ 0.96 and 0.98, on the same scale (Enrich2\'s slopes over the whole 18 hours: median ratio near 1)', `defaults ${line(wls)}; ordinary least squares ${line(olsAgainst)}`, wls[0].r > 0.88 && wls[0].r < 0.92 && wls[1].r > 0.94 && wls[1].r < 0.98 && olsAgainst[0].r >= 0.95 && olsAgainst[1].r >= 0.97 && olsAgainst.every((c) => Math.abs(c.ratio - 1) <= 0.05), 'defaults 0.88–0.92 and 0.94–0.98; OLS ≥ 0.95 and ≥ 0.97, ratio within 5% of 1');
+      // Lon's effect: advantageous substitutions (score ≥ 0.2, the paper's threshold) in each
+      // condition, published and here; the difference +Lon − −Lon where called, and by the native
+      // residue (the paper: most negative at hydrophobic residues and in the buried core).
+      const advantageous = (scores, keys, reason) => keys.filter((k, i) => !reason?.[i] && k !== '_wt' && !k.includes('[') && scores[i] >= 0.2).length;
+      const publishedAdvantageous = Object.fromEntries(Object.entries(pub).map(([id, m]) => [id, [...m].filter(([k, x]) => k !== '_wt' && x >= 0.2).length]));
+      const here = Object.fromEntries(R.conditions.map((c) => [c.id, advantageous(c.score, R.variants.original, c.reason)]));
+      const d = R.differential[0];
+      const protein = targetProtein(o.design.targets[0]);
+      let called = 0;
+      let negative = 0;
+      const byPosition = new Map();
+      R.variants.key.forEach((k, i) => {
+        if (d.reason[i] || R.variants.kind[i] !== KIND.MISSENSE) return;
+        if (d.q[i] < 0.05) {
+          called += 1;
+          if (d.delta[i] < 0) negative += 1;
+        }
+        const p = R.variants.position[i];
+        if (!byPosition.has(p)) byPosition.set(p, []);
+        byPosition.get(p).push(d.delta[i]);
+      });
+      const meanOf = (x) => x.reduce((s, y) => s + y, 0) / x.length;
+      const hydrophobic = [];
+      const others = [];
+      for (const [p, xs] of byPosition) (/[VILMFWY]/.test(protein[p - 1]) ? hydrophobic : others).push(meanOf(xs));
+      check('examples', 'DHFR, Lon\'s effect as the paper found it: without Lon about twice as many substitutions grow faster than the wild type (≥ 0.2) as with it (the published scores: the paper\'s 736 and 384); the difference +Lon − −Lon negative for most of the substitutions it calls (q < 0.05), and most negative, position by position, at native hydrophobic residues (V, I, L, M, F, W, Y)', `published ${publishedAdvantageous['minus-lon']} and ${publishedAdvantageous['plus-lon']}; here ${here['minus-lon']} and ${here['plus-lon']} (${(here['minus-lon'] / here['plus-lon']).toFixed(2)}×); ${d.name} (${d.method}): ${called} called, ${negative} negative; mean difference ${meanOf(hydrophobic).toFixed(2)} at ${hydrophobic.length} hydrophobic positions, ${meanOf(others).toFixed(2)} at ${others.length} others`, publishedAdvantageous['minus-lon'] === 736 && publishedAdvantageous['plus-lon'] === 384 && here['minus-lon'] / here['plus-lon'] > 1.8 && here['minus-lon'] / here['plus-lon'] < 2.6 && negative / called >= 0.85 && meanOf(hydrophobic) < meanOf(others) - 0.15, '736 and 384; 1.8–2.6×; ≥ 85% negative; hydrophobic lower by > 0.15');
+    }
+
+    // BRCA1 RING from MaveDB and back (wave 3, slice 6): its counts with the paper's design, scored,
+    // against the published scores (Enrich2's), then deposited and read back.
+    if (opened.has('brca1-ring')) {
+      const o = opened.get('brca1-ring');
+      const example = exampleById('brca1-ring');
+      const R = o.scored.results;
+      const pub = parseTable(recordTable(example, 'urn:mavedb:00000003-a-2', 'scores').bytes);
+      const row = new Map(columnText(pub.columns.find((c) => c.name === 'hgvs_pro')).map((k, i) => [k, i]));
+      const pubScore = pub.columns.find((c) => c.name === 'score').numeric;
+      const set = (o.design.ignoredColumns ?? []).filter((x) => /^Y2H_/.test(x.column)).length;
+      check('examples', 'BRCA1 RING: MaveDB\'s counts read as 12,316 amino-acid variants with Enrich2\'s _wt and _sy rows; the design gives two library preparations of three replicates, rounds 0–5, the replicates of a preparation sharing its input, and sets the yeast two-hybrid columns aside', `${o.table.rows} variants; ${o.design.replicates.length} replicates of ${[...new Set(o.design.replicates.map((r) => r.timepoints.length))].join(', ')} time points (${o.design.time.unit}s); ${sharedSamples(o.design).size} shared inputs; ${set} two-hybrid columns set aside`, o.table.rows === 12316 && o.design.replicates.length === 6 && o.design.replicates.every((r) => r.timepoints.map((t) => t.time).join() === '0,1,2,3,4,5') && sharedSamples(o.design).size === 2 && set === 24, '12,316; 6 of 6 rounds; 2 shared; 24 aside');
+      let worst = 0;
+      let compared = 0;
+      for (const r of R.replicates) {
+        const name = o.design.replicates.find((x) => x.id === r.id).name;
+        const theirs = pub.columns.find((c) => c.name === `score_${name}`).numeric;
+        R.variants.original.forEach((k, i) => {
+          const j = row.get(k);
+          if (j === undefined || !Number.isFinite(theirs[j]) || !Number.isFinite(r.score[i])) return;
+          compared += 1;
+          worst = Math.max(worst, Math.abs(r.score[i] - theirs[j]) / Math.max(1, Math.abs(theirs[j])));
+        });
+      }
+      const combinedR = (results) => {
+        const c = results.conditions[0];
+        const a = [];
+        const b = [];
+        results.variants.original.forEach((k, i) => { const j = row.get(k); if (j !== undefined && !c.reason[i] && Number.isFinite(pubScore[j])) { a.push(c.score[i]); b.push(pubScore[j]); } });
+        return { r: pearson(a, b), n: a.length };
+      };
+      const mine = combinedR(R);
+      const enrich2 = scoreTable(o.table, o.design, defaultParameters(o.design, o.ws.sources[0], 'enrich2'));
+      const theirsCombined = combinedR(enrich2.results);
+      const publishedScored = [...pubScore].filter(Number.isFinite).length;
+      check('examples', 'BRCA1 RING against the published scores, as the guide says: with MaveScape\'s defaults every replicate score equals the published one (Enrich2\'s weighted regression with wild-type normalization), the combined scores close (the moderated combination against Enrich2\'s random effects); with the Enrich2-compatible preset the combined scores follow them exactly, as many variants scored as MaveDB\'s', `${compared} replicate scores, largest relative difference ${worst.toExponential(1)}; defaults combined r ${mine.r.toFixed(4)} over ${mine.n}; Enrich2-compatible r ${theirsCombined.r.toFixed(5)}, ${enrich2.results.conditions[0].scored} scored against MaveDB's ${publishedScored}`, compared > 45000 && worst <= 1e-10 && mine.r > 0.98 && mine.r < 0.999 && theirsCombined.r >= 0.9999 && enrich2.results.conditions[0].scored === publishedScored, '> 45,000 within 1e-10; 0.98–0.999; ≥ 0.9999, the same count');
+      // The zinc ligands, on BRCA1's numbering (the target's offset of 1, as the example states it).
+      const model = buildMapModel(R, o.design);
+      const zinc = [24, 27, 39, 41, 44, 47, 61, 64];
+      const ranked = [];
+      for (let p = 1; p <= model.length; p += 1) if (model.columnCount[p - 1] >= 5) ranked.push([p + model.target.offset, model.columnMedian[p - 1]]);
+      ranked.sort((x, y) => x[1] - y[1]);
+      const ranks = zinc.map((z) => ranked.findIndex(([p]) => p === z) + 1);
+      const typical = median(ranked.filter(([p]) => !zinc.includes(p)).map(([, m]) => m));
+      check('examples', 'BRCA1 RING, Run 1 on the map as the guide says: the RING\'s eight zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64) among its twelve least tolerant positions (median score, positions with five or more scored)', `ranks ${zinc.map((z, k) => `${z}: ${ranks[k]}`).join(', ')} of ${ranked.length}; their medians ${zinc.map((z) => ranked.find(([p]) => p === z)[1].toFixed(2)).join(' ')}, a typical position's ${typical.toFixed(2)}`, ranks.every((r) => r >= 1 && r <= 12) && model.target.offset === 1, 'all within the 12 lowest; offset 1');
+      const { built, first, trip } = exampleRoundTrip('brca1-ring');
+      const experimentTitle = JSON.parse(first.files.find((f) => f.name === 'experiment.json').text).title;
+      const back = trip.back.results;
+      const backScore = new Map(back.variants.key.map((k, i) => [k, back.conditions[0].score[i]]));
+      const c = built.results.conditions[0];
+      let exact = 0;
+      let differ = 0;
+      built.results.variants.key.forEach((k, i) => {
+        if (c.reason[i]) return;
+        if (Object.is(backScore.get(k), c.score[i])) exact += 1;
+        else differ += 1;
+      });
+      check('examples', 'BRCA1 RING\'s round trip: Run 1 deposited in MaveDB\'s format (its experiment described as the record\'s), read back as MaveScape opens a package, its scores the run\'s exactly, and the deposit written again the same bytes', `${first.report.variants.exported} variants deposited (${first.report.mode}; its experiment "${experimentTitle}", ${JSON.parse(first.files.find((f) => f.name === 'score_set.json').text).experimentUrn ?? 'new'}); ${exact} scores back exactly, ${differ} not; written again: ${trip.same ? 'the same bytes' : `differs in ${trip.differ.join(', ')}`}`, exact === c.scored && !differ && trip.same && experimentTitle === cachedRecord('urn:mavedb:00000003-a-2').experiment.title, 'all exactly; the same');
+    }
+
     // With external data: Hsp90 against the published fitness; factor IX against MultiSTEP's scores.
     {
       const o = opened.get('hsp90');
@@ -2196,6 +2532,425 @@ const suites = {
       };
       const multistep = openExampleInNode(exampleById('factor9'), { parameters: { binScale: 'low5-wt', combination: 'mean' } });
       check('examples', 'factor IX against MultiSTEP\'s published scores: with MaveScape\'s defaults (nonsense 0, wild type 1, the moderated combination) and with MultiSTEP\'s own settings set in the Score view (the lowest 5% at 0, the replicates\' mean), as the guide says', `defaults r ${rOf(o.scored.results).toFixed(4)}; MultiSTEP's settings r ${rOf(multistep.scored.results).toFixed(4)}`, rOf(o.scored.results) >= 0.99 && rOf(multistep.scored.results) >= 0.999, '≥ 0.99; ≥ 0.999');
+    }
+  },
+
+  // Public data (wave 3, slice 1): UniProt's answers as MaveScape's fetcher cached them
+  // (validation/fixtures/public-data, release 2026_03), read as the page reads them.
+  async 'public-data'() {
+    const root = new URL('fixtures/public-data/', import.meta.url);
+    const cached = (kind, name) => JSON.parse(readFileSync(new URL(`${kind}/${name}`, root), 'utf8'));
+    const records = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).flatMap((kind) => readdirSync(new URL(`${kind}/`, root)).filter((f) => f.endsWith('.meta.json')).map((f) => ({ kind, name: f.replace(/\.meta\.json$/, ''), meta: cached(kind, f) })));
+    // UniProt names its release; MaveDB none. A search records its words (the POST's body). NCBI's
+    // records are GenBank text (wave 3, slice 3).
+    // The tracks' answers (wave 3, slice 5): ClinVar's search and summaries, PDBe-KB's profiles,
+    // AlphaFold DB's AlphaMissense tables, gnomAD's GraphQL answers (each with its query) and
+    // MaveDB's annotations.
+    const hosts = {
+      UniProt: /^https:\/\/rest\.uniprot\.org\//, MaveDB: /^https:\/\/api\.mavedb\.org\/api\/v1\//,
+      'NCBI E-utilities': /^https:\/\/eutils\.ncbi\.nlm\.nih\.gov\/entrez\/eutils\/(efetch\.fcgi\?db=nuccore&id=(?:[A-Z]{2}_\d+|[A-Z]{1,2}\d{5,8})\.\d+&rettype=gb|esearch\.fcgi\?db=clinvar&term=[^&]+&retmax=10000&retstart=\d+&retmode=json|esummary\.fcgi\?db=clinvar&id=\d+(,\d+)*&retmode=json)/,
+      Ensembl: /^https:\/\/rest\.ensembl\.org\/sequence\/id\/ENST\d{11}\?type=cdna&mask_feature=1$/,
+      'PDBe-KB': /^https:\/\/www\.ebi\.ac\.uk\/pdbe\/graph-api\/uniprot\/sequence_conservation\/[A-Z0-9]+$/,
+      'AlphaFold DB': /^https:\/\/alphafold\.ebi\.ac\.uk\/files\/AF-[A-Z0-9]+-F1-aa-substitutions\.csv$/,
+      gnomAD: /^https:\/\/gnomad\.broadinstitute\.org\/api$/,
+    };
+    const typeOf = (meta) => (/efetch\.fcgi/.test(meta.source) ? 'text/plain; charset=utf-8' : /\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) || /\/variants\/data\?/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json');
+    const complete = records.filter(({ kind, meta }) => hosts[meta.service]?.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && (meta.service !== 'UniProt' || meta.version) && (kind !== 'mavedb-search' || (meta.method === 'POST' && JSON.parse(meta.request).text)) && (kind !== 'gnomad' || (meta.method === 'POST' && JSON.parse(meta.request).query)) && meta.contentType === typeOf(meta));
+    check('public-data', 'each cached response carries its retrieval record: the service, the URL on a listed host, when it was retrieved, UniProt\'s release, a search\'s words, a GraphQL query', `${complete.length} of ${records.length} records complete (${[...new Set(records.map((r) => r.kind))].map((k) => `${k} ${records.filter((r) => r.kind === k).length}`).join(', ')})`, records.length >= 14 && complete.length === records.length, 'all');
+    for (const [id, accession] of Object.entries({ 'grb2-sh3': 'P62993', hsp90: 'P02829', factor9: 'P00740' })) {
+      const example = exampleById(id);
+      const design = JSON.parse(readFileSync(new URL(`../web/${example.files.design}`, import.meta.url), 'utf8'));
+      const target = design.targets[0];
+      const entry = readUniProtEntry(cached('uniprot', `${accession}.json`));
+      const placement = placeTarget(target, entry);
+      const patch = placementPatch(target, entry, placement);
+      check('public-data', `${example.title}: its target sits where its design says in UniProt ${accession}, identical, at one place, and the entry changes nothing in the design`, `positions ${placement.start}–${placement.end} (offset ${placement.offset}; the design's ${target.offset}), ${placement.identical ? 'identical' : `${placement.differences.length} differences`}, ${placement.places} place${placement.places > 1 ? 's' : ''}; would change ${Object.keys(patch).join(', ') || 'nothing'}`, placement.offset === target.offset && placement.identical && placement.places === 1 && !Object.keys(patch).length, 'the design\'s offset; identical; nothing');
+    }
+    {
+      const lookup = readdirSync(new URL('uniparc/', root)).find((f) => !f.endsWith('.meta.json'));
+      const { entries } = uniparcEntries(cached('uniparc', lookup));
+      const grb2 = readUniProtEntry(cached('uniprot', 'P62993.json'));
+      const reviewed = entries.filter((e) => e.reviewed);
+      check('public-data', 'GRB2\'s whole sequence, looked up in UniProt: P62993 first among the reviewed entries with exactly that sequence, and its SHA-256 names the cached lookup', `${entries.length} active entries, ${reviewed.length} reviewed (${reviewed.slice(0, 3).map((e) => `${e.accession} ${e.organism}`).join(', ')}); cached as ${lookup.slice(0, 12)}…, the sequence's ${sha256(new TextEncoder().encode(grb2.sequence)).slice(0, 12)}…`, entries[0]?.accession === 'P62993' && lookup === `${sha256(new TextEncoder().encode(grb2.sequence))}.json`, 'P62993; the same');
+    }
+    {
+      // The GRB2 example checked as its guide says, then scored: the check in the workspace, not
+      // in the design (its runs stay current), and in the methods.
+      const o = openExampleInNode(exampleById('grb2-sh3'));
+      const target = o.ws.targets[0];
+      const entry = readUniProtEntry(cached('uniprot', 'P62993.json'));
+      const placement = placeTarget(target, entry);
+      const meta = cached('uniprot', 'P62993.json.meta.json');
+      const ws = recordTargetCheck(o.ws, target.id, placementPatch(target, entry, placement), referenceOf(entry, { source: meta.source, retrieved: meta.retrieved, version: meta.version }, placement), 'Checked the target against UniProt P62993');
+      const source = ws.sources[0];
+      const run = makeRun({ inputs: runInputs({ source, design: ws.design, parameters: o.parameters }), source, results: o.scored.results, software: { version: '0.3.0', commit: '' }, name: 'Run 1', created: '2026-10-10T12:00:00.000Z' });
+      const methods = writeMethods(ws, run, { results: o.scored.results });
+      const sentence = /Its position in the reference was checked against UniProt P62993 \[\d+\], release 2026_03, retrieved 2026-10-10: residues 159–214, identical\./.exec(methods.markdown)?.[0];
+      check('public-data', 'the GRB2 example checked against UniProt as its guide says: the design unchanged, the check kept with the workspace and written in the methods, with UniProt cited', sentence ?? 'no sentence', ws.design === o.ws.design && ws.targets[0].reference?.release === '2026_03' && Boolean(sentence) && methods.references.some((r) => r.key === 'uniprot'), 'unchanged; kept; written; cited');
+    }
+
+    // MaveDB (wave 3, slice 2): the three feasibility records (four score sets), read with no code
+    // for any of them; their published scores read as published equal MaveDB's columns.
+    const FEASIBILITY = [
+      ['urn:mavedb:00000835-a-1', 'mavedb-grb2-sh3', '', 'grb2-sh3'],
+      ['urn:mavedb:00000003-a-1', 'mavedb-brca1-ring', 'nt/', null],
+      ['urn:mavedb:00000003-a-2', 'mavedb-brca1-ring', 'aa/', null],
+      ['urn:mavedb:00001200-a-1', 'mavedb-factor9', '', 'factor9'],
+    ];
+    for (const [urn] of FEASIBILITY) {
+      const record = readScoreSet(cached('mavedb', `${urn.replaceAll(':', '_')}.json`));
+      const { targets, problems } = targetsOf(record);
+      check('public-data', `MaveDB ${urn}: the record read (title, license and terms, citation, target, columns)`, `"${record.title}", ${record.license.short}, ${targets.map((t) => `${t.name} ${t.sequenceType} ${t.sequence.length}${t.offset ? ` (offset ${t.offset})` : ''}`).join('; ')}; ${record.scoreColumns.length} score and ${record.countColumns.length} count columns; ${record.calibrations.length} calibrations; ${record.citation?.slice(0, 50)}…`, targets.length === 1 && !problems.length && record.license.open && Boolean(record.citation) && record.hasCounts, 'one target; open license; cited; counts');
+    }
+    const fx = readoutOf(readScoreSet(cached('mavedb', 'urn_mavedb_00001200-a-1.json')));
+    check('public-data', 'MaveDB urn:mavedb:00001200-a-1: the experiment\'s keywords give the design\'s readout and library method, in MaveDB\'s terms', JSON.stringify(fx), fx.readout.method === 'Reporter' && fx.readout.mechanism === 'Loss of function' && fx.readout.modelSystem === 'Immortalized human cells' && fx.libraryMethod === 'Microarray synthesis', 'Reporter; Loss of function; Immortalized human cells; Microarray synthesis');
+    const bap1 = readScoreSet(cached('mavedb', 'urn_mavedb_00000662-a-2.json'));
+    check('public-data', 'a record whose target is named by an accession (BAP1, CC BY 4.0): shown with its terms, its target said not readable yet', `${bap1.license.short}: ${bap1.license.terms} ${targetsOf(bap1).problems[0]?.slice(0, 90)}…`, !bap1.license.open === false && /crediting the authors/.test(bap1.license.terms) && targetsOf(bap1).targets.length === 0, 'terms shown; not read');
+    {
+      // The published scores read as published: every row's score, SE and the variants left out,
+      // against MaveDB's own columns (external data).
+      const lines = [];
+      let exact = true;
+      for (const [urn, set, dir, exampleId] of FEASIBILITY) {
+        const record = readScoreSet(cached('mavedb', `${urn.replaceAll(':', '_')}.json`));
+        const target = targetsOf(record).targets[0];
+        const scores = parseTable(dataset(set).bytes(`${dir}scores.csv`), { fileName: 'scores.csv' });
+        const layout = detectLayout(scores);
+        const design = scoresDesign(record, { table: scores, layout, target });
+        const read = scoreTable(scores, design, defaultParameters(design));
+        const given = scores.columns.find((c) => c.name === design.scores.score).numeric;
+        const se = scores.columns.find((c) => c.name === design.scores.se).numeric;
+        const c = read.results.conditions[0];
+        let same = 0;
+        for (let i = 0; i < scores.rows; i += 1) if (Object.is(c.score[i], given[i]) && Object.is(c.se[i], se[i])) same += 1;
+        const na = given.reduce((a, x) => a + (Number.isNaN(x) ? 1 : 0), 0);
+        exact &&= read.ok && same === scores.rows && c.scored === scores.rows - na;
+        // The counts' design, drafted from their column names: against the documented design where
+        // one describes the same table.
+        const counts = parseTable(dataset(set).bytes(`${dir}counts.csv`), { fileName: 'counts.csv' });
+        const { design: drafted } = countsDesign(record, { table: counts, layout: detectLayout(counts), target });
+        const valid = validateDesign(drafted, { columns: counts.columns.map((x) => x.name) }).ok;
+        const reference = exampleId ? JSON.parse(readFileSync(new URL(`designs/${exampleId}.design.json`, import.meta.url), 'utf8')) : null;
+        // Bins compared by their order: MaveDB records no bin values, so the draft numbers them 1, 2, 3, 4
+        // (the same scores, scaled per replicate, as the documented weights 0.25–1).
+        const structure = (d) => meaning(d).slots.map((x) => x.replace(/\|b(\d+):[^=]+=/, '|b$1='));
+        const agree = reference ? JSON.stringify(structure(drafted)) === JSON.stringify(structure(reference)) : null;
+        const values = reference && drafted.model === 'bins' && JSON.stringify(meaning(drafted).slots) !== JSON.stringify(meaning(reference).slots);
+        lines.push(`${urn}: ${c.scored} of ${scores.rows} as published (${na} NA), ${same} rows identical; counts drafted ${drafted.model}${valid ? ', valid' : ', NOT valid'}${agree === null ? '' : agree ? `, as the documented design${values ? ' but for the bins\' values (ranks 1–4; documented 0.25–1)' : ''}` : ', unlike the documented design'}`);
+        exact &&= valid && agree !== false;
+      }
+      check('public-data', 'each feasibility record\'s published scores read as published equal MaveDB\'s columns, row for row (score and SE, NA left out); its counts get a valid design drafted from their names, as the documented design where one describes the same table', lines.join('; '), exact, 'identical; valid; as documented');
+    }
+    {
+      // A workspace of published scores, opened from MaveDB, saved as an archive and reopened: its
+      // record and the table's origin kept, its run recomputed to its recorded hash.
+      const record = readScoreSet(cached('mavedb', 'urn_mavedb_00000835-a-1.json'));
+      const target = targetsOf(record).targets[0];
+      const bytes = new Uint8Array(readFileSync(new URL('fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv', import.meta.url)));
+      const scores = parseTable(bytes, { fileName: 'scores.csv' });
+      const design = scoresDesign(record, { table: scores, layout: detectLayout(scores), target });
+      let ws = workspaceOf(scores, design, { layout: 'mavedb-scores', sha256: sha256(bytes), size: bytes.length, files: [{ fileName: 'scores.csv', sha256: sha256(bytes), size: bytes.length }], origin: { database: 'MaveDB', urn: record.urn, file: 'scores', license: 'CC0', retrieved: '2026-10-11T02:08:41Z' } });
+      ws = { ...ws, records: [{ database: 'MaveDB', ...record }] };
+      const parameters = defaultParameters(design);
+      const read = scoreTable(scores, design, parameters);
+      const run = makeRun({ inputs: runInputs({ source: ws.sources[0], design: ws.design, parameters }), source: ws.sources[0], results: read.results, software: SOFTWARE, name: 'Published scores', created: '2026-10-11T02:10:00.000Z' });
+      ws = addRun(ws, run).ws;
+      const archive = await writeArchive(ws, { software: SOFTWARE, sources: new Map([[sha256(bytes), bytes]]), results: new Map([[run.id, read.results]]) });
+      const reopened = await readArchive(archive.bytes);
+      const again = recompute(reopened.ws, reopened.sources);
+      check('public-data', 'a workspace of published scores from MaveDB saved as an archive reopens: its record and the table\'s origin kept, its run (read as published) recomputed to its recorded hash', `${reopened.problems.length} problems; record ${reopened.ws.records?.[0]?.urn}; origin ${reopened.ws.sources[0].origin?.urn}; output ${outputDigest(again.scored.results).slice(0, 12)}… against ${run.output.sha256.slice(0, 12)}…`, !reopened.problems.length && reopened.ws.records?.[0]?.urn === record.urn && reopened.ws.sources[0].origin?.file === 'scores' && outputDigest(again.scored.results) === run.output.sha256, 'kept; the same');
+    }
+    {
+      // MaveDB's mapped variants (wave 3, slice 3): GRB2's, joined to its scores by each variant's
+      // accession; each mapped protein name on NP_002077.1 the table's own at the target's position
+      // plus the UniProt offset (158), with the same amino acids.
+      const mapped = mappedVariants(cached('mavedb', 'urn_mavedb_00000835-a-1.mapped.json'));
+      const back = readMapped(parseTable(mappedCSV(mapped)));
+      const scores = parseTable(readFileSync(new URL('fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv', import.meta.url)), { fileName: 'scores.csv' });
+      const accession = columnText(scores.columns.find((c) => c.name === 'accession'));
+      const pro = columnText(scores.columns.find((c) => c.name === 'hgvs_pro'));
+      let joined = 0;
+      let agree = 0;
+      const differ = [];
+      accession.forEach((a, i) => {
+        const m = back.get(a);
+        if (!m) return;
+        joined += 1;
+        const ours = /^p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|=)$/.exec(pro[i]);
+        const theirs = /^NP_002077\.1:p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|=)$/.exec(m.hgvs ?? '');
+        if (ours && theirs && ours[1] === theirs[1] && Number(ours[2]) + 158 === Number(theirs[2]) && (ours[3] === theirs[3] || (ours[3] === '=' && theirs[3] === ours[1]))) agree += 1;
+        else differ.push(`${pro[i]} ↦ ${m.hgvs}`);
+      });
+      const wellFormed = mapped.every((m) => /^ga4gh:VA\.[A-Za-z0-9_-]{32}$/.test(m.vrs ?? ''));
+      check('public-data', 'MaveDB\'s mapped variants of GRB2 (VRS 2.0): each current mapping joined to its row of scores by the variant\'s accession, its VRS identifier well formed, its protein on NP_002077.1 the table\'s at the target\'s position plus the UniProt offset (158), the same amino acids', `${mapped.length} mapped; ${joined} of ${scores.rows} rows joined; ${agree} agree${differ.length ? `; ${differ.length} differ: ${differ.slice(0, 3).join('; ')}` : ''}; identifiers ${wellFormed ? 'well formed' : 'not all well formed'}`, joined === mapped.length && joined >= 1100 && agree === joined && wellFormed, 'joined; agree; well formed');
+    }
+    {
+      // A score set of scores alone (PTEN, the example): what the readiness names, and where.
+      const record = readScoreSet(cached('mavedb', 'urn_mavedb_00000013-a-1.json'));
+      const target = targetsOf(record).targets[0];
+      const scores = parseTable(dataset('mavedb-pten-vampseq').bytes('scores.csv'), { fileName: 'scores.csv' });
+      const design = scoresDesign(record, { table: scores, layout: detectLayout(scores), target });
+      const ws = workspaceOf(scores, design, { layout: 'mavedb-scores', origin: { database: 'MaveDB', urn: record.urn, file: 'scores', hasCounts: false, rawReads: record.experiment.rawReads.map((r) => r.id) } });
+      const r = readiness(ws);
+      const counts = r.gaps.find((g) => g.id === 'counts');
+      const status = Object.fromEntries(r.analyses.map((a) => [a.id, a.status]));
+      check('public-data', 'a record of scores alone: the map, QC of what scores show and comparison possible; rescoring and QC of the counts not, the counts named with where they may be (the record names its raw reads)', `${JSON.stringify(r.base)}; rescore ${status['score.rescore']}, map ${status['record.scores']}, compare ${status['record.compare']}; counts: ${counts?.where}`, r.base.scores && status['score.rescore'] === 'unavailable' && status['qc.counts'] === 'unavailable' && status['record.scores'] === 'ready' && status['record.compare'] === 'ready' && /MaveDB has no counts for urn:mavedb:00000013-a-1/.test(counts?.where) && /PRJNA428380/.test(counts?.where), 'as said');
+    }
+  },
+
+  // Wave 3, slice 4: MaveDB deposits, as MaveDB's own validators take them (the mavedb package,
+  // AGPL-3.0, as an external reference: reference/generate_mavedb_export.py), and read back.
+  'mavedb-export'() {
+    const reference = JSON.parse(readFileSync(new URL('./reference/mavedb-export.json', import.meta.url), 'utf8'));
+    const { packages, missing } = depositPackages();
+    if (missing.length) throw new MissingData(missing.join('; '));
+    const t = reference.tools;
+    check('mavedb-export', 'reference made with', `mavedb ${t.mavedb}, mavehgvs ${t.mavehgvs}, biocommons hgvs ${t.hgvs}, pandas ${t.pandas}, pydantic ${t.pydantic}; transcripts ${reference.transcripts.join(', ')}`, t.mavedb === '2026.2.7.4' && t.mavehgvs === '0.8.1' && t.hgvs === '1.5.7', 'mavedb 2026.2.7.4, mavehgvs 0.8.1, hgvs 1.5.7');
+    // The files written now are the ones the validators checked.
+    const same = (a, b) => b && Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
+    const stale = packages.filter((p) => !same(mavedbHashes(p.deposit), reference.packages[p.id]?.files));
+    const files = packages.reduce((n, p) => n + Object.keys(mavedbHashes(p.deposit)).length, 0);
+    check('mavedb-export', 'every deposit written now is the one MaveDB\'s validators checked: each file\'s SHA-256 as in reference/mavedb-export.json', `${packages.length} deposits, ${files} files${stale.length ? `; changed: ${stale.map((p) => p.id).join(', ')} (regenerate the reference)` : ''}`, !stale.length && packages.length === Object.keys(reference.packages).length, 'all the same');
+    // The tables, as MaveDB's upload reads them and its variant-creation job checks them.
+    const of = (p) => reference.packages[p.id];
+    const tablesBad = packages.filter((p) => !of(p)?.tables.ok || of(p).tables.scores.rows !== p.deposit.report.variants.exported);
+    const rows = packages.reduce((n, p) => n + p.deposit.report.variants.exported, 0);
+    check('mavedb-export', 'the scores and counts pass MaveDB\'s validate_and_standardize_dataframe_pair with their column descriptions and target (mavehgvs against a target\'s sequence, biocommons hgvs against a transcript), every row read', `${packages.length - tablesBad.length} of ${packages.length} (${rows.toLocaleString('en-US')} rows; ${packages.filter((p) => p.deposit.files.some((f) => f.name === 'counts.csv')).length} with counts)${tablesBad.length ? `; refused: ${tablesBad.map((p) => `${p.id} ${of(p)?.tables.error ?? 'not checked'}`).join('; ')}` : ''}`, !tablesBad.length, 'all');
+    const names = packages.reduce((n, p) => n + (of(p)?.names.checked ?? 0), 0);
+    const namesBad = packages.filter((p) => !of(p)?.names.ok);
+    check('mavedb-export', 'every name in the tables valid MAVE-HGVS by mavehgvs 0.8.1 in strict mode', `${names.toLocaleString('en-US')} names${namesBad.length ? `; invalid in ${namesBad.map((p) => `${p.id}: ${of(p).names.invalid.slice(0, 2).join(', ')}`).join('; ')}` : ''}`, !namesBad.length && names >= rows, 'all');
+    // The experiment and the score set: MaveDB's models take them when MaveScape says nothing is
+    // missing, and refuse them, for what MaveScape names, when it says something is.
+    const metadata = packages.map((p) => {
+      const r = of(p);
+      const ok = r?.experiment.ok && r?.scoreSet.ok;
+      const expected = p.expect === 'ok';
+      const said = p.deposit.report.missing.map((m) => m.field);
+      const agrees = expected ? ok && !said.length : !ok && said.includes(p.expect) && new RegExp(`${p.expect}Text|${p.expect}`).test(`${r?.experiment.error ?? ''} ${r?.scoreSet.error ?? ''}`);
+      return { p, ok, agrees };
+    });
+    const disagree = metadata.filter((m) => !m.agrees);
+    check('mavedb-export', 'experiment.json as MaveDB\'s ExperimentCreate (keywords by its validate_keyword_list and in its vocabulary), score_set.json as its ScoreSetCreate: taken when MaveScape reports nothing missing, refused for what it names when it does (a deposit without an abstract)', `${metadata.filter((m) => m.ok).length} taken, ${metadata.filter((m) => !m.ok).length} refused as said${disagree.length ? `; disagree: ${disagree.map((m) => m.p.id).join(', ')}` : ''}`, !disagree.length && metadata.filter((m) => !m.ok).length === 1, 'all as said');
+    // Every kind of run and target MaveDB takes.
+    const modes = Object.fromEntries(['protein', 'coding', 'noncoding', 'accession'].map((m) => [m, packages.filter((p) => p.deposit.report.mode === m).length]));
+    const passed = packages.filter((p) => JSON.parse(p.deposit.files.find((f) => f.name === 'mavescape.json').text).run.published).length;
+    check('mavedb-export', 'the kinds of deposit: protein variants; c. names with their protein changes on the coding sequence; n. names on the whole sequence; names prefixed by a RefSeq or Ensembl transcript; runs scored from counts (two populations, a time series, sorted bins, barcodes, two conditions) and published scores passed through', `${Object.entries(modes).map(([k, v]) => `${k} ${v}`).join(', ')}; ${packages.length - passed} scored, ${passed} published`, Object.values(modes).every((n) => n > 0) && passed >= 4 && packages.length - passed >= 10, 'each');
+    // Export → import → export: the files MaveDB reads, the same bytes.
+    const trips = packages.map((p) => ({ p, ...roundTrip(p.deposit) }));
+    const differ = trips.filter((x) => !x.same);
+    check('mavedb-export', 'export → import → export: each deposit read back as MaveScape opens a MaveDB package (its published scores read as published, its counts beside them, its MaveDB details kept) and written again, the files MaveDB reads the same bytes', `${trips.length - differ.length} of ${trips.length} the same${differ.length ? `; differ: ${differ.map((x) => `${x.p.id} (${x.differ.join(', ')})`).join('; ')}` : ''}`, !differ.length, 'all');
+    // MaveDB's controlled vocabulary, as MaveScape writes the experiment's keywords.
+    const vocabulary = JSON.parse(readFileSync(new URL('./fixtures/public-data/mavedb-keywords.json', import.meta.url), 'utf8'));
+    const keys = Object.keys(vocabulary.keywords);
+    const vocabDiffer = keys.filter((k) => JSON.stringify([...(MAVEDB_KEYWORDS[k] ?? [])].sort()) !== JSON.stringify(vocabulary.keywords[k].map((x) => x.label).sort()));
+    check('mavedb-export', `MaveScape's keyword vocabulary (readout.js, MAVEDB_KEYWORDS) is MaveDB's: every key and label of /api/v1/controlled-keywords (retrieved ${vocabulary.retrieved})`, `${keys.length} keys, ${keys.reduce((n, k) => n + vocabulary.keywords[k].length, 0)} labels${vocabDiffer.length ? `; differ: ${vocabDiffer.join(', ')}` : ''}`, !vocabDiffer.length && keys.length === Object.keys(MAVEDB_KEYWORDS).length, 'the same');
+  },
+
+  // Sequence tracks and annotations (wave 3, slice 5): the published examples' targets annotated
+  // from public data as the fetcher cached them (fixtures/public-data, offline), and the files a
+  // person may add (fixtures/annotations), each against an outside reference: Capra & Singh's
+  // score_conservation.py (reference/annotations.json, generate_annotations.py), UniProt's GFF3
+  // beside its JSON, AlphaFold DB's and ClinVar's own fields, MaveDB's join of gnomAD to BRCA1's
+  // variants.
+  async annotations() {
+    const ref = annotationReference();
+    const grb2 = exampleContext('grb2-sh3');
+    const f9 = exampleContext('factor9');
+    const hsp90 = exampleContext('hsp90');
+    const sha = (path) => createHash('sha256').update(readFileSync(new URL(`./fixtures/${path}`, import.meta.url))).digest('hex');
+    const stale = [ref.alignment, ...ref.profiles].filter((x) => sha(x.file) !== x.sha256);
+    check('annotations', 'reference made with', `score_conservation.py (SHA-256 ${ref.tool.sha256.slice(0, 12)}…) under Python ${ref.tool.python}; the fixtures it read unchanged${stale.length ? `; changed: ${stale.map((x) => x.file).join(', ')}` : ''}`, !stale.length, 'the same files');
+
+    // Conservation from an alignment, as the tool scores it.
+    {
+      const sto = annotationProvider('alignment').read(annotationFixture('annotations/grb2-sh3.sto'), { ...grb2, record: { file: 'grb2-sh3.sto' } });
+      const fasta = annotationProvider('alignment').read(annotationFixture('annotations/grb2-sh3.fasta'), { ...grb2, record: { file: 'grb2-sh3.fasta' } });
+      const t = fasta.tracks[0];
+      const { first, last } = t.alignment;
+      let worst = 0;
+      let unscored = 0;
+      ref.alignment.scores.forEach((x, j) => {
+        const mine = t.values[first - 1 + j];
+        if (x === null) unscored += Number.isNaN(mine) ? 0 : 1;
+        else worst = Math.max(worst, Math.abs(mine - x));
+      });
+      const same = [...sto.tracks[0].values].every((x, i) => Object.is(x, t.values[i]));
+      check('annotations', `conservation from an alignment (Pfam's SH3 seed with the human GRB2 SH3 first, ${ref.alignment.sequences} sequences) as Capra & Singh's score_conservation.py scores it by default, each of the query's residues on the GRB2 example's target; read the same from Stockholm and FASTA`, `${ref.alignment.scores.length} residues at positions ${first}–${last}, largest difference ${worst.toExponential(1)}${unscored ? `, ${unscored} scored where the tool scores none` : ''}; Stockholm and FASTA ${same ? 'the same' : 'differ'}`, worst <= 1e-9 && !unscored && same && first === 4 && last === 49, '≤ 10⁻⁹ (the tool prints 12 decimals); positions 4–49');
+    }
+    // PDBe-KB's profiles.
+    {
+      let positions = 0;
+      let worst = 0;
+      for (const p of ref.profiles) {
+        const mine = readProfile(JSON.parse(annotationFixture(p.file)));
+        positions += mine.length;
+        p.divergence.forEach((x, i) => { worst = Math.max(worst, Math.abs(mine[i].divergence - x)); });
+      }
+      const placed = [['GRB2', grb2, 'P62993'], ['factor IX', f9, 'P00740'], ['Hsp90', hsp90, 'P02829']].map(([name, c, a]) => {
+        const read = annotationProvider('pdbe-conservation').read(annotationFixture(`public-data/pdbe/${a}.conservation.json`), c);
+        return `${name} ${[...read.tracks[0].values].filter(Number.isFinite).length} of ${c.length}`;
+      });
+      check('annotations', 'conservation from PDBe-KB\'s profiles (GRB2, factor IX, Hsp90): each position\'s divergence as the tool\'s js_divergence gives it for the profile\'s probabilities; placed on each example\'s target by its offset', `${positions} positions, largest difference ${worst.toExponential(1)}; on the targets: ${placed.join(', ')}`, worst <= 1e-12 && placed[0] === 'GRB2 56 of 56', '≤ 10⁻¹²');
+    }
+    // UniProt's features, from its JSON and its GFF3.
+    {
+      const rows = [['GRB2', grb2, 'P62993'], ['factor IX', f9, 'P00740'], ['Hsp90', hsp90, 'P02829']].map(([name, c, a]) => {
+        const json = annotationProvider('uniprot-features').read(annotationFixture(`public-data/uniprot/${a}.features.json`), c);
+        const gff = annotationProvider('custom').read(annotationFixture(`annotations/${a}.gff`), c);
+        const shape = (tracks) => JSON.stringify(tracks.map((t) => [t.part, t.features.map((f) => `${f.type} ${f.start}-${f.end}`).sort()]));
+        return { name, same: shape(json.tracks) === shape(gff.tracks), count: json.tracks.reduce((n, t) => n + t.features.length, 0), json };
+      });
+      const domain = rows[0].json.tracks[0].features[0];
+      const wrong = annotationProvider('uniprot-features').read(annotationFixture('public-data/uniprot/P62993.features.json'), { ...grb2, offset: 0 });
+      check('annotations', 'UniProt\'s features as MaveScape reads its JSON and its GFF3 (release 2026_03): the same tracks of the same features on each example\'s target; GRB2\'s SH3 2 domain (156–215) over the whole target (159–214); a wrong offset refused, not drawn', `${rows.map((r) => `${r.name} ${r.count} features, ${r.same ? 'the same' : 'differ'}`).join('; ')}; GRB2: ${domain.label} ${domain.start}–${domain.end}${domain.clipped ? ' (clipped)' : ''}; offset 0: ${wrong.problem ? 'refused' : 'drawn'}`, rows.every((r) => r.same) && domain.start === 1 && domain.end === 56 && Boolean(wrong.problem), 'the same; refused');
+    }
+    // AlphaMissense.
+    {
+      const counts = [];
+      let differ = 0;
+      let classed = 0;
+      for (const [name, c, a] of [['GRB2', grb2, 'P62993'], ['factor IX', f9, 'P00740']]) {
+        const text = annotationFixture(`public-data/alphafold/${a}.aa-substitutions.csv`);
+        const table = new Map(text.trim().split(/\r?\n/).slice(1).map((l) => l.split(',')).map(([v, x, k]) => [v, { x: Number(x), k }]));
+        const t = annotationProvider('alphamissense').read(text, c).tracks[0];
+        for (const e of t.entries) {
+          const row = table.get(`${e.ref}${e.position + c.offset}${e.alt}`);
+          if (!row || row.x !== e.value || { LPath: 'pathogenic', Amb: 'ambiguous', LBen: 'benign' }[row.k] !== e.cls) differ += 1;
+        }
+        // AlphaMissense's classes are its thresholds on the score (Cheng et al. 2023).
+        for (const { x, k } of table.values()) if ((k === 'LPath') === (x > 0.564) && (k === 'LBen') === (x < 0.34)) classed += 1; else classed -= 1e9;
+        counts.push(`${name} ${t.entries.length.toLocaleString('en-US')} of ${(c.length * 19).toLocaleString('en-US')}`);
+      }
+      check('annotations', 'AlphaMissense as AlphaFold DB publishes it: every substitution of GRB2\'s and factor IX\'s targets with the table\'s score and class; each class the authors\' threshold on the score (likely pathogenic > 0.564, likely benign < 0.34)', `${counts.join(', ')} placed; ${differ} differ from the table; ${classed.toLocaleString('en-US')} rows classed by the thresholds`, differ === 0 && classed > 0, 'none differ; every row');
+    }
+    // ClinVar.
+    {
+      const [g] = await publicAnnotations(grb2, ['clinvar']);
+      const [f] = await publicAnnotations(f9, ['clinvar'], { gene: 'F9' });
+      const raw = (gene) => {
+        const out = [];
+        for (const file of readdirSync(new URL('./fixtures/public-data/clinvar/', import.meta.url)).filter((x) => x.endsWith('.summary.json'))) {
+          const result = JSON.parse(annotationFixture(`public-data/clinvar/${file}`)).result;
+          for (const uid of result.uids) if (result[uid].title.includes(`(${gene}):`)) out.push(result[uid]);
+        }
+        return out;
+      };
+      const agree = (got, gene) => {
+        const byAccession = new Map(raw(gene).map((r) => [r.accession, r]));
+        const entries = got.read.tracks[0].entries;
+        const rows = new Map(readClinVarTable(got.got.text).map((r) => [r.hgvs_c, r]));
+        let bad = 0;
+        for (const e of entries) {
+          const r = byAccession.get(rows.get(e.name)?.accession);
+          const c = r?.germline_classification ?? {};
+          if (!r || (clinvarClass(c.description) ?? 'other') !== e.cls || (REVIEW_STARS[String(c.review_status).toLowerCase()] ?? 0) !== e.stars) bad += 1;
+        }
+        return { records: byAccession.size, kept: got.got.record.kept, placed: entries.length, bad, residues: entries.every((e) => (gene === 'GRB2' ? grb2 : f9).protein[e.position - 1] === e.ref) };
+      };
+      const a = agree(g, 'GRB2');
+      const b = agree(f, 'F9');
+      check('annotations', 'ClinVar\'s records of GRB2 and F9 (NCBI E-utilities: the search, then the summaries 500 at a time): every record read; those on the GRB2 SH3 and the whole factor IX placed where their residues agree, each with ClinVar\'s own classification and review status (as stars)', `GRB2 ${a.kept} of ${a.records} read, ${a.placed} on the target; F9 ${b.kept} of ${b.records} read, ${b.placed} on the target; ${a.bad + b.bad} differ from ClinVar's fields; residues ${a.residues && b.residues ? 'all agree' : 'disagree'}`, a.kept === a.records && b.kept === b.records && b.records === 553 && !a.bad && !b.bad && a.residues && b.residues && b.placed > 400, 'all');
+    }
+    // gnomAD against MaveDB's own join of gnomAD to BRCA1's variants.
+    {
+      const answer = JSON.parse(annotationFixture('public-data/gnomad/ENST00000357654.variants.json'));
+      const ours = new Map(answer.data.transcript.variants.map((v) => [v.variant_id, v.joint]));
+      const csv = parseTable(readFileSync(new URL('./fixtures/public-data/mavedb/urn_mavedb_00000097-0-2.annotations.clinvar_2026_01.csv', import.meta.url)), { fileName: 'annotations.csv' });
+      const col = (n) => columnText(csv.columns.find((c) => c.name === n));
+      const [ids, afs, acs, ans] = ['gnomad.gnomad_id', 'gnomad.gnomad_af', 'gnomad.gnomad_ac', 'gnomad.gnomad_an'].map(col);
+      let compared = 0;
+      let worst = 0;
+      let missing = 0;
+      ids.forEach((id, r) => {
+        if (!id || id === 'NA') return;
+        const j = ours.get(id);
+        if (!j) {
+          missing += 1;
+          return;
+        }
+        compared += 1;
+        worst = Math.max(worst, Math.abs(j.ac / j.an - Number(afs[r])) / Number(afs[r]), j.ac === Number(acs[r]) && j.an === Number(ans[r]) ? 0 : 1);
+      });
+      const rows = gnomadRows(answer);
+      check('annotations', 'gnomAD v4\'s frequencies as MaveScape reads them (BRCA1\'s MANE Select transcript, exomes and genomes joined) equal MaveDB\'s own join of gnomAD v4.1 to BRCA1\'s saturation genome editing variants, variant by variant (by gnomAD\'s identifier)', `${compared} of ${compared + missing} of MaveDB's variants found, largest relative difference ${worst.toExponential(1)}; ${rows.length.toLocaleString('en-US')} variants of ENST00000357654 with a protein change`, compared >= 40 && !missing && worst <= 1e-12, 'all, ≤ 10⁻¹²');
+    }
+    // MaveDB's annotations joined to the BRCA1 example's run.
+    try {
+      const o = openExampleInNode(EXAMPLES.find((e) => e.id === 'brca1-sge'));
+      const results = proteinView(o.scored.results) ?? o.scored.results;
+      const own = o.scored.results;
+      const v = own.variants;
+      const accession = columnText(o.table.columns.find((c) => c.name === 'accession'));
+      const variants = new Map();
+      for (let i = 0; i < own.rows; i += 1) {
+        const key = v.proKey ? v.proKey[i] : v.key[i];
+        const item = { key: /^p\.[A-Z][a-z]{2}\d+([A-Z][a-z]{2}|=)$/.test(key ?? '') ? key : null, position: v.proPosition ? v.proPosition[i] : v.position[i] };
+        variants.set(accession[i], item);
+        variants.set(v.original[i], item);
+      }
+      const target = o.design.targets[0];
+      const protein = targetProtein(target).replace(/\*$/, '');
+      const text = readFileSync(new URL('./fixtures/public-data/mavedb/urn_mavedb_00000097-0-2.annotations.clinvar_2026_01.csv', import.meta.url), 'utf8');
+      const read = annotationProvider('mavedb-annotations').read(text, { target, protein, offset: 0, length: protein.length, variants });
+      const csv = parseTable(new TextEncoder().encode(text), { fileName: 'a.csv' });
+      const sig = columnText(csv.columns.find((c) => c.name === 'clinvar.2026_01.clinical_significance'));
+      const af = columnText(csv.columns.find((c) => c.name === 'gnomad.gnomad_af'));
+      const annotated = sig.filter((x, r) => (x && x !== 'NA' && x !== '-') || (af[r] && af[r] !== 'NA')).length;
+      const unmatched = read.notes.find((n) => /not in the run/.test(n));
+      const [clinvar, gnomad] = read.tracks;
+      const theirs = new Map();
+      sig.forEach((x) => { if (x && x !== 'NA' && x !== '-') theirs.set(x, (theirs.get(x) ?? 0) + 1); });
+      check('annotations', 'MaveDB\'s annotations of BRCA1\'s saturation genome editing score set (ClinVar 2026_01, gnomAD v4.1), joined to the example\'s run by MaveDB accession: every annotated variant found; those that change one residue on the map, the rest said', `${annotated.toLocaleString('en-US')} annotated variants${unmatched ? `; ${unmatched}` : ', all in the run'}; on the map: ClinVar ${clinvar?.entries.length ?? 0}, gnomAD ${gnomad?.entries.length ?? 0}; ${read.notes.join(' ')} MaveDB's classes: ${[...theirs].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, n]) => `${n} ${k}`).join(', ')}`, !unmatched && clinvar?.entries.length > 0 && gnomad?.entries.length > 0 && results.rows > 0, 'all found');
+    } catch (error) {
+      if (!(error instanceof MissingExampleData)) throw error;
+      throw new MissingData(error.message);
+    }
+    // The GRB2 example's tracks kept with a workspace, in its archive and back; each with its source.
+    {
+      const fetched = await publicAnnotations(grb2, ['uniprot-features', 'pdbe-conservation', 'alphamissense', 'clinvar', 'gnomad']);
+      const files = [['alignment', 'grb2-sh3.sto'], ['custom', 'P62993.gff']].map(([provider, name]) => ({ provider, name, text: annotationFixture(`annotations/${name}`), record: { service: 'a file', file: name } }));
+      let ws = createWorkspace('GRB2 tracks', { id: 'ws-tracks', now: '2026-10-11T00:00:00Z' });
+      const bytes = new Map();
+      for (const x of [...fetched.map((f) => ({ provider: f.provider, name: f.annotation.name, text: f.got.text, fileName: f.got.fileName, record: f.got.record })), ...files.map((f) => ({ ...f, fileName: f.name }))]) {
+        const data = new TextEncoder().encode(x.text);
+        const hash = sha256(data);
+        bytes.set(hash, data);
+        ws = addAnnotation(ws, { provider: x.provider, name: x.name, file: { fileName: x.fileName, sha256: hash, size: data.length }, record: x.record }).ws;
+      }
+      const tracksOf = (w, files) => w.annotations.flatMap((a) => annotationTracks(a, new TextDecoder().decode(files.get(a.file.sha256)), grb2).tracks);
+      const before = tracksOf(ws, bytes);
+      const archive = await writeArchive(ws, { annotations: bytes });
+      const back = await readArchive(archive.bytes);
+      const after = tracksOf(back.ws, back.sources);
+      const valuesOf = (t) => JSON.stringify(t.kind === 'values' ? [...t.values].map((x) => (Number.isNaN(x) ? null : x)) : t.kind === 'features' ? t.features : t.entries.map((e) => [e.key, e.value, e.cls]));
+      const same = before.length === after.length && before.every((t, i) => t.id === after[i].id && valuesOf(t) === valuesOf(after[i]));
+      const sourced = before.filter((t) => t.source?.service && (t.source.file || /^\d{4}-\d{2}-\d{2}T/.test(t.source.retrieved ?? '')));
+      const released = before.filter((t) => t.source?.service === 'UniProt').every((t) => t.source.release === '2026_03');
+      check('annotations', 'the GRB2 example\'s annotations (UniProt features, PDBe-KB conservation, AlphaMissense, ClinVar, gnomAD, an alignment, a GFF3 file) kept with a workspace, written to its archive and read back: the same tracks with the same values; every track naming its source (the service and when it was retrieved, UniProt\'s release; or its file)', `${ws.annotations.length} annotations, ${before.length} tracks; after the archive ${same ? 'the same' : 'different'}${back.problems.length ? `; problems: ${back.problems.join(' ')}` : ''}; ${sourced.length} of ${before.length} with their source${released ? ', UniProt\'s release 2026_03' : ''}`, same && !back.problems.length && sourced.length === before.length && released && before.length >= 9, 'the same; all');
+      // The tracks as a table, read back as custom tracks.
+      const values = before.filter((t) => t.kind === 'values');
+      const model = { length: grb2.length, protein: grb2.protein, target: { offset: grb2.offset } };
+      const reread = annotationProvider('custom').read(tracksCSV(values, model), grb2).tracks;
+      const round6 = (x) => (Number.isFinite(x) ? Number(x.toPrecision(6)) : null);
+      const roundTrip = values.every((t, i) => reread[i] && [...t.values].every((x, p) => Object.is(round6(x), round6(reread[i].values[p]))));
+      check('annotations', 'the tracks exported as a table (CSV, position by position) read back as custom tracks: every value as written (6 significant digits)', `${values.length} tracks of values, ${roundTrip ? 'the same' : 'different'}`, roundTrip && values.length >= 2, 'the same');
+      // What the GRB2 example's guide says of its tracks (lib/examples.js, expected).
+      try {
+        const o = openExampleInNode(EXAMPLES.find((e) => e.id === 'grb2-sh3'));
+        const model = buildMapModel(o.scored.results, o.design, {});
+        const am = before.find((t) => t.id === 'alphamissense:alphamissense').values;
+        const pdbe = before.find((t) => t.id === 'pdbe-conservation:conservation').values;
+        const least = [...model.columnMedian].map((x, i) => [x, i]).sort((a, b) => a[0] - b[0]).slice(0, 8);
+        const pairs = [...model.columnMedian].map((x, i) => [x, pdbe[i]]).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+        const rho = spearman(pairs.map((p) => p[0]), pairs.map((p) => p[1]));
+        check('annotations', 'the GRB2 example as its guide says: AlphaMissense calls the eight least tolerant positions likely pathogenic (each a mean above 0.9); conservation (PDBe-KB) follows the position effects only in part', `least tolerant ${least.map(([, i]) => `${grb2.protein[i]}${i + 159} ${am[i].toFixed(2)}`).join(', ')}; Spearman ρ of the position effect and conservation ${rho.toFixed(2)}`, least.every(([, i]) => am[i] > 0.9) && rho < -0.3 && rho > -0.6, 'all > 0.9; ρ from −0.6 to −0.3');
+      } catch (error) {
+        if (!(error instanceof MissingExampleData)) throw error;
+      }
+      // Offline, each provider asks only for what it needs, by public identifier.
+      const asked = fetched.map((f) => `${f.provider}: ${f.asked.map((p) => p.replace(/ids=[\d,]+/, 'ids=…')).join(', ')}`);
+      const expected = ['uniprot-features: uniprot/P62993/features', 'pdbe-conservation: pdbe/conservation/P62993', 'alphamissense: alphafold/P62993/missense', 'clinvar: clinvar/search?gene=GRB2&page=1, clinvar/summary?ids=…', 'gnomad: gnomad/gene/GRB2, gnomad/transcript/ENST00000316804'];
+      check('annotations', 'what each provider asks the fetcher (docs/NETWORK.md): an accession, a gene\'s symbol, ClinVar\'s record numbers, a transcript; never a sequence', asked.join('; '), JSON.stringify(asked) === JSON.stringify(expected), expected.join('; '));
     }
   },
 };

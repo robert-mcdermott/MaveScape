@@ -17,7 +17,7 @@ functional effects for research; it does not classify variants as pathogenic or 
 **[Website and user guide](https://robert-mcdermott.github.io/mavescape/)**: getting started,
 opening your data, scoring, quality control, the map, the record and scripting, with screenshots.
 
-> **Status: 0.2.0 released; 0.3.0 in progress.** Count tables import, designs are set in the
+> **Status: 0.3.0 released; 0.4.0 in progress.** Count tables import, designs are set in the
 > Experiment view, two-population experiments (by log ratio or DiMSum's fitness and error model),
 > time series (by weighted regression on every time point), sorted bins (by their weighted average
 > or maximum likelihood) and barcoded libraries (their barcodes summed, or each scored and
@@ -31,9 +31,25 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > cause it and what to do. Replicates are combined under a shared error model whose 95% intervals
 > hold the truth 94–97% of the time in 26 kinds of simulated experiment. For the open workspace,
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
-> would add, and writes the analysis package that `mavescape run` reads. Nine examples are on the Start page (three published, six simulated);
+> would add, and writes the analysis package that `mavescape run` reads. Thirteen examples are on the Start page (seven published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md)'s wave 2 is complete; 0.3 brings public data in and out.
+> [roadmap](mavescape-spec/roadmap.md)'s wave 3 is complete. It brought public data in and out,
+> through a fixed list of services: a target checked against its UniProt entry, and any published
+> MaveDB score set opened by search or URN, its scores on the map as published and its counts ready
+> to score again; several score sets of one target open together, their counts joined as
+> conditions to compare. The whole of MAVE-HGVS is read: nucleotide variants are read for the protein
+> changes they make (checked against biocommons hgvs) and drawn at the protein level as DiMSum
+> merges them, everything a map of substitutions cannot show listed beside it; targets come from
+> GenBank files, or from the RefSeq or Ensembl transcript a MaveDB record names. A run becomes a
+> MaveDB deposit (scores, counts, what each column is, the experiment and score set, the methods as
+> the analysis and the readout as the MAVE minimum information's keywords) that MaveDB's own
+> validators accept, written on your computer and never sent; `mavescape export` writes one from a
+> saved workspace, and a deposit opens again as a MaveDB record does. Below the map, tracks line up
+> UniProt's domains and secondary structure, conservation (PDBe-KB's profile, or your alignment
+> scored as Capra and Singh's tool scores it), AlphaMissense, ClinVar, gnomAD, MaveDB's own
+> annotations and your own files (predictors' scores, GFF3, tables), each with its source and date.
+> Wave 4 brings comparison: replicates, conditions, assays, runs and MaveDB's data matched and
+> compared, and which conclusions survive other reasonable analysis choices.
 
 ## What is a MAVE?
 
@@ -53,9 +69,9 @@ Tools such as Enrich2, DiMSum or dms_variants turn the reads into counts. MaveSc
 counts, the target's sequence and the experiment's design (which column is which sample, replicate,
 time point or bin). It turns them into scores with their uncertainty, quality control and a map.
 [MaveDB](https://www.mavedb.org) is the public repository of MAVE data. MaveScape is a separate
-program that needs no MaveDB account, and it writes scores in MaveDB's columns. Published scores
-without their counts can be explored, but they cannot be rescored or checked by count-based quality
-control.
+program that needs no MaveDB account; it writes scores in MaveDB's columns, and a run as a deposit
+MaveDB takes. Published scores without their counts can be explored, but they cannot be rescored or
+checked by count-based quality control.
 
 ## Install
 
@@ -80,7 +96,8 @@ opens in its own window.
 - **Variant counts**: a table with one row per variant and one column per sample (CSV, TSV or
   Excel), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per
   sample; or a table of barcode counts with its barcode-to-variant map.
-- **The target sequence** the variants are named against (FASTA, or pasted).
+- **The target sequence** the variants are named against (FASTA, a GenBank file such as a
+  plasmid map or a RefSeq record, or pasted).
 - **The design**: which column is which sample, its role, condition and replicate; a sample sheet
   fills it in.
 - Or **published scores**, from MaveDB and other sources.
@@ -97,10 +114,13 @@ MaveScape starts from counts; reads (FASTQ) are counted by those upstream tools.
 | `--data-dir DIR` | Where the workspace library is kept |
 | `--no-library` | Keep workspaces in the browser's storage instead |
 | `--keep-running` | Keep serving after the window is closed |
+| `mavescape urn:mavedb:…`, `--mavedb URN` | Open a MaveDB score set: its record, published scores and counts ([public data](https://robert-mcdermott.github.io/mavescape/docs/public-data.html)) |
+| `--offline`, `--no-fetch`, `--cache-dir DIR` | Public data from the cache only, or none; where the cache is ([`docs/NETWORK.md`](docs/NETWORK.md)) |
 | `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)) |
 | `--version` | Print the version |
 | `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/mavescape/docs/scripting.html#headless)) |
 | `mavescape validate [--design D] [tables]` | Check tables and a design as scoring would; exit 1 when something blocks scoring |
+| `mavescape export --format mavedb --out DIR W.msz` | Write a saved run as a MaveDB deposit (or `--format tables`); `--details` gives what MaveDB asks for, `--strict` fails while it is missing ([depositing in MaveDB](https://robert-mcdermott.github.io/mavescape/docs/record.html#mavedb)) |
 
 A second `mavescape <files>` hands its files to the window already open.
 
@@ -135,15 +155,20 @@ mavescape validate --design design.json counts.csv
 mavescape run --design design.json --out results/ --time 2026-10-09T12:00:00Z counts.csv
 mavescape run --from-workspace results/workspace.msz --out rerun/
 mavescape run --design design.json --out strict/ --strict --acknowledge "coverage=an error-prone PCR library" counts.csv
+mavescape export --format mavedb --details details.json --out deposit/ results/workspace.msz
 ```
 
 ## Privacy and security
 
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
-API calls from other web pages, and serves its page with a strict Content-Security-Policy. It
-makes no network requests of its own; remote control is off unless asked for, and then answers
-only programs on this computer; public-data fetching (MaveDB, UniProt, PDB, AlphaFold) will
-come through a fixed list of services and can be switched off (`--offline`).
+API calls from other web pages, and serves its page with a strict Content-Security-Policy, so the
+page contacts nothing but the program. Your files never leave your computer. The program fetches
+public data (MaveDB's score sets, a target's UniProt entry and features, the RefSeq or Ensembl transcript a record names, and annotations from ClinVar, gnomAD, AlphaMissense and PDBe-KB now; structures to come) from a
+fixed list of services, sending public identifiers, and caches each answer with where and when it
+came from; a request that would send a sequence is made only after you confirm it.
+[`docs/NETWORK.md`](docs/NETWORK.md) lists every request. `--offline` uses cached copies only and
+`--no-fetch` switches public data off. Remote control is off unless asked for, and then answers
+only programs on this computer.
 
 ## Development
 
@@ -169,6 +194,7 @@ with the workspace library in the browser.
 ```
 main.go, security.go, local.go, store.go, records.go, window.go   the Go host
 remote.go, actions.go, connection.go, output.go                   remote control
+run.go, export.go                                                 mavescape run, validate, export
 web/index.html, web/styles.css, web/app.js                        the app shell
 web/lib/       pure modules (no DOM): parsing, scoring, QC; run in Node, workers and the page
 web/ui/        views and components

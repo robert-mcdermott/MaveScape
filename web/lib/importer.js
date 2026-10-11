@@ -22,6 +22,9 @@ export const TEMPLATE_VERSION = 1;
 
 const SCORE_NAMES = /^(score|scores|fitness|effect|log_?ratio|lfc|log2fc|enrichment|abundance_score|raw_score|nor_fitness)$/i;
 const SE_NAMES = /^(se|sem|std_?err(or)?|sigma|raw_sigma|score_?se|se_score|sd|nor_fitness_sigma|error)$/i;
+const SE_RANK = [/^(se|sem|std_?err(or)?|score_?se|se_score)$/i, /^(sigma|nor_fitness_sigma)$/i, /^(raw_sigma|error)$/i];
+const CI_LOW = /^(lower_ci|ci_?lower|ci95_lower|ci_?low|lower_95)$/i;
+const CI_HIGH = /^(upper_ci|ci_?upper|ci95_upper|ci_?high|upper_95)$/i;
 
 function column(table, name) {
   return table.columns.find((c) => c.name === name) ?? null;
@@ -100,12 +103,17 @@ export function detectLayout(table) {
   return { layout: 'generic', variantColumn: best.name, level: best.level, countColumns, scoreColumns: scores, notes };
 }
 
+// The columns of scores, their standard errors and their 95% interval. A standard error is
+// preferred to a standard deviation (PTEN's VAMP-seq record has both, sd first).
 function scoreColumnsOf(names) {
   const out = {};
   const score = names.find((n) => SCORE_NAMES.test(n));
-  const se = names.find((n) => SE_NAMES.test(n));
+  const se = SE_RANK.map((re) => names.find((n) => re.test(n))).find(Boolean) ?? names.find((n) => SE_NAMES.test(n));
+  const low = names.find((n) => CI_LOW.test(n));
+  const high = names.find((n) => CI_HIGH.test(n));
   if (score) out.score = score;
   if (se) out.se = se;
+  if (low && high) Object.assign(out, { ciLow: low, ciHigh: high });
   return out;
 }
 
@@ -121,15 +129,19 @@ const PATTERNS = {
 };
 
 function first(patterns, name) {
-  for (const p of patterns) {
+  for (const [index, p] of patterns.entries()) {
     const m = p.exec(name);
-    if (m) return { value: Number(m[1]), text: m[0] };
+    if (m) return { value: Number(m[1]), text: m[0], index };
   }
   return null;
 }
 
+// The unit each time pattern names (Enrich2's _c_ and a bare "t" name none).
+const TIME_UNITS_NAMED = [null, null, 'generation', 'day', 'hour'];
+
 // Suggests each count column's role from its name: [{ column, role ('input' | 'output' |
-// 'timepoint' | 'bin' | null), time, bin, tile, replicate, group, reason }]. `group` gathers the
+// 'timepoint' | 'bin' | null), time, unit (what the name says time is in: 'hour', 'day',
+// 'generation', or null), bin, tile, replicate, group, reason }]. `group` gathers the
 // columns of one replicate (the name with the role, time and bin taken out). Suggestions only.
 export function suggestRoles(columns) {
   return columns.map((name) => {
@@ -159,7 +171,7 @@ export function suggestRoles(columns) {
     }
     // DiMSum's "output1A": the letter after the replicate number is a technical replicate.
     group = group.replace(/(\d)[A-Z]$/, '$1').replace(/^[_\s.-]+|[_\s.-]+$/g, '') || 'all';
-    return { column: name, role, time: time?.value ?? (role === 'input' ? 0 : null), bin: bin?.value ?? null, tile: tile?.value ?? null, replicate: replicate?.value ?? null, group, reason };
+    return { column: name, role, time: time?.value ?? (role === 'input' ? 0 : null), unit: role === 'timepoint' ? TIME_UNITS_NAMED[time.index] : null, bin: bin?.value ?? null, tile: tile?.value ?? null, replicate: replicate?.value ?? null, group, reason };
   });
 }
 
@@ -171,6 +183,25 @@ const slug = (text) => String(text).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^
 // Returns { design, notes }; the design is a draft for the Experiment view (validateDesign
 // checks it there). options: { variantColumn, level, target, name, barcodeColumn (a table of
 // barcodes) }.
+// The design of a table of published scores (wave 3, slice 2): read as published from its column
+// of scores, with the standard errors and 95% intervals it gives; every other column set aside.
+// scoreColumns: { score, se, ciLow, ciHigh } (detectLayout's).
+export function draftScoresDesign(table, { variantColumn, level, target, name, scoreColumns = {} }) {
+  const scores = { score: scoreColumns.score ?? 'score', ...(scoreColumns.se ? { se: scoreColumns.se } : {}), ...(scoreColumns.ciLow && scoreColumns.ciHigh ? { ciLow: scoreColumns.ciLow, ciHigh: scoreColumns.ciHigh } : {}) };
+  const design = {
+    format: 'mavescape-design', version: 1, name: name ?? 'Published scores', model: 'scores',
+    variants: { column: variantColumn, level: level === 'nucleotide' ? 'nucleotide' : 'protein' },
+    targets: target ? [target] : [],
+    library: { level: 'variant' },
+    samples: [], replicates: [], scores,
+    controls: { wildType: 'auto', synonymous: 'auto', nonsense: 'auto' },
+  };
+  const read = new Set([variantColumn, ...IDENTIFIER_COLUMNS, ...Object.values(scores)]);
+  const others = table.columns.map((c) => c.name).filter((c) => !read.has(c));
+  if (others.length) design.ignoredColumns = others.map((column) => ({ column, reason: 'published with the scores; not read' }));
+  return design;
+}
+
 export function draftDesign(table, roles, options = {}) {
   const notes = [];
   const used = roles.filter((r) => r.role);
@@ -227,6 +258,20 @@ export function draftDesign(table, roles, options = {}) {
     } else {
       replicate.bins = members.filter((m) => m.role === 'bin').map((m) => ({ sample: sampleFor(m.column), order: m.bin, value: m.bin })).sort((a, b) => a.order - b.order);
     }
+    // A lone sample is no replicate of a time series or of sorted bins (BRCA1's saturation genome
+    // editing counts its library and plasmid beside day 5 and day 11, wave 3 slice 3): set aside,
+    // for the person to give it a role if it has one.
+    const lone = model === 'time-series' ? replicate.timepoints.length < 2 : model === 'bins' ? replicate.bins.length < 2 : false;
+    if (lone) {
+      for (const m of members) {
+        const id = sampleFor(m.column);
+        const k = samples.findIndex((x) => x.id === id);
+        if (k >= 0) samples.splice(k, 1);
+        ignoredColumns.push({ column: m.column, reason: `a single sample, not a replicate of the ${model === 'bins' ? 'sorted bins' : 'time series'}: set aside` });
+      }
+      notes.push(`${members.map((m) => m.column).join(', ')}: ${members.length > 1 ? 'samples' : 'a sample'} on ${members.length > 1 ? 'their' : 'its'} own, not ${members.length > 1 ? '' : 'a '}replicate${members.length > 1 ? 's' : ''} of the ${model === 'bins' ? 'sorted bins' : 'time series'}: set aside. Give ${members.length > 1 ? 'them a role' : 'it a role'} in the Experiment view if ${members.length > 1 ? 'they have one' : 'it has one'}.`);
+      continue;
+    }
     replicates.push(replicate);
     groupOf.set(replicate, group);
   }
@@ -277,7 +322,11 @@ export function draftDesign(table, roles, options = {}) {
   };
   if (conditions.length) design.conditions = conditions;
   if (tiles.size) design.library.tiles = [...tiles].sort((a, b) => a[1] - b[1]).map(([id, n]) => ({ id, name: `Tile ${n}`, ...tileRange(table, options, used.filter((r) => r.tile === n).map((r) => r.column)) }));
-  if (model === 'time-series') design.time = { unit: 'other' };
+  // The unit the time points' names give ("t_02hrs", "day5", "gen10"), when they all give the same.
+  if (model === 'time-series') {
+    const units = new Set(used.filter((r) => r.role === 'timepoint').map((r) => r.unit ?? null));
+    design.time = { unit: units.size === 1 && [...units][0] ? [...units][0] : 'other' };
+  }
   if (model === 'bins') {
     design.bins = { weight: 'rank' };
     notes.push('Bins are given their order as their value; set the values (VAMP-seq weights, or fluorescence) in the Experiment view.');

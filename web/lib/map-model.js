@@ -7,11 +7,14 @@
 // "The variant-effect map"): scored; low confidence (scored, with a flag); filtered (measured, its
 // score NA with a reason); missing (designed but not measured); not designed (outside the tiles:
 // no cell); the reference residue (outlined; it holds the synonymous variant's score when there is
-// one). Multi-variants, insertions and deletions are not on the map; the model counts them.
+// one). Multi-variants, insertions and deletions are not on the map; the model counts them. A
+// nucleotide-level run is given as its protein view (collapse.js): the nucleotide variants of each
+// protein variant merged, as DiMSum merges them.
 
 import { log10 } from './dmath.js';
 import { KIND, STATUS } from './variants.js';
 import { targetLength } from './design.js';
+import { targetProtein } from './target.js';
 import { median, quantileSorted, sorted } from './stats.js';
 import { STAGE_BY_ID } from './filters.js';
 import { scaleWords } from './readout.js';
@@ -61,25 +64,15 @@ export function contrastCondition(results, index = 0) {
   };
 }
 
-function proteinOf(target) {
-  if (target.sequenceType === 'protein') return target.sequence.toUpperCase();
-  const order = 'TCAG';
-  const aas = 'FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG';
-  const codons = {};
-  let k = 0;
-  for (const a of order) for (const b of order) for (const c of order) codons[a + b + c] = aas[k++];
-  const dna = target.sequence.toUpperCase().slice((target.codingStart ?? 1) - 1);
-  let out = '';
-  for (let i = 0; i + 3 <= dna.length; i += 3) out += codons[dna.slice(i, i + 3)] ?? 'X';
-  return out;
-}
+const proteinOf = targetProtein;
 
 // The model of one condition of a run, or of a contrast between two (colorBy 'differential').
 // options: { condition (index), contrast (index), rowOrder, colorBy }.
 export function buildMapModel(results, design, options = {}) {
   const target = design.targets?.length === 1 ? design.targets[0] : null;
   if (!target) throw new Error('The map needs the design\'s target: the sequence its positions are numbered on.');
-  if (design.variants.level !== 'protein') throw new Error('The map shows protein-level variants; this run names nucleotide variants (their mapping to the protein comes in wave 3).');
+  // A nucleotide-level run is drawn from its protein view (collapse.js), whose variants are protein's.
+  if ((results.variants.level ?? design.variants.level) !== 'protein') throw new Error(target.sequenceType === 'dna' ? 'The map shows protein variants: read this run at the protein level first.' : 'The map shows protein variants; this run names nucleotide variants of a target that is not DNA.');
   const differential = options.colorBy === 'differential' && results.differential?.length;
   const c = differential ? contrastCondition(results, Math.min(options.contrast ?? 0, results.differential.length - 1)) : results.conditions[options.condition ?? 0];
   const order = ROW_ORDERS[options.rowOrder ?? 'biochemical'] ?? ROW_ORDERS.biochemical;
@@ -189,6 +182,8 @@ export function buildMapModel(results, design, options = {}) {
     if (vals.length) columnMedian[p - 1] = median(vals);
   }
   const rowMedian = Float64Array.from(rowValues, (vals) => (vals.length ? median(vals) : Number.NaN));
+  // The score of no effect, whatever the map is colored by: the wild type's (0 for a contrast).
+  const scoreCenter = differential ? 0 : Number.isFinite(wt) ? wt : (c.rescale?.anchors.find((a) => a.what === 'wild type')?.to ?? 0);
   return {
     target: { id: target.id, name: target.name, offset: target.offset ?? 0 },
     protein,
@@ -210,6 +205,7 @@ export function buildMapModel(results, design, options = {}) {
     value,
     columnMedian,
     columnCount,
+    scoreCenter,
     rowMedian,
     counts,
     offMap,
@@ -261,6 +257,31 @@ export function describeMap(model, results) {
     lines.push(`Most tolerant: ${positions.slice(-5).reverse().map(([p, m]) => `${model.protein[p - 1]}${pos(p)} ${m.toFixed(2)}`).join(', ')}.`);
   }
   if (model.colorBy === 'score') lines.push(`Colors run from ${model.domain.min.toFixed(2)} to ${model.domain.max.toFixed(2)}, centered on the wild type (${model.domain.center.toFixed(2)}).`);
-  if (model.offMap) lines.push(`${model.offMap} variants are not single substitutions (multi-variants, insertions, deletions) and are not on the map.`);
+  const collapse = results.collapse;
+  if (collapse) {
+    lines.push(`Read at the protein level: the run's ${collapse.from} nucleotide variants${collapse.elsewhere ? ` of ${model.target.name} (${collapse.elsewhere} more, named on the score set's other targets, set aside)` : ''} make ${collapse.proteinVariants} protein variants; ${collapse.merged ? `${collapse.merged} of them are made by more than one (${collapse.mergedFrom} nucleotide variants), merged as DiMSum merges them (${collapse.unweighted ? (collapse.unweighted === collapse.merged ? 'averaged: the scores have no SE to weight them by' : `each score weighted by 1/SE², ${collapse.unweighted} averaged for want of SEs`) : 'each score weighted by 1/SE²'})` : 'none is made by more than one'}.${collapse.mixed ? ` ${collapse.mixed} that change one amino acid and leave another codon synonymous are left out, as DiMSum leaves them.` : ''}`);
+  }
+  const off = model.offMap + (collapse ? collapse.unmerged : 0);
+  if (off) lines.push(`${off} variant${off > 1 ? 's are' : ' is'} not single substitutions (${collapse ? 'frameshifts, splice-site, intronic and UTR variants, ' : ''}multi-variants, insertions, deletions) and not on the map: they are listed beside it.`);
   return lines;
+}
+
+// The variants a map does not show, as the run's own rows: for a nucleotide run (its protein view
+// drawn), each row not merged into a cell on the map; else each row that is not a single
+// substitution. Invalid names and the wild type aside. [row].
+export function offMapRows(results, model, view = null) {
+  const shown = new Set();
+  for (let k = 0; k < model.cells.length; k += 1) {
+    const i = model.cells[k];
+    if (i < 0 || model.state[k] === STATE.NOT_DESIGNED) continue;
+    if (view) for (const r of view.variants.members[i]) shown.add(r);
+    else shown.add(i);
+  }
+  const v = results.variants;
+  const rows = [];
+  for (let i = 0; i < results.rows; i += 1) {
+    if (shown.has(i) || v.status[i] === STATUS.INVALID || v.kind[i] === KIND.WT) continue;
+    rows.push(i);
+  }
+  return rows;
 }

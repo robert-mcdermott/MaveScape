@@ -1,8 +1,8 @@
 {
   "format": "mavescape-design",
   "version": 1,
-  "name": "BRCA1 RING domain, E2 (UBE2D1) binding by phage display",
-  "description": "Six rounds of phage-display selection for E2 binding (round 0 = input), in two library preparations of three replicates each; the replicates of a library share its input.",
+  "name": "BRCA1 RING domain, E3 ubiquitin ligase activity by phage autoubiquitination",
+  "description": "Six rounds of selection of phage-displayed BRCA1 RING domain variants for their own ubiquitination (autoubiquitination: E3 ligase activity, with the E2 present, hence \"PlusE2\"; round 0 = input), in two library preparations of three replicates each; the replicates of a library share its input.",
   "source": {
     "mavedb": "urn:mavedb:00000003-a-2",
     "citation": "Starita et al., Genetics 2015, doi:10.1534/genetics.115.175802; rescored in Rubin et al., Genome Biology 2017, doi:10.1186/s13059-017-1272-5",

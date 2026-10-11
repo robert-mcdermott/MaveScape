@@ -1,0 +1,124 @@
+LOCUS       ON605209                3438 bp    DNA     circular SYN 29-OCT-2022
+DEFINITION  Cloning vector pMK-RQ-BCD_LacZ-cmyc-EB2-H6, complete sequence.
+ACCESSION   ON605209
+VERSION     ON605209.1
+KEYWORDS    .
+SOURCE      Cloning vector pMK-RQ-BCD_LacZ-cmyc-EB2-H6
+  ORGANISM  Cloning vector pMK-RQ-BCD_LacZ-cmyc-EB2-H6
+            other sequences; artificial sequences; vectors.
+REFERENCE   1  (bases 1 to 3438)
+  AUTHORS   Colarusso,A., Lauro,C., Calvanese,M., Parrilli,E. and Tutino,M.L.
+  TITLE     Active human full-length CDKL5 produced in the Antarctic bacterium
+            Pseudoalteromonas haloplanktis TAC125
+  JOURNAL   Microb Cell Fact 21 (1), 211 (2022)
+   PUBMED   36242022
+REFERENCE   2  (bases 1 to 3438)
+  AUTHORS   Colarusso,A., Lauro,C., Calvanese,M., Parrilli,E. and Tutino,M.L.
+  TITLE     Direct Submission
+  JOURNAL   Submitted (24-MAY-2022) Dept. of Chemical Sciences, University of
+            Naples Federico II, via Cintia, 21, Naples 80126, Italy
+FEATURES             Location/Qualifiers
+     source          1..3438
+                     /organism="Cloning vector pMK-RQ-BCD_LacZ-cmyc-EB2-H6"
+                     /mol_type="other DNA"
+                     /db_xref="taxon:2989432"
+     CDS             414..473
+                     /note="derived from E. coli"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="beta-galactosidase leader peptide"
+                     /protein_id="UYO37357.1"
+                     /translation="MTSLQHIINRRDWENKEVK"
+     gene            473..1519
+                     /gene="cmyc-eb2-h6"
+     CDS             473..1519
+                     /gene="cmyc-eb2-h6"
+                     /note="human full-length EB2 with N-terminal cmyc and
+                     N-terminal 6xHis tag"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="Cmyc-H6-EB2"
+                     /protein_id="UYO37358.1"
+                     /translation="MGEQKLISEEDLPGPTQTLSPNGENNNDIIQDNNGTIIPFRKHT
+                     VRGERSYSWGMAVNVYSTSITQETMSRHDIIAWVNDIVSLNYTKVEQLCSGAAYCQFM
+                     DMLFPGCISLKKVKFQAKLEHEYIHNFKLLQASFKRMNVDKVIPVEKLVKGRFQDNLD
+                     FIQWFKKFYDANYDGKEYDPVEARQGQDAIPPPDPGEQIFNLPKKSHHANSPTAGAAK
+                     SSPAAKPGSTPSRPSSAKRASSSGSASKSDKDLETQVIQLNEQVHSLKLALEGVEKER
+                     DFYFGKLREIELLCQEHGQENDDLVQRLMDILYASEEHEGHTEEPEAEEQAHEQQPPQ
+                     QEEYHHHHHHKEVK"
+     rep_origin      1698..2365
+     gene            complement(2516..3310)
+                     /gene="kanR"
+     CDS             complement(2516..3310)
+                     /gene="kanR"
+                     /note="KanR"
+                     /codon_start=1
+                     /transl_table=11
+                     /product="aminoglycoside phosphotransferase"
+                     /protein_id="UYO37359.1"
+                     /translation="MIEQDGLHAGSPAAWVERLFGYDWAQQTIGCSDAAVFRLSAQGR
+                     PVLFVKTDLSGALNELQDEAARLSWLATTGVPCAAVLDVVTEAGRDWLLLGEVPGQDL
+                     LSSHLAPAEKVSIMADAMRRLHTLDPATCPFDHQAKHRIERARTRMEAGLVDQDDLDE
+                     EHQGLAPAELFARLKASMPDGEDLVVTHGDACLPNIMVENGRFSGFIDCGRLGVADRY
+                     QDIALATRDIAEELGGEWADRFLVLYGIAAPDSQRIAFYRLLDEFF"
+ORIGIN      
+        1 ctaaattgta agcgttaata ttttgttaaa attcgcgtta aatttttgtt aaatcagctc
+       61 attttttaac caataggccg aaatcggcaa aatcccttat aaatcaaaag aatagaccga
+      121 gatagggttg agtggccgct acagggcgct cccattcgcc attcaggctg cgcaactgtt
+      181 gggaagggcg tttcggtgcg ggcctcttcg ctattacgcc agctggcgaa agggggatgt
+      241 gctgcaaggc gattaagttg ggtaacgcca gggttttccc agtcacgacg ttgtaaaacg
+      301 acggccagtg agcgcgacgt aatacgactc actatagggc gaattgaagg aaggccgtca
+      361 aggccgcatg gtctcacgca ttataattgc ccgtttatgc aacaggaata aacatgacct
+      421 ctttacagca cataattaat cgtcgcgatt gggaaaataa ggaggtcaaa taatgggtga
+      481 gcaaaagtta atttcggaag aagatttacc gggtccgaca cagaccttaa gtccgaatgg
+      541 tgaaaataac aacgatatta ttcaggataa caacggcacc attattccgt ttcgtaaaca
+      601 taccgttcgt ggtgaacgta gctatagttg gggtatggca gttaatgttt atagcaccag
+      661 cattacccaa gaaaccatga gccgtcatga tattattgcc tgggttaacg atattgtgtc
+      721 attaaattat accaaagttg aacagttatg tagcggtgca gcatattgtc agtttatgga
+      781 tatgttattt ccgggttgta ttagcttaaa aaaagttaaa tttcaggcca aattagaaca
+      841 cgagtatatt cacaacttta aattattaca ggcaagcttt aaacgcatga atgttgataa
+      901 agtgattccg gttgaaaaat tagtgaaagg tcgttttcag gataacttag attttattca
+      961 gtggtttaaa aaattttacg acgccaacta tgatggcaaa gaatatgatc ctgttgaagc
+     1021 acgtcagggt caagatgcaa ttccgcctcc ggaccctggt gagcagattt ttaaccttcc
+     1081 gaaaaaaagc catcatgcaa atagcccgac cgcaggcgca gcaaaaagca gtccggcagc
+     1141 aaaaccgggt agcaccccga gccgtccgag cagcgcaaaa cgtgcaagca gcagcggtag
+     1201 cgcaagcaaa agcgataaag atttagaaac ccaggtgatt cagttaaatg aacaggttca
+     1261 tagcttaaaa ttagcattag aaggtgttga aaaagaacgc gatttttatt ttggtaaatt
+     1321 acgcgaaatt gaattattat gccaagaaca tggtcaagaa aatgatgatt tagttcagcg
+     1381 tttaatggat attttatatg caagcgaaga acatgaaggt cataccgaag aaccggaagc
+     1441 cgaagaacag gcacatgaac agcagcctcc gcagcaagaa gaatatcacc atcaccatca
+     1501 tcataaggag gtcaaataat ggtgagaccc tgggcctcat gggccttcct ttcactgccc
+     1561 gctttccagt cgggaaacct gtcgtgccag ctgcattaac atggtcatag ctgtttcctt
+     1621 gcgtattggg cgctctccgc ttcctcgctc actgactcgc tgcgctcggt cgttcgggta
+     1681 aagcctgggg tgcctaatga gcaaaaggcc agcaaaaggc caggaaccgt aaaaaggccg
+     1741 cgttgctggc gtttttccat aggctccgcc cccctgacga gcatcacaaa aatcgacgct
+     1801 caagtcagag gtggcgaaac ccgacaggac tataaagata ccaggcgttt ccccctggaa
+     1861 gctccctcgt gcgctctcct gttccgaccc tgccgcttac cggatacctg tccgcctttc
+     1921 tcccttcggg aagcgtggcg ctttctcata gctcacgctg taggtatctc agttcggtgt
+     1981 aggtcgttcg ctccaagctg ggctgtgtgc acgaaccccc cgttcagccc gaccgctgcg
+     2041 ccttatccgg taactatcgt cttgagtcca acccggtaag acacgactta tcgccactgg
+     2101 cagcagccac tggtaacagg attagcagag cgaggtatgt aggcggtgct acagagttct
+     2161 tgaagtggtg gcctaactac ggctacacta gaagaacagt atttggtatc tgcgctctgc
+     2221 tgaagccagt taccttcgga aaaagagttg gtagctcttg atccggcaaa caaaccaccg
+     2281 ctggtagcgg tggttttttt gtttgcaagc agcagattac gcgcagaaaa aaaggatctc
+     2341 aagaagatcc tttgatcttt tctacggggt ctgacgctca gtggaacgaa aactcacgtt
+     2401 aagggatttt ggtcatgaga ttatcaaaaa ggatcttcac ctagatcctt ttaaattaaa
+     2461 aatgaagttt taaatcaatc taaagtatat atgagtaaac ttggtctgac agttattaga
+     2521 aaaattcatc cagcagacga taaaacgcaa tacgctggct atccggtgcc gcaatgccat
+     2581 acagcaccag aaaacgatcc gcccattcgc cgcccagttc ttccgcaata tcacgggtgg
+     2641 ccagcgcaat atcctgataa cgatccgcca cgcccagacg gccgcaatca ataaagccgc
+     2701 taaaacggcc attttccacc ataatgttcg gcaggcacgc atcaccatgg gtcaccacca
+     2761 gatcttcgcc atccggcatg ctcgctttca gacgcgcaaa cagctctgcc ggtgccaggc
+     2821 cctgatgttc ttcatccaga tcatcctgat ccaccaggcc cgcttccata cgggtacgcg
+     2881 cacgttcaat acgatgtttc gcctgatgat caaacggaca ggtcgccggg tccagggtat
+     2941 gcagacgacg catggcatcc gccataatgc tcactttttc tgccggcgcc agatggctag
+     3001 acagcagatc ctgacccggc acttcgccca gcagcagcca atcacggccc gcttcggtca
+     3061 ccacatccag caccgccgca cacggaacac cggtggtggc cagccagctc agacgcgccg
+     3121 cttcatcctg cagctcgttc agcgcaccgc tcagatcggt tttcacaaac agcaccggac
+     3181 gaccctgcgc gctcagacga aacaccgccg catcagagca gccaatggtc tgctgcgccc
+     3241 aatcatagcc aaacagacgt tccacccacg ctgccgggct acccgcatgc aggccatcct
+     3301 gttcaatcat actcttcctt tttcaatatt attgaagcat ttatcagggt tattgtctca
+     3361 tgagcggata catatttgaa tgtatttaga aaaataaaca aataggggtt ccgcgcacat
+     3421 ttccccgaaa agtgccac
+//
+

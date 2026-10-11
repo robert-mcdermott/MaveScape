@@ -49,7 +49,7 @@ jobs:
       - name: Syntax check
         run: |
           shopt -s nullglob
-          for file in web/app.js web/ui/*.js web/lib/*.js web/workers/*.js validation/*.mjs validation/fixtures/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js; do node --check "$file"; done
+          for file in web/app.js web/ui/*.js web/lib/*.js web/lib/providers/*.js web/workers/*.js validation/*.mjs validation/fixtures/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js; do node --check "$file"; done
       - name: node --test
         run: node --test "web/lib/*.test.mjs"
       - name: Cache external validation data
@@ -79,8 +79,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Cache the MaveDB tables the session compares with Node (DHFR's two score sets, BAP1's)
+        uses: actions/cache@v4
+        with:
+          path: |
+            validation/cache/mavedb-dhfr
+            validation/cache/mavedb-bap1-sge
+          key: validation-remote-${{ hashFiles('validation/sources.json') }}
+      - name: Fetch those MaveDB tables
+        run: node validation/fetch.mjs mavedb-dhfr mavedb-bap1-sge
       - name: Every remote action, in the program and headless Chrome, against Node
-        run: node validation/remote-session.mjs --verbose
+        run: node validation/remote-session.mjs --verbose --require-data
         env:
           CHROME: /usr/bin/google-chrome
       - name: A million barcodes imported and scored in the window
@@ -89,6 +98,10 @@ jobs:
           CHROME: /usr/bin/google-chrome
       - name: mavescape run and validate, as a pipeline runs them
         run: node validation/headless-run.mjs --verbose
+        env:
+          CHROME: /usr/bin/google-chrome
+      - name: The feasibility records opened from MaveDB, live, and the phase-0 exit checked again
+        run: node validation/mavedb-live.mjs --verbose
         env:
           CHROME: /usr/bin/google-chrome
 

@@ -33,7 +33,8 @@ const sourceOf = (ws) => ws.sources.find((s) => s.id === (ws.designSource ?? ws.
 // What QC can be of: each run (by id), and 'counts' (the current design, no scores).
 export function qcSubjects(ws) {
   const options = ws.runs.slice().reverse().map((r) => ({ id: `run:${r.id}`, label: `${r.name} (${r.inputs.source.name})`, run: r }));
-  if (ws.design && sourceOf(ws)) options.push({ id: 'counts', label: 'The counts, with the current design (no scores)' });
+  // Published scores (wave 3, slice 2) have no counts of their own to check.
+  if (ws.design && ws.design.model !== 'scores' && sourceOf(ws)) options.push({ id: 'counts', label: 'The counts, with the current design (no scores)' });
   return options;
 }
 

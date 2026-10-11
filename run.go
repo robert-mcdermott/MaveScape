@@ -125,8 +125,10 @@ type runRecord struct {
 	Inputs    []runFile       `json:"inputs"`
 	Run       json.RawMessage `json:"run,omitempty"`
 	QC        json.RawMessage `json:"qc,omitempty"`
-	Steps     []runStepRecord `json:"steps"`
-	Outputs   []runFile       `json:"outputs"`
+	// mavescape export --format mavedb: what the deposit holds and lacks (the mavedb_deposit action).
+	Deposit json.RawMessage `json:"deposit,omitempty"`
+	Steps   []runStepRecord `json:"steps"`
+	Outputs []runFile       `json:"outputs"`
 }
 
 // --- mavescape run ------------------------------------------------------------------------------
@@ -377,6 +379,10 @@ type runSummary struct {
 	Differential bool     `json:"comparesConditions"`
 	Barcodes     bool     `json:"barcodes"`
 	Map          bool     `json:"map"`
+	// Published: scores read as published (a design of model "scores"), with no counts to write.
+	Published bool `json:"published"`
+	// ProteinLevel: nucleotide variants of a DNA target, also read at the protein level.
+	ProteinLevel bool `json:"proteinLevel"`
 }
 
 type qcOverall struct {
@@ -504,38 +510,7 @@ func executeRun(ctx context.Context, opts runOptions, browser string, record *ru
 
 	// The files.
 	out := func(name string) string { return filepath.Join(opts.out, name) }
-	exports := []struct {
-		what, file, condition string
-	}{}
-	if len(summary.Conditions) > 1 {
-		used := map[string]bool{}
-		for _, condition := range summary.Conditions {
-			exports = append(exports, struct{ what, file, condition string }{"scores", "scores_" + safeFileName(condition, used) + ".csv", condition})
-		}
-	} else {
-		exports = append(exports, struct{ what, file, condition string }{"scores", "scores.csv", ""})
-	}
-	exports = append(exports,
-		struct{ what, file, condition string }{"counts", "counts.csv", ""},
-		struct{ what, file, condition string }{"qc-samples", "qc_samples.csv", ""},
-		struct{ what, file, condition string }{"qc-variants", "qc_variants.csv", ""},
-		struct{ what, file, condition string }{"qc-findings", "qc_findings.csv", ""},
-	)
-	if summary.Barcodes {
-		exports = append(exports, struct{ what, file, condition string }{"barcodes", "barcodes.csv", ""})
-	}
-	if summary.Differential {
-		exports = append(exports, struct{ what, file, condition string }{"differential", "differential.csv", ""})
-	}
-	if summary.Map {
-		exports = append(exports, struct{ what, file, condition string }{"map", "map.svg", ""})
-	}
-	exports = append(exports,
-		struct{ what, file, condition string }{"provenance", "provenance.json", ""},
-		struct{ what, file, condition string }{"methods", "methods.md", ""},
-		struct{ what, file, condition string }{"references", "references.bib", ""},
-		struct{ what, file, condition string }{"archive", "workspace.msz", ""},
-	)
+	exports := append(tableExports(summary), exportItem{"archive", "workspace.msz", ""})
 	failed := false
 	for _, e := range exports {
 		args := map[string]any{"what": e.what, "path": out(e.file)}
@@ -571,6 +546,48 @@ func executeRun(ctx context.Context, opts runOptions, browser string, record *ru
 	return 0
 }
 
+// exportItem is a file of a run's outputs: what the export action writes, its file name, and the
+// condition it is of ("" for all, or the run's only one).
+type exportItem struct {
+	what, file, condition string
+}
+
+// tableExports lists a run's tables and record (mavescape run's outputs, and mavescape export
+// --format tables): the scores (one file per condition), the scores at the protein level, the
+// counts and QC, the barcodes, differential scores, the map, the provenance, methods and references.
+func tableExports(summary runSummary) []exportItem {
+	exports := []exportItem{}
+	if len(summary.Conditions) > 1 {
+		used := map[string]bool{}
+		for _, condition := range summary.Conditions {
+			exports = append(exports, exportItem{"scores", "scores_" + safeFileName(condition, used) + ".csv", condition})
+		}
+	} else {
+		exports = append(exports, exportItem{"scores", "scores.csv", ""})
+	}
+	if summary.ProteinLevel {
+		exports = append(exports, exportItem{"protein-scores", "protein_scores.csv", ""})
+	}
+	if !summary.Published {
+		exports = append(exports, exportItem{"counts", "counts.csv", ""}, exportItem{"qc-samples", "qc_samples.csv", ""})
+	}
+	exports = append(exports, exportItem{"qc-variants", "qc_variants.csv", ""}, exportItem{"qc-findings", "qc_findings.csv", ""})
+	if summary.Barcodes {
+		exports = append(exports, exportItem{"barcodes", "barcodes.csv", ""})
+	}
+	if summary.Differential {
+		exports = append(exports, exportItem{"differential", "differential.csv", ""})
+	}
+	if summary.Map {
+		exports = append(exports, exportItem{"map", "map.svg", ""})
+	}
+	return append(exports,
+		exportItem{"provenance", "provenance.json", ""},
+		exportItem{"methods", "methods.md", ""},
+		exportItem{"references", "references.bib", ""},
+	)
+}
+
 var unsafeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 // safeFileName makes a name part of a file name, unique among those used.
@@ -595,6 +612,8 @@ type runStepper struct {
 	log       *runLog
 	overwrite bool
 	count     int
+	// Who performs the actions, for the history ("mavescape run" if not given).
+	client string
 }
 
 // do performs an action and returns its data, or false (recorded, logged) when it fails.
@@ -643,7 +662,11 @@ func (s *runStepper) perform(action string, args map[string]any) (remoteResult, 
 	if err != nil {
 		return remoteResult{}, err
 	}
-	event := remoteEvent{Action: action, Args: encoded, Client: runClient}
+	client := s.client
+	if client == "" {
+		client = runClient
+	}
+	event := remoteEvent{Action: action, Args: encoded, Client: client}
 	if spec, ok := findAction(action); ok {
 		if spec.output {
 			output, release, err := s.hub.prepareOutput(encoded)
@@ -935,7 +958,8 @@ func startHeadlessPage(ctx context.Context, browser string, dev bool, clock stri
 	if err != nil {
 		return nil, err
 	}
-	cfg := config{host: "127.0.0.1", port: 0, window: "none", remote: true, dev: dev, dataDir: filepath.Join(scratch, "library")}
+	// Public data are off: a headless run reads only the files it is given.
+	cfg := config{host: "127.0.0.1", port: 0, window: "none", remote: true, dev: dev, dataDir: filepath.Join(scratch, "library"), noFetch: true}
 	running, err := start(cfg, io.Discard)
 	if err != nil {
 		os.RemoveAll(scratch)
@@ -1075,10 +1099,14 @@ type runLog struct {
 	json   bool
 	stdout io.Writer
 	stderr io.Writer
+	// The command, for messages: "run" or "export".
+	command string
+	// The record's file name, for the last line.
+	recordName string
 }
 
 func newRunLog(mode string, stdout, stderr io.Writer) *runLog {
-	return &runLog{json: mode == "json", stdout: stdout, stderr: stderr}
+	return &runLog{json: mode == "json", stdout: stdout, stderr: stderr, command: "run", recordName: "run.json"}
 }
 
 func (l *runLog) emit(fields map[string]any) {
@@ -1124,7 +1152,7 @@ func (l *runLog) problem(message string) {
 		l.emit(map[string]any{"level": "error", "event": "problem", "message": message})
 		return
 	}
-	fmt.Fprintln(l.stderr, "mavescape run:", message)
+	fmt.Fprintf(l.stderr, "mavescape %s: %s\n", l.command, message)
 }
 
 func (l *runLog) done(record runRecord, path string) {
@@ -1133,10 +1161,10 @@ func (l *runLog) done(record runRecord, path string) {
 		return
 	}
 	if record.OK {
-		fmt.Fprintf(l.stdout, "Done in %.1f s: %d files written to %s (run.json lists them).\n", record.Seconds, len(record.Outputs), filepath.Dir(path))
+		fmt.Fprintf(l.stdout, "Done in %.1f s: %d files written to %s (%s lists them).\n", record.Seconds, len(record.Outputs), filepath.Dir(path), l.recordName)
 		return
 	}
-	fmt.Fprintf(l.stderr, "mavescape run: not done (exit %d) after %.1f s; %s says why.\n", record.Exit, record.Seconds, path)
+	fmt.Fprintf(l.stderr, "mavescape %s: not done (exit %d) after %.1f s; %s says why.\n", l.command, record.Exit, record.Seconds, path)
 }
 
 // The first sentence of a message, for the progress lines.

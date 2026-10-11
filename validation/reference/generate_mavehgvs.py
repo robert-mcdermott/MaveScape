@@ -15,6 +15,10 @@ synonymous or target-identical. web/lib/hgvs.js must agree on every string (vali
 - identifiers from the feasibility data (all of GRB2; a fixed sample of the others);
 - variants generated from the grammar, valid and invalid, with a fixed seed;
 - single-character edits of the above, with a fixed seed (near-misses).
+
+And mavehgvs's own tests of variants against a target sequence (its TestTargetSequenceValidation),
+each pair judged with targetseq: web/lib/hgvs.js's and consequence.js's checks against a target
+must decide the same.
 """
 
 import csv
@@ -153,6 +157,23 @@ def judge(s):
     }
 
 
+def target_cases():
+    """mavehgvs's own tests of variants against a target sequence (TestTargetSequenceValidation,
+    tests/test_variant.py at v0.8.1): every (target, variant) pair, judged with targetseq."""
+    url = f"https://raw.githubusercontent.com/VariantEffect/mavehgvs/{TAG_COMMIT}/tests/test_variant.py"
+    text = urllib.request.urlopen(url).read().decode()
+    start = text.index("class TestTargetSequenceValidation")
+    end = text.index("\nclass ", start + 10)
+    out = []
+    for target, s in re.findall(r'\("([A-Z]+)", "([^"]+)"\)', text[start:end]):
+        try:
+            v = Variant(s, targetseq=target)
+            out.append({"target": target, "s": s, "ok": True, "canonical": str(v)})
+        except MaveHgvsParseError as e:
+            out.append({"target": target, "s": s, "ok": False, "error": str(e)})
+    return out
+
+
 def main():
     rng = random.Random(20261008)
     literals = test_literals()
@@ -177,6 +198,8 @@ def main():
         "versions": {"mavehgvs": metadata.version("mavehgvs"), "fqfa": metadata.version("fqfa")},
         "counts": {"strings": len(results), "valid": valid, "invalid": len(results) - valid},
         "results": results,
+        # Variants against a target sequence (wave 3, slice 3): mavehgvs's own test cases.
+        "targets": target_cases(),
     }
     with open(OUT, "w") as f:
         json.dump(out, f, separators=(",", ":"), ensure_ascii=False)

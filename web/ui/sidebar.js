@@ -24,7 +24,7 @@ const SECTIONS = [
     kind: 'design', title: 'Design', icon: 'experiment',
     items: (ws) => (ws.design ? [{ id: 'design', ...ws.design }] : []),
     label: (d) => d.name ?? 'Experiment design',
-    meta: (d) => (d.samples ? `${d.samples.length} samples` : ''),
+    meta: (d) => (d.model === 'scores' ? 'published scores' : d.samples ? `${d.samples.length} samples` : ''),
     empty: 'Samples, roles, conditions and replicates, set in the Experiment view.',
   },
   {

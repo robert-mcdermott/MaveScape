@@ -4,6 +4,9 @@
 
 import { h, icon, clear, relativeTime, formatBytes, formatCount } from './dom.js';
 import { variantSection } from './variant-inspector.js';
+import { targetOriginText } from '../lib/genbank.js';
+import { retrievalText } from '../lib/uniprot.js';
+import { recordView } from './mavedb.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -31,11 +34,20 @@ export function mountInspector(app) {
       h('dt', 'Layout'), h('dd', source.layout),
       h('dt', 'Variant names'), h('dd', `${source.mapping.variantColumn} (${source.mapping.level})`),
       h('dt', 'Count columns'), h('dd', String(source.mapping.countColumns.length)),
-      h('dt', 'Target'), h('dd', app.store.ws.targets.find((t) => t.id === source.target)?.name ?? 'none'));
+      h('dt', 'Target'), h('dd', app.store.ws.targets.find((t) => t.id === source.target)?.name ?? 'none'),
+      // A table from MaveDB (wave 3, slice 2): which record and file, its license, when retrieved.
+      source.origin?.database === 'MaveDB' ? [
+        // The counts of several score sets opened together (wave 3, slice 6), joined.
+        h('dt', 'From'), h('dd', source.origin.urns ? `MaveDB ${source.origin.urns.join(' and ')} (counts, joined: a condition each)` : `MaveDB ${source.origin.urn} (${source.origin.file})`),
+        h('dt', 'License'), h('dd', source.origin.license ?? ''),
+        h('dt', 'Retrieved'), h('dd', String(source.origin.retrieved ?? '').slice(0, 10)),
+      ] : null);
+    const record = source.origin?.database === 'MaveDB' ? (app.store.ws.records ?? []).find((r) => r.urn === source.origin.urn) : null;
     const problems = [...(source.problems?.blocking ?? []).map((m) => h('div.callout.danger', { style: { marginTop: '6px', fontSize: '12px' } }, m)), ...(source.problems?.warnings ?? []).map((m) => h('div.callout.warn', { style: { marginTop: '6px', fontSize: '12px' } }, m))];
     return h('section.inspector-section', h('h3', icon('table'), source.name), kv,
       s ? h('p.muted', { style: { fontSize: '12px', margin: '8px 0 0' } }, `${formatCount(s.total)} variants: ${formatCount(s.valid)} valid, ${formatCount(s.warning)} read leniently, ${formatCount(s.invalid)} not valid.`) : null,
-      ...problems);
+      ...problems,
+      record ? h('details.inspector-details', { open: true }, h('summary', 'The MaveDB record'), recordView(record)) : null);
   }
 
   function targetSection(target) {
@@ -47,7 +59,10 @@ export function mountInspector(app) {
         target.sequenceType === 'dna' ? [h('dt', 'Coding start'), h('dd', String(target.codingStart ?? 1))] : null,
         h('dt', 'Offset'), h('dd', String(target.offset ?? 0)),
         ids.uniprot ? [h('dt', 'UniProt'), h('dd', ids.uniprot)] : null,
-        ids.gene ? [h('dt', 'Gene'), h('dd', ids.gene)] : null),
+        ids.gene ? [h('dt', 'Gene'), h('dd', ids.gene)] : null,
+        target.reference ? [h('dt', 'Checked'), h('dd', `against UniProt ${target.reference.accession} (${retrievalText(target.reference)}): positions ${target.reference.start}–${target.reference.end}${target.reference.identical ? ', identical' : ''}`)] : null,
+        // Where its sequence came from (wave 3, slice 3): a GenBank file, NCBI, Ensembl.
+        target.origin ? [h('dt', 'From'), h('dd', targetOriginText(target.origin))] : null),
       h('p.mono', { style: { fontSize: '11px', wordBreak: 'break-all', margin: '8px 0 0', color: 'var(--text-2)' } }, target.sequence.length > 240 ? `${target.sequence.slice(0, 240)}…` : target.sequence));
   }
 
@@ -130,7 +145,7 @@ export function mountInspector(app) {
       render();
     },
     update(topics) {
-      if (topics.has('ws') || topics.has('focus') || topics.has('selection') || topics.has('results') || topics.has('workspace-loaded')) render();
+      if (topics.has('ws') || topics.has('focus') || topics.has('selection') || topics.has('results') || topics.has('workspace-loaded') || topics.has('tracks')) render();
     },
   };
 }

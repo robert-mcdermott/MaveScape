@@ -1,0 +1,6 @@
+{
+  "contentType": "application/json",
+  "service": "Ensembl",
+  "source": "https://rest.ensembl.org/sequence/id/ENST00000460680?type=cdna\u0026mask_feature=1",
+  "retrieved": "2026-10-11T04:13:28Z"
+}

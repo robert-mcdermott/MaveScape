@@ -13,6 +13,11 @@ test('layouts in common use are recognized', () => {
   assert.equal(scores.layout, 'mavedb-scores');
   assert.equal(scores.variantColumn, 'hgvs_nt', 'MaveDB indexes by hgvs_nt when it is given');
   assert.deepEqual(scores.scoreColumns, { score: 'score', se: 'SE' });
+  // A standard error is preferred to a standard deviation listed before it, and an interval is
+  // read with its two bounds (PTEN's VAMP-seq record on MaveDB).
+  const vamp = detectLayout(parseTable('accession,hgvs_nt,hgvs_splice,hgvs_pro,score,sd,expts,se,lower_ci,upper_ci\nurn:1,NA,NA,p.Met1Val,1.06,0.13,4.0,0.06,0.94,1.19\n'));
+  assert.deepEqual(vamp.scoreColumns, { score: 'score', se: 'se', ciLow: 'lower_ci', ciHigh: 'upper_ci' });
+  assert.deepEqual(detectLayout(parseTable('accession,hgvs_nt,hgvs_splice,hgvs_pro,score,sigma,raw_score,raw_sigma\nurn:1,NA,NA,p.=,0,0.1,1,0.2\n')).scoreColumns, { score: 'score', se: 'sigma' });
   assert.equal(detectLayout(parseTable('nt_seq\tinput1\toutput1A\nacgt\t1\t0\n')).layout, 'dimsum');
   const generic = detectLayout(parseTable('mutation,pre,post,fitness\nA12V,10,3,0.2\nG13D,8,8,0\nWT,100,90,0\n'));
   assert.equal(generic.layout, 'generic');
@@ -75,4 +80,29 @@ test('the review blocks on duplicates and on counts that are not numbers; templa
   const template = makeTemplate('My lab', table, { variantColumn: 'variant', level: 'protein', countColumns: ['input', 'output'] });
   assert.equal(applyTemplate(template, table).variantColumn, 'variant');
   assert.equal(applyTemplate(template, parseTable('variant,input\nx,1\n')), null);
+});
+
+test('a lone sample is no replicate of a time series: set aside, with a note (BRCA1\'s saturation genome editing counts)', () => {
+  const table = parseTable('hgvs_nt,count_library,count_day5_rep1,count_day11_rep1,count_day5_rep2,count_day11_rep2\nc.1A>G,5,10,8,11,9\nc.2T>C,4,9,1,10,2\n');
+  const roles = suggestRoles(table.columns.slice(1).map((c) => c.name)).map((r) => (r.role ? r : { ...r, group: r.column }));
+  const target = { id: 't', name: 'T', sequenceType: 'dna', sequence: 'ATGAAATAA', codingStart: 1 };
+  const { design, notes } = draftDesign(table, roles, { variantColumn: 'hgvs_nt', level: 'nucleotide', target });
+  assert.equal(design.model, 'time-series');
+  assert.deepEqual(design.replicates.map((r) => [r.name, r.timepoints.map((t) => t.time)]), [['Replicate 1', [5, 11]], ['Replicate 2', [5, 11]]]);
+  assert.deepEqual(design.ignoredColumns, [{ column: 'count_library', reason: 'a single sample, not a replicate of the time series: set aside' }]);
+  assert.ok(notes.some((n) => /count_library: a sample on its own/.test(n)));
+  assert.ok(validateDesign(design, { columns: table.columns.map((c) => c.name) }).ok);
+  assert.equal(design.time.unit, 'day', 'day 5 and day 11 name days');
+});
+
+test('a time series takes its unit from its time points\' names when they all name one', () => {
+  const unitOf = (header) => {
+    const table = parseTable(`hgvs_pro,${header.join(',')}\np.=,1${',1'.repeat(header.length - 1)}\n`);
+    const roles = suggestRoles(header).map((r) => (r.role ? r : { ...r, group: r.column }));
+    return draftDesign(table, roles, { variantColumn: 'hgvs_pro', level: 'protein' }).design.time?.unit;
+  };
+  assert.equal(unitOf(['Repeat1_t_00hrs', 'Repeat1_t_02hrs', 'Repeat1_t_04hrs']), 'hour');
+  assert.equal(unitOf(['rep1_gen0', 'rep1_gen3', 'rep1_gen6']), 'generation');
+  assert.equal(unitOf(['rep1_c_0', 'rep1_c_1', 'rep1_c_2']), 'other', 'Enrich2\'s rounds name no unit');
+  assert.equal(unitOf(['rep1_t0', 'rep1_day3', 'rep1_day6']), 'other', 'a mixture: none');
 });

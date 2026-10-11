@@ -99,10 +99,14 @@ are simpler while one person maintains all three. Revisit at 1.0.
   them by hash. With no host (static hosting), `storage.js` uses OPFS, then IndexedDB.
 - **Public data.** `fetch.go` serves `/api/fetch/<service>/<id>` from one allowlist. Every response
   is cached with its upstream URL, retrieval time, ETag and service version where given, and is
-  marked `X-MaveScape-Cache: hit|miss|stale`. `--offline` serves only cached copies; `--no-fetch`
+  marked `X-MaveScape-Cache: hit|miss|revalidated|stale` (an older copy confirmed unchanged by its
+  ETag or date is `revalidated`). `--offline` serves only cached copies; `--no-fetch`
   switches the feature off entirely. Requests carry public identifiers only (URNs, accessions,
-  gene symbols, HGVS of public variants). A sequence search (BLAST-like lookup of a target with no
-  accession) shows exactly what will be sent and needs confirmation. `docs/NETWORK.md` lists every
+  gene symbols, HGVS of public variants). A lookup of a target with no accession by its
+  sequence (UniProt's exact-sequence search) shows exactly what will be sent and needs
+  confirmation: the host refuses it (HTTP 428, with the request it would make) until the page
+  confirms it. A target's check against its UniProt entry is kept with the workspace's target
+  (`reference`), not in the design, so that recording it leaves runs current. `docs/NETWORK.md` lists every
   request MaveScape can make.
 
 ## The analysis pipeline

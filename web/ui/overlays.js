@@ -57,6 +57,7 @@ export function showMenu(anchor, items, options = {}) {
         type: 'button',
         role: 'menuitem',
         disabled: item.disabled,
+        title: item.title,
         class: [item.danger ? 'danger' : '', item.active ? 'active' : ''].join(' '),
         onclick: (event) => {
           event.stopPropagation();

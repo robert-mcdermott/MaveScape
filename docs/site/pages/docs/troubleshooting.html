@@ -28,6 +28,14 @@ lede: Common problems and what to do about them. If yours is not here, the drawe
       <h2 id="library">Where are my workspaces?</h2>
       <p>In the library folder the status bar names: <code>~/Library/Application Support/MaveScape</code> on macOS, <code>~/.config/MaveScape</code> on Linux and <code>%AppData%\MaveScape</code> on Windows, unless MaveScape was started with <code>--data-dir</code>. Deleted workspaces go to the library's trash folder. To move an analysis to another computer, export the workspace archive (<a href="record.html#archive">The workspace archive</a>).</p>
 
+      <h2 id="public-data">Public data are not fetched</h2>
+      <ul>
+        <li><strong>"Public data need the MaveScape program":</strong> the page is served as a plain web site; public data come through the program (<a href="getting-started.html">Getting started</a>).</li>
+        <li><strong>"switched off (--no-fetch)"</strong> or <strong>"running with --offline"</strong>: MaveScape was started so; with <code>--offline</code>, only copies already in the cache are served. Start it without the flag.</li>
+        <li><strong>"Could not reach UniProt"</strong> or <strong>"did not answer in time":</strong> check the network; on one that needs a proxy, set <code>HTTPS_PROXY</code> before starting MaveScape. A copy already in the cache is still used, and the dialog says it is an older one.</li>
+        <li><strong>A running MaveScape keeps its own setting:</strong> starting <code>mavescape --offline</code> while another is running hands the files to the running one, which says so; stop it first.</li>
+      </ul>
+
       <h2 id="remote">Remote control does not answer</h2>
       <ul>
         <li><strong>"No MaveScape page is connected":</strong> the program is running but no window is open; open the printed address.</li>

@@ -5,7 +5,7 @@
 import { toast } from './overlays.js';
 import { IDENTIFIER_COLUMNS } from '../lib/design.js';
 import { setAsideOtherColumns } from '../lib/design-edit.js';
-import { draftDesign } from '../lib/importer.js';
+import { draftDesign, draftScoresDesign } from '../lib/importer.js';
 import { setDesign } from '../lib/workspace.js';
 
 export const countColumnsOf = (s) => (s?.mapping?.countColumns ?? []).filter((c) => !IDENTIFIER_COLUMNS.includes(c));
@@ -21,6 +21,12 @@ export async function draftFromColumns(app, s) {
   }
   const target = store.ws.targets.find((t) => t.id === s.target);
   const columns = countColumnsOf(s);
+  // A table of published scores (wave 3, slice 2): a design that reads them as published.
+  if (!columns.length && s.mapping?.scoreColumns?.score) {
+    const scores = draftScoresDesign(table, { variantColumn: s.mapping.variantColumn, level: s.mapping.level, target, name: s.name.replace(/\.[^.]+$/, ''), scoreColumns: s.mapping.scoreColumns });
+    store.commit(setDesign(store.ws, scores, `Drafted the design of ${s.name}: published scores in "${scores.scores.score}"`, s.id), 'Draft the design from the column names');
+    return;
+  }
   const roles = s.roleSuggestions?.length ? [...s.roleSuggestions, ...columns.filter((c) => !s.roleSuggestions.some((r) => r.column === c)).map((column) => ({ column, role: null, group: column }))] : columns.map((column) => ({ column, role: null, group: column }));
   const { design, notes } = draftDesign(table, roles, { variantColumn: s.mapping.variantColumn, level: s.mapping.level, target, name: s.name.replace(/\.[^.]+$/, ''), barcodeColumn: s.mapping.barcodeColumn });
   if (!target) design.targets = [];

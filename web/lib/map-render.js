@@ -2,33 +2,42 @@
 // positions, each state its own way (missing: an empty cell with a dot; filtered: a diagonal
 // hatch; low confidence: a paler color and a corner mark; not designed: no cell; the reference
 // residue: outlined), the median of each position above and of each row at the right, position
-// axes (target and reference numbering), an overview strip of the whole target with the visible
-// window, and the selection, hover and keyboard focus. Pure apart from the context it is given, so
-// the benchmark (validation/bench.mjs) runs it in Node on a stand-in context.
+// axes (target and reference numbering), the sequence tracks shown below the grid (track-render.js;
+// wave 3, slice 5), an overview strip of the whole target with the visible window, and the
+// selection, hover and keyboard focus. Pure apart from the context it is given, so the benchmark
+// (validation/bench.mjs) runs it in Node on a stand-in context.
 
 import { STATE, colorPosition } from './map-model.js';
 import { colormapLUT } from './colormaps.js';
+import { layoutTracks, paintShapes, TRACK_GAP, trackShapes, tracksHeight } from './track-render.js';
 
-export const LAYOUT = { left: 30, right: 22, track: 14, axis: 16, refAxis: 14, gap: 6, overview: 18 };
+// leftTracks: the left margin when tracks are shown, for their names.
+export const LAYOUT = { left: 30, leftTracks: 132, right: 22, track: 14, axis: 16, refAxis: 14, gap: 6, overview: 18 };
 
 // The geometry of a view: { width, cellW, cellH, x0 (first visible position, may be fractional),
-// offset }. Returns the regions in canvas pixels.
+// tracks (the tracks shown, or none) }. Returns the regions in canvas pixels.
 export function geometry(model, view) {
   const L = LAYOUT;
+  const tracks = view.tracks ?? [];
+  const left = tracks.length ? L.leftTracks : L.left;
   const top = L.track + L.axis;
   const gridH = model.rows.length * view.cellH;
   const refAxis = model.target.offset ? L.refAxis : 0;
-  const overviewTop = top + gridH + refAxis + L.gap;
+  const tracksTop = top + gridH + refAxis;
+  const tracksH = tracksHeight(tracks);
+  const overviewTop = tracksTop + tracksH + L.gap;
   return {
-    left: L.left,
+    left,
     top,
-    gridW: Math.max(10, view.width - L.left - L.right),
+    gridW: Math.max(10, view.width - left - L.right),
     gridH,
     trackTop: 0,
     refAxisTop: top + gridH,
+    tracksTop,
+    tracksHeight: tracksH,
     overviewTop,
     height: overviewTop + L.overview + 2,
-    visible: Math.max(1, (view.width - L.left - L.right) / view.cellW),
+    visible: Math.max(1, (view.width - left - L.right) / view.cellW),
   };
 }
 
@@ -153,7 +162,7 @@ export function drawMap(ctx, model, view, theme, color, paler) {
   for (let r = 0; r < R; r += 1) {
     const y = g.top + r * cellH + h / 2;
     ctx.fillStyle = theme.muted;
-    if (cellH >= 8) ctx.fillText(model.rows[r] === '*' ? '*' : model.rows[r], g.left / 2, y);
+    if (cellH >= 8) ctx.fillText(model.rows[r] === '*' ? '*' : model.rows[r], g.left - LAYOUT.left / 2, y);
     const t = colorPosition(model, model.rowMedian[r]);
     if (Number.isFinite(t) && model.domain.kind === 'diverging') {
       ctx.fillStyle = color(t);
@@ -166,7 +175,7 @@ export function drawMap(ctx, model, view, theme, color, paler) {
     for (const [start] of model.groups.slice(1)) {
       const y = g.top + start * cellH - 0.5;
       ctx.beginPath();
-      ctx.moveTo(4, y);
+      ctx.moveTo(g.left - LAYOUT.left + 4, y);
       ctx.lineTo(g.left - 4, y);
       ctx.stroke();
     }
@@ -186,6 +195,20 @@ export function drawMap(ctx, model, view, theme, color, paler) {
     // Reference residues under the axis when there is room for a letter per position.
     ctx.font = '9px ui-monospace, monospace';
     for (let p = first; p <= last; p += 1) if (p % step) ctx.fillText(model.protein[p - 1], xOf(p) + w / 2, LAYOUT.track + LAYOUT.axis - 4);
+  }
+  // The tracks, on the grid's columns, with their names in the margin.
+  if (view.tracks?.length) {
+    const shapes = trackShapes(view.tracks, { left: g.left, gridW: g.gridW, cellW, x0: view.x0, first, last, top: g.tracksTop, gutter: g.left }, theme, color);
+    paintShapes(ctx, shapes, { x: g.left, y: g.tracksTop, w: g.gridW, h: g.tracksHeight });
+  }
+  // The position under the pointer, down the grid and the tracks.
+  const column = view.hover >= 0 ? Math.floor(view.hover / R) + 1 : view.hoverPosition ?? -1;
+  if (column >= first && column <= last && (view.tracks?.length || view.hover < 0)) {
+    ctx.save();
+    ctx.globalAlpha = 0.14;
+    ctx.fillStyle = theme.accent;
+    ctx.fillRect(xOf(column), g.top, w, g.tracksTop + g.tracksHeight - g.top);
+    ctx.restore();
   }
   drawOverview(ctx, model, view, theme, color, g);
   return g;
@@ -211,11 +234,21 @@ export function drawOverview(ctx, model, view, theme, color, g = geometry(model,
   ctx.strokeRect(Math.max(g.left, x) + 0.5, y + 0.5, Math.min(width, g.visible * per) - 1, LAYOUT.overview - 1);
 }
 
-// What is at (x, y): { region: 'cell', position, row } | { region: 'overview', position } | null.
+// What is at (x, y): { region: 'cell', position, row } | { region: 'overview', position } |
+// { region: 'track', track (its index among the tracks shown), position (null in the names'
+// margin) } | null.
 export function hitTest(model, view, x, y) {
   const g = geometry(model, view);
   if (y >= g.overviewTop && y <= g.overviewTop + LAYOUT.overview && x >= g.left && x <= g.left + g.gridW) {
     return { region: 'overview', position: 1 + ((x - g.left) / g.gridW) * model.length };
+  }
+  if (view.tracks?.length && y >= g.tracksTop && y < g.tracksTop + g.tracksHeight && x <= g.left + g.gridW) {
+    const { rows } = layoutTracks(view.tracks, g.tracksTop);
+    const track = rows.findIndex((r) => y >= r.y - TRACK_GAP / 2 && y < r.y + r.height + TRACK_GAP / 2);
+    if (track < 0) return null;
+    if (x < g.left) return { region: 'track', track, position: null };
+    const position = Math.floor(view.x0 + (x - g.left) / view.cellW);
+    return position >= 1 && position <= model.length ? { region: 'track', track, position } : null;
   }
   if (x < g.left || x > g.left + g.gridW || y < g.top || y >= g.top + g.gridH) return null;
   const position = Math.floor(view.x0 + (x - g.left) / view.cellW);

@@ -21,17 +21,22 @@ import { launch, sleep } from '../docs/capture/cdp.mjs';
 import { readArchive, writeArchive } from '../web/lib/archive.js';
 import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../web/lib/findings.js';
-import { barcodesCSV, countsCSV, differentialCSV, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV } from '../web/lib/exports.js';
+import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV } from '../web/lib/exports.js';
+import { MAVEDB_FILES, mavedbDeposit } from '../web/lib/mavedb-export.js';
+import { proteinView } from '../web/lib/collapse.js';
+import { readScoreSet, scoresDesign } from '../web/lib/mavedb.js';
+import { detectLayout } from '../web/lib/importer.js';
+import { defaultParameters } from '../web/lib/score.js';
 import { writeMethods } from '../web/lib/methods.js';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { outputDigest } from '../web/lib/runs.js';
-import { inputFor, recompute } from './roundtrip-cases.mjs';
+import { inputFor, recompute, scoreTable } from './roundtrip-cases.mjs';
 import { readZip } from '../web/lib/zip.js';
 import { parseTable } from '../web/lib/csv.js';
 import { readiness } from '../web/lib/readiness.js';
 import { workspaceOf } from './readiness-cases.mjs';
-import { openExampleInNode } from './example-cases.mjs';
+import { openExampleInNode, recordTarget } from './example-cases.mjs';
 import { exampleById } from '../web/lib/examples.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -94,7 +99,7 @@ function nodeFiles(dir) {
   if (run.inputs.design.variants.level === 'protein') out['map.svg'] = mapSVG(buildMapModel(r, run.inputs.design), { results: r });
   if (r.barcodes) out['barcodes.csv'] = barcodesCSV(r, run);
   if (r.differential) out['differential.csv'] = differentialCSV(r, run);
-  return { files: out, digest: outputDigest(r), recorded: run.output.sha256, ws, sources, run };
+  return { files: out, digest: outputDigest(r), recorded: run.output.sha256, ws, sources, run, results: r, methods };
 }
 let archiveReader = null;
 function readArchiveSync(path) {
@@ -254,6 +259,21 @@ try {
   } catch { parsed = []; }
   check('--log json: one JSON object per line, from start to done, each step with its action and outcome', `${parsed.length} lines: ${[...new Set(parsed.map((p) => p.event))].join(', ')}; last ${JSON.stringify(parsed.at(-1) ?? {}).slice(0, 100)}`, logged.code === 0 && parsed.length > 5 && parsed[0].event === 'start' && parsed.at(-1).event === 'done' && parsed.at(-1).exit === 0 && parsed.filter((p) => p.event === 'step').every((p) => p.action && p.ok === true && typeof p.seconds === 'number'));
 
+  // Nucleotide variants of a transcript (wave 3, slice 3): BAP1's published scores, its target
+  // Ensembl's transcript, scored without a window: the map at the protein level, and the scores at
+  // the protein level as Node merges them.
+  {
+    const bapRecord = readScoreSet(JSON.parse(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000662-a-2.json'), 'utf8')));
+    const tablePath = join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000662-a-2.scores.csv');
+    const table = parseTable(readFileSync(tablePath), { fileName: 'scores.csv' });
+    const design = scoresDesign(bapRecord, { table, layout: detectLayout(table), target: recordTarget(bapRecord) });
+    writeFileSync(out('bap1.design.json'), JSON.stringify(design));
+    const bap1 = await mavescape(['run', '--design', out('bap1.design.json'), '--out', out('bap1'), '--time', TIME, tablePath]);
+    const scored = scoreTable(table, design, defaultParameters(design));
+    const written = bap1.code === 0 && existsSync(join(out('bap1'), 'protein_scores.csv')) ? readFileSync(join(out('bap1'), 'protein_scores.csv'), 'utf8') : '';
+    check('mavescape run on nucleotide variants of a transcript (BAP1 exon 1): the map drawn at the protein level, and protein_scores.csv as Node merges the variants', `exit ${bap1.code}; ${files(out('bap1')).filter((f) => /scores|map/.test(f)).join(', ')}; protein scores ${written === proteinScoresCSV(proteinView(scored.results)) ? 'Node\'s' : 'different'}`, bap1.code === 0 && files(out('bap1')).includes('map.svg') && written === proteinScoresCSV(proteinView(scored.results)) && record(out('bap1')).run?.outputSha256 === outputDigest(scored.results));
+  }
+
   // A table of codon variants (wave 2, slice 11): Hsp90's design names the protein variants derived
   // from MaveDB's nucleotide names, and mavescape run reads the table's codons for it.
   {
@@ -286,6 +306,41 @@ try {
   check('mavescape validate: 0 when valid, 1 with what blocks scoring (as JSON with --json), a design alone, parameters checked, 2 for a wrong command line',
     `valid ${valid.code} (${valid.stdout.trim().slice(0, 60)}…); invalid ${invalid.code}, ${report.blocking?.length} problems, table ${report.table?.name}; design alone ${designOnly.code}; parameters ${badParameters.code}; nothing named ${noInput.code}`,
     valid.code === 0 && /^Valid/.test(valid.stdout) && invalid.code === 1 && report.valid === false && report.blocking.some((p) => /does not|no column/.test(p)) && report.inputs.length === 2 && designOnly.code === 0 && badParameters.code === 1 && /pseudocount/i.test(badParameters.stdout) && noInput.code === 2);
+
+  // --- mavescape export (wave 3, slice 4): a saved workspace's run as a MaveDB deposit, or tables ---
+  {
+    const saved = join(out('a'), 'workspace.msz');
+    const listed = (dir) => readdirSync(dir).filter((f) => f !== 'export.json').sort();
+    const sameFiles = (a, b) => listed(a).join() === listed(b).join() && listed(a).every((f) => Buffer.compare(readFileSync(join(a, f)), readFileSync(join(b, f))) === 0);
+    const d1 = await mavescape(['export', '--format', 'mavedb', '--out', out('dep1'), '--time', TIME, saved]);
+    const d2 = await mavescape(['export', '--out', out('dep2'), '--time', TIME, saved]);
+    const rec1 = JSON.parse(readFileSync(join(out('dep1'), 'export.json'), 'utf8'));
+    const node = nodeFiles(out('a'));
+    const deposit = mavedbDeposit({ ws: node.ws, run: node.run, results: node.results, methods: node.methods });
+    const nodeDiffer = deposit.files.filter((f) => MAVEDB_FILES.includes(f.name)).filter((f) => !existsSync(join(out('dep1'), f.name)) || readFileSync(join(out('dep1'), f.name), 'utf8') !== f.text).map((f) => f.name);
+    check('mavescape export --format mavedb: a run of a saved workspace as a MaveDB deposit, twice the same bytes, the files MaveDB reads as Node writes them from the archive; export.json lists them and what MaveDB still requires (an abstract), said on stderr; exit 0', `exit ${d1.code}; ${listed(out('dep1')).join(', ')}; ${sameFiles(out('dep1'), out('dep2')) ? 'twice the same' : 'not the same twice'}; ${nodeDiffer.length ? `differ from Node: ${nodeDiffer.join(', ')}` : 'Node\'s'}; missing ${rec1.deposit?.missing?.map((m) => m.field).join(', ')}`,
+      d1.code === 0 && d2.code === 0 && sameFiles(out('dep1'), out('dep2')) && !nodeDiffer.length && ['README.md', 'scores.csv', 'counts.csv', 'score_columns.json', 'count_columns.json', 'experiment.json', 'score_set.json', 'mavescape.json'].every((f) => listed(out('dep1')).includes(f)) && rec1.format === 'mavescape-export' && rec1.outputs.length === 8 && rec1.deposit?.missing?.some((m) => m.field === 'abstract') && /requires what the workspace lacks/.test(d1.stderr));
+    const strictly = await mavescape(['export', '--strict', '--out', out('dep3'), saved]);
+    writeFileSync(out('details.json'), JSON.stringify({ abstract: 'Abundance of every substitution in the SH3 domain of GRB2.', license: 'CC BY 4.0', publications: ['doi:10.1038/s41586-024-08370-4'] }));
+    const detailed = await mavescape(['export', '--strict', '--details', out('details.json'), '--out', out('dep4'), '--time', TIME, saved]);
+    const set = JSON.parse(readFileSync(join(out('dep4'), 'score_set.json'), 'utf8'));
+    check('--strict: exit 1 while the deposit lacks what MaveDB requires; with --details giving it, exit 0, the details in the deposit', `exit ${strictly.code} then ${detailed.code}; license ${set.licenseId}, publication ${set.primaryPublicationIdentifiers[0]?.identifier}`, strictly.code === 1 && /--strict/.test(JSON.parse(readFileSync(join(out('dep3'), 'export.json'), 'utf8')).problems.join(' ')) && detailed.code === 0 && set.licenseId === 3 && set.abstractText.startsWith('Abundance') && set.primaryPublicationIdentifiers[0]?.dbName === 'Crossref');
+    const twoDep = await mavescape(['export', '--out', out('dep5'), '--time', TIME, join(out('two'), 'workspace.msz')]);
+    const folders = readdirSync(out('dep5')).filter((f) => f !== 'export.json').sort();
+    check('two conditions: a deposit for each, in a folder of its own (MaveDB keeps each as a score set)', `exit ${twoDep.code}; ${folders.join(', ')}`, twoDep.code === 0 && folders.join() === 'With_ligand,Without_ligand' && folders.every((f) => existsSync(join(out('dep5'), f, 'scores.csv')) && existsSync(join(out('dep5'), f, 'score_set.json'))));
+    const tables = await mavescape(['export', '--format', 'tables', '--out', out('tab'), saved]);
+    const shared = ['scores.csv', 'counts.csv', 'qc_samples.csv', 'qc_variants.csv', 'qc_findings.csv', 'map.svg', 'methods.md', 'references.bib'];
+    const tableDiffer = shared.filter((f) => !existsSync(join(out('tab'), f)) || Buffer.compare(readFileSync(join(out('tab'), f)), readFileSync(join(out('a'), f))) !== 0);
+    check('mavescape export --format tables: the run\'s tables from the saved workspace, the same bytes as mavescape run wrote them', `exit ${tables.code}; ${listed(out('tab')).join(', ')}; ${tableDiffer.length ? `differ: ${tableDiffer.join(', ')}` : 'the same'}`, tables.code === 0 && !tableDiffer.length);
+    const wrong = await Promise.all([
+      mavescape(['export', '--out', out('x1')]),
+      mavescape(['export', '--format', 'csv', '--out', out('x2'), saved]),
+      mavescape(['export', '--format', 'tables', '--details', out('details.json'), '--out', out('x3'), saved]),
+      mavescape(['export', '--out', out('x4'), 'web/examples/grb2-sh3/counts.csv']),
+      mavescape(['export', '--out', out('dep1'), saved]),
+    ]);
+    check('mavescape export: a wrong command line, a file that is not a workspace archive, a folder in use: exit 2 with the reason', wrong.map((w) => `${w.code}: ${w.stderr.trim().split('\n')[0].slice(0, 60)}`).join(' | '), wrong.every((w) => w.code === 2 && w.stderr.trim()));
+  }
 } catch (error) {
   check('the headless runs ran to the end', error.stack ?? error.message, false);
 } finally {

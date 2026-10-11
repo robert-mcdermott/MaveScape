@@ -1,0 +1,6 @@
+{
+  "contentType": "application/json",
+  "service": "NCBI E-utilities",
+  "source": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar\u0026term=F9%5Bgene%5D+AND+%28%22missense+variant%22%5Bmolecular+consequence%5D+OR+%22nonsense%22%5Bmolecular+consequence%5D+OR+%22synonymous+variant%22%5Bmolecular+consequence%5D%29\u0026retmax=10000\u0026retstart=0\u0026retmode=json\u0026tool=mavescape",
+  "retrieved": "2026-10-11T15:14:32Z"
+}

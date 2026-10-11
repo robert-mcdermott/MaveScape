@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { replicateSamples, sharedSamples, summarizeDesign, targetLength, validateDesign } from './design.js';
+import { coversPosition, multiTileSamples, replicateSamples, sharedSamples, summarizeDesign, targetLength, tileRows, tileView, validateDesign } from './design.js';
 
 // A small two-population design: 2 replicates, input and output each.
 function twoPopulation(overrides = {}) {
@@ -96,6 +96,32 @@ test('samples shared between replicates are found and said', () => {
   assert.deepEqual(replicateSamples(design.replicates[0]).map((s) => s.role), ['input', 'output']);
 });
 
+test('a sample holding two tiles is not shared by their replicates: each measures only its own tile there', () => {
+  const design = twoPopulation({
+    library: { level: 'variant', tiles: [{ id: 'a', start: 1, end: 5 }, { id: 'b', start: 6, end: 10 }] },
+    replicates: [
+      { id: 'a1', biological: 1, tile: 'a', input: 'in1', output: 'out1' }, { id: 'a2', biological: 2, tile: 'a', input: 'in2', output: 'out2' },
+      { id: 'b1', biological: 1, tile: 'b', input: 'in1', output: 'out1' }, { id: 'b2', biological: 2, tile: 'b', input: 'in2', output: 'out2' },
+    ],
+  });
+  assert.ok(validateDesign(design, { columns }).ok);
+  assert.equal(sharedSamples(design).size, 0);
+  assert.deepEqual([...multiTileSamples(design)], [['in1', ['a', 'b']], ['out1', ['a', 'b']], ['in2', ['a', 'b']], ['out2', ['a', 'b']]]);
+  const lines = summarizeDesign(design).lines.join('\n');
+  assert.match(lines, /4 samples hold 2 tiles grown together: each replicate measures only its own tile's positions there/);
+  assert.doesNotMatch(lines, /shared between replicates/);
+  // Tiles that overlap share a sample where they meet: dependent there.
+  const overlapping = { ...design, library: { level: 'variant', tiles: [{ id: 'a', start: 1, end: 6 }, { id: 'b', start: 5, end: 10 }] } };
+  assert.equal(sharedSamples(overlapping).size, 4);
+  // Which rows a replicate measures: its tile's positions, and the wild type (no position).
+  const tiles = new Map(design.library.tiles.map((t) => [t.id, t]));
+  assert.deepEqual([...tileRows(design.replicates[2], tiles, [0, 3, 6, 10, 11])], [1, 0, 1, 1, 0]);
+  assert.equal(tileRows({ id: 'x' }, tiles, [3]), null, 'no tile: every row');
+  assert.ok(coversPosition(design.replicates[0], tiles, 5) && !coversPosition(design.replicates[0], tiles, 6) && coversPosition(design.replicates[0], tiles, 0));
+  const view = tileView(new Map([['in1', Float64Array.from([5, 6, 7])]]), Uint8Array.from([1, 0, 1]));
+  assert.deepEqual([...view.get('in1')], [5, Number.NaN, 7]);
+});
+
 test('a copy of a column must copy a column a sample uses', () => {
   const design = twoPopulation({ ignoredColumns: [{ column: 'in_1_again', reason: 'repeats the shared input', copyOf: 'nowhere' }] });
   assert.match(messages(validateDesign(design)), /is a copy of "nowhere", which no sample uses/);
@@ -143,7 +169,7 @@ test('a score-only design names its score columns', () => {
   const design = { ...twoPopulation(), model: 'scores', samples: [], replicates: [], scores: { score: 'score', se: 'SE' } };
   assert.equal(validateDesign(design, { columns: ['hgvs_pro', 'score', 'SE'] }).ok, true);
   assert.match(messages(validateDesign(design, { columns: ['hgvs_pro', 'score'] })), /no column "SE"/);
-  assert.match(summarizeDesign(design).lines.join('\n'), /Precomputed scores: column "score" with standard errors in "SE"/);
+  assert.match(summarizeDesign(design).lines.join('\n'), /Published scores: column "score" with standard errors in "SE"/);
 });
 
 test('the summary describes the design in plain language', () => {

@@ -48,5 +48,5 @@ test('rows in another order keep every cell; other values color by their own sca
   assert.equal(cellAt(a, 2, a.rows.indexOf('A')).index, cellAt(b, 2, b.rows.indexOf('A')).index);
   assert.equal(b.domain.kind, 'sequential');
   assert.throws(() => buildMapModel(results, design({ targets: [] })), /target/);
-  assert.throws(() => buildMapModel(results, design({ variants: { column: 'v', level: 'nucleotide' } })), /protein-level/);
+  assert.throws(() => buildMapModel(results, design({ variants: { column: 'v', level: 'nucleotide' } })), /protein variants/, 'a nucleotide run is drawn from its protein view, which a protein target cannot give');
 });

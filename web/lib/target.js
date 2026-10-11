@@ -86,9 +86,14 @@ export function targetFromSequence(record, options = {}) {
   return { target, messages };
 }
 
-// The protein the target encodes (its own sequence for a protein target).
+// The protein the target encodes (its own sequence for a protein target): a DNA target's coding
+// sequence translated from its coding start to its first stop (kept), or to its last whole codon.
+// A transcript's 3′ UTR is not translated (wave 3, slice 3).
 export function targetProtein(target) {
-  return target.sequenceType === 'protein' ? target.sequence.toUpperCase() : translate(target.sequence, target.codingStart ?? 1).protein;
+  if (target.sequenceType === 'protein') return target.sequence.toUpperCase();
+  const { protein } = translate(target.sequence, target.codingStart ?? 1);
+  const stop = protein.indexOf('*');
+  return stop >= 0 ? protein.slice(0, stop + 1) : protein;
 }
 
 // Where a protein (the target's) sits in a reference protein: { offset, differences } for the

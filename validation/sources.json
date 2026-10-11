@@ -22,8 +22,8 @@
    ]
   },
   "mavedb-brca1-ring": {
-   "title": "BRCA1 RING domain, E2 binding and Y2H (urn:mavedb:00000003-a-1 and -a-2)",
-   "description": "Time series: E2 binding by phage display, 2 libraries × 3 replicates × 6 rounds (inputs shared within a library), and yeast two-hybrid, 2 libraries × 3 replicates × 4 time points (0/18/37/45 and 0/16/41/64 in the column names, units not stated in the record; non-uniform), in one count table. 909-nt DNA target (BRCA1 codons 2–304); -a-1 at nucleotide level (20,724 variants), -a-2 at amino-acid level (12,316). Scored by the Enrich2 authors with weighted least squares and random-effects combination; Enrich2's legacy _wt and _sy rows.",
+   "title": "BRCA1 RING domain, E3 ligase activity (phage autoubiquitination) and BARD1 binding (Y2H) (urn:mavedb:00000003-a-1 and -a-2)",
+   "description": "Time series: E3 ubiquitin ligase activity by phage autoubiquitination (selected with the E2, hence PlusE2 in the column names), 2 libraries × 3 replicates × 6 rounds (inputs shared within a library), and yeast two-hybrid, 2 libraries × 3 replicates × 4 time points (0/18/37/45 and 0/16/41/64 in the column names, units not stated in the record; non-uniform), in one count table. 909-nt DNA target (BRCA1 codons 2–304); -a-1 at nucleotide level (20,724 variants), -a-2 at amino-acid level (12,316). Scored by the Enrich2 authors with weighted least squares and random-effects combination; Enrich2's legacy _wt and _sy rows.",
    "source": "MaveDB; Starita et al., Genetics 2015 (doi:10.1534/genetics.115.175802), rescored in Rubin et al., Genome Biology 2017 (doi:10.1186/s13059-017-1272-5)",
    "license": "CC0 (MaveDB)",
    "files": [
@@ -130,6 +130,128 @@
      "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000005-a-6/counts",
      "size": 2568937,
      "sha256": "247ed53735d626eb46fb1af162ee57e084ec596e6808438e51aef2b297da9f46"
+    }
+   ]
+  },
+  "mavedb-pten-vampseq": {
+   "title": "PTEN abundance by VAMP-seq (urn:mavedb:00000013-a-1)",
+   "description": "Published scores only (no counts): VAMP-seq abundance of 4,409 PTEN variants, scaled with the wild type at 1 and nonsense at 0, with SEs, 95% intervals and each experiment's scores; six published calibrations in the record. The example opened from MaveDB (wave 3, slice 2).",
+   "source": "MaveDB; Matreyek et al., Nat Genet 2018 (doi:10.1038/s41588-018-0122-z)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000013-a-1/scores",
+     "size": 1735960,
+     "sha256": "ceaf3f0720af8aa06012d60959efbcd7ab54a5317d2bebdace8a0f49de4b2b97"
+    }
+   ]
+  },
+  "mavedb-brca1-sge": {
+   "title": "BRCA1 saturation genome editing (urn:mavedb:00000097-0-2)",
+   "description": "3,893 single-nucleotide variants of 13 exons of BRCA1 and their flanking introns, named on the RefSeq transcript NM_007294.3 (coding, splice-site, intronic and 5′ UTR), each scored by its depletion from HAP1 cells between days 5 and 11, with the library, plasmid and RNA counts the authors deposited. The example opened from MaveDB (wave 3, slice 3): a target named by its transcript, nucleotide variants read at the protein level.",
+   "source": "MaveDB; Findlay et al., Nature 2018 (doi:10.1038/s41586-018-0461-z)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/scores",
+     "size": 610024,
+     "sha256": "906dc152f28b4c8261e4e532a03c9c42f2e45e211aa3ada12e3c826c151580ec"
+    },
+    {
+     "path": "counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/counts",
+     "size": 368636,
+     "sha256": "9d2e8281ff55d87e6ef0ada99a8fc6973073741d9c97ce6bea70e62eca7cdabc"
+    }
+   ]
+  },
+  "mavedb-dhfr": {
+   "title": "E. coli DHFR, growth without and with the Lon protease (urn:mavedb:00000063-b-1 and -a-1)",
+   "description": "Time series: every substitution of the 159-residue DHFR (UniProt P0ABQ4) complementing ER2566 ΔfolA ΔthyA in a turbidostat, sampled at 0, 2, 4, 6, 8, 12, 16 and 18 hours, without Lon (-b-1, the parental B strain) and with Lon restored (-a-1). Four sub-libraries of 40 positions (1–40, 41–80, 81–120, 121–159), each grown three times, two in each of six repeats per condition, the repeats pairing the sub-libraries differently in each condition; each repeat also counts the library after transformation and after overnight outgrowth. Counts below 2 × 10⁻⁵ of the reads at a time point are not reported (NA). Scored by the authors with Enrich2's unweighted regression, each replicate scaled to the mean of all and averaged; _wt is the wild type's row.",
+   "source": "MaveDB; Thompson et al., eLife 2020 (doi:10.7554/eLife.53476)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "minus-lon/scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000063-b-1/scores",
+     "size": 242193,
+     "sha256": "adbc659430f09e964d04ddcc234d98fbd70123703edbd8ca53009726b371c04f"
+    },
+    {
+     "path": "minus-lon/counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000063-b-1/counts",
+     "size": 968272,
+     "sha256": "297484d87b619aee5d0c408bf75a82b8988be9e5c66169a5758b69b1b19364fc"
+    },
+    {
+     "path": "plus-lon/scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000063-a-1/scores",
+     "size": 239726,
+     "sha256": "d39a97f64c378d7d102b0cbc8c5151fe202a1258f229c7cdd58b048a0e85b90e"
+    },
+    {
+     "path": "plus-lon/counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000063-a-1/counts",
+     "size": 974798,
+     "sha256": "c63e1d4e521b4246b2b2588f2d999856521261dd772062282da1f71498124e49"
+    }
+   ]
+  },
+  "mavedb-tp53-dbd": {
+   "title": "TP53 DNA-binding domain, deletions and insertions (urn:mavedb:00001277-a-1)",
+   "description": "Published scores of 8,058 variants of TP53's DNA-binding domain named on NM_000546.6: 5,609 deletions, insertions, duplications and deletion-insertions, 1,631 substitutions and 818 intronic variants. Each name's protein change checked against biocommons hgvs (validation suite consequences).",
+   "source": "MaveDB (urn:mavedb:00001277-a-1); its record names the publication (PMID 39774325)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00001277-a-1/scores",
+     "size": 1071081,
+     "sha256": "15ed0e9933b302628a7326ba759231619406385ae518d3bdc174f41e79b14e62"
+    }
+   ]
+  },
+  "mavedb-bap1-sge": {
+   "title": "BAP1 saturation genome editing, exon 1 (urn:mavedb:00000662-a-2)",
+   "description": "620 variants of BAP1's first exon and its flanks, named on the Ensembl transcript ENST00000460680.5: substitutions, single-base deletions and deletion-insertions in the 5′ UTR, the coding sequence and the intron.",
+   "source": "MaveDB (urn:mavedb:00000662-a-2); its record names the authors and publication",
+   "license": "CC BY 4.0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000662-a-2/scores",
+     "size": 190536,
+     "sha256": "4117ec263777211adbe36301f30d5d8623f45bbc25be16a5327f51133d8cb8bc"
+    }
+   ]
+  },
+  "mavedb-tp53-base-editing": {
+   "title": "TP53 base editing, etoposide (urn:mavedb:00001245-a-1)",
+   "description": "465 base-editor outcomes named as multi-variants on ENST00000269305.9 (c.[1144A>G;1145A>G;1146A>G]) beside their protein changes on ENSP00000269305.4: the published protein names a multi-variant's translation must give.",
+   "source": "MaveDB (urn:mavedb:00001245-a-1)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00001245-a-1/scores",
+     "size": 80246,
+     "sha256": "c169c52891fcb42801e4d0430d4924652217607cb4369f335792360154538411"
+    }
+   ]
+  },
+  "mavedb-varchamp": {
+   "title": "VarChAMP imaging, 28 targets (urn:mavedb:00001237-a-1)",
+   "description": "430 variants of 28 genes in one score set, each named with its target's label (LMNA:n.127G>A): a score set of several targets, opened one target at a time.",
+   "source": "MaveDB (urn:mavedb:00001237-a-1)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00001237-a-1/scores",
+     "size": 33217,
+     "sha256": "6f2305fc10c76bba16d174e080974e4d91786ebf2e5df506f17d8098eb537f14"
     }
    ]
   }

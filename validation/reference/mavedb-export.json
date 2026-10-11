@@ -1,0 +1,1167 @@
+{
+ "generated": "2026-10-10",
+ "packages": {
+  "bap1": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "experiment.json": "19eec18a7e653f75559086cdd01585a942466d617d80d50ce26038d4908fb37e",
+    "score_set.json": "8f6c3997890390524237642f22e91843af50c2c583441016c7a037e221a738ae",
+    "scores.csv": "5f9d0a1547e24dc193f562e4918342bac1ab82cfa148ef519042688fe39899e0"
+   },
+   "names": {
+    "checked": 620,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": null,
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_nt",
+      "score",
+      "processed_LFC_D4_D7",
+      "processed_LFC_D4_D10",
+      "processed_LFC_D4_D14",
+      "processed_LFC_D4_D21",
+      "processed_LFC_continuous",
+      "SE_bind_D4_D7",
+      "SE_bind_D4_D10",
+      "SE_bind_D4_D14",
+      "SE_bind_D4_D21",
+      "SE_bind_continuous",
+      "processed_Z_D4_D7",
+      "processed_Z_D4_D10",
+      "processed_Z_D4_D14",
+      "processed_Z_D4_D21",
+      "processed_Z_continuous",
+      "processed_BH_FDR_D4_D7",
+      "processed_BH_FDR_D4_D10",
+      "processed_BH_FDR_D4_D14",
+      "processed_BH_FDR_D4_D21",
+      "processed_BH_FDR_continuous"
+     ],
+     "rows": 620
+    }
+   }
+  },
+  "brca1-ring-n": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "experiment.json": "1642c8c4fcad06679784568d5eca733e6412410d4d571f0015feb4286607024d",
+    "score_set.json": "9f099941d32d9349003bb96a4ef52fef0d95fcf8ad725651f392961fef34b775",
+    "scores.csv": "0e8f0b855305064e2e879b0a43a16d9c76beb92c32e4387913f023b61ac69886"
+   },
+   "names": {
+    "checked": 20724,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": null,
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_nt",
+      "score",
+      "SE",
+      "epsilon",
+      "SE_PlusE2NewRep3",
+      "score_PlusE2NewRep3",
+      "SE_PlusE2NewRep4",
+      "score_PlusE2NewRep4",
+      "SE_PlusE2NewRep5",
+      "score_PlusE2NewRep5",
+      "SE_PlusE2Rep3",
+      "score_PlusE2Rep3",
+      "SE_PlusE2Rep4",
+      "score_PlusE2Rep4",
+      "SE_PlusE2Rep5",
+      "score_PlusE2Rep5"
+     ],
+     "rows": 20724
+    }
+   }
+  },
+  "brca1-ring-nt": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "counts.csv": "91dc33f191fb793b5c0d1edbb997e6cd3ff3e701387e622603474c32e122ca5b",
+    "experiment.json": "1642c8c4fcad06679784568d5eca733e6412410d4d571f0015feb4286607024d",
+    "score_set.json": "9f099941d32d9349003bb96a4ef52fef0d95fcf8ad725651f392961fef34b775",
+    "scores.csv": "2a1f995370315585713aba83bf5fd0f9eaf541b14271bebe418b327b84469055"
+   },
+   "names": {
+    "checked": 41448,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_nt",
+      "hgvs_pro",
+      "PlusE2NewRep3_c_0",
+      "PlusE2NewRep3_c_1",
+      "PlusE2NewRep3_c_2",
+      "PlusE2NewRep3_c_3",
+      "PlusE2NewRep3_c_4",
+      "PlusE2NewRep3_c_5",
+      "PlusE2NewRep4_c_0",
+      "PlusE2NewRep4_c_1",
+      "PlusE2NewRep4_c_2",
+      "PlusE2NewRep4_c_3",
+      "PlusE2NewRep4_c_4",
+      "PlusE2NewRep4_c_5",
+      "PlusE2NewRep5_c_0",
+      "PlusE2NewRep5_c_1",
+      "PlusE2NewRep5_c_2",
+      "PlusE2NewRep5_c_3",
+      "PlusE2NewRep5_c_4",
+      "PlusE2NewRep5_c_5",
+      "PlusE2Rep3_c_0",
+      "PlusE2Rep3_c_1",
+      "PlusE2Rep3_c_2",
+      "PlusE2Rep3_c_3",
+      "PlusE2Rep3_c_4",
+      "PlusE2Rep3_c_5",
+      "PlusE2Rep4_c_0",
+      "PlusE2Rep4_c_1",
+      "PlusE2Rep4_c_2",
+      "PlusE2Rep4_c_3",
+      "PlusE2Rep4_c_4",
+      "PlusE2Rep4_c_5",
+      "PlusE2Rep5_c_0",
+      "PlusE2Rep5_c_1",
+      "PlusE2Rep5_c_2",
+      "PlusE2Rep5_c_3",
+      "PlusE2Rep5_c_4",
+      "PlusE2Rep5_c_5",
+      "Y2H_1_Rep1_c_0",
+      "Y2H_1_Rep1_c_18",
+      "Y2H_1_Rep1_c_37",
+      "Y2H_1_Rep1_c_45",
+      "Y2H_1_Rep2_c_0",
+      "Y2H_1_Rep2_c_18",
+      "Y2H_1_Rep2_c_37",
+      "Y2H_1_Rep2_c_45",
+      "Y2H_1_Rep3_c_0",
+      "Y2H_1_Rep3_c_18",
+      "Y2H_1_Rep3_c_37",
+      "Y2H_1_Rep3_c_45",
+      "Y2H_2_Rep1_c_0",
+      "Y2H_2_Rep1_c_16",
+      "Y2H_2_Rep1_c_41",
+      "Y2H_2_Rep1_c_64",
+      "Y2H_2_Rep2_c_0",
+      "Y2H_2_Rep2_c_16",
+      "Y2H_2_Rep2_c_41",
+      "Y2H_2_Rep2_c_64",
+      "Y2H_2_Rep3_c_0",
+      "Y2H_2_Rep3_c_16",
+      "Y2H_2_Rep3_c_41",
+      "Y2H_2_Rep3_c_64"
+     ],
+     "rows": 20724
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_nt",
+      "hgvs_pro",
+      "score",
+      "SE",
+      "epsilon",
+      "SE_PlusE2NewRep3",
+      "score_PlusE2NewRep3",
+      "SE_PlusE2NewRep4",
+      "score_PlusE2NewRep4",
+      "SE_PlusE2NewRep5",
+      "score_PlusE2NewRep5",
+      "SE_PlusE2Rep3",
+      "score_PlusE2Rep3",
+      "SE_PlusE2Rep4",
+      "score_PlusE2Rep4",
+      "SE_PlusE2Rep5",
+      "score_PlusE2Rep5"
+     ],
+     "rows": 20724
+    }
+   }
+  },
+  "brca1-sge": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "counts.csv": "5639d7668340eaca14bdf1e31022f2552f8db65388e99353fc28e57a3fec5815",
+    "experiment.json": "cfdae79ebca939629b4f01a511c39af42e736bd898e0cd492d9f7e49b056f0dc",
+    "score_set.json": "248858aca8d8229e4b83ca9088fd2f2c933b29a53f15ec38ef524720833c18bb",
+    "scores.csv": "37d8746aff89fef78634a65e977a740e6caba5fc335944c68b34c7e1a42d58e6"
+   },
+   "names": {
+    "checked": 3893,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_nt",
+      "count_negative_control",
+      "count_library",
+      "count_day5_rep1",
+      "count_day11_rep1",
+      "count_day5_rep2",
+      "count_day11_rep2",
+      "count_rna_rep1",
+      "count_rna_rep2"
+     ],
+     "rows": 3893
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_nt",
+      "score",
+      "score_rep1",
+      "score_rep2",
+      "score_rna",
+      "score_rna_rep1",
+      "score_rna_rep2"
+     ],
+     "rows": 3893
+    }
+   }
+  },
+  "brca1-sge-counts": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "0ac52acc83a0363ef99fe4d30193bdee7f215377c32f73fa1a0651623332c3c4",
+    "counts.csv": "d529aaca140a8472c50f3f561c3d3220281143ce53cb539d9c292a1edf1f433e",
+    "experiment.json": "a6ee3aff6b65875148eb7857cda8b4fc354e797bf09038209d7c32474056ebd4",
+    "score_columns.json": "7aafadcbbded8c0188c2176a19e8d145be22eb065f52b25188d1933d4a345ef7",
+    "score_set.json": "b7d5e54290d019fed4cb051b0905f76a0fd1d97dca981d353edcd4ab903b4c67",
+    "scores.csv": "5843977904609f9778612bb59b785952a0076fc76b0bf09fef621330e508b4fc"
+   },
+   "names": {
+    "checked": 3893,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_nt",
+      "count_day5_rep1",
+      "count_day11_rep1",
+      "count_day5_rep2",
+      "count_day11_rep2"
+     ],
+     "rows": 3893
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_nt",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_count_rep1",
+      "SE_count_rep1",
+      "score_count_rep2",
+      "SE_count_rep2",
+      "status"
+     ],
+     "rows": 3893
+    }
+   }
+  },
+  "cbs-high": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "ec9c3cbd71835a1a694c52b3cc2140149f3d7997bfea52190cb065bf83ba6ea1",
+    "counts.csv": "b3386ec358713448984b1b4607a7cf67b3b980811e3b9e0a5a91ee28b7bdfb60",
+    "experiment.json": "db43515b1096ef478a2b199550f88c122f1226ac43effca59aab977b1ee46e34",
+    "score_columns.json": "ad683544722cfc50738d2c9c2d69f06f17613ca2d0e9ae4d03e074062bc260ec",
+    "score_set.json": "d65214b218fed54fb105e7c54534f5019c3eb2a0fe0229a2665aa483518aa808",
+    "scores.csv": "bb491b5246209a938c80348cd3b705a195a8123f92c4a98644d3ab379075c642"
+   },
+   "names": {
+    "checked": 20196,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_nt",
+      "hgvs_pro",
+      "nonselect1",
+      "high1",
+      "nonselect2",
+      "high2",
+      "nonselect3",
+      "high3",
+      "nonselect4",
+      "high4"
+     ],
+     "rows": 10098
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_nt",
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_high-1",
+      "SE_high-1",
+      "score_high-2",
+      "SE_high-2",
+      "score_high-3",
+      "SE_high-3",
+      "score_high-4",
+      "SE_high-4",
+      "status",
+      "flags"
+     ],
+     "rows": 10098
+    }
+   }
+  },
+  "cbs-low": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "4151c0d5c90262748d1b195a70eed74d0f8d891daa6595d9b0f6811b67fe7700",
+    "counts.csv": "87d988d3c087c88228cb2a6f79b61546928a3df9505b517e312eec59bcde3e5d",
+    "experiment.json": "db43515b1096ef478a2b199550f88c122f1226ac43effca59aab977b1ee46e34",
+    "score_columns.json": "235e58e11dfcee39f69941572d609e81cb17d83111f9b62a4cd2505a9b85fd4e",
+    "score_set.json": "d65214b218fed54fb105e7c54534f5019c3eb2a0fe0229a2665aa483518aa808",
+    "scores.csv": "99a55cb21eec8175f432477707dc658a3b0abdd6f2908446750637080dae4004"
+   },
+   "names": {
+    "checked": 20196,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_nt",
+      "hgvs_pro",
+      "nonselect1",
+      "low1",
+      "nonselect2",
+      "low2",
+      "nonselect3",
+      "low3",
+      "nonselect4",
+      "low4"
+     ],
+     "rows": 10098
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_nt",
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_low-1",
+      "SE_low-1",
+      "score_low-2",
+      "SE_low-2",
+      "score_low-3",
+      "SE_low-3",
+      "score_low-4",
+      "SE_low-4",
+      "status",
+      "flags"
+     ],
+     "rows": 10098
+    }
+   }
+  },
+  "factor9": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "559bef7d0167e3e6771c4bb301cd4977d0a3eda03cad8c0d27e23b889b770691",
+    "counts.csv": "1e39e871a71febe151dca536e128f7861ceb93ab39e46f15b003436a87547048",
+    "experiment.json": "e33023866e765c2a09a480f79a26bdcd2c1caf0cc68e23a0ebb7f4d1dd043827",
+    "score_columns.json": "adedb225df14829d248efb14a4e297d81e69d44e31ee456b4fa109ac37df9fd3",
+    "score_set.json": "7efe5f72f0f5a24316d80b0683188517b3f3cdf14a3ce02ce89c60c9bc537cf0",
+    "scores.csv": "94cc12994e24ab920eb016402de7c735387c4061597222a3ea7c6340d4d10def"
+   },
+   "names": {
+    "checked": 9682,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "t1-r1-bin1",
+      "t1-r1-bin2",
+      "t1-r1-bin3",
+      "t1-r1-bin4",
+      "t1-r2-bin1",
+      "t1-r2-bin2",
+      "t1-r2-bin3",
+      "t1-r2-bin4",
+      "t1-r3-bin1",
+      "t1-r3-bin2",
+      "t1-r3-bin3",
+      "t1-r3-bin4",
+      "t2-r1-bin1",
+      "t2-r1-bin2",
+      "t2-r1-bin3",
+      "t2-r1-bin4",
+      "t2-r2-bin1",
+      "t2-r2-bin2",
+      "t2-r2-bin3",
+      "t2-r2-bin4",
+      "t2-r3-bin1",
+      "t2-r3-bin2",
+      "t2-r3-bin3",
+      "t2-r3-bin4",
+      "t3-r1-bin1",
+      "t3-r1-bin2",
+      "t3-r1-bin3",
+      "t3-r1-bin4",
+      "t3-r2-bin1",
+      "t3-r2-bin2",
+      "t3-r2-bin3",
+      "t3-r2-bin4",
+      "t3-r3-bin1",
+      "t3-r3-bin2",
+      "t3-r3-bin3",
+      "t3-r3-bin4"
+     ],
+     "rows": 9682
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_t1-r1",
+      "SE_t1-r1",
+      "score_t1-r2",
+      "SE_t1-r2",
+      "score_t1-r3",
+      "SE_t1-r3",
+      "score_t2-r1",
+      "SE_t2-r1",
+      "score_t2-r2",
+      "SE_t2-r2",
+      "score_t2-r3",
+      "SE_t2-r3",
+      "score_t3-r1",
+      "SE_t3-r1",
+      "score_t3-r2",
+      "SE_t3-r2",
+      "score_t3-r3",
+      "SE_t3-r3",
+      "status",
+      "flags"
+     ],
+     "rows": 9682
+    }
+   }
+  },
+  "grb2-sh3": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "4de772ad8e55e9f932c388211b106ac12744c5736209a01c6307bded41e30ae2",
+    "counts.csv": "1f0e9d2747a0e035bdd23b47843d2c6f709996c661241948516a1b907b17d2da",
+    "experiment.json": "172c93cdeb2eb617ff77381b751e622fbe7d863cf469a1db590c0bfa931f412b",
+    "score_columns.json": "f31e25e5003ad8578e4c87bd4bdeed1fbd78486fa7e901c401f9516b52025286",
+    "score_set.json": "cabc65a5e6a7ae4197f2e9df7a949f1d7d4e6db38c2518256d12e180bc236aa2",
+    "scores.csv": "0bfdb9d03e87b3f8d767bc9fbdd2364a61728308c28bfa0a879e11684676a0a3"
+   },
+   "names": {
+    "checked": 1121,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "input-rep1",
+      "input-rep2",
+      "input-rep3",
+      "output-rep1",
+      "output-rep2",
+      "output-rep3"
+     ],
+     "rows": 1121
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_rep1",
+      "SE_rep1",
+      "score_rep2",
+      "SE_rep2",
+      "score_rep3",
+      "SE_rep3",
+      "status",
+      "flags"
+     ],
+     "rows": 1121
+    }
+   }
+  },
+  "grb2-sh3-incomplete": {
+   "experiment": {
+    "error": "ValidationError: 1 validation error for ExperimentCreate\nabstractText\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.10/v/string_type",
+    "ok": false
+   },
+   "files": {
+    "count_columns.json": "4de772ad8e55e9f932c388211b106ac12744c5736209a01c6307bded41e30ae2",
+    "counts.csv": "1f0e9d2747a0e035bdd23b47843d2c6f709996c661241948516a1b907b17d2da",
+    "experiment.json": "0d40bb514d0e636ec3349ca0becd46fd3503c5641f61d6ff1dbbeb70b9df752e",
+    "score_columns.json": "f31e25e5003ad8578e4c87bd4bdeed1fbd78486fa7e901c401f9516b52025286",
+    "score_set.json": "ab1ca86514d9eb484a67123dd8e66fa7984dbc06cdf39fbf11d081c3958d18e4",
+    "scores.csv": "0bfdb9d03e87b3f8d767bc9fbdd2364a61728308c28bfa0a879e11684676a0a3"
+   },
+   "names": {
+    "checked": 1121,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "error": "ValidationError: 1 validation error for ScoreSetCreate\nabstractText\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.10/v/string_type",
+    "ok": false
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "input-rep1",
+      "input-rep2",
+      "input-rep3",
+      "output-rep1",
+      "output-rep2",
+      "output-rep3"
+     ],
+     "rows": 1121
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_rep1",
+      "SE_rep1",
+      "score_rep2",
+      "SE_rep2",
+      "score_rep3",
+      "SE_rep3",
+      "status",
+      "flags"
+     ],
+     "rows": 1121
+    }
+   }
+  },
+  "hsp90": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "7318696314abfb64f11046c14390a8b4c86ba0ec486bcc07b215866a08840ba1",
+    "counts.csv": "9b07500ed825c18b58017013ac2972744e760256897c6e741bb30148e83ef324",
+    "experiment.json": "05dcaeb25e528d85d7b22e13e6728b6381054ce1c01a11d2cff2eda451731711",
+    "score_columns.json": "8825ef3514d5394fd61ee2088b27d6be474d459b71d1a7ee12ab5400babe1c87",
+    "score_set.json": "42eeda3541eb0e6f140598219f2ed7c0323495944259432d1186688fd01618e7",
+    "scores.csv": "5080d2c2eed1b8e114cddb503ab5b09cee6cdd66c4ff8420345dbc0fec1145fe"
+   },
+   "names": {
+    "checked": 188,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "gen-0",
+      "gen-3",
+      "gen-6",
+      "gen-9",
+      "gen-12",
+      "gen-15",
+      "gen-18",
+      "gen-21"
+     ],
+     "rows": 188
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "score_rep1",
+      "SE_rep1",
+      "status"
+     ],
+     "rows": 188
+    }
+   }
+  },
+  "pten-mavedb": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "experiment.json": "0ff126cd99572dd3ab77074ead976cb96bea30534065fa8d0242bb3def92ae32",
+    "score_set.json": "77940e1331e639de03bc531641a5bc2fe2e3d4f18f2e3570ad430364f5191214",
+    "scores.csv": "73da28bae693bfddd416ed88d1329ec98712ad3dd1f97eb354eeaeb513c1fdce"
+   },
+   "names": {
+    "checked": 4409,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": null,
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "sd",
+      "expts",
+      "se",
+      "lower_ci",
+      "upper_ci",
+      "score1",
+      "score2",
+      "score3",
+      "score4",
+      "score5",
+      "score6",
+      "score7",
+      "score8",
+      "median_w_ave",
+      "exp1_w_ave",
+      "exp2_w_ave",
+      "exp3_w_ave",
+      "exp4_w_ave",
+      "exp5_w_ave",
+      "exp6_w_ave",
+      "exp7_w_ave",
+      "exp8_w_ave",
+      "snv",
+      "abundance_class"
+     ],
+     "rows": 4409
+    }
+   }
+  },
+  "simulated": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "13df9f452b14ccfe66180c50533cf2ef1f7f3884f90191ef49e20625e234b98b",
+    "counts.csv": "168d64bd1aec5f1e6ac77b1e6d348e4755181795bd28b3a93b583fc58c8c20c2",
+    "experiment.json": "aa2aa307a1c9bffa9ccbf1e6c2fb884812a31dc65c7a358b3a756c85682ff9ce",
+    "score_columns.json": "f31e25e5003ad8578e4c87bd4bdeed1fbd78486fa7e901c401f9516b52025286",
+    "score_set.json": "9f8ceaa5877a0b57f5721f38f832ea3e286e68cf57d18e17e485e6cd47dd5b7d",
+    "scores.csv": "b61dc8736c2550946c014462b9ccd0041cc040c02869e13bf779fb2d1d368b3b"
+   },
+   "names": {
+    "checked": 839,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "input_rep1",
+      "output_rep1",
+      "input_rep2",
+      "output_rep2",
+      "input_rep3",
+      "output_rep3"
+     ],
+     "rows": 839
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_rep1",
+      "SE_rep1",
+      "score_rep2",
+      "SE_rep2",
+      "score_rep3",
+      "SE_rep3",
+      "status",
+      "flags"
+     ],
+     "rows": 839
+    }
+   }
+  },
+  "simulated-barcodes": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "46da6e78a16ae57bdab79964c85114a8f3625b8764e0e50a253ac5258b3324a2",
+    "counts.csv": "1bd44a7cf660e8f42ad7d89f3a10e0bde5542b8df783e1524f97748c0fd9b8e6",
+    "experiment.json": "3bcb5101e5f51c788212f0bb1e9965438ff5d8ecafbdb643539a76eb37c2920e",
+    "score_columns.json": "f31e25e5003ad8578e4c87bd4bdeed1fbd78486fa7e901c401f9516b52025286",
+    "score_set.json": "06ab2d644725ebc4b07c36800961267f56a0ba93b695066d738ae4b32ee80614",
+    "scores.csv": "ec3da933c8542ba610482031d817150bd2fc537fbf745d478a6b36b4ffdd69b6"
+   },
+   "names": {
+    "checked": 648,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "pre_rep1",
+      "post_rep1",
+      "pre_rep2",
+      "post_rep2",
+      "pre_rep3",
+      "post_rep3"
+     ],
+     "rows": 648
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_rep1",
+      "SE_rep1",
+      "score_rep2",
+      "SE_rep2",
+      "score_rep3",
+      "SE_rep3",
+      "status",
+      "flags"
+     ],
+     "rows": 648
+    }
+   }
+  },
+  "simulated-conditions-a": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "325ab14bed79218c076f97976c444adcd2451dcc6cb8b274cb1b251963a04605",
+    "counts.csv": "29aec876a635e76f4c250604d2fdbd021663f47c6a586ce59056ae5e61b6a7b2",
+    "experiment.json": "457f5be40007d2c4875fc5304245efaea87a541f4e3a2af8046efbe14fd9e8df",
+    "score_columns.json": "6c8777c36520cd87c85b4af3f18318f80ad2e72afd7717ee2eeccfa92ad5d2a2",
+    "score_set.json": "2b3518f01e7241dd9a2fec3b2e3c2ecc6a2f0c9aae9d4492aaeccd1eb546ebab",
+    "scores.csv": "3e0d0a25d0477826d088a20dafe2fdfa035e0814347eeb74a14f797891e15d72"
+   },
+   "names": {
+    "checked": 839,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "input_rep1",
+      "a_rep1",
+      "input_rep2",
+      "a_rep2",
+      "input_rep3",
+      "a_rep3"
+     ],
+     "rows": 839
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_a-rep1",
+      "SE_a-rep1",
+      "score_a-rep2",
+      "SE_a-rep2",
+      "score_a-rep3",
+      "SE_a-rep3",
+      "status"
+     ],
+     "rows": 839
+    }
+   }
+  },
+  "simulated-conditions-b": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "b7df015e21ebff21fdb00cf5407958bfb3a772f064603d4d628b7129de236e2d",
+    "counts.csv": "e4f741b414abe0f5c80235529ce9fbd3cff5f3bcd2879110d8bd3f4656e66d98",
+    "experiment.json": "457f5be40007d2c4875fc5304245efaea87a541f4e3a2af8046efbe14fd9e8df",
+    "score_columns.json": "a14ed63320981d88928e112c13b808aaa3d762312005f9c2ead4cbd1edf86ea9",
+    "score_set.json": "2b3518f01e7241dd9a2fec3b2e3c2ecc6a2f0c9aae9d4492aaeccd1eb546ebab",
+    "scores.csv": "6ebba58d74e07b41e322ca3ad241e0c0ba29c0c71c6e30c319f2b42a838c0448"
+   },
+   "names": {
+    "checked": 839,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "input_rep1",
+      "b_rep1",
+      "input_rep2",
+      "b_rep2",
+      "input_rep3",
+      "b_rep3"
+     ],
+     "rows": 839
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_b-rep1",
+      "SE_b-rep1",
+      "score_b-rep2",
+      "SE_b-rep2",
+      "score_b-rep3",
+      "SE_b-rep3",
+      "status",
+      "flags"
+     ],
+     "rows": 839
+    }
+   }
+  },
+  "simulated-problems": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "13df9f452b14ccfe66180c50533cf2ef1f7f3884f90191ef49e20625e234b98b",
+    "counts.csv": "8c10f6e6ea66ef34cd6d90097017a4f8c31f34cafb8e3cfd5ef30c267ab79c45",
+    "experiment.json": "534a6268b1bd676c98bbd67d11690f1b8c85d2a1d8048ac13b6247a1b9e740da",
+    "score_columns.json": "f31e25e5003ad8578e4c87bd4bdeed1fbd78486fa7e901c401f9516b52025286",
+    "score_set.json": "a2d926a97b5a9d762bdc25274b5ace3509924e4ff26bcf03a771de709e237076",
+    "scores.csv": "df0e31a72bb90394933aad1ebef828b115bf15844f7fe453c7f66076666ec726"
+   },
+   "names": {
+    "checked": 839,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "input_rep1",
+      "output_rep1",
+      "input_rep2",
+      "output_rep2",
+      "input_rep3",
+      "output_rep3"
+     ],
+     "rows": 839
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_rep1",
+      "SE_rep1",
+      "score_rep2",
+      "SE_rep2",
+      "score_rep3",
+      "SE_rep3",
+      "status",
+      "flags"
+     ],
+     "rows": 839
+    }
+   }
+  },
+  "simulated-sort-seq": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "47c1a9a7f6a01f6c0cf935f67df80d55d7baa6c640cf369cefe58777c3f98f4d",
+    "counts.csv": "206c9d95afdd276331559b28f1a43227660999f379d32460f8b454a0cd41c765",
+    "experiment.json": "455fe206a72fa83bf55d1bb3043c2722655148e1caa0d5fe4d923118076cbe4c",
+    "score_columns.json": "702de233f5674caf5ea7830fe0d6f23edfe1ffe5237bd868ff1b2d010728910e",
+    "score_set.json": "35e940b00f81c805bcda7dc1c33ab35af125eb1616e8a133230fbcb281d283dc",
+    "scores.csv": "b8efd83e814e2b0c971279ac6c07fd8dae7d9c891a939f3c515d0baf918b3a5e"
+   },
+   "names": {
+    "checked": 839,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "rep1_bin1",
+      "rep1_bin2",
+      "rep1_bin3",
+      "rep1_bin4",
+      "rep2_bin1",
+      "rep2_bin2",
+      "rep2_bin3",
+      "rep2_bin4",
+      "rep3_bin1",
+      "rep3_bin2",
+      "rep3_bin3",
+      "rep3_bin4"
+     ],
+     "rows": 839
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_rep1",
+      "SE_rep1",
+      "score_rep2",
+      "SE_rep2",
+      "score_rep3",
+      "SE_rep3",
+      "status"
+     ],
+     "rows": 839
+    }
+   }
+  },
+  "simulated-time-series": {
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "64bca426c6e94c9e4948d107d74384cc358c2aeae6f3b4316b1d88665ae4198e",
+    "counts.csv": "e715a95c804af03ef479d41d63eba53da0d330d5df6715b506b4f2f4c5fafadb",
+    "experiment.json": "a50e965c90026ee018ad6ad6efd30507fb6d39c63922ef28fbeb1fe90e797d2c",
+    "score_columns.json": "f31e25e5003ad8578e4c87bd4bdeed1fbd78486fa7e901c401f9516b52025286",
+    "score_set.json": "848e29a32536bb107494673b2b43d06a72af15aa8dc8cbfd1bd775ab1dda7243",
+    "scores.csv": "9c34b3e6a60fd93295dc3ea2a943d787979fada2b3340b49abb84ac33a24c638"
+   },
+   "names": {
+    "checked": 839,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "rep1_t0",
+      "rep1_t2",
+      "rep1_t4",
+      "rep1_t6",
+      "rep1_t8",
+      "rep2_t0",
+      "rep2_t2",
+      "rep2_t4",
+      "rep2_t6",
+      "rep2_t8",
+      "rep3_t0",
+      "rep3_t2",
+      "rep3_t4",
+      "rep3_t6",
+      "rep3_t8"
+     ],
+     "rows": 839
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_rep1",
+      "SE_rep1",
+      "score_rep2",
+      "SE_rep2",
+      "score_rep3",
+      "SE_rep3",
+      "status",
+      "flags"
+     ],
+     "rows": 839
+    }
+   }
+  }
+ },
+ "tools": {
+  "biopython": "1.88",
+  "hgvs": "1.5.7",
+  "mavedb": "2026.2.7.4",
+  "mavehgvs": "0.8.1",
+  "pandas": "2.3.3",
+  "pydantic": "2.10.6"
+ },
+ "transcripts": [
+  "ENST00000269305.9",
+  "ENST00000460680.6",
+  "NM_000546.6",
+  "NM_007294.3"
+ ]
+}

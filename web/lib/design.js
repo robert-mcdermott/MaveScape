@@ -9,10 +9,19 @@
 // suite `designs`, wave 1 slice 2).
 
 import { checkReadout, describeReadout, inText } from './readout.js';
+import { targetProtein } from './target.js';
 
 export const DESIGN_FORMAT = 'mavescape-design';
 export const DESIGN_VERSION = 1;
 export const MODELS = ['two-population', 'time-series', 'bins', 'scores'];
+
+// The numeric columns the scoring engine reads: every sample's, and for a design of published
+// scores (model 'scores') its columns of scores, standard errors and intervals.
+export function engineColumns(design) {
+  const names = (design.samples ?? []).flatMap((s) => s.columns);
+  if (design.model === 'scores') for (const key of ['score', 'se', 'ciLow', 'ciHigh']) if (design.scores?.[key]) names.push(design.scores[key]);
+  return [...new Set(names)];
+}
 export const TIME_UNITS = ['round', 'generation', 'hour', 'day', 'minute', 'other'];
 export const BIN_WEIGHTS = ['rank', 'fluorescence', 'other'];
 
@@ -27,7 +36,7 @@ const MODEL_NAMES = {
   'two-population': 'Two-population selection',
   'time-series': 'Time series',
   bins: 'FACS bins',
-  scores: 'Precomputed scores',
+  scores: 'Published scores',
 };
 
 function isObject(value) {
@@ -35,10 +44,10 @@ function isObject(value) {
 }
 
 // The length of a target in the positions variants are numbered by: residues for a protein, or
-// for a DNA target named at the protein level, codons from its reading frame.
+// for a DNA target named at the protein level, the codons of its coding sequence (to its stop).
 export function targetLength(target, level = 'protein') {
   const sequence = String(target?.sequence ?? '');
-  if (target?.sequenceType === 'dna' && level === 'protein') return Math.floor((sequence.length - ((target.codingStart ?? 1) - 1)) / 3);
+  if (target?.sequenceType === 'dna' && level === 'protein') return targetProtein(target).length;
   return sequence.length;
 }
 
@@ -56,7 +65,11 @@ export function replicateSamples(replicate) {
 // withinCondition: only samples shared by replicates of one condition (whose combination they make
 // dependent); an input selected under two conditions is shared between them, which the
 // differential pairs by.
+// A sample holding several tiles (two sub-libraries grown together, wave 3 slice 6) is not shared by
+// replicates of tiles that do not overlap: each measures only its own tile's positions.
 export function sharedSamples(design, { withinCondition = false } = {}) {
+  const tiles = new Map((design.library?.tiles ?? []).map((t) => [t.id, t]));
+  const byId = new Map((design.replicates ?? []).map((r) => [r.id, r]));
   const users = new Map();
   for (const replicate of design.replicates ?? []) {
     for (const { sample } of replicateSamples(replicate)) {
@@ -66,8 +79,71 @@ export function sharedSamples(design, { withinCondition = false } = {}) {
     }
   }
   const out = new Map();
-  for (const { sample, ids } of users.values()) if (ids.size > 1) out.set(sample, [...new Set([...(out.get(sample) ?? []), ...ids])]);
+  for (const { sample, ids } of users.values()) {
+    const list = [...ids];
+    const sharing = list.filter((a) => list.some((b) => b !== a && tilesOverlap(byId.get(a), byId.get(b), tiles)));
+    if (sharing.length > 1) out.set(sample, [...new Set([...(out.get(sample) ?? []), ...sharing])]);
+  }
   return out;
+}
+
+// Whether two replicates can measure the same variant: one names no tile, both the same tile, or
+// their tiles overlap.
+export function tilesOverlap(a, b, tiles) {
+  if (!a?.tile || !b?.tile || a.tile === b.tile) return true;
+  const x = tiles.get(a.tile);
+  const y = tiles.get(b.tile);
+  return !x || !y || (x.start <= y.end && y.start <= x.end);
+}
+
+// Samples that hold several tiles, each measured by its own replicates: sample → [tile ids].
+export function multiTileSamples(design) {
+  const tilesOf = new Map();
+  for (const replicate of design.replicates ?? []) {
+    if (!replicate.tile) continue;
+    for (const { sample } of replicateSamples(replicate)) {
+      if (!tilesOf.has(sample)) tilesOf.set(sample, new Set());
+      tilesOf.get(sample).add(replicate.tile);
+    }
+  }
+  return new Map([...tilesOf].filter(([, t]) => t.size > 1).map(([s, t]) => [s, [...t]]));
+}
+
+// The rows a replicate measures (wave 3, slice 6): a replicate of a tile measures only its tile's
+// positions, though its samples may hold another tile's variants too (DHFR's sub-libraries were
+// grown two together); the wild type and rows without a position belong to every tile.
+// positions: each row's (variants.position). Uint8Array, or null when it measures every row.
+export function tileRows(replicate, tiles, positions) {
+  if (!replicate.tile || !tiles.get(replicate.tile)) return null;
+  const mask = new Uint8Array(positions.length);
+  let outside = 0;
+  for (let i = 0; i < positions.length; i += 1) {
+    mask[i] = coversPosition(replicate, tiles, positions[i]) ? 1 : 0;
+    if (!mask[i]) outside += 1;
+  }
+  return outside ? mask : null;
+}
+
+// Whether a replicate measures a position: one of its tile's, or any when it has no tile or the row
+// no position (the wild type). tiles: Map(id → tile).
+export function coversPosition(replicate, tiles, position) {
+  const tile = replicate.tile ? tiles.get(replicate.tile) : null;
+  return !tile || !(position >= 1) || (position >= tile.start && position <= tile.end);
+}
+
+// A replicate's view of the samples (a Map's get): each sample's counts missing outside its tile.
+export function tileView(pooled, mask) {
+  if (!mask) return pooled;
+  const seen = new Map();
+  return {
+    get(id) {
+      if (!seen.has(id)) {
+        const counts = pooled.get(id);
+        seen.set(id, counts ? Float64Array.from(counts, (c, i) => (mask[i] ? c : Number.NaN)) : counts);
+      }
+      return seen.get(id);
+    },
+  };
 }
 
 // Checks a design, and its columns against a table's header when `table` ({ columns }) is given.
@@ -123,6 +199,7 @@ export function validateDesign(design, table = null) {
       error(`${path}.sequenceType`, 'The sequence type must be dna or protein.');
     }
     if (target.offset !== undefined && !Number.isInteger(target.offset)) error(`${path}.offset`, 'The offset is a whole number.');
+    if (target.taxonomyId !== undefined && !(Number.isInteger(target.taxonomyId) && target.taxonomyId > 0)) error(`${path}.taxonomyId`, 'The NCBI Taxonomy id is a positive whole number (9606 for Homo sapiens).');
     for (const [j, d] of (target.differences ?? []).entries()) {
       if (!Number.isInteger(d.position) || d.position < 1 || d.position > targetLength(target, level)) error(`${path}.differences[${j}]`, 'A known difference must name a position in the target.');
     }
@@ -393,6 +470,11 @@ export function summarizeDesign(design) {
   if (shared.size) {
     const sizes = new Set([...shared.values()].map((ids) => ids.length));
     lines.push(`${plural(shared.size, 'sample is', 'samples are')} shared between replicates (${[...sizes].join(' or ')} each): replicates that share an input are not independent there.`);
+  }
+  const multiTile = multiTileSamples(design);
+  if (multiTile.size) {
+    const sizes = new Set([...multiTile.values()].map((t) => t.length));
+    lines.push(`${plural(multiTile.size, 'sample holds', 'samples hold')} ${[...sizes].join(' or ')} tiles grown together: each replicate measures only its own tile's positions there.`);
   }
   const technical = (design.samples ?? []).filter((s) => s.columns.length > 1);
   if (technical.length) lines.push(`${plural(technical.length, 'sample has', 'samples have')} technical replicates (several columns), summed before scoring.`);

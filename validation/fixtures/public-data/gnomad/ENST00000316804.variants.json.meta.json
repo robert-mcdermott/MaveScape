@@ -1,0 +1,9 @@
+{
+  "contentType": "application/json",
+  "service": "gnomAD",
+  "source": "https://gnomad.broadinstitute.org/api",
+  "method": "POST",
+  "request": "{\"query\":\"query MaveScapeTranscript($id: String!) { transcript(transcript_id: $id, reference_genome: GRCh38) { transcript_id transcript_version gene { symbol } variants(dataset: gnomad_r4) { variant_id hgvsc hgvsp consequence flags joint { ac an filters } } } }\",\"variables\":{\"id\":\"ENST00000316804\"}}",
+  "retrieved": "2026-10-11T15:14:38Z",
+  "etag": "W/\"27df0-VhOk3942trG3swHRAJuLg7FDsdE\""
+}

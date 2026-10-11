@@ -37,7 +37,8 @@ export function runId(inputs) {
 const list = (typed) => Array.from(typed, (x) => (Number.isFinite(x) ? x : null));
 
 // What a run's output is, for its hash: every variant's key, each replicate's scores, SEs and
-// states, and each condition's scores, SEs, replicates used, reasons and flags. Numbers in
+// states, and each condition's scores, SEs, replicates used, reasons and flags (and published
+// scores' given intervals). Numbers in
 // JavaScript's shortest round-trip form; NaN as null.
 export function outputDigest(results) {
   return hash({
@@ -49,8 +50,21 @@ export function outputDigest(results) {
     // Only when there are some, so that runs without them keep their hashes: each score's degrees of
     // freedom (moderated combination, wave 2 slice 9), and differential scores.
     ...(results.conditions.some((c) => c.df) ? { df: results.conditions.map((c) => (c.df ? list(c.df) : null)) } : {}),
+    // Published scores' own intervals (wave 3, slice 2).
+    ...(results.conditions.some((c) => c.ciLow) ? { intervals: results.conditions.map((c) => (c.ciLow ? [list(c.ciLow), list(c.ciHigh)] : null)) } : {}),
     ...(results.differential ? { differential: results.differential.map((d) => ({ id: d.id, method: d.method, delta: list(d.delta), se: list(d.se), p: list(d.p), reason: Array.from(d.reason) })) } : {}),
   });
+}
+
+// The name of a workspace's next scored run: "Run N", counting the runs scored. Published scores,
+// read rather than scored, have their own names ("Published scores") and take no number, so the
+// first run scored after opening a MaveDB record is Run 1. A name already taken (a run removed
+// since) is skipped.
+export function nextRunName(ws) {
+  const taken = new Set(ws.runs.map((r) => r.name));
+  let n = ws.runs.filter((r) => r.inputs?.parameters?.model !== 'published').length + 1;
+  while (taken.has(`Run ${n}`)) n += 1;
+  return `Run ${n}`;
 }
 
 // The record kept in the workspace. software: { version, commit }.
@@ -113,6 +127,13 @@ const combinationShort = (c) => ({ moderated: 'moderated', reml: 'REML', fixed: 
 export function describeParameters(parameters, barcodes = false) {
   const p = withDefaults(parameters);
   const f = p.filters;
+  if (p.model === 'published') {
+    const kept = ['scores as published'];
+    if (f.maxSE !== null) kept.push(`SE ≤ ${f.maxSE}`);
+    if (f.excludeKinds.length) kept.push(`without ${f.excludeKinds.join(', ')}`);
+    if (f.exclude.length) kept.push(`${f.exclude.length} excluded`);
+    return kept.join(', ');
+  }
   const regression = p.model === 'wls' || p.model === 'ols';
   const bins = p.model === 'bins' || p.model === 'bins-mle';
   const parts = p.model === 'dimsum'
