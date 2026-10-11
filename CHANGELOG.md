@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+Wave 4 of the [roadmap](mavescape-spec/roadmap.md): compare. Built slice by slice; this section
+grows with each.
+
+### Added
+
+- **Comparisons within a workspace (wave 4, slice 1; C1–C3).** The Compare view (after Map) puts
+  two sets of scores side by side: two replicates of a run, two conditions, or two runs (a
+  rescoring, or a MaveDB record's published scores against its counts scored again). It starts
+  with the pair a workspace most likely asks for, and Swap exchanges them.
+  - **A compatibility report comes first**, each item ok, qualified or blocked:
+    - the targets: the same sequence, or two stretches of one UniProt entry (each with its
+      accession and offset), matched on the entry's coordinates; no common reference blocks;
+    - the level: a nucleotide run read at the protein level against a protein-level side;
+    - the variants scored on both sides, and those on one side only (fewer than 10 in common
+      block);
+    - the directions: opposite ones compare the second side negated;
+    - the assays;
+    - the scales: on different or unknown scales (published scores are on their record's own),
+      only the correlations are given;
+    - independence: replicates sharing a sample, a replicate inside its condition, one table
+      scored twice, or a record's published scores against its own counts.
+  - **The agreement of the variants scored on both**, each with its 95% interval:
+    - Pearson's r and Spearman's ρ (Bonett and Wright's interval);
+    - Lin's concordance correlation, with its accuracy, scale shift and location shift;
+    - Bland–Altman's bias and limits of agreement, and the trend of the differences with the
+      means;
+    - the scatter plot (y = x drawn on one scale) and the Bland–Altman plot; a variant clicked is
+      shown in the inspector and ringed.
+  - **Exports:** the matched variants (`*_comparison.csv`), and the report and statistics with
+    each run's output hash (`*_comparison.json`).
+  - **Remote control:** `compare` (the sides by name) and `export` of `comparison`; `set_mode`
+    shows `compare`.
+  - **Guides:** the BRCA1 saturation genome editing example's last step compares its counts,
+    scored, with the published scores; the guide page *Comparisons*.
+
+### Changed
+
+- An example opened from MaveDB gives its readout (what a higher score means, from the paper) to its
+  counts' drafted design too, not only to its published scores: compared, both say it.
+- The readiness's *Compared with a rescoring or another assay* no longer says comparisons come
+  later.
+
+### Validation
+
+- `compare` validation suite (19 checks):
+  - **Against R:** the statistics of seven pairs (six simulated, and DHFR's published scores
+    without and with Lon) equal R's (`cor.test`, DescTools' `CCC`, BlandAltmanLeh, `lm`) to
+    10⁻¹⁰; the reference, `validation/reference/compare.json`, is written by
+    `generate_compare.R`.
+  - **Coverage:** in 2,000 simulated pairs of known agreement of each of five kinds (30 to 1,000
+    variants), the 95% intervals hold the truth 94–96% of the time. Two are weaker, and the suite
+    reports them as they are: near r = 1, Spearman's (86% with 30 variants, 92% with 200); with 30
+    variants on two scales, Lin's (92%).
+  - **The report's rules** on GRB2: replicates; a replicate inside its run; one table scored twice;
+    GRB2 moved along UniProt P62993 and matched on its coordinates; the same blocked without an
+    accession; a direction stated the other way.
+  - **The published examples:** BRCA1's counts against its published scores (r 0.76, correlations
+    only); DHFR's Run 1 against each record (r 0.898 and 0.959); DHFR's two published score sets
+    matched as R's merge matches them; BRCA1 RING's replicates sharing their input.
+- The remote-control session (114 checks): `compare` on GRB2's replicates and on its runs (one table
+  scored twice; two scales), each as Node compares the runs it recomputes from the archive; the
+  comparison's CSV and JSON as Node writes them; a side that does not exist refused.
+- Unit tests: `compare.test.mjs` (8).
+
 ## 0.3.0 (2026-10-11)
 
 Wave 3 of the [roadmap](mavescape-spec/roadmap.md): public data in and out, through a fixed list of

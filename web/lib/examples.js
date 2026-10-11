@@ -156,7 +156,7 @@ export const EXAMPLES = [
       'On the map, the coding variants read at the protein level: 2,251 protein variants, 391 of them made by more than one nucleotide variant and merged as DiMSum merges them. The 1,090 variants with no protein change to draw (intronic, splice-site, UTR) are listed beside the map.',
       'Nonsense variants score far below synonymous ones (medians −2.12 and −0.01; AUC 0.99); splice-site variants score like nonsense (median −2.02, 92% below −1), intronic ones a few bases further in like synonymous ones (median −0.18).',
       'QC fails coverage: 17% of the substitutions one base change makes, on the whole protein. The variants lie in two stretches, positions 1–101 and 1631–1855, the exons the experiment edited.',
-      'The counts open with a design drafted from their names: two replicates, day 5 to day 11. Scored, they agree with the published scores at r ≈ 0.76: the authors normalized each exon apart and corrected for position within it, which the counts do not record.',
+      'The counts open with a design drafted from their names: two replicates, day 5 to day 11. Scored, they agree with the published scores at r ≈ 0.76 (Compare): the authors normalized each exon apart and corrected for position within it, which the counts do not record, so the comparison gives correlations only.',
     ],
     steps: [
       ['map', 'The map shows BRCA1\'s function scores as published, each coding variant read for the protein change it makes. Click the stop at codon 1853 (p.Tyr1853Ter): two nucleotide variants make it, each with its score, merged into the cell.'],
@@ -164,7 +164,7 @@ export const EXAMPLES = [
       ['experiment', 'Select the target in the sidebar: the RefSeq transcript NM_007294.3, fetched from NCBI as GenBank, numbered from its coding sequence (233–5,824), its translation the record\'s protein.'],
       ['qc', 'In QC, the stops separate from the synonymous variants (AUC 0.99), but coverage fails: the whole protein counts as designed. The variants lie in two stretches (1–101, 1631–1855), the exons edited: given as the library\'s tiles in Experiment, coverage is judged within them.'],
       ['experiment', 'Select the counts table: its design was drafted from the column names, two replicates from day 5 to day 11, the library and RNA counts set aside.'],
-      ['score', 'Score the counts and compare with the published scores: they agree at r ≈ 0.76. The published scores were normalized exon by exon and corrected for position within each exon, which the deposited counts do not record.'],
+      ['compare', 'In Score, score the counts; then open Compare: Run 1 against the published scores, all 3,893 variants matched. They agree at r ≈ 0.76, and the report says why only correlations are shown: the published scores were normalized exon by exon and corrected for position within each, a scale the counts do not record, and both come from one experiment.'],
     ],
   },
   {

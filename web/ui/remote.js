@@ -40,6 +40,8 @@ import { searchHits } from '../lib/mavedb.js';
 import { retrievalText } from '../lib/uniprot.js';
 import { addFileTrack, addPublicTrack, arrangeTrack, removeTrack, runTrackState } from './tracks.js';
 import { annotationsOf, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
+import { comparisonJSON, sideOptions } from '../lib/compare.js';
+import { comparisonFiles, computeComparison, currentPair, setPair } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 
 export class ActionError extends Error {}
@@ -49,7 +51,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const ONE_TO_THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter', X: 'Ter' };
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map' };
+const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare' };
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -882,10 +884,49 @@ export function installRemote(app) {
       return { message: `Removed ${a.name} and its tracks.`, data: { removed: a.id } };
     },
 
+    // Compares two sets of scores of the workspace (wave 4, slice 1): each side a run's condition or
+    // replicate by name ("Run 1", "Run 1: Replicate 2", "Published scores"); the pair shown (or the
+    // default) when not given. Shows the Compare view.
+    async compare(args) {
+      const w = ws();
+      if (!w.runs.length) throw new ActionError('There is no score run to compare: score a run first.');
+      const options = w.runs.flatMap((r) => sideOptions(r));
+      const labels = options.map((o) => o.label);
+      const side = (text) => options.find((o) => o.label === choose(text, labels, 'side')).spec;
+      const kept = currentPair(app);
+      const pair = { a: args.a ? side(args.a) : kept?.a, b: args.b ? side(args.b) : kept?.b };
+      if (!pair.a || !pair.b) throw new ActionError(`Give the two sides, a and b: ${labels.join(', ')}.`);
+      setPair(app, pair);
+      await app.setMode('compare');
+      const c = await computeComparison(app, pair);
+      if (c.error) throw new ActionError(c.error);
+      await settle();
+      const s = c.statistics;
+      const f = (x) => (Number.isFinite(x) ? x.toFixed(3) : '—');
+      const iv = (e, lo, hi) => `${f(e)} (${f(lo)} to ${f(hi)})`;
+      const flagged = c.report.items.filter((i) => i.status !== 'ok');
+      const message = s
+        ? `${c.a.label} and ${c.b.label}: ${c.matched.n} variants scored on both sides. Pearson's r ${iv(s.pearson.r, s.pearson.low, s.pearson.high)}, Spearman's ρ ${iv(s.spearman.rho, s.spearman.low, s.spearman.high)}${s.concordance ? `, Lin's concordance ${iv(s.concordance.ccc, s.concordance.low, s.concordance.high)}, bias ${f(s.blandAltman.bias)} with limits of agreement ${f(s.blandAltman.lower)} to ${f(s.blandAltman.upper)}` : '; Lin\'s concordance and Bland–Altman withheld (not on one scale)'}.${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
+        : `${c.a.label} and ${c.b.label} cannot be compared: ${flagged.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`;
+      const { software, ...data } = JSON.parse(comparisonJSON(c));
+      return { message, data };
+    },
+
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison'];
       const what = choose(args.what, kinds, 'export');
       let file;
+      // The comparison shown (wave 4, slice 1): its matched variants (CSV), or its report and
+      // statistics (a path ending in .json).
+      if (what === 'comparison') {
+        const pair = currentPair(app);
+        if (!pair) throw new ActionError('There is nothing to compare: score a run first, then compare (the action compare).');
+        const c = await computeComparison(app, pair);
+        if (c.error) throw new ActionError(c.error);
+        const files = comparisonFiles(app, c);
+        const json = /\.json$/i.test(args.path ?? '');
+        return { file: json ? files.json.text : files.csv.text, message: json ? `The comparison of ${c.a.label} and ${c.b.label}: its report and statistics.` : `The comparison of ${c.a.label} and ${c.b.label}: ${c.matched?.n ?? 0} variants scored on both sides.` };
+      }
       // The analysis package (wave 2, slice 10): of a run when named, else of the current run, else
       // of the design with the default parameters.
       if (what === 'package') {

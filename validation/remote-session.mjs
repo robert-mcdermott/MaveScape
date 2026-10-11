@@ -33,6 +33,7 @@ import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { tracksCSV } from '../web/lib/tracks.js';
 import { openExampleInNode } from './example-cases.mjs';
+import { compareSides, comparisonCSV, comparisonJSON, describeSide } from '../web/lib/compare.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -285,6 +286,28 @@ try {
   delete provenance.files;
   delete expectedProvenance.files;
   check('export provenance.json: Node\'s, but for the file names', `${Object.keys(provenance).length} fields`, JSON.stringify(provenance) === JSON.stringify(expectedProvenance));
+
+  // Comparisons (wave 4, slice 1): two replicates, one table scored twice, two scales; each as Node
+  // compares the runs it recomputes from the exported archive, and the files the same bytes.
+  const nodeRuns = archive.ws.runs.map((run, i) => ({ run, results: recompute(archive.ws, archive.sources, i).scored.results }));
+  const nodeCompare = (a, b) => compareSides(describeSide(archive.ws, nodeRuns[a[0]].run, nodeRuns[a[0]].results, a[1]), describeSide(archive.ws, nodeRuns[b[0]].run, nodeRuns[b[0]].results, b[1]));
+  const withoutSoftware = (text) => { const { software, ...rest } = JSON.parse(text); return JSON.stringify(rest); };
+  const reps = nodeRuns[0].results.replicates.map((r) => r.id);
+  const repCompare = await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2' });
+  const repNode = nodeCompare([0, { run: nodeRuns[0].run.id, replicate: reps[0] }], [0, { run: nodeRuns[0].run.id, replicate: reps[1] }]);
+  check('compare: GRB2\'s replicates 1 and 2 in the Compare view, the report and every statistic as Node compares them', repCompare.message.slice(0, 200), JSON.stringify(repCompare.data) === withoutSoftware(comparisonJSON(repNode)) && repCompare.data.report.status === 'ok' && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'compare' && (await browser.eval(`Boolean(document.querySelector('.compare-report'))`)));
+  const runsCompare = await act('compare', { a: 'Run 1', b: 'Run 2' });
+  check('compare: Run 1 against Run 2 (the Enrich2 preset): one table scored twice, qualified, on one scale', runsCompare.data.report.items.find((i) => i.id === 'independence').text, runsCompare.data.report.status === 'qualified' && runsCompare.data.sameScale === true && runsCompare.data.statistics.concordance !== null);
+  const scalesCompare = await act('compare', { a: 'Run 1', b: 'Run 3' });
+  const scalesNode = nodeCompare([0, { run: nodeRuns[0].run.id, condition: 0 }], [2, { run: nodeRuns[2].run.id, condition: 0 }]);
+  check('compare: Run 1 against Run 3 (DiMSum\'s fitness): two scales, so Lin\'s concordance and Bland–Altman withheld, saying why', scalesCompare.data.report.items.find((i) => i.id === 'scale').text, scalesCompare.data.sameScale === false && scalesCompare.data.withheld.join() === 'concordance,blandAltman' && JSON.stringify(scalesCompare.data) === withoutSoftware(comparisonJSON(scalesNode)));
+  await act('export', { what: 'comparison', path: join(out, 'comparison.csv') });
+  await act('export', { what: 'comparison', path: join(out, 'comparison.json') });
+  const comparedCSV = readFileSync(join(out, 'comparison.csv'), 'utf8');
+  const comparedJSON = readFileSync(join(out, 'comparison.json'), 'utf8');
+  check('export comparison: the matched variants (CSV) and the report and statistics (JSON) of the comparison shown, as Node writes them', `${comparedCSV.split('\n').length - 2} variants; ${JSON.parse(comparedJSON).a.label} and ${JSON.parse(comparedJSON).b.label}`, comparedCSV === comparisonCSV(scalesNode) && withoutSoftware(comparedJSON) === withoutSoftware(comparisonJSON(scalesNode)) && JSON.parse(comparedJSON).software?.version === connection.version);
+  const noSide = await send('compare', { a: 'Run 9' });
+  check('compare with a side that does not exist: refused, listing the sides', noSide.message, !noSide.ok && /No side "Run 9"/.test(noSide.message) && /Run 1: Replicate 2/.test(noSide.message));
 
   // Sequence tracks (wave 3, slice 5), offline, from the cached answers: the run's own, hidden until
   // shown; annotations from public data and from files; shown, moved, filtered; beside a variant;

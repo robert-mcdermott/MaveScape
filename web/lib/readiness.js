@@ -154,7 +154,7 @@ export const GAPS = {
   },
   'target-identifiers': {
     label: 'The target\'s reference identifier', kind: 'description', place: 'target',
-    why: 'A deposit to MaveDB maps the target to UniProt or RefSeq, and comparisons with other assays (MaveScape 0.4) align by it.',
+    why: 'A deposit to MaveDB maps the target to UniProt or RefSeq, and a comparison with a run on another stretch of the protein matches their variants on its coordinates (Compare).',
     where: 'UniProt or RefSeq, for the protein or transcript the construct encodes.',
     how: 'Experiment, Target.',
   },
@@ -242,7 +242,7 @@ function scoresAnalysesOf(f) {
   });
   add('Quality control', 'qc.scored-fraction', 'Variants with a score');
   add('Record', 'record.scores', 'The published scores on the map, explored and exported', { improves: [['score-se', !f.scoreSE]] });
-  add('Record', 'record.compare', 'Compared with a rescoring or another assay (comparisons come with MaveScape 0.4)');
+  add('Record', 'record.compare', 'Compared with a rescoring, the published scores or a replicate (Compare)');
   add('Record', 'record.methods', 'The methods paragraph and its references', { improves: [['readout', !f.readout]] });
   add('Record', 'record.deposit', 'A MaveDB deposit with all the MAVE minimum information asks for (Export, Deposit in MaveDB)', { needs: [['readout', !f.readout], ['readout-terms', !f.readoutTerms], ['target-identifiers', !f.identifiers]] });
   return out;

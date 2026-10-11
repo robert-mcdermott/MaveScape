@@ -1675,18 +1675,81 @@ scales?
 
 ### Wave 4
 
-1. **Comparisons (C1–C3).** A comparison engine that matches variants across replicates,
-   conditions, assays, runs, local and MaveDB data, and predictors.
-   - **A compatibility report** comes first: target, coordinates, matched and unmatched variants,
-     and the readouts (wave 2, slice 8: direction, units, reference state and rescaling). Two
-     assays on different scales are then not read as disagreeing.
-   - **Views:** synchronized and difference maps, scatter plots with Pearson, Spearman, Lin's
-     concordance and Bland–Altman, discordant-variant tables, position-level disagreement, and
-     confidence and depth filters.
-   - Invalid comparisons are blocked or qualified.
-2. **Robustness to analysis choices (C4).** A run is repeated across variations, following
+The roadmap first had three items for this wave. Before the wave began, the first item
+(comparisons, C1–C3) was split into three slices, as large as wave 3's. Robustness and selections
+follow, and the wave ends with its examples, as waves 2 and 3 did.
+
+1. **Comparisons within a workspace (C1, C3, part of C2): done.** A comparison engine (`web/lib/compare.js`)
+   that pairs two sets of scores in one workspace and matches their variants: two replicates of a
+   run, two conditions, a run's condition and another run's (a rescoring, or the published scores
+   of a MaveDB record against its counts scored again). A Compare view and the remote action
+   `compare`.
+   - **The compatibility report comes first** (C3):
+     - the targets: the same sequence, or one UniProt entry at different offsets, matched on its
+       coordinates;
+     - the level: nucleotide variants read at the protein level when the other side is protein;
+     - the variants matched, and those scored on one side only;
+     - the readouts: direction, units, reference state and rescaling;
+     - whether the two sides are independent: replicates that share an input, or one table scored
+       twice, agree for reasons other than the biology.
+
+     Two sets of scores on different or unknown scales are compared by correlation only: Lin's
+     concordance and Bland–Altman, which measure agreement on one scale, are withheld and the
+     report says why. A comparison that cannot be made (different targets with no common
+     reference, too few variants in common) is blocked, saying why.
+   - **A scatter plot with agreement statistics** (C2, in part): Pearson's r and Spearman's ρ, Lin's
+     concordance correlation and Bland–Altman's bias and limits of agreement, each with a 95%
+     interval; the Bland–Altman plot; a variant clicked shown in the inspector.
+   - The matched variants exported (`comparison.csv`), with the report and the statistics
+     (`comparison.json`).
+   - The statistics are in `web/lib/agreement.js`. The BRCA1 saturation genome editing example's
+     last step compares its counts, scored, with the published scores; a screenshot scene for each
+     (`compare`, `compare-published`); the guide page *Comparisons*. An example opened from MaveDB
+     gives its readout to its counts' draft too.
+   - Validation:
+     - `compare` (19 checks):
+       - every statistic of seven pairs equal to R's (`cor.test`, Spearman with Bonett and
+         Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰;
+       - in 2,000 simulated pairs of known agreement of each of five kinds, the 95% intervals
+         holding the truth 94–96% of the time (two weaker, reported apart);
+       - the report's rules on GRB2 and on pairs made from it (moved along UniProt P62993 and
+         matched on its coordinates; blocked without an accession; a direction stated the other
+         way);
+       - the examples compared as their guides say: BRCA1's counts against its published scores
+         (r 0.76, correlations only); DHFR's Run 1 against each record (0.898 and 0.959); DHFR's
+         published pair matched as R's merge matches it; BRCA1 RING's replicates sharing an input.
+     - `remote-session.mjs` 114 checks: `compare` and its export, as Node compares the runs it
+       recomputes from the archive.
+     - Unit tests: `compare.test.mjs` (8).
+   - Found by slice 1:
+     - **DHFR's Run 1 scores 626 variants that the published scores leave out**, at about four
+       times the SE. They agree little between the conditions (r 0.15), so −Lon and +Lon
+       correlate at 0.52 in Run 1, 0.76 on the published scores' variants, and 0.81 in the
+       published scores. The confidence and depth filters of slice 2 are for this.
+     - **Two intervals hold the truth less often than they claim**, and the suite reports them as
+       they are rather than tolerating them unseen:
+       - Spearman's near r = 1 (86% with 30 variants, 92% with 200): the sample ρ is biased below
+         the truth there;
+       - Lin's with 30 variants on two scales (92%).
+     - **An example's readout reached only its published scores**: compared with them, the counts'
+       drafted design said nothing of the direction. The readout is the assay's, and now reaches
+       both.
+     - **DHFR's two published score sets are on one scale in fact** (one study, one pipeline), but
+       nothing in their records says so: they are compared by correlation only until slice 3 lets a
+       person put two sets on one scale.
+2. **Comparison views across the map (C2).** Synchronized maps of the two sides, the difference
+   map, the variants that disagree beyond their uncertainty (each difference's z from both SEs,
+   where the two are independent), disagreement by position, and filters by confidence and depth.
+   Exports of each.
+3. **Other sources and scales (C1, C3).** A MaveDB score set compared with a local run without
+   opening it into the workspace, another assay of the same protein, and a predictor (AlphaMissense,
+   EVE or ESM1b, from the tracks' providers). Two assays rescaled onto one scale by their anchors
+   (wave 2, slice 8: nonsense and the wild type), which published scores refuse today; a
+   predictor compared by rank and by its classes.
+4. **Robustness to analysis choices (C4).** A run is repeated across variations, following
    CytoWeave's `multiverse.js` pattern:
-   - pseudocounts, normalizations, filters, combination methods and uncertainty models;
+   - pseudocounts, normalizations, filters, combination methods and uncertainty models (scaling
+     each replicate, as DiMSum does, among them: wave 2, slice 9);
    - each replicate left out in turn;
    - low-depth measurements removed.
 
@@ -1697,9 +1760,12 @@ scales?
    - Validation: simulated experiments with a planted fragile result: one replicate driving an
      effect, and an effect that appears at only one pseudocount. The variants reported as fragile
      are exactly the planted ones, and a robust result is reported as robust.
-3. **Selections (V3).** Freeform and query selections ("missense at 40–80 with SE < 0.2",
+5. **Selections (V3).** Freeform and query selections ("missense at 40–80 with SE < 0.2",
    "variants whose class depends on the pseudocount"; structural classes such as "buried
    positions" with wave 5), named sets, set operations, export.
+6. **Examples.** Published comparisons that teach what the wave built: two assays of one protein
+   that only seem to disagree until they are on one scale, a rescoring against the published
+   scores, and a conclusion that depends on an analysis choice.
 
 ## 0.5.0: variants in 3D (wave 5)
 

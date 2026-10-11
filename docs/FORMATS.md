@@ -1,6 +1,6 @@
 # File formats
 
-Every file MaveScape 0.1, 0.2 and 0.3 read and write. Researchers whose counts come from their own pipeline
+Every file MaveScape 0.1 to 0.4 read and write. Researchers whose counts come from their own pipeline
 need only a count table, the target's sequence, and the design: which column is which sample.
 Blank, annotated layouts of each are on the Start page and in
 [`web/examples/layouts/`](../web/examples/layouts/). The Start page also opens two worked examples.
@@ -15,7 +15,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Designs | `*.design.json`; sample sheets (CSV, TSV); DiMSum's experiment design file | `*.design.json` |
 | Import templates | `*.import.json` | `*.import.json` |
 | Workspaces | `*.msz` archives | `*.msz` archives; the workspace document (JSON) |
-| Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3) |
+| Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3); a comparison's matched variants (CSV) and its report and statistics (JSON, 0.4) |
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
@@ -808,6 +808,62 @@ The tracks shown, position by position: `position`, `reference_position` (with a
 the count, largest or mean as the track draws it, and a second column, `<track>: variants`, each
 variant there with its label; a features track: the features covering the position). Read again,
 it is a custom track (above).
+
+## Comparisons
+
+A comparison (the Compare view, remote control's `compare`; MaveScape 0.4) pairs two sets of scores
+of a workspace, each a run's condition or one of its replicates. It is a view, not kept in the
+workspace: the runs are, each with its record, and the comparison is made again from them. Its
+two files, named after the two sides (`<first>_vs_<second>_comparison.*`):
+
+**The matched variants** (`*_comparison.csv`), one row per variant scored on both sides, in the
+first side's order (the wild type left out):
+
+| Column | Meaning |
+| --- | --- |
+| `variant` | the variant, as matched: its name on the target, or on the UniProt entry's coordinates (its position plus the target's offset) when the two targets are different stretches of one entry |
+| `variant_a`, `variant_b` | as each side names it (a nucleotide run read at the protein level: its protein variant) |
+| `class` | the first side's class of the variant (missense, nonsense, synonymous, …) |
+| `score_a`, `SE_a`, `score_b`, `SE_b` | each side's score and SE as scored (`NA`: none) |
+| `difference`, `mean` | first − second and their mean, as compared: the second negated when the two directions are opposite (`bNegated` below) |
+
+**The report and statistics** (`*_comparison.json`):
+
+```json
+{
+  "format": "mavescape-comparison",
+  "version": 1,
+  "software": { "name": "MaveScape", "version": "0.4.0", "commit": "…" },
+  "a": { "label": "Run 1: Replicate 1", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep1" },
+  "b": { "label": "Run 1: Replicate 2", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep2" },
+  "level": "protein",
+  "coordinates": "target",
+  "bNegated": false,
+  "sameScale": true,
+  "report": { "status": "ok", "items": [{ "id": "target", "status": "ok", "label": "Target", "text": "…" }] },
+  "matched": { "n": 1109, "onlyA": 0, "onlyB": 0, "notScoredA": 1, "notScoredB": 2 },
+  "statistics": {
+    "n": 1109,
+    "pearson": { "n": 1109, "r": 0.874, "low": 0.860, "high": 0.888 },
+    "spearman": { "n": 1109, "rho": 0.823, "low": 0.800, "high": 0.844 },
+    "concordance": { "n": 1109, "ccc": 0.874, "low": 0.860, "high": 0.887, "r": 0.874, "accuracy": 1.0, "scaleShift": 0.98, "locationShift": 0.01 },
+    "blandAltman": { "n": 1109, "bias": -0.019, "sd": 0.97, "lower": -1.909, "upper": 1.870, "biasLow": -0.076, "biasHigh": 0.037, "lowerLow": -2.007, "lowerHigh": -1.811, "upperLow": 1.772, "upperHigh": 1.969, "trend": { "slope": 0.018, "low": -0.012, "high": 0.049, "intercept": 0.06, "p": 0.24 } }
+  },
+  "withheld": []
+}
+```
+
+Each side names its run's id and output hash, so the comparison can be traced to the two runs and
+made again. A side is a condition (`condition`: its name) or a replicate (`replicate`: its id).
+`coordinates` is `target` (variants matched by name on one target) or `reference` (two stretches
+of one UniProt entry, matched on its coordinates). Each report item is `ok`, `qualified` or
+`blocked`, with its words; the report's `status` is the worst of them. A blocked comparison has
+`statistics: null`. On different or unknown scales (`sameScale: false`), `concordance` and
+`blandAltman` are `null` and named in `withheld`. Every interval is 95%: Pearson's from Fisher's
+z; Spearman's from Fisher's z with Bonett and Wright's SE; Lin's from its z-transform (Lin 2000);
+Bland–Altman's with t on n − 1 degrees of freedom, the limits' SE √(3 SD²/n); the trend's
+(the least-squares slope of the differences on the means) with t on n − 2. A number that is not
+defined (too few variants, no spread) is `null`.
 
 ## Headless runs: `run.json`
 

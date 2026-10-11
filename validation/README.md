@@ -24,6 +24,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `public-data` | UniProt's and MaveDB's answers as MaveScape's fetcher cached them (wave 3, slices 1 and 2): every cached answer with its retrieval record; each published example's target where its design says in its UniProt entry (identical, at one place, the entry changing nothing in the design); GRB2's whole sequence looked up, P62993 first; the GRB2 example checked as its guide says, the design unchanged and the methods naming the check and citing UniProt; the feasibility records (four MaveDB score sets) read with no code for any of them, their published scores read as published equal to MaveDB's columns row for row, their counts drafted into valid designs (GRB2's and factor IX's as documented, but for the bins' values); keywords as the readout; a record whose target is an accession, and a record of scores alone, its readiness naming the counts and where they may be; a workspace of published scores through its archive, its run reproduced; GRB2's mapped variants (wave 3, slice 3) each joined to its row of scores, its protein on NP_002077.1 the table's at the target's position plus the UniProt offset | `fixtures/public-data/`; MaveDB, external |
 | `annotations` | Sequence tracks and annotations (wave 3, slice 5; `annotation-cases.mjs`, the fetcher's cached answers served by `cached-fetch.mjs`): conservation from an alignment as Capra & Singh's `score_conservation.py` scores it, and PDBe-KB's profiles as its divergence gives them; UniProt's features the same from its JSON and its GFF3; AlphaMissense as AlphaFold DB's tables give it; ClinVar's records of GRB2 and F9 with ClinVar's own classifications; gnomAD's frequencies of BRCA1's variants against MaveDB's own join of gnomAD to its saturation genome editing score set; MaveDB's annotations joined to the BRCA1 example's run; annotations kept through an archive; the tracks' table read back; what each provider asks; the GRB2 example as its guide says | `reference/annotations.json`; `fixtures/public-data/`, `fixtures/annotations/`; the BRCA1 example's table, external |
 | `mavedb-export` | MaveDB deposits (wave 3, slice 4; `mavedb-export-cases.mjs`): 19 deposits (`web/lib/mavedb-export.js`) of every kind of run and target, from the examples and published records, checked by MaveDB's own validators: every table accepted by `validate_and_standardize_dataframe_pair` with its column descriptions and targets (mavehgvs against a sequence, biocommons hgvs against a transcript), every name strict MAVE-HGVS, the experiment and score set taken by MaveDB's models where MaveScape says nothing is missing and refused for what it says is; the files written now those the reference checked (each SHA-256); export → import → export the same bytes; MaveScape's keyword vocabulary MaveDB's | `reference/mavedb-export.json`; `fixtures/public-data/` (`mavedb-keywords.json`, the transcripts); MaveDB, external |
+| `compare` | Comparisons within a workspace (wave 4, slice 1; `compare-cases.mjs`, `web/lib/compare.js`, `web/lib/agreement.js`): the agreement statistics of seven pairs equal R's (`reference/compare.json`, by `reference/generate_compare.R`: `cor.test`, Spearman with Bonett and Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰; their 95% intervals' coverage in 2,000 simulated pairs of known agreement of each of five kinds (94–96%; Spearman's near r = 1 and Lin's with 30 variants on two scales reported apart, as they are); the compatibility report's rules on GRB2 (replicates, a replicate inside its run, one table scored twice, a run moved along UniProt P62993 and matched on its coordinates, the same blocked without an accession, a direction stated the other way) and the files; then BRCA1's counts against its published scores, DHFR's Run 1 against each record, DHFR's two published score sets matched as R's merge matches them, and BRCA1 RING's replicates sharing their input. 19 checks | `reference/compare.json`; MaveDB, external (`mavedb-brca1-sge`, `mavedb-dhfr`, `mavedb-brca1-ring`) for the last checks |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -72,8 +73,12 @@ present; `--require-data` makes them required, as CI's `remote` job does after f
 records kept, a published run each, their counts joined with a design drafted as a condition each
 in hours; `open_example "dhfr-lon"` with Node's output hash, its map on +Lon − −Lon, and Run 1
 reproduced from the joined table's two files; and (0.3.0's release) GRB2's target checked against
-UniProt after its run, the run's ClinVar refused before the check (no gene) and added after it.
-109 checks; in CI as the `remote` job.
+UniProt after its run, the run's ClinVar refused before the check (no gene) and added after it;
+and (wave 4, slice 1) `compare` on GRB2's replicates, on Run 1 against Run 2 (one table scored
+twice) and against Run 3 (DiMSum's fitness: two scales, concordance and Bland–Altman withheld),
+each the report and statistics Node gives for the runs it recomputes from the exported archive,
+`export` of the comparison (CSV and JSON) as Node writes it, and a side that does not exist
+refused. 114 checks; in CI as the `remote` job.
 
 ## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3 and 6)
 
@@ -364,6 +369,35 @@ other bytes, until the reference is made again.
 - **The names on a transcript are checked without a database**: biocommons hgvs given only each
   transcript's sequence and coding region validates BRCA1's 3,893 names, and refuses a wrong
   reference base.
+
+## Agreement statistics (`reference/compare.json`, wave 4 slice 1)
+
+`reference/generate_compare.R` (R 4.6.1, DescTools 0.99.60, BlandAltmanLeh 0.3.1, jsonlite; run
+from the repository root with DHFR's tables in `cache/`) writes seven pairs of scores and their
+statistics, each pair's x and y kept in the reference so that MaveScape is given the same numbers:
+six simulated (`set.seed(20261011)`: close agreement on one scale, twice the scale, a shift of 0.5,
+weak and negative, ties at one decimal, twelve variants) and DHFR's published scores without and
+with Lon (`urn:mavedb:00000063-b-1` and `-a-1`), merged in R on their protein variants (2,277). For
+each:
+- Pearson's r and its interval (`cor.test`);
+- Spearman's ρ (`cor`, ties at their average rank) with Bonett and Wright's interval, written out
+  from the paper;
+- Lin's concordance with its z-transform interval, scale and location shifts and accuracy C_b
+  (DescTools' `CCC`);
+- Bland–Altman's bias and limits with their intervals (BlandAltmanLeh's `bland.altman.stats`);
+- the trend of the differences on the means (`lm`).
+
+MaveScape's `web/lib/agreement.js` gives every number to 10⁻¹² of R's (the reference is rounded to
+13 digits), and the suite matches DHFR's pair as R's merge does: the same 2,277 variants.
+
+The intervals' coverage is checked by simulation (`compare-cases.mjs`, `coverage`): x ~ N(0, 1),
+y = a + b·x + e with e ~ N(0, s²), whose true Pearson's ρ, Spearman's ρ_s = (6/π) asin(ρ/2), Lin's
+ρc = 2b/(1 + b² + s² + a²), bias and limits are known. In 2,000 pairs of each of five kinds (30 to
+1,000 variants; one scale or twice it; shifted or not; r 0.29 to 0.99), each 95% interval holds the
+truth 94–96% of the time. Two are weaker, and the suite reports them as they are:
+- near r = 1 (0.99), Spearman's: 86% with 30 variants and 92% with 200, the sample ρ being biased
+  below the truth there;
+- with 30 variants on two scales, Lin's: 92%.
 
 ## Reference outputs (`reference/`)
 

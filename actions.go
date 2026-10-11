@@ -50,8 +50,8 @@ var remoteActions = []remoteAction{
 		"paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths of files or folders."},
 		"new_workspace": flagArg("Open them in a new workspace rather than the open one."),
 	}, "paths"), long: true, reads: true},
-	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score or map.", InputSchema: schema(map[string]any{
-		"mode": textArg("start, experiment, qc, score or map."),
+	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map or compare.", InputSchema: schema(map[string]any{
+		"mode": textArg("start, experiment, qc, score, map or compare."),
 	}, "mode")},
 	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
 		"kind": textArg("table, target, run, selection or variant; found by name across all of them if not given."),
@@ -131,6 +131,10 @@ var remoteActions = []remoteAction{
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
 	})},
+	{Name: "compare", Description: "Compares two sets of scores of the workspace, as the Compare view does: each side a run's condition (its combined scores) or one of its replicates, of one run or two (a rescoring, or a MaveDB record's published scores against its counts scored again). Returns the compatibility report first (targets and coordinates, the level, the variants matched and those on one side only, the directions and scales, whether the two are independent; each item ok, qualified or blocked), then the agreement of the variants scored on both sides: Pearson's r and Spearman's rho, Lin's concordance and Bland–Altman's bias and limits of agreement (the last two only on one scale), each with its 95% interval. Shows the Compare view; export with what comparison writes the matched variants or (a .json path) the report and statistics.", InputSchema: schema(map[string]any{
+		"a": textArg("The first side, by name: \"Run 1\", \"Run 1: Replicate 2\", \"Run 1: +Lon\", \"Published scores\". The pair shown, or a default (a run against the published scores, two replicates, two conditions, the last two runs), if not given."),
+		"b": textArg("The second side, by name."),
+	}), long: true},
 	{Name: "list_tracks", Description: "The sequence tracks beside a run's map, in order: the run's own (reference, coverage, position effect, uncertainty) and the workspace's annotations' (UniProt features, conservation, AlphaMissense, ClinVar, gnomAD, MaveDB's annotations, an alignment, a predictor, a custom track), each with its source (service, release, retrieval date), whether it is shown, its filter and the filters it offers, and what it holds; the annotations that could not be read; and what can be added.", InputSchema: schema(map[string]any{
 		"run":       runArg,
 		"condition": conditionArg,
@@ -151,8 +155,8 @@ var remoteActions = []remoteAction{
 	{Name: "remove_track", Description: "Removes an annotation and its tracks (undoable, in the history).", InputSchema: schema(map[string]any{
 		"annotation": textArg("The annotation by id or name (list_tracks)."),
 	}, "annotation")},
-	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), or a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them). Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package or mavedb."),
+	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), or the comparison shown (its matched variants, CSV; its report and statistics, JSON). Needs the token.", InputSchema: schema(map[string]any{
+		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb or comparison (the variants of the comparison shown, or its report and statistics to a .json path)."),
 		"path":           textArg("The absolute path of the file to write."),
 		"overwrite":      flagArg("Replace the file if it exists."),
 		"run":            runArg,

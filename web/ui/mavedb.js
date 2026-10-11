@@ -121,7 +121,10 @@ async function openRecordWorkspace(app, { record, retrieval, recordsTarget, targ
     const countsSource = addSource(ws, sourceOf(countsPart, { name: `${record.title}: counts (${label})`, target: target.id, origin: origin('counts', countsRetrieval) }));
     countsId = countsSource.id;
     draft = countsDesign(record, { table: countsPart.table, layout: countsPart.layout, target });
-    ws = setDesign(countsSource.ws, draft.design, `A design drafted from the column names of ${named}'s counts`, countsId);
+    // An example's readout is the assay's, so the counts' too (wave 4, slice 1: compared with the
+    // published scores, both say what a higher score means).
+    if (example?.readout && draft.design) draft.design.readout = { ...(draft.design.readout ?? {}), ...example.readout };
+    ws = setDesign(countsSource.ws, draft.design, `A design drafted from the column names of ${named}'s counts${example?.readout ? ' (the readout\'s direction as the example states it, from the paper)' : ''}`, countsId);
   }
   // An example's own design of the counts, and its first run (ui/examples.js).
   if (prepare) ws = await prepare(ws, { counts: countsPart ? { id: countsId, table: countsPart.table } : null, busy });

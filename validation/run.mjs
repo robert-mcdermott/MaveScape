@@ -8,7 +8,8 @@
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, consequences
 // (external data), import (external data), experiment (external data), scoring, qc, map and
 // roundtrip (their last checks need external data), readiness, examples (its last checks need
-// external data), public-data; all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// external data), public-data, mavedb-export, annotations, compare (its last checks need external
+// data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -95,6 +96,9 @@ import { createZip } from '../web/lib/zip.js';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLES, exampleById, simulatedExample } from '../web/lib/examples.js';
 import { depositPackages, exampleRoundTrip, mavedbHashes, roundTrip } from './mavedb-export-cases.mjs';
+import { agreementOf } from '../web/lib/agreement.js';
+import { compareSides, comparisonCSV, comparisonJSON, describeSide } from '../web/lib/compare.js';
+import { countsRun, coverage, exampleRun, movedRun, publishedRun, together } from './compare-cases.mjs';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 
 const args = process.argv.slice(2);
@@ -2273,7 +2277,7 @@ const suites = {
       const gaps = o.readiness.gaps.map((g) => g.id);
       const missing = (example.teaches ?? []).filter((g) => !gaps.includes(g));
       check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
-      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
+      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
       if (example.mavedb) {
         // Opened from MaveDB: its tables the ones the example was made with (and the validation
         // pins), each record's license the example's (several records, wave 3 slice 6).
@@ -2951,6 +2955,122 @@ const suites = {
       const asked = fetched.map((f) => `${f.provider}: ${f.asked.map((p) => p.replace(/ids=[\d,]+/, 'ids=…')).join(', ')}`);
       const expected = ['uniprot-features: uniprot/P62993/features', 'pdbe-conservation: pdbe/conservation/P62993', 'alphamissense: alphafold/P62993/missense', 'clinvar: clinvar/search?gene=GRB2&page=1, clinvar/summary?ids=…', 'gnomad: gnomad/gene/GRB2, gnomad/transcript/ENST00000316804'];
       check('annotations', 'what each provider asks the fetcher (docs/NETWORK.md): an accession, a gene\'s symbol, ClinVar\'s record numbers, a transcript; never a sequence', asked.join('; '), JSON.stringify(asked) === JSON.stringify(expected), expected.join('; '));
+    }
+  },
+
+  // Wave 4, slice 1 (C1–C3): comparisons within a workspace. The agreement statistics against R;
+  // their intervals' coverage in simulated pairs of known agreement; the compatibility report's
+  // rules on the GRB2 example (bundled) and on pairs made from it; then the published examples
+  // compared as their guides say (external data).
+  async compare() {
+    const reference = JSON.parse(readFileSync(new URL('./reference/compare.json', import.meta.url), 'utf8'));
+    const pairs = [];
+    for (const c of reference.cases) {
+      const st = agreementOf(Float64Array.from(c.x), Float64Array.from(c.y));
+      const add = (group, ours, theirs, keys) => { for (const k of keys) pairs.push([`${c.name}: ${group}.${k}`, ours[k], theirs[k]]); };
+      add('pearson', st.pearson, c.pearson, ['r', 'low', 'high']);
+      add('spearman', st.spearman, c.spearman, ['rho', 'low', 'high']);
+      add('concordance', st.concordance, c.concordance, ['ccc', 'low', 'high', 'scaleShift', 'locationShift', 'accuracy']);
+      add('blandAltman', st.blandAltman, c.blandAltman, Object.keys(c.blandAltman));
+      add('trend', st.blandAltman.trend, c.trend, ['slope', 'low', 'high', 'p']);
+    }
+    const r = worstDifference(pairs);
+    check('compare', `the agreement statistics of ${reference.cases.length} pairs (${reference.cases.map((c) => c.name).join('; ')}) equal R's: Pearson's r and its interval (cor.test), Spearman's ρ with Bonett and Wright's interval, Lin's concordance with its z-transform interval, scale and location shifts and accuracy (DescTools' CCC), Bland–Altman's bias and limits with their intervals (BlandAltmanLeh), the trend of the differences (lm)`, `${pairs.length} numbers; largest relative difference ${r.worst.toExponential(1)} (${r.where}); ${reference.generator}`, r.worst <= 1e-10, '≤ 1e-10');
+
+    // Coverage: 2,000 simulated pairs of each kind, the share of 95% intervals holding the truth.
+    const kinds = [
+      ['30 variants, r 0.89 on one scale', { seed: 41, n: 30, b: 1, s: 0.5 }],
+      ['200 variants, a weak r 0.29', { seed: 42, n: 200, b: 0.3, s: 1 }],
+      ['200 variants, twice the scale and shifted (r 0.99)', { seed: 43, n: 200, a: 0.5, b: 2, s: 0.3 }],
+      ['1,000 variants, r 0.89 at 0.8 the scale, shifted', { seed: 44, n: 1000, a: 0.2, b: 0.8, s: 0.4 }],
+      ['30 variants, twice the scale and shifted (r 0.99)', { seed: 45, n: 30, a: 0.5, b: 2, s: 0.3 }],
+    ];
+    // Where the asymptotic intervals are known to hold less, they are reported apart, as they are:
+    // Spearman's ρ is biased below the truth near ±1 (Kendall and Gibbons, Rank Correlation
+    // Methods, 1990), and Lin's interval needs more variants when the scales differ.
+    const apart = [];
+    for (const [label, config] of kinds) {
+      const c = coverage({ ...config, reps: 2000 });
+      const shares = Object.entries(c.share);
+      const near = Math.abs(c.truth.pearson) > 0.97;
+      const set = near ? (config.n < 100 ? ['spearman', 'concordance'] : ['spearman']) : [];
+      for (const k of set) apart.push([`${label}: ${k === 'spearman' ? 'Spearman' : 'Lin'}`, c.share[k], k]);
+      const judged = shares.filter(([k]) => !set.includes(k));
+      check('compare', `95% intervals in simulated pairs (${label}; 2,000 pairs): each holds the truth about 95% of the time${set.length ? ` (${set.map((k) => (k === 'spearman' ? 'Spearman\'s' : 'Lin\'s')).join(' and ')} apart, below)` : ''}`, shares.map(([k, v]) => `${k} ${v.toFixed(3)}`).join(', '), judged.every(([, v]) => v >= 0.93 && v <= 0.97), '0.93–0.97');
+    }
+    check('compare', 'near r = 1 (0.99, a twofold scale): Spearman\'s interval holds the truth less often, its ρ biased below the truth there, the more so with few variants; and with 30 variants Lin\'s too. Reported as they are', apart.map(([l, v]) => `${l} ${v.toFixed(3)}`).join('; '), apart.length === 3 && apart.every(([, v, k]) => v >= (k === 'spearman' ? 0.85 : 0.9)), 'Spearman\'s ≥ 0.85, Lin\'s ≥ 0.90');
+
+    // The report's rules, on the GRB2 example (bundled) and on pairs made from it.
+    const g = exampleRun('grb2-sh3');
+    const side = (ws, p, spec) => describeSide(ws, p.run, p.results, { run: p.run.id, ...spec });
+    const status = (c, id) => c.report.items.find((i) => i.id === id)?.status;
+    const reps = g.results.replicates.map((x) => x.id);
+    const two = compareSides(side(g.ws, g, { replicate: reps[0] }), side(g.ws, g, { replicate: reps[1] }));
+    const own = pearson(two.x, two.y);
+    check('compare', 'GRB2\'s replicates 1 and 2: one target, protein variants, one scale, no sample in common, so every item ok and every statistic given; Pearson\'s r as this suite computes it on the same pairs', `${two.report.status}; ${two.matched.n} variants; r ${fmt(two.statistics.pearson.r, 4)} (${fmt(own, 4)} here), ρc ${fmt(two.statistics.concordance.ccc, 4)}, bias ${fmt(two.statistics.blandAltman.bias, 4)}`, two.report.status === 'ok' && two.matched.n > 1000 && Math.abs(own - two.statistics.pearson.r) < 1e-12 && two.statistics.concordance && two.statistics.blandAltman, 'ok; the same r');
+    const inside = compareSides(side(g.ws, g, { condition: 0 }), side(g.ws, g, { replicate: reps[0] }));
+    check('compare', 'GRB2\'s Run 1 against its replicate 1: qualified, the replicate being one of those combined into the run', inside.report.items.find((i) => i.id === 'independence').text, status(inside, 'independence') === 'qualified' && /one of the replicates combined into/.test(inside.report.items.find((i) => i.id === 'independence').text), 'qualified');
+    const enrich2 = exampleRun('grb2-sh3', { name: 'Run 2', parameters: PRESETS.enrich2.parameters });
+    const twice = compareSides(side(g.ws, g, { condition: 0 }), side(g.ws, enrich2, { condition: 0 }));
+    check('compare', 'GRB2 scored with the defaults and with the Enrich2-compatible preset: one table scored twice (qualified: the agreement measures the analyses), on one scale', `${twice.report.items.find((i) => i.id === 'independence').text} ${twice.report.items.find((i) => i.id === 'scale').text} r ${fmt(twice.statistics.pearson.r, 4)}, ρc ${fmt(twice.statistics.concordance?.ccc, 4)}`, status(twice, 'independence') === 'qualified' && /One table scored twice/.test(twice.report.items.find((i) => i.id === 'independence').text) && twice.sameScale, 'qualified; one scale');
+    // GRB2's run moved onto another stretch of UniProt P62993: five residues later, renumbered.
+    const target = g.run.inputs.design.targets[0];
+    const moved = movedRun(g, { ...target, sequence: target.sequence.slice(5), offset: (target.offset ?? 0) + 5, identifiers: { ...target.identifiers, uniprot: 'P62993' } }, 5);
+    const ws2 = { sources: [...g.ws.sources, { sha256: moved.run.inputs.source.sha256 }] };
+    const onRef = compareSides(side(ws2, g, { condition: 0 }), side(ws2, moved, { condition: 0 }));
+    const singles = (() => {
+      const c = g.results.conditions[0];
+      let k = 0;
+      g.results.variants.key.forEach((key, i) => { if (/^p\.[A-Z][a-z]{2}(\d+)([A-Z][a-z]{2}|=)$/.test(key) && Number(/\d+/.exec(key)[0]) > 5 && !c.reason[i] && Number.isFinite(c.score[i])) k += 1; });
+      return k;
+    })();
+    check('compare', 'GRB2 against itself moved five residues along UniProt P62993 (another target, renumbered): matched on the entry\'s coordinates, every single substitution after the fifth residue, r 1', `${onRef.coordinates}; ${onRef.report.items.find((i) => i.id === 'target').text} ${onRef.matched.n} matched (${singles} expected); r ${fmt(onRef.statistics?.pearson.r, 6)}`, onRef.coordinates === 'reference' && status(onRef, 'target') === 'qualified' && onRef.matched.n === singles && Math.abs(onRef.statistics.pearson.r - 1) < 1e-12, `${singles}; r 1`);
+    const noRef = movedRun(g, { ...target, sequence: target.sequence.slice(5), offset: 0, identifiers: {} }, 5);
+    const blocked = compareSides(side(ws2, g, { condition: 0 }), side({ sources: [...g.ws.sources, { sha256: noRef.run.inputs.source.sha256 }] }, noRef, { condition: 0 }));
+    check('compare', 'the same without the UniProt accession: blocked (no common reference), no statistics, saying what to give', blocked.report.items.at(-1).text, blocked.report.status === 'blocked' && blocked.statistics === null && /UniProt accession and offset/.test(blocked.report.items.at(-1).text), 'blocked');
+    // The direction stated the other way, the scores negated: compared negated.
+    const flipped = movedRun(g, target, 0, { direction: 'higher-less', negate: true });
+    const opposite = compareSides(side(ws2, g, { condition: 0 }), side({ sources: [...g.ws.sources, { sha256: flipped.run.inputs.source.sha256 }] }, flipped, { condition: 0 }));
+    check('compare', 'a run whose readout says a higher score means less of the function, its scores negated: compared negated (r 1), Lin\'s concordance and Bland–Altman withheld, saying why', `${opposite.report.items.find((i) => i.id === 'direction').text} r ${fmt(opposite.statistics?.pearson.r, 6)}; withheld ${opposite.withheld.join(', ')}`, opposite.flipped && Math.abs(opposite.statistics.pearson.r - 1) < 1e-12 && opposite.withheld.join() === 'concordance,blandAltman', 'negated; r 1; withheld');
+    // The files.
+    const csv = comparisonCSV(two).trim().split('\n');
+    const json = JSON.parse(comparisonJSON(two, { version: 'validation' }));
+    const rowsOK = csv.slice(1).every((line, k) => {
+      const f = line.split(',');
+      return Math.abs(Number(f[8]) - (two.x[k] - two.y[k])) < 1e-12 && Math.abs(Number(f[4]) - two.x[k]) < 1e-12;
+    });
+    check('compare', 'comparison.csv: a row per variant scored on both sides, each side\'s score and SE, the difference and mean; comparison.json: the two runs\' output hashes, the report, the counts and the statistics', `${csv.length - 1} rows; ${json.a.output.slice(0, 12)}… and ${json.b.output.slice(0, 12)}…; ${json.report.items.length} items; r ${fmt(json.statistics.pearson.r, 4)}`, csv[0] === 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean' && csv.length - 1 === two.matched.n && rowsOK && json.format === 'mavescape-comparison' && json.a.output === g.run.output.sha256 && json.statistics.pearson.r === two.statistics.pearson.r, 'all');
+
+    // The published examples, compared as their guides say (MaveDB's tables, external data).
+    try {
+      const pub = publishedRun('brca1-sge', 'urn:mavedb:00000097-0-2');
+      const cnt = countsRun('brca1-sge', 'urn:mavedb:00000097-0-2');
+      const w = together(cnt, pub);
+      const sge = compareSides(side(w, cnt, { condition: 0 }), side(w, pub, { condition: 0 }));
+      check('compare', 'BRCA1\'s saturation genome editing, its counts scored against its published scores (the example\'s guide): every variant matched at the nucleotide level, r ≈ 0.76, Lin\'s concordance and Bland–Altman withheld (the record\'s own scale), one experiment analysed twice, the direction the example states on both', `${sge.level}; ${sge.matched.n} matched; r ${fmt(sge.statistics.pearson.r, 3)}; withheld ${sge.withheld.join(', ')}; ${sge.report.items.filter((i) => i.status !== 'ok').map((i) => i.label).join(', ')} qualified`, sge.level === 'nucleotide' && sge.matched.n === 3893 && sge.statistics.pearson.r > 0.74 && sge.statistics.pearson.r < 0.78 && !sge.statistics.concordance && status(sge, 'scale') === 'qualified' && status(sge, 'independence') === 'qualified' && status(sge, 'direction') === 'ok', '3,893; 0.74–0.78');
+      const d = exampleRun('dhfr-lon');
+      const minus = publishedRun('dhfr-lon', 'urn:mavedb:00000063-b-1', { name: 'Published scores (deficient Lon)' });
+      const plus = publishedRun('dhfr-lon', 'urn:mavedb:00000063-a-1', { name: 'Published scores (functioning Lon)' });
+      const wd = together(d, minus, plus);
+      const lessLon = compareSides(side(wd, d, { condition: 0 }), side(wd, minus, { condition: 0 }));
+      const moreLon = compareSides(side(wd, d, { condition: 1 }), side(wd, plus, { condition: 0 }));
+      check('compare', 'DHFR\'s Run 1 (the paper\'s design, the defaults) against each record\'s published scores: r 0.90 without Lon and 0.96 with it, as the examples suite finds them (wave 3, slice 6), each record\'s own experiment', `−Lon: ${lessLon.matched.n} matched, r ${fmt(lessLon.statistics.pearson.r, 3)}; +Lon: ${moreLon.matched.n}, r ${fmt(moreLon.statistics.pearson.r, 3)}`, Math.abs(lessLon.statistics.pearson.r - 0.898) < 0.002 && Math.abs(moreLon.statistics.pearson.r - 0.959) < 0.002 && status(lessLon, 'independence') === 'qualified', '0.898 and 0.959');
+      const published = compareSides(side(wd, minus, { condition: 0 }), side(wd, plus, { condition: 0 }));
+      const dhfrRef = reference.cases.find((c) => c.keys);
+      const sameKeys = published.keys.length === dhfrRef.keys.length && [...published.keys].sort().join() === [...dhfrRef.keys].sort().join();
+      check('compare', 'DHFR\'s two published score sets matched as R\'s merge matches them (the reference\'s DHFR pair): the same variants, the same r', `${published.matched.n} matched (${dhfrRef.n} in R); r ${fmt(published.statistics.pearson.r, 6)} (${fmt(dhfrRef.pearson.r, 6)})`, sameKeys && Math.abs(published.statistics.pearson.r - dhfrRef.pearson.r) < 1e-10, 'the same');
+      const conditions = compareSides(side(wd, d, { condition: 0 }), side(wd, d, { condition: 1 }));
+      const inPublished = new Set(published.keys);
+      const on = conditions.keys.map((k, i) => (inPublished.has(k) ? i : -1)).filter((i) => i >= 0);
+      const rOn = pearson(on.map((i) => conditions.x[i]), on.map((i) => conditions.y[i]));
+      check('compare', 'DHFR\'s Run 1, −Lon against +Lon: no sample in common, one scale, every statistic; weaker than the published pair (r 0.81) because Run 1 also scores 626 variants of few reads, which agree little; on the published pair\'s variants alone, near it', `${conditions.report.status}; ${conditions.matched.n} matched, r ${fmt(conditions.statistics.pearson.r, 3)}, ρc ${fmt(conditions.statistics.concordance?.ccc, 3)}; on the ${on.length} the published scores share, r ${fmt(rOn, 3)}`, conditions.report.status === 'ok' && conditions.statistics.concordance && conditions.matched.n - on.length === 626 && rOn > conditions.statistics.pearson.r + 0.15, 'ok; 626 more');
+      const ring = exampleRun('brca1-ring');
+      const rr = ring.results.replicates;
+      const sharing = compareSides(side(ring.ws, ring, { replicate: rr[0].id }), side(ring.ws, ring, { replicate: rr[1].id }));
+      check('compare', 'BRCA1 RING\'s first two phage replicates, which share their input library: qualified, naming the sample', sharing.report.items.find((i) => i.id === 'independence').text, status(sharing, 'independence') === 'qualified' && /share the sample/.test(sharing.report.items.find((i) => i.id === 'independence').text), 'qualified');
+    } catch (error) {
+      if (!(error instanceof MissingExampleData)) throw error;
+      throw new MissingData(error.message);
     }
   },
 };

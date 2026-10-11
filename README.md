@@ -48,8 +48,13 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > UniProt's domains and secondary structure, conservation (PDBe-KB's profile, or your alignment
 > scored as Capra and Singh's tool scores it), AlphaMissense, ClinVar, gnomAD, MaveDB's own
 > annotations and your own files (predictors' scores, GFF3, tables), each with its source and date.
-> Wave 4 brings comparison: replicates, conditions, assays, runs and MaveDB's data matched and
-> compared, and which conclusions survive other reasonable analysis choices.
+> Wave 4 brings comparison. Two replicates, conditions or runs of a workspace (a rescoring, or a
+> MaveDB record's published scores against its counts scored again) are compared in the Compare
+> view: a compatibility report first (targets and coordinates, the variants matched, directions,
+> scales, whether the two are independent), then Pearson, Spearman, Lin's concordance and
+> Bland–Altman with their 95% intervals, equal to R's. Next: the comparison across the map, other
+> assays and predictors on one scale, and which conclusions survive other reasonable analysis
+> choices.
 
 ## What is a MAVE?
 

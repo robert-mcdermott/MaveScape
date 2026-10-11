@@ -47,7 +47,7 @@ if (wanted.length === 0 || wanted.includes('pten-mavedb')) {
 }
 // BRCA1's saturation genome editing (wave 3, slice 3): its scores and counts.
 const BRCA1_SGE = join(ROOT, 'validation/cache/mavedb-brca1-sge');
-if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant'].includes(w))) {
+if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant', 'compare-published'].includes(w))) {
   if (!existsSync(join(BRCA1_SGE, 'counts.csv'))) throw new Error('The BRCA1 example\'s scenes need MaveDB\'s tables: run node validation/fetch.mjs mavedb-brca1-sge');
 }
 // The examples opened from MaveDB with their counts (wave 3, slice 6): DHFR's two score sets, BRCA1
@@ -483,6 +483,24 @@ const scenes = {
     await act('set_mode', { mode: 'score' });
     await act('focus', { kind: 'run', name: 'Run 1' });
     await scrollTo('.differential-pane', 'center');
+  },
+  // Comparisons (wave 4, slice 1): GRB2's replicates 1 and 2, every item of the report ok and every
+  // statistic given, a variant in the inspector and ringed in the plots.
+  async compare() {
+    await example('grb2-sh3');
+    await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2' });
+    await act('focus', { kind: 'variant', name: 'p.Trp36Ala', run: 'Run 1' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(600);
+  },
+  // BRCA1's counts scored against its published scores: correlations only, the report saying why.
+  async 'compare-published'() {
+    await example('brca1-sge');
+    await act('score', {});
+    await act('compare', {});
+    await clearToasts();
+    await sleep(600);
   },
   // The record: a run's exports, from the workflow strip.
   async record() {
