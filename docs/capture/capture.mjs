@@ -18,7 +18,7 @@
 // Needs Go (to build MaveScape) and Chrome, Chromium, Edge or Brave (CHROME=path).
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,7 +53,11 @@ let token = '';
 // Started per scene on an empty library, so that no scene sees another's workspaces.
 async function startMaveScape() {
   const library = mkdtempSync(join(temp, 'library-'));
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  // UniProt's answers as the fetcher cached them (validation/fixtures/public-data), copied fresh,
+  // so the scenes that check a target are answered from the cache and send nothing.
+  const cache = mkdtempSync(join(temp, 'cache-'));
+  cpSync(join(ROOT, 'validation/fixtures/public-data'), cache, { recursive: true });
+  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   const stop = async () => {
@@ -140,6 +144,17 @@ const scenes = {
     await example('grb2-sh3');
     await act('set_mode', { mode: 'experiment' });
     await scrollTo('.readout-pane', 'center');
+  },
+  // The target checked against its UniProt entry (wave 3, slice 1): GRB2's SH3 domain at
+  // positions 159–214 of P62993, from the cache.
+  async 'target-uniprot'() {
+    await example('grb2-sh3');
+    await act('set_mode', { mode: 'experiment' });
+    await scrollTo('[data-place="target"]', 'start');
+    await click('Check against UniProt');
+    await waitFor(`Boolean(document.querySelector('.dialog .entry-card'))`);
+    await clearToasts();
+    await sleep(600);
   },
   // What the analysis can do (wave 2, slice 10): GRB2's readiness in the Experiment view, and what
   // the published counts leave out.

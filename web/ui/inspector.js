@@ -4,6 +4,7 @@
 
 import { h, icon, clear, relativeTime, formatBytes, formatCount } from './dom.js';
 import { variantSection } from './variant-inspector.js';
+import { retrievalText } from '../lib/uniprot.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -47,7 +48,8 @@ export function mountInspector(app) {
         target.sequenceType === 'dna' ? [h('dt', 'Coding start'), h('dd', String(target.codingStart ?? 1))] : null,
         h('dt', 'Offset'), h('dd', String(target.offset ?? 0)),
         ids.uniprot ? [h('dt', 'UniProt'), h('dd', ids.uniprot)] : null,
-        ids.gene ? [h('dt', 'Gene'), h('dd', ids.gene)] : null),
+        ids.gene ? [h('dt', 'Gene'), h('dd', ids.gene)] : null,
+        target.reference ? [h('dt', 'Checked'), h('dd', `against UniProt ${target.reference.accession} (${retrievalText(target.reference)}): positions ${target.reference.start}–${target.reference.end}${target.reference.identical ? ', identical' : ''}`)] : null),
       h('p.mono', { style: { fontSize: '11px', wordBreak: 'break-all', margin: '8px 0 0', color: 'var(--text-2)' } }, target.sequence.length > 240 ? `${target.sequence.slice(0, 240)}…` : target.sequence));
   }
 

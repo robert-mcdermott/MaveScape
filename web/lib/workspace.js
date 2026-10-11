@@ -180,6 +180,20 @@ export function updateTarget(ws, id, patch, detail = null) {
   return change(ws, { targets: next, design }, 'target', detail ?? `Changed the target ${target.name}: ${fields.join(', ')}`);
 }
 
+// A target checked against its reference entry (wave 3, slice 1): the design's fields the check
+// changes (offset, identifiers, organism, differences), and its record (uniprot.js, referenceOf),
+// kept with the workspace's target only, as provenance. A check that changes nothing leaves the
+// design, and so its runs, as they were. One entry in the history.
+export function recordTargetCheck(ws, id, patch, reference, detail) {
+  const target = ws.targets.find((t) => t.id === id);
+  if (!target) return ws;
+  const fields = Object.keys(patch).filter((k) => JSON.stringify(patch[k]) !== JSON.stringify(target[k]));
+  const patched = (t) => (t.id === id ? { ...t, ...Object.fromEntries(fields.map((k) => [k, patch[k]])), id } : t);
+  const design = fields.length && ws.design ? { ...ws.design, targets: ws.design.targets.map(patched) } : ws.design;
+  const targets = ws.targets.map((t) => (t.id === id ? { ...patched(t), reference } : t));
+  return change(ws, { targets, design }, 'target', detail);
+}
+
 // Adds a named selection of variants (by their MAVE-HGVS keys), made on the map of a run.
 export function addSelection(ws, selection) {
   const id = uniqueId(selection.name ?? 'selection', ws.selections);
@@ -226,5 +240,8 @@ export function acknowledgeFinding(ws, finding, reason, time = clockNow()) {
 
 // Sets (or clears) the design, and the table it describes.
 export function setDesign(ws, design, detail, sourceId = ws.designSource) {
+  // A target's check against its entry (recordTargetCheck) is the workspace's, never the design's,
+  // even when the design takes its target from the workspace.
+  if (design?.targets?.some((t) => t.reference)) design = { ...design, targets: design.targets.map(({ reference, ...t }) => t) };
   return change(ws, { design, designSource: design ? sourceId : null }, 'design', detail);
 }

@@ -935,7 +935,8 @@ func startHeadlessPage(ctx context.Context, browser string, dev bool, clock stri
 	if err != nil {
 		return nil, err
 	}
-	cfg := config{host: "127.0.0.1", port: 0, window: "none", remote: true, dev: dev, dataDir: filepath.Join(scratch, "library")}
+	// Public data are off: a headless run reads only the files it is given.
+	cfg := config{host: "127.0.0.1", port: 0, window: "none", remote: true, dev: dev, dataDir: filepath.Join(scratch, "library"), noFetch: true}
 	running, err := start(cfg, io.Discard)
 	if err != nil {
 		os.RemoveAll(scratch)

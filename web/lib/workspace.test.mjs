@@ -65,6 +65,33 @@ test('sources and targets are added with ids of their own; an identical target i
   assert.equal(uniqueId('a b/c', [{ id: 'a-b-c' }]), 'a-b-c-2');
 });
 
+test('a target\'s check against its entry: its record stays with the workspace; the design changes only where the check does', async () => {
+  const { addTarget, recordTargetCheck, setDesign } = await import('./workspace.js');
+  const { currentRun } = await import('./workflow.js');
+  const target = { id: 'grb2', name: 'GRB2 SH3', sequenceType: 'protein', sequence: 'TYVQALFDF', offset: 158 };
+  let ws = addTarget(createWorkspace('W'), target).ws;
+  ws = setDesign(ws, { format: 'mavescape-design', targets: [target] }, 'Set the design');
+  const design = ws.design;
+  const reference = { database: 'UniProtKB', accession: 'P62993', release: '2026_03', offset: 158 };
+  const checked = recordTargetCheck(ws, 'grb2', { offset: 158 }, reference, 'Checked the target against UniProt P62993');
+  assert.equal(checked.design, design, 'nothing changed: the design is the same object');
+  assert.deepEqual(checked.targets[0].reference, reference);
+  assert.equal(checked.design.targets[0].reference, undefined);
+  assert.equal(checked.history.at(-1).detail, 'Checked the target against UniProt P62993');
+  const moved = recordTargetCheck(ws, 'grb2', { offset: 160, organism: 'Homo sapiens' }, { ...reference, offset: 160 }, 'Placed the target');
+  assert.equal(moved.design.targets[0].offset, 160);
+  assert.equal(moved.design.targets[0].organism, 'Homo sapiens');
+  assert.equal(moved.targets[0].offset, 160);
+  assert.equal(moved.history.length, ws.history.length + 1);
+  assert.equal(recordTargetCheck(ws, 'nope', {}, reference, 'x'), ws);
+  assert.equal(currentRun(checked), null);
+  // A design that takes its target from the workspace leaves the record behind.
+  const drafted = setDesign(checked, { format: 'mavescape-design', targets: [checked.targets[0]] }, 'Drafted');
+  assert.equal(drafted.design.targets[0].reference, undefined);
+  assert.equal(drafted.design.targets[0].offset, 158);
+  assert.deepEqual(drafted.targets[0].reference, reference);
+});
+
 test('the history is hash-chained: any entry changed, removed, inserted or reordered breaks it', async () => {
   const { addTarget, setDesign, verifyHistory, appendHistory, HISTORY_LIMIT } = await import('./workspace.js');
   let ws = createWorkspace('Chained', { now: '2026-10-08T00:00:00.000Z' });

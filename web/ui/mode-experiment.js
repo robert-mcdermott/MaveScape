@@ -18,6 +18,7 @@ import { draftFromColumns } from './design-draft.js';
 import { GAPS, readiness, readinessLine } from '../lib/readiness.js';
 import { currentRun } from '../lib/workflow.js';
 import { exportPackage } from './record.js';
+import { targetPublicData } from './public-data.js';
 
 const MODELS = [['two-population', 'Two populations'], ['time-series', 'Time series'], ['bins', 'FACS bins']];
 const TIME_UNITS = ['round', 'generation', 'hour', 'day', 'minute', 'other'];
@@ -121,7 +122,9 @@ export function mountExperimentMode(app, container) {
         field('Gene', ids.gene, setId('gene'), { placeholder: 'GRB2' }),
         field('RefSeq', ids.refseq, setId('refseq'), { placeholder: 'NM_002086.5' }),
         field('Ensembl', ids.ensembl, setId('ensembl'), { placeholder: 'ENST…' }),
-        field('Organism', target.organism, (v) => patch({ organism: v || undefined }, `Set the target's organism to ${v || 'none'}`), { placeholder: 'Homo sapiens' })));
+        field('Organism', target.organism, (v) => patch({ organism: v || undefined }, `Set the target's organism to ${v || 'none'}`), { placeholder: 'Homo sapiens' })),
+      // Where the target sits in its UniProt entry (wave 3, slice 1), fetched through the program.
+      targetPublicData(app, target));
   }
 
   function summaryPane(design, s) {

@@ -26,7 +26,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | --- | --- | --- |
 | P1 | One self-contained program for macOS, Linux and Windows (x64 and ARM64); one-line install with checksum verification; no administrator rights, account, Python or R | done (wave 1, slice 1: six binaries from the release workflow, installers adapted from CytoWeave) |
 | P2 | The web application also runs from a static web server, without the Go host (library in OPFS/IndexedDB; public data unavailable, said plainly) | done (wave 1, slice 1; public data arrive in wave 3) |
-| P3 | User files never leave the computer; the only network requests are to the documented public services, for public identifiers; `--offline` blocks them all | planned (wave 1 for no requests; wave 3 for the fetcher) |
+| P3 | User files never leave the computer; the only network requests are to the documented public services, for public identifiers; `--offline` blocks them all | done (wave 1: no requests; wave 3, slice 1: the allowlisted fetcher and its cache, `--offline`, `--no-fetch`, a sequence sent only once confirmed, `docs/NETWORK.md`) |
 | P4 | Apache-2.0; no third-party runtime dependencies | done |
 | P5 | Opens as a desktop window; a second launch hands its files or MaveDB URN to the open window | partial (wave 1, slice 1: files; the URN with MaveDB import, wave 3) |
 | P6 | Version and build commit reported in the UI, `--version`, exports and methods | partial (UI and `/api/info`: wave 1, slice 1; exports and methods: slice 8) |
@@ -55,7 +55,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | --- | --- | --- |
 | E1 | A versioned, documented design schema (`mavescape-design` v1, JSON Schema) able to represent two-population, time-series, bin, barcode and score-only experiments without dataset-specific code | done (wave 1, slice 2: three MaveDB data sets of different designs, four designs, no data-set code; validation `designs`). Barcode libraries: done (wave 2, slice 4: `library.barcodeColumn`) |
 | E2 | Design editor: sample name and column, condition, role, biological and technical replicate, time and unit, bin order and value, batch, control classes | done (wave 1, slice 4: every model, conditions and tiles; validation `experiment`; wave 2 slice 2: "Missing = 0" per sample). Barcode libraries done (wave 2, slice 4: each row a variant or a barcode); control classes with where each serves and why: done (wave 2, slice 8); named user classes in the editor planned (wave 8, with control sets) |
-| E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | done (wave 1, slices 3–4: from FASTA files or pasted; name, offset, coding start and identifiers edited in the Experiment view). Offsets found from UniProt: wave 3 |
+| E3 | Targets: reference sequence (DNA or protein), coordinate offset, gene, UniProt, RefSeq, Ensembl and organism identifiers | done (wave 1, slices 3–4: from FASTA files or pasted; name, offset, coding start and identifiers edited in the Experiment view). Offsets found from UniProt: done (wave 3, slice 1: the target checked against its entry, its offset, identifiers, species and differences from it, the check recorded; a target with no accession found by its exact sequence, once confirmed) |
 | E4 | Role suggestions shown as suggestions, never applied silently | done (wave 1, slice 3: suggested from column names, drafts equal the hand-written designs' shape on all four feasibility designs) |
 | E5 | A human-readable design summary and validation before scoring | done (wave 1, slice 4) |
 | E6 | Every material change undoable and recorded in a hash-chained history | done (wave 1, slice 4: verified in the drawer; validation `experiment`) |
@@ -155,7 +155,7 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 | --- | --- | --- |
 | I1 | MaveDB: search, fetch score sets by URN with scores, counts, metadata, license and citation; cached with retrieval metadata | planned (wave 3) |
 | I2 | MaveDB-ready export (scores and counts CSV, metadata) that passes MaveDB's own validators | planned (wave 3) |
-| I3 | Annotation providers behind one interface (UniProt features, ClinVar, gnomAD, conservation, AlphaMissense and other predictors, custom tables), each record with source, version, identifiers and retrieval date | planned (wave 3) |
+| I3 | Annotation providers behind one interface (UniProt features, ClinVar, gnomAD, conservation, AlphaMissense and other predictors, custom tables), each record with source, version, identifiers and retrieval date | in progress: wave 3, slice 1 (the fetcher and cache: every answer with its source, release and retrieval date; a target's UniProt entry); the providers with slice 5 |
 | I4 | Imported predictor scores as variant-level tracks | planned (wave 3) |
 
 ## Automation

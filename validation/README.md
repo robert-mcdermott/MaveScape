@@ -20,6 +20,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 | `readiness` | What each analysis can do with what a workspace holds (wave 2, slice 10; `readiness-cases.mjs`): the six examples, the five fixtures and a simulated bottleneck with its cells recorded, whole and with one part taken away (the wild-type row, a replicate, the gates, the cells, the times in generations, the middle time points, the readout, the nonsense or synonymous controls), 74 workspaces. The readiness model must name exactly what was taken away, and its verdict on every analysis must agree with the engine: each scoring analysis scored or refused with the parameters that use it, each QC finding assessed or not, and an analysis it leaves out for a design one the engine cannot do there either. An empty workspace and a broken design | `web/examples/`, `fixtures/`, simulated |
 | `examples` | Every bundled example opened as the window opens it (wave 2, slice 11; `example-cases.mjs`): assembled (Hsp90's codon variants read at the protein level), scored with its parameters, raising exactly the QC findings it teaches, its readout stated and its readiness naming what its guide points to, at most six guided steps; the published examples' counts MaveDB's, byte for byte. Hsp90's codons (568 rows, 188 protein variants, the wild type's nine copies read once) and its per-generation scores against the published fitness; a single replicate's own SEs; factor IX against MultiSTEP's scores; the simulated problems against their truth, with and without replicate 3 | `web/examples/`; MaveDB, external (`mavedb-hsp90`, `mavedb-factor9`) |
+| `public-data` | UniProt's answers as MaveScape's fetcher cached them (wave 3, slice 1): every cached answer with its retrieval record; each published example's target where its design says in its UniProt entry (identical, at one place, the entry changing nothing in the design); GRB2's whole sequence looked up, P62993 first; the GRB2 example checked as its guide says, the design unchanged and the methods naming the check and citing UniProt | `fixtures/public-data/` |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -40,7 +41,12 @@ and the differential export as Node writes them; and (slice 7) `check` (valid, a
 not fit, parameters that cannot score) and `reproduce_run`; and (slice 8) a finding's causes and
 next steps, `acknowledge_finding` (the finding still fails, the overall status counts it apart, a
 passing one is left alone, an unknown one lists the findings) and the QC findings export, byte for
-byte Node's. 75 checks; in CI as the `remote` job.
+byte Node's; and (wave 3, slice 1) the session runs `--offline` on UniProt's answers as the
+fetcher cached them (`fixtures/public-data/`): `check_target` places GRB2's domain from the
+cache, refuses another protein's entry and, offline, an entry not cached, and with `apply` keeps
+the check with the workspace, the design and its run unchanged; the methods and the archive keep
+it; and every request the page makes in the whole session, recorded through the DevTools
+protocol, goes to its own origin, none beyond. 81 checks; in CI as the `remote` job.
 
 ## Headless runs (`headless-run.mjs`, wave 2 slice 7)
 
@@ -113,6 +119,23 @@ what the reference tools compute; this shows whether the intervals mean what the
   score of one proportionally larger, which no model of counting describes.
 
 34 checks; about 35 s; in CI's `web` job with the external data.
+
+## UniProt's answers, as the fetcher caches them (`fixtures/public-data/`, wave 3 slice 1)
+
+A cache of public data in the layout MaveScape's fetcher writes (`docs/FORMATS.md`, "The cache of
+public data"), so that the tests, the `public-data` suite, the remote-control session (started
+with `--offline --cache-dir` on a copy) and the screenshots (on a fresh copy, answered from it)
+never reach the network. UniProt's own answers, retrieved 2026-10-10 (release 2026_03) by the
+requests `docs/NETWORK.md` lists, byte for byte, each with its retrieval record:
+
+| File | What |
+| --- | --- |
+| `uniprot/P62993.json` | GRB2 (human), the GRB2 SH3 example's target's entry |
+| `uniprot/P02829.json` | Hsp82 (yeast), the Hsp90 example's |
+| `uniprot/P00740.json` | coagulation factor IX (human), the factor IX example's |
+| `uniparc/da732b5e….json` | the lookup of GRB2's whole sequence: 120 active UniProtKB entries with exactly that sequence (named by the sequence's SHA-256) |
+
+UniProt's data are under CC BY 4.0.
 
 ## Public data (`sources.json`)
 

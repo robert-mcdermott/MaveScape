@@ -30,6 +30,8 @@ import { archiveFile, packageFile, RUN_FILES, runFile, selectionFile } from './r
 import { intervalOf } from '../lib/exports.js';
 import { anchorUncertainty } from '../lib/anchors.js';
 import { readiness, readinessText } from '../lib/readiness.js';
+import { applyCheck, checkTarget, placementText } from './public-data.js';
+import { retrievalText } from '../lib/uniprot.js';
 
 export class ActionError extends Error {}
 
@@ -347,6 +349,32 @@ export function installRemote(app) {
     // first): its names against the design's target, its problems, the design against its
     // columns, and the parameters against the design. design: one to check (else the
     // workspace's, if any). valid: nothing blocks scoring.
+    // The target checked against its UniProt entry (wave 3, slice 1), through the program's fetcher:
+    // only the accession is sent. A lookup by sequence is not offered here: it sends the sequence,
+    // and only the person at the window may decide that.
+    async check_target(args) {
+      const w = ws();
+      const designTarget = w.design?.targets?.[0]?.id;
+      const name = args.target ? choose(args.target, w.targets.map((t) => t.name), 'target') : null;
+      const target = name ? w.targets.find((t) => t.name === name) : w.targets.find((t) => t.id === designTarget) ?? w.targets[0];
+      if (!target) throw new ActionError('There is no target: open its FASTA first.');
+      const check = await checkTarget(app, target, args.accession ?? null);
+      if (!check.ok) throw new ActionError(check.message);
+      const changes = Object.keys(check.patch);
+      if (args.apply) applyCheck(app, target, check);
+      const p = check.placement;
+      const data = {
+        target: target.name,
+        entry: { accession: check.entry.accession, name: check.entry.name, gene: check.entry.gene, organism: check.entry.organism, length: check.entry.length, reviewed: check.entry.reviewed },
+        retrieval: check.retrieval,
+        placement: { offset: p.offset, start: p.start, end: p.end, identical: p.identical, differences: p.differences, outside: p.outside, places: p.places },
+        changes: check.patch,
+        applied: Boolean(args.apply),
+      };
+      const what = changes.length ? (args.apply ? ` Set ${changes.join(', ')}, and recorded the check.` : ` It would change ${changes.join(', ')} (apply: true to use them).`) : (args.apply ? ' Nothing to change; recorded the check.' : ' Nothing to change.');
+      return { message: `${placementText(target, check)}${what} (UniProt ${retrievalText(check.retrieval) || 'entry'}.)`, data };
+    },
+
     async check(args) {
       const design = args.design ?? ws().design ?? null;
       if (design && (typeof design !== 'object' || design.format !== 'mavescape-design')) throw new ActionError('The design must be a mavescape-design document (docs/FORMATS.md).');

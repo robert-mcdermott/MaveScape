@@ -229,6 +229,10 @@ on macOS, `~/.config/MaveScape` on Linux (or `$XDG_CONFIG_HOME/MaveScape`), and
 if you no longer need those workspaces; deleted workspaces are first moved to its
 `trash` folder.
 
+Public data MaveScape fetched (UniProt entries, from 0.3) are cached in `~/Library/Caches/MaveScape`
+on macOS, `~/.cache/MaveScape` on Linux and `%LocalAppData%\MaveScape` on Windows (`--cache-dir`
+puts it elsewhere). It holds only public answers, and can be deleted at any time.
+
 ## Building from source
 
 With the Go version in `go.mod` or newer:

@@ -1,6 +1,6 @@
 # File formats
 
-Every file MaveScape 0.1 and 0.2 read and write. Researchers whose counts come from their own pipeline
+Every file MaveScape 0.1, 0.2 and 0.3 read and write. Researchers whose counts come from their own pipeline
 need only a count table, the target's sequence, and the design: which column is which sample.
 Blank, annotated layouts of each are on the Start page and in
 [`web/examples/layouts/`](../web/examples/layouts/). The Start page also opens two worked examples.
@@ -15,6 +15,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Workspaces | `*.msz` archives | `*.msz` archives; the workspace document (JSON) |
 | Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG) |
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
+| Public data (0.3) | UniProt entries and sequence lookups, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 
 Coming later: Excel workbooks and GenBank files (0.3), structures (0.5).
 
@@ -262,6 +263,27 @@ name, SHA-256, size, rows, encoding, layout, mapping and import summary), `targe
 material change, `{ time, action, detail, hash }`, each hash the SHA-256 of the one before and the
 entry, so that a change made later breaks the chain.
 
+A **target** (in `targets`, and as the design's copy in `design.targets`) is as in a design
+file (above). From MaveScape 0.3 the workspace's target can also keep `reference`, the record of
+its last check against its UniProt entry (Experiment, Target: **Check against UniProt**). It is
+provenance, kept with the workspace and not in the design, so a check that changes nothing leaves
+the design and its runs as they were; the methods name it while the target's accession and offset
+are still the ones checked:
+
+```json
+"reference": {
+  "database": "UniProtKB", "accession": "P62993", "entryName": "GRB2_HUMAN",
+  "release": "2026_03", "retrieved": "2026-10-10T17:35:33Z",
+  "url": "https://rest.uniprot.org/uniprotkb/P62993.json?fields=accession,id,protein_name,gene_names,organism_name,length,sequence",
+  "length": 217, "offset": 158, "start": 159, "end": 214, "identical": true, "differences": 0
+}
+```
+
+`length` is the entry's; `start` and `end` the positions in it of the target's first and last
+residues (a DNA target's protein); `differences` how many residues differ. What the check changed
+in the design (the offset, `identifiers`, `organism` and `differences`) is in the design, and the
+history says what changed.
+
 A **score run** keeps its inputs, not its scores: the table's SHA-256, the mapping, the design,
 the parameters and the scoring version (whose canonical JSON's SHA-256 is the run's id), the
 software, the warnings, and the output's SHA-256. Reopened, a run is recomputed from its inputs
@@ -279,6 +301,40 @@ its id), `phiPrior` and `dfPrior` (the moderated dispersions' prior; `null` for 
 of freedom). Runs that combined by another method record it, and
 runs made before 0.2 recorded `reml`; they reopen to their hashes. A run's output hash covers each
 score's degrees of freedom when it has them.
+
+## The cache of public data
+
+Answers from the public services ([NETWORK.md](NETWORK.md)) are kept in the cache's folder
+(`--cache-dir`; by default `<user cache dir>/MaveScape`), one folder per kind of request:
+
+```
+uniprot/P62993.json              UniProt's answer, byte for byte
+uniprot/P62993.json.meta.json    its retrieval record
+uniparc/<sha256>.json            a sequence's lookup, named by the SHA-256 of the sequence (its
+                                 record's source has {sequence} in place of the sequence)
+```
+
+The **retrieval record** (`*.meta.json`):
+
+```json
+{
+  "contentType": "application/json",
+  "service": "UniProt",
+  "source": "https://rest.uniprot.org/uniprotkb/P62993.json?fields=accession,id,protein_name,gene_names,organism_name,length,sequence",
+  "retrieved": "2026-10-10T17:35:33Z",
+  "checked": "2026-11-12T09:02:41Z",
+  "etag": "\"5f1c\"",
+  "lastModified": "Tue, 02 Sep 2026 00:00:00 GMT",
+  "version": "2026_03"
+}
+```
+
+`retrieved` is when the answer was downloaded and `checked` when the service last confirmed it
+unchanged (absent until then), both UTC; `etag`, `lastModified` and `version` (UniProt's release)
+are present when the service gave them. A copy's age, for when it is checked again, is its file's.
+The same fields reach the page as `X-MaveScape-*` headers with each answer. Answers saved by hand
+in this layout are served like any other, which is how the validation and the screenshots work
+offline ([`validation/fixtures/public-data/`](../validation/fixtures/public-data/)).
 
 ## Exports
 

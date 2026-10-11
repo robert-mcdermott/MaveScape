@@ -1102,13 +1102,91 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
 
 ### Wave 3
 
-1. **The allowlisted fetcher (P3, I3).** Port Proteoscope's `cache.go` and the download, limit
-   and serve parts of `fetch.go` with one explicit host list (MaveDB, UniProt, RCSB, PDBe,
-   AlphaFold DB, NCBI E-utilities, Ensembl, gnomAD); retrieval time and ETag in each record;
-   `--offline`, `--no-fetch`, `--cache-dir`; size and decompression limits; confirmation before
-   any request that would send a sequence; `docs/NETWORK.md` listing every request.
-   - Validation: Go tests for the allowlist, redirects, limits, gzip bombs, offline and stale
-     serving; a test that the page makes no request outside `/api/`.
+1. **The allowlisted fetcher (P3, I3): done.** `cache.go` and the download, limit and serve parts
+   of `fetch.go`, adapted from Proteoscope 0.10.0, with one explicit host list (`publicHosts`:
+   MaveDB, UniProt, RCSB, PDBe, AlphaFold DB, NCBI E-utilities, Ensembl, gnomAD, each with the
+   paths it may be asked for), checked as every request is sent, redirects included
+   (`guardedTransport`): HTTPS on the default port, no user name, no dot segments; redirects on
+   the same host only, and without the `Referer` Go adds. The requests are listed once
+   (`publicRequests`: the route the page asks, the request upstream, what is sent and why, the
+   cache folder, age and size limit) and served at `/api/fetch/…`; `/api/fetch` describes them and
+   `/api/fetch/cache` lists the cache. Each answer is cached with its retrieval record (the
+   service, the URL, when retrieved and last confirmed, the ETag, date and release), confirmed by
+   ETag or date once older than its age, served stale only when the service cannot be reached;
+   retries on 429/502/503/504 (twice, after 1 and 3 s, or `Retry-After` up to 10 s); per-request
+   size limits applied after decompression; JSON only. `--offline` (cached copies only; the
+   fetcher has no way to send), `--no-fetch` (off), `--cache-dir` (default
+   `<user cache dir>/MaveScape`); `/api/info` and the banner say which; a second launch with
+   another setting is told the running one keeps its own; headless runs have public data off.
+   A request that would send a sequence is refused with HTTP 428 and the exact request it would
+   make, until the page confirms it (`X-MaveScape-Confirm: send-sequence`), which it does only
+   when the person clicks *Send it* in a dialog showing the whole request; a lookup already
+   cached is answered sending nothing, and its record names the request with `{sequence}` in place
+   of the sequence, so the cache holds public answers only; no remote action sends a sequence. `docs/NETWORK.md` lists
+   every host and request, and what each sends.
+
+   The first requests, and what they serve: **a target checked against its UniProt entry**
+   (`web/lib/uniprot.js`, `web/ui/public-data.js`). Experiment, Target: *Check against UniProt*
+   fetches the entry its accession names and places the target (or the protein a DNA target
+   encodes) in it, ungapped, a few residues allowed to hang over either end (a tag or linker),
+   80% of residues agreeing at least, and a placement that fits equally well elsewhere left to
+   the person; it shows the entry, where it came from and when, where the target sits and how it
+   differs, and each field the entry would change (offset, accession and gene, species,
+   differences, with notes kept). *Use these* changes them in the design; the check's record
+   (`target.reference`: entry, release, retrieval, placement) is kept with the workspace's target,
+   not in the design, so a check that changes nothing leaves the design and its runs current
+   (`recordTargetCheck`). The history, the target pane and the inspector show it; the methods name
+   the entry, release and date, citing UniProt, while the target is as checked. A target with no
+   accession is found by its exact sequence (UniParc, active UniProtKB entries, reviewed first).
+   An inactive accession is reported with the entries that replaced it. The status bar's
+   *Public data* opens the Network dialog: the hosts, the requests, the cache's folder and what it
+   holds. The remote action `check_target` (with `apply`). The GRB2 example's guide checks its
+   target (six steps: the two map steps merged); a screenshot scene (`target-uniprot`); the guide
+   page *Public data*.
+   - Validation:
+     - Go tests (`fetch_test.go`): the allowlist (allowed and refused URLs: look-alike hosts,
+       other ports and schemes, user names, paths outside a host's, dot segments); nothing sent to
+       an unlisted host; redirects on the same host followed, to another refused and never
+       contacted; answers beyond the limit refused when declared, streamed, compressed by the
+       transport, compressed in the body and both (a 4 KB answer expanding to 4 MB stops at
+       1 MB); JSON only; retries, and none for HTTP 500; revalidation by ETag (304: the copy
+       confirmed, `checked` recorded, fresh again); stale copies when the service is down; a 404
+       not served from the cache; `--offline` serving cached copies and sending nothing;
+       `--no-fetch`; the sequence sent only once confirmed, the request it would send shown first,
+       cached lookups sending nothing, and no file of the cache holding the sequence; `docs/NETWORK.md` naming
+       every host, route and upstream (`TestNetworkDocumentListsEveryRequest`); no script in
+       `web/` naming another origin in a request, and the CSP's `connect-src 'self'`.
+     - `public-data` (6 checks) on UniProt's answers as the fetcher cached them
+       (`validation/fixtures/public-data/`, release 2026_03): each record complete; each published
+       example's target where its design says in its entry, identical, at one place, the entry
+       changing nothing (GRB2 159–214 of P62993, Hsp90 582–590 of P02829, factor IX 1–461 of
+       P00740); GRB2's whole sequence finding P62993 first; the GRB2 example checked as its guide
+       says, the design unchanged and the methods naming the check.
+     - `remote-session.mjs` 81 checks, the session now offline on the cached answers:
+       `check_target` (identical, from the cache; another protein refused; an uncached entry
+       refused offline; applied, the design and its run unchanged); the methods and the archive
+       keep the check; and every request the page made in the whole session recorded through the
+       DevTools protocol: none beyond its own origin.
+     - Unit tests: `uniprot.test.mjs` (8), a check kept outside the design in
+       `workspace.test.mjs`, the methods' sentence in `methods.test.mjs`.
+   - Found by slice 1:
+     - **Go's HTTP client adds a `Referer` header to a redirected request**, naming the URL
+       redirected from, which for a sequence's lookup holds the sequence (the tests' fake service
+       refused requests carrying one). Redirects stay on their host, but a redirected request now
+       carries nothing the first did not.
+     - **UniProt answers an inactive accession with HTTP 200** and an entry of type "Inactive"
+       naming where it went (P29354: split into P62993 and P62994), not a 404 or a redirect: the
+       page reads it as such.
+     - **A sequence's lookup returns every database's cross-reference** unless asked otherwise:
+       1,147 for GRB2 (232 KB), of which 120 are active UniProtKB entries. The request asks for
+       those only (30 KB).
+     - **UniProt names an organism with its reference strain** ("Saccharomyces cerevisiae (strain
+       ATCC 204508 / S288c)"), which need not be the experiment's: organisms are compared and set
+       by species.
+     - **Any change to the design makes its runs no longer current**, so recording a check in the
+       design would have asked for a rescore that changes nothing: the record is kept with the
+       workspace's target instead.
+     - The three published examples' targets are exactly where their designs say in UniProt.
 2. **MaveDB import (I1).** Search (`POST /score-sets/search`, 100 per page) and fetch by URN
    (`mavescape --mavedb urn:mavedb:…`): scores, counts, metadata, targets (sequence or
    accession, with UniProt/RefSeq/Ensembl offsets), license and citation, published

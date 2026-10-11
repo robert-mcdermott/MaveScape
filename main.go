@@ -46,7 +46,11 @@ type config struct {
 	dev         bool
 	showVersion bool
 	remote      bool
-	files       []string
+	// Public data (fetch.go): --offline, --no-fetch and --cache-dir.
+	offline  bool
+	noFetch  bool
+	cacheDir string
+	files    []string
 }
 
 type app struct {
@@ -58,6 +62,8 @@ type app struct {
 	store    *store
 	// control: the remote-control hub (remote.go), with --remote-control.
 	control *remoteHub
+	// fetch: public data from the listed services, through the cache (fetch.go).
+	fetch *fetcher
 }
 
 func init() {
@@ -95,7 +101,10 @@ func main() {
 	// A MaveScape already running on the preferred port gets the files and a new window, so the
 	// workspace library (kept per origin by the browser) stays in one place. One started for
 	// remote control starts on its own port, so that scripts reach a page they can drive.
-	if existing := findRunning(cfg.host, cfg.port); existing != "" && !cfg.remote {
+	if existing, running := findRunning(cfg.host, cfg.port); existing != "" && !cfg.remote {
+		if want := fetchMode(cfg); running.Fetch != "" && want != running.Fetch {
+			fmt.Printf("The running MaveScape keeps its own setting for public data (%s, not %s): stop it and start again to change it.\n", fetchModeName(running.Fetch), fetchModeName(want))
+		}
 		handed := false
 		if len(cfg.files) > 0 {
 			if err := forwardFiles(existing, cfg.files); err != nil {
@@ -268,6 +277,9 @@ func parseConfig(args []string) (config, error) {
 	flags.BoolVar(&cfg.noStore, "no-library", false, "do not keep a workspace library on disk (the browser's own storage is used)")
 	flags.BoolVar(&cfg.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
 	flags.BoolVar(&cfg.showVersion, "version", false, "print the version and exit")
+	flags.BoolVar(&cfg.offline, "offline", false, "make no network requests: public data (MaveDB, UniProt…) come only from copies already in the cache (docs/NETWORK.md)")
+	flags.BoolVar(&cfg.noFetch, "no-fetch", false, "switch public data off entirely: no requests, no cache")
+	flags.StringVar(&cfg.cacheDir, "cache-dir", "", "folder for the cache of public data (default: <user cache dir>/MaveScape)")
 	flags.BoolVar(&cfg.remote, "remote-control", false, "accept actions from programs on this computer at /api/remote/action (scripts, the documentation's screenshots)")
 	noOpen := flags.Bool("no-open", false, "same as --window none")
 	flags.Usage = func() {
@@ -320,6 +332,7 @@ func newApp(cfg config) (*app, error) {
 		dev:     cfg.dev,
 		assets:  content,
 		files:   newLocalFiles(),
+		fetch:   newFetcher(cfg),
 	}
 	if problems := a.files.add(cfg.files); len(problems) > 0 {
 		for _, problem := range problems {
@@ -363,6 +376,7 @@ func (a *app) printBanner(out io.Writer, url, connection string) {
 	} else {
 		fmt.Fprintln(out, "Workspace library: kept by the browser")
 	}
+	fmt.Fprintln(out, a.fetch.describe())
 	if n := len(a.files.list()); n > 0 {
 		fmt.Fprintf(out, "Opening %d file(s) named on the command line\n", n)
 	}
@@ -403,11 +417,13 @@ type info struct {
 	Platform string      `json:"platform"`
 	// RemoteControl: the page connects to the hub (web/ui/remote.js).
 	RemoteControl bool `json:"remoteControl"`
+	// Fetch: public data on, offline (cached copies only) or off (fetch.go).
+	Fetch string `json:"fetch"`
 }
 
 func (a *app) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
-		body := info{Name: "MaveScape", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", Files: a.files.list(), Platform: platformName(), RemoteControl: a.control != nil}
+		body := info{Name: "MaveScape", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", Files: a.files.list(), Platform: platformName(), RemoteControl: a.control != nil, Fetch: a.fetch.mode}
 		if a.store != nil {
 			body.Library = true
 			body.DataDir = a.store.dir
@@ -416,6 +432,7 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/local/{index}", a.files.serve)
 	mux.HandleFunc("POST /api/open", a.openPaths)
+	a.fetch.register(mux)
 	if a.control != nil {
 		a.control.register(mux)
 	}
@@ -465,23 +482,34 @@ func listen(host string, port int) (net.Listener, int, error) {
 	return nil, 0, lastErr
 }
 
-// findRunning returns the URL of a MaveScape already serving on host:port, or "".
-func findRunning(host string, port int) string {
+// findRunning returns the URL of a MaveScape already serving on host:port, or "", and its info.
+func findRunning(host string, port int) (string, info) {
 	url := "http://" + net.JoinHostPort(host, strconv.Itoa(port))
 	client := http.Client{Timeout: 400 * time.Millisecond}
 	response, err := client.Get(url + "/api/info")
 	if err != nil {
-		return ""
+		return "", info{}
 	}
 	defer response.Body.Close()
 	var body info
 	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&body) != nil {
-		return ""
+		return "", info{}
 	}
 	if body.Name != "MaveScape" {
-		return ""
+		return "", info{}
 	}
-	return url
+	return url, body
+}
+
+func fetchModeName(mode string) string {
+	switch mode {
+	case "offline":
+		return "--offline"
+	case "off":
+		return "--no-fetch"
+	default:
+		return "fetching on"
+	}
 }
 
 func forwardFiles(url string, paths []string) error {

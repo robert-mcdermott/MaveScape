@@ -914,3 +914,18 @@ ol.workflow-steps { list-style: none; margin: 0; padding: 0; display: flex; alig
 .workflow-gaps { color: var(--warn-text); font-weight: 600; }
 .range-inputs { display: flex; gap: 6px; align-items: center; }
 .range-inputs .input { width: 6em; }
+
+/* Public data (wave 3, slice 1): the target's check against UniProt, the sequence sent only once
+   confirmed, the Network dialog. */
+.small { font-size: 12px; }
+p.small { margin: 8px 0; }
+.entry-card { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); }
+.entry-card .badge { margin-left: 8px; vertical-align: 1px; }
+td .badge { margin-left: 6px; }
+.table-scroll { max-width: 100%; overflow-x: auto; }
+table.matches td:last-child { width: 1%; }
+.badge.muted { color: var(--text-3); }
+.sent-preview { max-height: 132px; overflow: auto; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--panel-2); white-space: pre-wrap; word-break: break-all; }
+.reference-row { display: grid; gap: 6px; margin-top: 10px; }
+.reference-row .reference-line { margin: 0; }
+.statusbar-link.network .dot { margin-right: 2px; }

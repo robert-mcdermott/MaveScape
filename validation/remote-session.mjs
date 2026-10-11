@@ -10,7 +10,7 @@
 // Exits with status 1 when a check fails.
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,13 +40,17 @@ let URL = `http://127.0.0.1:${PORT}/`;
 const temp = mkdtempSync(join(tmpdir(), 'mavescape-remote-'));
 const library = join(temp, 'library');
 const out = join(temp, 'out');
+const cache = join(temp, 'cache');
 mkdirSync(out);
 let token = '';
 
 async function startMaveScape() {
   const binary = join(temp, process.platform === 'win32' ? 'mavescape.exe' : 'mavescape');
   await new Promise((done, fail) => spawn('go', ['build', '-o', binary, '.'], { cwd: ROOT, stdio: 'inherit' }).on('exit', (code) => (code ? fail(new Error('go build failed (is Go installed?)')) : done())));
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  // Offline, with UniProt's answers as the fetcher cached them (validation/fixtures/public-data):
+  // the session makes no request beyond this computer.
+  cpSync(join(ROOT, 'validation/fixtures/public-data'), cache, { recursive: true });
+  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   for (let i = 0; i < 300; i += 1) {
@@ -101,6 +105,10 @@ try {
   browser = await launch({ width: 1440, height: 900, scale: 1 });
   const errors = [];
   browser.on('Runtime.exceptionThrown', (e) => errors.push(e.exceptionDetails?.exception?.description ?? e.exceptionDetails?.text));
+  // Every request the page makes in the whole session (wave 3, slice 1: none beyond its origin).
+  const requested = [];
+  await browser.send('Network.enable');
+  browser.on('Network.requestWillBeSent', (e) => requested.push(e.request.url));
   await browser.goto(URL, 1500);
   for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);
   await sleep(500);
@@ -123,6 +131,18 @@ try {
   const opened = await act('open_example', { id: 'grb2' });
   state = await act('get_state');
   check('open_example "grb2": the GRB2 example, scored, in QC', opened.message, opened.data.id === 'grb2-sh3' && state.data.runs.length === 1 && state.data.mode === 'qc' && state.data.design?.valid);
+  // The target checked against UniProt (wave 3, slice 1), offline, from the cache.
+  const placed = await act('check_target');
+  check('check_target: GRB2\'s SH3 domain is residues 159–214 of UniProt P62993, identical, from the cache (release 2026_03); nothing to change', placed.message, placed.data.placement.start === 159 && placed.data.placement.end === 214 && placed.data.placement.identical && !Object.keys(placed.data.changes).length && placed.data.retrieval.cache === 'hit' && placed.data.retrieval.version === '2026_03' && !placed.data.applied);
+  const elsewhere = await send('check_target', { accession: 'P00740' });
+  check('check_target against another protein\'s entry: refused, saying why', elsewhere.message, !elsewhere.ok && /fewer than 80%/.test(elsewhere.message));
+  const uncached = await send('check_target', { accession: 'Q9Y6K9' });
+  check('check_target offline, for an entry not in the cache: refused, saying MaveScape is offline', uncached.message, !uncached.ok && /--offline/.test(uncached.message));
+  const designBefore = await browser.eval('JSON.stringify(window.mavescape.store.ws.design)');
+  const recorded = await act('check_target', { apply: true });
+  const kept = await browser.eval('window.mavescape.store.ws.targets[0].reference');
+  const stillCurrent = await act('get_state');
+  check('check_target with apply: the check kept with the workspace\'s target, the design (and so its run) unchanged', `${recorded.message} Kept: ${JSON.stringify(kept)}; next ${stillCurrent.data.next?.step}`, kept?.accession === 'P62993' && kept.release === '2026_03' && kept.start === 159 && (await browser.eval('JSON.stringify(window.mavescape.store.ws.design)')) === designBefore && stillCurrent.data.steps.find((x) => x.id === 'score')?.state === 'done');
   const examplesListed = await send('open_example', { id: 'nothing-like-it' });
   check('an unknown example lists the examples', examplesListed.message, !examplesListed.ok && /grb2-sh3/.test(examplesListed.message) && /simulated/.test(examplesListed.message));
 
@@ -235,6 +255,8 @@ try {
     const written = readFileSync(join(out, name), 'utf8');
     check(`export ${name}: the same bytes as Node's from the archive`, `${written.length} bytes`, written === expected[name], `${expected[name].length} bytes`);
   }
+  const methodsWritten = readFileSync(join(out, 'methods.md'), 'utf8');
+  check('the methods name the target\'s check against UniProt, cite UniProt, and the archive keeps the check', /checked against UniProt P62993 \[\d+\], release 2026_03, retrieved 2026-10-10: residues 159–214, identical/.exec(methodsWritten)?.[0] ?? 'not named', /checked against UniProt P62993/.test(methodsWritten) && /UniProt Consortium/.test(readFileSync(join(out, 'references.bib'), 'utf8')) && archive.ws.targets[0].reference?.release === '2026_03');
   const provenance = JSON.parse(readFileSync(join(out, 'provenance.json'), 'utf8'));
   const expectedProvenance = JSON.parse(expected['provenance.json']);
   delete provenance.files;
@@ -325,6 +347,8 @@ try {
   const paired = await act('score', { parameters: { differential: 'paired' } });
   check('score with the paired differential: a second run, summarized per contrast', paired.message, paired.data.name === 'Run 2' && paired.data.differential?.[0]?.method === 'paired' && paired.data.differential[0].compared > 800);
 
+  const foreign = requested.filter((u) => !u.startsWith(URL) && !/^(data|blob):/.test(u));
+  check('the page asked nothing of any origin but its own, public data through the program\'s /api/fetch/ only', `${requested.length} requests, ${requested.filter((u) => u.includes('/api/fetch/')).length} for public data; beyond the origin: ${foreign.slice(0, 3).join(', ') || 'none'}`, requested.length > 50 && !foreign.length && requested.some((u) => u.includes('/api/fetch/uniprot/P62993')));
   check('every action listed was exercised', `${[...called].length} of ${names.length}: missing ${names.filter((n) => !called.has(n)).join(', ') || 'none'}`, names.every((n) => called.has(n)));
   check('no uncaught errors in the page', errors.join(' | ') || 'none', errors.length === 0);
 } catch (error) {

@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+Wave 3 of the [roadmap](mavescape-spec/roadmap.md): public data in and out. Built slice by slice;
+this section grows with each.
+
+### Added
+
+- **Public data through one list of services (wave 3, slice 1).** The MaveScape program fetches
+  public data for the page, which contacts nothing else, from a fixed list of hosts (MaveDB,
+  UniProt, RCSB PDB, PDBe, AlphaFold DB, NCBI E-utilities, Ensembl, gnomAD), each with the paths
+  it may be asked for, checked as every request is sent, redirects included. Requests carry
+  public identifiers. Each answer is cached with its retrieval record (the service, the URL, when
+  it was retrieved and last confirmed, its ETag and release), checked again after 30 days, and
+  served from the cache, marked stale, when the service cannot be reached. Answers have size
+  limits, applied after decompression; brief outages are retried. `--offline` serves cached copies
+  only and sends nothing; `--no-fetch` switches public data off; `--cache-dir` moves the cache
+  (by default `<user cache dir>/MaveScape`). A request that would send a sequence is made only
+  once you have seen exactly what it sends and confirmed it, and the cache keeps its answer
+  without the sequence. [`docs/NETWORK.md`](docs/NETWORK.md)
+  lists every host and request and what each sends. The cache and the download, limit and serve
+  parts of the fetcher are adapted from Proteoscope 0.10.0.
+- **A target checked against its UniProt entry (wave 3, slice 1).** Experiment, Target: *Check
+  against UniProt* fetches the entry the target's accession names and shows where the target (or
+  the protein a DNA target encodes) sits in it, how it differs, and what the entry would change:
+  the offset, the accession and gene, the species, the known differences. *Use these* sets them;
+  either way the check is recorded with the workspace (entry, release, date and placement), shown
+  in the target pane and the inspector, and named in the methods, which cite UniProt. Recording a
+  check that changes nothing leaves the design and its runs as they were. A tag or linker hanging
+  over an end is allowed and named; a target that fits equally well in several places keeps its
+  offset; an inactive accession is reported with the entries that replaced it. A target with no
+  accession can be found by its exact sequence (*Find in UniProt by sequence…*), after
+  confirming that the sequence may be sent. The remote action `check_target` (with `apply`)
+  does the same for scripts and sends only the accession.
+- **The Network dialog** (the status bar's *Public data*): the services MaveScape may contact,
+  what it asks each, the cache's folder, and what the cache holds.
+- The guide page *Public data*; the GRB2 example's guide checks its target against UniProt; a
+  screenshot of the check.
+
+### Changed
+
+- `mavescape run` and `mavescape validate` start their private window with public data off: they
+  read only the files they are given.
+- The GRB2 example's two map steps are one, so that its guide keeps six steps.
+
+### Validation
+
+- Go tests for the fetcher: the host list (look-alike hosts, other ports, schemes and paths, user
+  names, dot segments refused), nothing sent to a host not listed, redirects, size limits on
+  declared, streamed and compressed answers (a 4 KB answer expanding to 4 MB stops at the limit),
+  retries, revalidation by ETag, stale copies, `--offline`, `--no-fetch`, the sequence sent only
+  once confirmed; `docs/NETWORK.md` lists every host and request; no script in the page names
+  another origin in a request.
+- `public-data` validation suite (6 checks) on UniProt's answers as the fetcher cached them
+  (`validation/fixtures/public-data/`): the three published examples' targets sit exactly where
+  their designs say in UniProt, and the GRB2 example's check reaches its methods.
+- The remote-control session (81 checks) runs offline on those cached answers, exercises
+  `check_target`, and records every request the page makes: none goes beyond its own origin.
+
 ## 0.2.0 (2026-10-10)
 
 Wave 2 of the [roadmap](mavescape-spec/roadmap.md): every common experiment design, each checked

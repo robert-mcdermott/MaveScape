@@ -25,6 +25,7 @@ export const REFERENCES = {
   voom: { type: 'article', authors: ['Law, Charity W', 'Chen, Yunshun', 'Shi, Wei', 'Smyth, Gordon K'], title: 'voom: precision weights unlock linear model analysis tools for RNA-seq read counts', journal: 'Genome Biology', year: 2014, volume: 15, pages: 'R29', doi: '10.1186/gb-2014-15-2-r29' },
   mutscan: { type: 'article', authors: ['Soneson, Charlotte', 'Bendel, Alexandra M', 'Diss, Guillaume', 'Stadler, Michael B'], title: 'mutscan—a flexible R package for efficient end-to-end analysis of multiplexed assays of variant effect data', journal: 'Genome Biology', year: 2023, volume: 24, pages: '132', doi: '10.1186/s13059-023-02967-0' },
   bh: { type: 'article', authors: ['Benjamini, Yoav', 'Hochberg, Yosef'], title: 'Controlling the false discovery rate: a practical and powerful approach to multiple testing', journal: 'Journal of the Royal Statistical Society: Series B (Methodological)', year: 1995, volume: 57, number: 1, pages: '289--300', doi: '10.1111/j.2517-6161.1995.tb02031.x' },
+  uniprot: { type: 'article', authors: ['{The UniProt Consortium}'], title: 'UniProt: the Universal Protein Knowledgebase in 2025', journal: 'Nucleic Acids Research', year: 2025, volume: 53, number: 'D1', pages: 'D609--D617', doi: '10.1093/nar/gkae1010' },
   mavedb: { type: 'article', authors: ['Esposito, Daniel', 'Weile, Jochen', 'Shendure, Jay', 'Starita, Lea M', 'Papenfuss, Anthony T', 'Roth, Frederick P', 'Fowler, Douglas M', 'Rubin, Alan F'], title: 'MaveDB: an open-source platform to distribute and interpret data from multiplexed assays of variant effect', journal: 'Genome Biology', year: 2019, volume: 20, pages: '223', doi: '10.1186/s13059-019-1845-6' },
 };
 
@@ -83,6 +84,12 @@ export function writeMethods(ws, run, options = {}) {
     data.push(`Variant identifiers in the ${design.variants.column} column were read as MAVE-HGVS, MaveDB's nomenclature ${cite('mavedb')}${run.inputs.mapping.mode === 'lenient' ? ', accepting common legacy forms,' : ' (strict),'} and checked against the target: ${summary.valid} valid${summary.warning ? `, ${summary.warning} read leniently` : ''}${summary.invalid ? `, ${summary.invalid} not valid (not scored)` : ''}${kinds ? ` (${kinds})` : ''}.`);
   }
   if (target) data.push(`The target was ${target.name} (${target.sequenceType === 'dna' ? `${target.sequence.length} nt` : `${target.sequence.length} residues`}${target.offset ? `; position 1 is position ${1 + target.offset} of the reference` : ''}${target.identifiers?.uniprot ? `; UniProt ${target.identifiers.uniprot}` : ''}).`);
+  // Its check against its UniProt entry (wave 3, slice 1), kept with the workspace's target, when
+  // the run's target is still as it was checked.
+  const checked = target ? (ws.targets ?? []).find((t) => t.id === target.id)?.reference : null;
+  if (checked && checked.accession === target.identifiers?.uniprot && checked.offset === (target.offset ?? 0)) {
+    data.push(`Its position in the reference was checked against UniProt ${checked.accession} ${cite('uniprot')}${checked.release ? `, release ${checked.release}` : ''}${checked.retrieved ? `, retrieved ${checked.retrieved.slice(0, 10)}` : ''}: residues ${checked.start}–${checked.end}${checked.identical ? ', identical' : `, ${checked.differences} difference${checked.differences === 1 ? '' : 's'}`}.`);
+  }
   if (design.source?.citation) {
     data.push(`The data are from ${design.source.citation.replace(/,?\s*doi:\s*\S+$/i, '')} ${cite('data', { type: 'misc', text: `${design.source.citation}${design.source.mavedb ? `. MaveDB ${design.source.mavedb}` : ''}${design.source.license ? ` (${design.source.license})` : ''}.`, title: design.source.citation, note: design.source.mavedb ?? null })}${design.source.mavedb ? `, MaveDB ${design.source.mavedb}` : ''}.`);
   }

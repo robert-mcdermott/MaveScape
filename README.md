@@ -33,7 +33,8 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
 > would add, and writes the analysis package that `mavescape run` reads. Nine examples are on the Start page (three published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md)'s wave 2 is complete; 0.3 brings public data in and out.
+> [roadmap](mavescape-spec/roadmap.md)'s wave 2 is complete; wave 3 brings public data in and out,
+> starting with a target checked against its UniProt entry through a fixed list of services.
 
 ## What is a MAVE?
 
@@ -140,10 +141,14 @@ mavescape run --design design.json --out strict/ --strict --acknowledge "coverag
 ## Privacy and security
 
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
-API calls from other web pages, and serves its page with a strict Content-Security-Policy. It
-makes no network requests of its own; remote control is off unless asked for, and then answers
-only programs on this computer; public-data fetching (MaveDB, UniProt, PDB, AlphaFold) will
-come through a fixed list of services and can be switched off (`--offline`).
+API calls from other web pages, and serves its page with a strict Content-Security-Policy, so the
+page contacts nothing but the program. Your files never leave your computer. The program fetches
+public data (a target's UniProt entry now; MaveDB, structures and annotations to come) from a
+fixed list of services, sending public identifiers, and caches each answer with where and when it
+came from; a request that would send a sequence is made only after you confirm it.
+[`docs/NETWORK.md`](docs/NETWORK.md) lists every request. `--offline` uses cached copies only and
+`--no-fetch` switches public data off. Remote control is off unless asked for, and then answers
+only programs on this computer.
 
 ## Development
 

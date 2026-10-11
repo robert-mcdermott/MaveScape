@@ -65,6 +65,11 @@ var remoteActions = []remoteAction{
 		"design": map[string]any{"type": "object", "description": "The design document."},
 		"table":  textArg("The table by name; the one the design describes, or the first, if not given."),
 	}, "design")},
+	{Name: "check_target", Description: "Checks the target against its UniProt entry, fetched through MaveScape's list of public services (docs/NETWORK.md; cached, and from the cache only with --offline): where the target sits, the differences, and the fields the entry would change (offset, identifiers, organism). With apply, uses them and records the check with the workspace, for its history and methods. Only the accession is sent, never a sequence.", InputSchema: schema(map[string]any{
+		"accession": textArg("A UniProt accession (P62993); the target's own if not given."),
+		"target":    textArg("A target by name; the design's if not given."),
+		"apply":     flagArg("Use what the entry gives and record the check."),
+	})},
 	{Name: "check", Description: "Checks a table as scoring would, without scoring: its variant names against the design's target, its problems, the design against its columns, and the parameters against the design. Returns valid (nothing blocks scoring), what blocks it, and the warnings. mavescape validate and mavescape run use it.", InputSchema: schema(map[string]any{
 		"table":      textArg("The table by name; the one the design describes, or the first, if not given."),
 		"design":     map[string]any{"type": "object", "description": "A design to check against the table (a mavescape-design document); the workspace's own if not given."},

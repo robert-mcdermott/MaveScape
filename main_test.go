@@ -19,7 +19,7 @@ import (
 func testApp(t *testing.T, files ...string) (*app, http.Handler) {
 	t.Helper()
 	dir := t.TempDir()
-	a, err := newApp(config{dataDir: dir, files: files})
+	a, err := newApp(config{dataDir: dir, cacheDir: filepath.Join(dir, "cache"), files: files})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestInfoDescribesTheDesktopProgram(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Name != "MaveScape" || body.Version != version || !body.Library || body.Session == "" || body.Mode != "desktop" {
+	if body.Name != "MaveScape" || body.Version != version || !body.Library || body.Session == "" || body.Mode != "desktop" || body.Fetch != "on" {
 		t.Fatalf("unexpected info %+v", body)
 	}
 }
@@ -387,6 +387,13 @@ func TestParseConfig(t *testing.T) {
 	noOpen, _ := parseConfig([]string{"--no-open"})
 	if noOpen.window != "none" {
 		t.Fatal("--no-open should mean --window none")
+	}
+	network, err := parseConfig([]string{"--offline", "--cache-dir", "cache", "counts.csv"})
+	if err != nil || !network.offline || network.noFetch || network.cacheDir != "cache" || fetchMode(network) != "offline" || len(network.files) != 1 {
+		t.Fatalf("unexpected network flags %+v", network)
+	}
+	if off, _ := parseConfig([]string{"--no-fetch", "--offline"}); fetchMode(off) != "off" || fetchMode(defaults) != "on" {
+		t.Fatal("--no-fetch should switch public data off, whatever else is given")
 	}
 }
 

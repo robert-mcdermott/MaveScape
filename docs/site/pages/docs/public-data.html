@@ -1,0 +1,37 @@
+---
+title: Public data
+description: What MaveScape fetches from public services (UniProt now; MaveDB and annotations to come), what it sends, the cache and its records, checking a target against its UniProt entry, and working offline.
+lede: Your files never leave your computer. MaveScape reaches the internet only for public data, such as a protein's UniProt entry, through a fixed list of services, sending public identifiers. Each answer is cached with where and when it came from, so it works offline and the record says which release you used.
+---
+      <h2 id="how">How MaveScape fetches</h2>
+      <p>The page in your window asks the MaveScape program, and nothing else. The program asks the services on one list, and checks every request against it as it is sent, redirects included: UniProt now; MaveDB, RCSB PDB, PDBe, AlphaFold DB, NCBI, Ensembl and gnomAD as later versions use them. Requests carry accessions and URNs. One that would send a sequence is made only after you have seen it and confirmed it.</p>
+      <p>The status bar's <strong>Public data</strong> opens the Network dialog: the services MaveScape may contact, what it asks each, where its cache is, and what the cache holds. <a href="{{github}}/blob/main/docs/NETWORK.md">NETWORK.md</a> lists every request, what it sends and what it is for.</p>
+
+      <h2 id="target">Checking a target against UniProt</h2>
+      <shot name="target-uniprot" alt="The UniProt check of the GRB2 example's target: entry P62993, Growth factor receptor-bound protein 2, reviewed, release 2026_03, retrieved 2026-10-10 from MaveScape's cache; the target's 56 residues are positions 159 to 214, identical; the offset, accession, gene, organism and known differences all the same; and a Record the check button">The GRB2 example's target checked against UniProt P62993: the SH3 domain is residues 159–214, identical, as its design says.</shot>
+      <p>In the Experiment view, the Target pane's <strong>Check against UniProt</strong> fetches the entry the target's UniProt accession names and finds where the target sits in it: the protein itself, or the protein a DNA target encodes. The dialog shows the entry (its name, gene, organism and length, whether it is reviewed), where it came from and when, where the target sits, how it differs, and each field of the target the entry would change:</p>
+      <ul>
+        <li><strong>The offset</strong>, so positions are numbered on the reference protein (an offset of 158 makes the target's position 1 residue 159).</li>
+        <li><strong>The accession and gene</strong>, and <strong>the organism</strong> (the species; UniProt names its reference strain too, which need not be your experiment's).</li>
+        <li><strong>Known differences</strong>: residues where the target differs from the entry, a construct's changes, so they are not reported as errors. A note you gave one is kept.</li>
+      </ul>
+      <p><strong>Use these</strong> changes them in the design; its runs are kept, and the next score uses the new values. When nothing would change, <strong>Record the check</strong> keeps the record and leaves the design, and so its runs, as they were. Either way the check goes into the workspace: the history says what it found and changed, the target pane and the inspector show it, and the methods name the entry, its release and the date:</p>
+      <div class="code wrap" data-no-copy><pre><code>Its position in the reference was checked against UniProt P62993 [2], release 2026_03, retrieved 2026-10-10: residues 159–214, identical.</code></pre></div>
+      <p>The placement allows a few residues to hang over either end, as a tag or a linker does, and says so. If fewer than 80% of the target's residues agree wherever it is placed, the entry is another protein or isoform, and nothing changes. A short or repeated target may fit equally well at several places; then the offset is left for you to set.</p>
+      <p>An inactive accession (merged, split or deleted) is reported with the entries that replaced it.</p>
+
+      <h2 id="sequence">Finding a target by its sequence</h2>
+      <p>A target with no accession can be looked up by its sequence: <strong>Find in UniProt by sequence…</strong> asks UniProt for the entries with exactly the target's protein sequence. This request sends the sequence, which may be unpublished, so MaveScape first shows the request it would make, sequence included, and sends it only if you click <strong>Send it</strong>. Nothing else goes with it: not the target's name, nor your counts or design. The matches are listed, reviewed entries first; <strong>Check</strong> on one goes on as above.</p>
+      <p>Only identical sequences match. A domain, a fragment or a construct with changes is found by its protein's accession instead: type it in the UniProt field and check against it. A lookup is cached, so the same one is never sent twice.</p>
+
+      <h2 id="cache">The cache and its records</h2>
+      <p>Each answer is cached with its retrieval record: the service, the address it came from, when it was retrieved and last confirmed, and the release (UniProt's, such as <code>2026_03</code>). A copy younger than 30 days is used without asking; an older one is checked with the service and confirmed unchanged or replaced. If the service cannot be reached, the older copy is used and the dialog says so.</p>
+      <p>The cache is in <code>~/Library/Caches/MaveScape</code> on macOS, <code>~/.cache/MaveScape</code> on Linux and <code>%LocalAppData%\MaveScape</code> on Windows; <code>--cache-dir</code> moves it. To empty it, delete the folder. Its layout and records are in <a href="{{github}}/blob/main/docs/FORMATS.md#the-cache-of-public-data">FORMATS.md</a>.</p>
+
+      <h2 id="offline">Offline, or off</h2>
+      <div class="code"><pre><code><span class="prompt">$ </span>mavescape --offline</code></pre></div>
+      <p>With <code>--offline</code>, MaveScape makes no network request. Public data come only from copies already in the cache, and anything else is refused with a message saying so. With <code>--no-fetch</code>, public data are off: no request and no cache. <code>mavescape run</code> and <code>mavescape validate</code> read only the files they are given. Served as a plain web site, without the program, MaveScape has no public data. On a network that needs a proxy, set <code>HTTPS_PROXY</code>.</p>
+
+      <h2 id="scripts">From scripts</h2>
+      <p>The <code>check_target</code> action does the check for a script (<a href="scripting.html#actions">Remote control</a>): it returns where the target sits, the differences and the changes, and with <code>apply</code> uses them and records the check. It sends only the accession; no action sends a sequence.</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "check_target", "args": {"apply": true}}'</code></pre></div>

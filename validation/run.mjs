@@ -7,7 +7,8 @@
 //
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
 // data), experiment (external data), scoring, qc, map and roundtrip (their last checks need
-// external data), readiness, examples (its last checks need external data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// external data), readiness, examples (its last checks need external data), public-data; all by
+// default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -36,10 +37,12 @@ import { readinessDatasets, REMOVALS, caseOf, probe } from './readiness-cases.mj
 import { writePackage } from '../web/lib/package.js';
 import { EXAMPLE_DATASETS, openExampleInNode, raisedOf } from './example-cases.mjs';
 import { proteinChange } from '../web/lib/codons.js';
+import { placeTarget, placementPatch, readUniProtEntry, referenceOf, uniparcEntries } from '../web/lib/uniprot.js';
+import { writeMethods } from '../web/lib/methods.js';
 import { intervalOf } from '../web/lib/exports.js';
 import { readZip } from '../web/lib/zip.js';
 import { readiness } from '../web/lib/readiness.js';
-import { acknowledgeFinding, addSource, addTarget, createWorkspace, parseWorkspace, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
+import { acknowledgeFinding, addSource, addTarget, createWorkspace, parseWorkspace, recordTargetCheck, serializeWorkspace, setDesign, updateTarget, verifyHistory } from '../web/lib/workspace.js';
 const formatCount = (n) => n.toLocaleString('en-US');
 import { VISIONS, lab as labOf, paletteReport, simulate } from '../web/lib/colorvision.js';
 import { CATEGORICAL, CATEGORICAL_CVD, colormapColor } from '../web/lib/colormaps.js';
@@ -2196,6 +2199,47 @@ const suites = {
       };
       const multistep = openExampleInNode(exampleById('factor9'), { parameters: { binScale: 'low5-wt', combination: 'mean' } });
       check('examples', 'factor IX against MultiSTEP\'s published scores: with MaveScape\'s defaults (nonsense 0, wild type 1, the moderated combination) and with MultiSTEP\'s own settings set in the Score view (the lowest 5% at 0, the replicates\' mean), as the guide says', `defaults r ${rOf(o.scored.results).toFixed(4)}; MultiSTEP's settings r ${rOf(multistep.scored.results).toFixed(4)}`, rOf(o.scored.results) >= 0.99 && rOf(multistep.scored.results) >= 0.999, '≥ 0.99; ≥ 0.999');
+    }
+  },
+
+  // Public data (wave 3, slice 1): UniProt's answers as MaveScape's fetcher cached them
+  // (validation/fixtures/public-data, release 2026_03), read as the page reads them.
+  'public-data'() {
+    const root = new URL('fixtures/public-data/', import.meta.url);
+    const cached = (kind, name) => JSON.parse(readFileSync(new URL(`${kind}/${name}`, root), 'utf8'));
+    const records = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).flatMap((kind) => readdirSync(new URL(`${kind}/`, root)).filter((f) => f.endsWith('.meta.json')).map((f) => ({ kind, name: f.replace(/\.meta\.json$/, ''), meta: cached(kind, f) })));
+    const complete = records.filter(({ meta }) => meta.service === 'UniProt' && /^https:\/\/rest\.uniprot\.org\//.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && meta.version && meta.contentType === 'application/json');
+    check('public-data', 'each cached response carries its retrieval record: the service, the URL on a listed host, when it was retrieved, and the release', `${complete.length} of ${records.length} records complete (${records.map((r) => `${r.kind}/${r.name.slice(0, 12)}`).join(', ')})`, records.length >= 4 && complete.length === records.length, 'all');
+    for (const [id, accession] of Object.entries({ 'grb2-sh3': 'P62993', hsp90: 'P02829', factor9: 'P00740' })) {
+      const example = exampleById(id);
+      const design = JSON.parse(readFileSync(new URL(`../web/${example.files.design}`, import.meta.url), 'utf8'));
+      const target = design.targets[0];
+      const entry = readUniProtEntry(cached('uniprot', `${accession}.json`));
+      const placement = placeTarget(target, entry);
+      const patch = placementPatch(target, entry, placement);
+      check('public-data', `${example.title}: its target sits where its design says in UniProt ${accession}, identical, at one place, and the entry changes nothing in the design`, `positions ${placement.start}–${placement.end} (offset ${placement.offset}; the design's ${target.offset}), ${placement.identical ? 'identical' : `${placement.differences.length} differences`}, ${placement.places} place${placement.places > 1 ? 's' : ''}; would change ${Object.keys(patch).join(', ') || 'nothing'}`, placement.offset === target.offset && placement.identical && placement.places === 1 && !Object.keys(patch).length, 'the design\'s offset; identical; nothing');
+    }
+    {
+      const lookup = readdirSync(new URL('uniparc/', root)).find((f) => !f.endsWith('.meta.json'));
+      const { entries } = uniparcEntries(cached('uniparc', lookup));
+      const grb2 = readUniProtEntry(cached('uniprot', 'P62993.json'));
+      const reviewed = entries.filter((e) => e.reviewed);
+      check('public-data', 'GRB2\'s whole sequence, looked up in UniProt: P62993 first among the reviewed entries with exactly that sequence, and its SHA-256 names the cached lookup', `${entries.length} active entries, ${reviewed.length} reviewed (${reviewed.slice(0, 3).map((e) => `${e.accession} ${e.organism}`).join(', ')}); cached as ${lookup.slice(0, 12)}…, the sequence's ${sha256(new TextEncoder().encode(grb2.sequence)).slice(0, 12)}…`, entries[0]?.accession === 'P62993' && lookup === `${sha256(new TextEncoder().encode(grb2.sequence))}.json`, 'P62993; the same');
+    }
+    {
+      // The GRB2 example checked as its guide says, then scored: the check in the workspace, not
+      // in the design (its runs stay current), and in the methods.
+      const o = openExampleInNode(exampleById('grb2-sh3'));
+      const target = o.ws.targets[0];
+      const entry = readUniProtEntry(cached('uniprot', 'P62993.json'));
+      const placement = placeTarget(target, entry);
+      const meta = cached('uniprot', 'P62993.json.meta.json');
+      const ws = recordTargetCheck(o.ws, target.id, placementPatch(target, entry, placement), referenceOf(entry, { source: meta.source, retrieved: meta.retrieved, version: meta.version }, placement), 'Checked the target against UniProt P62993');
+      const source = ws.sources[0];
+      const run = makeRun({ inputs: runInputs({ source, design: ws.design, parameters: o.parameters }), source, results: o.scored.results, software: { version: '0.3.0', commit: '' }, name: 'Run 1', created: '2026-10-10T12:00:00.000Z' });
+      const methods = writeMethods(ws, run, { results: o.scored.results });
+      const sentence = /Its position in the reference was checked against UniProt P62993 \[\d+\], release 2026_03, retrieved 2026-10-10: residues 159–214, identical\./.exec(methods.markdown)?.[0];
+      check('public-data', 'the GRB2 example checked against UniProt as its guide says: the design unchanged, the check kept with the workspace and written in the methods, with UniProt cited', sentence ?? 'no sentence', ws.design === o.ws.design && ws.targets[0].reference?.release === '2026_03' && Boolean(sentence) && methods.references.some((r) => r.key === 'uniprot'), 'unchanged; kept; written; cited');
     }
   },
 };

@@ -16,6 +16,7 @@ import { installImport } from './ui/import.js';
 import { chooseArchiveExport, openArchives } from './ui/record.js';
 import { exampleGuide } from './ui/examples.js';
 import { mountWorkflow } from './ui/workflow.js';
+import { showNetwork } from './ui/public-data.js';
 import { fixClock } from './lib/clock.js';
 
 const VERSION = '0.2.0';
@@ -444,6 +445,7 @@ async function start() {
       h('span.item', icon('library'), library.kind === 'desktop' ? `Library: ${library.location}` : 'Library: this browser'),
       h('span.item', `${store.ws.sources.length} table${store.ws.sources.length === 1 ? '' : 's'} · ${store.ws.runs.length} score run${store.ws.runs.length === 1 ? '' : 's'}`),
       h('button.item.statusbar-link', { type: 'button', title: `History and log (${modKey}J)`, onclick: () => app.toggleDrawer() }, icon('drawer'), store.ui.drawer.open ? 'Hide the drawer' : 'History and log'),
+      info ? h('button.item.statusbar-link.network', { type: 'button', title: 'What MaveScape may fetch, from where, and what it has cached', onclick: () => showNetwork(app) }, icon('globe'), { on: 'Public data', offline: 'Public data: offline', off: 'Public data: off' }[info.fetch] ?? 'Public data: off') : null,
       h('span.spacer'),
       h('span.item', version),
       h('span.item.muted', 'Research use only'));

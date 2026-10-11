@@ -1,0 +1,8 @@
+UniProt's answers to the requests MaveScape makes (docs/NETWORK.md), retrieved 2026-10-10 from
+rest.uniprot.org (UniProt release 2026_03), unchanged, in the layout of MaveScape's cache of
+public data (docs/FORMATS.md, "The cache of public data"). Each answer's .meta.json records the
+request and when it was retrieved.
+
+UniProt is licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2025. Nucleic Acids
+Research 2025;53(D1):D609-D617. doi:10.1093/nar/gkae1010
