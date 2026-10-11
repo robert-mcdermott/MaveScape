@@ -234,6 +234,9 @@ open and reproduce their runs; three saved by 0.3.0 are kept for later versions 
   target's sequence and offset are the run's. A target checked against UniProt after a run gets
   its gene and accession, but that run's *Add a track* still found ClinVar and gnomAD wanting a
   gene "as UniProt's check does" (found while saving 0.3.0's archives).
+- The first run scored after opening a MaveDB record is Run 1. Published scores, read rather than
+  scored, are named for what they are and take no number; they made it Run 2. A run's name skips
+  one already taken (a run removed since), where it could repeat one before.
 
 ### Validation
 
@@ -345,7 +348,9 @@ open and reproduce their runs; three saved by 0.3.0 are kept for later versions 
   export again (a nucleotide run's map drawn at the protein level), and reads every annotation's
   tracks again from the archive, in the order kept. `mavescape run --from-workspace` reruns each run
   in a window to the same hash. The remote-control session (109 checks) adds a target checked after
-  its run, whose tracks are then found by the gene the check gave.
+  its run, whose tracks are then found by the gene the check gave. CI's remote job fetches BAP1's
+  MaveDB table too, which the session's deposit is compared with (CI runs on pull requests, so
+  wave 3's first CI run, the release's, found it missing).
 
 ## 0.2.0 (2026-10-10)
 

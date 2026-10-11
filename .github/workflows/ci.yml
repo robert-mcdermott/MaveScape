@@ -79,13 +79,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Cache DHFR's MaveDB tables (two score sets opened together)
+      - name: Cache the MaveDB tables the session compares with Node (DHFR's two score sets, BAP1's)
         uses: actions/cache@v4
         with:
-          path: validation/cache/mavedb-dhfr
-          key: validation-dhfr-${{ hashFiles('validation/sources.json') }}
-      - name: Fetch DHFR's MaveDB tables
-        run: node validation/fetch.mjs mavedb-dhfr
+          path: |
+            validation/cache/mavedb-dhfr
+            validation/cache/mavedb-bap1-sge
+          key: validation-remote-${{ hashFiles('validation/sources.json') }}
+      - name: Fetch those MaveDB tables
+        run: node validation/fetch.mjs mavedb-dhfr mavedb-bap1-sge
       - name: Every remote action, in the program and headless Chrome, against Node
         run: node validation/remote-session.mjs --verbose --require-data
         env:

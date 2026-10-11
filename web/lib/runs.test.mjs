@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { addRun, describeMethod, describeParameters, makeRun, outputDigest, recordedInputs, removeRun, reproduction, runId, runInputs } from './runs.js';
+import { addRun, describeMethod, describeParameters, makeRun, nextRunName, outputDigest, recordedInputs, removeRun, reproduction, runId, runInputs } from './runs.js';
 import { DEFAULT_PARAMETERS, PRESETS, scoreExperiment } from './score.js';
 import { createWorkspace, verifyHistory } from './workspace.js';
 
@@ -43,4 +43,15 @@ test('a recomputed run is reproduced, or says why it differs', () => {
   assert.match(reproduction(run, 'b'.repeat(64), '0.3.0').message, /MaveScape 0\.2\.0 made it; this is 0\.3\.0/);
   const older = { ...run, inputs: { ...run.inputs, scoring: '1' } };
   assert.match(reproduction(older, 'b'.repeat(64), '0.3.0').message, /scoring engine 1, which took its logarithms from the browser.*differ only in their last digits/);
+});
+
+test('the next run\'s name counts the runs scored: published scores take no number, a taken name is skipped', () => {
+  const run = (name, model = 'wls') => ({ name, inputs: { parameters: { model } } });
+  assert.equal(nextRunName({ runs: [] }), 'Run 1');
+  assert.equal(nextRunName({ runs: [run('Run 1'), run('Run 2')] }), 'Run 3');
+  // Opened from MaveDB: the published scores, then the first run scored.
+  assert.equal(nextRunName({ runs: [run('Published scores', 'published')] }), 'Run 1');
+  assert.equal(nextRunName({ runs: [run('Published scores (deficient Lon)', 'published'), run('Published scores (functioning Lon)', 'published'), run('Run 1')] }), 'Run 2');
+  // Run 1 removed: Run 2 is still there, so the next is Run 3, not a second Run 2.
+  assert.equal(nextRunName({ runs: [run('Run 2')] }), 'Run 3');
 });

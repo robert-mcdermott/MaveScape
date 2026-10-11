@@ -9,7 +9,7 @@ import { toast } from './overlays.js';
 import { EXAMPLES } from '../lib/examples.js';
 import { coversPosition, validateDesign, summarizeDesign } from '../lib/design.js';
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
-import { addRun, makeRun, outputDigest, runId, runInputs } from '../lib/runs.js';
+import { addRun, makeRun, nextRunName, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
 import { acknowledgeFinding, addSelection, addTarget, createWorkspace, rename, setDeposit, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
@@ -571,7 +571,7 @@ export function installRemote(app) {
       }
       if (ws().id !== wsId) throw new ActionError('Another workspace was opened while scoring; the run was not added.');
       if (!result.ok) throw new ActionError(`Scoring is refused: ${result.errors.join(' ')}`);
-      const run = makeRun({ inputs, source, results: result.results, software: { version: app.version, commit: app.commit }, name: `Run ${ws().runs.length + 1}` });
+      const run = makeRun({ inputs, source, results: result.results, software: { version: app.version, commit: app.commit }, name: nextRunName(ws()) });
       app.runResults ??= new Map();
       app.runResults.set(run.id, { results: result.results, status: 'computed' });
       store.commit(addRun(ws(), run).ws, `Score: ${run.name} (${author})`);

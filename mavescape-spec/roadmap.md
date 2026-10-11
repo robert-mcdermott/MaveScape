@@ -1659,6 +1659,12 @@ again.
     may have none), a map at the level of the variants (a nucleotide run's is drawn at the protein
     level), and tracks read without the run's record (MaveDB's annotations join by its variants and
     accessions, which the Node tracks now give as the window does).
+  - **The first run scored after opening a MaveDB record was Run 2**: the published scores counted
+    as a run. They take no number now (`nextRunName`), and a name already taken is skipped.
+  - **CI had never run wave 3**: it runs on pull requests and `main`, so the release's pull request
+    was the first. Its remote job lacked BAP1's MaveDB table, which the session's deposit has been
+    compared with since slice 4 (cached on this computer, so every local run passed). The job
+    fetches it now, and the session names a missing table instead of stopping.
 
 ## 0.4.0: compare (wave 4)
 

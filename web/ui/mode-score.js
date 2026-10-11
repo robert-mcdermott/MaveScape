@@ -17,7 +17,7 @@ import { NORMALIZATIONS, median } from '../lib/score-ratio.js';
 import { COMBINATIONS } from '../lib/replicates.js';
 import { intervalOf } from '../lib/exports.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '../lib/filters.js';
-import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, removeRun, runId, runInputs, unitOf } from '../lib/runs.js';
+import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, nextRunName, removeRun, runId, runInputs, unitOf } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { classHistogram, cssVar, flowBars, legend, scatter, scoreGroups } from './plots.js';
@@ -136,8 +136,7 @@ export function mountScoreMode(app, container) {
       render();
       return;
     }
-    const n = store.ws.runs.length + 1;
-    const run = makeRun({ inputs, source: s, results: result.results, software: { version: app.version, commit: app.commit }, name: `Run ${n}` });
+    const run = makeRun({ inputs, source: s, results: result.results, software: { version: app.version, commit: app.commit }, name: nextRunName(store.ws) });
     app.runResults.set(run.id, { results: result.results, status: 'computed' });
     const added = addRun(store.ws, run);
     store.commit(added.ws, `Score: ${run.name}`);

@@ -56,6 +56,17 @@ export function outputDigest(results) {
   });
 }
 
+// The name of a workspace's next scored run: "Run N", counting the runs scored. Published scores,
+// read rather than scored, have their own names ("Published scores") and take no number, so the
+// first run scored after opening a MaveDB record is Run 1. A name already taken (a run removed
+// since) is skipped.
+export function nextRunName(ws) {
+  const taken = new Set(ws.runs.map((r) => r.name));
+  let n = ws.runs.filter((r) => r.inputs?.parameters?.model !== 'published').length + 1;
+  while (taken.has(`Run ${n}`)) n += 1;
+  return `Run ${n}`;
+}
+
 // The record kept in the workspace. software: { version, commit }.
 export function makeRun({ inputs, source, results, software, name, created = now() }) {
   return {

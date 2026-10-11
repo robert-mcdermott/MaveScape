@@ -58,7 +58,8 @@ cached transcript, its version said, its run Node's, a merged protein variant in
 nucleotide variants listed in the inspector), the scores at the protein level exported as Node
 writes them, and the map described at the protein level; and (slice 4) `mavedb_deposit` on BAP1's
 published scores (named by ENST00000460680.6, nothing missing), `export` of `mavedb` the same
-bytes as Node writes it (suite `mavedb-export`), the deposit opened again from its folder and from
+bytes as Node writes it (suite `mavedb-export`; Node's needs `mavedb-bap1-sge`, which CI's `remote`
+job fetches, and `--require-data` requires), the deposit opened again from its folder and from
 its ZIP and written again the same, and GRB2's MaveDB details set by `set_mavedb_details` (an
 unknown one refused), its deposit's scores, counts and method text; and (slice 5) `list_tracks`
 (the run's own four, hidden until shown), `add_track` from the cached answers (UniProt's features,
@@ -881,8 +882,9 @@ own, so 0.3.0 saved three: `archives/release-0.3.0-grb2-mavedb.msz`,
 [commit]`) builds MaveScape from the checkout. It opens its page in a headless browser with a fixed
 clock and drives it through remote control, offline, on the fetcher's cached answers
 (`fixtures/public-data/`) and MaveDB's tables (`mavedb-dhfr`, `mavedb-brca1-sge`). So the archives
-are what the window saves. Their runs name the commit they were built from, 3ca180d, marked
-`-dirty` because the release's own changes were not yet committed. They hold:
+are what the window saves. Their runs name the commit they were built from: c0d7f4f, the release
+commit, marked `-dirty` because the release's last changes (the run naming, CI's tables) were not
+yet committed. They hold:
 - **GRB2's SH3 domain, opened from MaveDB** (`urn:mavedb:00000835-a-1`): the record, its published
   scores as a run, MaveDB's mapped variants kept, and the counts with their drafted design, scored.
   The target was checked against UniProt P62993 after that run. The archive also has UniProt's

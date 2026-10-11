@@ -488,11 +488,17 @@ try {
   check('mavedb_deposit: BAP1\'s published scores as MaveDB takes them, named by the transcript MaveScape checked them on (ENST00000460680.6), the record\'s abstract, license and method text kept: nothing missing', bDeposit.message, bDeposit.data.mode === 'accession' && bDeposit.data.target.targetAccession?.accession === 'ENST00000460680.6' && bDeposit.data.variants.exported === 620 && !bDeposit.data.missing.length);
   const bZip = await act('export', { what: 'mavedb', path: join(out, 'bap1-mavedb.zip') });
   const bFiles = await readZip(new Uint8Array(readFileSync(join(out, 'bap1-mavedb.zip'))));
-  const nodeBap1 = depositPackages(['bap1']).packages[0].deposit;
+  // Node's deposit of the same record needs BAP1's MaveDB table (validation/cache, as
+  // node validation/fetch.mjs mavedb-bap1-sge keeps it).
+  const nodeBap1 = depositPackages(['bap1']).packages[0]?.deposit ?? null;
+  if (!nodeBap1) {
+    console.log('  BAP1\'s MaveDB table is not in validation/cache: node validation/fetch.mjs mavedb-bap1-sge (the deposit compared with Node\'s skipped)');
+    if (requireData) check('BAP1\'s MaveDB table present', 'not in validation/cache', false, 'present (--require-data)');
+  }
   const mavedbFiles = (files) => Object.fromEntries([...files].filter(([n]) => MAVEDB_FILES.includes(n)).map(([n, b]) => [n, typeof b === 'string' ? b : new TextDecoder().decode(b)]));
-  const nodeFiles = mavedbFiles(new Map(nodeBap1.files.map((f) => [f.name, f.text])));
-  const sameAsNode = Object.keys(nodeFiles).length && Object.entries(nodeFiles).every(([n, t]) => mavedbFiles(bFiles)[n] === t) && Object.keys(mavedbFiles(bFiles)).length === Object.keys(nodeFiles).length;
-  check('export mavedb: the deposit as one ZIP, the files MaveDB reads the same bytes as Node\'s (validated by MaveDB\'s own validators, suite mavedb-export)', `${bZip.message} ${[...bFiles.keys()].join(', ')}`, sameAsNode && bFiles.has('README.md') && bFiles.has('mavescape.json'));
+  const nodeFiles = nodeBap1 ? mavedbFiles(new Map(nodeBap1.files.map((f) => [f.name, f.text]))) : null;
+  const sameAsNode = !nodeFiles || (Object.keys(nodeFiles).length && Object.entries(nodeFiles).every(([n, t]) => mavedbFiles(bFiles)[n] === t) && Object.keys(mavedbFiles(bFiles)).length === Object.keys(nodeFiles).length);
+  check('export mavedb: the deposit as one ZIP, the files MaveDB reads the same bytes as Node\'s (validated by MaveDB\'s own validators, suite mavedb-export)', `${bZip.message} ${[...bFiles.keys()].join(', ')}${nodeFiles ? '' : ' (not compared with Node\'s)'}`, sameAsNode && bFiles.has('README.md') && bFiles.has('mavescape.json'));
   const folder = join(out, 'bap1-package');
   mkdirSync(folder, { recursive: true });
   for (const [name, bytes] of bFiles) writeFileSync(join(folder, name), bytes);
