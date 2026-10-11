@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { agreementOf, blandAltman, concordance, pearsonAgreement, spearmanAgreement } from './agreement.js';
-import { compareSides, comparisonCSV, comparisonJSON, describeSide, MIN_MATCHED, scaleOf, sideOptions } from './compare.js';
+import { compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, MIN_MATCHED, MIN_POSITION_VARIANTS, positionsCSV, scaleOf, sideMap, sideOptions } from './compare.js';
+import { buildMapModel, STATE } from './map-model.js';
 import { KIND } from './variants.js';
 
 const near = (a, b, tol = 1e-12) => assert.ok(Math.abs(a - b) <= tol, `${a} is not ${b}`);
@@ -48,12 +49,14 @@ function makeRun({ id = 'run-a', name = 'Run 1', sequence = 'A'.repeat(40), offs
     score: Float64Array.from({ length: n }, (_, i) => base(i) * scale + shift + (r ? 0.1 * Math.sin(3 * i) : 0)),
     se: new Float64Array(n).fill(0.2),
     state: new Uint8Array(n),
+    first: Float64Array.from({ length: n }, (_, i) => 5 + 10 * (i % 4)),
   }));
   const results = {
     rows: n,
-    variants: { key, original: key, kind, position: Int32Array.from(key, (k) => Number(/\d+/.exec(k)?.[0] ?? 0)), status: new Uint8Array(n) },
+    controls: { wt: 0, synonymous: 0, nonsense: 10 },
+    variants: { key, original: key, kind, position: Int32Array.from(key, (k) => Number(/\d+/.exec(k)?.[0] ?? 0)), status: new Uint8Array(n), ref: new Uint8Array(n).fill(1), alt: Uint8Array.from(key, (k) => 1 + 'ARNDCQEGHILKMFPSTWYV*'.indexOf({ Val: 'V', Gly: 'G', Ter: '*' }[k.slice(-3)] ?? 'A')) },
     replicates: reps,
-    conditions: [{ id: 'all', name: 'All replicates', replicates: reps.map((r) => r.id), score: Float64Array.from({ length: n }, (_, i) => base(i) * scale + shift), se: new Float64Array(n).fill(0.1), reason: new Uint8Array(n), flags: new Uint8Array(n) }],
+    conditions: [{ id: 'all', name: 'All replicates', replicates: reps.map((r) => r.id), score: Float64Array.from({ length: n }, (_, i) => base(i) * scale + shift), se: Float64Array.from({ length: n }, (_, i) => (i % 5 === 0 ? 0.5 : 0.1)), reason: new Uint8Array(n), flags: Uint8Array.from({ length: n }, (_, i) => (i % 7 === 0 ? 1 : 0)) }],
   };
   const design = {
     model: 'two-population',
@@ -122,7 +125,7 @@ test('compare: opposite directions negate the second side; published scores are 
   const c = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }));
   assert.equal(c.flipped, true);
   near(c.statistics.pearson.r, 1);
-  assert.deepEqual(c.withheld, ['concordance', 'blandAltman']);
+  assert.deepEqual(c.withheld, ['concordance', 'blandAltman', 'discordance', 'positions']);
   const published = makeRun({ id: 'run-p', name: 'Published scores', model: 'published', table: 'p'.repeat(64), scale: 3, shift: 1 });
   assert.equal(scaleOf(side(published, { condition: 0 })).known, false);
   const p = compareSides(side(a, { condition: 0 }), side(published, { condition: 0 }));
@@ -135,7 +138,7 @@ test('compare: the matched variants and the record as files', () => {
   const r = makeRun();
   const c = compareSides(side(r, { replicate: 'r1' }), side(r, { replicate: 'r2' }));
   const csv = comparisonCSV(c).trim().split('\n');
-  assert.equal(csv[0], 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean');
+  assert.equal(csv[0], 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean,z,p,q');
   assert.equal(csv.length, 31);
   const json = JSON.parse(comparisonJSON(c, { version: '0.4.0' }));
   assert.equal(json.format, 'mavescape-comparison');
@@ -143,4 +146,71 @@ test('compare: the matched variants and the record as files', () => {
   assert.equal(json.matched.n, 30);
   assert.equal(json.report.status, 'ok');
   near(json.statistics.pearson.r, c.statistics.pearson.r);
+});
+
+test('compare: filters leave out low confidence, a large SE and few reads on either side, saying how many', () => {
+  const a = makeRun();
+  const b = makeRun({ id: 'run-b', table: 'b'.repeat(64), shift: 0.05 });
+  const all = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }));
+  const low = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }), { filters: { lowConfidence: true } });
+  const flagged = all.rows.filter(([i, j]) => all.values.a.flags[i] || all.values.b.flags[j]).length;
+  assert.equal(low.matched.compared, all.matched.n - flagged);
+  assert.equal(low.matched.filtered.lowConfidence, flagged);
+  assert.match(low.report.items.find((i) => i.id === 'filters').text, /of low confidence on either side/);
+  const se = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }), { filters: { maxSE: 0.2 } });
+  assert.ok(se.rows.every(([i, j]) => se.values.a.se[i] <= 0.2 && se.values.b.se[j] <= 0.2));
+  const reads = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }), { filters: { minReads: 20 } });
+  assert.ok(reads.rows.every(([i, j]) => reads.values.a.reads[i] >= 20 && reads.values.b.reads[j] >= 20) && reads.matched.filtered.reads > 0);
+  const none = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }), { filters: { maxSE: 0.01 } });
+  assert.equal(none.report.status, 'blocked');
+  assert.equal(none.statistics, null);
+});
+
+test('compare: discordance is tested for independent sides on one scale only; a position needs three variants', () => {
+  const a = makeRun();
+  const b = makeRun({ id: 'run-b', table: 'b'.repeat(64), shift: 0.05 });
+  const c = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }));
+  assert.equal(c.discordance.valid, true);
+  assert.equal(c.discordance.tested, 30);
+  c.rows.forEach(([i, j], k) => {
+    const z = (c.x[k] - c.y[k]) / Math.sqrt(c.values.a.se[i] ** 2 + c.values.b.se[j] ** 2);
+    near(c.discordance.z[k], z);
+  });
+  for (const x of c.positions.list) assert.equal(Number.isFinite(x.z), x.n >= MIN_POSITION_VARIANTS);
+  assert.equal(positionsCSV(c).trim().split('\n').length, c.positions.list.length + 1);
+  // Shared samples, one table twice, different scales: not tested, saying why.
+  const shared = makeRun({ replicates: [['r1', 's0', 's1'], ['r2', 's0', 's2']] });
+  assert.match(compareSides(side(shared, { replicate: 'r1' }), side(shared, { replicate: 'r2' })).discordance.reason, /Not independent/);
+  const twice = makeRun({ id: 'run-c' });
+  assert.equal(compareSides(side(a, { condition: 0 }), side(twice, { condition: 0 })).discordance.valid, false);
+  const published = makeRun({ id: 'run-p', model: 'published', table: 'p'.repeat(64) });
+  assert.match(compareSides(side(a, { condition: 0 }), side(published, { condition: 0 })).discordance.reason, /Not on one scale/);
+});
+
+test('compare: the maps of a comparison: each side as a condition, and the difference as a contrast', () => {
+  const a = makeRun({ sequence: 'A'.repeat(40) });
+  const b = makeRun({ id: 'run-b', table: 'b'.repeat(64), shift: 0.3 });
+  const sa = side(a, { condition: 0 });
+  const c = compareSides(sa, side(b, { condition: 0 }), { filters: { lowConfidence: true } });
+  const dm = differenceMap(c, sa);
+  const model = buildMapModel(dm.results, dm.design, { colorBy: 'differential', contrast: 0 });
+  assert.equal(model.colorBy, 'differential');
+  assert.equal(model.domain.center, 0);
+  const compared = new Map(c.rows.map(([i], k) => [i, c.x[k] - c.y[k]]));
+  let drawn = 0;
+  let filtered = 0;
+  for (let k = 0; k < model.cells.length; k += 1) {
+    const i = model.cells[k];
+    if (i < 0) continue;
+    if (compared.has(i)) {
+      near(model.value[k], compared.get(i));
+      drawn += 1;
+    } else if (model.state[k] === STATE.FILTERED) filtered += 1;
+  }
+  assert.equal(drawn, c.rows.length);
+  assert.ok(filtered > 0, 'the variants left out by the filter are drawn filtered');
+  const replicateMap = sideMap(side(a, { replicate: 'r2' }));
+  const rm = buildMapModel(replicateMap.results, replicateMap.design, { condition: 0 });
+  assert.equal(rm.condition.name, 'Replicate 2');
+  assert.equal(differenceMap(compareSides(sa, side(makeRun({ id: 'run-p', model: 'published', table: 'p'.repeat(64) }), { condition: 0 })), sa), null);
 });

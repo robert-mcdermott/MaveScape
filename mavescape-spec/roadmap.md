@@ -1737,10 +1737,52 @@ follow, and the wave ends with its examples, as waves 2 and 3 did.
      - **DHFR's two published score sets are on one scale in fact** (one study, one pipeline), but
        nothing in their records says so: they are compared by correlation only until slice 3 lets a
        person put two sets on one scale.
-2. **Comparison views across the map (C2).** Synchronized maps of the two sides, the difference
+2. **Comparison views across the map (C2): done.** Synchronized maps of the two sides, the difference
    map, the variants that disagree beyond their uncertainty (each difference's z from both SEs,
    where the two are independent), disagreement by position, and filters by confidence and depth.
    Exports of each.
+   - The Compare view has three tabs: Agreement, Maps and Disagreement.
+     - **Filters:** low confidence on either side, a maximum SE, a minimum of input reads. A side
+       without SEs or counts is not filtered on them, and the report says so.
+     - **Maps:** the two maps and the difference map (the comparison drawn as the map draws a
+       contrast), panned and zoomed as one. The map component tells others its view and takes
+       theirs, two stretches of one protein lined up on its coordinates. A variant clicked is
+       selected in each.
+     - **Disagreement:** each difference's z, p and q, valid for two independent sides on one
+       scale; the dispersion (median z² over its expected value); and the disagreement by
+       position, a position tested with 3 variants or more.
+   - Exports: `*_comparison.csv` with z, p and q; `*_comparison_positions.csv`; the three maps as
+     SVG; the report with the discordance and positions. Remote control's `compare` takes the
+     filters and the tab; `export` writes `comparison-positions` and `comparison-map`.
+   - The DHFR example's sixth step compares its conditions; two screenshot scenes
+     (`compare-maps`, `compare-disagreement`).
+   - Validation:
+     - `compare` (25 checks):
+       - the discordance and the positions of 600 variants equal R's (`pnorm`, `p.adjust`);
+       - in 20 simulated pairs with planted differences, 96% of planted variants found, 4% of
+         calls false, 57 of 60 planted positions; with nothing planted, dispersion about 1 and
+         none called;
+       - DHFR's discordance equal to Run 1's own differential z;
+       - the filters as this suite counts them;
+       - the difference map drawing every difference;
+       - GRB2's dispersion where QC finds variance beyond counting.
+     - `remote-session.mjs` 116 checks: the comparison with a filter, its positions and maps the
+       same bytes as Node's.
+     - Unit tests: `compare.test.mjs` 11 (the filters, when discordance is tested, a position's
+       three variants, the maps of a comparison).
+   - Found by slice 2:
+     - **Replicates differ far more than their counting SEs say.** GRB2's replicate differences are
+       8.2 times as variable as their SEs (the dispersion), so a test of each difference would call
+       479 of 1,109 discordant. The view reports the dispersion and warns above 1.5; QC's variance
+       beyond counting finds the same bottleneck.
+     - **DHFR's two conditions differ 2.8 times as much as their SEs say**, even with low
+       confidence left out. Run 1's own differential between them (the conditions as
+       independent, wave 3 slice 6) uses the same SEs, so its 377 calls are an upper bound too.
+       Comparing analysis choices is slice 4's work.
+     - **A position's test was one variant's when it had only one compared** (DHFR's V99 ranked
+       second): a position is now tested with 3 variants or more.
+     - **Clicking a map cell moved the keyboard focus away**, because the view was drawn again.
+       The maps now update their selection in place.
 3. **Other sources and scales (C1, C3).** A MaveDB score set compared with a local run without
    opening it into the workspace, another assay of the same protein, and a predictor (AlphaMissense,
    EVE or ESM1b, from the tracks' providers). Two assays rescaled onto one scale by their anchors

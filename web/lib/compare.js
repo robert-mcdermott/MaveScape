@@ -23,7 +23,11 @@
 import { agreementOf } from './agreement.js';
 import { mean as mergeMean, proteinView } from './collapse.js';
 import { replicateSamples } from './design.js';
-import { REPLICATE_STATE } from './filters.js';
+import { REPLICATE_STATE, STAGE_BY_ID } from './filters.js';
+import { adjustBH } from './distributions.js';
+import { normalUpper } from './dmath.js';
+import { MEDIAN_CHI2_1, median } from './stats.js';
+import { targetProtein } from './target.js';
 import { readoutOf } from './readout.js';
 import { unitOf } from './runs.js';
 import { RESCALINGS } from './score.js';
@@ -86,23 +90,37 @@ export function describeSide(ws, run, results, spec) {
 const urnsOf = (origin) => (origin?.database === 'MaveDB' ? origin.urns ?? (origin.urn ? [origin.urn] : []) : []);
 
 // A side's scores at a level ('protein' reads a nucleotide run at the protein level, merged as the
-// map merges them): { keys, original, kind, position, score, se, usable, flags }.
+// map merges them): { view (the results read), keys, original, kind, position, score, se, usable,
+// flags, reads }. reads: each variant's input reads (a condition's: the mean over its replicates
+// that used it, as the map's input count; NaN without counts, as published scores have none).
 function valuesOf(side, level) {
   const own = side.results;
   const view = level === 'protein' && own.variants.proKey ? proteinView(own) : own;
   const v = view.variants;
   const n = view.rows;
+  const base = { view, keys: v.key, original: v.original, kind: v.kind, position: v.position, proPosition: v.proPosition ?? null };
+  const readsOf = (reps) => Float64Array.from({ length: n }, (_, i) => {
+    let sum = 0;
+    let k = 0;
+    for (const r of reps) {
+      if (r.state[i] !== REPLICATE_STATE.USED || !r.first || !Number.isFinite(r.first[i])) continue;
+      sum += r.first[i];
+      k += 1;
+    }
+    return k ? sum / k : Number.NaN;
+  });
   if (side.kind === 'condition') {
     const c = view.conditions[side.condition];
     const usable = new Uint8Array(n);
     for (let i = 0; i < n; i += 1) usable[i] = !c.reason[i] && Number.isFinite(c.score[i]) ? 1 : 0;
-    return { keys: v.key, original: v.original, kind: v.kind, position: v.position, score: c.score, se: c.se, usable, flags: c.flags };
+    return { ...base, score: c.score, se: c.se, usable, flags: c.flags, reads: readsOf(view.replicates.filter((r) => c.replicates.includes(r.id))) };
   }
   const r = own.replicates.find((x) => x.id === side.spec.replicate);
   const used = (i) => r.state[i] === REPLICATE_STATE.USED && Number.isFinite(r.score[i]);
+  const reads = readsOf(view.replicates.filter((x) => x.id === r.id));
   if (view === own) {
     const usable = Uint8Array.from({ length: n }, (_, i) => (used(i) ? 1 : 0));
-    return { keys: v.key, original: v.original, kind: v.kind, position: v.position, score: r.score, se: r.se, usable, flags: new Uint8Array(n) };
+    return { ...base, score: r.score, se: r.se, usable, flags: new Uint8Array(n), reads };
   }
   // A replicate of a nucleotide run at the protein level: its scores merged as the conditions' are.
   const score = new Float64Array(n).fill(Number.NaN);
@@ -116,7 +134,7 @@ function valuesOf(side, level) {
     se[j] = merged.se;
     usable[j] = 1;
   });
-  return { keys: v.key, original: v.original, kind: v.kind, position: v.position, score, se, usable, flags: new Uint8Array(n) };
+  return { ...base, score, se, usable, flags: new Uint8Array(n), reads };
 }
 
 // --- Scales ---------------------------------------------------------------------------------------
@@ -167,7 +185,7 @@ function onReference(key, offset) {
 
 // The level and coordinates two sides are matched on, or why they cannot be:
 // { level, coordinates: 'target' | 'reference', offsets, problem, items }.
-function matchingOf(a, b) {
+function matchingOf(a, b, forceProtein = false) {
   const ta = a.target;
   const tb = b.target;
   const nucleotide = (s) => s.design.variants?.level !== 'protein';
@@ -191,7 +209,7 @@ function matchingOf(a, b) {
     }
   }
   let level;
-  if (coordinates === 'target' && nucleotide(a) && nucleotide(b)) {
+  if (coordinates === 'target' && nucleotide(a) && nucleotide(b) && !(forceProtein && protein(a) && protein(b))) {
     level = 'nucleotide';
     items.push({ id: 'level', status: 'ok', label: 'Level', text: 'Nucleotide variants, matched as written.' });
   } else if (protein(a) && protein(b)) {
@@ -256,10 +274,25 @@ function matchVariants(va, vb, coordinates, offsets) {
 const fmtCount = (n) => n.toLocaleString('en-US');
 const STATUS_RANK = { ok: 0, qualified: 1, blocked: 2 };
 
-// Compares side b with side a: { a, b, level, coordinates, report: { status, items }, flipped,
-// sameScale, matched: { n, onlyA, onlyB, notScoredA, notScoredB }, rows, keys, x, y, statistics,
-// withheld }. x: a's scores; y: b's as compared (negated when their directions are opposite).
-export function compareSides(a, b) {
+// The filters a comparison can apply to the variants scored on both sides (wave 4, slice 2): leave
+// out a variant of low confidence on either side, one whose SE on either side is above maxSE, or one
+// with fewer than minReads input reads on either side (a side with no SEs or no counts, as
+// published scores may be, is not filtered on them).
+export const NO_FILTERS = { lowConfidence: false, maxSE: null, minReads: null };
+const filtersOf = (f) => ({ ...NO_FILTERS, ...(f ?? {}) });
+export const filtersApplied = (f) => Boolean(f && (f.lowConfidence || Number.isFinite(f.maxSE) || Number.isFinite(f.minReads)));
+
+// Discordant: q below this (Benjamini–Hochberg over the variants tested).
+export const DISCORDANT_Q = 0.05;
+
+// Compares side b with side a. options: { filters, level: 'protein' (match at the protein level
+// whenever both sides can be read there, as the maps need) }. Returns { a, b, level, coordinates,
+// report: { status, items }, flipped, sameScale, matched: { n, onlyA, onlyB, notScoredA, notScoredB,
+// compared, filtered }, rows, keys, x, y, statistics, withheld, discordance, positions, values }.
+// rows, keys, x and y are the variants compared (after the filters); x: a's scores; y: b's as
+// compared (negated when their directions are opposite).
+export function compareSides(a, b, options = {}) {
+  const filters = filtersOf(options.filters);
   const items = [];
   const blocked = (id, label, text) => {
     items.push({ id, status: 'blocked', label, text });
@@ -267,20 +300,53 @@ export function compareSides(a, b) {
   };
   let level = null;
   let coordinates = null;
+  let offsets = [0, 0];
   let flipped = false;
   let sameScale = false;
   let matched = null;
   let rows = [];
   let keys = [];
+  let va = null;
+  let vb = null;
   const finish = () => {
-    const status = items.reduce((s, x) => (STATUS_RANK[x.status] > STATUS_RANK[s] ? x.status : s), 'ok');
-    const out = { a: summary(a), b: summary(b), level, coordinates, flipped, sameScale, report: { status, items }, matched, rows, keys, x: null, y: null, statistics: null, withheld: [] };
-    if (status === 'blocked') return out;
-    const va = valuesOf(a, level);
-    const vb = valuesOf(b, level);
-    out.x = Float64Array.from(rows, ([i]) => va.score[i]);
-    out.y = Float64Array.from(rows, ([, j]) => (flipped ? -vb.score[j] : vb.score[j]));
+    const statusOf = () => items.reduce((s, x) => (STATUS_RANK[x.status] > STATUS_RANK[s] ? x.status : s), 'ok');
+    const out = { a: summary(a), b: summary(b), level, coordinates, offsets, flipped, sameScale, filters, report: { status: statusOf(), items }, matched, rows: [], keys: [], x: null, y: null, statistics: null, withheld: [], discordance: null, positions: null };
+    if (out.report.status === 'blocked') return out;
     out.values = { a: va, b: vb };
+    out.matchedAll = rows;
+    // The filters.
+    const kept = [];
+    const dropped = { lowConfidence: 0, se: 0, reads: 0 };
+    rows.forEach(([i, j], k) => {
+      if (filters.lowConfidence && (va.flags[i] || vb.flags[j])) dropped.lowConfidence += 1;
+      else if (Number.isFinite(filters.maxSE) && (va.se[i] > filters.maxSE || vb.se[j] > filters.maxSE)) dropped.se += 1;
+      else if (Number.isFinite(filters.minReads) && (va.reads[i] < filters.minReads || vb.reads[j] < filters.minReads)) dropped.reads += 1;
+      else kept.push(k);
+    });
+    matched.compared = kept.length;
+    matched.filtered = dropped;
+    if (filtersApplied(filters)) {
+      const parts = [
+        dropped.lowConfidence ? `${fmtCount(dropped.lowConfidence)} of low confidence on either side` : '',
+        dropped.se ? `${fmtCount(dropped.se)} with an SE above ${filters.maxSE} on either side` : '',
+        dropped.reads ? `${fmtCount(dropped.reads)} with fewer than ${filters.minReads} input reads on either side` : '',
+      ].filter(Boolean);
+      const unfiltered = [
+        Number.isFinite(filters.maxSE) ? [a, b].filter((s, w) => ![va, vb][w].se.some((x) => Number.isFinite(x))).map((s) => `${s.label} gives no SEs`) : [],
+        Number.isFinite(filters.minReads) ? [a, b].filter((s, w) => ![va, vb][w].reads.some((x) => Number.isFinite(x))).map((s) => `${s.label} has no counts`) : [],
+      ].flat();
+      const text = `${parts.length ? `Left out: ${parts.join('; ')}.` : 'The filters leave out none of them.'} ${fmtCount(kept.length)} compared.${unfiltered.length ? ` ${unfiltered.join('; ')}: the filter applies to the other side only.` : ''}`;
+      if (kept.length < MIN_MATCHED) {
+        items.push({ id: 'filters', status: 'blocked', label: 'Filters', text: `${text} Too few to compare (${MIN_MATCHED} at least).` });
+        out.report.status = statusOf();
+        return out;
+      }
+      items.push({ id: 'filters', status: 'ok', label: 'Filters', text });
+    }
+    out.rows = kept.map((k) => rows[k]);
+    out.keys = kept.map((k) => keys[k]);
+    out.x = Float64Array.from(out.rows, ([i]) => va.score[i]);
+    out.y = Float64Array.from(out.rows, ([, j]) => (flipped ? -vb.score[j] : vb.score[j]));
     const stats = agreementOf(out.x, out.y);
     if (!sameScale) {
       out.withheld = ['concordance', 'blandAltman'];
@@ -288,18 +354,23 @@ export function compareSides(a, b) {
       stats.blandAltman = null;
     }
     out.statistics = stats;
+    out.discordance = discordanceOf(out, items);
+    if (!out.discordance.valid) out.withheld.push('discordance');
+    out.positions = positionsOf(out, a);
+    if (!out.positions.valid) out.withheld.push('positions');
+    out.report.status = statusOf();
     return out;
   };
 
   if (sameSpec(a.spec, b.spec)) return blocked('sides', 'Sides', `${a.label} is compared with itself.`);
-  const m = matchingOf(a, b);
+  const m = matchingOf(a, b, options.level === 'protein');
   if (m.problem) return blocked('target', 'Target', m.problem);
-  ({ level, coordinates } = m);
+  ({ level, coordinates, offsets } = m);
   items.push(...m.items);
 
   // The variants matched.
-  const va = valuesOf(a, level);
-  const vb = valuesOf(b, level);
+  va = valuesOf(a, level);
+  vb = valuesOf(b, level);
   const found = matchVariants(va, vb, coordinates, m.offsets);
   rows = found.rows;
   keys = found.keys;
@@ -369,31 +440,187 @@ export function compareSides(a, b) {
 
 const summary = (s) => ({ label: s.label, run: s.run, kind: s.kind, name: s.name, condition: s.condition, ...(s.kind === 'replicate' ? { replicate: s.spec.replicate } : {}) });
 
+// --- Disagreement (wave 4, slice 2) ---------------------------------------------------------------
+
+// The variants that disagree beyond their uncertainty: each difference's z = (x − y)/√(SE_a² + SE_b²),
+// its two-sided normal p, and q by Benjamini–Hochberg over the variants with both SEs; discordant
+// where q < DISCORDANT_Q. Valid only on one scale and for independent sides: the SE of a difference
+// from both SEs assumes their errors independent (a shared sample's cancels from the difference;
+// one table scored twice has one error). dispersion: median(z²)/median(χ²₁), about 1 when the SEs
+// describe how far the two differ, above 1 when they differ more than their SEs say.
+function discordanceOf(c, items) {
+  const n = c.rows.length;
+  const empty = { valid: false, reason: '', z: null, p: null, q: null, tested: 0, discordant: 0, dispersion: Number.NaN };
+  const independence = items.find((i) => i.id === 'independence');
+  if (!c.sameScale) return { ...empty, reason: 'Not on one scale: a difference between the two has no meaning until they are.' };
+  if (independence?.status !== 'ok') return { ...empty, reason: `Not independent (${independence?.text ?? 'see the report'}): the SE of a difference from both SEs assumes independent errors.` };
+  const { a: va, b: vb } = c.values;
+  const z = new Float64Array(n).fill(Number.NaN);
+  const p = new Float64Array(n).fill(Number.NaN);
+  const z2 = [];
+  c.rows.forEach(([i, j], k) => {
+    const se = Math.sqrt(va.se[i] * va.se[i] + vb.se[j] * vb.se[j]);
+    if (!(se > 0)) return;
+    z[k] = (c.x[k] - c.y[k]) / se;
+    p[k] = 2 * normalUpper(Math.abs(z[k]));
+    z2.push(z[k] * z[k]);
+  });
+  if (!z2.length) return { ...empty, reason: 'No variant has an SE on both sides.' };
+  const q = adjustBH(p);
+  let discordant = 0;
+  for (let k = 0; k < n; k += 1) if (q[k] < DISCORDANT_Q) discordant += 1;
+  return { valid: true, reason: '', z, p, q, tested: z2.length, discordant, dispersion: median(z2) / MEDIAN_CHI2_1 };
+}
+
+// A position's own test needs this many variants compared there: with fewer, its z would be one
+// variant's.
+export const MIN_POSITION_VARIANTS = 3;
+
+// Disagreement by position: the variants compared at each position of the first side's target (a
+// nucleotide run's, by the protein position each changes), their mean difference and its root mean
+// square, those discordant, and the position's z = Σ(x − y)/√Σ(SE_a² + SE_b²) (at least
+// MIN_POSITION_VARIANTS compared), with p and q over the positions tested. Valid on one scale; z, p
+// and q where discordance is.
+function positionsOf(c, a) {
+  if (!c.sameScale) return { valid: false, reason: 'Not on one scale.', list: [] };
+  const { a: va, b: vb } = c.values;
+  const where = c.level === 'protein' ? va.position : va.proPosition;
+  if (!where) return { valid: false, reason: 'Nucleotide variants with no protein position.', list: [] };
+  const protein = a.target ? targetProtein(a.target) : '';
+  const offset = c.coordinates === 'reference' ? c.offsets[0] : (a.target?.offset ?? 0);
+  const byPosition = new Map();
+  c.rows.forEach(([i, j], k) => {
+    const pos = where[i];
+    if (!(pos >= 1)) return;
+    if (!byPosition.has(pos)) byPosition.set(pos, []);
+    byPosition.get(pos).push([k, i, j]);
+  });
+  const d = c.discordance;
+  const list = [...byPosition.keys()].sort((x, y) => x - y).map((pos) => {
+    const members = byPosition.get(pos);
+    let sum = 0;
+    let squares = 0;
+    let variance = 0;
+    let discordant = 0;
+    for (const [k, i, j] of members) {
+      const diff = c.x[k] - c.y[k];
+      sum += diff;
+      squares += diff * diff;
+      variance += va.se[i] * va.se[i] + vb.se[j] * vb.se[j];
+      if (d.valid && d.q[k] < DISCORDANT_Q) discordant += 1;
+    }
+    const z = d.valid && variance > 0 && members.length >= MIN_POSITION_VARIANTS ? sum / Math.sqrt(variance) : Number.NaN;
+    return { position: pos, reference: pos + offset, residue: protein[pos - 1] ?? '', n: members.length, mean: sum / members.length, rms: Math.sqrt(squares / members.length), discordant, z, p: Number.isFinite(z) ? 2 * normalUpper(Math.abs(z)) : Number.NaN };
+  });
+  const q = adjustBH(Float64Array.from(list, (x) => x.p));
+  list.forEach((x, k) => { x.q = q[k]; });
+  return { valid: true, reason: '', list };
+}
+
+// --- Maps (wave 4, slice 2) -----------------------------------------------------------------------
+
+const MEASURED = STAGE_BY_ID.get('measured').code;
+
+// A side as the map reads it: { results, design, condition } for buildMapModel (map-model.js), its
+// condition the side's scores (a replicate's as a condition of its own), at the protein level.
+// null when the side cannot be drawn (nucleotide variants of a target with no coding sequence).
+export function sideMap(side) {
+  if (side.design.variants?.level !== 'protein' && !side.results.variants.proKey) return null;
+  const v = valuesOf(side, 'protein');
+  if (side.kind === 'condition') return { results: v.view, design: side.design, condition: side.condition };
+  const n = v.keys.length;
+  const r = side.results.replicates.find((x) => x.id === side.spec.replicate);
+  const condition = {
+    id: r.id, name: r.name ?? r.id, replicates: [r.id], score: v.score, se: v.se, k: v.usable,
+    reason: Uint8Array.from(v.usable, (u) => (u ? 0 : MEASURED)), flags: new Uint8Array(n), rescale: null,
+  };
+  return { results: { ...v.view, conditions: [condition] }, design: side.design, condition: 0 };
+}
+
+// The difference of a comparison as the map reads a contrast (the first side − the second, on the
+// first side's target): { results, design, contrast: 0 } for buildMapModel with colorBy
+// 'differential'. Compared variants have their difference, SE (where both have one) and q; a
+// variant scored on the first side only, or left out by the filters, has none (drawn filtered); one
+// the first side did not score is missing. c: a comparison at the protein level.
+export function differenceMap(c, a) {
+  if (!c.statistics || c.level !== 'protein' || !c.sameScale) return null;
+  const { a: va, b: vb } = c.values;
+  const view = va.view;
+  const n = view.rows;
+  const nan = () => new Float64Array(n).fill(Number.NaN);
+  const delta = nan();
+  const se = nan();
+  const q = nan();
+  const z = nan();
+  const p = nan();
+  const reason = new Uint8Array(n).fill(1);
+  const reasonA = Uint8Array.from(va.usable, (u) => (u ? 0 : MEASURED));
+  const reasonB = new Uint8Array(n).fill(MEASURED);
+  const flagsB = new Uint8Array(n);
+  for (const [i, j] of matchedPairs(c)) {
+    reasonB[i] = vb.usable[j] ? 0 : MEASURED;
+    flagsB[i] = vb.flags[j];
+  }
+  c.rows.forEach(([i, j], k) => {
+    delta[i] = c.x[k] - c.y[k];
+    se[i] = Math.sqrt(va.se[i] * va.se[i] + vb.se[j] * vb.se[j]);
+    reason[i] = 0;
+    if (c.discordance?.valid) {
+      z[i] = c.discordance.z[k];
+      p[i] = c.discordance.p[k];
+      q[i] = c.discordance.q[k];
+    }
+  });
+  const first = { id: 'first', name: c.a.label, replicates: [], score: va.score, se: va.se, k: va.usable, reason: reasonA, flags: va.flags };
+  const second = { id: 'second', name: c.b.label, replicates: [], score: nan(), se: nan(), k: new Uint8Array(n), reason: reasonB, flags: flagsB };
+  const contrast = { id: 'comparison', name: `${c.a.label} vs ${c.b.label}`, reference: 'second', condition: 'first', method: 'comparison', delta, se, z, p, q, reason, k: new Uint8Array(n).fill(1), pairs: [], unpaired: [] };
+  return { results: { ...view, controls: { ...view.controls, wt: -1 }, replicates: [], conditions: [second, first], differential: [contrast] }, design: a.design, contrast: 0 };
+}
+
+// Every variant matched (before the filters), as [first row, second row], kept for the maps.
+function matchedPairs(c) {
+  return c.matchedAll ?? c.rows;
+}
+
 // --- Exports --------------------------------------------------------------------------------------
 
 const num = (x) => (Number.isFinite(x) ? String(x) : 'NA');
 const cell = (s) => (/[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s);
 
-// The matched variants (comparison.csv): the variant (on the reference's coordinates when matched
-// there), as each side names it, its class, each side's score and SE as scored, and the difference
-// and mean as compared (the second side negated when the directions are opposite).
+// The variants compared (comparison.csv): the variant (on the reference's coordinates when matched
+// there), as each side names it, its class, each side's score and SE as scored, the difference and
+// mean as compared (the second side negated when the directions are opposite), and the difference's
+// z, p and q where the two are independent and on one scale (NA otherwise).
 export function comparisonCSV(c) {
-  const lines = ['variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean'];
+  const lines = ['variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean,z,p,q'];
   if (!c.statistics) return `${lines[0]}\n`;
   const { a: va, b: vb } = c.values;
+  const d = c.discordance?.valid ? c.discordance : null;
   c.rows.forEach(([i, j], k) => {
     const x = c.x[k];
     const y = c.y[k];
-    lines.push([cell(c.keys[k]), cell(va.keys[i]), cell(vb.keys[j]), KIND_NAMES[va.kind[i]], num(va.score[i]), num(va.se[i]), num(vb.score[j]), num(vb.se[j]), num(x - y), num((x + y) / 2)].join(','));
+    lines.push([cell(c.keys[k]), cell(va.keys[i]), cell(vb.keys[j]), KIND_NAMES[va.kind[i]], num(va.score[i]), num(va.se[i]), num(vb.score[j]), num(vb.se[j]), num(x - y), num((x + y) / 2), num(d?.z[k]), num(d?.p[k]), num(d?.q[k])].join(','));
   });
   return `${lines.join('\n')}\n`;
 }
 
+// Disagreement by position (comparison_positions.csv): each position of the first side's target with
+// variants compared, its reference position (with the offset), residue, the variants compared, their
+// mean and root-mean-square difference, those discordant, and the position's z, p and q.
+export function positionsCSV(c) {
+  const lines = ['position,reference_position,residue,variants,mean_difference,rms_difference,discordant,z,p,q'];
+  for (const x of c.positions?.list ?? []) lines.push([x.position, x.reference, x.residue, x.n, num(x.mean), num(x.rms), x.discordant, num(x.z), num(x.p), num(x.q)].join(','));
+  return `${lines.join('\n')}\n`;
+}
+
 // The comparison's record (comparison.json): the two sides (each run's id and output hash), how they
-// were matched, the report, the counts and the statistics, with what was withheld.
+// were matched and filtered, the report, the counts and the statistics, the discordant variants and
+// the disagreement by position, with what was withheld.
 export function comparisonJSON(c, software = null) {
   const side = (s) => ({ label: s.label, run: s.run.id, runName: s.run.name, output: s.run.sha256, ...(s.kind === 'replicate' ? { replicate: s.replicate } : { condition: s.name }) });
   const clean = (o) => JSON.parse(JSON.stringify(o, (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? null : v)));
+  const d = c.discordance;
+  const discordant = d?.valid ? c.rows.map((_, k) => k).filter((k) => d.q[k] < DISCORDANT_Q).sort((x, y) => d.q[x] - d.q[y] || Math.abs(d.z[y]) - Math.abs(d.z[x])).map((k) => ({ variant: c.keys[k], difference: c.x[k] - c.y[k], z: d.z[k], q: d.q[k] })) : [];
   return `${JSON.stringify(clean({
     format: 'mavescape-comparison',
     version: 1,
@@ -404,9 +631,12 @@ export function comparisonJSON(c, software = null) {
     coordinates: c.coordinates,
     bNegated: c.flipped,
     sameScale: c.sameScale,
+    filters: c.filters,
     report: c.report,
     matched: c.matched,
     statistics: c.statistics,
+    discordance: d ? { valid: d.valid, reason: d.reason || null, tested: d.tested, discordant: d.discordant, dispersion: d.dispersion, q: DISCORDANT_Q, variants: discordant } : null,
+    positions: c.positions ? { valid: c.positions.valid, reason: c.positions.reason || null, list: c.positions.list } : null,
     withheld: c.withheld,
   }), null, 2)}\n`;
 }

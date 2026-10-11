@@ -33,7 +33,7 @@ import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { tracksCSV } from '../web/lib/tracks.js';
 import { openExampleInNode } from './example-cases.mjs';
-import { compareSides, comparisonCSV, comparisonJSON, describeSide } from '../web/lib/compare.js';
+import { compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -300,12 +300,28 @@ try {
   check('compare: Run 1 against Run 2 (the Enrich2 preset): one table scored twice, qualified, on one scale', runsCompare.data.report.items.find((i) => i.id === 'independence').text, runsCompare.data.report.status === 'qualified' && runsCompare.data.sameScale === true && runsCompare.data.statistics.concordance !== null);
   const scalesCompare = await act('compare', { a: 'Run 1', b: 'Run 3' });
   const scalesNode = nodeCompare([0, { run: nodeRuns[0].run.id, condition: 0 }], [2, { run: nodeRuns[2].run.id, condition: 0 }]);
-  check('compare: Run 1 against Run 3 (DiMSum\'s fitness): two scales, so Lin\'s concordance and Bland–Altman withheld, saying why', scalesCompare.data.report.items.find((i) => i.id === 'scale').text, scalesCompare.data.sameScale === false && scalesCompare.data.withheld.join() === 'concordance,blandAltman' && JSON.stringify(scalesCompare.data) === withoutSoftware(comparisonJSON(scalesNode)));
+  check('compare: Run 1 against Run 3 (DiMSum\'s fitness): two scales, so Lin\'s concordance, Bland–Altman, discordance and disagreement by position withheld, saying why', scalesCompare.data.report.items.find((i) => i.id === 'scale').text, scalesCompare.data.sameScale === false && scalesCompare.data.withheld.join() === 'concordance,blandAltman,discordance,positions' && JSON.stringify(scalesCompare.data) === withoutSoftware(comparisonJSON(scalesNode)));
   await act('export', { what: 'comparison', path: join(out, 'comparison.csv') });
   await act('export', { what: 'comparison', path: join(out, 'comparison.json') });
   const comparedCSV = readFileSync(join(out, 'comparison.csv'), 'utf8');
   const comparedJSON = readFileSync(join(out, 'comparison.json'), 'utf8');
   check('export comparison: the matched variants (CSV) and the report and statistics (JSON) of the comparison shown, as Node writes them', `${comparedCSV.split('\n').length - 2} variants; ${JSON.parse(comparedJSON).a.label} and ${JSON.parse(comparedJSON).b.label}`, comparedCSV === comparisonCSV(scalesNode) && withoutSoftware(comparedJSON) === withoutSoftware(comparisonJSON(scalesNode)) && JSON.parse(comparedJSON).software?.version === connection.version);
+  // Slice 2: a filter, the discordant variants and the disagreement by position, and the maps.
+  const rep1 = describeSide(archive.ws, nodeRuns[0].run, nodeRuns[0].results, { run: nodeRuns[0].run.id, replicate: reps[0] });
+  const rep2 = describeSide(archive.ws, nodeRuns[0].run, nodeRuns[0].results, { run: nodeRuns[0].run.id, replicate: reps[1] });
+  const filteredCompare = await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2', max_se: 0.3 });
+  const filteredNode = compareSides(rep1, rep2, { filters: { lowConfidence: false, maxSE: 0.3, minReads: null } });
+  check('compare with a filter (SE at most 0.3): the variants left out, the discordant variants and the disagreement by position, as Node gives them', filteredCompare.message.slice(0, 220), JSON.stringify(filteredCompare.data) === withoutSoftware(comparisonJSON(filteredNode)) && filteredCompare.data.matched.filtered.se > 0 && filteredCompare.data.discordance.valid && filteredCompare.data.positions.list.length > 40);
+  await act('export', { what: 'comparison-positions', path: join(out, 'comparison_positions.csv') });
+  await act('export', { what: 'comparison-map', path: join(out, 'comparison_difference.svg') });
+  await act('export', { what: 'comparison-map', map: 'second', path: join(out, 'comparison_second.svg') });
+  const palette = (await browser.eval('window.mavescape.mapView?.palette ?? null')) ?? 'rdbu';
+  const diffNode = differenceMap(filteredNode, rep1);
+  const diffSVG = mapSVG(buildMapModel(diffNode.results, diffNode.design, { colorBy: 'differential', contrast: 0 }), { palette, results: diffNode.results });
+  const secondNode = sideMap(rep2);
+  const secondSVG = mapSVG(buildMapModel(secondNode.results, secondNode.design, { condition: secondNode.condition }), { palette, results: secondNode.results });
+  check('export comparison-positions and comparison-map (the difference, and the second side\'s): the same bytes as Node\'s', `${readFileSync(join(out, 'comparison_positions.csv'), 'utf8').split('\n').length - 2} positions; maps ${readFileSync(join(out, 'comparison_difference.svg'), 'utf8').length} and ${readFileSync(join(out, 'comparison_second.svg'), 'utf8').length} bytes`, readFileSync(join(out, 'comparison_positions.csv'), 'utf8') === positionsCSV(filteredNode) && readFileSync(join(out, 'comparison_difference.svg'), 'utf8') === diffSVG && readFileSync(join(out, 'comparison_second.svg'), 'utf8') === secondSVG);
+  await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2', max_se: null });
   const noSide = await send('compare', { a: 'Run 9' });
   check('compare with a side that does not exist: refused, listing the sides', noSide.message, !noSide.ok && /No side "Run 9"/.test(noSide.message) && /Run 1: Replicate 2/.test(noSide.message));
 

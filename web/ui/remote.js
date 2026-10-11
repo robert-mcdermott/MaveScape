@@ -41,7 +41,7 @@ import { retrievalText } from '../lib/uniprot.js';
 import { addFileTrack, addPublicTrack, arrangeTrack, removeTrack, runTrackState } from './tracks.js';
 import { annotationsOf, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
 import { comparisonJSON, sideOptions } from '../lib/compare.js';
-import { comparisonFiles, computeComparison, currentPair, setPair } from './mode-compare.js';
+import { comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, setFilters, setPair } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 
 export class ActionError extends Error {}
@@ -896,36 +896,62 @@ export function installRemote(app) {
       const kept = currentPair(app);
       const pair = { a: args.a ? side(args.a) : kept?.a, b: args.b ? side(args.b) : kept?.b };
       if (!pair.a || !pair.b) throw new ActionError(`Give the two sides, a and b: ${labels.join(', ')}.`);
+      // Filters by confidence and depth (wave 4, slice 2): those given replace the comparison's; none
+      // given keeps them.
+      const given = ['low_confidence', 'max_se', 'min_reads'].some((k) => args[k] !== undefined);
+      const number = (x, what) => {
+        if (x === null || x === undefined || x === '') return null;
+        if (!Number.isFinite(Number(x)) || Number(x) < 0) throw new ActionError(`${what} is a number of 0 or more.`);
+        return Number(x);
+      };
+      const filters = given ? { lowConfidence: args.low_confidence === true, maxSE: number(args.max_se, 'max_se'), minReads: number(args.min_reads, 'min_reads') } : currentFilters(app);
+      if (given) setFilters(app, filters);
+      if (args.show !== undefined) app.compareTab = choose(args.show, ['agreement', 'maps', 'disagreement'], 'tab');
       setPair(app, pair);
       await app.setMode('compare');
-      const c = await computeComparison(app, pair);
+      const c = await computeComparison(app, pair, filters);
       if (c.error) throw new ActionError(c.error);
       await settle();
       const s = c.statistics;
       const f = (x) => (Number.isFinite(x) ? x.toFixed(3) : '—');
       const iv = (e, lo, hi) => `${f(e)} (${f(lo)} to ${f(hi)})`;
       const flagged = c.report.items.filter((i) => i.status !== 'ok');
+      const d = c.discordance;
+      const discordance = d?.valid ? ` ${d.discordant} of ${d.tested} differ beyond their uncertainty (q < 0.05); the differences are ${f(d.dispersion)} times as variable as the SEs say.` : '';
       const message = s
-        ? `${c.a.label} and ${c.b.label}: ${c.matched.n} variants scored on both sides. Pearson's r ${iv(s.pearson.r, s.pearson.low, s.pearson.high)}, Spearman's ρ ${iv(s.spearman.rho, s.spearman.low, s.spearman.high)}${s.concordance ? `, Lin's concordance ${iv(s.concordance.ccc, s.concordance.low, s.concordance.high)}, bias ${f(s.blandAltman.bias)} with limits of agreement ${f(s.blandAltman.lower)} to ${f(s.blandAltman.upper)}` : '; Lin\'s concordance and Bland–Altman withheld (not on one scale)'}.${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
+        ? `${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared${c.matched.compared !== c.matched.n ? ` of ${c.matched.n} scored on both sides` : ''}. Pearson's r ${iv(s.pearson.r, s.pearson.low, s.pearson.high)}, Spearman's ρ ${iv(s.spearman.rho, s.spearman.low, s.spearman.high)}${s.concordance ? `, Lin's concordance ${iv(s.concordance.ccc, s.concordance.low, s.concordance.high)}, bias ${f(s.blandAltman.bias)} with limits of agreement ${f(s.blandAltman.lower)} to ${f(s.blandAltman.upper)}` : '; Lin\'s concordance and Bland–Altman withheld (not on one scale)'}.${discordance}${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
         : `${c.a.label} and ${c.b.label} cannot be compared: ${flagged.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`;
       const { software, ...data } = JSON.parse(comparisonJSON(c));
       return { message, data };
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map'];
       const what = choose(args.what, kinds, 'export');
       let file;
-      // The comparison shown (wave 4, slice 1): its matched variants (CSV), or its report and
-      // statistics (a path ending in .json).
-      if (what === 'comparison') {
+      // The comparison shown (wave 4, slices 1–2): its variants compared (CSV), or its report and
+      // statistics (a path ending in .json); its disagreement by position (CSV); a map of it (SVG:
+      // map first, second or difference, the default).
+      if (what.startsWith('comparison')) {
         const pair = currentPair(app);
         if (!pair) throw new ActionError('There is nothing to compare: score a run first, then compare (the action compare).');
         const c = await computeComparison(app, pair);
         if (c.error) throw new ActionError(c.error);
+        if (!c.statistics) throw new ActionError(`${c.a.label} and ${c.b.label} cannot be compared: ${c.report.items.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`);
         const files = comparisonFiles(app, c);
+        if (what === 'comparison-positions') {
+          if (!c.positions?.valid) throw new ActionError(`No disagreement by position: ${c.positions?.reason}`);
+          return { file: files.positions.text, message: `The disagreement by position of ${c.a.label} and ${c.b.label}: ${c.positions.list.length} positions.` };
+        }
+        if (what === 'comparison-map') {
+          const which = choose(args.map ?? 'difference', ['first', 'second', 'difference'], 'map');
+          const cm = c.level === 'protein' ? c : await computeComparison(app, pair, currentFilters(app), 'protein');
+          const svg = cm.statistics ? comparisonMapSVG(app, cm, which) : null;
+          if (!svg) throw new ActionError(which === 'difference' ? `No difference map: ${c.sameScale ? 'the two cannot be drawn at the protein level' : 'the two are not on one scale'}.` : `No map of the ${which} side (nucleotide variants with no protein change to draw).`);
+          return { file: svg, message: `The ${which} map of the comparison of ${c.a.label} and ${c.b.label} (SVG).` };
+        }
         const json = /\.json$/i.test(args.path ?? '');
-        return { file: json ? files.json.text : files.csv.text, message: json ? `The comparison of ${c.a.label} and ${c.b.label}: its report and statistics.` : `The comparison of ${c.a.label} and ${c.b.label}: ${c.matched?.n ?? 0} variants scored on both sides.` };
+        return { file: json ? files.json.text : files.csv.text, message: json ? `The comparison of ${c.a.label} and ${c.b.label}: its report and statistics.` : `The comparison of ${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared.` };
       }
       // The analysis package (wave 2, slice 10): of a run when named, else of the current run, else
       // of the design with the default parameters.

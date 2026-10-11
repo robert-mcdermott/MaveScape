@@ -198,6 +198,7 @@ export const EXAMPLES = [
       'With MaveScape\'s defaults (weighted regression) the scores follow the published ones at r ≈ 0.90 without Lon and 0.96 with it; with the authors\' unweighted regression (ordinary least squares), r ≈ 0.96 and 0.98, on the same scale (the published scores are Enrich2\'s slopes over the whole 18 hours).',
       'Without Lon about twice as many substitutions grow faster than the wild type (a score above 0.2) as with it, as the paper found (736 and 384 published). The difference +Lon − −Lon is negative almost everywhere it is called, most at native hydrophobic residues (V, I, L, M, F, W, Y), as the paper found for the buried core.',
       'QC fails the variance beyond counting and the fit of the time courses, and reviews the time points used and the dropout: a variant below 2 × 10⁻⁵ of the reads was not reported at a time point, so the most depleted drop out and their slopes rest on the early time points, as the authors\' did.',
+      'Compared, −Lon and +Lon agree at r 0.52 over every variant both score, and 0.77 with low confidence left out: Run 1 scores many variants of few reads, which agree little. Of the 1,715 then compared, 201 differ beyond their uncertainty, 186 lower with Lon; the differences are 2.8 times as variable as their SEs say.',
     ],
     steps: [
       ['map', 'The map shows the difference +Lon − −Lon (Run 1): blue where Lon penalizes a substitution. Click a dark blue cell: the inspector shows the variant\'s time courses in its sub-library\'s three replicates, its score in each condition, and the difference with its interval and q.'],
@@ -205,6 +206,7 @@ export const EXAMPLES = [
       ['qc', 'In QC, read "Missing after selection" and "Fit of the time courses": counts below the reporting frequency are missing, not zero, so depleted variants are fitted on their early time points.'],
       ['score', 'In Score, choose ordinary least squares (the authors\' unweighted regression) and score again: compare the runs with the published scores in the inspector.'],
       ['map', 'Color the map by each condition\'s scores, or open the published runs: the substitutions that grow faster than the wild type without Lon (red) mostly lose that advantage with it.'],
+      ['compare', 'In Compare, choose Run 1: −Lon and Run 1: +Lon and leave out low confidence: they agree at r 0.77. Under Disagreement, 201 of 1,715 variants differ beyond their uncertainty, 186 of them lower with Lon, most at W47, W30 and P126; the differences are 2.8 times as variable as their SEs say, so read those counts as an upper bound. Under Maps, the difference beside the two maps.'],
     ],
   },
   {

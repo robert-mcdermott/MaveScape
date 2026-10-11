@@ -131,9 +131,13 @@ var remoteActions = []remoteAction{
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
 	})},
-	{Name: "compare", Description: "Compares two sets of scores of the workspace, as the Compare view does: each side a run's condition (its combined scores) or one of its replicates, of one run or two (a rescoring, or a MaveDB record's published scores against its counts scored again). Returns the compatibility report first (targets and coordinates, the level, the variants matched and those on one side only, the directions and scales, whether the two are independent; each item ok, qualified or blocked), then the agreement of the variants scored on both sides: Pearson's r and Spearman's rho, Lin's concordance and Bland–Altman's bias and limits of agreement (the last two only on one scale), each with its 95% interval. Shows the Compare view; export with what comparison writes the matched variants or (a .json path) the report and statistics.", InputSchema: schema(map[string]any{
-		"a": textArg("The first side, by name: \"Run 1\", \"Run 1: Replicate 2\", \"Run 1: +Lon\", \"Published scores\". The pair shown, or a default (a run against the published scores, two replicates, two conditions, the last two runs), if not given."),
-		"b": textArg("The second side, by name."),
+	{Name: "compare", Description: "Compares two sets of scores of the workspace, as the Compare view does: each side a run's condition (its combined scores) or one of its replicates, of one run or two (a rescoring, or a MaveDB record's published scores against its counts scored again). Returns the compatibility report first (targets and coordinates, the level, the variants matched and those on one side only, the directions and scales, whether the two are independent; each item ok, qualified or blocked), then the agreement of the variants compared: Pearson's r and Spearman's rho, Lin's concordance and Bland–Altman's bias and limits of agreement (the last two only on one scale), each with its 95% interval; and, for two independent sides on one scale, the variants that differ beyond their uncertainty (each difference's z from both SEs, q by Benjamini–Hochberg) and the disagreement by position. Filters leave out variants of low confidence, large SE or few reads. Shows the Compare view; export with what comparison writes the variants compared or (a .json path) the report and statistics, comparison-positions the disagreement by position, comparison-map a map (SVG).", InputSchema: schema(map[string]any{
+		"a":              textArg("The first side, by name: \"Run 1\", \"Run 1: Replicate 2\", \"Run 1: +Lon\", \"Published scores\". The pair shown, or a default (a run against the published scores, two replicates, two conditions, the last two runs), if not given."),
+		"b":              textArg("The second side, by name."),
+		"low_confidence": flagArg("Leave out the variants of low confidence on either side (true); those given replace the comparison's filters, none given keeps them."),
+		"max_se":         map[string]any{"type": "number", "minimum": 0, "description": "Leave out the variants whose SE on either side is above this."},
+		"min_reads":      map[string]any{"type": "number", "minimum": 0, "description": "Leave out the variants with fewer input reads than this on either side."},
+		"show":           textArg("The tab shown: agreement (the scatter plot and statistics), maps (the two maps and their difference) or disagreement (the discordant variants and the positions)."),
 	}), long: true},
 	{Name: "list_tracks", Description: "The sequence tracks beside a run's map, in order: the run's own (reference, coverage, position effect, uncertainty) and the workspace's annotations' (UniProt features, conservation, AlphaMissense, ClinVar, gnomAD, MaveDB's annotations, an alignment, a predictor, a custom track), each with its source (service, release, retrieval date), whether it is shown, its filter and the filters it offers, and what it holds; the annotations that could not be read; and what can be added.", InputSchema: schema(map[string]any{
 		"run":       runArg,
@@ -156,13 +160,14 @@ var remoteActions = []remoteAction{
 		"annotation": textArg("The annotation by id or name (list_tracks)."),
 	}, "annotation")},
 	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), or the comparison shown (its matched variants, CSV; its report and statistics, JSON). Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb or comparison (the variants of the comparison shown, or its report and statistics to a .json path)."),
+		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position) or comparison-map (a map of it, SVG: map first, second or difference)."),
 		"path":           textArg("The absolute path of the file to write."),
 		"overwrite":      flagArg("Replace the file if it exists."),
 		"run":            runArg,
 		"condition":      conditionArg,
 		"include_tables": flagArg("archive: include the count tables (the default), or name each by its SHA-256 only."),
 		"selection":      textArg("selection: a saved selection by name; the current selection if not given."),
+		"map":            textArg("comparison-map: first, second or difference (the default)."),
 	}, "what", "path"), long: true, output: true},
 }
 

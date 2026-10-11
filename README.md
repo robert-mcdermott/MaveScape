@@ -52,9 +52,10 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > MaveDB record's published scores against its counts scored again) are compared in the Compare
 > view: a compatibility report first (targets and coordinates, the variants matched, directions,
 > scales, whether the two are independent), then Pearson, Spearman, Lin's concordance and
-> Bland–Altman with their 95% intervals, equal to R's. Next: the comparison across the map, other
-> assays and predictors on one scale, and which conclusions survive other reasonable analysis
-> choices.
+> Bland–Altman with their 95% intervals, equal to R's; the two maps and their difference, panned
+> and zoomed as one; the variants and positions that differ beyond their uncertainty; filters by
+> confidence and depth. Next: other assays and predictors on one scale, and which conclusions
+> survive other reasonable analysis choices.
 
 ## What is a MAVE?
 

@@ -69,7 +69,7 @@ import { addAnnotation } from '../web/lib/workspace.js';
 import { createHash } from 'node:crypto';
 import { proteinView } from '../web/lib/collapse.js';
 import { spearman } from '../web/lib/stats.js';
-import { tQuantile } from '../web/lib/distributions.js';
+import { adjustBH, tQuantile } from '../web/lib/distributions.js';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
 import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS, SCORING_VERSION, withDefaults } from '../web/lib/score.js';
@@ -97,8 +97,8 @@ import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLES, exampleById, simulatedExample } from '../web/lib/examples.js';
 import { depositPackages, exampleRoundTrip, mavedbHashes, roundTrip } from './mavedb-export-cases.mjs';
 import { agreementOf } from '../web/lib/agreement.js';
-import { compareSides, comparisonCSV, comparisonJSON, describeSide } from '../web/lib/compare.js';
-import { countsRun, coverage, exampleRun, movedRun, publishedRun, together } from './compare-cases.mjs';
+import { compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap } from '../web/lib/compare.js';
+import { countsRun, coverage, exampleRun, movedRun, plantedPair, publishedRun, syntheticPair, together } from './compare-cases.mjs';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 
 const args = process.argv.slice(2);
@@ -3031,7 +3031,7 @@ const suites = {
     // The direction stated the other way, the scores negated: compared negated.
     const flipped = movedRun(g, target, 0, { direction: 'higher-less', negate: true });
     const opposite = compareSides(side(ws2, g, { condition: 0 }), side({ sources: [...g.ws.sources, { sha256: flipped.run.inputs.source.sha256 }] }, flipped, { condition: 0 }));
-    check('compare', 'a run whose readout says a higher score means less of the function, its scores negated: compared negated (r 1), Lin\'s concordance and Bland–Altman withheld, saying why', `${opposite.report.items.find((i) => i.id === 'direction').text} r ${fmt(opposite.statistics?.pearson.r, 6)}; withheld ${opposite.withheld.join(', ')}`, opposite.flipped && Math.abs(opposite.statistics.pearson.r - 1) < 1e-12 && opposite.withheld.join() === 'concordance,blandAltman', 'negated; r 1; withheld');
+    check('compare', 'a run whose readout says a higher score means less of the function, its scores negated: compared negated (r 1); Lin\'s concordance, Bland–Altman, discordance and disagreement by position withheld (not on one scale), saying why', `${opposite.report.items.find((i) => i.id === 'direction').text} r ${fmt(opposite.statistics?.pearson.r, 6)}; withheld ${opposite.withheld.join(', ')}`, opposite.flipped && Math.abs(opposite.statistics.pearson.r - 1) < 1e-12 && opposite.withheld.join() === 'concordance,blandAltman,discordance,positions', 'negated; r 1; withheld');
     // The files.
     const csv = comparisonCSV(two).trim().split('\n');
     const json = JSON.parse(comparisonJSON(two, { version: 'validation' }));
@@ -3039,7 +3039,50 @@ const suites = {
       const f = line.split(',');
       return Math.abs(Number(f[8]) - (two.x[k] - two.y[k])) < 1e-12 && Math.abs(Number(f[4]) - two.x[k]) < 1e-12;
     });
-    check('compare', 'comparison.csv: a row per variant scored on both sides, each side\'s score and SE, the difference and mean; comparison.json: the two runs\' output hashes, the report, the counts and the statistics', `${csv.length - 1} rows; ${json.a.output.slice(0, 12)}… and ${json.b.output.slice(0, 12)}…; ${json.report.items.length} items; r ${fmt(json.statistics.pearson.r, 4)}`, csv[0] === 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean' && csv.length - 1 === two.matched.n && rowsOK && json.format === 'mavescape-comparison' && json.a.output === g.run.output.sha256 && json.statistics.pearson.r === two.statistics.pearson.r, 'all');
+    check('compare', 'comparison.csv: a row per variant compared, each side\'s score and SE, the difference and mean, and the difference\'s z, p and q; comparison.json: the two runs\' output hashes, the report, the counts and the statistics', `${csv.length - 1} rows; ${json.a.output.slice(0, 12)}… and ${json.b.output.slice(0, 12)}…; ${json.report.items.length} items; r ${fmt(json.statistics.pearson.r, 4)}`, csv[0] === 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean,z,p,q' && csv.length - 1 === two.matched.n && rowsOK && json.format === 'mavescape-comparison' && json.a.output === g.run.output.sha256 && json.statistics.pearson.r === two.statistics.pearson.r, 'all');
+
+    // Discordance and disagreement by position (wave 4, slice 2): against R on the reference's pair,
+    // then simulated pairs with planted differences.
+    const dref = reference.discordance;
+    const sideOf = (pair, which) => describeSide(pair.ws, pair[which].run, pair[which].results, { run: pair[which].run.id, condition: 0 });
+    const synth = syntheticPair({ x: dref.x, y: dref.y, sx: dref.sx, sy: dref.sy, position: dref.position });
+    const ds = compareSides(sideOf(synth, 'a'), sideOf(synth, 'b'));
+    const dpairs = [];
+    ds.rows.forEach(([i], k) => { for (const f of ['z', 'p', 'q']) dpairs.push([`variant ${i + 1} ${f}`, ds.discordance[f][k], dref[f][i]]); });
+    const refPositions = new Map(dref.positions.position.map((pos, k) => [pos, k]));
+    for (const x of ds.positions.list) for (const f of ['z', 'p', 'q', 'mean']) dpairs.push([`position ${x.position} ${f}`, x[f], dref.positions[f][refPositions.get(x.position)]]);
+    const dw = worstDifference(dpairs);
+    check('compare', `discordance (each difference's z from both SEs, its p and Benjamini–Hochberg's q) and disagreement by position (a position's z from the sum of its differences) of ${dref.x.length} variants at ${dref.positions.position.length} positions equal R's (pnorm, p.adjust)`, `${dpairs.length} numbers; largest relative difference ${dw.worst.toExponential(1)} (${dw.where}); ${ds.discordance.discordant} discordant (R: ${dref.q.filter((q) => q < 0.05).length}); positions ${ds.positions.list.filter((x) => x.q < 0.05).map((x) => x.position).join(', ')} (planted ${dref.plantedPositions.join(', ')})`, dw.worst <= 1e-10 && ds.positions.list.length === dref.positions.position.length, '≤ 1e-10');
+    let power = 0;
+    let plantedN = 0;
+    let fdp = 0;
+    let positionsFound = 0;
+    let falsePositions = 0;
+    let positionCalls = 0;
+    const repsPlanted = 20;
+    for (let r = 0; r < repsPlanted; r += 1) {
+      const data = plantedPair({ seed: 100 + r });
+      const pair = syntheticPair(data);
+      const c = compareSides(sideOf(pair, 'a'), sideOf(pair, 'b'));
+      const differing = new Set([...data.planted, ...Array.from(data.position, (pos, i) => (data.plantedPositions.includes(pos) ? i : -1)).filter((i) => i >= 0)]);
+      const calls = c.rows.filter((_, k) => c.discordance.q[k] < 0.05).map(([i]) => i);
+      power += data.planted.filter((i) => calls.includes(i)).length;
+      plantedN += data.planted.length;
+      fdp += calls.length ? calls.filter((i) => !differing.has(i)).length / calls.length : 0;
+      const strong = c.positions.list.filter((x) => x.q < 0.05).map((x) => x.position);
+      const truePositions = new Set([...data.plantedPositions, ...data.planted.map((i) => data.position[i])]);
+      positionsFound += data.plantedPositions.filter((pos) => strong.includes(pos)).length;
+      falsePositions += strong.filter((pos) => !truePositions.has(pos)).length;
+      positionCalls += strong.length;
+    }
+    const nulls = Array.from({ length: 10 }, (_, r) => {
+      const pair = syntheticPair(plantedPair({ seed: 500 + r, planted: 0, positions: [] }));
+      return compareSides(sideOf(pair, 'a'), sideOf(pair, 'b')).discordance;
+    });
+    check('compare', `discordant variants in ${repsPlanted} simulated pairs of 600 variants, 30 planted to differ by ±1.5 and 3 positions by 0.5: the planted found, the false discoveries about the 5% Benjamini–Hochberg allows, the planted positions found; and in 10 pairs with nothing planted, the differences as variable as the SEs say (dispersion about 1) and none discordant`, `${(power / plantedN * 100).toFixed(1)}% of planted variants found; mean false discovery proportion ${(fdp / repsPlanted * 100).toFixed(1)}%; ${positionsFound} of ${3 * repsPlanted} planted positions found, ${falsePositions} of ${positionCalls} positions called with no difference planted; with nothing planted, dispersion ${nulls.map((d) => d.dispersion.toFixed(2)).join(', ')}, ${nulls.reduce((a, d) => a + d.discordant, 0)} discordant`, power / plantedN >= 0.9 && fdp / repsPlanted <= 0.07 && positionsFound >= 55 && falsePositions / positionCalls <= 0.1 && nulls.every((d) => d.dispersion > 0.8 && d.dispersion < 1.25) && nulls.reduce((a, d) => a + d.discordant, 0) <= 2, 'power ≥ 90%; FDP ≤ 7%; ≥ 55 of 60; ≤ 10%; 0.8–1.25; ≤ 2');
+    // GRB2's replicates: their differences much wider than their counting SEs, as QC finds.
+    const excess = g.o.findings.find((f) => f.id === 'excess-variance');
+    check('compare', 'GRB2\'s replicates 1 and 2: their differences many times as variable as their SEs say (the dispersion), as QC\'s "variance beyond counting" finds (the Domainome\'s input bottleneck), so the view warns that more test as discordant than truly differ', `dispersion ${fmt(two.discordance.dispersion, 2)}; ${two.discordance.discordant} of ${two.discordance.tested} discordant; QC's variance beyond counting: ${excess?.status}`, two.discordance.dispersion > 4 && excess?.status === 'fail', 'dispersion > 4; QC fails');
 
     // The published examples, compared as their guides say (MaveDB's tables, external data).
     try {
@@ -3064,6 +3107,34 @@ const suites = {
       const on = conditions.keys.map((k, i) => (inPublished.has(k) ? i : -1)).filter((i) => i >= 0);
       const rOn = pearson(on.map((i) => conditions.x[i]), on.map((i) => conditions.y[i]));
       check('compare', 'DHFR\'s Run 1, −Lon against +Lon: no sample in common, one scale, every statistic; weaker than the published pair (r 0.81) because Run 1 also scores 626 variants of few reads, which agree little; on the published pair\'s variants alone, near it', `${conditions.report.status}; ${conditions.matched.n} matched, r ${fmt(conditions.statistics.pearson.r, 3)}, ρc ${fmt(conditions.statistics.concordance?.ccc, 3)}; on the ${on.length} the published scores share, r ${fmt(rOn, 3)}`, conditions.report.status === 'ok' && conditions.statistics.concordance && conditions.matched.n - on.length === 626 && rOn > conditions.statistics.pearson.r + 0.15, 'ok; 626 more');
+      // DHFR's two conditions (wave 4, slice 2): the comparison's z the run's own differential z
+      // (Enrich2's, independent), the filters, and the difference map.
+      const differential = d.results.differential[0];
+      let zWorst = 0;
+      conditions.rows.forEach(([i], k) => { zWorst = Math.max(zWorst, Math.abs(conditions.discordance.z[k] + differential.z[i])); });
+      const qOwn = adjustBH(Float64Array.from(conditions.rows, ([i]) => differential.p[i]));
+      let qWorst = 0;
+      conditions.rows.forEach((_, k) => { qWorst = Math.max(qWorst, Math.abs(qOwn[k] - conditions.discordance.q[k])); });
+      check('compare', 'DHFR\'s Run 1, −Lon against +Lon: each difference\'s z is the run\'s own differential z (the conditions as independent, Enrich2\'s), its sign the other way (first − second), and q its Benjamini–Hochberg over the variants compared', `${conditions.discordance.tested} variants; largest |z + z_run| ${zWorst.toExponential(1)}, |q − q_run| ${qWorst.toExponential(1)}; ${conditions.discordance.discordant} discordant`, zWorst <= 1e-12 && qWorst <= 1e-12 && conditions.discordance.discordant > 300, '≤ 1e-12');
+      const lessSure = conditions.rows.filter(([i, j]) => conditions.values.a.flags[i] || conditions.values.b.flags[j]).length;
+      const confident = compareSides(side(wd, d, { condition: 0 }), side(wd, d, { condition: 1 }), { filters: { lowConfidence: true } });
+      const deep = compareSides(side(wd, d, { condition: 0 }), side(wd, minus, { condition: 0 }), { filters: { minReads: 20 } });
+      check('compare', 'the filters: DHFR\'s −Lon against +Lon with low confidence left out on either side (as this suite counts it), r rising from 0.52 to above 0.75; a minimum of reads against published scores, which have no counts, applied to the run only, saying so', `${confident.matched.compared} compared (${conditions.matched.compared} − ${lessSure}), r ${fmt(confident.statistics.pearson.r, 3)}, ${confident.discordance.discordant} discordant; ${deep.report.items.find((i) => i.id === 'filters').text}`, confident.matched.compared === conditions.matched.compared - lessSure && confident.statistics.pearson.r > 0.75 && /has no counts: the filter applies to the other side only/.test(deep.report.items.find((i) => i.id === 'filters').text), 'as counted; > 0.75; said');
+      const dm = differenceMap(confident, side(wd, d, { condition: 0 }));
+      const model = buildMapModel(dm.results, dm.design, { colorBy: 'differential', contrast: 0 });
+      const compared = new Map(confident.rows.map(([i], k) => [i, confident.x[k] - confident.y[k]]));
+      let cellsOK = 0;
+      let cellsBad = 0;
+      let filteredOut = 0;
+      for (let k = 0; k < model.cells.length; k += 1) {
+        const i = model.cells[k];
+        if (i < 0) continue;
+        if (compared.has(i)) {
+          if ((model.state[k] === STATE.SCORED || model.state[k] === STATE.LOW || model.state[k] === STATE.REFERENCE) && Math.abs(model.value[k] - compared.get(i)) < 1e-12) cellsOK += 1;
+          else cellsBad += 1;
+        } else if (model.state[k] === STATE.FILTERED) filteredOut += 1;
+      }
+      check('compare', 'DHFR\'s difference map (low confidence left out): every variant compared drawn with its difference, those scored on one side only or left out by the filter drawn filtered, colored by the difference centered on 0', `${cellsOK} cells with their difference, ${cellsBad} not; ${filteredOut} filtered; colored by ${model.colorBy}, ${model.contrast.name}, domain ${fmt(model.domain.min, 2)} to ${fmt(model.domain.max, 2)}`, cellsBad === 0 && cellsOK > 1500 && filteredOut > 1000 && model.domain.center === 0, 'every one');
       const ring = exampleRun('brca1-ring');
       const rr = ring.results.replicates;
       const sharing = compareSides(side(ring.ws, ring, { replicate: rr[0].id }), side(ring.ws, ring, { replicate: rr[1].id }));

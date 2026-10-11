@@ -127,3 +127,57 @@ export function movedRun(base, target, shift, { direction = null, negate = false
   const run = { id: `run-moved-${table.slice(0, 8)}`, name: direction ? 'Stated the other way' : 'Moved', inputs: { ...base.run.inputs, design, source: { ...base.run.inputs.source, sha256: table } }, output: { sha256: `moved-${table.slice(0, 12)}`, conditions: [{ id: c.id, name: c.name, replicates: [] }], replicates: [] } };
   return { run, results };
 }
+
+// Two runs of independent tables on one protein target, on one scale, from scores and SEs given
+// per variant, each a substitution at its position (up to 20 at a position): { ws, a, b } with each
+// side as describeSide reads it. For the discordance tests (wave 4, slice 2).
+const ALTS = ['Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 'Ter'];
+export function syntheticPair({ x, y, sx, sy, position }) {
+  const seen = new Map();
+  const keys = Array.from(position, (p) => {
+    const k = seen.get(p) ?? 0;
+    seen.set(p, k + 1);
+    return `p.Ala${p}${ALTS[k]}`;
+  });
+  const length = Math.max(...position);
+  const design = { model: 'two-population', targets: [{ id: 't', name: 'Simulated', sequence: 'A'.repeat(length), sequenceType: 'protein', offset: 0, identifiers: {} }], variants: { level: 'protein', column: 'hgvs_pro' }, readout: { direction: 'higher-more' }, replicates: [] };
+  const run = (id, score, se) => {
+    const n = keys.length;
+    const results = {
+      rows: n,
+      variants: { key: keys, original: keys, kind: Uint8Array.from(keys, (k) => (k.endsWith('Ter') ? KIND.NONSENSE : KIND.MISSENSE)), position: Int32Array.from(position), status: new Uint8Array(n) },
+      replicates: [],
+      conditions: [{ id: 'all', name: 'All replicates', replicates: [], score: Float64Array.from(score), se: Float64Array.from(se), reason: new Uint8Array(n), flags: new Uint8Array(n) }],
+    };
+    const table = sha256(new TextEncoder().encode(`${id}|${score.length}|${score[0]}`));
+    return { run: { id, name: id === 'run-a' ? 'First' : 'Second', inputs: { design, parameters: { model: 'ratio', normalization: 'wt', rescale: 'none' }, source: { sha256: table } }, output: { sha256: `${id}-out`, conditions: [{ id: 'all', name: 'All replicates', replicates: [] }], replicates: [] } }, results };
+  };
+  const a = run('run-a', x, sx);
+  const b = run('run-b', y, sy);
+  const ws = { sources: [] };
+  return { ws, a, b };
+}
+
+// Simulated pairs with planted discordance: n variants at n/10 positions, truth ~ N(0, 1), each side
+// the truth with its own counting error (SEs from 0.1 to 0.3); `planted` variants differ by ±shift
+// and `positions` positions by positionShift. Returns { x, y, sx, sy, position, planted (indices),
+// plantedPositions }.
+export function plantedPair({ seed, n = 600, planted = 30, shift = 1.5, positions = [12, 31, 47], positionShift = 0.5 }) {
+  const random = createRandom(seed);
+  const position = Int32Array.from({ length: n }, (_, i) => Math.floor(i / 10) + 1);
+  const sx = Float64Array.from({ length: n }, () => 0.1 + 0.2 * random());
+  const sy = Float64Array.from({ length: n }, () => 0.1 + 0.2 * random());
+  const delta = new Float64Array(n);
+  const chosen = new Set();
+  while (chosen.size < planted) chosen.add(random.int(n));
+  for (const i of chosen) delta[i] = random() < 0.5 ? -shift : shift;
+  for (let i = 0; i < n; i += 1) if (positions.includes(position[i])) delta[i] += positionShift;
+  const x = new Float64Array(n);
+  const y = new Float64Array(n);
+  for (let i = 0; i < n; i += 1) {
+    const t = random.gaussian();
+    x[i] = t + sx[i] * random.gaussian();
+    y[i] = t + delta[i] + sy[i] * random.gaussian();
+  }
+  return { x, y, sx, sy, position, planted: [...chosen].sort((p, q) => p - q), plantedPositions: positions };
+}

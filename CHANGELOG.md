@@ -37,6 +37,32 @@ grows with each.
   - **Guides:** the BRCA1 saturation genome editing example's last step compares its counts,
     scored, with the published scores; the guide page *Comparisons*.
 
+- **Comparisons across the map (wave 4, slice 2; C2).** The Compare view has three tabs:
+  Agreement, Maps and Disagreement.
+  - **Filters**, by confidence and depth: leave out variants of low confidence on either side,
+    those with an SE above a maximum, or those with fewer input reads than a minimum. The report
+    says how many each filter left out. A side with no SEs or counts (published scores) is not
+    filtered on them, and the report says so.
+  - **Maps:** the first side's map, the second's, and the map of their difference (first − second,
+    for two sides on one scale), panned and zoomed as one (two stretches of one protein lined up
+    on its coordinates). A variant clicked is selected in each. Each exports as SVG.
+  - **Disagreement:**
+    - the variants that differ beyond their uncertainty: each difference's z from both SEs, and q
+      by Benjamini–Hochberg, for two independent sides on one scale;
+    - the dispersion, which says whether the SEs describe how far the two differ, and warns when
+      they don't (GRB2's replicates differ 8 times as much as their counting SEs say);
+    - the disagreement by position, as bars and the ten that differ most, each position with 3
+      variants or more tested.
+  - **Exports:** the variants compared with their z, p and q; the positions (`*_comparison_positions.csv`);
+    the report with the discordant variants, the dispersion and the positions; the three maps.
+  - **Remote control:** `compare` takes `low_confidence`, `max_se`, `min_reads` and `show` (the
+    tab), and returns the discordance and the positions; `export` writes `comparison-positions`
+    and `comparison-map` (`map`: first, second or difference).
+  - **The DHFR example** has a sixth step: −Lon against +Lon, low confidence left out (r 0.52 →
+    0.77), its discordant variants (201, 186 lower with Lon), its positions, and its maps.
+- The map component tells others its pan and zoom, and takes theirs, so that maps shown together
+  move as one.
+
 ### Changed
 
 - An example opened from MaveDB gives its readout (what a higher score means, from the paper) to its
@@ -65,6 +91,22 @@ grows with each.
   scored twice; two scales), each as Node compares the runs it recomputes from the archive; the
   comparison's CSV and JSON as Node writes them; a side that does not exist refused.
 - Unit tests: `compare.test.mjs` (8).
+- `compare` suite, slice 2 (25 checks in all):
+  - **Against R:** the discordance (z, p, BH's q) and the disagreement by position of 600 variants
+    at 60 positions equal R's (`pnorm`, `p.adjust`) to 10⁻¹⁰.
+  - **Planted differences:** in 20 simulated pairs with 30 variants and 3 positions planted to
+    differ, 96% of the planted variants are found, with 4% of calls false (BH allows 5%), and 57
+    of 60 planted positions. In 10 pairs with nothing planted the dispersion is 0.86–1.11, and
+    none is called.
+  - **DHFR:** each difference's z is Run 1's own differential z (Enrich2's independent test);
+    leaving out low confidence leaves the count this suite counts, and r rises above 0.75; the
+    difference map draws every variant compared with its difference.
+  - **GRB2:** its replicates' dispersion (8.2) agrees with QC's failing variance beyond counting.
+- The remote-control session (116 checks): `compare` with a filter, its discordance and positions
+  as Node gives them; `comparison-positions` and `comparison-map` (the difference, the second side)
+  the same bytes as Node's.
+- Unit tests: three more in `compare.test.mjs` (11): the filters, when discordance is tested, a
+  position's three variants, and the maps of a comparison.
 
 ## 0.3.0 (2026-10-11)
 

@@ -19,6 +19,10 @@
 #   - Bland and Altman: BlandAltmanLeh::bland.altman.stats(x, y) (d = x - y), the bias and limits
 #     with their 95% intervals;
 #   - the trend of d on the means (x + y)/2: lm, its slope, interval and p.
+# And one case of discordance (wave 4, slice 2): two independent sets of scores of 600 variants at
+# 60 positions with their SEs, 30 variants and 3 positions planted to differ; each difference's
+# z = (x - y)/sqrt(sx^2 + sy^2), p = 2 pnorm(-|z|), q = p.adjust(p, "BH"); and each position's
+# (3 variants or more) z = sum(x - y)/sqrt(sum(sx^2 + sy^2)), p and q over the positions.
 # Numbers rounded to 13 significant digits.
 
 suppressPackageStartupMessages({
@@ -91,15 +95,48 @@ statistics <- function(case) {
   )
 }
 
+discordance <- function() {
+  set.seed(20261012)
+  n <- 600
+  position <- rep(1:60, each = 10)
+  truth <- rnorm(n)
+  sx <- runif(n, 0.1, 0.3)
+  sy <- runif(n, 0.1, 0.3)
+  shift <- rep(0, n)
+  planted <- sample(n, 30)
+  shift[planted] <- sample(c(-1.5, 1.5), 30, replace = TRUE)
+  planted_positions <- c(12, 31, 47)
+  shift[position %in% planted_positions] <- shift[position %in% planted_positions] + 0.5
+  x <- round13(truth + rnorm(n, sd = sx))
+  y <- round13(truth + shift + rnorm(n, sd = sy))
+  sx <- round13(sx)
+  sy <- round13(sy)
+  z <- (x - y) / sqrt(sx^2 + sy^2)
+  p <- 2 * pnorm(-abs(z))
+  q <- p.adjust(p, method = "BH")
+  d <- x - y
+  v <- sx^2 + sy^2
+  pos <- sort(unique(position))
+  pz <- sapply(pos, function(k) sum(d[position == k]) / sqrt(sum(v[position == k])))
+  pp <- 2 * pnorm(-abs(pz))
+  list(
+    name = "discordance: 600 variants at 60 positions, 30 variants and 3 positions planted",
+    x = x, y = y, sx = sx, sy = sy, position = position, planted = sort(planted), plantedPositions = planted_positions,
+    z = round13(z), p = round13(p), q = round13(q),
+    positions = list(position = pos, z = round13(pz), p = round13(pp), q = round13(p.adjust(pp, method = "BH")), mean = round13(sapply(pos, function(k) mean(d[position == k]))))
+  )
+}
+
 cases <- c(synthetic(), list(dhfr()))
 out <- list(
   generator = paste0("R ", R.version$major, ".", R.version$minor, "; DescTools ", packageVersion("DescTools"), "; BlandAltmanLeh ", packageVersion("BlandAltmanLeh")),
-  method = "cor.test; cor(method = 'spearman') with Bonett and Wright's interval; DescTools::CCC(ci = 'z-transform'); BlandAltmanLeh::bland.altman.stats; lm(d ~ m). Rounded to 13 significant digits.",
+  method = "cor.test; cor(method = 'spearman') with Bonett and Wright's interval; DescTools::CCC(ci = 'z-transform'); BlandAltmanLeh::bland.altman.stats; lm(d ~ m); discordance by pnorm and p.adjust(method = 'BH'). Rounded to 13 significant digits.",
   cases = lapply(cases, function(case) c(
     list(name = case$name, x = round13(case$x), y = round13(case$y)),
     if (!is.null(case$keys)) list(keys = case$keys),
     statistics(list(x = round13(case$x), y = round13(case$y)))
-  ))
+  )),
+  discordance = discordance()
 )
 writeLines(toJSON(out, auto_unbox = TRUE, digits = NA), "validation/reference/compare.json")
 cat("validation/reference/compare.json:", length(out$cases), "cases\n")

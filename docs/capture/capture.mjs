@@ -58,7 +58,8 @@ const MAVEDB_TABLES = [
   ['urn:mavedb:00000003-a-2', join(ROOT, 'validation/cache/mavedb-brca1-ring/aa'), 'brca1-ring'],
 ];
 for (const [, dir, scene] of MAVEDB_TABLES) {
-  if ((wanted.length === 0 || wanted.includes(scene)) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
+  const scenes = scene === 'dhfr-lon' ? ['dhfr-lon', 'compare-maps', 'compare-disagreement'] : [scene];
+  if ((wanted.length === 0 || wanted.some((w) => scenes.includes(w))) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
 }
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
 
@@ -499,6 +500,23 @@ const scenes = {
     await example('brca1-sge');
     await act('score', {});
     await act('compare', {});
+    await clearToasts();
+    await sleep(600);
+  },
+  // DHFR's conditions compared on the maps (wave 4, slice 2): −Lon, +Lon and their difference, with
+  // low confidence left out, panned and zoomed as one, a variant of W47 selected in each.
+  async 'compare-maps'() {
+    await example('dhfr-lon');
+    await act('compare', { a: 'Run 1: −Lon', b: 'Run 1: +Lon', low_confidence: true, show: 'maps' });
+    await act('focus', { kind: 'variant', name: 'p.Trp47Arg', run: 'Run 1' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(800);
+  },
+  // The same, its disagreement: the discordant variants, the dispersion, and the positions.
+  async 'compare-disagreement'() {
+    await example('dhfr-lon');
+    await act('compare', { a: 'Run 1: −Lon', b: 'Run 1: +Lon', low_confidence: true, show: 'disagreement' });
     await clearToasts();
     await sleep(600);
   },

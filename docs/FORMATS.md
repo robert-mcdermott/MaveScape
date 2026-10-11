@@ -814,10 +814,10 @@ it is a custom track (above).
 A comparison (the Compare view, remote control's `compare`; MaveScape 0.4) pairs two sets of scores
 of a workspace, each a run's condition or one of its replicates. It is a view, not kept in the
 workspace: the runs are, each with its record, and the comparison is made again from them. Its
-two files, named after the two sides (`<first>_vs_<second>_comparison.*`):
+files, named after the two sides (`<first>_vs_<second>_comparison*`):
 
-**The matched variants** (`*_comparison.csv`), one row per variant scored on both sides, in the
-first side's order (the wild type left out):
+**The variants compared** (`*_comparison.csv`), one row per variant scored on both sides and kept
+by the filters, in the first side's order (the wild type left out):
 
 | Column | Meaning |
 | --- | --- |
@@ -826,6 +826,23 @@ first side's order (the wild type left out):
 | `class` | the first side's class of the variant (missense, nonsense, synonymous, …) |
 | `score_a`, `SE_a`, `score_b`, `SE_b` | each side's score and SE as scored (`NA`: none) |
 | `difference`, `mean` | first − second and their mean, as compared: the second negated when the two directions are opposite (`bNegated` below) |
+| `z`, `p`, `q` | the difference over √(SE_a² + SE_b²), its two-sided normal p, and q by Benjamini and Hochberg over the variants tested (`NA` where not tested: not on one scale, not independent, or an SE missing); discordant where q < 0.05 |
+
+**The disagreement by position** (`*_comparison_positions.csv`; two sides on one scale), one row per
+position of the first side's target with variants compared (a nucleotide run's, by the protein
+position each changes):
+
+| Column | Meaning |
+| --- | --- |
+| `position`, `reference_position`, `residue` | the position on the target, on the reference (with the target's offset, or the entry's when matched on its coordinates), and the target's residue there |
+| `variants` | the variants compared there |
+| `mean_difference`, `rms_difference` | their mean difference (first − second) and its root mean square |
+| `discordant` | how many of them are discordant |
+| `z`, `p`, `q` | the position's z, the sum of its differences over √Σ(SE_a² + SE_b²), with 3 variants compared or more; its p; q by Benjamini and Hochberg over the positions tested (`NA` otherwise) |
+
+**The maps** (`*_first_map.svg`, `*_second_map.svg`, `*_difference_map.svg`): each side's map, as
+the map's SVG export (above), and the difference's, colored by first − second centered on 0, its
+legend saying so; a variant scored on one side only, or left out by the filters, is drawn filtered.
 
 **The report and statistics** (`*_comparison.json`):
 
@@ -840,8 +857,9 @@ first side's order (the wild type left out):
   "coordinates": "target",
   "bNegated": false,
   "sameScale": true,
+  "filters": { "lowConfidence": false, "maxSE": null, "minReads": null },
   "report": { "status": "ok", "items": [{ "id": "target", "status": "ok", "label": "Target", "text": "…" }] },
-  "matched": { "n": 1109, "onlyA": 0, "onlyB": 0, "notScoredA": 1, "notScoredB": 2 },
+  "matched": { "n": 1109, "onlyA": 0, "onlyB": 0, "notScoredA": 1, "notScoredB": 2, "compared": 1109, "filtered": { "lowConfidence": 0, "se": 0, "reads": 0 } },
   "statistics": {
     "n": 1109,
     "pearson": { "n": 1109, "r": 0.874, "low": 0.860, "high": 0.888 },
@@ -849,6 +867,8 @@ first side's order (the wild type left out):
     "concordance": { "n": 1109, "ccc": 0.874, "low": 0.860, "high": 0.887, "r": 0.874, "accuracy": 1.0, "scaleShift": 0.98, "locationShift": 0.01 },
     "blandAltman": { "n": 1109, "bias": -0.019, "sd": 0.97, "lower": -1.909, "upper": 1.870, "biasLow": -0.076, "biasHigh": 0.037, "lowerLow": -2.007, "lowerHigh": -1.811, "upperLow": 1.772, "upperHigh": 1.969, "trend": { "slope": 0.018, "low": -0.012, "high": 0.049, "intercept": 0.06, "p": 0.24 } }
   },
+  "discordance": { "valid": true, "reason": null, "tested": 1109, "discordant": 479, "dispersion": 8.15, "q": 0.05, "variants": [{ "variant": "p.Trp36Ala", "difference": 1.2, "z": 9.1, "q": 1e-17 }] },
+  "positions": { "valid": true, "reason": null, "list": [{ "position": 36, "reference": 194, "residue": "W", "n": 20, "mean": 0.4, "rms": 0.9, "discordant": 9, "z": 7.2, "p": 6e-13, "q": 1e-11 }] },
   "withheld": []
 }
 ```
@@ -859,7 +879,13 @@ made again. A side is a condition (`condition`: its name) or a replicate (`repli
 of one UniProt entry, matched on its coordinates). Each report item is `ok`, `qualified` or
 `blocked`, with its words; the report's `status` is the worst of them. A blocked comparison has
 `statistics: null`. On different or unknown scales (`sameScale: false`), `concordance` and
-`blandAltman` are `null` and named in `withheld`. Every interval is 95%: Pearson's from Fisher's
+`blandAltman` are `null` and named in `withheld`. `matched.n` counts the variants scored on both
+sides, `matched.compared` those the filters kept, and `matched.filtered` those each filter left out
+(in that order: low confidence, SE, reads). `discordance` (`valid: false` with its `reason` when the
+two are not independent or not on one scale, also named in `withheld`) gives the variants tested,
+those discordant (q < 0.05) with their difference, z and q, and the dispersion, the median z² over
+its expected value (about 1 when the SEs describe how far the two differ). `positions` is the
+disagreement by position, as its CSV. Every interval is 95%: Pearson's from Fisher's
 z; Spearman's from Fisher's z with Bonett and Wright's SE; Lin's from its z-transform (Lin 2000);
 Bland–Altman's with t on n − 1 degrees of freedom, the limits' SE √(3 SD²/n); the trend's
 (the least-squares slope of the differences on the means) with t on n − 2. A number that is not

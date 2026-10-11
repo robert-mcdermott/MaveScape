@@ -770,6 +770,13 @@ table.design-columns tr.unset td:first-child { color: var(--warn-text); }
 .compare-stats th { text-align: left; font-weight: 500; color: var(--text-2); white-space: nowrap; padding-right: 12px; }
 .compare-stats td { font-variant-numeric: tabular-nums; }
 .compare-plot { position: relative; }
+.compare-tabs-row { display: flex; margin-bottom: 12px; }
+.compare-split label.check { display: flex; margin-bottom: 8px; }
+.compare-map { margin-bottom: 14px; }
+.compare-map h4 { margin: 0 0 4px; }
+.compare-map-scale { margin-bottom: 4px; }
+.compare-positions { width: 100%; height: auto; }
+.compare-positions .tick { font-size: 9px; fill: var(--text-3); }
 @media (max-width: 1180px) { .score-split { grid-template-columns: minmax(0, 1fr); } }
 .score-split .pane .callout { display: flex; gap: 8px; align-items: flex-start; }
 .score-progress { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }

@@ -26,7 +26,9 @@ export function themeFromPage() {
 
 // options: { model, palette, selected (Set of cell indices), describe(cell) → text,
 // onHover(cell | null), onSelect(cells: Set, primary cell), cellH, tracks (shown), describeTrack(track,
-// position | null) → text, onTrackClick(track, position, add) }.
+// position | null) → text, onTrackClick(track, position, add), onView({ x0, cellW }) }. onView is
+// told the first position shown and the cell width whenever they change, and setView sets them
+// (maps shown together pan and zoom as one: the Compare view, wave 4 slice 2).
 export function mountVariantMap(options) {
   let model = options.model;
   let palette = options.palette ?? 'rdbu';
@@ -41,6 +43,8 @@ export function mountVariantMap(options) {
   let fitted = false;
   let frame = 0;
   let colors = null;
+  // The view last told to onView, or set by setView (not told back).
+  let reported = { x0: null, cellW: null };
 
   const theme = () => themeFromPage();
   function refreshColors() {
@@ -79,6 +83,10 @@ export function mountVariantMap(options) {
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     cellsOfSelection();
     drawMap(ctx, model, view, colors.theme, colors.color, colors.paler);
+    if (options.onView && (view.x0 !== reported.x0 || view.cellW !== reported.cellW)) {
+      reported = { x0: view.x0, cellW: view.cellW };
+      options.onView({ ...reported });
+    }
   }
   function cellOf(k) {
     if (k < 0) return null;
@@ -324,6 +332,16 @@ export function mountVariantMap(options) {
     },
     zoom(factor) {
       zoomAround(factor, geometry(model, view).left + geometry(model, view).gridW / 2);
+    },
+    // Shows the map from position x0 at cells cellW wide (another map's view), without telling
+    // onView.
+    setView({ x0, cellW }) {
+      fitted = true;
+      view.cellW = cellW;
+      view.x0 = x0;
+      clampView();
+      reported = { x0: view.x0, cellW: view.cellW };
+      draw();
     },
     fit,
     focusCell(k) {
