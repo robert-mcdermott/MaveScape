@@ -98,7 +98,8 @@ export function writeMethods(ws, run, options = {}) {
   data.push(`${published ? 'Published scores' : 'Variant counts'} were read from ${run.inputs.source.name} (SHA-256 ${run.inputs.source.sha256}${run.inputs.source.rows ? `; ${run.inputs.source.rows} rows` : ''}).`);
   // A table retrieved from MaveDB (wave 3, slice 2): which record and file, and when.
   const origin = source?.origin;
-  if (origin?.database === 'MaveDB') data.push(`The table is MaveDB's ${origin.file} of ${origin.urn}${origin.license ? ` (${origin.license})` : ''}, retrieved ${String(origin.retrieved ?? '').slice(0, 10)}.`);
+  if (origin?.database === 'MaveDB' && origin.urns) data.push(`The table is MaveDB's counts of ${origin.urns.join(' and ')}${origin.license ? ` (${origin.license})` : ''}, retrieved ${String(origin.retrieved ?? '').slice(0, 10)}, joined on their variants, each score set's counts a condition.`);
+  else if (origin?.database === 'MaveDB') data.push(`The table is MaveDB's ${origin.file} of ${origin.urn}${origin.license ? ` (${origin.license})` : ''}, retrieved ${String(origin.retrieved ?? '').slice(0, 10)}.`);
   if (summary) {
     const kinds = Object.entries(summary.byKind ?? {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ');
     data.push(`Variant identifiers in the ${design.variants.column} column were read as MAVE-HGVS, MaveDB's nomenclature ${cite('mavedb')}${run.inputs.mapping.mode === 'lenient' ? ', accepting common legacy forms,' : ' (strict),'} and checked against the target: ${summary.valid} valid${summary.warning ? `, ${summary.warning} read leniently` : ''}${summary.invalid ? `, ${summary.invalid} not valid (not scored)` : ''}${kinds ? ` (${kinds})` : ''}.`);

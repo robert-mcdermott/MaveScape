@@ -23,7 +23,7 @@ import { textPairs, themeTokens } from './accessibility-cases.mjs';
 import { DESIGN_CASES, dataChecks, readDesign, readTable } from './design-cases.mjs';
 import { checkSchema } from './json-schema.mjs';
 import { enrich2Combination, normalizers, ratioScores, regressionScores, replicateCounts } from './enrich2-formulas.mjs';
-import { summarizeDesign, validateDesign } from '../web/lib/design.js';
+import { multiTileSamples, sharedSamples, summarizeDesign, validateDesign } from '../web/lib/design.js';
 import { parseHgvs, formatPosition, targetMismatches } from '../web/lib/hgvs.js';
 import { codingFrame, consequenceOf, nucleotideMismatches } from '../web/lib/consequence.js';
 import { compareConsequences, compareDimsumAggregate, compareGenBank, sameProtein, transcriptOf } from './consequence-cases.mjs';
@@ -31,14 +31,14 @@ import { compareConsequences, compareDimsumAggregate, compareGenBank, sameProtei
 import { cellText, columnText, createTableParser, parseTable } from '../web/lib/csv.js';
 import { detectLayout, draftDesign, namesFromSequences, reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { buildCountSet, joinCountTables } from '../web/lib/counts.js';
-import { buildVariants, KIND_NAMES, summarizeVariants } from '../web/lib/variants.js';
+import { buildVariants, KIND, KIND_NAMES, summarizeVariants } from '../web/lib/variants.js';
 import { parseFasta, targetFromSequence, targetProtein } from '../web/lib/target.js';
 import { createRandom, shuffle } from '../web/lib/random.js';
 import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
 import { designFromSampleSheet, designStructure, sampleSheetCSV } from '../web/lib/samplesheet.js';
 import { readinessDatasets, REMOVALS, caseOf, probe, workspaceOf } from './readiness-cases.mjs';
 import { writePackage } from '../web/lib/package.js';
-import { EXAMPLE_DATASETS, MissingExampleData, openExampleInNode, raisedOf, recordTarget } from './example-cases.mjs';
+import { cachedRecord, EXAMPLE_DATASETS, exampleRecords, MissingExampleData, openExampleInNode, raisedOf, recordTable, recordTarget } from './example-cases.mjs';
 import { proteinChange } from '../web/lib/codons.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf, uniparcEntries } from '../web/lib/uniprot.js';
 import { countsDesign, mappedCSV, mappedVariants, readMapped, readoutOf, readScoreSet, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
@@ -94,7 +94,7 @@ import { readArchive, writeArchive } from '../web/lib/archive.js';
 import { createZip } from '../web/lib/zip.js';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLES, exampleById, simulatedExample } from '../web/lib/examples.js';
-import { depositPackages, mavedbHashes, roundTrip } from './mavedb-export-cases.mjs';
+import { depositPackages, exampleRoundTrip, mavedbHashes, roundTrip } from './mavedb-export-cases.mjs';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 
 const args = process.argv.slice(2);
@@ -1520,7 +1520,7 @@ const suites = {
         for (let i = 0; i < results.rows; i += 1) if (!c.reason[i]) pairs.push([results.variants.key[i], e2Condition.score[i], c.score[i]], [`${results.variants.key[i]} SE`, e2Condition.se[i], c.se[i]]);
       }
       const dd = worstDifference(pairs);
-      check('scoring', 'BRCA1, the whole table drafted from its column names: E2 binding (6 time points) and Y2H (4) become two conditions, scored apart; the E2 condition scores as the hand-written E2 design does', `${both.conditions.map((c) => `${c.name}: ${c.replicates.length} replicates, ${formatCount(c.scored)} scored`).join('; ')}; E2 against the hand-written design ${dd.worst.toExponential(2)} over ${pairs.length / 2} variants`, both.conditions.length === 2 && !!e2Condition && dd.worst <= 1e-12 && pairs.length > 0, 'two conditions; ≤ 1e-12');
+      check('scoring', 'BRCA1, the whole table drafted from its column names: the phage assay of E3 ligase activity ("PlusE2", 6 time points) and Y2H (4) become two conditions, scored apart; the phage condition scores as the hand-written design does', `${both.conditions.map((c) => `${c.name}: ${c.replicates.length} replicates, ${formatCount(c.scored)} scored`).join('; ')}; E2 against the hand-written design ${dd.worst.toExponential(2)} over ${pairs.length / 2} variants`, both.conditions.length === 2 && !!e2Condition && dd.worst <= 1e-12 && pairs.length > 0, 'two conditions; ≤ 1e-12');
       // Factor IX (MultiSTEP): its published replicate and combined scores from its counts.
       const f9Table = parseTable(dataset('mavedb-factor9').bytes('counts.csv'));
       const f9Design = readDesign('factor9.design.json');
@@ -1936,7 +1936,7 @@ const suites = {
     const zinc = new Set([24, 27, 39, 41, 44, 47, 61, 64]);
     const least = positions.slice(0, 5);
     const ligands = least.filter(([p]) => zinc.has(p)).length;
-    check('map', 'BRCA1 RING (E2 binding): the positions least tolerant of substitution are the RING domain\'s zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64)', `${least.map(([p, m, aa]) => `${aa}${p} ${m.toFixed(2)}`).join(', ')}; ${ligands} of 5 are zinc ligands; ${b.offMap} multi-variants off the map`, ligands >= 4, '≥ 4 of the 5');
+    check('map', 'BRCA1 RING (E3 ligase activity, phage autoubiquitination): the positions least tolerant of substitution are the RING domain\'s zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64)', `${least.map(([p, m, aa]) => `${aa}${p} ${m.toFixed(2)}`).join(', ')}; ${ligands} of 5 are zinc ligands; ${b.offMap} multi-variants off the map`, ligands >= 4, '≥ 4 of the 5');
   },
   // The record (wave 1, slice 8): a workspace saved as a .msz archive, reopened and exported again
   // gives the same bytes, for the archive and for every export; exported scores and counts import
@@ -2264,10 +2264,15 @@ const suites = {
       check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
       check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
       if (example.mavedb) {
-        // Opened from MaveDB: its table the one the example was made with (and the validation pins).
-        const bytes = o.parts[0].bytes;
-        const file = sources.datasets[EXAMPLE_DATASETS[example.id]]?.files.find((f) => f.path === 'scores.csv');
-        check('examples', `${example.title}: MaveDB's table is the one the example was made with, and its record names the license and citation the example gives`, `${sha256(bytes).slice(0, 16)}… against ${example.mavedb.scores.sha256.slice(0, 16)}…; ${o.ws.sources[0].origin.license}`, sha256(bytes) === example.mavedb.scores.sha256 && file?.sha256 === example.mavedb.scores.sha256 && example.license.startsWith(o.ws.sources[0].origin.license), 'the same; CC0');
+        // Opened from MaveDB: its tables the ones the example was made with (and the validation
+        // pins), each record's license the example's (several records, wave 3 slice 6).
+        const set = sources.datasets[EXAMPLE_DATASETS[example.id]];
+        const tables = exampleRecords(example).flatMap((r) => ['scores', 'counts'].filter((f) => r[f]).map((f) => {
+          const t = recordTable(example, r.urn, f);
+          const pin = set?.files.find((x) => x.path === t.relative);
+          return { urn: r.urn, file: f, ok: sha256(t.bytes) === r[f].sha256 && pin?.sha256 === r[f].sha256 && t.bytes.length === r[f].size, license: cachedRecord(r.urn).license.short };
+        }));
+        check('examples', `${example.title}: MaveDB's tables are the ones the example was made with, and its records name the license and citation the example gives`, tables.map((t) => `${t.urn.replace('urn:mavedb:', '')} ${t.file} ${t.ok ? 'the same' : 'changed'} (${t.license})`).join('; '), tables.length > 0 && tables.every((t) => t.ok && example.license.startsWith(t.license)), 'the same; CC0');
       } else if (!example.simulated) {
         const bytes = o.parts[0].bytes;
         const file = sources.datasets[EXAMPLE_DATASETS[example.id]]?.files.find((f) => f.path === 'counts.csv');
@@ -2342,6 +2347,137 @@ const suites = {
       const r = pearson(a, b);
       const example = exampleById('brca1-sge');
       check('examples', 'BRCA1\'s saturation genome editing: its counts (the example\'s table) drafted from their names into two replicates of day 5 and day 11, the library and RNA counts set aside, and scored with the defaults, agree with the published scores as the guide says (r ≈ 0.76): the published scores were normalized exon by exon and for position within each', `counts ${countsSha.slice(0, 12)}…; ${design.model}, ${design.replicates.map((x) => `${x.name}: ${x.timepoints.map((t) => t.time).join('→')}`).join(', ')}; set aside ${(design.ignoredColumns ?? []).map((x) => x.column).join(', ')}; ${c.scored} scored, r ${r.toFixed(3)} with ${a.length} published`, countsSha === example.mavedb.counts.sha256 && design.model === 'time-series' && design.replicates.length === 2 && design.replicates.every((x) => x.timepoints.length === 2) && r > 0.74 && r < 0.78, 'the example\'s; two replicates, 5→11; r 0.74–0.78');
+    }
+
+    // DHFR without and with Lon (wave 3, slice 6): two score sets opened together, their counts
+    // joined with the paper's design; the scores against the published ones, and the conditions
+    // against each other, as the paper found them.
+    if (opened.has('dhfr-lon')) {
+      const o = opened.get('dhfr-lon');
+      const example = exampleById('dhfr-lon');
+      const R = o.scored.results;
+      const tiles = new Map(o.design.library.tiles.map((t) => [t.id, t]));
+      let outside = 0;
+      let marked = 0;
+      for (const r of R.replicates) {
+        const t = tiles.get(o.design.replicates.find((x) => x.id === r.id).tile);
+        R.variants.position.forEach((p, i) => {
+          if (p < 1 || (p >= t.start && p <= t.end)) return;
+          if (r.state[i] === REPLICATE_STATE.USED) outside += 1;
+          if (r.state[i] === REPLICATE_STATE.OUTSIDE_TILE) marked += 1;
+        });
+      }
+      // The wild type, at no position, is every replicate's.
+      const kMax = Math.max(...R.conditions.map((c) => Math.max(...[...c.k].filter((k, i) => R.variants.position[i] >= 1))));
+      const prefixes = [...new Set(o.table.columns.slice(1).map((c) => c.name.split(':')[0]))];
+      const multi = multiTileSamples(o.design);
+      const summary = summarizeDesign(o.design).lines.join(' ');
+      check('examples', 'DHFR: the two score sets\' counts joined, each record\'s columns named by its URN; 24 time series under two conditions, four sub-libraries of 40 positions each grown three times, two in each repeat: each replicate measures only its own sub-library\'s positions (the other\'s, counted by the same samples, marked outside its tile), no variant combined from more than its three replicates, and the summary says so', `${o.table.rows} variants, columns of ${prefixes.join(' and ')}; ${o.design.replicates.length} replicates in ${o.design.conditions.map((c) => c.name).join(' and ')}; ${multi.size} samples holding two tiles; ${outside} measurements used outside their tile, ${marked} marked; at most ${kMax} replicates combined`, o.assembled.kind === 'joined' && prefixes.join() === '00000063-b-1,00000063-a-1' && o.design.replicates.length === 24 && multi.size === 96 && !outside && marked > 0 && kMax === 3 && /hold 2 tiles grown together: each replicate measures only its own tile's positions/.test(summary) && !/shared between replicates/.test(summary), 'joined; 24; 96; 0 used outside; ≤ 3; said');
+      // The published scores, condition by condition (−Lon is 00000063-b-1, +Lon -a-1).
+      const publishedOf = (urn) => {
+        const t = parseTable(recordTable(example, urn, 'scores').bytes);
+        const names = columnText(t.columns.find((c) => c.name === 'hgvs_pro'));
+        const score = t.columns.find((c) => c.name === 'score').numeric;
+        return new Map(names.map((k, i) => [k, score[i]]));
+      };
+      const pub = { 'minus-lon': publishedOf('urn:mavedb:00000063-b-1'), 'plus-lon': publishedOf('urn:mavedb:00000063-a-1') };
+      const against = (results) => results.conditions.map((c) => {
+        const a = [];
+        const b = [];
+        results.variants.original.forEach((k, i) => { const x = pub[c.id].get(k); if (!c.reason[i] && Number.isFinite(x) && k !== '_wt') { a.push(c.score[i]); b.push(x); } });
+        const ratios = a.map((x, i) => x / b[i]).filter((x) => Number.isFinite(x) && x > 0).sort((x, y) => x - y);
+        return { id: c.id, name: c.name, n: a.length, r: pearson(a, b), ratio: ratios[ratios.length >> 1] };
+      });
+      const ols = scoreTable(o.table, o.design, withDefaults({ ...o.parameters, model: 'ols' }));
+      const wls = against(R);
+      const olsAgainst = against(ols.results);
+      const line = (x) => x.map((c) => `${c.name} r ${c.r.toFixed(3)} (median ratio ${c.ratio.toFixed(2)}, ${c.n})`).join(', ');
+      check('examples', 'DHFR against the published scores, as the guide says: with MaveScape\'s defaults (weighted regression) r ≈ 0.90 without Lon and 0.96 with it; with the authors\' unweighted regression (ordinary least squares) r ≈ 0.96 and 0.98, on the same scale (Enrich2\'s slopes over the whole 18 hours: median ratio near 1)', `defaults ${line(wls)}; ordinary least squares ${line(olsAgainst)}`, wls[0].r > 0.88 && wls[0].r < 0.92 && wls[1].r > 0.94 && wls[1].r < 0.98 && olsAgainst[0].r >= 0.95 && olsAgainst[1].r >= 0.97 && olsAgainst.every((c) => Math.abs(c.ratio - 1) <= 0.05), 'defaults 0.88–0.92 and 0.94–0.98; OLS ≥ 0.95 and ≥ 0.97, ratio within 5% of 1');
+      // Lon's effect: advantageous substitutions (score ≥ 0.2, the paper's threshold) in each
+      // condition, published and here; the difference +Lon − −Lon where called, and by the native
+      // residue (the paper: most negative at hydrophobic residues and in the buried core).
+      const advantageous = (scores, keys, reason) => keys.filter((k, i) => !reason?.[i] && k !== '_wt' && !k.includes('[') && scores[i] >= 0.2).length;
+      const publishedAdvantageous = Object.fromEntries(Object.entries(pub).map(([id, m]) => [id, [...m].filter(([k, x]) => k !== '_wt' && x >= 0.2).length]));
+      const here = Object.fromEntries(R.conditions.map((c) => [c.id, advantageous(c.score, R.variants.original, c.reason)]));
+      const d = R.differential[0];
+      const protein = targetProtein(o.design.targets[0]);
+      let called = 0;
+      let negative = 0;
+      const byPosition = new Map();
+      R.variants.key.forEach((k, i) => {
+        if (d.reason[i] || R.variants.kind[i] !== KIND.MISSENSE) return;
+        if (d.q[i] < 0.05) {
+          called += 1;
+          if (d.delta[i] < 0) negative += 1;
+        }
+        const p = R.variants.position[i];
+        if (!byPosition.has(p)) byPosition.set(p, []);
+        byPosition.get(p).push(d.delta[i]);
+      });
+      const meanOf = (x) => x.reduce((s, y) => s + y, 0) / x.length;
+      const hydrophobic = [];
+      const others = [];
+      for (const [p, xs] of byPosition) (/[VILMFWY]/.test(protein[p - 1]) ? hydrophobic : others).push(meanOf(xs));
+      check('examples', 'DHFR, Lon\'s effect as the paper found it: without Lon about twice as many substitutions grow faster than the wild type (≥ 0.2) as with it (the published scores: the paper\'s 736 and 384); the difference +Lon − −Lon negative for most of the substitutions it calls (q < 0.05), and most negative, position by position, at native hydrophobic residues (V, I, L, M, F, W, Y)', `published ${publishedAdvantageous['minus-lon']} and ${publishedAdvantageous['plus-lon']}; here ${here['minus-lon']} and ${here['plus-lon']} (${(here['minus-lon'] / here['plus-lon']).toFixed(2)}×); ${d.name} (${d.method}): ${called} called, ${negative} negative; mean difference ${meanOf(hydrophobic).toFixed(2)} at ${hydrophobic.length} hydrophobic positions, ${meanOf(others).toFixed(2)} at ${others.length} others`, publishedAdvantageous['minus-lon'] === 736 && publishedAdvantageous['plus-lon'] === 384 && here['minus-lon'] / here['plus-lon'] > 1.8 && here['minus-lon'] / here['plus-lon'] < 2.6 && negative / called >= 0.85 && meanOf(hydrophobic) < meanOf(others) - 0.15, '736 and 384; 1.8–2.6×; ≥ 85% negative; hydrophobic lower by > 0.15');
+    }
+
+    // BRCA1 RING from MaveDB and back (wave 3, slice 6): its counts with the paper's design, scored,
+    // against the published scores (Enrich2's), then deposited and read back.
+    if (opened.has('brca1-ring')) {
+      const o = opened.get('brca1-ring');
+      const example = exampleById('brca1-ring');
+      const R = o.scored.results;
+      const pub = parseTable(recordTable(example, 'urn:mavedb:00000003-a-2', 'scores').bytes);
+      const row = new Map(columnText(pub.columns.find((c) => c.name === 'hgvs_pro')).map((k, i) => [k, i]));
+      const pubScore = pub.columns.find((c) => c.name === 'score').numeric;
+      const set = (o.design.ignoredColumns ?? []).filter((x) => /^Y2H_/.test(x.column)).length;
+      check('examples', 'BRCA1 RING: MaveDB\'s counts read as 12,316 amino-acid variants with Enrich2\'s _wt and _sy rows; the design gives two library preparations of three replicates, rounds 0–5, the replicates of a preparation sharing its input, and sets the yeast two-hybrid columns aside', `${o.table.rows} variants; ${o.design.replicates.length} replicates of ${[...new Set(o.design.replicates.map((r) => r.timepoints.length))].join(', ')} time points (${o.design.time.unit}s); ${sharedSamples(o.design).size} shared inputs; ${set} two-hybrid columns set aside`, o.table.rows === 12316 && o.design.replicates.length === 6 && o.design.replicates.every((r) => r.timepoints.map((t) => t.time).join() === '0,1,2,3,4,5') && sharedSamples(o.design).size === 2 && set === 24, '12,316; 6 of 6 rounds; 2 shared; 24 aside');
+      let worst = 0;
+      let compared = 0;
+      for (const r of R.replicates) {
+        const name = o.design.replicates.find((x) => x.id === r.id).name;
+        const theirs = pub.columns.find((c) => c.name === `score_${name}`).numeric;
+        R.variants.original.forEach((k, i) => {
+          const j = row.get(k);
+          if (j === undefined || !Number.isFinite(theirs[j]) || !Number.isFinite(r.score[i])) return;
+          compared += 1;
+          worst = Math.max(worst, Math.abs(r.score[i] - theirs[j]) / Math.max(1, Math.abs(theirs[j])));
+        });
+      }
+      const combinedR = (results) => {
+        const c = results.conditions[0];
+        const a = [];
+        const b = [];
+        results.variants.original.forEach((k, i) => { const j = row.get(k); if (j !== undefined && !c.reason[i] && Number.isFinite(pubScore[j])) { a.push(c.score[i]); b.push(pubScore[j]); } });
+        return { r: pearson(a, b), n: a.length };
+      };
+      const mine = combinedR(R);
+      const enrich2 = scoreTable(o.table, o.design, defaultParameters(o.design, o.ws.sources[0], 'enrich2'));
+      const theirsCombined = combinedR(enrich2.results);
+      const publishedScored = [...pubScore].filter(Number.isFinite).length;
+      check('examples', 'BRCA1 RING against the published scores, as the guide says: with MaveScape\'s defaults every replicate score equals the published one (Enrich2\'s weighted regression with wild-type normalization), the combined scores close (the moderated combination against Enrich2\'s random effects); with the Enrich2-compatible preset the combined scores follow them exactly, as many variants scored as MaveDB\'s', `${compared} replicate scores, largest relative difference ${worst.toExponential(1)}; defaults combined r ${mine.r.toFixed(4)} over ${mine.n}; Enrich2-compatible r ${theirsCombined.r.toFixed(5)}, ${enrich2.results.conditions[0].scored} scored against MaveDB's ${publishedScored}`, compared > 45000 && worst <= 1e-10 && mine.r > 0.98 && mine.r < 0.999 && theirsCombined.r >= 0.9999 && enrich2.results.conditions[0].scored === publishedScored, '> 45,000 within 1e-10; 0.98–0.999; ≥ 0.9999, the same count');
+      // The zinc ligands, on BRCA1's numbering (the target's offset of 1, as the example states it).
+      const model = buildMapModel(R, o.design);
+      const zinc = [24, 27, 39, 41, 44, 47, 61, 64];
+      const ranked = [];
+      for (let p = 1; p <= model.length; p += 1) if (model.columnCount[p - 1] >= 5) ranked.push([p + model.target.offset, model.columnMedian[p - 1]]);
+      ranked.sort((x, y) => x[1] - y[1]);
+      const ranks = zinc.map((z) => ranked.findIndex(([p]) => p === z) + 1);
+      const typical = median(ranked.filter(([p]) => !zinc.includes(p)).map(([, m]) => m));
+      check('examples', 'BRCA1 RING, Run 1 on the map as the guide says: the RING\'s eight zinc ligands (C24, C27, C39, H41, C44, C47, C61, C64) among its twelve least tolerant positions (median score, positions with five or more scored)', `ranks ${zinc.map((z, k) => `${z}: ${ranks[k]}`).join(', ')} of ${ranked.length}; their medians ${zinc.map((z) => ranked.find(([p]) => p === z)[1].toFixed(2)).join(' ')}, a typical position's ${typical.toFixed(2)}`, ranks.every((r) => r >= 1 && r <= 12) && model.target.offset === 1, 'all within the 12 lowest; offset 1');
+      const { built, first, trip } = exampleRoundTrip('brca1-ring');
+      const experimentTitle = JSON.parse(first.files.find((f) => f.name === 'experiment.json').text).title;
+      const back = trip.back.results;
+      const backScore = new Map(back.variants.key.map((k, i) => [k, back.conditions[0].score[i]]));
+      const c = built.results.conditions[0];
+      let exact = 0;
+      let differ = 0;
+      built.results.variants.key.forEach((k, i) => {
+        if (c.reason[i]) return;
+        if (Object.is(backScore.get(k), c.score[i])) exact += 1;
+        else differ += 1;
+      });
+      check('examples', 'BRCA1 RING\'s round trip: Run 1 deposited in MaveDB\'s format (its experiment described as the record\'s), read back as MaveScape opens a package, its scores the run\'s exactly, and the deposit written again the same bytes', `${first.report.variants.exported} variants deposited (${first.report.mode}; its experiment "${experimentTitle}", ${JSON.parse(first.files.find((f) => f.name === 'score_set.json').text).experimentUrn ?? 'new'}); ${exact} scores back exactly, ${differ} not; written again: ${trip.same ? 'the same bytes' : `differs in ${trip.differ.join(', ')}`}`, exact === c.scored && !differ && trip.same && experimentTitle === cachedRecord('urn:mavedb:00000003-a-2').experiment.title, 'all exactly; the same');
     }
 
     // With external data: Hsp90 against the published fitness; factor IX against MultiSTEP's scores.

@@ -32,10 +32,16 @@ import { nodeTracks } from './annotation-cases.mjs';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { tracksCSV } from '../web/lib/tracks.js';
+import { openExampleInNode } from './example-cases.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
 const verbose = process.argv.includes('--verbose');
+const requireData = process.argv.includes('--require-data');
+// DHFR's MaveDB tables (wave 3, slice 6), as node validation/fetch.mjs mavedb-dhfr keeps them: copied
+// into the fetcher's cache, so that its two score sets open together offline.
+const DHFR = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-dhfr');
+const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:00000063-a-1', 'plus-lon']];
 const results = [];
 function check(name, value, ok, required = '') {
   results.push({ name, ok });
@@ -58,6 +64,15 @@ async function startMaveScape() {
   // Offline, with UniProt's answers as the fetcher cached them (validation/fixtures/public-data):
   // the session makes no request beyond this computer.
   cpSync(join(ROOT, 'validation/fixtures/public-data'), cache, { recursive: true });
+  if (existsSync(join(DHFR, 'plus-lon', 'counts.csv'))) {
+    for (const [urn, dir] of DHFR_TABLES) {
+      for (const table of ['scores', 'counts']) {
+        const name = `${urn.replaceAll(':', '_')}.${table}.csv`;
+        cpSync(join(DHFR, dir, `${table}.csv`), join(cache, 'mavedb', name));
+        writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
+      }
+    }
+  }
   const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
@@ -379,6 +394,26 @@ try {
   check('export barcodes.csv: the same bytes as Node\'s', `${bcWritten.length} bytes, ${bcWritten.split('\n').length - 2} barcodes`, bcWritten === barcodesCSV(bcNode, bcRun));
   const outlying = await act('inspect_variant', { variant: 'p.Glu6Gln', run: byBarcode.data.name });
   check('inspect_variant on a barcode run: each replicate\'s barcodes measured and its outliers, and the barcodes listed in the inspector', `${outlying.message} ${outlying.data.replicates.map((r) => `${r.name}: ${r.barcodesMeasured} measured, outliers ${r.outlierBarcodes.join(', ') || 'none'}`).join('; ')}`, outlying.data.replicates.every((r) => r.barcodesMeasured >= 3) && outlying.data.replicates.some((r) => r.outlierBarcodes.length === 1) && (await browser.eval(`Boolean(document.querySelector('#inspector .barcode-table'))`)));
+
+  // Several score sets opened together (wave 3, slice 6), offline from MaveDB's tables as the
+  // validation keeps them: DHFR without and with Lon, their counts joined with a design drafted as
+  // a condition each; then the example, with the paper's design, scored as Node scores it.
+  if (existsSync(join(DHFR, 'plus-lon', 'counts.csv'))) {
+    const together = await act('open_mavedb', { urn: 'urn:mavedb:00000063-b-1, urn:mavedb:00000063-a-1' });
+    const tState = await act('get_state');
+    const tWs = await browser.eval('({ records: window.mavescape.store.ws.records.map((r) => r.urn), runs: window.mavescape.store.ws.runs.map((r) => r.name), design: window.mavescape.store.ws.design, joined: window.mavescape.store.ws.sources.find((s) => s.origin?.joined) })');
+    check('open_mavedb with two URNs: DHFR\'s score sets opened together, both records kept, each one\'s published scores a run, their counts joined into one table (each record\'s columns named by its URN) with a design drafted as a condition each, the first the reference, in hours', `${together.message.slice(0, 260)}… Runs ${tWs.runs.join(', ')}; conditions ${tWs.design?.conditions?.map((c) => `${c.name}${c.reference ? ' (reference)' : ''}`).join(', ')}; time in ${tWs.design?.time?.unit}s; joined from ${tWs.joined?.files.map((f) => f.fileName).join(' and ')}`, tWs.records.join() === 'urn:mavedb:00000063-b-1,urn:mavedb:00000063-a-1' && tWs.runs.join() === 'Published scores (deficient Lon),Published scores (functioning Lon)' && together.data.published.map((p) => p.scored).join() === '2543,2378' && tWs.design?.conditions?.map((c) => c.id).join() === '00000063-b-1,00000063-a-1' && tWs.design.conditions[0].reference === true && tWs.design.time.unit === 'hour' && tWs.joined?.files.map((f) => f.fileName).join() === '00000063-b-1.csv,00000063-a-1.csv' && tState.data.tables.length === 3);
+    const dhfr = await act('open_example', { id: 'dhfr-lon' });
+    const dRun = await browser.eval('window.mavescape.store.ws.runs.find((r) => r.name === "Run 1")');
+    const dNode = openExampleInNode(exampleById('dhfr-lon'));
+    const dMap = await act('render_map', {});
+    check('open_example "dhfr-lon": the two score sets opened together, the paper\'s design in place of the draft, Run 1 with Node\'s output hash, the map colored by +Lon − −Lon', `${dhfr.message.slice(0, 160)}…; ${dRun?.output.sha256.slice(0, 16)}… and ${outputDigest(dNode.scored.results).slice(0, 16)}…; ${dMap.data.contrast}, colored by ${dMap.data.colorBy}`, dhfr.ok !== false && dRun?.output.sha256 === outputDigest(dNode.scored.results) && dRun.inputs.design.library.tiles.length === 4 && dMap.data.colorBy === 'differential' && dMap.data.contrast === '+Lon vs −Lon' && (await browser.eval('document.getElementById(\'app\').dataset.mode')) === 'map');
+    const reproducedDhfr = await act('reproduce_run', { run: 'Run 1' });
+    check('reproduce_run on the joined table: DHFR\'s Run 1 recomputed from its two files, its recorded output hash', reproducedDhfr.message, reproducedDhfr.data.status === 'reproduced');
+  } else {
+    console.log('  DHFR\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-dhfr (the checks of score sets opened together skipped)');
+    if (requireData) check('DHFR\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
+  }
 
   // Two conditions (wave 2, slice 6): the example opens on its differential map; scored in the
   // window with Node's hash; the map, a variant and the differential export as Node makes them.

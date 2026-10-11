@@ -1,0 +1,1847 @@
+{
+  "format": "mavescape-design",
+  "version": 1,
+  "name": "E. coli DHFR, growth without and with the Lon protease",
+  "description": "Every substitution of E. coli dihydrofolate reductase (DHFR, 159 residues) on a plasmid complementing a strain without its own DHFR and thymidylate synthase (ER2566 ΔfolA ΔthyA), grown in a turbidostat and sampled at 0, 2, 4, 6, 8, 12, 16 and 18 hours. Selected in the parental strain, which lacks the Lon protease as all B strains do (−Lon), and again with Lon reintroduced on the chromosome (+Lon). Four sub-libraries of 40 positions (SL1–SL4), each grown three times, two sub-libraries in each of six repeats per condition; the counts of each condition are a MaveDB score set of their own.",
+  "source": {
+    "mavedb": "urn:mavedb:00000063-b-1 and urn:mavedb:00000063-a-1",
+    "citation": "Thompson et al., eLife 2020, doi:10.7554/eLife.53476",
+    "license": "CC0"
+  },
+  "model": "time-series",
+  "readout": {
+    "phenotype": "Growth of E. coli whose folate synthesis depends on the DHFR variant (turbidostat, M9 medium)",
+    "method": "Cell proliferation assay with genetic complementation",
+    "mechanism": "Gain or loss of function",
+    "modelSystem": "Bacteria",
+    "direction": "higher-more"
+  },
+  "variants": {
+    "column": "hgvs_pro",
+    "level": "protein"
+  },
+  "targets": [
+    {
+      "id": "dhfr",
+      "name": "DHFR",
+      "sequenceType": "dna",
+      "sequence": "ATGATCAGTCTGATTGCGGCGTTAGCGGTAGATCGCGTTATCGGCATGGAAAACGCCATGCCGTGGAACCTGCCTGCCGATCTCGCCTGGTTTAAACGCAACACCTTAAATAAACCCGTGATTATGGGCCGCCATACCTGGGAATCAATCGGTCGTCCGTTGCCAGGACGCAAAAATATTATCCTCAGCAGTCAACCGGGTACGGACGATCGCGTAACGTGGGTGAAGTCGGTGGATGAAGCCATCGCGGCGTGTGGTGACGTACCAGAAATCATGGTGATTGGCGGCGGTCGCGTTTATGAACAGTTCTTGCCAAAAGCGCAAAAACTGTATCTGACGCATATCGACGCAGAAGTGGAAGGCGACACCCATTTCCCGGATTACGAGCCGGATGACTGGGAATCGGTATTCAGCGAATTCCACGATGCTGATGCGCAGAACTCTCACAGCTATTGCTTTGAGATTCTGGAGCGGCGGTAA",
+      "codingStart": 1,
+      "organism": "Escherichia coli",
+      "identifiers": {
+        "uniprot": "P0ABQ4",
+        "gene": "folA"
+      }
+    }
+  ],
+  "library": {
+    "level": "variant",
+    "tiles": [
+      {
+        "id": "sl1",
+        "name": "SL1",
+        "start": 1,
+        "end": 40
+      },
+      {
+        "id": "sl2",
+        "name": "SL2",
+        "start": 41,
+        "end": 80
+      },
+      {
+        "id": "sl3",
+        "name": "SL3",
+        "start": 81,
+        "end": 120
+      },
+      {
+        "id": "sl4",
+        "name": "SL4",
+        "start": 121,
+        "end": 159
+      }
+    ]
+  },
+  "time": {
+    "unit": "hour"
+  },
+  "conditions": [
+    {
+      "id": "minus-lon",
+      "name": "−Lon",
+      "reference": true
+    },
+    {
+      "id": "plus-lon",
+      "name": "+Lon"
+    }
+  ],
+  "samples": [
+    {
+      "id": "minus-lon-r1-00h",
+      "name": "−Lon, repeat 1, 0 h",
+      "columns": [
+        "00000063-b-1:Repeat1_t_00hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r1-02h",
+      "name": "−Lon, repeat 1, 2 h",
+      "columns": [
+        "00000063-b-1:Repeat1_t_02hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r1-04h",
+      "name": "−Lon, repeat 1, 4 h",
+      "columns": [
+        "00000063-b-1:Repeat1_t_04hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r1-06h",
+      "name": "−Lon, repeat 1, 6 h",
+      "columns": [
+        "00000063-b-1:Repeat1_t_06hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r1-08h",
+      "name": "−Lon, repeat 1, 8 h",
+      "columns": [
+        "00000063-b-1:Repeat1_t_08hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r1-12h",
+      "name": "−Lon, repeat 1, 12 h",
+      "columns": [
+        "00000063-b-1:Repeat1_t_12hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r1-16h",
+      "name": "−Lon, repeat 1, 16 h",
+      "columns": [
+        "00000063-b-1:Repeat1_t_16hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r1-18h",
+      "name": "−Lon, repeat 1, 18 h",
+      "columns": [
+        "00000063-b-1:Repeat1_t_18hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r2-00h",
+      "name": "−Lon, repeat 2, 0 h",
+      "columns": [
+        "00000063-b-1:Repeat2_t_00hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r2-02h",
+      "name": "−Lon, repeat 2, 2 h",
+      "columns": [
+        "00000063-b-1:Repeat2_t_02hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r2-04h",
+      "name": "−Lon, repeat 2, 4 h",
+      "columns": [
+        "00000063-b-1:Repeat2_t_04hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r2-06h",
+      "name": "−Lon, repeat 2, 6 h",
+      "columns": [
+        "00000063-b-1:Repeat2_t_06hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r2-08h",
+      "name": "−Lon, repeat 2, 8 h",
+      "columns": [
+        "00000063-b-1:Repeat2_t_08hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r2-12h",
+      "name": "−Lon, repeat 2, 12 h",
+      "columns": [
+        "00000063-b-1:Repeat2_t_12hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r2-16h",
+      "name": "−Lon, repeat 2, 16 h",
+      "columns": [
+        "00000063-b-1:Repeat2_t_16hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r2-18h",
+      "name": "−Lon, repeat 2, 18 h",
+      "columns": [
+        "00000063-b-1:Repeat2_t_18hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r3-00h",
+      "name": "−Lon, repeat 3, 0 h",
+      "columns": [
+        "00000063-b-1:Repeat3_t_00hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r3-02h",
+      "name": "−Lon, repeat 3, 2 h",
+      "columns": [
+        "00000063-b-1:Repeat3_t_02hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r3-04h",
+      "name": "−Lon, repeat 3, 4 h",
+      "columns": [
+        "00000063-b-1:Repeat3_t_04hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r3-06h",
+      "name": "−Lon, repeat 3, 6 h",
+      "columns": [
+        "00000063-b-1:Repeat3_t_06hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r3-08h",
+      "name": "−Lon, repeat 3, 8 h",
+      "columns": [
+        "00000063-b-1:Repeat3_t_08hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r3-12h",
+      "name": "−Lon, repeat 3, 12 h",
+      "columns": [
+        "00000063-b-1:Repeat3_t_12hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r3-16h",
+      "name": "−Lon, repeat 3, 16 h",
+      "columns": [
+        "00000063-b-1:Repeat3_t_16hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r3-18h",
+      "name": "−Lon, repeat 3, 18 h",
+      "columns": [
+        "00000063-b-1:Repeat3_t_18hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r4-00h",
+      "name": "−Lon, repeat 4, 0 h",
+      "columns": [
+        "00000063-b-1:Repeat4_t_00hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r4-02h",
+      "name": "−Lon, repeat 4, 2 h",
+      "columns": [
+        "00000063-b-1:Repeat4_t_02hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r4-04h",
+      "name": "−Lon, repeat 4, 4 h",
+      "columns": [
+        "00000063-b-1:Repeat4_t_04hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r4-06h",
+      "name": "−Lon, repeat 4, 6 h",
+      "columns": [
+        "00000063-b-1:Repeat4_t_06hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r4-08h",
+      "name": "−Lon, repeat 4, 8 h",
+      "columns": [
+        "00000063-b-1:Repeat4_t_08hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r4-12h",
+      "name": "−Lon, repeat 4, 12 h",
+      "columns": [
+        "00000063-b-1:Repeat4_t_12hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r4-16h",
+      "name": "−Lon, repeat 4, 16 h",
+      "columns": [
+        "00000063-b-1:Repeat4_t_16hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r4-18h",
+      "name": "−Lon, repeat 4, 18 h",
+      "columns": [
+        "00000063-b-1:Repeat4_t_18hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r5-00h",
+      "name": "−Lon, repeat 5, 0 h",
+      "columns": [
+        "00000063-b-1:Repeat5_t_00hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r5-02h",
+      "name": "−Lon, repeat 5, 2 h",
+      "columns": [
+        "00000063-b-1:Repeat5_t_02hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r5-04h",
+      "name": "−Lon, repeat 5, 4 h",
+      "columns": [
+        "00000063-b-1:Repeat5_t_04hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r5-06h",
+      "name": "−Lon, repeat 5, 6 h",
+      "columns": [
+        "00000063-b-1:Repeat5_t_06hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r5-08h",
+      "name": "−Lon, repeat 5, 8 h",
+      "columns": [
+        "00000063-b-1:Repeat5_t_08hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r5-12h",
+      "name": "−Lon, repeat 5, 12 h",
+      "columns": [
+        "00000063-b-1:Repeat5_t_12hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r5-16h",
+      "name": "−Lon, repeat 5, 16 h",
+      "columns": [
+        "00000063-b-1:Repeat5_t_16hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r5-18h",
+      "name": "−Lon, repeat 5, 18 h",
+      "columns": [
+        "00000063-b-1:Repeat5_t_18hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r6-00h",
+      "name": "−Lon, repeat 6, 0 h",
+      "columns": [
+        "00000063-b-1:Repeat6_t_00hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r6-02h",
+      "name": "−Lon, repeat 6, 2 h",
+      "columns": [
+        "00000063-b-1:Repeat6_t_02hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r6-04h",
+      "name": "−Lon, repeat 6, 4 h",
+      "columns": [
+        "00000063-b-1:Repeat6_t_04hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r6-06h",
+      "name": "−Lon, repeat 6, 6 h",
+      "columns": [
+        "00000063-b-1:Repeat6_t_06hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r6-08h",
+      "name": "−Lon, repeat 6, 8 h",
+      "columns": [
+        "00000063-b-1:Repeat6_t_08hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r6-12h",
+      "name": "−Lon, repeat 6, 12 h",
+      "columns": [
+        "00000063-b-1:Repeat6_t_12hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r6-16h",
+      "name": "−Lon, repeat 6, 16 h",
+      "columns": [
+        "00000063-b-1:Repeat6_t_16hrs"
+      ]
+    },
+    {
+      "id": "minus-lon-r6-18h",
+      "name": "−Lon, repeat 6, 18 h",
+      "columns": [
+        "00000063-b-1:Repeat6_t_18hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r1-00h",
+      "name": "+Lon, repeat 1, 0 h",
+      "columns": [
+        "00000063-a-1:Repeat1_t_00hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r1-02h",
+      "name": "+Lon, repeat 1, 2 h",
+      "columns": [
+        "00000063-a-1:Repeat1_t_02hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r1-04h",
+      "name": "+Lon, repeat 1, 4 h",
+      "columns": [
+        "00000063-a-1:Repeat1_t_04hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r1-06h",
+      "name": "+Lon, repeat 1, 6 h",
+      "columns": [
+        "00000063-a-1:Repeat1_t_06hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r1-08h",
+      "name": "+Lon, repeat 1, 8 h",
+      "columns": [
+        "00000063-a-1:Repeat1_t_08hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r1-12h",
+      "name": "+Lon, repeat 1, 12 h",
+      "columns": [
+        "00000063-a-1:Repeat1_t_12hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r1-16h",
+      "name": "+Lon, repeat 1, 16 h",
+      "columns": [
+        "00000063-a-1:Repeat1_t_16hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r1-18h",
+      "name": "+Lon, repeat 1, 18 h",
+      "columns": [
+        "00000063-a-1:Repeat1_t_18hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r2-00h",
+      "name": "+Lon, repeat 2, 0 h",
+      "columns": [
+        "00000063-a-1:Repeat2_t_00hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r2-02h",
+      "name": "+Lon, repeat 2, 2 h",
+      "columns": [
+        "00000063-a-1:Repeat2_t_02hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r2-04h",
+      "name": "+Lon, repeat 2, 4 h",
+      "columns": [
+        "00000063-a-1:Repeat2_t_04hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r2-06h",
+      "name": "+Lon, repeat 2, 6 h",
+      "columns": [
+        "00000063-a-1:Repeat2_t_06hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r2-08h",
+      "name": "+Lon, repeat 2, 8 h",
+      "columns": [
+        "00000063-a-1:Repeat2_t_08hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r2-12h",
+      "name": "+Lon, repeat 2, 12 h",
+      "columns": [
+        "00000063-a-1:Repeat2_t_12hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r2-16h",
+      "name": "+Lon, repeat 2, 16 h",
+      "columns": [
+        "00000063-a-1:Repeat2_t_16hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r2-18h",
+      "name": "+Lon, repeat 2, 18 h",
+      "columns": [
+        "00000063-a-1:Repeat2_t_18hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r3-00h",
+      "name": "+Lon, repeat 3, 0 h",
+      "columns": [
+        "00000063-a-1:Repeat3_t_00hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r3-02h",
+      "name": "+Lon, repeat 3, 2 h",
+      "columns": [
+        "00000063-a-1:Repeat3_t_02hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r3-04h",
+      "name": "+Lon, repeat 3, 4 h",
+      "columns": [
+        "00000063-a-1:Repeat3_t_04hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r3-06h",
+      "name": "+Lon, repeat 3, 6 h",
+      "columns": [
+        "00000063-a-1:Repeat3_t_06hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r3-08h",
+      "name": "+Lon, repeat 3, 8 h",
+      "columns": [
+        "00000063-a-1:Repeat3_t_08hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r3-12h",
+      "name": "+Lon, repeat 3, 12 h",
+      "columns": [
+        "00000063-a-1:Repeat3_t_12hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r3-16h",
+      "name": "+Lon, repeat 3, 16 h",
+      "columns": [
+        "00000063-a-1:Repeat3_t_16hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r3-18h",
+      "name": "+Lon, repeat 3, 18 h",
+      "columns": [
+        "00000063-a-1:Repeat3_t_18hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r4-00h",
+      "name": "+Lon, repeat 4, 0 h",
+      "columns": [
+        "00000063-a-1:Repeat4_t_00hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r4-02h",
+      "name": "+Lon, repeat 4, 2 h",
+      "columns": [
+        "00000063-a-1:Repeat4_t_02hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r4-04h",
+      "name": "+Lon, repeat 4, 4 h",
+      "columns": [
+        "00000063-a-1:Repeat4_t_04hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r4-06h",
+      "name": "+Lon, repeat 4, 6 h",
+      "columns": [
+        "00000063-a-1:Repeat4_t_06hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r4-08h",
+      "name": "+Lon, repeat 4, 8 h",
+      "columns": [
+        "00000063-a-1:Repeat4_t_08hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r4-12h",
+      "name": "+Lon, repeat 4, 12 h",
+      "columns": [
+        "00000063-a-1:Repeat4_t_12hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r4-16h",
+      "name": "+Lon, repeat 4, 16 h",
+      "columns": [
+        "00000063-a-1:Repeat4_t_16hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r4-18h",
+      "name": "+Lon, repeat 4, 18 h",
+      "columns": [
+        "00000063-a-1:Repeat4_t_18hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r5-00h",
+      "name": "+Lon, repeat 5, 0 h",
+      "columns": [
+        "00000063-a-1:Repeat5_t_00hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r5-02h",
+      "name": "+Lon, repeat 5, 2 h",
+      "columns": [
+        "00000063-a-1:Repeat5_t_02hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r5-04h",
+      "name": "+Lon, repeat 5, 4 h",
+      "columns": [
+        "00000063-a-1:Repeat5_t_04hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r5-06h",
+      "name": "+Lon, repeat 5, 6 h",
+      "columns": [
+        "00000063-a-1:Repeat5_t_06hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r5-08h",
+      "name": "+Lon, repeat 5, 8 h",
+      "columns": [
+        "00000063-a-1:Repeat5_t_08hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r5-12h",
+      "name": "+Lon, repeat 5, 12 h",
+      "columns": [
+        "00000063-a-1:Repeat5_t_12hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r5-16h",
+      "name": "+Lon, repeat 5, 16 h",
+      "columns": [
+        "00000063-a-1:Repeat5_t_16hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r5-18h",
+      "name": "+Lon, repeat 5, 18 h",
+      "columns": [
+        "00000063-a-1:Repeat5_t_18hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r6-00h",
+      "name": "+Lon, repeat 6, 0 h",
+      "columns": [
+        "00000063-a-1:Repeat6_t_00hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r6-02h",
+      "name": "+Lon, repeat 6, 2 h",
+      "columns": [
+        "00000063-a-1:Repeat6_t_02hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r6-04h",
+      "name": "+Lon, repeat 6, 4 h",
+      "columns": [
+        "00000063-a-1:Repeat6_t_04hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r6-06h",
+      "name": "+Lon, repeat 6, 6 h",
+      "columns": [
+        "00000063-a-1:Repeat6_t_06hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r6-08h",
+      "name": "+Lon, repeat 6, 8 h",
+      "columns": [
+        "00000063-a-1:Repeat6_t_08hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r6-12h",
+      "name": "+Lon, repeat 6, 12 h",
+      "columns": [
+        "00000063-a-1:Repeat6_t_12hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r6-16h",
+      "name": "+Lon, repeat 6, 16 h",
+      "columns": [
+        "00000063-a-1:Repeat6_t_16hrs"
+      ]
+    },
+    {
+      "id": "plus-lon-r6-18h",
+      "name": "+Lon, repeat 6, 18 h",
+      "columns": [
+        "00000063-a-1:Repeat6_t_18hrs"
+      ]
+    }
+  ],
+  "replicates": [
+    {
+      "id": "minus-lon-sl1-1",
+      "name": "−Lon, SL1, replicate 1 (repeat 1)",
+      "biological": 1,
+      "condition": "minus-lon",
+      "tile": "sl1",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r1-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r1-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r1-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r1-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r1-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r1-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r1-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r1-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl1-2",
+      "name": "−Lon, SL1, replicate 2 (repeat 2)",
+      "biological": 2,
+      "condition": "minus-lon",
+      "tile": "sl1",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r2-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r2-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r2-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r2-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r2-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r2-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r2-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r2-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl1-3",
+      "name": "−Lon, SL1, replicate 3 (repeat 3)",
+      "biological": 3,
+      "condition": "minus-lon",
+      "tile": "sl1",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r3-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r3-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r3-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r3-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r3-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r3-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r3-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r3-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl2-1",
+      "name": "−Lon, SL2, replicate 1 (repeat 1)",
+      "biological": 1,
+      "condition": "minus-lon",
+      "tile": "sl2",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r1-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r1-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r1-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r1-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r1-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r1-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r1-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r1-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl2-2",
+      "name": "−Lon, SL2, replicate 2 (repeat 2)",
+      "biological": 2,
+      "condition": "minus-lon",
+      "tile": "sl2",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r2-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r2-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r2-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r2-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r2-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r2-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r2-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r2-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl2-3",
+      "name": "−Lon, SL2, replicate 3 (repeat 4)",
+      "biological": 3,
+      "condition": "minus-lon",
+      "tile": "sl2",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r4-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r4-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r4-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r4-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r4-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r4-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r4-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r4-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl3-1",
+      "name": "−Lon, SL3, replicate 1 (repeat 3)",
+      "biological": 1,
+      "condition": "minus-lon",
+      "tile": "sl3",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r3-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r3-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r3-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r3-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r3-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r3-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r3-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r3-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl3-2",
+      "name": "−Lon, SL3, replicate 2 (repeat 5)",
+      "biological": 2,
+      "condition": "minus-lon",
+      "tile": "sl3",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r5-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r5-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r5-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r5-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r5-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r5-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r5-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r5-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl3-3",
+      "name": "−Lon, SL3, replicate 3 (repeat 6)",
+      "biological": 3,
+      "condition": "minus-lon",
+      "tile": "sl3",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r6-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r6-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r6-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r6-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r6-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r6-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r6-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r6-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl4-1",
+      "name": "−Lon, SL4, replicate 1 (repeat 4)",
+      "biological": 1,
+      "condition": "minus-lon",
+      "tile": "sl4",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r4-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r4-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r4-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r4-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r4-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r4-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r4-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r4-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl4-2",
+      "name": "−Lon, SL4, replicate 2 (repeat 5)",
+      "biological": 2,
+      "condition": "minus-lon",
+      "tile": "sl4",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r5-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r5-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r5-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r5-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r5-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r5-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r5-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r5-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "minus-lon-sl4-3",
+      "name": "−Lon, SL4, replicate 3 (repeat 6)",
+      "biological": 3,
+      "condition": "minus-lon",
+      "tile": "sl4",
+      "timepoints": [
+        {
+          "sample": "minus-lon-r6-00h",
+          "time": 0
+        },
+        {
+          "sample": "minus-lon-r6-02h",
+          "time": 2
+        },
+        {
+          "sample": "minus-lon-r6-04h",
+          "time": 4
+        },
+        {
+          "sample": "minus-lon-r6-06h",
+          "time": 6
+        },
+        {
+          "sample": "minus-lon-r6-08h",
+          "time": 8
+        },
+        {
+          "sample": "minus-lon-r6-12h",
+          "time": 12
+        },
+        {
+          "sample": "minus-lon-r6-16h",
+          "time": 16
+        },
+        {
+          "sample": "minus-lon-r6-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl1-1",
+      "name": "+Lon, SL1, replicate 1 (repeat 1)",
+      "biological": 1,
+      "condition": "plus-lon",
+      "tile": "sl1",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r1-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r1-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r1-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r1-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r1-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r1-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r1-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r1-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl1-2",
+      "name": "+Lon, SL1, replicate 2 (repeat 3)",
+      "biological": 2,
+      "condition": "plus-lon",
+      "tile": "sl1",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r3-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r3-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r3-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r3-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r3-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r3-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r3-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r3-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl1-3",
+      "name": "+Lon, SL1, replicate 3 (repeat 5)",
+      "biological": 3,
+      "condition": "plus-lon",
+      "tile": "sl1",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r5-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r5-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r5-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r5-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r5-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r5-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r5-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r5-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl2-1",
+      "name": "+Lon, SL2, replicate 1 (repeat 2)",
+      "biological": 1,
+      "condition": "plus-lon",
+      "tile": "sl2",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r2-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r2-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r2-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r2-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r2-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r2-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r2-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r2-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl2-2",
+      "name": "+Lon, SL2, replicate 2 (repeat 3)",
+      "biological": 2,
+      "condition": "plus-lon",
+      "tile": "sl2",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r3-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r3-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r3-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r3-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r3-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r3-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r3-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r3-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl2-3",
+      "name": "+Lon, SL2, replicate 3 (repeat 5)",
+      "biological": 3,
+      "condition": "plus-lon",
+      "tile": "sl2",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r5-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r5-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r5-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r5-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r5-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r5-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r5-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r5-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl3-1",
+      "name": "+Lon, SL3, replicate 1 (repeat 1)",
+      "biological": 1,
+      "condition": "plus-lon",
+      "tile": "sl3",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r1-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r1-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r1-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r1-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r1-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r1-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r1-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r1-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl3-2",
+      "name": "+Lon, SL3, replicate 2 (repeat 4)",
+      "biological": 2,
+      "condition": "plus-lon",
+      "tile": "sl3",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r4-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r4-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r4-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r4-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r4-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r4-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r4-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r4-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl3-3",
+      "name": "+Lon, SL3, replicate 3 (repeat 6)",
+      "biological": 3,
+      "condition": "plus-lon",
+      "tile": "sl3",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r6-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r6-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r6-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r6-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r6-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r6-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r6-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r6-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl4-1",
+      "name": "+Lon, SL4, replicate 1 (repeat 2)",
+      "biological": 1,
+      "condition": "plus-lon",
+      "tile": "sl4",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r2-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r2-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r2-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r2-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r2-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r2-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r2-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r2-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl4-2",
+      "name": "+Lon, SL4, replicate 2 (repeat 4)",
+      "biological": 2,
+      "condition": "plus-lon",
+      "tile": "sl4",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r4-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r4-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r4-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r4-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r4-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r4-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r4-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r4-18h",
+          "time": 18
+        }
+      ]
+    },
+    {
+      "id": "plus-lon-sl4-3",
+      "name": "+Lon, SL4, replicate 3 (repeat 6)",
+      "biological": 3,
+      "condition": "plus-lon",
+      "tile": "sl4",
+      "timepoints": [
+        {
+          "sample": "plus-lon-r6-00h",
+          "time": 0
+        },
+        {
+          "sample": "plus-lon-r6-02h",
+          "time": 2
+        },
+        {
+          "sample": "plus-lon-r6-04h",
+          "time": 4
+        },
+        {
+          "sample": "plus-lon-r6-06h",
+          "time": 6
+        },
+        {
+          "sample": "plus-lon-r6-08h",
+          "time": 8
+        },
+        {
+          "sample": "plus-lon-r6-12h",
+          "time": 12
+        },
+        {
+          "sample": "plus-lon-r6-16h",
+          "time": 16
+        },
+        {
+          "sample": "plus-lon-r6-18h",
+          "time": 18
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "wildType": "_wt",
+    "synonymous": [],
+    "nonsense": "auto"
+  },
+  "ignoredColumns": [
+    {
+      "column": "00000063-b-1:Repeat1_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat1_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat2_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat2_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat3_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat3_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat4_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat4_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat5_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat5_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat6_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-b-1:Repeat6_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat1_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat1_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat2_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat2_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat3_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat3_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat4_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat4_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat5_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat5_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat6_library_transformation",
+      "reason": "the library in the transformation rescue medium, before the overnight outgrowth: not a time point of the selection"
+    },
+    {
+      "column": "00000063-a-1:Repeat6_outgrowth",
+      "reason": "the overnight outgrowth in supplemented medium, before the turbidostat: not a time point of the selection"
+    }
+  ],
+  "notes": [
+    "Counts were reported at a time point only for variants at a frequency above 2 × 10⁻⁵ (the paper's methods): a missing count is a variant below it, not a zero.",
+    "The authors scored each repeat by Enrich2's unweighted regression on the time points, scaled each replicate to the average of all and averaged them; their scores are MaveDB's."
+  ]
+}

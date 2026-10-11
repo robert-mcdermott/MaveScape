@@ -14,6 +14,7 @@
 import { h, icon } from './dom.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { targetProtein } from '../lib/target.js';
+import { coversPosition } from '../lib/design.js';
 import { proteinView } from '../lib/collapse.js';
 import { mappedBlock } from './mapped.js';
 import { annotationBlock } from './tracks.js';
@@ -210,8 +211,12 @@ export function variantSection(app, focus) {
       if (c.flags[row]) parts.push(h('div.callout.accent', { style: { margin: '0 0 8px', fontSize: '12px' } }, `Low confidence: ${flagNames(c.flags[row]).join('; ')}.`));
     }
     if (inView) parts.push(...membersBlock(app, own, v.members[row], focus, run));
-    // Replicates.
-    const reps = inView ? [] : results.replicates.filter((r) => c.replicates.includes(r.id));
+    // Replicates: those of the variant's tile (a replicate of another tile does not measure it, though
+    // its samples may hold it; wave 3, slice 6), the others counted below.
+    const tiles = new Map((run.inputs.design.library?.tiles ?? []).map((t) => [t.id, t]));
+    const ofCondition = inView ? [] : results.replicates.filter((r) => c.replicates.includes(r.id));
+    const reps = ofCondition.filter((r) => coversPosition(r, tiles, v.position[row]));
+    const otherTiles = ofCondition.length - reps.length;
     const sampleCounts = new Map((results.samples ?? []).map((x) => [x.id, x.counts]));
     if (reps.some((r) => r.bins)) {
       // Sorted bins: each replicate's reads in each bin, and the variant's distribution over the bins
@@ -243,6 +248,7 @@ export function variantSection(app, focus) {
       parts.push(h('h4.inspector-sub', 'Replicates'), h('table.data.compact', h('thead', h('tr', h('th', 'Replicate'), h('th.r', 'Before'), h('th.r', 'After'), h('th.r', 'Score'), h('th', 'Used'))),
         h('tbody', ...reps.map((r) => h('tr', h('td', r.name), h('td.r', fmt(r.first[row], 0)), h('td.r', fmt(r.last[row], 0)), h('td.r', Number.isFinite(r.score[row]) ? `${fmt(r.score[row], 2)} ± ${fmt(r.se[row], 2)}` : '—'), h('td', r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'yes'))))));
     }
+    if (otherTiles) parts.push(h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, `${otherTiles} replicate${otherTiles === 1 ? '' : 's'} of other tiles, which do not measure position ${v.position[row]}, not listed.`));
     if (results.barcodes) {
       const block = barcodesBlock(results, reps, row, reps.some((r) => r.bins));
       if (block) parts.push(block);

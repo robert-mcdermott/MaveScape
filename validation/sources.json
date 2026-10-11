@@ -22,8 +22,8 @@
    ]
   },
   "mavedb-brca1-ring": {
-   "title": "BRCA1 RING domain, E2 binding and Y2H (urn:mavedb:00000003-a-1 and -a-2)",
-   "description": "Time series: E2 binding by phage display, 2 libraries × 3 replicates × 6 rounds (inputs shared within a library), and yeast two-hybrid, 2 libraries × 3 replicates × 4 time points (0/18/37/45 and 0/16/41/64 in the column names, units not stated in the record; non-uniform), in one count table. 909-nt DNA target (BRCA1 codons 2–304); -a-1 at nucleotide level (20,724 variants), -a-2 at amino-acid level (12,316). Scored by the Enrich2 authors with weighted least squares and random-effects combination; Enrich2's legacy _wt and _sy rows.",
+   "title": "BRCA1 RING domain, E3 ligase activity (phage autoubiquitination) and BARD1 binding (Y2H) (urn:mavedb:00000003-a-1 and -a-2)",
+   "description": "Time series: E3 ubiquitin ligase activity by phage autoubiquitination (selected with the E2, hence PlusE2 in the column names), 2 libraries × 3 replicates × 6 rounds (inputs shared within a library), and yeast two-hybrid, 2 libraries × 3 replicates × 4 time points (0/18/37/45 and 0/16/41/64 in the column names, units not stated in the record; non-uniform), in one count table. 909-nt DNA target (BRCA1 codons 2–304); -a-1 at nucleotide level (20,724 variants), -a-2 at amino-acid level (12,316). Scored by the Enrich2 authors with weighted least squares and random-effects combination; Enrich2's legacy _wt and _sy rows.",
    "source": "MaveDB; Starita et al., Genetics 2015 (doi:10.1534/genetics.115.175802), rescored in Rubin et al., Genome Biology 2017 (doi:10.1186/s13059-017-1272-5)",
    "license": "CC0 (MaveDB)",
    "files": [
@@ -164,6 +164,38 @@
      "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/counts",
      "size": 368636,
      "sha256": "9d2e8281ff55d87e6ef0ada99a8fc6973073741d9c97ce6bea70e62eca7cdabc"
+    }
+   ]
+  },
+  "mavedb-dhfr": {
+   "title": "E. coli DHFR, growth without and with the Lon protease (urn:mavedb:00000063-b-1 and -a-1)",
+   "description": "Time series: every substitution of the 159-residue DHFR (UniProt P0ABQ4) complementing ER2566 ΔfolA ΔthyA in a turbidostat, sampled at 0, 2, 4, 6, 8, 12, 16 and 18 hours, without Lon (-b-1, the parental B strain) and with Lon restored (-a-1). Four sub-libraries of 40 positions (1–40, 41–80, 81–120, 121–159), each grown three times, two in each of six repeats per condition, the repeats pairing the sub-libraries differently in each condition; each repeat also counts the library after transformation and after overnight outgrowth. Counts below 2 × 10⁻⁵ of the reads at a time point are not reported (NA). Scored by the authors with Enrich2's unweighted regression, each replicate scaled to the mean of all and averaged; _wt is the wild type's row.",
+   "source": "MaveDB; Thompson et al., eLife 2020 (doi:10.7554/eLife.53476)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "minus-lon/scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000063-b-1/scores",
+     "size": 242193,
+     "sha256": "adbc659430f09e964d04ddcc234d98fbd70123703edbd8ca53009726b371c04f"
+    },
+    {
+     "path": "minus-lon/counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000063-b-1/counts",
+     "size": 968272,
+     "sha256": "297484d87b619aee5d0c408bf75a82b8988be9e5c66169a5758b69b1b19364fc"
+    },
+    {
+     "path": "plus-lon/scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000063-a-1/scores",
+     "size": 239726,
+     "sha256": "d39a97f64c378d7d102b0cbc8c5151fe202a1258f229c7cdd58b048a0e85b90e"
+    },
+    {
+     "path": "plus-lon/counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000063-a-1/counts",
+     "size": 974798,
+     "sha256": "c63e1d4e521b4246b2b2588f2d999856521261dd772062282da1f71498124e49"
     }
    ]
   },

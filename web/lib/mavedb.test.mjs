@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { accessionKind, accessionTarget, countsDesign, licenseOf, mappedCSV, mappedVariants, normalizeUrn, readMapped, readoutOf, readScoreSet, scoresDesign, searchHits, targetsOf } from './mavedb.js';
+import { accessionKind, accessionTarget, countsDesign, countsDesignTogether, distinctNames, joinedPrefix, licenseOf, mappedCSV, mappedVariants, normalizeUrn, normalizeUrns, readMapped, readoutOf, readScoreSet, scoresDesign, searchHits, targetsOf } from './mavedb.js';
+import { assembleTable } from './assemble.js';
 import { parseTable } from './csv.js';
 import { detectLayout } from './importer.js';
 import { validateDesign } from './design.js';
@@ -150,4 +151,33 @@ test('MaveDB\'s mapped variants: the current mappings, kept as a table and read 
   assert.deepEqual(rows, [{ urn: 'urn:mavedb:00000835-a-1#1', vrs: 'ga4gh:VA.abc', hgvs: 'NP_002077.1:p.Thr159Ter', clingen: null, level: 'protein' }]);
   const back = readMapped(parseTable(mappedCSV(rows)));
   assert.deepEqual(back.get('urn:mavedb:00000835-a-1#1'), { vrs: 'ga4gh:VA.abc', hgvs: 'NP_002077.1:p.Thr159Ter', clingen: null, level: 'protein' });
+});
+
+test('several score sets written together: their URNs in order, each once', () => {
+  assert.deepEqual(normalizeUrns('urn:mavedb:00000063-b-1, https://www.mavedb.org/score-sets/urn:mavedb:00000063-a-1 urn:mavedb:00000063-b-1'), ['urn:mavedb:00000063-b-1', 'urn:mavedb:00000063-a-1']);
+  assert.deepEqual(normalizeUrns('GRB2'), []);
+  assert.equal(joinedPrefix('urn:mavedb:00000063-a-1'), '00000063-a-1');
+  assert.deepEqual(distinctNames(['Growth rate of mutated DHFR with deficient Lon', 'Growth rate of mutated DHFR with functioning Lon']), ['deficient Lon', 'functioning Lon']);
+  assert.deepEqual(distinctNames(['Same title', 'Same title']), ['Same title', 'Same title'], 'nothing tells them apart: their titles');
+});
+
+test('two records\' counts joined: a design drafted as a condition each, the first the reference, valid for the joined table', () => {
+  // DHFR's two score sets (their records as the fetcher cached them), with counts of the same layout.
+  const records = ['urn:mavedb:00000063-b-1', 'urn:mavedb:00000063-a-1'].map(record);
+  const header = 'accession,hgvs_nt,hgvs_splice,hgvs_pro,Repeat1_library_transformation,Repeat1_t_00hrs,Repeat1_t_02hrs,Repeat1_t_04hrs,Repeat2_t_00hrs,Repeat2_t_02hrs,Repeat2_t_04hrs';
+  const counts = (urn) => parseTable(`${header}\n${urn}#1,NA,NA,_wt,9,100,120,130,90,95,99\n${urn}#2,NA,NA,p.Ile2Val,5,20,18,15,22,19,NA\n`, { fileName: `${joinedPrefix(urn)}.csv` });
+  const parts = records.map((r) => { const t = counts(r.urn); return { record: r, table: t, layout: detectLayout(t) }; });
+  const target = targetsOf(records[0]).targets[0];
+  const joined = assembleTable(parts.map((p) => ({ name: `${joinedPrefix(p.record.urn)}.csv`, table: p.table, role: 'counts' })), { level: 'protein', target }).table;
+  const { design, problem } = countsDesignTogether(parts, { joined, target });
+  assert.equal(problem, undefined);
+  assert.deepEqual(design.conditions, [{ id: '00000063-b-1', name: 'deficient Lon', reference: true }, { id: '00000063-a-1', name: 'functioning Lon' }]);
+  assert.equal(design.time.unit, 'hour');
+  assert.equal(design.replicates.length, 4);
+  assert.ok(design.replicates.every((r) => r.timepoints.every((t) => design.samples.some((s) => s.id === t.sample))));
+  assert.ok(design.samples.every((s) => s.columns.every((c) => /^00000063-[ab]-1:Repeat\d_t_0\dhrs$/.test(c))));
+  assert.deepEqual(design.ignoredColumns.map((x) => x.column), ['00000063-b-1:Repeat1_library_transformation', '00000063-a-1:Repeat1_library_transformation']);
+  assert.equal(design.source.mavedb, 'urn:mavedb:00000063-b-1 and urn:mavedb:00000063-a-1');
+  const v = validateDesign(design, { columns: joined.columns.map((c) => c.name) });
+  assert.ok(v.ok, v.errors.map((e) => e.message).join(' '));
 });

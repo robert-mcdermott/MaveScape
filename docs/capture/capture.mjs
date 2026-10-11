@@ -50,6 +50,16 @@ const BRCA1_SGE = join(ROOT, 'validation/cache/mavedb-brca1-sge');
 if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant'].includes(w))) {
   if (!existsSync(join(BRCA1_SGE, 'counts.csv'))) throw new Error('The BRCA1 example\'s scenes need MaveDB\'s tables: run node validation/fetch.mjs mavedb-brca1-sge');
 }
+// The examples opened from MaveDB with their counts (wave 3, slice 6): DHFR's two score sets, BRCA1
+// RING's amino-acid score set; each record's tables and the folder that holds them.
+const MAVEDB_TABLES = [
+  ['urn:mavedb:00000063-b-1', join(ROOT, 'validation/cache/mavedb-dhfr/minus-lon'), 'dhfr-lon'],
+  ['urn:mavedb:00000063-a-1', join(ROOT, 'validation/cache/mavedb-dhfr/plus-lon'), 'dhfr-lon'],
+  ['urn:mavedb:00000003-a-2', join(ROOT, 'validation/cache/mavedb-brca1-ring/aa'), 'brca1-ring'],
+];
+for (const [, dir, scene] of MAVEDB_TABLES) {
+  if ((wanted.length === 0 || wanted.includes(scene)) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
+}
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
 
 // --- MaveScape ------------------------------------------------------------------------------------
@@ -76,6 +86,14 @@ async function startMaveScape() {
     if (!existsSync(join(BRCA1_SGE, `${table}.csv`))) continue;
     cpSync(join(BRCA1_SGE, `${table}.csv`), join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv`));
     writeFileSync(join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/${table}`, retrieved: '2026-10-11T04:13:31Z' }, null, 2)}\n`);
+  }
+  for (const [urn, dir] of MAVEDB_TABLES) {
+    for (const table of ['scores', 'counts']) {
+      if (!existsSync(join(dir, `${table}.csv`))) continue;
+      const name = `${urn.replaceAll(':', '_')}.${table}.csv`;
+      cpSync(join(dir, `${table}.csv`), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
+    }
   }
   const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
@@ -441,6 +459,23 @@ const scenes = {
     await act('inspect_variant', { variant: 'p.Pro13Ala' });
     await sleep(600);
     await scrollTo('#inspector h4.inspector-sub:nth-of-type(2)', 'start');
+  },
+  // Two MaveDB score sets opened together (wave 3, slice 6): DHFR's map of +Lon − −Lon, a variant
+  // Lon penalizes in the inspector, its sub-library's three replicates.
+  async 'dhfr-lon'() {
+    await example('dhfr-lon');
+    await act('render_map', { color_by: 'differential' });
+    await act('inspect_variant', { variant: 'p.Met20Ala', condition: '+Lon' });
+    await clearToasts();
+    await sleep(600);
+  },
+  // BRCA1 RING from MaveDB (wave 3, slice 6): its counts scored (Run 1) on the map, a zinc ligand
+  // of the RING (C61 on BRCA1's numbering) in the inspector, its six replicates.
+  async 'brca1-ring'() {
+    await example('brca1-ring');
+    await act('inspect_variant', { variant: 'p.Cys60Tyr', run: 'Run 1' });
+    await clearToasts();
+    await sleep(600);
   },
   // The Score view's comparison of the conditions: how, how many differ, the volcano plot.
   async 'differential-score'() {

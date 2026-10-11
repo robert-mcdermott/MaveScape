@@ -12,13 +12,13 @@ import { detectLayout, reviewImport, suggestRoles } from '../lib/importer.js';
 import { sha256 } from '../lib/sha256.js';
 import { addRun, makeRun, runInputs } from '../lib/runs.js';
 import { defaultParameters, withDefaults } from '../lib/score.js';
-import { addSource, addTarget, change, createWorkspace, setDesign } from '../lib/workspace.js';
+import { addSource, addTarget, change, createWorkspace, setDesign, updateTarget } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { pearson } from '../lib/stats.js';
 import { intervalOf } from '../lib/exports.js';
 import { runScore, workerInput } from './score-input.js';
 import { runEntry } from './run-results.js';
-import { importMaveDB } from './mavedb.js';
+import { exampleRecords, importMaveDB } from './mavedb.js';
 
 const fetchBytes = async (path) => {
   const response = await fetch(path);
@@ -30,11 +30,18 @@ const fetchBytes = async (path) => {
 export async function openExample(app, id) {
   const example = exampleById(id);
   if (!example) return { ok: false, message: `No example "${id}".` };
-  // An example opened from MaveDB (wave 3, slice 2): through the program's fetcher, as any record.
+  // An example opened from MaveDB (wave 3, slice 2): through the program's fetcher, as any record;
+  // several score sets opened together (wave 3, slice 6).
   if (example.mavedb) {
-    // Its counts too when the example teaches them (BRCA1's saturation genome editing).
-    const opened = await importMaveDB(app, example.mavedb.urn, { counts: Boolean(example.mavedb.counts), example });
-    if (opened.ok) await app.setMode(example.opens);
+    const records = exampleRecords(example);
+    // Its counts too when the example teaches them (BRCA1's saturation genome editing), with its
+    // own design and a first run when it gives one (DHFR's, BRCA1 RING's).
+    const prepare = example.files?.design ? (ws, context) => scoreExampleCounts(app, example, ws, context) : null;
+    const opened = await importMaveDB(app, records.map((r) => r.urn).join(' '), { counts: records.some((r) => Boolean(r.counts)), example, prepare });
+    if (opened.ok) {
+      setExampleMapView(app, example);
+      await app.setMode(example.opens);
+    }
     return { ok: opened.ok, message: opened.ok ? `Opened the example "${example.title}" from MaveDB. ${opened.message}` : opened.message };
   }
   const busy = progressToast(`Opening the example "${example.title}"…`);
@@ -111,7 +118,7 @@ export async function openExample(app, id) {
     // A new workspace: not in the library until it is saved.
     app.store.markSaved(null);
     await app.saveNow();
-    if (example.map) app.mapView = { ...(app.mapView ?? { rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0 }), ...example.map };
+    setExampleMapView(app, example);
     await app.setMode(example.opens);
     busy.done(`Opened the example "${example.title}". Its guide is in the inspector.`);
     return { ok: true, message: `Opened the example "${example.title}"${result.ok ? ', scored with MaveScape\'s defaults' : ''}.` };
@@ -119,6 +126,42 @@ export async function openExample(app, id) {
     busy.fail(`The example could not be opened: ${error.message}`);
     return { ok: false, message: `The example could not be opened: ${error.message}` };
   }
+}
+
+// The map's view as the example opens it (a two-condition example's on its difference). The view is
+// changed in place: a map already shown keeps reading the same object.
+function setExampleMapView(app, example) {
+  if (!example.map) return;
+  app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0, offKind: 'all', offPage: 0 };
+  Object.assign(app.mapView, example.map);
+  app.store.notify(['results']);
+}
+
+// A MaveDB example's counts given the example's design, from the paper (which the column names do
+// not say: DHFR's sub-libraries, BRCA1 RING's shared inputs and second assay), in place of the
+// draft, its target's offset and identifiers with it, and scored with MaveScape's defaults and
+// what the example sets: Run 1 (wave 3, slice 6). context: { counts: { id, table }, busy }.
+async function scoreExampleCounts(app, example, ws, { counts, busy }) {
+  if (!counts) throw new Error('MaveDB sent no counts for the example.');
+  const given = JSON.parse(new TextDecoder().decode(await fetchBytes(example.files.design)));
+  const source = ws.sources.find((s) => s.id === counts.id);
+  const target = ws.targets.find((t) => t.id === source.target);
+  const stated = given.targets[0];
+  if (stated.sequence !== target.sequence) throw new Error(`MaveDB's target is no longer the sequence the example's design was written for (${target.sequence.length} against ${stated.sequence.length}).`);
+  // What the example states about the target beyond the record (BRCA1 RING's offset, from the paper).
+  const patch = Object.fromEntries(['offset', 'organism', 'identifiers', 'differences'].filter((k) => stated[k] !== undefined).map((k) => [k, stated[k]]));
+  ws = updateTarget(ws, target.id, patch, `The target as the example states it (${Object.keys(patch).join(', ')}), from the paper`);
+  const { origin, reference, ...plain } = ws.targets.find((t) => t.id === target.id);
+  ws = setDesign(ws, { ...given, targets: [plain] }, `The design of the example "${example.title}", from the paper's methods, in place of the one drafted from the column names`, counts.id);
+  busy?.update(0.85, 'Scoring the counts with the example\'s design');
+  const { names, barcodes, columns, transfer } = workerInput(counts.table, ws.design);
+  const parameters = withDefaults({ ...defaultParameters(ws.design, source), ...(example.parameters ?? {}) });
+  const result = await runScore(app, { names, barcodes, columns, design: ws.design, parameters, mode: 'lenient' }, { transfer }).promise;
+  if (!result.ok) throw new Error(`The example's counts could not be scored: ${result.errors.join(' ')}`);
+  const run = makeRun({ inputs: runInputs({ source, design: ws.design, parameters }), source, results: result.results, software: { version: app.version, commit: app.commit }, name: 'Run 1' });
+  app.runResults ??= new Map();
+  app.runResults.set(run.id, { results: result.results, status: 'computed' });
+  return addRun(ws, run).ws;
 }
 
 const percent = (x, n) => `${(100 * x / n).toFixed(1)}%`;

@@ -37,7 +37,8 @@ export function mountInspector(app) {
       h('dt', 'Target'), h('dd', app.store.ws.targets.find((t) => t.id === source.target)?.name ?? 'none'),
       // A table from MaveDB (wave 3, slice 2): which record and file, its license, when retrieved.
       source.origin?.database === 'MaveDB' ? [
-        h('dt', 'From'), h('dd', `MaveDB ${source.origin.urn} (${source.origin.file})`),
+        // The counts of several score sets opened together (wave 3, slice 6), joined.
+        h('dt', 'From'), h('dd', source.origin.urns ? `MaveDB ${source.origin.urns.join(' and ')} (counts, joined: a condition each)` : `MaveDB ${source.origin.urn} (${source.origin.file})`),
         h('dt', 'License'), h('dd', source.origin.license ?? ''),
         h('dt', 'Retrieved'), h('dd', String(source.origin.retrieved ?? '').slice(0, 10)),
       ] : null);

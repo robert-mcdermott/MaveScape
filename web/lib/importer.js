@@ -129,15 +129,19 @@ const PATTERNS = {
 };
 
 function first(patterns, name) {
-  for (const p of patterns) {
+  for (const [index, p] of patterns.entries()) {
     const m = p.exec(name);
-    if (m) return { value: Number(m[1]), text: m[0] };
+    if (m) return { value: Number(m[1]), text: m[0], index };
   }
   return null;
 }
 
+// The unit each time pattern names (Enrich2's _c_ and a bare "t" name none).
+const TIME_UNITS_NAMED = [null, null, 'generation', 'day', 'hour'];
+
 // Suggests each count column's role from its name: [{ column, role ('input' | 'output' |
-// 'timepoint' | 'bin' | null), time, bin, tile, replicate, group, reason }]. `group` gathers the
+// 'timepoint' | 'bin' | null), time, unit (what the name says time is in: 'hour', 'day',
+// 'generation', or null), bin, tile, replicate, group, reason }]. `group` gathers the
 // columns of one replicate (the name with the role, time and bin taken out). Suggestions only.
 export function suggestRoles(columns) {
   return columns.map((name) => {
@@ -167,7 +171,7 @@ export function suggestRoles(columns) {
     }
     // DiMSum's "output1A": the letter after the replicate number is a technical replicate.
     group = group.replace(/(\d)[A-Z]$/, '$1').replace(/^[_\s.-]+|[_\s.-]+$/g, '') || 'all';
-    return { column: name, role, time: time?.value ?? (role === 'input' ? 0 : null), bin: bin?.value ?? null, tile: tile?.value ?? null, replicate: replicate?.value ?? null, group, reason };
+    return { column: name, role, time: time?.value ?? (role === 'input' ? 0 : null), unit: role === 'timepoint' ? TIME_UNITS_NAMED[time.index] : null, bin: bin?.value ?? null, tile: tile?.value ?? null, replicate: replicate?.value ?? null, group, reason };
   });
 }
 
@@ -318,7 +322,11 @@ export function draftDesign(table, roles, options = {}) {
   };
   if (conditions.length) design.conditions = conditions;
   if (tiles.size) design.library.tiles = [...tiles].sort((a, b) => a[1] - b[1]).map(([id, n]) => ({ id, name: `Tile ${n}`, ...tileRange(table, options, used.filter((r) => r.tile === n).map((r) => r.column)) }));
-  if (model === 'time-series') design.time = { unit: 'other' };
+  // The unit the time points' names give ("t_02hrs", "day5", "gen10"), when they all give the same.
+  if (model === 'time-series') {
+    const units = new Set(used.filter((r) => r.role === 'timepoint').map((r) => r.unit ?? null));
+    design.time = { unit: units.size === 1 && [...units][0] ? [...units][0] : 'other' };
+  }
   if (model === 'bins') {
     design.bins = { weight: 'rank' };
     notes.push('Bins are given their order as their value; set the values (VAMP-seq weights, or fluorescence) in the Experiment view.');

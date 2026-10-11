@@ -154,6 +154,23 @@ this section grows with each.
   (wave 3, slice 5); [`docs/NETWORK.md`](docs/NETWORK.md) lists each and what it sends.
 - The guide's *Tracks* (The map) and *Annotations beside the map* (Public data), and a screenshot
   of the GRB2 example's tracks; the GRB2 example's guide adds tracks to its map.
+- **Several MaveDB score sets opened together, a condition each (wave 3, slice 6).** MaveDB keeps
+  each selection as a score set of its own; give several URNs at once (*Open from MaveDB*,
+  `open_mavedb`) and *Open together* opens them as one workspace: each record kept, each one's
+  published scores a run of their own, and their counts joined into one table on their variant
+  names, each record's columns named by its URN's number, with a design drafted from their names as
+  for one record but a condition each, the first the reference. Their targets must be the same
+  sequence. Scored, the map compares them.
+- **Two examples, thirteen in all (wave 3, slice 6).** *DHFR with and without the Lon protease*
+  (Thompson et al. 2020; urn:mavedb:00000063-b-1 and -a-1): two score sets opened together, their
+  counts with the paper's design (four sub-libraries, two grown in each repeat, eight time points
+  over 18 hours), the map opening on +Lon − −Lon. *BRCA1 RING domain, from MaveDB and back*
+  (Starita et al. 2015, scored by Enrich2; urn:mavedb:00000003-a-2): its counts rescored, every
+  replicate score the published one, deposited in MaveDB's format and opened again, its scores
+  exactly the run's. An example opened from MaveDB can give the design its counts need, which the
+  column names do not say, and its first run.
+- The guide's *Several score sets as conditions* (Public data), the two examples' pages with their
+  screenshots, and tiles grown together (The experiment).
 - **The Network dialog** (the status bar's *Public data*): the services MaveScape may contact,
   what it asks each, the cache's folder, and what the cache holds.
 - The guide page *Public data*; the GRB2 example's guide checks its target against UniProt; a
@@ -188,6 +205,25 @@ this section grows with each.
   (wave 3, slice 5). With no track shown, the map and its exports are as before.
 - `conservation.js`, copied from Proteoscope, uses `dmath.js`'s log and exp, so its scores do not
   depend on the JavaScript engine (wave 3, slice 5).
+- **A replicate of a tile measures only its tile's positions** (wave 3, slice 6), though its
+  samples hold others' (sub-libraries grown and sequenced together, as DHFR's were): another tile's
+  variants in its samples are marked *outside its tile* and are neither scored nor combined in it,
+  nor compared by QC; such samples are not "shared" between the tiles' replicates, and the design's
+  summary says so. Before, a variant was combined from every replicate whose samples counted it, so
+  a measurement shared by two tiles' replicates counted twice. Designs whose tiles have samples of
+  their own (factor IX's) score as before, the same bytes.
+- The inspector and `inspect_variant` list only the replicates of a variant's tile, and say how
+  many of other tiles are not listed (wave 3, slice 6).
+- Conditions that share no input are compared as independent by default; they were "paired by
+  their shared input", which then fell back to independent (wave 3, slice 6). The scores are the
+  same; the run's parameters now say what was done.
+- A drafted time series takes its unit from the time points' names when they all name one
+  (`t_02hrs`: hours; `day5`: days; `gen10`: generations) (wave 3, slice 6).
+- An example opened from MaveDB sets its map's view (DHFR's, on the difference) though the map is
+  already shown (wave 3, slice 6).
+- The BRCA1 RING validation design and data set describe the phage assay as what it measures, E3
+  ubiquitin ligase activity by autoubiquitination (selected with the E2, hence "PlusE2"), not E2
+  binding (wave 3, slice 6).
 
 ### Validation
 
@@ -265,6 +301,24 @@ this section grows with each.
   from files, shown, moved and filtered (not in the history), a variant's annotations, and the
   tracks' table and the map with its tracks the same bytes as Node's from the archive; the methods
   cite each source. Unit tests: `tracks.test.mjs`, `providers.test.mjs`, `conservation.test.mjs`.
+- `examples` validation suite (46 checks; wave 3, slice 6): the two new examples opened as the
+  window opens them, their tables MaveDB's as pinned (`mavedb-dhfr`, a new external data set), QC
+  raising exactly the findings they list. DHFR: each replicate measures only its own sub-library
+  (none combined twice), the scores against the published ones (r 0.90 and 0.96 with the defaults,
+  0.96 and 0.98 with the authors' unweighted regression, on the same scale), Lon's effect as the
+  paper found it (the published 736 and 384 advantageous substitutions; here about twice as many
+  without Lon; 92% of the differences called negative, most at native hydrophobic residues). BRCA1
+  RING: 50,055 replicate scores equal the published ones within 2 × 10⁻¹⁴ with MaveScape's
+  defaults, the combined ones with the Enrich2-compatible preset (r 1.000, 6,847 scored, as
+  MaveDB's); its eight zinc ligands among its twelve least tolerant positions; Run 1 deposited,
+  read back with its scores exact, and written again the same bytes.
+- The remote-control session (108 checks): DHFR's two score sets opened together offline, the
+  drafted design a condition each in hours; its example's Run 1 with Node's output hash, the map on
+  +Lon − −Lon, and Run 1 reproduced from the joined table's two files. The CI's remote job fetches
+  DHFR's tables (`--require-data`). `mavedb-live.mjs` (19 checks): DHFR's two score sets opened
+  together live, their tables as pinned.
+- The MaveDB deposit reference regenerated with MaveDB's validators (`generate_mavedb_export.py`):
+  BRCA1's saturation genome editing counts now draft in days, which its deposit says.
 
 ## 0.2.0 (2026-10-10)
 

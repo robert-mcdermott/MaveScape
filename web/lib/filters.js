@@ -33,8 +33,10 @@ export const STAGE_BY_ID = new Map(STAGES.map((s) => [s.id, s]));
 // pseudocount), or no maximum-likelihood estimate from the bins (all reads in an open outer bin, or
 // in fewer than three bins with σ fitted). FEW_BARCODES: a barcode table's
 // variant measured by fewer barcodes than the minimum (outlier barcodes left out not counting).
-export const REPLICATE_STATE = { USED: 0, NOT_COUNTED: 1, INPUT_COUNT: 2, TOTAL_COUNT: 3, FEW_POINTS: 4, LOW_FREQUENCY: 5, NOT_ESTIMABLE: 6, FEW_BARCODES: 7 };
-export const REPLICATE_STATE_NAMES = ['used', 'not counted in every sample', 'input count below the minimum', 'total count below the minimum', 'counted at too few time points', 'summed bin frequency below the minimum', 'no estimate (a zero count with no pseudocount, or no fit from the bins)', 'fewer barcodes than the minimum'];
+// OUTSIDE_TILE: counted by a sample that holds several tiles, at a position outside the replicate's
+// own tile (wave 3, slice 6): another tile's replicates measure it.
+export const REPLICATE_STATE = { USED: 0, NOT_COUNTED: 1, INPUT_COUNT: 2, TOTAL_COUNT: 3, FEW_POINTS: 4, LOW_FREQUENCY: 5, NOT_ESTIMABLE: 6, FEW_BARCODES: 7, OUTSIDE_TILE: 8 };
+export const REPLICATE_STATE_NAMES = ['used', 'not counted in every sample', 'input count below the minimum', 'total count below the minimum', 'counted at too few time points', 'summed bin frequency below the minimum', 'no estimate (a zero count with no pseudocount, or no fit from the bins)', 'fewer barcodes than the minimum', 'outside its tile (another tile\'s replicates measure it)'];
 
 // Flags on a scored variant (bits): measurements to read with care, shown as low confidence.
 export const FLAG = { OUTPUT_ZERO: 1, INPUT_ZERO: 2, FEWER_REPLICATES: 4, FEWER_POINTS: 8 };

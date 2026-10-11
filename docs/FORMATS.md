@@ -236,7 +236,8 @@ The design as data: format `mavescape-design`, version 1, described by
 its columns: several are technical replicates, summed), the replicates (each naming its samples:
 input and output, time points, or bins; its biological number, condition and tile), conditions,
 tiles, controls, and `ignoredColumns` (every other column of the table, with the reason, or the
-column it copies). For a table of barcodes, `library.level` is `barcode` and `library.barcodeColumn`
+column it copies). A sample may be named by replicates of several tiles (sub-libraries grown and
+sequenced together): each of them measures only its own tile's positions there (MaveScape 0.3). For a table of barcodes, `library.level` is `barcode` and `library.barcodeColumn`
 names the column of barcodes (MaveScape 0.2). A sample's `missingMeansZero: true` reads its missing counts as 0, for tables
 that write variants that dropped out during selection as missing (MaveScape 0.2; "Missing = 0" in
 the Experiment view; warned about on a replicate's first sample). For sorted bins, each bin of a replicate
@@ -372,6 +373,14 @@ urn:mavedb:00000835-a-1#1,ga4gh:VA.0lN4ih6CEbwrQ_YxlUsIp4eo225wMbtf,NP_002077.1:
 `vrs_id` is the GA4GH VRS 2.0 allele identifier of the current mapping (`postMapped`), `hgvs` the
 HGVS on the reference sequence it maps to, `clingen_allele_id` its ClinGen allele (where MaveDB
 gives one). The inspector shows a variant's; superseded mappings are left out.
+
+Several score sets opened together (MaveScape 0.3, "Several score sets as conditions"): each
+record's scores are a source of their own, as above; their counts are one source assembled from
+every record's counts file, joined on the variant column (`files`, in order, each named by its
+URN's number, `00000063-b-1.csv`, so that its columns are named `00000063-b-1:Repeat1_t_00hrs`;
+`mapping.absentMeans` `missing`). Its `origin` names them all and no one:
+`{ database: "MaveDB", urn: null, urns: [urn, …], file: "counts", joined: true, retrieved, license,
+hasCounts, rawReads }`.
 
 The workspace keeps each record opened in `records`: MaveDB's record as MaveScape reads
 it (its title, short description and method text, license and its terms, citation and publications,
@@ -656,7 +665,9 @@ A table of barcodes, one row per barcode: `barcode`, its variant (`hgvs_pro` or 
   `causes` and `next` (each `kind: text`, separated by ` | `; causes are `technical`, `model` or
   `expected`, next steps `inspect`, `analysis` or `experiment`).
 - `*_qc_variants.csv`: per variant: the state of its name, its status and flags, and for each
-  replicate its counts before and after and whether that replicate was used (or why not).
+  replicate its counts before and after and whether that replicate was used (or why not: from
+  MaveScape 0.3, `outside its tile (another tile's replicates measure it)` where a sample holds
+  several tiles).
 
 ### Selections
 

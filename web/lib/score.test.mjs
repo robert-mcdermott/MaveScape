@@ -116,3 +116,52 @@ test('published scores: a variant written twice with the same scores is read onc
   const differ = scoreExperiment({ names: twice, design: published, parameters: defaultParameters(published), columns: { score: col(0, -0.4, 0.1, -1) } });
   assert.match(differ.errors.join(' '), /on more than one row \(p\.=\) with different scores/);
 });
+
+test('samples holding two tiles: each replicate measures only its own tile, no measurement combined twice', async () => {
+  const { REPLICATE_STATE } = await import('./filters.js');
+  const { defaultParameters } = await import('./score.js');
+  // Two tiles (1–2 and 3–5) grown together: each of the two replicates' samples counts both; the
+  // design names each sample from a replicate of each tile.
+  const d = design({
+    library: { level: 'variant', tiles: [{ id: 'a', start: 1, end: 2 }, { id: 'b', start: 3, end: 5 }] },
+    replicates: [
+      { id: 'a1', biological: 1, tile: 'a', input: 'in1', output: 'out1' }, { id: 'a2', biological: 2, tile: 'a', input: 'in2', output: 'out2' },
+      { id: 'b1', biological: 1, tile: 'b', input: 'in1', output: 'out1' }, { id: 'b2', biological: 2, tile: 'b', input: 'in2', output: 'out2' },
+    ],
+  });
+  const out = scoreExperiment({ names, columns: columns(), design: d, parameters: DEFAULT_PARAMETERS });
+  assert.ok(out.ok, out.errors?.join(' '));
+  const reps = Object.fromEntries(out.results.replicates.map((r) => [r.id, r]));
+  // p.Ser2Ala (tile a) is outside tile b; p.Glu5Asp (tile b) outside tile a; the wild type is both's.
+  assert.equal(reps.b1.state[1], REPLICATE_STATE.OUTSIDE_TILE);
+  assert.ok(Number.isNaN(reps.b1.score[1]));
+  assert.equal(reps.a1.state[4], REPLICATE_STATE.OUTSIDE_TILE);
+  assert.equal(reps.a1.state[0], REPLICATE_STATE.USED);
+  const c = out.results.conditions[0];
+  assert.deepEqual([...c.k].slice(1, 5), [1, 2, 2, 1], 'from their own tile\'s replicates only (p.Ser2Ala and p.Glu5Asp each counted in one), never four');
+  assert.deepEqual([...c.expected].slice(1, 5), [2, 2, 2, 2]);
+  // The same scores as each tile scored alone.
+  const alone = scoreExperiment({ names, columns: columns(), design: design(), parameters: DEFAULT_PARAMETERS });
+  assert.equal(c.score[4], alone.results.conditions[0].score[4]);
+  // Not "shared" between the tiles' replicates: nothing to say about dependence.
+  assert.ok(!out.results.warnings.some((w) => w.code === 'shared-samples'));
+  assert.ok(!out.results.info.some((m) => /shared between replicates/.test(m)));
+  assert.equal(defaultParameters(d).differential, null);
+});
+
+test('conditions that share no input are compared as independent by default; sharing one, paired', async () => {
+  const { defaultDifferential } = await import('./score.js');
+  const timeSeries = (shared) => ({
+    format: 'mavescape-design', version: 1, name: 'ts', model: 'time-series', variants: { column: 'v', level: 'protein' }, targets: [target], library: { level: 'variant' },
+    conditions: [{ id: 'a', name: 'A', reference: true }, { id: 'b', name: 'B' }],
+    samples: ['a0', 'a1', 'a2', 'b0', 'b1', 'b2'].map((id) => ({ id, columns: [id] })),
+    replicates: [
+      { id: 'ra', biological: 1, condition: 'a', timepoints: [{ sample: 'a0', time: 0 }, { sample: 'a1', time: 1 }, { sample: 'a2', time: 2 }] },
+      { id: 'rb', biological: 1, condition: 'b', timepoints: [{ sample: shared ? 'a0' : 'b0', time: 0 }, { sample: 'b1', time: 1 }, { sample: 'b2', time: 2 }] },
+    ],
+    controls: { wildType: 'auto', synonymous: 'auto', nonsense: 'auto' },
+  });
+  assert.equal(defaultDifferential(timeSeries(false)), 'independent');
+  assert.equal(defaultDifferential(timeSeries(true)), 'paired');
+  assert.equal(defaultDifferential(timeSeries(true), 'enrich2'), 'independent');
+});

@@ -79,8 +79,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Cache DHFR's MaveDB tables (two score sets opened together)
+        uses: actions/cache@v4
+        with:
+          path: validation/cache/mavedb-dhfr
+          key: validation-dhfr-${{ hashFiles('validation/sources.json') }}
+      - name: Fetch DHFR's MaveDB tables
+        run: node validation/fetch.mjs mavedb-dhfr
       - name: Every remote action, in the program and headless Chrome, against Node
-        run: node validation/remote-session.mjs --verbose
+        run: node validation/remote-session.mjs --verbose --require-data
         env:
           CHROME: /usr/bin/google-chrome
       - name: A million barcodes imported and scored in the window

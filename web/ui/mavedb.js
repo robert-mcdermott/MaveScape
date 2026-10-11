@@ -15,7 +15,8 @@ import { progressToast, showDialog, toast } from './overlays.js';
 import { fetchPublic, publicDataState } from './public-data.js';
 import { storeBytes } from './import.js';
 import { runScore, workerInput } from './score-input.js';
-import { accessionTarget, countsDesign, mappedCSV, mappedVariants, normalizeUrn, readScoreSet, recordSummary, scoresDesign, searchHits, targetsOf } from '../lib/mavedb.js';
+import { accessionTarget, countsDesign, countsDesignTogether, distinctNames, joinedPrefix, mappedCSV, mappedVariants, normalizeUrn, normalizeUrns, readScoreSet, recordSummary, scoresDesign, searchHits, targetsOf } from '../lib/mavedb.js';
+import { assembleTable } from '../lib/assemble.js';
 import { detectLayout, reviewImport, suggestRoles } from '../lib/importer.js';
 import { addRun, makeRun, runInputs } from '../lib/runs.js';
 import { defaultParameters } from '../lib/score.js';
@@ -86,7 +87,7 @@ async function recordTarget(app, record, choice, busy) {
 // files): the target, the record kept, the published scores read as published (a run of their own),
 // the counts with a design drafted from their column names. Loaded into the window. Returns
 // { ws, target, published, result, draft, changed }.
-async function openRecordWorkspace(app, { record, retrieval, recordsTarget, targetOrigin, scores, scoresRetrieval, countsPart, countsRetrieval, origin, example = null, deposit = null, busy, label, named, history }) {
+async function openRecordWorkspace(app, { record, retrieval, recordsTarget, targetOrigin, scores, scoresRetrieval, countsPart, countsRetrieval, origin, example = null, prepare = null, deposit = null, busy, label, named, history }) {
   await app.saveNow();
   let ws = createWorkspace(record.title);
   const added = addTarget(ws, targetOrigin ? { ...recordsTarget, origin: targetOrigin } : recordsTarget);
@@ -122,6 +123,8 @@ async function openRecordWorkspace(app, { record, retrieval, recordsTarget, targ
     draft = countsDesign(record, { table: countsPart.table, layout: countsPart.layout, target });
     ws = setDesign(countsSource.ws, draft.design, `A design drafted from the column names of ${named}'s counts`, countsId);
   }
+  // An example's own design of the counts, and its first run (ui/examples.js).
+  if (prepare) ws = await prepare(ws, { counts: countsPart ? { id: countsId, table: countsPart.table } : null, busy });
   await app.loadWorkspace(ws);
   app.tables.set(scoresSource.id, { table: scores.table, review: scores.review });
   if (countsPart) app.tables.set(countsId, { table: countsPart.table, review: countsPart.review });
@@ -136,7 +139,10 @@ async function openRecordWorkspace(app, { record, retrieval, recordsTarget, targ
 // mapped variants. example: a bundled example opened from MaveDB (lib/examples.js): what it states
 // that the record does not (its readout), and the checksum its table had when the example was made.
 // Returns { ok, message, data }.
-export async function importMaveDB(app, text, { counts = true, example = null, target: choice = null, mapped = false } = {}) {
+export async function importMaveDB(app, text, { counts = true, example = null, prepare = null, target: choice = null, mapped = false } = {}) {
+  // Several score sets written together open as one workspace, a condition each (wave 3, slice 6).
+  const urns = normalizeUrns(text);
+  if (urns.length > 1) return importMaveDBTogether(app, urns, { counts, example, prepare });
   const urn = normalizeUrn(text);
   if (!urn) return { ok: false, message: `"${text}" is not the URN of a published MaveDB score set (such as urn:mavedb:00000835-a-1).` };
   const state = publicDataState(app);
@@ -180,7 +186,7 @@ export async function importMaveDB(app, text, { counts = true, example = null, t
 
     const origin = (file, retrieval) => ({ database: 'MaveDB', urn, file, url: retrieval?.source ?? null, retrieved: retrieval?.retrieved ?? null, license: record.license.short, hasCounts: record.hasCounts, rawReads: record.experiment.rawReads.map((r) => r.id), ...(mappedFile ? { mapped: mappedFile } : {}) });
     const opened = await openRecordWorkspace(app, {
-      record, retrieval: got.retrieval, recordsTarget, targetOrigin, scores, scoresRetrieval: scoresFile.retrieval, countsPart, countsRetrieval, origin, example, busy,
+      record, retrieval: got.retrieval, recordsTarget, targetOrigin, scores, scoresRetrieval: scoresFile.retrieval, countsPart, countsRetrieval, origin, example, prepare, busy,
       label: 'MaveDB', named: urn,
       history: ['mavedb', `Opened ${urn} from MaveDB: "${record.title}" (${record.license.short}; ${retrievalText(got.retrieval) || 'retrieved now'})`],
     });
@@ -193,7 +199,7 @@ export async function importMaveDB(app, text, { counts = true, example = null, t
       ...targetNotes,
       published ? `Its published scores are on the map: ${exact(scored)} of ${exact(scores.table.rows)} variants have one (the run "Published scores", read as published)${ws.design.variants.level !== 'protein' ? ', its nucleotide variants read at the protein level' : ''}.` : `Its scores could not be read: ${result.errors.join(' ')}`,
       mappedFile ? `MaveDB's mapping of ${exact(mappedFile.variants)} variants to the human reference (VRS identifiers) is kept: the inspector shows each variant's.` : '',
-      countsPart ? `Its counts (${plural(countsPart.layout.countColumns.length, 'column')}) have a design drafted from their names (${{ 'two-population': 'two populations', 'time-series': 'a time series', bins: 'sorted bins' }[draft.design.model] ?? draft.design.model}): check it in Experiment, then score.` : record.hasCounts ? 'Its counts were not opened.' : 'MaveDB has no counts for it: the readiness says where they may be.',
+      countsPart && prepare ? `Its counts (${plural(countsPart.layout.countColumns.length, 'column')}) have the example's design, scored (Run 1).` : countsPart ? `Its counts (${plural(countsPart.layout.countColumns.length, 'column')}) have a design drafted from their names (${{ 'two-population': 'two populations', 'time-series': 'a time series', bins: 'sorted bins' }[draft.design.model] ?? draft.design.model}): check it in Experiment, then score.` : record.hasCounts ? 'Its counts were not opened.' : 'MaveDB has no counts for it: the readiness says where they may be.',
       record.license.open ? '' : `License: ${record.license.terms}`,
       changed ? 'MaveDB\'s table has changed since the example was made: what its guide expects may not hold.' : '',
     ].filter(Boolean).join(' ');
@@ -204,6 +210,169 @@ export async function importMaveDB(app, text, { counts = true, example = null, t
     return { ok: false, message: `${urn} could not be opened: ${error.message}` };
   }
 }
+
+// Several published score sets of one target opened as one workspace (wave 3, slice 6): two
+// selections of one library, or of one gene's library in two strains, that MaveDB keeps as score
+// sets of their own. Each record is kept and its published scores are a run of their own; their
+// counts, when every one has them, are joined into one table on their variant names, each
+// record's columns named by its URN's number ("00000063-a-1:Repeat1_t_00hrs"), with a design
+// drafted from their names, a condition each, the first the reference: the differential map
+// compares them. Their targets must be the same sequence. Returns { ok, message, data }.
+async function importMaveDBTogether(app, urns, { counts = true, example = null, prepare = null } = {}) {
+  const state = publicDataState(app);
+  if (state === 'web' || state === 'off') {
+    const got = await fetchPublic(app, `mavedb/score-sets/${urns[0]}`);
+    return { ok: false, message: got.message };
+  }
+  const named = urns.join(' and ');
+  const busy = progressToast(`Opening ${named} from MaveDB…`);
+  try {
+    const opened = [];
+    for (const urn of urns) {
+      busy.update(0.02 + 0.08 * opened.length / urns.length, `Reading ${urn}`);
+      const got = await fetchPublic(app, `mavedb/score-sets/${urn}`);
+      if (!got.ok) throw new Error(`${urn}: ${got.message}`);
+      const record = readScoreSet(got.json);
+      if (record.problem) throw new Error(`${urn}: ${record.problem}`);
+      opened.push({ urn, record, retrieval: got.retrieval });
+    }
+    // One target: each record's, fetched when a transcript names it, the same sequence.
+    let first = null;
+    for (const o of opened) {
+      const t = await recordTarget(app, o.record, null, busy);
+      if (!first) first = t;
+      else if (t.target.sequence !== first.target.sequence || t.target.sequenceType !== first.target.sequenceType) throw new Error(`${o.urn}'s target (${t.target.name}, ${t.target.sequence.length} ${t.target.sequenceType === 'dna' ? 'nt' : 'aa'}) is not ${opened[0].urn}'s (${first.target.name}, ${first.target.sequence.length}): score sets open together when they measure one target.`);
+    }
+    const { target: recordsTarget, origin: targetOrigin, notes: targetNotes } = first;
+    const names = distinctNames(opened.map((o) => o.record.title));
+    for (const [k, o] of opened.entries()) {
+      busy.update(0.1 + 0.4 * k / opened.length, `Reading the tables of ${o.urn}`);
+      const stem = o.urn.replaceAll(':', '_');
+      const scoresFile = await fetchPublic(app, `mavedb/score-sets/${o.urn}/scores`, { as: 'bytes' });
+      if (!scoresFile.ok) throw new Error(`${o.urn}: ${scoresFile.message}`);
+      o.scores = await readTable(app, `${stem}.scores.csv`, scoresFile.bytes, recordsTarget);
+      o.scoresRetrieval = scoresFile.retrieval;
+      if (counts && o.record.hasCounts) {
+        const countsFile = await fetchPublic(app, `mavedb/score-sets/${o.urn}/counts`, { as: 'bytes' });
+        if (!countsFile.ok) throw new Error(`${o.urn}: ${countsFile.message}`);
+        // Named by the URN's number: the joined table names each record's columns so.
+        o.counts = await readTable(app, `${joinedPrefix(o.urn)}.csv`, countsFile.bytes, recordsTarget);
+        o.countsRetrieval = countsFile.retrieval;
+      }
+    }
+    const notes = [...targetNotes];
+    const joinCounts = counts && opened.every((o) => o.counts);
+    if (counts && !joinCounts && opened.some((o) => o.counts)) notes.push(`${opened.filter((o) => !o.counts).map((o) => o.urn).join(', ')} ${opened.filter((o) => !o.counts).length > 1 ? 'have' : 'has'} no counts: the scores alone, and no counts joined.`);
+
+    await app.saveNow();
+    let ws = createWorkspace(example?.title ?? opened.map((o) => o.record.title).join('; '));
+    const added = addTarget(ws, targetOrigin ? { ...recordsTarget, origin: targetOrigin } : recordsTarget);
+    ws = added.ws;
+    const target = ws.targets.find((t) => t.id === added.id);
+    ws = change(ws, { records: opened.map((o) => recordSummary(o.record, o.retrieval)) }, 'mavedb', `Opened ${named} from MaveDB together: ${opened.map((o, k) => `"${o.record.title}" (${o.record.license.short}; ${retrievalText(o.retrieval) || 'retrieved now'}${k === 0 ? '; the reference' : ''})`).join(', ')}`);
+    const originOf = (o, file, retrieval) => ({ database: 'MaveDB', urn: o.urn, file, url: retrieval?.source ?? null, retrieved: retrieval?.retrieved ?? null, license: o.record.license.short, hasCounts: o.record.hasCounts, rawReads: o.record.experiment.rawReads.map((r) => r.id) });
+    // Each record's published scores, read as published: a run each.
+    const published = [];
+    for (const [k, o] of opened.entries()) {
+      busy.update(0.5 + 0.2 * k / opened.length, `Reading the scores of ${o.urn} as published`);
+      const added2 = addSource(ws, sourceOf(o.scores, { name: `${o.record.title}: scores (MaveDB)`, target: target.id, origin: originOf(o, 'scores', o.scoresRetrieval) }));
+      const design = scoresDesign(o.record, { table: o.scores.table, layout: o.scores.layout, target });
+      if (example?.readout) design.readout = { ...(design.readout ?? {}), ...example.readout };
+      ws = setDesign(added2.ws, design, `The published scores of ${o.urn}, read as published`, added2.id);
+      const source = ws.sources.find((s) => s.id === added2.id);
+      const input = workerInput(o.scores.table, ws.design);
+      const parameters = defaultParameters(ws.design, source);
+      const result = await runScore(app, { names: input.names, barcodes: input.barcodes, columns: input.columns, design: ws.design, parameters, mode: 'lenient' }, { transfer: input.transfer }).promise;
+      if (!result.ok) {
+        notes.push(`${o.urn}'s scores could not be read: ${result.errors.join(' ')}`);
+        continue;
+      }
+      const run = makeRun({ inputs: runInputs({ source, design: ws.design, parameters }), source, results: result.results, software: { version: app.version, commit: app.commit }, name: `Published scores (${names[k]})` });
+      ws = addRun(ws, run).ws;
+      app.runResults ??= new Map();
+      app.runResults.set(run.id, { results: result.results, status: 'computed' });
+      published.push({ urn: o.urn, run: run.name, scored: run.output.conditions[0].scored, variants: o.scores.table.rows });
+    }
+    // Their counts, joined: one table, a condition each.
+    let joined = null;
+    let draft = null;
+    let countsId = null;
+    if (joinCounts) {
+      busy.update(0.75, 'Joining the counts');
+      const level = opened[0].counts.layout.level;
+      const assembled = assembleTable(opened.map((o) => ({ name: o.counts.name, table: o.counts.table, role: 'counts' })), { absentMeans: 'missing', level, target: recordsTarget });
+      if (!assembled.table) throw new Error(`The counts could not be joined: ${assembled.problems.map((x) => x.message).join(' ')}`);
+      joined = assembled.table;
+      const layout = detectLayout(joined);
+      const countColumns = joined.columns.slice(1).filter((c) => c.type === 'number').map((c) => c.name);
+      const review = reviewImport(joined, { variantColumn: joined.columns[0].name, level, countColumns, target: recordsTarget, mode: 'lenient' });
+      const source = {
+        name: `${opened.map((o, k) => names[k]).join(' and ')}: counts joined (MaveDB)`,
+        fileName: opened[0].counts.name,
+        sha256: opened[0].counts.stored.sha256,
+        size: opened[0].counts.stored.size,
+        files: opened.map((o) => ({ fileName: o.counts.name, sha256: o.counts.stored.sha256, size: o.counts.stored.size })),
+        rows: joined.rows,
+        columns: joined.columns.map((c) => ({ name: c.name, type: c.type, missing: c.missing })),
+        encoding: 'utf-8',
+        delimiter: joined.delimiter ?? ',',
+        lineEnd: joined.lineEnd ?? '\n',
+        layout: layout.layout,
+        mapping: { variantColumn: joined.columns[0].name, level, mode: 'lenient', absentMeans: 'missing', countColumns, scoreColumns: {} },
+        target: target.id,
+        roleSuggestions: suggestRoles(countColumns).filter((r) => r.role),
+        summary: review.summary,
+        problems: { blocking: review.blocking.map((x) => x.message), warnings: [...review.warnings, ...assembled.problems.filter((x) => x.level === 'warning')].map((x) => x.message) },
+        imported: now(),
+        // The counts of several records: each named, none the table's alone.
+        origin: { database: 'MaveDB', urn: null, urns: opened.map((o) => o.urn), file: 'counts', joined: true, url: null, retrieved: opened[0].countsRetrieval?.retrieved ?? null, license: [...new Set(opened.map((o) => o.record.license.short))].join(', '), hasCounts: true, rawReads: [...new Set(opened.flatMap((o) => o.record.experiment.rawReads.map((r) => r.id)))] },
+      };
+      const added3 = addSource(ws, source);
+      countsId = added3.id;
+      draft = countsDesignTogether(opened.map((o) => ({ record: o.record, table: o.counts.table, layout: o.counts.layout })), { joined, target });
+      if (draft.problem) {
+        notes.push(draft.problem);
+        ws = added3.ws;
+      } else {
+        ws = setDesign(added3.ws, draft.design, `A design drafted from the column names of ${named}'s counts, joined: a condition each, ${names[0]} the reference`, countsId);
+      }
+    }
+    // An example's tables are the ones it was made with, or the guide's numbers may not hold.
+    const pinned = example ? exampleRecords(example) : [];
+    const changed = pinned.some((x) => {
+      const o = opened.find((y) => y.urn === x.urn);
+      return o && ((x.scores?.sha256 && o.scores.stored.sha256 !== x.scores.sha256) || (x.counts?.sha256 && o.counts && o.counts.stored.sha256 !== x.counts.sha256));
+    });
+    if (example) ws = change(ws, { example: { id: example.id, simulated: false } }, 'example', `Opened the example "${example.title}" (${example.source}, ${example.license})${changed ? '; MaveDB\'s tables have changed since the example was made' : ''}`);
+    if (prepare) ws = await prepare(ws, { counts: countsId ? { id: countsId, table: joined } : null, busy });
+    await app.loadWorkspace(ws);
+    for (const o of opened) {
+      const source = ws.sources.find((x) => x.origin?.urn === o.urn && x.origin.file === 'scores');
+      if (source) app.tables.set(source.id, { table: o.scores.table, review: o.scores.review });
+    }
+    if (countsId) app.tables.set(countsId, { table: joined, review: null });
+    app.store.markSaved(null);
+    await app.saveNow();
+    await app.setMode(published.length ? 'map' : 'experiment');
+    const message = [
+      `Opened ${named} from MaveDB together: ${opened.map((o, k) => `"${o.record.title}" (${o.record.license.short})${k === 0 ? ', the reference' : ''}`).join('; ')}.`,
+      targetOrigin ? `Their target, ${target.name}, is the transcript ${targetOrigin.accession} (${targetOrigin.service ?? targetOrigin.format}).` : '',
+      published.length ? `Their published scores are on the map, a run each (${published.map((x) => `"${x.run}": ${exact(x.scored)} of ${exact(x.variants)} variants`).join('; ')}).` : '',
+      joined ? `Their counts are joined into one table (${exact(joined.rows)} variants, ${plural(joined.columns.length - 1, 'column')})${prepare ? ', with the example\'s design, scored (Run 1)' : draft?.design ? `, with a design drafted from their names, a condition each (${names.join(' and ')}): check it in Experiment, then score to compare them` : ''}.` : '',
+      ...notes,
+      changed ? 'MaveDB\'s tables have changed since the example was made: what its guide expects may not hold.' : '',
+    ].filter(Boolean).join(' ');
+    busy.done(`Opened ${named} from MaveDB.`);
+    return { ok: true, message, data: { urns, titles: opened.map((o) => o.record.title), conditions: draft?.design?.conditions?.map((c) => c.name) ?? null, target: { name: target.name }, published, counts: joined ? { rows: joined.rows, columns: joined.columns.length - 1, design: draft?.design?.model ?? null } : null, warnings: notes } };
+  } catch (error) {
+    busy.fail(`${named} could not be opened: ${error.message}`);
+    return { ok: false, message: `${named} could not be opened: ${error.message}` };
+  }
+}
+
+// The records an example opened from MaveDB is made of, with the checksums their tables had:
+// [{ urn, scores, counts }] (one, or several opened together).
+export const exampleRecords = (example) => (example?.mavedb?.records ?? (example?.mavedb ? [example.mavedb] : []));
 
 // Opens a MaveDB package (wave 3, slice 4): experiment.json, score_set.json, scores.csv and
 // counts.csv, as MaveScape writes one (lib/mavedb-export.js) or as one is written for MaveDB's API,
@@ -348,7 +517,7 @@ export function openMaveDBDialog(app, { query = '' } = {}) {
     width: 'wide',
     content: [
       h('div.search-row', input, h('button.btn.primary', { type: 'button', onclick: () => go(1) }, icon('search'), 'Search')),
-      h('p.muted.small', state === 'offline' ? 'Offline: only searches and records already in MaveScape\'s cache.' : 'MaveScape asks MaveDB (api.mavedb.org) for its published score sets: the words you search for are sent, nothing else.'),
+      h('p.muted.small', state === 'offline' ? 'Offline: only searches and records already in MaveScape\'s cache.' : 'MaveScape asks MaveDB (api.mavedb.org) for its published score sets: the words you search for are sent, nothing else. Several URNs open together, a condition each.'),
       body,
     ],
     buttons: [{ label: 'Close' }],
@@ -357,6 +526,11 @@ export function openMaveDBDialog(app, { query = '' } = {}) {
   async function go(page) {
     const text = input.value.trim();
     if (!text) return;
+    const urns = normalizeUrns(text);
+    if (urns.length > 1) {
+      previewTogether(urns);
+      return;
+    }
     const urn = normalizeUrn(text);
     if (urn) {
       preview(urn);
@@ -419,6 +593,46 @@ export function openMaveDBDialog(app, { query = '' } = {}) {
           if (!opened.ok) toast(opened.message, { kind: 'error' });
         } }, icon('download'), 'Open as a new workspace')),
       recordView(record, { retrieval: got.retrieval }));
+  }
+
+  // Several score sets (wave 3, slice 6): each record in brief, whether they share a target, and
+  // their opening together, a condition each.
+  async function previewTogether(urns) {
+    show(h('p.muted', `Reading ${urns.join(', ')}…`));
+    const records = [];
+    for (const urn of urns) {
+      const got = await fetchPublic(app, `mavedb/score-sets/${urn}`);
+      if (!got.ok) {
+        show(h('div.callout.danger', icon('warning'), h('span', `${urn}: ${got.message}`)));
+        return;
+      }
+      const record = readScoreSet(got.json);
+      if (record.problem) {
+        show(h('div.callout.danger', icon('warning'), h('span', `${urn}: ${record.problem}`)));
+        return;
+      }
+      records.push(record);
+    }
+    const sequences = records.map((r) => targetsOf(r).targets[0]?.sequence ?? targetsOf(r).pending[0]?.accession ?? null);
+    const same = sequences.every((x) => x && x === sequences[0]);
+    const allCounts = records.every((r) => r.hasCounts);
+    const names = distinctNames(records.map((r) => r.title));
+    const withCounts = h('input', { type: 'checkbox', checked: allCounts, disabled: !allCounts });
+    show(
+      h('div.btn-row.open-row',
+        h('div.open-options',
+          h('label.check', withCounts, allCounts ? ' Join their counts into one table, a condition each, with a design drafted from their names' : ' Not all of them have counts: their scores alone')),
+        h('span.spacer'),
+        h('button.btn.primary', { type: 'button', disabled: !same, title: same ? `Open ${urns.join(' and ')} as one workspace` : 'They do not measure one target', onclick: async () => {
+          dialog.close();
+          const opened = await importMaveDB(app, urns.join(' '), { counts: withCounts.checked });
+          if (!opened.ok) toast(opened.message, { kind: 'error' });
+        } }, icon('download'), 'Open together')),
+      same ? h('p.small', `One target; ${records.length} conditions, ${names[0]} the reference (the first given): the map compares each with it.`) : h('div.callout.warn', icon('warning'), h('span', 'These score sets do not measure one target: open them apart.')),
+      ...records.map((r, k) => h('div.entry-card',
+        h('div', h('b', r.title), h(`span.badge${r.license.open ? '' : '.warn'}`, r.license.short), h('span.badge', `condition: ${names[k]}`)),
+        h('div.muted', [r.urn, r.variants !== null ? plural(r.variants, 'variant') : null, r.hasCounts ? 'counts' : 'no counts', r.published ? `published ${r.published}` : null].filter(Boolean).join(' · ')),
+        r.shortDescription ? h('div.small', r.shortDescription) : null)));
   }
 
   if (query) go(1);

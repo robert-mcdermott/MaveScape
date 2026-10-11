@@ -7,7 +7,7 @@
 
 import { toast } from './overlays.js';
 import { EXAMPLES } from '../lib/examples.js';
-import { validateDesign, summarizeDesign } from '../lib/design.js';
+import { coversPosition, validateDesign, summarizeDesign } from '../lib/design.js';
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
 import { addRun, makeRun, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
@@ -252,7 +252,7 @@ export function installRemote(app) {
       const data = {
         workspace: { id: w.id, name: w.name, example: w.example?.id ?? null },
         mode: store.ui.mode === 'welcome' ? 'start' : store.ui.mode,
-        tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, sha256: s.sha256, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source, ...(s.origin ? { origin: { database: s.origin.database, urn: s.origin.urn, ...(s.origin.package ? { package: s.origin.package } : {}), file: s.origin.file, retrieved: s.origin.retrieved, license: s.origin.license } } : {}) })),
+        tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, sha256: s.sha256, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source, ...(s.origin ? { origin: { database: s.origin.database, urn: s.origin.urn, ...(s.origin.urns ? { urns: s.origin.urns } : {}), ...(s.origin.package ? { package: s.origin.package } : {}), file: s.origin.file, retrieved: s.origin.retrieved, license: s.origin.license } } : {}) })),
         targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0, ...(t.sequenceType === 'dna' ? { codingStart: t.codingStart ?? 1 } : {}), ...(t.origin ? { from: t.origin.service ?? t.origin.format, accession: t.origin.accession } : {}) })),
         design: w.design ? designSummary(w.design, source) : null,
         runs: w.runs.map(runSummary),
@@ -694,7 +694,9 @@ export function installRemote(app) {
       await settle();
       if (row < 0) return { message: `${name} is not in ${run.name}'s table: it was not measured (missing on the map, not "no effect").`, data: { variant: name, measured: false } };
       const reasons = c.reason[row] ? STAGE_BY_CODE.get(c.reason[row]) : null;
-      const replicates = results.replicates.filter((r) => c.replicates.includes(r.id)).map((r) => ({
+      // The replicates of the variant's tile (wave 3, slice 6): another tile's do not measure it.
+      const tiles = new Map((run.inputs.design.library?.tiles ?? []).map((t) => [t.id, t]));
+      const replicates = results.replicates.filter((r) => c.replicates.includes(r.id) && coversPosition(r, tiles, v.position[row])).map((r) => ({
         name: r.name, before: round(r.first[row]), after: round(r.last[row]), score: round(r.score[row]), se: round(r.se[row]), used: !r.state[row], state: r.state[row] ? REPLICATE_STATE_NAMES[r.state[row]] : 'used',
         // A regression's time points used and departure from a line (χ²/df against counting).
         ...(r.points ? { timePoints: r.points[row], departure: round(r.fit[row]) } : {}),

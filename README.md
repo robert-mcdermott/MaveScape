@@ -31,12 +31,13 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > cause it and what to do. Replicates are combined under a shared error model whose 95% intervals
 > hold the truth 94–97% of the time in 26 kinds of simulated experiment. For the open workspace,
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
-> would add, and writes the analysis package that `mavescape run` reads. Eleven examples are on the Start page (five published, six simulated);
+> would add, and writes the analysis package that `mavescape run` reads. Thirteen examples are on the Start page (seven published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
 > [roadmap](mavescape-spec/roadmap.md)'s wave 2 is complete; wave 3 brings public data in and out,
 > through a fixed list of services: a target checked against its UniProt entry, and any published
 > MaveDB score set opened by search or URN, its scores on the map as published and its counts ready
-> to score again. The whole of MAVE-HGVS is read: nucleotide variants are read for the protein
+> to score again; several score sets of one target open together, their counts joined as
+> conditions to compare. The whole of MAVE-HGVS is read: nucleotide variants are read for the protein
 > changes they make (checked against biocommons hgvs) and drawn at the protein level as DiMSum
 > merges them, everything a map of substitutions cannot show listed beside it; targets come from
 > GenBank files, or from the RefSeq or Ensembl transcript a MaveDB record names. A run becomes a

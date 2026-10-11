@@ -92,4 +92,17 @@ test('a lone sample is no replicate of a time series: set aside, with a note (BR
   assert.deepEqual(design.ignoredColumns, [{ column: 'count_library', reason: 'a single sample, not a replicate of the time series: set aside' }]);
   assert.ok(notes.some((n) => /count_library: a sample on its own/.test(n)));
   assert.ok(validateDesign(design, { columns: table.columns.map((c) => c.name) }).ok);
+  assert.equal(design.time.unit, 'day', 'day 5 and day 11 name days');
+});
+
+test('a time series takes its unit from its time points\' names when they all name one', () => {
+  const unitOf = (header) => {
+    const table = parseTable(`hgvs_pro,${header.join(',')}\np.=,1${',1'.repeat(header.length - 1)}\n`);
+    const roles = suggestRoles(header).map((r) => (r.role ? r : { ...r, group: r.column }));
+    return draftDesign(table, roles, { variantColumn: 'hgvs_pro', level: 'protein' }).design.time?.unit;
+  };
+  assert.equal(unitOf(['Repeat1_t_00hrs', 'Repeat1_t_02hrs', 'Repeat1_t_04hrs']), 'hour');
+  assert.equal(unitOf(['rep1_gen0', 'rep1_gen3', 'rep1_gen6']), 'generation');
+  assert.equal(unitOf(['rep1_c_0', 'rep1_c_1', 'rep1_c_2']), 'other', 'Enrich2\'s rounds name no unit');
+  assert.equal(unitOf(['rep1_t0', 'rep1_day3', 'rep1_day6']), 'other', 'a mixture: none');
 });

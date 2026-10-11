@@ -24,7 +24,7 @@ import { writeMethods } from '../web/lib/methods.js';
 import { computeQC } from '../web/lib/qc.js';
 import { defaultThresholds, findingsFrom } from '../web/lib/findings.js';
 import { sha256 } from '../web/lib/sha256.js';
-import { MissingExampleData, openExampleInNode } from './example-cases.mjs';
+import { exampleRecords, MissingExampleData, openExampleInNode } from './example-cases.mjs';
 import { cbsCase } from './differential-cases.mjs';
 import { inputFor, scoreTable } from './roundtrip-cases.mjs';
 
@@ -232,7 +232,20 @@ export function roundTrip(first) {
   const b = text(second);
   const names = [...new Set([...a.keys(), ...b.keys()])];
   const differ = names.filter((n) => a.get(n) !== b.get(n));
-  return { same: !differ.length, differ, second };
+  return { same: !differ.length, differ, second, back: built };
+}
+
+// An example opened from MaveDB with its counts (wave 3, slice 6: BRCA1 RING's round trip), its
+// Run 1 deposited as the window deposits it (its record kept, for the deposit's defaults), and the
+// deposit read back and written again: { built, first, trip }.
+export function exampleRoundTrip(id) {
+  const example = EXAMPLES.find((e) => e.id === id);
+  const opened = openExampleInNode(example);
+  const record = recordOf(exampleRecords(example)[0].urn);
+  const bytes = encoder.encode(tableText(opened.table));
+  const built = workspace({ name: example.title, bytes, design: opened.design, target: opened.design.targets[0], origin: { database: 'MaveDB', urn: record.urn, file: 'counts' }, record, parameters: opened.parameters });
+  const first = deposit(built);
+  return { built, first, trip: roundTrip(first) };
 }
 
 // --write DIR: each package's files in DIR/<id>/, for the reference.

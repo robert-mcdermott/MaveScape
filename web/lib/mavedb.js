@@ -14,6 +14,8 @@
 //   readoutOf(record) → { readout, libraryMethod, unknown }
 //   scoresDesign(record, { table, layout, target }) → design
 //   countsDesign(record, { table, layout, target }) → { design, notes }
+//   normalizeUrns(text) → [urn]                           several score sets written together
+//   countsDesignTogether(parts, { joined, target }) → { design, notes } | { problem }
 //   searchHits(json) → { total, hits }
 
 import { IDENTIFIER_COLUMNS } from './design.js';
@@ -387,6 +389,85 @@ export function countsDesign(record, { table, layout, target }) {
     targets: target ? [target] : [],
   };
   return { design: setAsideOtherColumns(drafted, table.columns.map((c) => c.name), IDENTIFIER_COLUMNS), notes };
+}
+
+// The URNs of several score sets written together ("urn:mavedb:00000063-b-1 urn:mavedb:00000063-a-1",
+// or MaveDB addresses), in order, each once (wave 3, slice 6).
+export function normalizeUrns(text) {
+  const found = String(text ?? '').match(/urn:mavedb:[0-9]{8}-[a-z0-9]+-[0-9]+/gi) ?? [];
+  return [...new Set(found.map((u) => u.toLowerCase()).filter((u) => URN.test(u)))];
+}
+
+// The name a joined table gives a record's columns ("00000063-a-1:Repeat1_t_00hrs"): its URN's
+// number, the name of its counts file there (assemble.js joins files on their variant column,
+// each column named by its file).
+export const joinedPrefix = (urn) => urn.replace(/^urn:mavedb:/, '');
+
+// Conditions named by what tells their records' titles apart: the words they share at the start
+// left out ("Growth rate of mutated DHFR with functioning Lon" and "… with deficient Lon":
+// "functioning Lon" and "deficient Lon"), else the whole title.
+export function distinctNames(titles) {
+  const words = titles.map((t) => String(t ?? '').trim().split(/\s+/));
+  let shared = 0;
+  while (words.every((w) => w.length > shared + 1 && w[shared] === words[0][shared])) shared += 1;
+  const names = words.map((w) => w.slice(shared).join(' '));
+  return new Set(names).size === names.length && names.every(Boolean) ? names : titles.map((t) => String(t ?? ''));
+}
+
+// The design of several records' counts joined into one table (wave 3, slice 6): two score sets
+// of one target, each a condition (the first the reference), as MaveDB keeps the selections of
+// one library under two conditions apart. Each record's counts are drafted from their names as
+// alone (countsDesign), then its samples, replicates and columns renamed into the joined table's
+// ("00000063-a-1:Repeat1_t_00hrs") and given its condition. parts: [{ record, table, layout }] (each
+// record's own counts); joined: the joined table. Returns { design, notes } or { problem }.
+export function countsDesignTogether(parts, { joined, target }) {
+  const drafts = parts.map((p) => countsDesign(p.record, { table: p.table, layout: p.layout, target }));
+  const models = [...new Set(drafts.map((d) => d.design.model))];
+  if (models.length > 1) return { problem: `The score sets' counts draft into different kinds of experiment (${models.join(' and ')}): open them apart, or give the design in the Experiment view.` };
+  const names = distinctNames(parts.map((p) => p.record.title));
+  const notes = [];
+  const samples = [];
+  const replicates = [];
+  const ignoredColumns = [];
+  const conditions = [];
+  const tiles = new Map();
+  parts.forEach((p, k) => {
+    const prefix = joinedPrefix(p.record.urn);
+    const d = drafts[k].design;
+    const id = prefix;
+    const sample = (s) => `${id}-${s}`.slice(0, 64);
+    const column = (c) => `${prefix}:${c}`;
+    conditions.push({ id, name: names[k], ...(k === 0 ? { reference: true } : {}) });
+    for (const s of d.samples) samples.push({ ...s, id: sample(s.id), name: `${names[k]}: ${s.name ?? s.id}`, columns: s.columns.map(column) });
+    for (const r of d.replicates) {
+      const out = { ...r, id: sample(r.id), name: `${names[k]}: ${r.name ?? r.id}`, condition: id };
+      if (r.input) out.input = sample(r.input);
+      if (r.output) out.output = sample(r.output);
+      if (r.timepoints) out.timepoints = r.timepoints.map((t) => ({ ...t, sample: sample(t.sample) }));
+      if (r.bins) out.bins = r.bins.map((b) => ({ ...b, sample: sample(b.sample) }));
+      replicates.push(out);
+    }
+    for (const x of d.ignoredColumns ?? []) if (!IDENTIFIER_COLUMNS.includes(x.column)) ignoredColumns.push({ ...x, column: column(x.column), ...(x.copyOf ? { copyOf: column(x.copyOf) } : {}) });
+    for (const t of d.library?.tiles ?? []) if (!tiles.has(t.id)) tiles.set(t.id, t);
+    notes.push(...drafts[k].notes.map((n) => `${names[k]}: ${n}`));
+  });
+  const first = drafts[0].design;
+  const units = new Set(drafts.map((d) => d.design.time?.unit).filter(Boolean));
+  const design = {
+    ...first,
+    name: parts.map((p) => p.record.title).join('; '),
+    description: `${parts.length} MaveDB score sets of one target, a condition each: ${parts.map((p, k) => `${names[k]} (${p.record.urn})`).join(', ')}.`,
+    source: { ...first.source, mavedb: parts.map((p) => p.record.urn).join(' and ') },
+    variants: { ...first.variants, column: joined.columns[0].name },
+    library: { ...first.library, ...(tiles.size ? { tiles: [...tiles.values()] } : {}) },
+    ...(first.model === 'time-series' ? { time: { unit: units.size === 1 ? [...units][0] : 'other' } } : {}),
+    conditions,
+    samples,
+    replicates,
+  };
+  delete design.ignoredColumns;
+  if (ignoredColumns.length) design.ignoredColumns = ignoredColumns;
+  return { design: setAsideOtherColumns(design, joined.columns.map((c) => c.name), IDENTIFIER_COLUMNS), notes };
 }
 
 // MaveDB's mapped variants (GET /score-sets/{urn}/mapped-variants; wave 3, slice 3): for each

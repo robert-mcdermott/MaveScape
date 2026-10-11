@@ -22,7 +22,7 @@
 // rescaling anchor missing) is refused with the reasons, never quietly done another way.
 
 import { buildVariants, duplicateKeys, KIND, STATUS } from './variants.js';
-import { engineColumns, replicateSamples, sharedSamples, validateDesign } from './design.js';
+import { engineColumns, replicateSamples, sharedSamples, tileRows, tileView, validateDesign } from './design.js';
 import { parseHgvs } from './hgvs.js';
 import { median, normalizers, ratioScores, NORMALIZATIONS } from './score-ratio.js';
 import { MODELS as TIME_MODELS, REGRESSION_SE, regressionScores } from './score-regression.js';
@@ -140,13 +140,17 @@ export function defaultParameters(design, source = null, preset = 'mavescape') {
 // Differential scores for a design with two or more conditions: limma's moderated t where it
 // applies (two populations relative to the wild type or the synonymous variants, with residual
 // degrees of freedom), whose variances, shared across variants, keep calls calibrated with few
-// replicates; replicates paired by their shared inputs otherwise; Enrich2's comparison of
-// conditions for the Enrich2-compatible preset.
+// replicates; replicates paired by their shared inputs otherwise, or, where the conditions share
+// no input (DHFR's two strains, each transformed apart; wave 3 slice 6), the conditions as
+// independent; Enrich2's comparison of conditions for the Enrich2-compatible preset.
 export function defaultDifferential(design, preset = 'mavescape', normalization = 'wt') {
   if ((design?.conditions?.length ?? 0) < 2) return null;
   if (preset === 'enrich2') return 'independent';
   if (design.model === 'two-population' && (normalization === 'wt' || normalization === 'synonymous') && !limmaDesign(design).refused) return 'limma';
-  return 'paired';
+  const reference = design.conditions.find((c) => c.reference) ?? design.conditions[0];
+  const first = (r) => orderedSlots(r)[0]?.sample;
+  const inputs = new Set(design.replicates.filter((r) => r.condition === reference.id).map(first).filter(Boolean));
+  return design.replicates.some((r) => r.condition !== reference.id && inputs.has(first(r))) ? 'paired' : 'independent';
 }
 
 export function withDefaults(parameters = {}) {
@@ -263,11 +267,17 @@ function binSlots(replicate) {
   return [...(replicate.bins ?? [])].sort((a, b) => a.order - b.order);
 }
 
+// Rows outside the tile that the replicate's samples counted: said so, not "not counted".
+function markOutsideTile(state, mask, samples) {
+  if (!mask) return;
+  for (let i = 0; i < state.length; i += 1) if (!mask[i] && samples.some((s) => s && !Number.isNaN(s[i]))) state[i] = REPLICATE_STATE.OUTSIDE_TILE;
+}
+
 // One replicate of sorted bins (score-bins.js): its variants' states, scores and SEs, scaled.
-function scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings }) {
+function scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings, mask = null }) {
   const f = p.filters;
   const slots = binSlots(replicate);
-  const samples = slots.map((x) => pooled.get(x.sample));
+  const samples = slots.map((x) => tileView(pooled, mask).get(x.sample));
   const label = `replicate ${replicate.name ?? replicate.id}`;
   const B = samples.length;
   const totals = binTotals(samples);
@@ -313,6 +323,7 @@ function scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, w
   }
   // No reads in any bin (with no minimum count): nothing to estimate.
   for (let i = 0; i < n; i += 1) if (state[i] === REPLICATE_STATE.USED && !Number.isFinite(scored.score[i])) state[i] = REPLICATE_STATE.NOT_ESTIMABLE;
+  markOutsideTile(state, mask, slots.map((x) => pooled.get(x.sample)));
   // The replicate's scale (VAMP-seq: nonsense 0, wild type 1), from the variants used.
   let anchors = null;
   if (p.binScale !== 'none') {
@@ -405,7 +416,7 @@ function barcodeVariantStates(groups, barcodeState, measured, minimum) {
 // together, their scales and shifts and the error model fitted on them, on the measurements the
 // count filters keep. Returns { entries: Map(replicate id → entry), fits: [{ replicates,
 // condition, tile, threshold, variants, bootstrap, normalised, errorModel }] }.
-function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info }) {
+function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info, tiles }) {
   const f = p.filters;
   const groups = new Map();
   for (const r of design.replicates) {
@@ -428,8 +439,10 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info 
     const states = [];
     for (const r of reps) {
       const slots = orderedSlots(r);
-      const inp = pooled.get(slots[0].sample);
-      const out = pooled.get(slots[slots.length - 1].sample);
+      const mask = tileRows(r, tiles, variants.position);
+      const view = tileView(pooled, mask);
+      const inp = view.get(slots[0].sample);
+      const out = view.get(slots[slots.length - 1].sample);
       const state = new Uint8Array(n);
       const mi = new Float64Array(n);
       const mo = new Float64Array(n);
@@ -440,7 +453,7 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info 
         mi[i] = use ? inp[i] : Number.NaN;
         mo[i] = use ? out[i] : Number.NaN;
       }
-      raw.push({ r, inp, out, slots });
+      raw.push({ r, inp, out, slots, mask });
       inputs.push(mi);
       outputs.push(mo);
       states.push(state);
@@ -453,9 +466,10 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info 
     const negative = m.scale.map((a, k) => (a < 0 ? reps[k].name ?? reps[k].id : null)).filter(Boolean);
     if (negative.length) warnings.push({ code: 'dimsum-negative-scale', message: `DiMSum's normalisation turns ${negative.join(', ')} upside down (a negative scale): are an input and an output swapped in the design?` });
     fits.push({ replicates: reps.map((r) => r.id), condition: reps[0].condition ?? null, tile: reps[0].tile ?? null, threshold: m.threshold, variants: m.variants, bootstrap: m.bootstrap, normalised: m.normalised, errorModel: m.input !== null });
-    raw.forEach(({ r, inp, out, slots }, k) => {
+    raw.forEach(({ r, inp, out, slots, mask }, k) => {
       const state = states[k];
       for (let i = 0; i < n; i += 1) if (state[i] === REPLICATE_STATE.USED && Number.isNaN(res.score[k][i])) state[i] = REPLICATE_STATE.NOT_ESTIMABLE;
+      markOutsideTile(state, mask, [pooled.get(slots[0].sample), pooled.get(slots[slots.length - 1].sample)]);
       const pick = (x) => (x ? x[k] : null);
       entries.set(r.id, {
         id: r.id,
@@ -662,11 +676,15 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   const sorted = BIN_MODELS.has(p.model);
   const synonymousRow = new Uint8Array(n);
   for (const i of controls.synonymous) synonymousRow[i] = 1;
+  const tiles = new Map((design.library?.tiles ?? []).map((t) => [t.id, t]));
   // DiMSum: the replicates of each experiment fitted together, first.
   if (p.model === 'dimsum') onProgress(0.05, 'Fitting DiMSum\'s error model');
-  const dimsum = p.model === 'dimsum' ? scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info }) : null;
+  const dimsum = p.model === 'dimsum' ? scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info, tiles }) : null;
   design.replicates.forEach((replicate, index) => {
     onProgress((index / design.replicates.length) * 0.6, `Scoring ${replicate.name ?? replicate.id}`);
+    // A replicate of a tile measures its tile's positions only (its samples may hold others').
+    const mask = tileRows(replicate, tiles, variants.position);
+    const view = tileView(pooled, mask);
     if (dimsum) {
       const entry = dimsum.entries.get(replicate.id);
       replicates.push(entry);
@@ -674,7 +692,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       return;
     }
     if (sorted) {
-      const entry = scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings });
+      const entry = scoreBinReplicate({ replicate, index, design, pooled, p, controls, n, warnings, mask });
       if (groups) {
         // A variant's barcodes measured: those counted in every bin, with reads.
         const rows = binSlots(replicate).map((x) => pooledRows.get(x.sample));
@@ -753,14 +771,16 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
         throw new Refused([error.message]);
       }
     };
-    let samples = slots.map((s) => pooled.get(s.sample));
+    let samples = slots.map((s) => view.get(s.sample));
     let m = measure(samples);
+    // A barcode's rows, seen as its variant's tile sees them.
+    const rowView = groups && mask ? tileView(pooledRows, Uint8Array.from(groups.variantOf, (g) => (g < 0 ? 1 : mask[g]))) : pooledRows;
     let scored = null;
     let bc = null;
     if (groups) {
       // Every barcode scored against the replicate's normalizers, and compared with its variant's
       // other barcodes.
-      const rows = slots.map((s) => pooledRows.get(s.sample));
+      const rows = slots.map((s) => rowView.get(s.sample));
       const mb = measure(rows, m.r);
       for (let b = 0; b < groups.rows; b += 1) {
         if (groups.variantOf[b] >= 0) continue;
@@ -784,7 +804,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       if (outliers) info.push(`${outliers} barcode${outliers > 1 ? 's' : ''} of ${label} departing from ${outliers > 1 ? 'their' : 'its'} variant's others by more than ${f.maxBarcodeZ} (z/√φ, φ = ${d.phi.toFixed(2)}) left out.`);
       if (p.aggregation === 'sum') {
         if (outliers) {
-          samples = slots.map((s) => sumByVariant(pooledRows.get(s.sample), groups, outlier));
+          samples = slots.map((s) => sumByVariant(rowView.get(s.sample), groups, outlier));
           m = measure(samples);
         }
         for (let i = 0; i < n; i += 1) if (m.state[i] === REPLICATE_STATE.USED && measured[i] < f.minBarcodes) m.state[i] = REPLICATE_STATE.FEW_BARCODES;
@@ -862,6 +882,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
         variance: regression ? scored.firstVar : Float64Array.from(samples[0], (c) => 1 / (c + p.pseudocount) + (p.normalization === 'synonymous' ? 0 : 1 / r[0])),
       },
     };
+    markOutsideTile(entry.state, mask, slots.map((s) => pooled.get(s.sample)));
     replicates.push(entry);
     repById.set(replicate.id, entry);
   });
@@ -896,7 +917,6 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   const conditionList = design.conditions?.length ? design.conditions : [{ id: 'all', name: 'All replicates' }];
   const excludeKinds = kindCodes(f.excludeKinds);
   const excluded = new Set(f.exclude);
-  const tiles = new Map((design.library?.tiles ?? []).map((t) => [t.id, t]));
   const conditions = [];
   // Enrich2 starts its estimator from the variance over every variant in its table of variants
   // scored in every replicate of at least one condition (scores_shared): with several conditions,
@@ -947,7 +967,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
       for (const rep of reps) {
         if (coversRow(rep, i)) exp += 1;
         const s = rep.state[i];
-        if (s !== REPLICATE_STATE.NOT_COUNTED && s !== REPLICATE_STATE.FEW_POINTS && s !== REPLICATE_STATE.NOT_ESTIMABLE) anyCounted = true;
+        if (s !== REPLICATE_STATE.NOT_COUNTED && s !== REPLICATE_STATE.FEW_POINTS && s !== REPLICATE_STATE.NOT_ESTIMABLE && s !== REPLICATE_STATE.OUTSIDE_TILE) anyCounted = true;
         if (s === REPLICATE_STATE.USED || s === REPLICATE_STATE.TOTAL_COUNT || s === REPLICATE_STATE.LOW_FREQUENCY || s === REPLICATE_STATE.FEW_BARCODES) anyPastInput = true;
         if (s === REPLICATE_STATE.FEW_BARCODES) anyFewBarcodes = true;
         if (s === REPLICATE_STATE.USED) these.push(rep);

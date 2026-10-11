@@ -24,7 +24,7 @@
 
 import { log, log10, pow, square } from './dmath.js';
 import { buildVariants, KIND, STATUS } from './variants.js';
-import { replicateSamples, targetLength } from './design.js';
+import { replicateSamples, targetLength, tileRows, tileView } from './design.js';
 import { sampleCounts } from './replicates.js';
 import { binAverages, binTotals } from './score-bins.js';
 import { barcodeDisagreement, groupBarcodes, OUTLIER_Z, sumByVariant } from './score-barcodes.js';
@@ -627,8 +627,11 @@ export function computeQC({ names, barcodes = null, columns, design, mode = 'len
   }
   const published = design.model === 'scores' ? columns[design.scores?.score] : null;
   if (published) for (let i = 0; i < n; i += 1) if (Number.isFinite(published[i])) observed[i] = 1;
-  // Replicates, by condition.
-  const replicates = design.replicates.map((r) => ({ ...(design.model === 'bins' ? binRatios(r, pooled, variants, m.agreementInput) : rawRatios(r, pooled, variants, m.agreementInput)), tile: r.tile ?? null }));
+  // Replicates, by condition: each seeing only its tile's positions (a sample may hold two tiles).
+  const tiles = new Map((design.library?.tiles ?? []).map((t) => [t.id, t]));
+  const viewOf = (r) => tileView(pooled, tileRows(r, tiles, variants.position));
+  const replicates = design.replicates.map((r) => ({ ...(design.model === 'bins' ? binRatios(r, viewOf(r), variants, m.agreementInput) : rawRatios(r, viewOf(r), variants, m.agreementInput)), tile: r.tile ?? null }));
+  const byReplicate = new Map(design.replicates.map((r) => [r.id, r]));
   const conditionList = design.conditions?.length ? design.conditions : [{ id: null, name: 'All replicates' }];
   const conditions = conditionList.map((c) => {
     const reps = replicates.filter((r) => (c.id === null ? true : r.condition === c.id));
@@ -639,9 +642,9 @@ export function computeQC({ names, barcodes = null, columns, design, mode = 'len
     for (const g of groups) for (let j = 0; j < g.length; j += 1) for (let k = j + 1; k < g.length; k += 1) pairs.push(pairMetrics(g[j], g[k]));
     // The cells recorded (wave 2, slice 10): the bottleneck they predict, beside the one the pair's
     // disagreement implies.
-    if (design.model === 'two-population') for (const pair of pairs) pair.recorded = recordedCells(design, pooled, [pair.a, pair.b]);
+    if (design.model === 'two-population') for (const pair of pairs) pair.recorded = recordedCells(design, viewOf(byReplicate.get(pair.a)), [pair.a, pair.b]);
     const loo = groups.filter((g) => g.length >= 3).flatMap((g) => leaveOneOut(g) ?? []);
-    const errorModel = design.model === 'two-population' ? groups.filter((g) => g.length >= 2).map((g) => errorModelOf(g, design, pooled, variants)) : [];
+    const errorModel = design.model === 'two-population' ? groups.filter((g) => g.length >= 2).map((g) => errorModelOf(g, design, viewOf(byReplicate.get(g[0].id)), variants)) : [];
     return { id: c.id ?? 'all', name: c.name, replicates: reps.map((r) => r.id), dropout: reps.map((r) => ({ replicate: r.id, ...r.dropout })).filter((d) => d.sample), pairs, leaveOneOut: loo.length ? loo : null, synonymous: reps.map((r) => synonymousCheck(r, variants)), errorModel };
   });
   // Missingness: rows by their pattern of missing samples.

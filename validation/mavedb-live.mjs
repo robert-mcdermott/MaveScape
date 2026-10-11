@@ -202,6 +202,18 @@ try {
     const bap1 = await act('open_mavedb', { urn: 'urn:mavedb:00000662-a-2' });
     check('BAP1 exon 1 (urn:mavedb:00000662-a-2): opened live, its target the transcript Ensembl serves (its current version, said where MaveDB names another), every one of its 620 variants\' reference bases agreeing with it', bap1.message.slice(0, 260), /^ENST00000460680\.\d+$/.test(bap1.data.target?.accession ?? '') && bap1.data.published?.scored === 620);
   }
+
+  // Wave 3, slice 6: two score sets opened together, live: DHFR without and with Lon, each
+  // record's tables the ones the validation pins, their counts joined with a condition each.
+  {
+    const together = await act('open_mavedb', { urn: 'urn:mavedb:00000063-b-1 urn:mavedb:00000063-a-1' });
+    const ws = await browser.eval('({ sources: window.mavescape.store.ws.sources.map((s) => ({ files: s.files.map((f) => f.sha256), origin: s.origin })), conditions: window.mavescape.store.ws.design?.conditions?.map((c) => c.name) })');
+    const files = sources.datasets['mavedb-dhfr'].files;
+    const pin = (path) => files.find((f) => f.path === path)?.sha256;
+    const scores = (urn) => ws.sources.find((s) => s.origin?.urn === urn && s.origin.file === 'scores')?.files[0];
+    const joined = ws.sources.find((s) => s.origin?.joined)?.files ?? [];
+    check('DHFR without and with Lon (urn:mavedb:00000063-b-1 and -a-1): opened together live, each record\'s scores and counts the tables the validation pins, the counts joined with a condition each', `${together.message.slice(0, 200)}…; conditions ${ws.conditions?.join(', ')}`, scores('urn:mavedb:00000063-b-1') === pin('minus-lon/scores.csv') && scores('urn:mavedb:00000063-a-1') === pin('plus-lon/scores.csv') && joined.join() === [pin('minus-lon/counts.csv'), pin('plus-lon/counts.csv')].join() && ws.conditions?.join() === 'deficient Lon,functioning Lon');
+  }
 } catch (error) {
   check('the session ran to the end', error.stack ?? error.message, false);
 } finally {
