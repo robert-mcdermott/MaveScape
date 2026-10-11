@@ -49,13 +49,16 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > scored as Capra and Singh's tool scores it), AlphaMissense, ClinVar, gnomAD, MaveDB's own
 > annotations and your own files (predictors' scores, GFF3, tables), each with its source and date.
 > Wave 4 brings comparison. Two replicates, conditions or runs of a workspace (a rescoring, or a
-> MaveDB record's published scores against its counts scored again) are compared in the Compare
-> view: a compatibility report first (targets and coordinates, the variants matched, directions,
-> scales, whether the two are independent), then Pearson, Spearman, Lin's concordance and
-> Bland–Altman with their 95% intervals, equal to R's; the two maps and their difference, panned
-> and zoomed as one; the variants and positions that differ beyond their uncertainty; filters by
-> confidence and depth. Next: other assays and predictors on one scale, and which conclusions
-> survive other reasonable analysis choices.
+> MaveDB record's published scores against its counts scored again), or a run against another
+> MaveDB score set (kept beside the workspace without opening it) or a predictor (AlphaMissense,
+> EVE, ESM1b), are compared in the Compare view: a compatibility report first (targets and
+> coordinates, the variants matched, directions, scales, whether the two are independent), then
+> Pearson, Spearman, Lin's concordance and Bland–Altman with their 95% intervals, equal to R's; two
+> assays put on one scale by their anchors (nonsense and the wild type), the anchors' uncertainty
+> carried into the tests; the two maps and their difference, panned and zoomed as one; the variants
+> and positions that differ beyond their uncertainty; a predictor by rank and by its classes (the
+> AUC, with DeLong's interval); filters by confidence and depth. Next: which conclusions survive
+> other reasonable analysis choices.
 
 ## What is a MAVE?
 

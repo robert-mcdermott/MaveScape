@@ -1,6 +1,7 @@
-// Comparisons for the validation suite `compare` (wave 4, slice 1): the published examples as runs
-// a comparison reads (each table with its own SHA-256 and where it came from, as the window keeps
-// them), and simulated pairs of known agreement for the intervals' coverage.
+// Comparisons for the validation suite `compare` (wave 4, slices 1–3): the published examples as
+// runs a comparison reads (each table with its own SHA-256 and where it came from, as the window
+// keeps them), MaveDB score sets and predictors kept beside a workspace, and simulated pairs of
+// known agreement for the intervals' coverage and the tests' calibration.
 
 import { parseTable } from '../web/lib/csv.js';
 import { countsDesign, scoresDesign } from '../web/lib/mavedb.js';
@@ -13,6 +14,12 @@ import { createRandom } from '../web/lib/random.js';
 import { agreementOf } from '../web/lib/agreement.js';
 import { KIND } from '../web/lib/variants.js';
 import { cachedRecord, openExampleInNode, recordTable, recordTarget } from './example-cases.mjs';
+import { readFileSync } from 'node:fs';
+import { describePredictor, describeScoreSet, sideMap } from '../web/lib/compare.js';
+import { buildMapModel } from '../web/lib/map-model.js';
+import { annotationTracks } from '../web/lib/providers/index.js';
+import { scoreSetRecord } from '../web/lib/providers/mavedb-scores.js';
+import { scoreSetResults } from '../web/lib/scoreset.js';
 import { workspaceOf } from './readiness-cases.mjs';
 import { scoreTable } from './roundtrip-cases.mjs';
 
@@ -130,32 +137,93 @@ export function movedRun(base, target, shift, { direction = null, negate = false
 
 // Two runs of independent tables on one protein target, on one scale, from scores and SEs given
 // per variant, each a substitution at its position (up to 20 at a position): { ws, a, b } with each
-// side as describeSide reads it. For the discordance tests (wave 4, slice 2).
+// side as describeSide reads it. For the discordance tests (wave 4, slice 2). kinds (wave 4, slice
+// 3): each variant's kind ('wild type', 'synonymous', 'nonsense', 'missense'), for the anchors of a
+// rescaling; parameters: { a, b }, each run's (another model puts it on another scale).
 const ALTS = ['Arg', 'Asn', 'Asp', 'Cys', 'Gln', 'Glu', 'Gly', 'His', 'Ile', 'Leu', 'Lys', 'Met', 'Phe', 'Pro', 'Ser', 'Thr', 'Trp', 'Tyr', 'Val', 'Ter'];
-export function syntheticPair({ x, y, sx, sy, position }) {
+const KINDS = { 'wild type': KIND.WT, synonymous: KIND.SYNONYMOUS, nonsense: KIND.NONSENSE, missense: KIND.MISSENSE };
+export function syntheticPair({ x, y, sx, sy, position, kinds = null, parameters = {} }) {
   const seen = new Map();
-  const keys = Array.from(position, (p) => {
+  const keys = Array.from(position, (p, i) => {
+    const kind = kinds?.[i];
+    if (kind === 'wild type') return 'p.=';
+    if (kind === 'synonymous') return `p.Ala${p}=`;
+    if (kind === 'nonsense') return `p.Ala${p}Ter`;
     const k = seen.get(p) ?? 0;
     seen.set(p, k + 1);
     return `p.Ala${p}${ALTS[k]}`;
   });
+  const kindOf = kinds ? Uint8Array.from(kinds, (k) => KINDS[k]) : Uint8Array.from(keys, (k) => (k.endsWith('Ter') ? KIND.NONSENSE : KIND.MISSENSE));
   const length = Math.max(...position);
   const design = { model: 'two-population', targets: [{ id: 't', name: 'Simulated', sequence: 'A'.repeat(length), sequenceType: 'protein', offset: 0, identifiers: {} }], variants: { level: 'protein', column: 'hgvs_pro' }, readout: { direction: 'higher-more' }, replicates: [] };
-  const run = (id, score, se) => {
+  const run = (id, score, se, own) => {
     const n = keys.length;
     const results = {
       rows: n,
-      variants: { key: keys, original: keys, kind: Uint8Array.from(keys, (k) => (k.endsWith('Ter') ? KIND.NONSENSE : KIND.MISSENSE)), position: Int32Array.from(position), status: new Uint8Array(n) },
+      variants: { key: keys, original: keys, kind: kindOf, position: Int32Array.from(position), status: new Uint8Array(n) },
       replicates: [],
       conditions: [{ id: 'all', name: 'All replicates', replicates: [], score: Float64Array.from(score), se: Float64Array.from(se), reason: new Uint8Array(n), flags: new Uint8Array(n) }],
     };
     const table = sha256(new TextEncoder().encode(`${id}|${score.length}|${score[0]}`));
-    return { run: { id, name: id === 'run-a' ? 'First' : 'Second', inputs: { design, parameters: { model: 'ratio', normalization: 'wt', rescale: 'none' }, source: { sha256: table } }, output: { sha256: `${id}-out`, conditions: [{ id: 'all', name: 'All replicates', replicates: [] }], replicates: [] } }, results };
+    return { run: { id, name: id === 'run-a' ? 'First' : 'Second', inputs: { design, parameters: own ?? { model: 'ratio', normalization: 'wt', rescale: 'none' }, source: { sha256: table } }, output: { sha256: `${id}-out`, conditions: [{ id: 'all', name: 'All replicates', replicates: [] }], replicates: [] } }, results };
   };
-  const a = run('run-a', x, sx);
-  const b = run('run-b', y, sy);
+  const a = run('run-a', x, sx, parameters.a);
+  const b = run('run-b', y, sy, parameters.b);
   const ws = { sources: [] };
   return { ws, a, b };
+}
+
+// Two assays of one protein (wave 4, slice 3), as the reference's rescaling pair: the wild type,
+// then at each of 60 positions a synonymous variant (1–40), a nonsense one (1–20) and five missense;
+// one function f (the wild type and synonymous 1, nonsense 0, missense mostly near 1, a share lost)
+// measured on two scales, A = −3 + 3f and B = 0.05 + 0.95f, each with its own SEs (A's wild type's
+// wtSE). planted: missense variants whose B differs by ±shift on the function's scale. Returns {
+// x, y, sx, sy, position, kinds, planted (indices) }.
+export function twoAssays({ seed, planted = 0, shift = 0.5, wtSE = 0.06, nonsense = 20 }) {
+  const random = createRandom(seed);
+  const kinds = ['wild type'];
+  const position = [0];
+  for (let p = 1; p <= 60; p += 1) {
+    if (p <= 40) { kinds.push('synonymous'); position.push(p); }
+    if (p <= nonsense) { kinds.push('nonsense'); position.push(p); }
+    for (let k = 0; k < 5; k += 1) { kinds.push('missense'); position.push(p); }
+  }
+  const n = kinds.length;
+  const f = kinds.map((k) => (k === 'nonsense' ? 0 : k === 'missense' ? (random() < 0.35 ? 0.9 * random() : Math.min(1.05, 1 + 0.08 * random.gaussian())) : 1));
+  const missense = kinds.map((k, i) => (k === 'missense' ? i : -1)).filter((i) => i >= 0);
+  const chosen = new Set();
+  while (chosen.size < planted) chosen.add(missense[random.int(missense.length)]);
+  const sx = Float64Array.from({ length: n }, (_, i) => (i === 0 ? wtSE : 0.08 + 0.17 * random()));
+  const sy = Float64Array.from({ length: n }, (_, i) => (i === 0 ? 0.02 : 0.03 + 0.05 * random()));
+  const x = Float64Array.from(f, (v, i) => -3 + 3 * v + sx[i] * random.gaussian());
+  const y = Float64Array.from(f, (v, i) => 0.05 + 0.95 * (v + (chosen.has(i) ? (random() < 0.5 ? -shift : shift) : 0)) + sy[i] * random.gaussian());
+  return { x, y, sx, sy, position: Int32Array.from(position), kinds, planted: [...chosen].sort((p, q) => p - q) };
+}
+
+// A MaveDB score set kept beside a workspace, as a side (wave 4, slice 3): its record as the
+// fetcher cached it (fixtures), its scores from a file, read as published (lib/scoreset.js), an
+// annotation as the window keeps it (the scores file's SHA-256). { annotation, side }.
+export function scoreSetSide(urn, file, { direction = null } = {}) {
+  const record = cachedRecord(urn);
+  const set = scoreSetRecord(record, recordTarget(record));
+  if (direction) set.readout = { direction };
+  const bytes = readFileSync(file);
+  const annotation = { id: 'mavedb-scores', provider: 'mavedb-scores', name: `MaveDB score set: ${urn}`, file: { fileName: `${urn.replaceAll(':', '_')}.scores.csv`, sha256: sha256(new Uint8Array(bytes)), size: bytes.length }, record: { service: 'MaveDB', urn, scoreSet: set } };
+  const read = scoreSetResults(bytes.toString('utf8'), set);
+  if (read.error) throw new Error(read.error);
+  return { annotation, side: describeScoreSet(annotation, read), text: bytes.toString('utf8') };
+}
+
+// A predictor kept beside a workspace, as a side placed on another (wave 4, slice 3): its table
+// read by its provider onto the other side's map (its protein, offset and length), as the window
+// places its track. { annotation, side, notes }.
+export function predictorSide(provider, text, other, { name = provider } = {}) {
+  const annotation = { id: provider, provider, name, file: { fileName: `${provider}.csv`, sha256: sha256(new TextEncoder().encode(text)), size: text.length }, record: {} };
+  const map = sideMap(other);
+  const model = buildMapModel(map.results, map.design, { condition: map.condition });
+  const read = annotationTracks(annotation, text, { target: other.target, protein: model.protein, offset: model.target.offset ?? 0, length: model.length });
+  if (!read.tracks.length) throw new Error(read.problem ?? 'no track');
+  return { annotation, side: describePredictor(annotation, read.tracks[0], other, read.notes), notes: read.notes };
 }
 
 // Simulated pairs with planted discordance: n variants at n/10 positions, truth ~ N(0, 1), each side

@@ -777,6 +777,13 @@ table.design-columns tr.unset td:first-child { color: var(--warn-text); }
 .compare-map-scale { margin-bottom: 4px; }
 .compare-positions { width: 100%; height: auto; }
 .compare-positions .tick { font-size: 9px; fill: var(--text-3); }
+.compare-urn { display: flex; gap: 6px; margin-bottom: 6px; }
+.compare-urn .input { flex: 1; min-width: 0; }
+.compare-split .compare-scales label.check { margin-bottom: 4px; gap: 6px; align-items: flex-start; }
+.compare-classes { width: 100%; height: auto; }
+.compare-classes { max-width: 560px; }
+.compare-classes .tick { font-size: 11px; fill: var(--text-3); }
+.compare-classes .label { font-size: 12px; fill: var(--text-2); }
 @media (max-width: 1180px) { .score-split { grid-template-columns: minmax(0, 1fr); } }
 .score-split .pane .callout { display: flex; gap: 8px; align-items: flex-start; }
 .score-progress { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }

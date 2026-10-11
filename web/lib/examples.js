@@ -32,6 +32,7 @@ export const EXAMPLES = [
       'The least tolerant positions are buried hydrophobic and glycine residues of the fold (A163, G196, G203, I183 on GRB2\'s numbering).',
       'Checked against UniProt, the domain is residues 159–214 of P62993, identical: the offset of 158 the design gives.',
       'Beside the map, AlphaMissense calls the eight least tolerant positions likely pathogenic (a mean above 0.9 each), while conservation follows the position effects only in part (Spearman ρ about −0.4): abundance is not all a residue is conserved for.',
+      'In Compare, against its record\'s published scores (urn:mavedb:00000835-a-1, kept beside the workspace without opening it), Run 1 agrees at r 0.997 on another scale (the authors rescaled theirs); rescaled by their anchors (nonsense median 0, wild type 1), Lin\'s concordance is 0.996 and the bias 0.009. Against AlphaMissense, ρ 0.55 by rank, and its classes are told apart with an AUC of 0.78.',
     ],
     steps: [
       ['qc', 'Read the QC findings. Open "Variance beyond counting" and its plot: replicate differences sit above the dashed line of counting noise, in parallel, as a bottleneck does. DiMSum\'s terms below it show where: the inputs.'],
@@ -123,14 +124,15 @@ export const EXAMPLES = [
       'About a quarter of missense variants (25%) score below 0.5; the least tolerant positions are spread through both the phosphatase and the C2 domain, as a stability readout expects.',
       'QC passes what it can assess from scores alone, but coverage: 53% of all possible substitutions, the library made by oligo-directed mutagenic PCR. Every finding about counts is not assessed.',
       'What the analysis can do: rescoring and QC of the counts need counts, which MaveDB does not hold for this record; the readiness says where they may be found.',
+      'Against PTEN\'s lipid phosphatase activity (urn:mavedb:00000054-a-1, Mighell et al. 2018, kept beside the workspace without opening it), abundance agrees only in part (4,057 variants, r 0.45, ρ 0.37): two assays, and a variant can be stable but inactive. Rescaled by their anchors, the report names each: the activity record\'s wild type is its row, 1 with an SE of 0, though its methods place wild type-like variants from −1.11 to 0.89. Against AlphaMissense, abundance tells its likely benign substitutions from its likely pathogenic ones with an AUC of 0.77 (ρ 0.48).',
     ],
     steps: [
       ['map', 'The map shows PTEN\'s abundance as MaveDB publishes it, the wild type at 1 and nonsense near 0, in the run "Published scores". Click a cell: its score, SE and 95% interval are the record\'s own.'],
-      ['experiment', 'Select the table in the sidebar: the inspector shows the MaveDB record, its license and citation, and the assay in MaveDB\'s terms (a reporter, loss of function, human cells), which became the design\'s readout. The record does not say what a higher score means: the example states it, from the paper.'],
-      ['experiment', 'Below the record, its six calibrations: the investigators\' classes, and ExCALIBR\'s evidence strengths for research use only. MaveScape shows them as published and classifies no variant.'],
+      ['experiment', 'Select the table in the sidebar: the inspector shows the MaveDB record, its license and citation, and the assay in MaveDB\'s terms (a reporter, loss of function, human cells), which became the design\'s readout; the record does not say what a higher score means, so the example states it, from the paper. Below it, its six calibrations: the investigators\' classes, and ExCALIBR\'s evidence strengths for research use only, shown as published (MaveScape classifies no variant).'],
       ['qc', 'In QC, what scores alone show: the controls separate (AUC 0.98) and the scores resolve them; coverage is 53% of all substitutions. The findings about counts are not assessed.'],
       ['experiment', 'In Experiment, read "What the analysis can do": the map and comparison need only the scores; rescoring and QC of the counts need the counts, and the readiness says where they may be (the paper\'s supplement, the authors\' repository, the raw reads PRJNA428380).'],
       ['score', 'In Score, set a maximum SE of 0.15 and read the scores again: the second run leaves the uncertain variants out, each with the stage that left it out.'],
+      ['compare', 'In Compare, under Other sources, add urn:mavedb:00000054-a-1, PTEN\'s lipid phosphatase activity, saying that a higher score means more of the function: it is kept beside the workspace, not opened, and compared with the abundance as another assay of PTEN. Then add AlphaMissense and choose it as the second side: by rank, and in Classes, how well the abundance tells its likely benign substitutions from its likely pathogenic ones.'],
     ],
   },
   {

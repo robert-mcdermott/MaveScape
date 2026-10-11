@@ -287,6 +287,22 @@ export function removeAnnotation(ws, id) {
   return change(ws, { annotations: rest.length ? rest : undefined, ...(layout ? { tracks: layout } : {}) }, 'annotation', `Removed the annotation "${gone.name}"`);
 }
 
+// What a higher score of a MaveDB score set kept beside the workspace means, as a person states it
+// (wave 4, slice 3; MaveDB records none): its record's readout.direction ('higher-more',
+// 'higher-less', 'unsigned'; null: not stated). In the history.
+export function setScoreSetDirection(ws, id, direction) {
+  const list = ws.annotations ?? [];
+  const a = list.find((x) => x.id === id);
+  if (!a?.record?.scoreSet) return ws;
+  const current = a.record.scoreSet.readout?.direction ?? null;
+  if ((direction ?? null) === current) return ws;
+  const { readout, ...rest } = a.record.scoreSet;
+  const scoreSet = direction ? { ...rest, readout: { ...(readout ?? {}), direction } } : rest;
+  const next = { ...a, record: { ...a.record, scoreSet } };
+  const words = { 'higher-more': 'a higher score means more of the function measured', 'higher-less': 'a higher score means less of the function measured', unsigned: 'the scores have no sign' };
+  return change(ws, { annotations: list.map((x) => (x.id === id ? next : x)) }, 'annotation', `${a.name}: ${direction ? words[direction] ?? direction : 'what a higher score means not stated'}`);
+}
+
 // The arrangement of tracks (ws.tracks: { order, hidden, filters }; lib/tracks.js, arrangement): a
 // view of the analysis, not a change to it, so not in the history.
 export function setTrackLayout(ws, layout) {

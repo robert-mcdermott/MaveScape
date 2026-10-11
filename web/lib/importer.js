@@ -21,8 +21,10 @@ export const TEMPLATE_FORMAT = 'mavescape-import';
 export const TEMPLATE_VERSION = 1;
 
 const SCORE_NAMES = /^(score|scores|fitness|effect|log_?ratio|lfc|log2fc|enrichment|abundance_score|raw_score|nor_fitness)$/i;
-const SE_NAMES = /^(se|sem|std_?err(or)?|sigma|raw_sigma|score_?se|se_score|sd|nor_fitness_sigma|error)$/i;
-const SE_RANK = [/^(se|sem|std_?err(or)?|score_?se|se_score)$/i, /^(sigma|nor_fitness_sigma)$/i, /^(raw_sigma|error)$/i];
+// A standard error's column, written as a name or in words (DHFR's records: "standard error"; wave 4,
+// slice 3).
+const SE_NAMES = /^(se|sem|std_?err(or)?|standard[ _]error|sigma|raw_sigma|score_?se|se_score|sd|standard[ _]deviation|nor_fitness_sigma|error)$/i;
+const SE_RANK = [/^(se|sem|std_?err(or)?|standard[ _]error|score_?se|se_score)$/i, /^(sigma|nor_fitness_sigma)$/i, /^(raw_sigma|error)$/i];
 const CI_LOW = /^(lower_ci|ci_?lower|ci95_lower|ci_?low|lower_95)$/i;
 const CI_HIGH = /^(upper_ci|ci_?upper|ci95_upper|ci_?high|upper_95)$/i;
 

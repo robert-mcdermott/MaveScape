@@ -24,7 +24,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `public-data` | UniProt's and MaveDB's answers as MaveScape's fetcher cached them (wave 3, slices 1 and 2): every cached answer with its retrieval record; each published example's target where its design says in its UniProt entry (identical, at one place, the entry changing nothing in the design); GRB2's whole sequence looked up, P62993 first; the GRB2 example checked as its guide says, the design unchanged and the methods naming the check and citing UniProt; the feasibility records (four MaveDB score sets) read with no code for any of them, their published scores read as published equal to MaveDB's columns row for row, their counts drafted into valid designs (GRB2's and factor IX's as documented, but for the bins' values); keywords as the readout; a record whose target is an accession, and a record of scores alone, its readiness naming the counts and where they may be; a workspace of published scores through its archive, its run reproduced; GRB2's mapped variants (wave 3, slice 3) each joined to its row of scores, its protein on NP_002077.1 the table's at the target's position plus the UniProt offset | `fixtures/public-data/`; MaveDB, external |
 | `annotations` | Sequence tracks and annotations (wave 3, slice 5; `annotation-cases.mjs`, the fetcher's cached answers served by `cached-fetch.mjs`): conservation from an alignment as Capra & Singh's `score_conservation.py` scores it, and PDBe-KB's profiles as its divergence gives them; UniProt's features the same from its JSON and its GFF3; AlphaMissense as AlphaFold DB's tables give it; ClinVar's records of GRB2 and F9 with ClinVar's own classifications; gnomAD's frequencies of BRCA1's variants against MaveDB's own join of gnomAD to its saturation genome editing score set; MaveDB's annotations joined to the BRCA1 example's run; annotations kept through an archive; the tracks' table read back; what each provider asks; the GRB2 example as its guide says | `reference/annotations.json`; `fixtures/public-data/`, `fixtures/annotations/`; the BRCA1 example's table, external |
 | `mavedb-export` | MaveDB deposits (wave 3, slice 4; `mavedb-export-cases.mjs`): 19 deposits (`web/lib/mavedb-export.js`) of every kind of run and target, from the examples and published records, checked by MaveDB's own validators: every table accepted by `validate_and_standardize_dataframe_pair` with its column descriptions and targets (mavehgvs against a sequence, biocommons hgvs against a transcript), every name strict MAVE-HGVS, the experiment and score set taken by MaveDB's models where MaveScape says nothing is missing and refused for what it says is; the files written now those the reference checked (each SHA-256); export → import → export the same bytes; MaveScape's keyword vocabulary MaveDB's | `reference/mavedb-export.json`; `fixtures/public-data/` (`mavedb-keywords.json`, the transcripts); MaveDB, external |
-| `compare` | Comparisons within a workspace (wave 4, slice 1; `compare-cases.mjs`, `web/lib/compare.js`, `web/lib/agreement.js`): the agreement statistics of seven pairs equal R's (`reference/compare.json`, by `reference/generate_compare.R`: `cor.test`, Spearman with Bonett and Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰; their 95% intervals' coverage in 2,000 simulated pairs of known agreement of each of five kinds (94–96%; Spearman's near r = 1 and Lin's with 30 variants on two scales reported apart, as they are); slice 2: the discordance and disagreement by position of 600 variants equal R's (`pnorm`, `p.adjust`), and in simulated pairs with planted differences the planted found (96%), the false calls within BH's 5%, none called with nothing planted (dispersion about 1); the compatibility report's rules on GRB2 (replicates, a replicate inside its run, one table scored twice, a run moved along UniProt P62993 and matched on its coordinates, the same blocked without an accession, a direction stated the other way) and the files; then BRCA1's counts against its published scores, DHFR's Run 1 against each record, DHFR's two published score sets matched as R's merge matches them, and BRCA1 RING's replicates sharing their input; DHFR's discordance its Run 1's own differential z, its filters, its difference map; GRB2's dispersion where QC finds variance beyond counting. 25 checks | `reference/compare.json`; MaveDB, external (`mavedb-brca1-sge`, `mavedb-dhfr`, `mavedb-brca1-ring`) for the last checks |
+| `compare` | Comparisons within a workspace (wave 4, slice 1; `compare-cases.mjs`, `web/lib/compare.js`, `web/lib/agreement.js`): the agreement statistics of seven pairs equal R's (`reference/compare.json`, by `reference/generate_compare.R`: `cor.test`, Spearman with Bonett and Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰; their 95% intervals' coverage in 2,000 simulated pairs of known agreement of each of five kinds (94–96%; Spearman's near r = 1 and Lin's with 30 variants on two scales reported apart, as they are); slice 2: the discordance and disagreement by position of 600 variants equal R's (`pnorm`, `p.adjust`), and in simulated pairs with planted differences the planted found (96%), the false calls within BH's 5%, none called with nothing planted (dispersion about 1); the compatibility report's rules on GRB2 (replicates, a replicate inside its run, one table scored twice, a run moved along UniProt P62993 and matched on its coordinates, the same blocked without an accession, a direction stated the other way) and the files; then BRCA1's counts against its published scores, DHFR's Run 1 against each record, DHFR's two published score sets matched as R's merge matches them, and BRCA1 RING's replicates sharing their input; DHFR's discordance its Run 1's own differential z, its filters, its difference map; GRB2's dispersion where QC finds variance beyond counting; slice 3: two assays on two scales rescaled by their anchors (both rescalings) equal R's with the anchors' SEs and the tests' share, GRB2's published scores against AlphaMissense by class equal R's (pROC's DeLong interval) and an AUC with ties, the anchors' uncertainty keeping false calls to 3.5–4% of null pairs (10–55% without it), DeLong's interval holding the AUC 94–95% of the time, GRB2's Run 1 against its record kept beside the workspace (rescaled, ρc 0.996) and against AlphaMissense, a score set and a predictor through the archive, DHFR's record kept the same as opened, DHFR's published pair stated on one scale, PTEN's abundance against its phosphatase activity and against AlphaMissense. 36 checks | `reference/compare.json`; `fixtures/public-data/` (GRB2's record, AlphaMissense); MaveDB, external (`mavedb-brca1-sge`, `mavedb-dhfr`, `mavedb-brca1-ring`, `mavedb-pten-vampseq`, `mavedb-pten-phosphatase`) for the last checks |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -80,8 +80,11 @@ each the report and statistics Node gives for the runs it recomputes from the ex
 `export` of the comparison (CSV and JSON) as Node writes it, and a side that does not exist
 refused; and (slice 2) `compare` with a filter (SE at most 0.3), its discordant variants and
 disagreement by position as Node gives them, `export` of `comparison-positions` and
-`comparison-map` (the difference and the second side's map) the same bytes as Node's. 116 checks;
-in CI as the `remote` job.
+`comparison-map` (the difference and the second side's map) the same bytes as Node's; and (slice 3)
+`compare` with GRB2's record by its URN (fetched from the cache and kept beside the workspace
+without opening it) rescaled by their anchors, and with AlphaMissense by class, each as Node gives
+them, `comparison` and `comparison-classes` the same bytes as Node's, and a scale not known
+refused. 119 checks; in CI as the `remote` job.
 
 ## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3 and 6)
 
@@ -203,6 +206,7 @@ retrieval record:
 | `mavedb/urn_mavedb_00000835-a-1.json`, `.scores.csv`, `.counts.csv` | GRB2 SH3's MaveDB record and tables, retrieved 2026-10-11 (the tables byte for byte those `sources.json` pins) |
 | `mavedb/urn_mavedb_00000003-a-1.json`, `-a-2`, `00001200-a-1`, `00000011-a-1` | the records of BRCA1 RING (two score sets), factor IX and Hsp90 |
 | `mavedb/urn_mavedb_00000013-a-1.json` | PTEN VAMP-seq's record (the example; its table is external data, `mavedb-pten-vampseq`) |
+| `mavedb/urn_mavedb_00000054-a-1.json` | PTEN's lipid phosphatase record (Mighell et al. 2018), compared with the PTEN example without opening it (wave 4, slice 3; its table is external data, `mavedb-pten-phosphatase`) |
 | `mavedb/urn_mavedb_00000662-a-2.json`, `.scores.csv` | BAP1 SGE exon 1's record and scores: CC BY 4.0, its target named by an Ensembl transcript (the remote-control session and the headless run open it) |
 | `mavedb/urn_mavedb_00000835-a-1.mapped.json` | GRB2's mapped variants: MaveDB's mapping of its 1,120 variants to the human reference, VRS 2.0 (wave 3, slice 3) |
 | `mavedb/urn_mavedb_00000097-0-2.json`, `00001277-a-1`, `00001245-a-1`, `00001237-a-1`, `00001228-a-1` | the records of BRCA1's saturation genome editing (RefSeq target), TP53's DNA-binding domain (RefSeq), TP53 base editing (an Ensembl transcript and its protein), VarChAMP (28 targets) and DDX3X's saturation genome editing (a genome) |
@@ -213,7 +217,7 @@ retrieval record:
 | `mavedb-keywords.json` | MaveDB's controlled keywords for experiments, every key with its labels (retrieved 2026-10-10): the vocabulary a deposit's keywords are checked against (wave 3, slice 4) |
 | `uniprot/P62993.features.json`, `P00740`, `P02829` | the three examples' entries' features: domains, regions, sites, secondary structure (wave 3, slice 5) |
 | `pdbe/P62993.conservation.json`, `P00740`, `P02829` | PDBe-KB's conservation profiles of the three (each position's amino-acid probabilities) |
-| `alphafold/P62993.aa-substitutions.csv`, `P00740` | AlphaMissense's tables of GRB2 and factor IX, as AlphaFold DB publishes them |
+| `alphafold/P62993.aa-substitutions.csv`, `P00740`, `P60484` | AlphaMissense's tables of GRB2, factor IX and PTEN, as AlphaFold DB publishes them (PTEN's for the comparisons by class, wave 4 slice 3) |
 | `clinvar/GRB2.search.1.json`, `F9.search.1.json`, `<sha256>.summary.json` | ClinVar's search for GRB2's and F9's missense, nonsense and synonymous records (10 and 553), and their summaries (one page for GRB2, two for F9; named by the SHA-256 of the record numbers asked) |
 | `gnomad/GRB2.gene.json`, `F9`, `BRCA1`; `ENST00000316804.variants.json`, `ENST00000218099`, `ENST00000357654` | gnomAD's answers for the three genes (their MANE Select transcripts) and the transcripts' variants in gnomAD v4 (each with its GraphQL query in its record) |
 | `mavedb/urn_mavedb_00000097-0-2.namespaces.json`, `.annotations.clinvar_2026_01.csv` | the annotations MaveDB keeps for BRCA1's saturation genome editing score set, and its ClinVar 2026_01 and gnomAD annotations of its variants |
@@ -254,6 +258,7 @@ with its BLOSUM62 background). The reference records the tool's SHA-256 and each
 | `dimsum-demo` (lehner-lab/DiMSum `inst/demo`, MIT) | 40,591 whole nucleotide sequences × 4 inputs and 4 outputs; its design file | DiMSum's layout (variants as sequences, named against the 126-nt wild type); CR-only line ends |
 | `mavedb-cbs` (urn:mavedb:00000005-a-5, -a-6) | two populations × 4 replicates at low and at high vitamin B6, in two records whose non-selected samples are the same | two conditions from shared inputs (wave 2, slice 6); counts not whole numbers; codon variants with no wild-type row |
 | `mavedb-pten-vampseq` (urn:mavedb:00000013-a-1) | published scores only, no counts: VAMP-seq abundance of 4,409 PTEN variants, with SEs and 95% intervals | the PTEN example opened from MaveDB (wave 3, slice 2): its table as MaveDB writes it, which the example checks when it opens |
+| `mavedb-pten-phosphatase` (urn:mavedb:00000054-a-1) | published scores only: lipid phosphatase activity of 8,680 PTEN variants (codon variants named at the nucleotide level), Enrich2 scores with SEs and each replicate's, a `_wt` row of 1 with an SE of 0 | another assay of the PTEN example's protein, compared with it without opening it (wave 4, slice 3) |
 | `mavedb-brca1-sge` (urn:mavedb:00000097-0-2) | saturation genome editing: 3,893 single-nucleotide variants on NM_007294.3 (coding, splice-site, intronic, 5′ UTR), scores and counts (library, day 5 and day 11 of two replicates, RNA) | the BRCA1 example (wave 3, slice 3): a RefSeq target, nucleotide variants at the protein level, its counts scored against its published scores |
 | `mavedb-dhfr` (urn:mavedb:00000063-b-1, -a-1) | time series: 4 sub-libraries × 3 replicates, two grown in each of 6 repeats, 8 times over 18 hours, without and with the Lon protease, in two records (scores and counts) | the DHFR example (wave 3, slice 6): two score sets opened together as conditions, samples holding two tiles, counts below a reporting frequency written as missing |
 | `mavedb-tp53-dbd` (urn:mavedb:00001277-a-1) | published scores: 8,058 variants of TP53's DNA-binding domain on NM_000546.6, 5,609 of them deletions, insertions, duplications and deletion-insertions | the protein changes of insertions and deletions, against biocommons hgvs |
@@ -373,10 +378,10 @@ other bytes, until the reference is made again.
   transcript's sequence and coding region validates BRCA1's 3,893 names, and refuses a wrong
   reference base.
 
-## Agreement statistics (`reference/compare.json`, wave 4 slice 1)
+## Agreement statistics (`reference/compare.json`, wave 4 slices 1–3)
 
-`reference/generate_compare.R` (R 4.6.1, DescTools 0.99.60, BlandAltmanLeh 0.3.1, jsonlite; run
-from the repository root with DHFR's tables in `cache/`) writes seven pairs of scores and their
+`reference/generate_compare.R` (R 4.6.1, DescTools 0.99.60, BlandAltmanLeh 0.3.1, pROC 1.19.1,
+jsonlite; run from the repository root with DHFR's tables in `cache/`) writes seven pairs of scores and their
 statistics, each pair's x and y kept in the reference so that MaveScape is given the same numbers:
 six simulated (`set.seed(20261011)`: close agreement on one scale, twice the scale, a shift of 0.5,
 weak and negative, ties at one decimal, twelve variants) and DHFR's published scores without and
@@ -411,6 +416,41 @@ and counts what is called. 96% of the planted variants are found. Of the variant
 average differ by chance, within the 5% Benjamini and Hochberg allow. 57 of the 60 planted
 positions are found, with 7 of 147 positions called that hold no planted difference. In 10 pairs
 with nothing planted, none is called and the dispersion is 0.86–1.11.
+
+Slice 3 adds three cases:
+- **Rescaling** (`set.seed(20261013)`): two assays of 361 variants (the wild type, then at each of
+  60 positions a synonymous one, a nonsense one and five missense) measuring one function on two
+  scales, −3 + 3f and 0.05 + 0.95f, each with its own SEs. For each rescaling (nonsense median 0
+  and wild type 1; synonymous median 0 and nonsense median −1), R writes out:
+  - each side's anchors (the wild type's score, a class's median) and their SEs (the wild type's;
+    a median's √(π/2 × Σse²/n)/√n, as `anchors.js`);
+  - the rescaled scores;
+  - Lin's concordance and Bland–Altman of them (DescTools, BlandAltmanLeh);
+  - each difference's z with the anchors' share of its variance ((1 − t)² u₀² + t² u₁² on each
+    side, t the score's place between the anchors), p and q;
+  - each position's z with the anchors' shared variance ((Σ(1 − t))² u₀² + (Σt)² u₁²).
+
+  MaveScape's rescaled comparison gives every one to 10⁻¹² (4,010 numbers).
+- **Classes:** GRB2's published scores (`urn:mavedb:00000835-a-1`) against AlphaMissense
+  (P62993), joined in R on UniProt's numbering (the domain from residue 159): 1,053 variants. R
+  gives:
+  - Spearman's ρ of the score and the negated pathogenicity, with its interval;
+  - each class's median and quartiles (type 7);
+  - the AUC of telling the likely benign from the likely pathogenic substitutions, with DeLong's
+    interval and SE (pROC's `roc`, `ci.auc` and `var`, method "delong").
+
+  MaveScape gives them through its whole comparison: the score set read as published, kept beside
+  a workspace, and AlphaMissense placed on it as its track is.
+- **An AUC with ties** (`set.seed(20261014)`): 80 cases against 120 controls, rounded to one
+  decimal.
+
+The suite also simulates:
+- 600 pairs of two assays that differ only in scale (`compare-cases.mjs`, `twoAssays`), rescaled
+  by their anchors. Any variant is called in 3.5–4% of the pairs with the anchors' uncertainty in
+  the test, and in 10%, 30% and 55% without it, as the wild type is less certain and the nonsense
+  variants fewer.
+- 6,000 pairs of classes of known AUC (two normal groups). DeLong's interval holds the AUC 94–95%
+  of the time.
 
 ## Reference outputs (`reference/`)
 

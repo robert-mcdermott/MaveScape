@@ -12,6 +12,7 @@ lede: Thirteen examples come with MaveScape. Three are published experiments fro
         <li>Nonsense variants score about −4.6 against the wild type's 0: the assay separates loss of function cleanly.</li>
         <li>The least tolerant positions are buried hydrophobic and glycine residues of the fold: A163, G196, G203 and I183 on GRB2's numbering.</li>
         <li>In Experiment, <a href="experiment.html#readiness">What the analysis can do</a>: 19 of 25 analyses are ready. The published counts do not say how the library was made or how many cells were carried into selection; with the cells, QC would check the bottleneck it finds against them. The library is protein-level, so there are no synonymous variants to normalize to.</li>
+        <li>In <a href="compare.html#scale">Compare</a>, against its record's published scores (kept beside the workspace without opening it), Run 1 agrees at r 0.997 on another scale; rescaled by their anchors, Lin's concordance is 0.996 and the bias 0.009. Against AlphaMissense, ρ 0.55 by rank, and an AUC of 0.78 between its classes.</li>
       </ul>
 
       <h2 id="hsp90">Hsp90 over 21 generations (published)</h2>
@@ -45,6 +46,7 @@ lede: Thirteen examples come with MaveScape. Three are published experiments fro
         <li>About a quarter of missense variants score below 0.5; the least tolerant positions are spread through both the phosphatase and the C2 domain, as a stability readout expects.</li>
         <li>The record gives the assay in MaveDB's terms (a reporter, loss of function, human cells, a library by oligo-directed mutagenic PCR), which become the design's readout, but not what a higher score means: the example states it from the paper. Its six calibrations are in the inspector, ExCALIBR's for research use only.</li>
         <li>QC passes what it can assess from scores alone but coverage, 53% of all substitutions. Rescoring and QC of the counts need counts, which MaveDB does not hold for this record: the readiness says where they may be (the paper's supplement, the authors' repository, the raw reads PRJNA428380).</li>
+        <li>In <a href="compare.html#sources">Compare</a>, against PTEN's lipid phosphatase activity (urn:mavedb:00000054-a-1, Mighell et al. 2018, kept beside the workspace without opening it), abundance agrees only in part (4,057 variants, r 0.45, ρ 0.37): two assays, and a variant can be stable but inactive. Rescaled by their anchors, the report shows the activity record's wild type is its row, 1 with an SE of 0, though its methods place wild type-like variants from −1.11 to 0.89. Against AlphaMissense, abundance tells its likely benign substitutions from its likely pathogenic ones with an AUC of 0.77.</li>
       </ul>
 
       <h2 id="brca1-sge">BRCA1 saturation genome editing, opened from MaveDB (nucleotide variants)</h2>

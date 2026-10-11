@@ -42,7 +42,7 @@ const audit = args.includes('--audit');
 const shots = !args.includes('--no-shots');
 const AXE = join(ROOT, 'validation/cache/axe-core/axe.min.js');
 const PTEN = join(ROOT, 'validation/cache/mavedb-pten-vampseq/scores.csv');
-if (wanted.length === 0 || wanted.includes('pten-mavedb')) {
+if (wanted.length === 0 || wanted.includes('pten-mavedb') || wanted.includes('compare-classes')) {
   if (!existsSync(PTEN)) throw new Error('The PTEN example\'s scene needs MaveDB\'s table: run node validation/fetch.mjs mavedb-pten-vampseq');
 }
 // BRCA1's saturation genome editing (wave 3, slice 3): its scores and counts.
@@ -519,6 +519,24 @@ const scenes = {
     await act('compare', { a: 'Run 1: −Lon', b: 'Run 1: +Lon', low_confidence: true, show: 'disagreement' });
     await clearToasts();
     await sleep(600);
+  },
+  // Other sources and scales (wave 4, slice 3): GRB2's Run 1 against its record's published scores,
+  // kept beside the workspace by URN without opening it (from the cache), rescaled by their anchors.
+  async 'compare-scales'() {
+    await example('grb2-sh3');
+    await act('compare', { a: 'Run 1', b: 'urn:mavedb:00000835-a-1', scale: 'nonsense-wt', show: 'agreement' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(700);
+  },
+  // PTEN's abundance against AlphaMissense (P60484, from the cache): by rank and by its classes.
+  async 'compare-classes'() {
+    await example('pten-mavedb');
+    await act('add_track', { provider: 'alphamissense', run: 'Published scores' });
+    await act('compare', { a: 'Published scores', b: 'AlphaMissense: P60484', show: 'classes' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(700);
   },
   // The record: a run's exports, from the workflow strip.
   async record() {

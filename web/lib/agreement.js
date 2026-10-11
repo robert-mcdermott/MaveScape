@@ -155,6 +155,42 @@ export function trendOf(x, y, level = 0.95) {
   return { slope, low: slope - t * se, high: slope + t * se, intercept, p: se > 0 ? tTwoSided(slope / se, n - 2) : slope === 0 ? 1 : 0 };
 }
 
+// How well scores tell two groups apart (wave 4, slice 3): the area under the ROC curve, P(a case's
+// score > a control's) + ½ P(equal) (the Mann–Whitney U over m n), with DeLong's 95% interval
+// (DeLong, DeLong and Clarke-Pearson, Biometrics 1988;44:837–845): each case's placement (the share
+// of controls below it) and each control's (the share of cases above it), their variances over
+// m − 1 and n − 1, S = S_X/m + S_Y/n, and AUC ± z √S clipped to [0, 1], as pROC's ci.auc (method
+// "delong"). Placements from the ranks (ties at their average rank), so O(N log N).
+export function aucAgreement(cases, controls, level = 0.95) {
+  const m = cases.length;
+  const n = controls.length;
+  const nan = { m, n, auc: Number.NaN, low: Number.NaN, high: Number.NaN, se: Number.NaN };
+  if (!m || !n) return nan;
+  const all = new Float64Array(m + n);
+  all.set(cases, 0);
+  all.set(controls, m);
+  const rAll = ranks(all);
+  const rCases = ranks(cases);
+  const rControls = ranks(controls);
+  const x = new Float64Array(m);
+  const y = new Float64Array(n);
+  let sum = 0;
+  for (let i = 0; i < m; i += 1) {
+    x[i] = (rAll[i] - rCases[i]) / n;
+    sum += x[i];
+  }
+  for (let j = 0; j < n; j += 1) y[j] = (m - (rAll[m + j] - rControls[j])) / m;
+  const auc = sum / m;
+  if (m < 2 || n < 2) return { ...nan, auc };
+  let sx = 0;
+  let sy = 0;
+  for (const v of x) sx += square(v - auc);
+  for (const v of y) sy += square(v - auc);
+  const se = Math.sqrt(sx / (m - 1) / m + sy / (n - 1) / n);
+  const q = normalQuantile(1 - (1 - level) / 2);
+  return { m, n, auc, se, low: Math.max(0, auc - q * se), high: Math.min(1, auc + q * se) };
+}
+
 // Every statistic of a pair: { n, pearson, spearman, concordance, blandAltman }.
 export function agreementOf(x, y, level = 0.95) {
   return {

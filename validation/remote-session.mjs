@@ -33,7 +33,8 @@ import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { tracksCSV } from '../web/lib/tracks.js';
 import { openExampleInNode } from './example-cases.mjs';
-import { compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
+import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
+import { predictorSide, scoreSetSide } from './compare-cases.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -372,6 +373,25 @@ try {
   const removedTrack = await act('remove_track', { annotation: gffId });
   const afterRemoval = await act('list_tracks');
   check('remove_track: the GFF3\'s annotation and its tracks gone', `${removedTrack.message} ${afterRemoval.data.tracks.length} tracks`, !afterRemoval.data.tracks.some((t) => t.annotation === gffId) && afterRemoval.data.tracks.length === 4 + 3 + 1 + 1 + 1 + 1 + 1);
+
+  // Other sources and scales (wave 4, slice 3), offline from the cache: GRB2's Run 1 against its
+  // record's published scores, kept beside the workspace by URN without opening it, rescaled by
+  // their anchors; against AlphaMissense (added above) by rank and by its classes; each as Node
+  // compares them, and the files the same bytes.
+  const runOne = describeSide(archive.ws, nodeRuns[0].run, nodeRuns[0].results, { run: nodeRuns[0].run.id, condition: 0 });
+  const viaUrn = await act('compare', { a: 'Run 1', b: 'urn:mavedb:00000835-a-1', scale: 'nonsense-wt' });
+  const keptSet = scoreSetSide('urn:mavedb:00000835-a-1', join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv'));
+  const viaUrnNode = compareSides(runOne, keptSet.side, { scale: 'nonsense-wt' });
+  const keptNow = await browser.eval('JSON.stringify((window.mavescape.store.ws.annotations ?? []).filter((a) => a.provider === "mavedb-scores").map((a) => [a.id, a.file.sha256, a.record.scoreSet.urn]))');
+  check('compare with a MaveDB score set by its URN: fetched (from the cache) and kept beside the workspace without opening it, its scores read as published, rescaled with Run 1 by their anchors: the report and statistics as Node gives them', `${viaUrn.message.slice(0, 240)}… kept: ${keptNow}`, JSON.stringify(viaUrn.data) === withoutSoftware(comparisonJSON(viaUrnNode)) && viaUrn.data.scale.applied && viaUrn.data.statistics.concordance.ccc > 0.99 && JSON.parse(keptNow).length === 1 && JSON.parse(keptNow)[0][1] === keptSet.annotation.file.sha256 && (await act('get_state')).data.runs.length === 3);
+  await act('export', { what: 'comparison', path: join(out, 'comparison_scoreset.csv') });
+  const amCompare = await act('compare', { a: 'Run 1', b: 'AlphaMissense: P62993', scale: 'scored', show: 'classes' });
+  const amNode = compareSides(runOne, predictorSide('alphamissense', readFileSync(join(ROOT, 'validation/fixtures/public-data/alphafold/P62993.aa-substitutions.csv'), 'utf8'), runOne, { name: 'AlphaMissense: P62993' }).side);
+  await act('export', { what: 'comparison-classes', path: join(out, 'comparison_classes.csv') });
+  check('compare with AlphaMissense: by rank and by its classes, as Node gives them, the Classes tab shown; the exports (the score set\'s variants compared, AlphaMissense\'s classes) the same bytes as Node\'s', amCompare.message.slice(0, 260), JSON.stringify(amCompare.data) === withoutSoftware(comparisonJSON(amNode)) && amCompare.data.classes.valid && readFileSync(join(out, 'comparison_scoreset.csv'), 'utf8') === comparisonCSV(viaUrnNode) && readFileSync(join(out, 'comparison_classes.csv'), 'utf8') === classesCSV(amNode) && (await browser.eval('Boolean(document.querySelector(".compare-classes"))')));
+  const badScale = await send('compare', { scale: 'twice' });
+  const setTracks = await act('list_tracks', { run: 'Run 1' });
+  check('compare with a scale it does not know: refused, listing the scales; the score set\'s scores a track beside the map', `${badScale.message} ${setTracks.data.tracks.filter((t) => /00000835/.test(t.label)).map((t) => `${t.label}: ${t.summary ?? t.kind}`).join('; ')}`, !badScale.ok && /nonsense-wt/.test(badScale.message) && setTracks.data.tracks.some((t) => /urn:mavedb:00000835-a-1/.test(t.label)));
 
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.
   const noTokenOpen = await send('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] }, { withToken: false });

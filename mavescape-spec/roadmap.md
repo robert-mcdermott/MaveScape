@@ -1783,11 +1783,78 @@ follow, and the wave ends with its examples, as waves 2 and 3 did.
        second): a position is now tested with 3 variants or more.
      - **Clicking a map cell moved the keyboard focus away**, because the view was drawn again.
        The maps now update their selection in place.
-3. **Other sources and scales (C1, C3).** A MaveDB score set compared with a local run without
+3. **Other sources and scales (C1, C3): done.** A MaveDB score set compared with a local run without
    opening it into the workspace, another assay of the same protein, and a predictor (AlphaMissense,
    EVE or ESM1b, from the tracks' providers). Two assays rescaled onto one scale by their anchors
    (wave 2, slice 8: nonsense and the wild type), which published scores refuse today; a
    predictor compared by rank and by its classes.
+   - **A MaveDB score set kept beside the workspace**, by its URN: an annotation of a new
+     provider, `mavedb-scores`. Its record and published scores come through the fetcher, the
+     scores file kept as MaveDB sends it, with the record's target (fetched when a transcript names
+     it), keywords, and the direction a person states (MaveDB records none). `lib/scoreset.js`
+     reads its scores as published, as opening the record would. It is a comparison side (matched
+     on one sequence, or on UniProt's numbering) and a track beside the map. Added from Compare's
+     Other sources, the Tracks menu, `compare` with a URN, or `add_track`.
+   - **A predictor as a side:** AlphaMissense, or a predictor's file, placed on the measured side's
+     protein as its track is. AlphaMissense's and EVE's scores are compared negated, ESM1b's as
+     they are, another table's direction is said to be unknown.
+     - By rank: Spearman's ρ with its interval; Pearson's r, Lin's concordance, Bland–Altman and
+       the tests of disagreement withheld.
+     - By its classes (the Classes tab): the measured scores in each class (median, quartiles),
+       the synonymous and nonsense medians for reference, and the AUC of telling the tolerated
+       class from the damaging one with DeLong's interval (`aucAgreement`, `lib/agreement.js`).
+     - EVE's table now gives its classes.
+   - **Scale** (`SCALES`, `lib/compare.js`):
+     - as scored;
+     - stated to be on one scale;
+     - each side rescaled by its own anchors (`anchorsOf`): the nonsense median and the wild type,
+       or the synonymous and nonsense medians, as a run's rescaling does.
+
+     The anchors' SEs (the wild type's; a median's √(π/2 × mean SE²/n), as `anchors.js`) are
+     carried into each difference's test and, shared, into each position's. Rescaled sides are
+     aligned by their anchors rather than negated.
+   - Exports: `compared_a` and `compared_b` in `*_comparison.csv`; `*_comparison_classes.csv`;
+     the report's `scale`, `classes` and each side's source. Remote control's `compare` takes
+     URNs, predictors, `scale`, `direction` and `show: classes`; `export` writes
+     `comparison-classes`; `add_track` takes `mavedb-scores` with a `urn`.
+   - The PTEN example's sixth step compares its abundance with its phosphatase activity (a score
+     set not opened) and with AlphaMissense by class. Two screenshot scenes (`compare-scales`,
+     `compare-classes`).
+   - Validation:
+     - `compare` (36 checks):
+       - two assays on two scales rescaled by their anchors (both rescalings) equal to R's, with
+         the anchors' SEs and the tests' share;
+       - GRB2's published scores against AlphaMissense by class equal to R's (pROC's DeLong
+         interval), and an AUC with ties;
+       - in 600 simulated pairs of two assays differing only in scale, false calls in 3.5–4% of
+         pairs with the anchors' uncertainty, 10–55% without it;
+       - DeLong's interval holding the AUC 94–95% of the time;
+       - DHFR's record kept beside the workspace the same as opened;
+       - a score set and a predictor through the archive;
+       - the examples' numbers (GRB2, DHFR's published pair stated on one scale, PTEN).
+     - `remote-session.mjs` 119 checks: a URN compared, rescaled, and AlphaMissense by class, as
+       Node gives them; their exports the same bytes.
+     - Unit tests: `compare.test.mjs` 15; `providers.test.mjs` a score set from the cache.
+   - Found by slice 3:
+     - **DHFR's published standard errors were never read.** Its records name the column
+       `standard error`, in words, which the importer did not recognize, so DHFR's published runs
+       had no SEs. The importer now reads it. Stated on one scale, DHFR's two published sets get
+       Lin's concordance (0.79) and a test of their differences: 761 of 2,277 differ, but their
+       dispersion is 5.3.
+     - **A deposited wild type can be a placeholder.** PTEN's lipid phosphatase record writes its
+       wild type as 1 with an SE of 0. Its methods put the wild type-like variants from −1.11 to
+       0.89, and the missense median is −0.37. So its map is centered on 1, and rescaled by that
+       row its activity sits low. The report names every anchor, so the row is visible. Stating an
+       anchor's value, where a deposit's is wrong, is left for later (slice 6's examples may need
+       it).
+     - **Leaving the anchors' uncertainty out of the tests calls many differences that are not
+       there**: 10% of null pairs when the anchors are well measured, 55% when the wild type is
+       uncertain and nonsense variants few. With it, 3.5–4%.
+     - **Two assays of one protein differ far beyond their SEs.** PTEN's rescaled abundance and
+       activity have a dispersion of 9.4, and 1,887 of 4,057 variants test as different. Much of
+       that is biology: a variant can be stable but inactive.
+     - **A long side label was cut off** on the plot's axis (a score set's title and URN); labels
+       now shorten to fit.
 4. **Robustness to analysis choices (C4).** A run is repeated across variations, following
    CytoWeave's `multiverse.js` pattern:
    - pseudocounts, normalizations, filters, combination methods and uncertainty models (scaling

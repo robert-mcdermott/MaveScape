@@ -63,12 +63,54 @@ grows with each.
 - The map component tells others its pan and zoom, and takes theirs, so that maps shown together
   move as one.
 
+- **Other sources and scales (wave 4, slice 3; C1, C3).**
+  - **A MaveDB score set compared without opening it.** Under Other sources in Compare, a score
+    set's URN fetches its record and published scores (only the URN is sent), kept beside the
+    workspace and in its archive (an annotation, `mavedb-scores`). Its scores are read as published,
+    as opening the record would, on the record's own target. MaveDB records no direction: say what
+    a higher score means when adding it, or under Sides (in the history). Its scores are also a
+    track beside the map.
+  - **Another assay of the same protein:** matched on one sequence, or on UniProt's numbering.
+    PTEN's abundance against its lipid phosphatase activity agrees only in part (ρ 0.37).
+  - **A predictor:** AlphaMissense (from AlphaFold DB), or a predictor's file (EVE, ESM1b, any
+    table), placed on the run's protein as its track is. Compared by rank (Spearman's ρ; Pearson's
+    r, Lin's concordance, Bland–Altman and the tests of disagreement withheld), and by its classes
+    in a new Classes tab:
+    - the measured scores in each class, with the synonymous and nonsense medians for reference;
+    - the AUC of telling the tolerated class from the damaging one, with DeLong's interval.
+
+    AlphaMissense's and EVE's scores are compared negated. EVE's table gives its classes.
+  - **Scale:**
+    - as scored;
+    - stated to be on one scale (two score sets of one study and one pipeline);
+    - each side rescaled by its own anchors: nonsense median 0 and wild type 1, or synonymous
+      median 0 and nonsense median −1.
+
+    Rescaled, two assays get Lin's concordance, Bland–Altman, the difference map and the tests of
+    disagreement. The report names each anchor, and the tests carry the anchors' uncertainty. GRB2's
+    Run 1 against its record's published scores: r 0.997 on two scales; rescaled, ρc 0.996 and a
+    bias of 0.009.
+  - **Exports:** `*_comparison.csv` gains `compared_a` and `compared_b` (each score as compared); a
+    predictor's classes (`*_comparison_classes.csv`); the report adds `scale`, `classes` and each
+    side's source.
+  - **Remote control:**
+    - `compare` takes a score set's URN (fetched and kept first) or a predictor by name, `scale`,
+      `direction` and `show: classes`;
+    - `export` writes `comparison-classes`;
+    - `add_track` takes `mavedb-scores` with a `urn`.
+  - **The PTEN example's guide** compares its abundance with the phosphatase activity score set, not
+    opened, and with AlphaMissense by class (its record and calibrations now one step). The GRB2
+    example says what its comparison with its record shows.
+
 ### Changed
 
 - An example opened from MaveDB gives its readout (what a higher score means, from the paper) to its
   counts' drafted design too, not only to its published scores: compared, both say it.
 - The readiness's *Compared with a rescoring or another assay* no longer says comparisons come
   later.
+- A score table's standard errors are read from a column named in words, `standard error`, as
+  DHFR's MaveDB records name it (wave 4, slice 3): their published scores now carry their SEs.
+- A comparison's report possessive reads "Published scores'", not "Published scores's".
 
 ### Validation
 
@@ -107,6 +149,31 @@ grows with each.
   the same bytes as Node's.
 - Unit tests: three more in `compare.test.mjs` (11): the filters, when discordance is tested, a
   position's three variants, and the maps of a comparison.
+- `compare` suite, slice 3 (36 checks in all):
+  - **Against R:** two assays of 361 variants on two scales, each rescaled by its own anchors (both
+    rescalings): the anchors and their SEs, the rescaled scores, Lin's concordance, Bland–Altman,
+    and each difference's and position's z, p and q with the anchors' share. GRB2's published
+    scores against AlphaMissense: the 1,053 variants matched, Spearman's ρ, each class's median and
+    quartiles, and the AUC with DeLong's interval (pROC). An AUC with tied scores. All to 10⁻¹⁰;
+    the reference adds pROC 1.19.
+  - **The anchors' uncertainty:** in 600 simulated pairs of two assays differing only in scale,
+    rescaled, any variant is called in 3.5–4% of the pairs; left out of the test, in 10–55%. With
+    20 differences planted, 99% are found, 4.7% of calls false.
+  - **DeLong's interval** holds the AUC 94–95% of the time in 6,000 simulated pairs of classes.
+  - **A score set not opened:** DHFR's −Lon record kept beside the workspace gives Run 1 the same
+    comparison as the record opened. GRB2's record and AlphaMissense kept, written to the archive
+    and read back, give the same comparisons.
+  - **The examples:** GRB2's Run 1 against its record (r 0.997; rescaled, ρc 0.996, bias 0.009)
+    and AlphaMissense (ρ 0.55, AUC 0.78). DHFR's published pair stated on one scale (ρc 0.79; 761
+    of 2,277 differ, dispersion 5.3). PTEN's abundance against its phosphatase activity (ρ 0.37;
+    the record's wild-type row 1 with SE 0) and against AlphaMissense (AUC 0.77; activity 0.70).
+- The remote-control session (119 checks): `compare` with a score set's URN (fetched from the cache,
+  kept without opening it) rescaled by the anchors, and with AlphaMissense by class, each as Node
+  gives them; `comparison` and `comparison-classes` the same bytes as Node's; a scale not known
+  refused.
+- Unit tests: `compare.test.mjs` (15): the AUC by hand; two runs rescaled by their anchors, stated
+  on one scale, or not rescaled for want of an anchor; a predictor by rank and class; a score set as
+  a side and its direction stated. `providers.test.mjs`: a score set by its URN, from the cache.
 
 ## 0.3.0 (2026-10-11)
 

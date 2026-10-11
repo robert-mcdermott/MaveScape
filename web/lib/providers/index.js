@@ -21,11 +21,12 @@ import { ALPHAMISSENSE } from './alphamissense.js';
 import { CLINVAR } from './clinvar.js';
 import { GNOMAD } from './gnomad.js';
 import { MAVEDB_ANNOTATIONS } from './mavedb.js';
+import { MAVEDB_SCORES } from './mavedb-scores.js';
 import { ALIGNMENT } from './alignment.js';
 import { PREDICTOR } from './predictors.js';
 import { CUSTOM } from './custom.js';
 
-export const PROVIDERS = [UNIPROT_FEATURES, PDBE_CONSERVATION, ALPHAMISSENSE, CLINVAR, GNOMAD, MAVEDB_ANNOTATIONS, ALIGNMENT, PREDICTOR, CUSTOM];
+export const PROVIDERS = [UNIPROT_FEATURES, PDBE_CONSERVATION, ALPHAMISSENSE, CLINVAR, GNOMAD, MAVEDB_ANNOTATIONS, MAVEDB_SCORES, ALIGNMENT, PREDICTOR, CUSTOM];
 
 export function providerById(id) {
   return PROVIDERS.find((p) => p.id === id) ?? null;

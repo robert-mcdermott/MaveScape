@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { agreementOf, blandAltman, concordance, pearsonAgreement, spearmanAgreement } from './agreement.js';
-import { compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, MIN_MATCHED, MIN_POSITION_VARIANTS, positionsCSV, scaleOf, sideMap, sideOptions } from './compare.js';
+import { agreementOf, aucAgreement, blandAltman, concordance, pearsonAgreement, spearmanAgreement } from './agreement.js';
+import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describePredictor, describeScoreSet, describeSide, differenceMap, MIN_MATCHED, MIN_POSITION_VARIANTS, positionsCSV, scaleOf, sideMap, sideOptions } from './compare.js';
+import { MISSENSE_CLASSES } from './tracks.js';
+import { setScoreSetDirection } from './workspace.js';
 import { buildMapModel, STATE } from './map-model.js';
 import { KIND } from './variants.js';
 
@@ -138,7 +140,7 @@ test('compare: the matched variants and the record as files', () => {
   const r = makeRun();
   const c = compareSides(side(r, { replicate: 'r1' }), side(r, { replicate: 'r2' }));
   const csv = comparisonCSV(c).trim().split('\n');
-  assert.equal(csv[0], 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean,z,p,q');
+  assert.equal(csv[0], 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,compared_a,compared_b,difference,mean,z,p,q');
   assert.equal(csv.length, 31);
   const json = JSON.parse(comparisonJSON(c, { version: '0.4.0' }));
   assert.equal(json.format, 'mavescape-comparison');
@@ -213,4 +215,82 @@ test('compare: the maps of a comparison: each side as a condition, and the diffe
   const rm = buildMapModel(replicateMap.results, replicateMap.design, { condition: 0 });
   assert.equal(rm.condition.name, 'Replicate 2');
   assert.equal(differenceMap(compareSides(sa, side(makeRun({ id: 'run-p', model: 'published', table: 'p'.repeat(64) }), { condition: 0 })), sa), null);
+});
+
+// --- Other sources and scales (wave 4, slice 3) ----------------------------------------------------
+
+test('agreement: the AUC with DeLong\'s interval, by hand: three cases against two controls, one tie', () => {
+  const a = aucAgreement(Float64Array.from([1, 2, 3]), Float64Array.from([0, 2]));
+  near(a.auc, 0.75);
+  near(a.se, Math.sqrt(1 / 12));
+  near(a.high, 1);
+  near(a.low, 0.75 - 1.959963984540054 * Math.sqrt(1 / 12), 1e-9);
+  assert.ok(Number.isNaN(aucAgreement([], [1, 2]).auc));
+  near(aucAgreement([5, 6], [1, 2]).auc, 1);
+});
+
+test('compare: two runs on two scales, each rescaled by its own anchors, are on one scale; stated to be one; a side without its anchors is not rescaled, saying why', () => {
+  const a = makeRun();
+  const b = makeRun({ id: 'run-b', name: 'Run 2', table: 'b'.repeat(64), model: 'bins', scale: 2, shift: 0.5 });
+  const scored = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }));
+  assert.equal(scored.sameScale, false);
+  assert.equal(scored.statistics.concordance, null);
+  const rescaled = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }), { scale: 'nonsense-wt' });
+  assert.ok(rescaled.sameScale && rescaled.scale.applied);
+  assert.deepEqual(rescaled.scale.anchors.a.map((x) => x.what), ['nonsense', 'wild type']);
+  near(rescaled.scale.slope.a, 2 * rescaled.scale.slope.b);
+  near(rescaled.statistics.concordance.ccc, 1, 1e-12);
+  near(rescaled.statistics.blandAltman.bias, 0, 1e-12);
+  assert.match(rescaled.report.items.find((i) => i.id === 'scale').text, /^Rescaled onto one scale by their anchors/);
+  const row = comparisonCSV(rescaled).trim().split('\n')[1].split(',');
+  near(Number(row[8]), rescaled.x[0]);
+  near(Number(row[9]), rescaled.y[0]);
+  const none = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }), { scale: 'synonymous-nonsense' });
+  assert.equal(none.sameScale, false);
+  assert.match(none.report.items.find((i) => i.id === 'scale').text, /Not rescaled: Run 1 has no synonymous variants scored/);
+  const stated = compareSides(side(a, { condition: 0 }), side(b, { condition: 0 }), { scale: 'stated' });
+  assert.ok(stated.sameScale && stated.statistics.concordance);
+  assert.equal(stated.report.items.find((i) => i.id === 'scale').status, 'qualified');
+  assert.equal(JSON.parse(comparisonJSON(stated)).scale.mode, 'stated');
+});
+
+test('compare: a predictor, placed on a run\'s target, by rank and by its classes; two predictors are not compared', () => {
+  const a = side(makeRun(), { condition: 0 });
+  const missense = KEYS.filter((k) => !k.endsWith('Ter'));
+  const entries = missense.map((key, k) => {
+    const i = KEYS.indexOf(key) + 1;
+    const value = 1 - (Math.cos(i) * 1.5 + 2) / 4;
+    return { key, position: i, ref: 'A', alt: key.endsWith('Val') ? 'V' : 'G', value, cls: value > 0.564 ? 'pathogenic' : value < 0.34 ? 'benign' : 'ambiguous' };
+  });
+  const track = { entries, classes: MISSENSE_CLASSES, predictor: { layout: 'alphamissense' } };
+  const annotation = { id: 'alphamissense', provider: 'alphamissense', name: 'AlphaMissense: P00000', file: { sha256: 'c'.repeat(64) } };
+  const p = describePredictor(annotation, track, a);
+  assert.equal(sideMap(p), null);
+  const c = compareSides(a, p);
+  assert.equal(c.flipped, true);
+  assert.equal(c.statistics.pearson, null);
+  near(c.statistics.spearman.rho, 1);
+  assert.deepEqual(c.withheld, ['pearson', 'concordance', 'blandAltman', 'discordance', 'positions']);
+  assert.equal(c.classes.list.length, 3);
+  assert.equal(c.classes.list.reduce((s, x) => s + x.n, 0), missense.length);
+  near(c.classes.auc.auc, 1);
+  assert.equal(classesCSV(c).split('\n')[0], 'class,variants,median,lower_quartile,upper_quartile');
+  assert.equal(JSON.parse(comparisonJSON(c)).b.source, 'predictor');
+  const two = compareSides(p, describePredictor({ ...annotation, id: 'eve', name: 'EVE' }, track, a));
+  assert.equal(two.report.status, 'blocked');
+});
+
+test('compare: a MaveDB score set kept beside the workspace, read as published, as a side; its direction stated in the history', () => {
+  const r = makeRun({ id: 'run-b', table: 'b'.repeat(64) });
+  const scoreSet = { urn: 'urn:mavedb:00000001-a-1', title: 'A score set', target: r.run.inputs.design.targets[0] };
+  const annotation = { id: 'mavedb-scores', provider: 'mavedb-scores', name: 'MaveDB score set: urn:mavedb:00000001-a-1', file: { sha256: 'd'.repeat(64) }, record: { scoreSet } };
+  const set = describeScoreSet(annotation, { results: r.results, design: { ...r.run.inputs.design, source: { mavedb: scoreSet.urn } }, parameters: { model: 'published' } });
+  assert.equal(set.label, 'A score set (urn:mavedb:00000001-a-1)');
+  const c = compareSides(side(makeRun(), { condition: 0 }), set);
+  assert.equal(c.report.items.find((i) => i.id === 'scale').status, 'qualified');
+  assert.equal(JSON.parse(comparisonJSON(c)).b.urn, scoreSet.urn);
+  const ws = { id: 'w', history: [], annotations: [annotation] };
+  const stated = setScoreSetDirection(ws, 'mavedb-scores', 'higher-less');
+  assert.equal(stated.annotations[0].record.scoreSet.readout.direction, 'higher-less');
+  assert.equal(setScoreSetDirection(stated, 'mavedb-scores', null).annotations[0].record.scoreSet.readout, undefined);
 });

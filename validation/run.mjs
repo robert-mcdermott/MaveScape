@@ -96,9 +96,11 @@ import { createZip } from '../web/lib/zip.js';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLES, exampleById, simulatedExample } from '../web/lib/examples.js';
 import { depositPackages, exampleRoundTrip, mavedbHashes, roundTrip } from './mavedb-export-cases.mjs';
-import { agreementOf } from '../web/lib/agreement.js';
-import { compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap } from '../web/lib/compare.js';
-import { countsRun, coverage, exampleRun, movedRun, plantedPair, publishedRun, syntheticPair, together } from './compare-cases.mjs';
+import { agreementOf, aucAgreement } from '../web/lib/agreement.js';
+import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeScoreSet, describeSide, differenceMap } from '../web/lib/compare.js';
+import { countsRun, coverage, exampleRun, movedRun, plantedPair, predictorSide, publishedRun, scoreSetSide, syntheticPair, together, twoAssays } from './compare-cases.mjs';
+import { scoreSetResults } from '../web/lib/scoreset.js';
+import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 
 const args = process.argv.slice(2);
@@ -3037,9 +3039,9 @@ const suites = {
     const json = JSON.parse(comparisonJSON(two, { version: 'validation' }));
     const rowsOK = csv.slice(1).every((line, k) => {
       const f = line.split(',');
-      return Math.abs(Number(f[8]) - (two.x[k] - two.y[k])) < 1e-12 && Math.abs(Number(f[4]) - two.x[k]) < 1e-12;
+      return Math.abs(Number(f[10]) - (two.x[k] - two.y[k])) < 1e-12 && Math.abs(Number(f[4]) - two.x[k]) < 1e-12 && Math.abs(Number(f[8]) - two.x[k]) < 1e-12;
     });
-    check('compare', 'comparison.csv: a row per variant compared, each side\'s score and SE, the difference and mean, and the difference\'s z, p and q; comparison.json: the two runs\' output hashes, the report, the counts and the statistics', `${csv.length - 1} rows; ${json.a.output.slice(0, 12)}… and ${json.b.output.slice(0, 12)}…; ${json.report.items.length} items; r ${fmt(json.statistics.pearson.r, 4)}`, csv[0] === 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,difference,mean,z,p,q' && csv.length - 1 === two.matched.n && rowsOK && json.format === 'mavescape-comparison' && json.a.output === g.run.output.sha256 && json.statistics.pearson.r === two.statistics.pearson.r, 'all');
+    check('compare', 'comparison.csv: a row per variant compared, each side\'s score and SE as scored and as compared, the difference and mean, and the difference\'s z, p and q; comparison.json: the two runs\' output hashes, the report, the counts and the statistics', `${csv.length - 1} rows; ${json.a.output.slice(0, 12)}… and ${json.b.output.slice(0, 12)}…; ${json.report.items.length} items; r ${fmt(json.statistics.pearson.r, 4)}`, csv[0] === 'variant,variant_a,variant_b,class,score_a,SE_a,score_b,SE_b,compared_a,compared_b,difference,mean,z,p,q' && csv.length - 1 === two.matched.n && rowsOK && json.format === 'mavescape-comparison' && json.a.output === g.run.output.sha256 && json.statistics.pearson.r === two.statistics.pearson.r, 'all');
 
     // Discordance and disagreement by position (wave 4, slice 2): against R on the reference's pair,
     // then simulated pairs with planted differences.
@@ -3083,6 +3085,133 @@ const suites = {
     // GRB2's replicates: their differences much wider than their counting SEs, as QC finds.
     const excess = g.o.findings.find((f) => f.id === 'excess-variance');
     check('compare', 'GRB2\'s replicates 1 and 2: their differences many times as variable as their SEs say (the dispersion), as QC\'s "variance beyond counting" finds (the Domainome\'s input bottleneck), so the view warns that more test as discordant than truly differ', `dispersion ${fmt(two.discordance.dispersion, 2)}; ${two.discordance.discordant} of ${two.discordance.tested} discordant; QC's variance beyond counting: ${excess?.status}`, two.discordance.dispersion > 4 && excess?.status === 'fail', 'dispersion > 4; QC fails');
+
+    // Other sources and scales (wave 4, slice 3). Two assays on two scales, each rescaled by its own
+    // anchors, against R.
+    const rref = reference.rescaling;
+    const assays = syntheticPair({ x: rref.x, y: rref.y, sx: rref.sx, sy: rref.sy, position: rref.position, kinds: rref.kind, parameters: { b: { model: 'published' } } });
+    const asScored = compareSides(sideOf(assays, 'a'), sideOf(assays, 'b'));
+    const rpairs = [];
+    const rescaledModes = rref.modes.map((m) => {
+      const c = compareSides(sideOf(assays, 'a'), sideOf(assays, 'b'), { scale: m.mode });
+      for (const w of ['a', 'b']) {
+        c.scale.anchors[w].forEach((x, k) => {
+          rpairs.push([`${m.mode}: ${w}'s ${x.what} anchor`, x.from, m[w].anchors[k].from]);
+          rpairs.push([`${m.mode}: ${w}'s ${x.what} anchor's SE`, x.se, m[w].anchors[k].se]);
+        });
+        rpairs.push([`${m.mode}: ${w}'s slope`, c.scale.slope[w], m[w].slope]);
+      }
+      c.x.forEach((v, k) => {
+        rpairs.push([`${m.mode}: x ${k}`, v, m.x[k]]);
+        rpairs.push([`${m.mode}: y ${k}`, c.y[k], m.y[k]]);
+      });
+      for (const k of ['ccc', 'low', 'high', 'scaleShift', 'locationShift', 'accuracy']) rpairs.push([`${m.mode}: concordance.${k}`, c.statistics.concordance[k], m.concordance[k]]);
+      for (const k of Object.keys(m.blandAltman)) rpairs.push([`${m.mode}: blandAltman.${k}`, c.statistics.blandAltman[k], m.blandAltman[k]]);
+      c.rows.forEach((_, k) => { for (const f of ['z', 'p', 'q']) rpairs.push([`${m.mode}: variant ${k} ${f}`, c.discordance[f][k], m[f][k]]); });
+      const refPos = new Map(m.positions.position.map((pos, k) => [pos, k]));
+      for (const x of c.positions.list) for (const f of ['z', 'p', 'q']) rpairs.push([`${m.mode}: position ${x.position} ${f}`, x[f], m.positions[f][refPos.get(x.position)]]);
+      return c;
+    });
+    const rw = worstDifference(rpairs);
+    check('compare', `two assays of one protein on two scales (${rref.x.length} variants: the wild type, synonymous, nonsense and missense): as scored, Lin's concordance and Bland–Altman withheld; each rescaled by its own anchors (nonsense median 0 and wild type 1; synonymous median 0 and nonsense median −1): the anchors and their SEs, the rescaled scores, Lin's concordance and Bland–Altman, and each difference's and position's z, p and q with the anchors' share of their uncertainty, equal R's`, `as scored: withheld ${asScored.withheld.slice(0, 2).join(', ')}; rescaled: ρc ${rescaledModes.map((c) => fmt(c.statistics.concordance.ccc, 4)).join(' and ')}, bias ${rescaledModes.map((c) => fmt(c.statistics.blandAltman.bias, 4)).join(' and ')}; ${rpairs.length} numbers; largest relative difference ${rw.worst.toExponential(1)} (${rw.where})`, asScored.withheld.includes('concordance') && rescaledModes.every((c) => c.scale.applied && c.sameScale && c.statistics.concordance && c.discordance.valid) && rw.worst <= 1e-10, '≤ 1e-10');
+
+    // The anchors' uncertainty, carried into the tests: simulated pairs of two assays differing only
+    // in scale, rescaled by their anchors, with nothing planted (any variant called is a false call),
+    // as the wild type and nonsense median are more or less certain; then with differences planted.
+    const sideOfPair = (pair) => [sideOf(pair, 'a'), sideOf(pair, 'b')];
+    const settings = [[0.06, 20], [0.2, 20], [0.3, 6]];
+    const nullRuns = settings.map(([wtSE, nonsense]) => {
+      let withAnchors = 0;
+      let without = 0;
+      for (let r = 0; r < 200; r += 1) {
+        const pair = syntheticPair({ ...twoAssays({ seed: 9000 + r, wtSE, nonsense }), parameters: { b: { model: 'published' } } });
+        const c = compareSides(...sideOfPair(pair), { scale: 'nonsense-wt' });
+        if (c.discordance.discordant) withAnchors += 1;
+        const p = Float64Array.from(c.x, (x, k) => 2 * normalUpper(Math.abs((x - c.y[k]) / Math.sqrt(c.seX[k] * c.seX[k] + c.seY[k] * c.seY[k]))));
+        if (adjustBH(p).some((q) => q < 0.05)) without += 1;
+      }
+      return { wtSE, nonsense, withAnchors: withAnchors / 200, without: without / 200 };
+    });
+    let found = 0;
+    let plantedTotal = 0;
+    let falseShare = 0;
+    for (let r = 0; r < 20; r += 1) {
+      const data = twoAssays({ seed: 9500 + r, planted: 20, shift: 0.5 });
+      const c = compareSides(...sideOfPair(syntheticPair({ ...data, parameters: { b: { model: 'published' } } })), { scale: 'nonsense-wt' });
+      const calls = c.rows.filter((_, k) => c.discordance.q[k] < 0.05).map(([i]) => i);
+      found += data.planted.filter((i) => calls.includes(i)).length;
+      plantedTotal += data.planted.length;
+      falseShare += calls.length ? calls.filter((i) => !data.planted.includes(i)).length / calls.length : 0;
+    }
+    check('compare', 'two assays differing only in scale, rescaled by their anchors (200 simulated pairs in each of three settings, nothing planted): with the anchors\' uncertainty in each difference\'s SE, any variant called in about 5% of the pairs at most, as Benjamini–Hochberg allows; left out, far more often, the more so the less certain the anchors; with 20 differences of 0.5 planted (20 pairs), most found', `${nullRuns.map((x) => `wild type SE ${x.wtSE}, ${x.nonsense} nonsense: ${(100 * x.withAnchors).toFixed(1)}% with, ${(100 * x.without).toFixed(1)}% without`).join('; ')}; planted: ${(100 * found / plantedTotal).toFixed(1)}% found, mean false discovery proportion ${(100 * falseShare / 20).toFixed(1)}%`, nullRuns.every((x) => x.withAnchors <= 0.07 && x.without > x.withAnchors) && nullRuns.at(-1).without >= 0.3 && found / plantedTotal >= 0.8 && falseShare / 20 <= 0.07, 'with ≤ 7%; without more; ≥ 80% found; FDP ≤ 7%');
+
+    // A predictor by its classes: GRB2's published scores (urn:mavedb:00000835-a-1, kept beside the
+    // workspace) against AlphaMissense (P62993), as R computes them (pROC's DeLong interval).
+    const cref = reference.classes;
+    const grb2Set = scoreSetSide('urn:mavedb:00000835-a-1', new URL('./fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv', import.meta.url));
+    const amText = readFileSync(new URL('./fixtures/public-data/alphafold/P62993.aa-substitutions.csv', import.meta.url), 'utf8');
+    const amOnSet = predictorSide('alphamissense', amText, grb2Set.side, { name: 'AlphaMissense: P62993' });
+    const byClass = compareSides(grb2Set.side, amOnSet.side);
+    const kpairs = [['spearman.rho', byClass.statistics.spearman.rho, cref.spearman.rho], ['spearman.low', byClass.statistics.spearman.low, cref.spearman.low], ['spearman.high', byClass.statistics.spearman.high, cref.spearman.high]];
+    const codes = { pathogenic: 'LPath', ambiguous: 'Amb', benign: 'LBen' };
+    for (const x of byClass.classes.list) {
+      const theirs = cref.classes.find((k) => k.code === codes[x.id]);
+      for (const f of ['n', 'median', 'low', 'high']) kpairs.push([`${x.id} ${f}`, x[f], theirs[f]]);
+    }
+    for (const f of ['auc', 'low', 'high', 'se']) kpairs.push([`AUC ${f}`, byClass.classes.auc[f], cref.auc[f]]);
+    const kw = worstDifference(kpairs);
+    check('compare', 'a predictor by rank and by its classes: GRB2\'s published scores (a MaveDB score set kept beside the workspace, not opened) against AlphaMissense (P62993), placed on UniProt\'s numbering: the variants matched, Spearman\'s ρ with its interval, the scores\' median and quartiles in each class, and the AUC of telling its likely benign from its likely pathogenic substitutions with DeLong\'s interval and SE, equal R\'s (pROC); Pearson\'s r, Lin\'s concordance, Bland–Altman and the tests of disagreement withheld', `${byClass.matched.n} matched (R: ${cref.n}); ρ ${fmt(byClass.statistics.spearman.rho, 4)}; AUC ${fmt(byClass.classes.auc.auc, 4)} (${fmt(byClass.classes.auc.low, 4)} to ${fmt(byClass.classes.auc.high, 4)}); withheld ${byClass.withheld.join(', ')}; largest relative difference ${kw.worst.toExponential(1)} (${kw.where})`, byClass.matched.n === cref.n && kw.worst <= 1e-10 && byClass.withheld.join() === 'pearson,concordance,blandAltman,discordance,positions' && byClass.flipped, '≤ 1e-10; withheld');
+    const ties = reference.aucTies;
+    const tied = aucAgreement(Float64Array.from(ties.cases), Float64Array.from(ties.controls));
+    const tw = worstDifference([['auc', tied.auc, ties.auc], ['low', tied.low, ties.low], ['high', tied.high, ties.high], ['se', tied.se, ties.se]]);
+    // DeLong's interval in simulated classes of known AUC (two normal groups δ apart: Φ(δ/√2)).
+    const random = createRandom(20261015);
+    const aucCover = [[60, 200, 1], [30, 30, 0.5], [200, 600, 1.5]].map(([m, n, delta]) => {
+      const truth = normalCdf(delta / Math.SQRT2);
+      let held = 0;
+      for (let r = 0; r < 2000; r += 1) {
+        const tolerated = Float64Array.from({ length: m }, () => delta + random.gaussian());
+        const damaging = Float64Array.from({ length: n }, () => random.gaussian());
+        const a = aucAgreement(tolerated, damaging);
+        if (a.low <= truth && truth <= a.high) held += 1;
+      }
+      return { m, n, truth, share: held / 2000 };
+    });
+    check('compare', `the AUC and DeLong's interval with tied scores equal R's (pROC: ${ties.name}); and in simulated classes of known AUC (2,000 pairs each), the interval holds the truth about 95% of the time`, `largest relative difference ${tw.worst.toExponential(1)}; ${aucCover.map((x) => `${x.m} against ${x.n}, AUC ${fmt(x.truth, 3)}: ${fmt(x.share, 3)}`).join('; ')}`, tw.worst <= 1e-10 && aucCover.every((x) => x.share >= 0.93 && x.share <= 0.97), '≤ 1e-10; 0.93–0.97');
+
+    // The GRB2 example's guide (wave 4, slice 3): Run 1 against the published scores kept beside the
+    // workspace (urn:mavedb:00000835-a-1, not opened), as scored and rescaled by their anchors; and
+    // against AlphaMissense.
+    const gRun = side(g.ws, g, { condition: 0 });
+    const kept = compareSides(gRun, grb2Set.side);
+    const keptRescaled = compareSides(gRun, grb2Set.side, { scale: 'nonsense-wt' });
+    check('compare', 'the GRB2 example\'s Run 1 against its record\'s published scores, kept beside the workspace without opening it: one experiment analysed twice (the record\'s URN on both), on two scales (correlations only); each rescaled by its anchors (nonsense median 0, wild type 1), one scale: Lin\'s concordance near 1 and a bias near 0, the tests of disagreement withheld (not independent)', `${kept.matched.n} matched; r ${fmt(kept.statistics.pearson.r, 4)}, withheld ${kept.withheld.slice(0, 2).join(', ')}; rescaled: ${keptRescaled.report.items.find((i) => i.id === 'scale').text.slice(0, 160)}… ρc ${fmt(keptRescaled.statistics.concordance?.ccc, 4)}, bias ${fmt(keptRescaled.statistics.blandAltman?.bias, 4)} (${fmt(keptRescaled.statistics.blandAltman?.lower, 3)} to ${fmt(keptRescaled.statistics.blandAltman?.upper, 3)}); ${keptRescaled.discordance.reason.slice(0, 60)}…`, status(kept, 'independence') === 'qualified' && !kept.statistics.concordance && kept.statistics.pearson.r > 0.99 && keptRescaled.statistics.concordance.ccc > 0.99 && Math.abs(keptRescaled.statistics.blandAltman.bias) < 0.02 && !keptRescaled.discordance.valid, 'qualified; ρc > 0.99; |bias| < 0.02');
+    const amOnRun = predictorSide('alphamissense', amText, gRun, { name: 'AlphaMissense: P62993' });
+    const amRun = compareSides(gRun, amOnRun.side);
+    const classesFile = classesCSV(amRun).trim().split('\n');
+    check('compare', 'the GRB2 example\'s Run 1 against AlphaMissense: its substitutions placed on the domain by UniProt\'s numbering (those beyond it left out, said), compared negated (a higher pathogenicity is less of the function); by rank ρ about 0.55, and its classes told apart (AUC about 0.78); comparison_classes.csv a row per class', `${amRun.report.items.find((i) => i.id === 'target').text} ρ ${fmt(amRun.statistics.spearman.rho, 3)}; AUC ${fmt(amRun.classes.auc.auc, 3)} (${fmt(amRun.classes.auc.low, 3)} to ${fmt(amRun.classes.auc.high, 3)}); ${classesFile.length - 1} classes`, amRun.flipped && amRun.statistics.spearman.rho > 0.5 && amRun.statistics.spearman.rho < 0.6 && amRun.classes.auc.auc > 0.75 && classesFile[0] === 'class,variants,median,lower_quartile,upper_quartile' && classesFile.length === 4 && /beyond the target's ends left out/.test(amRun.report.items.find((i) => i.id === 'target').text), 'negated; 0.5–0.6; > 0.75; 3 classes');
+
+    // A score set and a predictor kept with the workspace: written to its archive and read back, the
+    // same comparisons.
+    {
+      let wsKept = g.ws;
+      const files = new Map();
+      for (const [annotation, text] of [[grb2Set.annotation, grb2Set.text], [amOnRun.annotation, amText]]) {
+        const data = new TextEncoder().encode(text);
+        files.set(annotation.file.sha256, data);
+        wsKept = addAnnotation(wsKept, { provider: annotation.provider, name: annotation.name, file: annotation.file, record: annotation.record }).ws;
+      }
+      const archive = await writeArchive(wsKept, { annotations: files });
+      const back = await readArchive(archive.bytes);
+      const textOf = (a) => new TextDecoder().decode(back.sources.get(a.file.sha256));
+      const setBack = back.ws.annotations.find((a) => a.provider === 'mavedb-scores');
+      const amBack = back.ws.annotations.find((a) => a.provider === 'alphamissense');
+      const setSide = describeScoreSet(setBack, scoreSetResults(textOf(setBack), setBack.record.scoreSet));
+      const again = compareSides(gRun, setSide, { scale: 'nonsense-wt' });
+      const amAgain = compareSides(gRun, predictorSide('alphamissense', textOf(amBack), gRun, { name: amBack.name }).side);
+      const same = (x, y) => JSON.stringify(JSON.parse(comparisonJSON(x)).statistics) === JSON.stringify(JSON.parse(comparisonJSON(y)).statistics) && JSON.stringify(x.classes) === JSON.stringify(y.classes);
+      check('compare', 'a MaveDB score set and AlphaMissense kept beside the GRB2 example, written to its archive and read back: the same comparisons (the score set read as published again, AlphaMissense placed again)', `${back.ws.annotations.length} kept; ${back.problems.length ? `problems: ${back.problems.join(' ')}` : 'no problem'}; ${same(keptRescaled, again) && same(amRun, amAgain) ? 'the same' : 'different'}`, !back.problems.length && same(keptRescaled, again) && same(amRun, amAgain), 'the same');
+    }
 
     // The published examples, compared as their guides say (MaveDB's tables, external data).
     try {
@@ -3139,6 +3268,36 @@ const suites = {
       const rr = ring.results.replicates;
       const sharing = compareSides(side(ring.ws, ring, { replicate: rr[0].id }), side(ring.ws, ring, { replicate: rr[1].id }));
       check('compare', 'BRCA1 RING\'s first two phage replicates, which share their input library: qualified, naming the sample', sharing.report.items.find((i) => i.id === 'independence').text, status(sharing, 'independence') === 'qualified' && /share the sample/.test(sharing.report.items.find((i) => i.id === 'independence').text), 'qualified');
+
+      // Wave 4, slice 3. DHFR's −Lon record kept beside the workspace, not opened: the same comparison
+      // with Run 1 as the record opened gives.
+      const cachePath = (relative) => {
+        const url = new URL(`./cache/${relative}`, import.meta.url);
+        if (!existsSync(url)) throw new MissingExampleData(`needs ${relative}: node validation/fetch.mjs ${relative.split('/')[0]}`);
+        return url;
+      };
+      // The direction stated as the example states it for the record it opens.
+      const minusSet = scoreSetSide('urn:mavedb:00000063-b-1', cachePath('mavedb-dhfr/minus-lon/scores.csv'), { direction: EXAMPLES.find((e) => e.id === 'dhfr-lon').readout.direction });
+      const viaSet = compareSides(side(wd, d, { condition: 0 }), minusSet.side);
+      const pick = (c) => JSON.stringify({ n: c.matched, s: c.statistics, items: c.report.items.map((i) => [i.id, i.status]) });
+      check('compare', 'DHFR\'s −Lon record kept beside the workspace (a MaveDB score set, not opened; the direction stated as the example states it) against Run 1: the same variants, statistics and report as the record opened (its run "Published scores")', `${viaSet.matched.n} matched, r ${fmt(viaSet.statistics.pearson.r, 6)} (opened: ${fmt(lessLon.statistics.pearson.r, 6)}); ${viaSet.report.items.map((i) => `${i.id} ${i.status}`).join(', ')}`, pick(viaSet) === pick(lessLon), 'the same');
+      // DHFR's published pair, one study and one pipeline: stated to be on one scale.
+      const stated = compareSides(side(wd, minus, { condition: 0 }), side(wd, plus, { condition: 0 }), { scale: 'stated' });
+      check('compare', 'DHFR\'s two published score sets (one study, one pipeline) stated to be on one scale: Lin\'s concordance and Bland–Altman given, the scale qualified as stated, and their differences tested with the SEs the records give (their column "standard error", read since this slice): two records, two tables, independent', `${stated.report.items.find((i) => i.id === 'scale').text.slice(0, 120)}… ρc ${fmt(stated.statistics.concordance?.ccc, 3)}, bias ${fmt(stated.statistics.blandAltman?.bias, 3)} (${fmt(stated.statistics.blandAltman?.lower, 3)} to ${fmt(stated.statistics.blandAltman?.upper, 3)}); ${stated.discordance.discordant} of ${stated.discordance.tested} discordant, dispersion ${fmt(stated.discordance.dispersion, 2)}`, stated.sameScale && status(stated, 'scale') === 'qualified' && stated.statistics.concordance && stated.discordance.valid && stated.discordance.tested > 2000, 'one scale, stated; tested');
+
+      // PTEN: its abundance (the example's record) against its lipid phosphatase activity
+      // (urn:mavedb:00000054-a-1, kept beside the workspace): another assay of the same protein.
+      const abundance = publishedRun('pten-mavedb', 'urn:mavedb:00000013-a-1');
+      const activity = scoreSetSide('urn:mavedb:00000054-a-1', cachePath('mavedb-pten-phosphatase/scores.csv'), { direction: 'higher-more' });
+      const abundanceSide = side(abundance.ws, abundance, { condition: 0 });
+      const assay2 = compareSides(abundanceSide, activity.side);
+      const assay2Rescaled = compareSides(abundanceSide, activity.side, { scale: 'nonsense-wt' });
+      const wtAnchor = assay2Rescaled.scale.anchors.b.find((x) => x.what === 'wild type');
+      check('compare', 'PTEN\'s abundance (VAMP-seq) against its lipid phosphatase activity, another MaveDB score set kept beside the workspace: one target sequence, the activity\'s codon variants read at the protein level, two assays (qualified), correlations only as scored; rescaled by their anchors, the report naming each: the activity record\'s wild type is its row, 1 with an SE of 0, though its methods put the wild type-like variants from −1.11 to 0.89', `${assay2.matched.n} matched; r ${fmt(assay2.statistics.pearson.r, 3)}, ρ ${fmt(assay2.statistics.spearman.rho, 3)}; assays ${status(assay2, 'assay')}; rescaled: ρc ${fmt(assay2Rescaled.statistics.concordance?.ccc, 3)}, the activity's wild type ${wtAnchor?.from} (SE ${wtAnchor?.se}), ${assay2Rescaled.discordance.discordant} of ${assay2Rescaled.discordance.tested} discordant, dispersion ${fmt(assay2Rescaled.discordance.dispersion, 1)}`, assay2.matched.n > 4000 && assay2.statistics.spearman.rho > 0.3 && assay2.statistics.spearman.rho < 0.45 && status(assay2, 'assay') === 'qualified' && wtAnchor?.from === 1 && wtAnchor?.se === 0, 'ρ 0.30–0.45; qualified; the row, 1');
+      const amPten = predictorSide('alphamissense', readFileSync(new URL('./fixtures/public-data/alphafold/P60484.aa-substitutions.csv', import.meta.url), 'utf8'), abundanceSide, { name: 'AlphaMissense: P60484' });
+      const ptenAM = compareSides(abundanceSide, amPten.side);
+      const activityAM = compareSides(activity.side, predictorSide('alphamissense', readFileSync(new URL('./fixtures/public-data/alphafold/P60484.aa-substitutions.csv', import.meta.url), 'utf8'), activity.side, { name: 'AlphaMissense: P60484' }).side);
+      check('compare', 'PTEN against AlphaMissense (P60484), by rank and by its classes: its abundance and its phosphatase activity each tell AlphaMissense\'s likely benign substitutions from its likely pathogenic ones', `abundance: ${ptenAM.matched.n} matched, ρ ${fmt(ptenAM.statistics.spearman.rho, 3)}, AUC ${fmt(ptenAM.classes.auc.auc, 3)} (${fmt(ptenAM.classes.auc.low, 3)} to ${fmt(ptenAM.classes.auc.high, 3)}); activity: ${activityAM.matched.n} matched, ρ ${fmt(activityAM.statistics.spearman.rho, 3)}, AUC ${fmt(activityAM.classes.auc.auc, 3)} (${fmt(activityAM.classes.auc.low, 3)} to ${fmt(activityAM.classes.auc.high, 3)})`, ptenAM.classes.auc.low > 0.7 && activityAM.classes.auc.low > 0.65, 'both above chance');
     } catch (error) {
       if (!(error instanceof MissingExampleData)) throw error;
       throw new MissingData(error.message);

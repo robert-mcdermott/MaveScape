@@ -40,8 +40,10 @@ import { searchHits } from '../lib/mavedb.js';
 import { retrievalText } from '../lib/uniprot.js';
 import { addFileTrack, addPublicTrack, arrangeTrack, removeTrack, runTrackState } from './tracks.js';
 import { annotationsOf, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
-import { comparisonJSON, sideOptions } from '../lib/compare.js';
-import { comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, setFilters, setPair } from './mode-compare.js';
+import { comparableAnnotations, comparisonJSON, SCALES } from '../lib/compare.js';
+import { normalizeUrn } from '../lib/mavedb.js';
+import { setScoreSetDirection } from '../lib/workspace.js';
+import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 
 export class ActionError extends Error {}
@@ -804,7 +806,7 @@ export function installRemote(app) {
       const target = trackTarget(run.inputs.design.targets?.[0], ws().targets);
       const source = ws().sources.find((x) => x.sha256 === run.inputs.source.sha256);
       const origin = source?.origin?.database === 'MaveDB' ? { urn: source.origin.urn } : null;
-      const available = PROVIDERS.map((p) => ({ provider: p.id, name: p.name, kind: p.kind, what: p.what, ...(p.kind === 'public' ? { unavailable: p.needs(target, { origin }) } : {}) }));
+      const available = PROVIDERS.map((p) => ({ provider: p.id, name: p.name, kind: p.kind, what: p.what, ...(p.kind === 'public' ? { unavailable: p.needs(target, { origin, urn: p.id === 'mavedb-scores' ? 'given' : null }) } : {}), ...(p.id === 'mavedb-scores' ? { needs: 'urn' } : {}) }));
       const tracks = state.arranged.map((t) => trackData(t, state.notes));
       const shown = tracks.filter((t) => t.shown).length;
       return { message: `${run.name}: ${plural(tracks.length, 'track')}, ${shown} shown (${tracks.filter((t) => t.shown).map((t) => t.label).join(', ') || 'none'}).${state.problems.length ? ` Not read: ${state.problems.map((p) => `${p.annotation.name}: ${p.message}`).join(' ')}` : ''}`, data: { run: run.name, tracks, problems: state.problems.map((p) => ({ annotation: p.annotation.id, name: p.annotation.name, problem: p.message })), available } };
@@ -822,11 +824,13 @@ export function installRemote(app) {
         result = await addFileTrack(app, run, { name: String(args.name), text: String(args.text) });
       } else {
         const id = choose(args.provider, PROVIDERS.filter((p) => p.kind === 'public').map((p) => p.id), 'provider');
-        result = await addPublicTrack(app, run, id, { quiet: true });
+        // A MaveDB score set by its URN (wave 4, slice 3), with what a higher score means.
+        const direction = args.direction ? choose(args.direction, ['higher-more', 'higher-less', 'unsigned'], 'direction') : null;
+        result = await addPublicTrack(app, run, id, { quiet: true, urn: args.urn ?? null, direction });
       }
       if (!result.ok) throw new ActionError(result.message);
       await settle();
-      return { message: result.message, data: { annotation: result.id, name: result.name, tracks: result.tracks.map((t) => ({ label: t.label, kind: t.kind, summary: describeTrack(t) })), notes: result.notes } };
+      return { message: result.message, data: { annotation: result.id, name: result.name, tracks: result.tracks.map((t) => ({ label: t.label, kind: t.kind, summary: describeTrack(t) })), notes: result.notes, ...(result.scoreSet ? { scoreSet: result.scoreSet } : {}) } };
     },
 
     // Shows or hides a track, moves it (position from 1), or filters it: { types }, { classes,
@@ -884,18 +888,45 @@ export function installRemote(app) {
       return { message: `Removed ${a.name} and its tracks.`, data: { removed: a.id } };
     },
 
-    // Compares two sets of scores of the workspace (wave 4, slice 1): each side a run's condition or
-    // replicate by name ("Run 1", "Run 1: Replicate 2", "Published scores"); the pair shown (or the
-    // default) when not given. Shows the Compare view.
+    // Compares two sets of scores (wave 4, slices 1–3): each side a run's condition or replicate by
+    // name ("Run 1", "Run 1: Replicate 2", "Published scores"), or a score set or predictor kept
+    // beside the workspace (its name, "AlphaMissense: P62993", or a score set's URN; a URN not yet
+    // kept is fetched and kept first, placed by the first side's run); the pair shown (or the
+    // default) when not given. scale: scored, stated, nonsense-wt or synonymous-nonsense. direction:
+    // what a higher score of the score set compared means. Shows the Compare view.
     async compare(args) {
       const w = ws();
       if (!w.runs.length) throw new ActionError('There is no score run to compare: score a run first.');
-      const options = w.runs.flatMap((r) => sideOptions(r));
-      const labels = options.map((o) => o.label);
-      const side = (text) => options.find((o) => o.label === choose(text, labels, 'side')).spec;
       const kept = currentPair(app);
-      const pair = { a: args.a ? side(args.a) : kept?.a, b: args.b ? side(args.b) : kept?.b };
+      // A score set named by its URN, kept first when it is not yet.
+      const placeBy = () => (kept?.a?.run ? w.runs.find((r) => r.id === kept.a.run) : null) ?? w.runs.at(-1);
+      for (const key of ['a', 'b']) {
+        const urn = args[key] ? normalizeUrn(String(args[key])) : null;
+        if (!urn || comparableAnnotations(ws()).some((a) => a.record?.scoreSet?.urn === urn)) continue;
+        const added = await addCompared(app, placeBy(), { urn, direction: args.direction ?? null, quiet: true });
+        if (!added.ok) throw new ActionError(added.message);
+      }
+      const options = compareOptions(ws());
+      const labels = options.map((o) => o.label);
+      const side = (text) => {
+        const urn = normalizeUrn(String(text));
+        const byUrn = urn ? comparableAnnotations(ws()).find((a) => a.record?.scoreSet?.urn === urn) : null;
+        if (byUrn) return { annotation: byUrn.id };
+        const byName = comparableAnnotations(ws()).find((a) => a.name === text || a.id === text);
+        if (byName) return { annotation: byName.id };
+        return options.find((o) => o.label === choose(text, labels, 'side')).spec;
+      };
+      const now = currentPair(app);
+      const pair = { a: args.a ? side(args.a) : now?.a, b: args.b ? side(args.b) : now?.b };
       if (!pair.a || !pair.b) throw new ActionError(`Give the two sides, a and b: ${labels.join(', ')}.`);
+      // What a higher score of a score set compared means (MaveDB records none).
+      if (args.direction !== undefined) {
+        const direction = args.direction === null || args.direction === '' || args.direction === 'not stated' ? null : choose(args.direction, ['higher-more', 'higher-less', 'unsigned'], 'direction');
+        const set = [pair.b, pair.a].map((spec) => (spec.annotation ? comparableAnnotations(ws()).find((a) => a.id === spec.annotation && a.record?.scoreSet) : null)).find(Boolean);
+        if (!set) throw new ActionError('direction is what a higher score of a MaveDB score set means: neither side is one.');
+        app.store.commit(setScoreSetDirection(ws(), set.id, direction), `${set.name}: what a higher score means`);
+      }
+      if (args.scale !== undefined) setScale(app, choose(args.scale, Object.keys(SCALES), 'scale'));
       // Filters by confidence and depth (wave 4, slice 2): those given replace the comparison's; none
       // given keeps them.
       const given = ['low_confidence', 'max_se', 'min_reads'].some((k) => args[k] !== undefined);
@@ -906,10 +937,10 @@ export function installRemote(app) {
       };
       const filters = given ? { lowConfidence: args.low_confidence === true, maxSE: number(args.max_se, 'max_se'), minReads: number(args.min_reads, 'min_reads') } : currentFilters(app);
       if (given) setFilters(app, filters);
-      if (args.show !== undefined) app.compareTab = choose(args.show, ['agreement', 'maps', 'disagreement'], 'tab');
+      if (args.show !== undefined) app.compareTab = choose(args.show, ['agreement', 'maps', 'disagreement', 'classes'], 'tab');
       setPair(app, pair);
       await app.setMode('compare');
-      const c = await computeComparison(app, pair, filters);
+      const c = await computeComparison(app, pair, filters, null, currentScale(app));
       if (c.error) throw new ActionError(c.error);
       await settle();
       const s = c.statistics;
@@ -918,24 +949,29 @@ export function installRemote(app) {
       const flagged = c.report.items.filter((i) => i.status !== 'ok');
       const d = c.discordance;
       const discordance = d?.valid ? ` ${d.discordant} of ${d.tested} differ beyond their uncertainty (q < 0.05); the differences are ${f(d.dispersion)} times as variable as the SEs say.` : '';
+      const k = c.classes;
+      const classes = k?.valid ? ` By ${k.predictor}'s classes: ${k.list.map((x) => `${x.label} ${x.n} (median ${f(x.median)})`).join(', ')}${Number.isFinite(k.auc?.auc) ? `; AUC ${iv(k.auc.auc, k.auc.low, k.auc.high)}` : ''}.` : '';
+      const agreement = s
+        ? `${s.pearson ? `Pearson's r ${iv(s.pearson.r, s.pearson.low, s.pearson.high)}, ` : ''}Spearman's ρ ${iv(s.spearman.rho, s.spearman.low, s.spearman.high)}${s.concordance ? `, Lin's concordance ${iv(s.concordance.ccc, s.concordance.low, s.concordance.high)}, bias ${f(s.blandAltman.bias)} with limits of agreement ${f(s.blandAltman.lower)} to ${f(s.blandAltman.upper)}` : k ? ' (a prediction, compared by rank)' : '; Lin\'s concordance and Bland–Altman withheld (not on one scale)'}`
+        : '';
       const message = s
-        ? `${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared${c.matched.compared !== c.matched.n ? ` of ${c.matched.n} scored on both sides` : ''}. Pearson's r ${iv(s.pearson.r, s.pearson.low, s.pearson.high)}, Spearman's ρ ${iv(s.spearman.rho, s.spearman.low, s.spearman.high)}${s.concordance ? `, Lin's concordance ${iv(s.concordance.ccc, s.concordance.low, s.concordance.high)}, bias ${f(s.blandAltman.bias)} with limits of agreement ${f(s.blandAltman.lower)} to ${f(s.blandAltman.upper)}` : '; Lin\'s concordance and Bland–Altman withheld (not on one scale)'}.${discordance}${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
+        ? `${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared${c.matched.compared !== c.matched.n ? ` of ${c.matched.n} scored on both sides` : ''}${c.scale?.applied ? ` (${c.scale.anchors ? 'rescaled by their anchors' : 'stated to be on one scale'})` : ''}. ${agreement}.${discordance}${classes}${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
         : `${c.a.label} and ${c.b.label} cannot be compared: ${flagged.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`;
       const { software, ...data } = JSON.parse(comparisonJSON(c));
       return { message, data };
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes'];
       const what = choose(args.what, kinds, 'export');
       let file;
-      // The comparison shown (wave 4, slices 1–2): its variants compared (CSV), or its report and
+      // The comparison shown (wave 4, slices 1–3): its variants compared (CSV), or its report and
       // statistics (a path ending in .json); its disagreement by position (CSV); a map of it (SVG:
-      // map first, second or difference, the default).
+      // map first, second or difference, the default); a predictor by its classes (CSV).
       if (what.startsWith('comparison')) {
         const pair = currentPair(app);
         if (!pair) throw new ActionError('There is nothing to compare: score a run first, then compare (the action compare).');
-        const c = await computeComparison(app, pair);
+        const c = await computeComparison(app, pair, currentFilters(app), null, currentScale(app));
         if (c.error) throw new ActionError(c.error);
         if (!c.statistics) throw new ActionError(`${c.a.label} and ${c.b.label} cannot be compared: ${c.report.items.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`);
         const files = comparisonFiles(app, c);
@@ -943,9 +979,13 @@ export function installRemote(app) {
           if (!c.positions?.valid) throw new ActionError(`No disagreement by position: ${c.positions?.reason}`);
           return { file: files.positions.text, message: `The disagreement by position of ${c.a.label} and ${c.b.label}: ${c.positions.list.length} positions.` };
         }
+        if (what === 'comparison-classes') {
+          if (!c.classes?.valid) throw new ActionError(`No classes: ${c.classes?.reason ?? 'neither side is a predictor that classes its substitutions (AlphaMissense, EVE).'}`);
+          return { file: files.classes.text, message: `${c.classes.measured}'s scores by ${c.classes.predictor}'s classes: ${c.classes.list.map((x) => `${x.label} ${x.n}`).join(', ')}.` };
+        }
         if (what === 'comparison-map') {
           const which = choose(args.map ?? 'difference', ['first', 'second', 'difference'], 'map');
-          const cm = c.level === 'protein' ? c : await computeComparison(app, pair, currentFilters(app), 'protein');
+          const cm = c.level === 'protein' ? c : await computeComparison(app, pair, currentFilters(app), 'protein', currentScale(app));
           const svg = cm.statistics ? comparisonMapSVG(app, cm, which) : null;
           if (!svg) throw new ActionError(which === 'difference' ? `No difference map: ${c.sameScale ? 'the two cannot be drawn at the protein level' : 'the two are not on one scale'}.` : `No map of the ${which} side (nucleotide variants with no protein change to draw).`);
           return { file: svg, message: `The ${which} map of the comparison of ${c.a.label} and ${c.b.label} (SVG).` };

@@ -401,14 +401,19 @@ history.
 `annotations` (MaveScape 0.3, absent until the first) lists the **annotations** whose tracks are
 drawn beside the map (below, "Tracks"), each `{ id, provider, name, file: { fileName, sha256,
 size }, record, added }`. `provider` is one of `uniprot-features`, `pdbe-conservation`,
-`alphamissense`, `clinvar`, `gnomad`, `mavedb-annotations` (public data) or `alignment`,
-`predictor`, `custom` (a file). The file is kept in the library and the archive by its SHA-256, so
+`alphamissense`, `clinvar`, `gnomad`, `mavedb-annotations`, `mavedb-scores` (public data) or
+`alignment`, `predictor`, `custom` (a file). The file is kept in the library and the archive by its SHA-256, so
 the tracks are read again from it offline: public data as MaveScape keeps them (below), a person's
 file as it was opened. `record` says where it came from: for public data `{ service, url,
 retrieved, release, requests, license, citation }` and what was asked (`accession`, `gene`, `urn`;
 ClinVar's `records` and `kept`; gnomAD's `transcript` and `mane`), the earliest retrieval of the
-answers it holds; for a file `{ service: "a file", file, bytes }`. Adding and removing one are in
-the history.
+answers it holds; for a file `{ service: "a file", file, bytes }`. A MaveDB score set kept beside
+the workspace (`mavedb-scores`, MaveScape 0.4) keeps its scores file as MaveDB sends it, and in
+`record.scoreSet` what reading them as published needs: `{ urn, title, shortDescription, citation,
+license: { short, open }, keywords, variants, target, targetOrigin, others, readout: { direction }
+}` (the target as a design's, fetched when the record names a transcript; `readout.direction` as a
+person states it, MaveDB recording none). Adding and removing one, and stating a score set's
+direction, are in the history.
 
 `tracks` (MaveScape 0.3, absent until changed) is the arrangement of the tracks: `{ order: [track
 ids], hidden: [track ids], filters: { track id: filter } }`. A track's id is a built-in one
@@ -811,10 +816,12 @@ it is a custom track (above).
 
 ## Comparisons
 
-A comparison (the Compare view, remote control's `compare`; MaveScape 0.4) pairs two sets of scores
-of a workspace, each a run's condition or one of its replicates. It is a view, not kept in the
-workspace: the runs are, each with its record, and the comparison is made again from them. Its
-files, named after the two sides (`<first>_vs_<second>_comparison*`):
+A comparison (the Compare view, remote control's `compare`; MaveScape 0.4) pairs two sets of scores,
+each a run's condition or one of its replicates, or a MaveDB score set or a predictor kept beside
+the workspace (its `annotations`, above: `mavedb-scores`, `alphamissense`, `predictor`). It is a
+view, not kept in the workspace: the runs and annotations are, each with its record, and the
+comparison is made again from them. Its files, named after the two sides
+(`<first>_vs_<second>_comparison*`):
 
 **The variants compared** (`*_comparison.csv`), one row per variant scored on both sides and kept
 by the filters, in the first side's order (the wild type left out):
@@ -825,8 +832,9 @@ by the filters, in the first side's order (the wild type left out):
 | `variant_a`, `variant_b` | as each side names it (a nucleotide run read at the protein level: its protein variant) |
 | `class` | the first side's class of the variant (missense, nonsense, synonymous, …) |
 | `score_a`, `SE_a`, `score_b`, `SE_b` | each side's score and SE as scored (`NA`: none) |
-| `difference`, `mean` | first − second and their mean, as compared: the second negated when the two directions are opposite (`bNegated` below) |
-| `z`, `p`, `q` | the difference over √(SE_a² + SE_b²), its two-sided normal p, and q by Benjamini and Hochberg over the variants tested (`NA` where not tested: not on one scale, not independent, or an SE missing); discordant where q < 0.05 |
+| `compared_a`, `compared_b` | each score as compared: rescaled by its side's anchors (`scale` below), or the second negated when the two directions are opposite (`bNegated` below); as scored otherwise |
+| `difference`, `mean` | first − second and their mean, as compared |
+| `z`, `p`, `q` | the difference over √(SE_a² + SE_b²) (rescaled, with the anchors' share of each score's variance added), its two-sided normal p, and q by Benjamini and Hochberg over the variants tested (`NA` where not tested: not on one scale, not independent, a predictor, or an SE missing); discordant where q < 0.05 |
 
 **The disagreement by position** (`*_comparison_positions.csv`; two sides on one scale), one row per
 position of the first side's target with variants compared (a nucleotide run's, by the protein
@@ -838,7 +846,16 @@ position each changes):
 | `variants` | the variants compared there |
 | `mean_difference`, `rms_difference` | their mean difference (first − second) and its root mean square |
 | `discordant` | how many of them are discordant |
-| `z`, `p`, `q` | the position's z, the sum of its differences over √Σ(SE_a² + SE_b²), with 3 variants compared or more; its p; q by Benjamini and Hochberg over the positions tested (`NA` otherwise) |
+| `z`, `p`, `q` | the position's z, the sum of its differences over √Σ(SE_a² + SE_b²) (rescaled, with the anchors' shared variance added), with 3 variants compared or more; its p; q by Benjamini and Hochberg over the positions tested (`NA` otherwise) |
+
+**A predictor by its classes** (`*_comparison_classes.csv`; a predictor that classes its
+substitutions, AlphaMissense or EVE), one row per class:
+
+| Column | Meaning |
+| --- | --- |
+| `class` | the predictor's class (AlphaMissense: likely pathogenic, ambiguous, likely benign) |
+| `variants` | the variants compared in it |
+| `median`, `lower_quartile`, `upper_quartile` | the measured side's scores of them, as scored: median and quartiles (R's type 7) |
 
 **The maps** (`*_first_map.svg`, `*_second_map.svg`, `*_difference_map.svg`): each side's map, as
 the map's SVG export (above), and the difference's, colored by first − second centered on 0, its
@@ -851,12 +868,13 @@ legend saying so; a variant scored on one side only, or left out by the filters,
   "format": "mavescape-comparison",
   "version": 1,
   "software": { "name": "MaveScape", "version": "0.4.0", "commit": "…" },
-  "a": { "label": "Run 1: Replicate 1", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep1" },
-  "b": { "label": "Run 1: Replicate 2", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep2" },
+  "a": { "label": "Run 1: Replicate 1", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep1" },
+  "b": { "label": "Run 1: Replicate 2", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep2" },
   "level": "protein",
   "coordinates": "target",
   "bNegated": false,
   "sameScale": true,
+  "scale": { "mode": "scored", "applied": false, "anchors": null, "slope": null, "reason": null },
   "filters": { "lowConfidence": false, "maxSE": null, "minReads": null },
   "report": { "status": "ok", "items": [{ "id": "target", "status": "ok", "label": "Target", "text": "…" }] },
   "matched": { "n": 1109, "onlyA": 0, "onlyB": 0, "notScoredA": 1, "notScoredB": 2, "compared": 1109, "filtered": { "lowConfidence": 0, "se": 0, "reads": 0 } },
@@ -869,12 +887,26 @@ legend saying so; a variant scored on one side only, or left out by the filters,
   },
   "discordance": { "valid": true, "reason": null, "tested": 1109, "discordant": 479, "dispersion": 8.15, "q": 0.05, "variants": [{ "variant": "p.Trp36Ala", "difference": 1.2, "z": 9.1, "q": 1e-17 }] },
   "positions": { "valid": true, "reason": null, "list": [{ "position": 36, "reference": 194, "residue": "W", "n": 20, "mean": 0.4, "rms": 0.9, "discordant": 9, "z": 7.2, "p": 6e-13, "q": 1e-11 }] },
+  "classes": null,
   "withheld": []
 }
 ```
 
 Each side names its run's id and output hash, so the comparison can be traced to the two runs and
-made again. A side is a condition (`condition`: its name) or a replicate (`replicate`: its id).
+made again. A side is a condition (`condition`: its name) or a replicate (`replicate`: its id); a
+score set or predictor kept beside the workspace is `{ label, source: "scoreset" | "predictor",
+annotation, name, urn, file }` (its annotation's id and name, a score set's URN, the SHA-256 of the
+file kept). `scale` says how the two were put on one scale: `mode` `scored` (as scored), `stated`
+(stated by the person comparing them), `nonsense-wt` or `synonymous-nonsense` (each side rescaled by
+its own anchors: `anchors.a` and `anchors.b`, each `[{ what, to, from, se, n }]`, the score each
+anchor had, the value it is rescaled to, its SE and how many variants it is the median of; `slope`,
+each side's), with `applied` and, when a side could not be rescaled, `reason`. A predictor is
+compared by rank: `pearson`, `concordance`, `blandAltman`, `discordance` and `positions` are
+withheld, and `classes` gives `{ valid, reason, predictor, measured, list: [{ id, label, n, median,
+low, high }], auc: { m, n, auc, low, high, se, tolerated, damaging, measuredNegated, directionStated },
+references: { synonymous: { n, median }, nonsense: { n, median } } }`: the measured side's scores in
+each class, the AUC of telling the tolerated class from the damaging one (DeLong's 95% interval, as
+pROC's `ci.auc`), and the measured side's synonymous and nonsense medians.
 `coordinates` is `target` (variants matched by name on one target) or `reference` (two stretches
 of one UniProt entry, matched on its coordinates). Each report item is `ok`, `qualified` or
 `blocked`, with its words; the report's `status` is the worst of them. A blocked comparison has
