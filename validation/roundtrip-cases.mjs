@@ -16,6 +16,7 @@ import { barcodesCSV, countsCSV, differentialCSV, provenanceJSON, provenanceText
 import { writeMethods } from '../web/lib/methods.js';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
+import { proteinView } from '../web/lib/collapse.js';
 import { sha256 } from '../web/lib/sha256.js';
 
 export const SOFTWARE = { version: '0.1.0', commit: '0123456789abcdef' };
@@ -86,7 +87,8 @@ export function allExports(ws, table, results) {
     'references.bib': methods.bibtex,
     'selection.csv': selectionCSV(selection.keys, results, run, selection.condition),
     'selection.json': selectionJSON(selection, run),
-    'map.svg': mapSVG(buildMapModel(results, run.inputs.design), { results }),
+    // A run of nucleotide variants is drawn at the protein level (ui/remote.js, export map).
+    'map.svg': mapSVG(buildMapModel(proteinView(results) ?? results, run.inputs.design), { results: proteinView(results) ?? results }),
     ...(results.barcodes ? { 'barcodes.csv': barcodesCSV(results, run) } : {}),
     ...(results.differential ? { 'differential.csv': differentialCSV(results, run) } : {}),
     methods,

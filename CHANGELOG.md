@@ -1,9 +1,15 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-10-11)
 
-Wave 3 of the [roadmap](mavescape-spec/roadmap.md): public data in and out. Built slice by slice;
-this section grows with each.
+Wave 3 of the [roadmap](mavescape-spec/roadmap.md): public data in and out, through a fixed list of
+services that only the program contacts. A target is checked against its UniProt entry; any
+published MaveDB score set opens by search or URN, its scores as published and its counts to score
+again, and several of one target open together as conditions to compare. The whole of MAVE-HGVS is
+read (nucleotide variants for the protein changes they make; targets from GenBank files and
+transcripts); a run becomes a MaveDB deposit that MaveDB's own validators accept; annotations line
+up beside the map as tracks; and there are thirteen examples. Workspaces saved by 0.1.0 and 0.2.0
+open and reproduce their runs; three saved by 0.3.0 are kept for later versions to do the same.
 
 ### Added
 
@@ -224,6 +230,10 @@ this section grows with each.
 - The BRCA1 RING validation design and data set describe the phage assay as what it measures, E3
   ubiquitin ligase activity by autoubiquitination (selected with the E2, hence "PlusE2"), not E2
   binding (wave 3, slice 6).
+- A run's tracks take the identifiers its target has gained since it was scored, while the
+  target's sequence and offset are the run's. A target checked against UniProt after a run gets
+  its gene and accession, but that run's *Add a track* still found ClinVar and gnomAD wanting a
+  gene "as UniProt's check does" (found while saving 0.3.0's archives).
 
 ### Validation
 
@@ -319,6 +329,23 @@ this section grows with each.
   together live, their tables as pinned.
 - The MaveDB deposit reference regenerated with MaveDB's validators (`generate_mavedb_export.py`):
   BRCA1's saturation genome editing counts now draft in days, which its deposit says.
+- **Archives that keep opening:** three workspaces saved by MaveScape 0.3.0 itself, driven
+  through its remote control offline (`validation/archives/release-0.3.0-*.msz`, written by
+  `make-0.3.0.mjs`; 2.5 MB together), hold what 0.3 brought:
+  - GRB2's SH3 domain opened from MaveDB, with the record, its published scores, MaveDB's mapped
+    variants, the counts scored, the target checked against UniProt, and seven annotations
+    arranged and filtered;
+  - DHFR's two score sets opened together, with their counts joined, two tiles in each sample, time
+    in hours, and the conditions compared as independent;
+  - BRCA1's saturation genome editing, with a RefSeq transcript as its target, nucleotide variants,
+    the counts scored, and MaveDB's own annotations and gnomAD.
+
+  The `roundtrip` suite opens them with 0.1.0's and 0.2.0's archives. It recomputes their seven runs
+  from the archives' own files to their recorded output hashes and archived scores, makes every
+  export again (a nucleotide run's map drawn at the protein level), and reads every annotation's
+  tracks again from the archive, in the order kept. `mavescape run --from-workspace` reruns each run
+  in a window to the same hash. The remote-control session (109 checks) adds a target checked after
+  its run, whose tracks are then found by the gene the check gave.
 
 ## 0.2.0 (2026-10-10)
 

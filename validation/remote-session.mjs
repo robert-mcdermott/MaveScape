@@ -450,6 +450,12 @@ try {
   const pTable = parseTable(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv')), { fileName: 'scores.csv' });
   const pNode = scoreTable(pTable, pRun.inputs.design, pRun.inputs.parameters);
   check('the published scores\' run: Node\'s output hash, read as published (model "published"), and the record kept with the workspace', `${pRun.output.sha256.slice(0, 16)}… and ${outputDigest(pNode.results).slice(0, 16)}…; ${pRun.inputs.parameters.model}`, pRun.output.sha256 === outputDigest(pNode.results) && pRun.inputs.parameters.model === 'published' && (await browser.eval('window.mavescape.store.ws.records?.[0]?.urn')) === 'urn:mavedb:00000835-a-1');
+  // The target checked against UniProt after the run (0.3.0's release): the run's tracks are found
+  // by the identifiers the check gave, its sequence and offset the same (lib/tracks.js, trackTarget).
+  const noGene = await send('add_track', { provider: 'clinvar', run: 'Published scores' });
+  await act('check_target', { apply: true });
+  const withGene = await send('add_track', { provider: 'clinvar', run: 'Published scores' });
+  check('a target checked against UniProt after its run: the run\'s tracks found by the gene the check gave (ClinVar refused before it, added after)', `${noGene.message} | ${withGene.message.slice(0, 120)}`, !noGene.ok && /names no gene/.test(noGene.message) && withGene.ok && /GRB2/.test(withGene.data?.name ?? ''));
   const ptenOffline = await send('open_mavedb', { urn: 'urn:mavedb:00000013-a-1' });
   check('open_mavedb offline, for a record whose table is not in the cache: refused, saying MaveScape is offline', ptenOffline.message, !ptenOffline.ok && /--offline/.test(ptenOffline.message));
 

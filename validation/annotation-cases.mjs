@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import { EXAMPLES } from '../web/lib/examples.js';
 import { annotationTracks, providerById } from '../web/lib/providers/index.js';
 import { targetProtein } from '../web/lib/target.js';
-import { arrangeTracks, builtinTracks } from '../web/lib/tracks.js';
+import { arrangeTracks, builtinTracks, trackTarget } from '../web/lib/tracks.js';
+import { cellText } from '../web/lib/csv.js';
 import { cachedGet } from './cached-fetch.mjs';
 
 const fixtures = new URL('./fixtures/', import.meta.url);
@@ -41,9 +42,29 @@ export async function publicAnnotations(context, providers, { gene = null } = {}
 
 // A run's tracks as the window arranges them (ui/tracks.js, runTracks), made in Node from a
 // workspace and its archive's files: the run's own and its annotations', for its map model.
-export function nodeTracks(ws, run, model, files) {
-  const target = run.inputs.design.targets[0];
-  const context = { target, protein: model.protein, offset: model.target.offset ?? 0, length: model.length, origin: null, variants: null };
+// With the run's own results and table (its scores, not drawn at the protein level), a run of a
+// MaveDB record's table also gives the record's URN and its variants by name, key and MaveDB
+// accession, as the window gives MaveDB's annotations (ui/tracks.js, contextOf).
+export function nodeTracks(ws, run, model, files, { results = null, table = null } = {}) {
+  const target = trackTarget(run.inputs.design.targets[0], ws.targets);
+  const source = ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
+  const origin = source?.origin?.database === 'MaveDB' && source.origin.urn ? { urn: source.origin.urn } : null;
+  let variants = null;
+  if (origin && results) {
+    variants = new Map();
+    const v = results.variants;
+    const single = (key) => /^p\.[A-Z][a-z]{2}\d+([A-Z][a-z]{2}|=)$/.test(key ?? '');
+    const column = table?.columns.find((c) => c.name === 'accession');
+    const accession = column && table.rows === results.rows ? (i) => cellText(column, i) : null;
+    for (let i = 0; i < results.rows; i += 1) {
+      const key = v.proKey ? v.proKey[i] : v.key[i];
+      const item = { key: single(key) ? key : null, position: v.proPosition ? v.proPosition[i] : v.position[i] };
+      variants.set(v.original[i], item);
+      variants.set(v.key[i], item);
+      if (accession) variants.set(accession(i), item);
+    }
+  }
+  const context = { target, protein: model.protein, offset: model.target.offset ?? 0, length: model.length, origin, variants };
   const all = builtinTracks(model);
   for (const a of ws.annotations ?? []) {
     const bytes = files.get(a.file.sha256);

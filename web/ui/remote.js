@@ -39,7 +39,7 @@ import { DEPOSIT_FIELDS, depositDetails, readPublication } from '../lib/mavedb-e
 import { searchHits } from '../lib/mavedb.js';
 import { retrievalText } from '../lib/uniprot.js';
 import { addFileTrack, addPublicTrack, arrangeTrack, removeTrack, runTrackState } from './tracks.js';
-import { annotationsOf, describeTrack, sourceText, trackFilters, tracksCSV } from '../lib/tracks.js';
+import { annotationsOf, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 
 export class ActionError extends Error {}
@@ -799,7 +799,7 @@ export function installRemote(app) {
       const run = resolveRun(args.run);
       const { results } = await resultsOf(run);
       const state = await runTrackState(app, run, { condition: resolveCondition(proteinView(results) ?? results, args.condition) });
-      const target = run.inputs.design.targets?.[0];
+      const target = trackTarget(run.inputs.design.targets?.[0], ws().targets);
       const source = ws().sources.find((x) => x.sha256 === run.inputs.source.sha256);
       const origin = source?.origin?.database === 'MaveDB' ? { urn: source.origin.urn } : null;
       const available = PROVIDERS.map((p) => ({ provider: p.id, name: p.name, kind: p.kind, what: p.what, ...(p.kind === 'public' ? { unavailable: p.needs(target, { origin }) } : {}) }));

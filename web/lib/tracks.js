@@ -142,6 +142,17 @@ export const BUILTIN_TRACKS = [
   { id: 'uncertainty', label: 'Uncertainty', kind: 'values', what: 'the median standard error of each position\'s scored substitutions' },
 ];
 
+// The target a run's tracks are found and read for: the run's own, which numbers its map, with the
+// identifiers the workspace's target has now (a UniProt check sets the accession and gene, often
+// after a run). Only while that target has the run's sequence and offset, so the positions are the
+// same; otherwise the run's alone.
+export function trackTarget(target, targets = []) {
+  if (!target) return null;
+  const now = targets.find((t) => t.sequence === target.sequence && (t.sequenceType ?? null) === (target.sequenceType ?? null) && (t.offset ?? 0) === (target.offset ?? 0));
+  if (!now?.identifiers) return target;
+  return { ...target, identifiers: { ...(target.identifiers ?? {}), ...now.identifiers } };
+}
+
 // The built-in tracks of a map model (map-model.js).
 export function builtinTracks(model) {
   const L = model.length;

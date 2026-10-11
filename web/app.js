@@ -21,7 +21,7 @@ import { findPackages, importMaveDB, importMaveDBPackage, openMaveDBDialog, open
 import { importTrackFiles } from './ui/tracks.js';
 import { fixClock } from './lib/clock.js';
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
 // show what they are for (mode-planned.js); Compare, Structure, Calibrate, Figures and Report join

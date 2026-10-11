@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   BUILTIN_TRACKS, CLINVAR_CLASSES, REVIEW_STARS, annotationsOf, applyFilter, arrangeTracks, arrangement, builtinTracks, clinvarClass, describeTrack, describeTrackAt,
-  placeResidues, readSubstitution, substitutionKey, trackFilters, tracksCSV, variantsTrack,
+  placeResidues, readSubstitution, substitutionKey, trackFilters, trackTarget, tracksCSV, variantsTrack,
 } from './tracks.js';
 import { layoutTracks, shapesSVG, trackPosition, trackShapes, tracksHeight } from './track-render.js';
 import { geometry, hitTest } from './map-render.js';
@@ -157,4 +157,15 @@ test('drawn: each kind in its place, below the grid; hits name the track and pos
   assert.equal(geometry(model, { ...view, tracks: [] }).left, 30);
   assert.deepEqual(hitTest(model, view, 132 + 25, g.tracksTop + 4 + 3), { region: 'track', track: 0, position: 2 });
   assert.deepEqual(hitTest(model, view, 20, g.tracksTop + 30), { region: 'track', track: 1, position: null });
+});
+
+test('a run\'s tracks use the identifiers its target has gained since, while the sequence and offset are the same', () => {
+  const scored = { name: 'GRB2', sequence: 'TYVQALFDFDPQEDGELGFRRGDFIHVMDNSDPNWWKGACHGQTGMFPRNYVTPVN', sequenceType: 'protein', offset: 158, identifiers: { uniprot: 'P62993' } };
+  const checked = { ...scored, id: 't1', identifiers: { uniprot: 'P62993', gene: 'GRB2' } };
+  assert.deepEqual(trackTarget(scored, [checked]).identifiers, { uniprot: 'P62993', gene: 'GRB2' });
+  assert.equal(trackTarget(scored, [checked]).offset, 158);
+  // Placed elsewhere since, or another sequence: the run's own.
+  assert.equal(trackTarget(scored, [{ ...checked, offset: 0 }]), scored);
+  assert.equal(trackTarget(scored, [{ ...checked, sequence: `${scored.sequence}A` }]), scored);
+  assert.equal(trackTarget(null, [checked]), null);
 });

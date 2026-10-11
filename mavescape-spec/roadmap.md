@@ -1636,6 +1636,29 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
        the difference.
      - **The inspector listed every replicate of a condition**: 9 of DHFR's 12 (6 of factor IX's 9)
        do not measure a given variant. It lists the variant's tile's now.
+     - Wave 3 is complete with slice 6.
+
+**Released 0.3.0 on 2026-10-11.** Each workspace opened from MaveDB is a workspace of its own, so
+0.3 leaves three archives (`validation/archives/release-0.3.0-*.msz`, 2.5 MB together). They were
+saved by 0.3.0 itself, its window driven through remote control offline by `make-0.3.0.mjs`:
+- GRB2 opened from MaveDB: the record, the published scores, MaveDB's mapped variants, the counts
+  scored, the UniProt check, and seven annotations arranged and filtered;
+- DHFR's two score sets opened together: the counts joined, two tiles in each sample, time in
+  hours, the conditions independent;
+- BRCA1's saturation genome editing: a RefSeq target, nucleotide variants, the counts scored, and
+  MaveDB's annotations and gnomAD.
+
+Every later version must reopen them, reproduce their seven runs and read their annotations' tracks
+again.
+- Found by the release:
+  - **A run's tracks kept the identifiers its target had when it was scored.** Checking the target
+    against UniProt after the run gave the target its gene, yet that run's ClinVar and gnomAD still
+    asked for one. A run's tracks now take the identifiers the workspace's target has, while its
+    sequence and offset are the run's (`trackTarget`).
+  - **The archive replay assumed what 0.3's runs do not have**: standard errors (published scores
+    may have none), a map at the level of the variants (a nucleotide run's is drawn at the protein
+    level), and tracks read without the run's record (MaveDB's annotations join by its variants and
+    accessions, which the Node tracks now give as the window does).
 
 ## 0.4.0: compare (wave 4)
 

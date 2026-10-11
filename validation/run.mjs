@@ -58,7 +58,7 @@ import { dmsVariantsName } from '../web/lib/barcodes.js';
 import { compareDimsum, demoCase, dimsumReference, fixtureCase, grb2Case } from './dimsum-cases.mjs';
 import { cbsCase, compareLimma, mutscanReference, twoConditionCase } from './differential-cases.mjs';
 import { DIFFERENTIAL_REASON_NAMES } from '../web/lib/differential.js';
-import { exampleContext, fixture as annotationFixture, publicAnnotations, reference as annotationReference } from './annotation-cases.mjs';
+import { exampleContext, fixture as annotationFixture, nodeTracks, publicAnnotations, reference as annotationReference } from './annotation-cases.mjs';
 import { annotationTracks, providerById as annotationProvider } from '../web/lib/providers/index.js';
 import { readProfile } from '../web/lib/providers/pdbe.js';
 import { readClinVarTable } from '../web/lib/providers/clinvar.js';
@@ -2144,19 +2144,22 @@ const suites = {
           check('roundtrip', `${file}: ${run.name} is recomputed`, again.errors[0], false, 'scored');
           continue;
         }
-        last ??= { run, table: t, results: again.results };
+        // The run its first selection is of (or its first run): the one whose exports are made again.
+        if (!last || run.id === opened.ws.selections[0]?.run) last = { run, table: t, results: again.results };
         const verdict = reproduction(run, outputDigest(again.results), 'this version');
         // Against the scores the archive holds for the run (results/<run>.csv), when it holds them.
         const held = opened.results.get(`results/${run.id}.csv`);
         let worst = 0;
         if (held) {
           const scores = parseTable(new TextEncoder().encode(held));
-          const col = (name) => scores.columns.find((c) => c.name === name).numeric;
+          // Published scores may have no SE (0.3's): an SE is in both, or in neither.
+          const col = (name) => scores.columns.find((c) => c.name === name)?.numeric ?? null;
           const [score, se] = [col('score'), col('SE')];
           const c = again.results.conditions[0];
           for (let i = 0; i < c.score.length; i += 1) {
-            if (Number.isFinite(score[i]) !== Number.isFinite(c.score[i])) worst = Infinity;
-            else if (Number.isFinite(score[i])) worst = Math.max(worst, Math.abs(c.score[i] - score[i]) / Math.max(1, Math.abs(score[i])), Math.abs(c.se[i] - se[i]) / Math.max(1, se[i]));
+            const [heldSE, againSE] = [se?.[i] ?? NaN, c.se?.[i] ?? NaN];
+            if (Number.isFinite(score[i]) !== Number.isFinite(c.score[i]) || Number.isFinite(heldSE) !== Number.isFinite(againSE)) worst = Infinity;
+            else if (Number.isFinite(score[i])) worst = Math.max(worst, Math.abs(c.score[i] - score[i]) / Math.max(1, Math.abs(score[i])), Number.isFinite(heldSE) ? Math.abs(againSE - heldSE) / Math.max(1, heldSE) : 0);
           }
         }
         const older = run.inputs.scoring !== SCORING_VERSION;
@@ -2170,7 +2173,15 @@ const suites = {
         // The reopened workspace makes its QC (with its own thresholds), exports and methods.
         const made = allExports({ ...opened.ws, runs: [last.run] }, last.table, last.results);
         const thresholds = withDefaultThresholds(opened.ws.qc?.thresholds);
-        check('roundtrip', `${file}: the reopened workspace keeps its QC thresholds and selection, and makes its exports and methods`, `replicate agreement review at ${thresholds.agreement.review}; selection "${opened.ws.selections[0]?.name}" of ${opened.ws.selections[0]?.keys.length} variants; ${Object.keys(made).length - 1} files`, Object.values(made).every((x) => x) && made['methods.md'].includes(last.run.output.sha256) && opened.ws.qc?.thresholds?.agreement?.review === thresholds.agreement.review, 'all made');
+        check('roundtrip', `${file}: the reopened workspace keeps its QC thresholds (where changed) and selection, and makes its exports and methods`, `replicate agreement review at ${thresholds.agreement.review}; selection "${opened.ws.selections[0]?.name}" of ${opened.ws.selections[0]?.keys.length} variants; ${Object.keys(made).length - 1} files`, Object.values(made).every((x) => x) && made['methods.md'].includes(last.run.output.sha256) && (!opened.ws.qc?.thresholds || opened.ws.qc.thresholds.agreement?.review === thresholds.agreement.review), 'all made');
+        // The annotations beside the map (0.3's) read again from the archive's own files, arranged as
+        // the workspace keeps them.
+        if (opened.ws.annotations?.length) {
+          const tracks = nodeTracks(opened.ws, last.run, buildMapModel(proteinView(last.results) ?? last.results, last.run.inputs.design), opened.sources, { results: last.results, table: last.table });
+          const per = opened.ws.annotations.map((a) => [a.name, tracks.filter((t) => t.id.startsWith(`${a.id}:`)).length]);
+          const order = opened.ws.tracks?.order ?? [];
+          check('roundtrip', `${file}: its annotations' tracks read again from the archive's own files, in the order the workspace keeps`, `${per.map(([n, k]) => `${n} ${k}`).join(', ')}; first ${tracks[0]?.label}`, per.every(([, k]) => k > 0) && (!order.length || tracks[0]?.id === order[0]), 'each a track or more, in order');
+        }
       }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');

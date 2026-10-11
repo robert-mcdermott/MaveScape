@@ -10,7 +10,7 @@ import { fetchPublic, publicDataState } from './public-data.js';
 import { storeBytes } from './import.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { PROVIDERS, annotationTracks, providerById, providerForFile } from '../lib/providers/index.js';
-import { annotationsOf, arrangeTracks, arrangement, builtinTracks, describeTrack, sourceText, trackFilters, tracksCSV } from '../lib/tracks.js';
+import { annotationsOf, arrangeTracks, arrangement, builtinTracks, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
 import { buildMapModel } from '../lib/map-model.js';
 import { proteinView } from '../lib/collapse.js';
 import { cellText } from '../lib/csv.js';
@@ -36,11 +36,12 @@ async function annotationText(app, annotation) {
   return texts.get(sha);
 }
 
-// What a run gives the providers: its design's target, the protein its map numbers, the offset, a
-// MaveDB record's URN, and its variants by name and MaveDB accession (→ the map's cell and position).
+// What a run gives the providers: its design's target (with the identifiers the workspace's has
+// gained since: lib/tracks.js, trackTarget), the protein its map numbers, the offset, a MaveDB
+// record's URN, and its variants by name and MaveDB accession (→ the map's cell and position).
 async function contextOf(app, run, model) {
   const design = run.inputs.design;
-  const target = design.targets?.[0] ?? null;
+  const target = trackTarget(design.targets?.[0] ?? null, app.store.ws.targets);
   const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
   const origin = source?.origin?.database === 'MaveDB' && source.origin.urn ? { urn: source.origin.urn } : null;
   let variants = null;
@@ -209,7 +210,7 @@ export function tracksPanel(app) {
   let state = null;
   const addMenu = (anchor) => {
     const { run, model } = state;
-    const target = run.inputs.design.targets?.[0];
+    const target = trackTarget(run.inputs.design.targets?.[0], app.store.ws.targets);
     const off = publicDataState(app);
     const fromMaveDB = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256)?.origin?.database === 'MaveDB';
     const items = PROVIDERS.filter((p) => p.kind === 'public').map((p) => {
