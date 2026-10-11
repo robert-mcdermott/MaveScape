@@ -55,6 +55,7 @@
           <li><a href="getting-started.html">Getting started</a></li>
           <li><a href="examples.html">Examples</a></li>
           <li><a href="opening-data.html">Opening your data</a></li>
+          <li><a href="public-data.html">Public data</a></li>
         </ul>
         <h4>Analysis</h4>
         <ul>
@@ -83,14 +84,14 @@
       <p class="doc-lede">The design says what each column of the count table is (which sample, its role, its replicate and time point) and what the assay measures. MaveScape drafts the columns from their names; you check them and say what the scores mean in the Experiment view.</p>
 
       <h2 id="draft">Drafting the design</h2>
-      <p>Once a table is open, the workflow strip offers <strong>Draft the design</strong>. MaveScape reads the column names (<code>input</code>, <code>pre</code>, <code>lib</code>; <code>output</code>, <code>post</code>, <code>sel</code>; <code>rep1</code>; <code>t0</code>, <code>gen3</code>; <code>bin1</code>; <code>tile2</code>), finds shared samples by comparing the columns' values, and sets aside every column it does not use, with the reason. The number of time points tells conditions apart: two assays in one table become two conditions.</p>
+      <p>Once a table is open, the workflow strip offers <strong>Draft the design</strong>. MaveScape reads the column names (<code>input</code>, <code>pre</code>, <code>lib</code>; <code>output</code>, <code>post</code>, <code>sel</code>; <code>rep1</code>; <code>t0</code>, <code>gen3</code>; <code>bin1</code>; <code>tile2</code>), finds shared samples by comparing the columns' values, and sets aside every column it does not use, with the reason. The number of time points tells conditions apart: two assays in one table become two conditions. A time point's name gives the time unit when every one says the same (<code>t_02hrs</code> in hours, <code>day5</code> in days, <code>gen10</code> in generations). A lone sample beside a time series or sorted bins (a plasmid library counted beside day 5 and day 11) is no replicate: it is set aside, with the reason, for you to give it a role if it has one.</p>
       <figure>
         <div class="shot"><img class="shot-dark" src="../assets/img/draft-design-dark.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view after drafting the design of GRB2's counts from the column names: six columns mapped to three replicates of an input and an output, and the design in words" /><img class="shot-light" src="../assets/img/draft-design-light.webp" width="2000" height="1250" loading="lazy" alt="The Experiment view after drafting the design of GRB2's counts from the column names: six columns mapped to three replicates of an input and an output, and the design in words" /></div>
         <figcaption>A design drafted from GRB2's column names: three replicates, each with an input and an output.</figcaption>
       </figure>
 
       <h2 id="editor">The Experiment view</h2>
-      <p>The design is two tables. <strong>Columns → samples:</strong> each column is a sample of its own, a technical replicate of another (summed), a copy of a shared sample's column, or not used, with why. <strong>Replicates × slots:</strong> each replicate's input and output, its time points (edited in the column heads) or its bins, with its condition and tile. With two or more conditions, one is the reference the others are compared with (<a href="scoring.html#conditions">Scoring</a>); an input selected under several conditions is one sample named by each of their replicates. Beside them: the kind of experiment, the time unit, <a href="#readout">what the assay measures and its controls</a>, and the target's name, offset, coding start and identifiers.</p>
+      <p>The design is two tables. <strong>Columns → samples:</strong> each column is a sample of its own, a technical replicate of another (summed), a copy of a shared sample's column, or not used, with why. <strong>Replicates × slots:</strong> each replicate's input and output, its time points (edited in the column heads) or its bins, with its condition and tile. With two or more conditions, one is the reference the others are compared with (<a href="scoring.html#conditions">Scoring</a>); an input selected under several conditions is one sample named by each of their replicates. Tiles grown together are one sample too, named by each tile's replicates (<a href="examples.html#dhfr-lon">DHFR's</a> sub-libraries were grown two at a time): each replicate measures only its own tile's positions there, and the inspector lists only the replicates of a variant's tile. Beside them: the kind of experiment, the time unit, <a href="#readout">what the assay measures and its controls</a>, and the target's name, offset, coding start and identifiers.</p>
       <p>Every change is checked as you make it. The design is described in plain words, and each error and warning is listed: a column that is neither a sample's nor set aside is an error, so nothing is dropped silently.</p>
 
       <h2 id="readiness">What the analysis can do</h2>
@@ -162,7 +163,7 @@ output_rep1,output,1,1,,,,,</code></pre></div>
       <p>A design is saved and opened as <code>*.design.json</code>, described by a JSON schema in the repository; <code>mavescape run</code> reads the same file, readout included. Every material change to the workspace (an import, a target, the design) goes into its history, each entry chained to the one before by its hash, so that an entry edited afterward is caught. The drawer (<kbd>⌘J</kbd>) shows it.</p>
 
       <nav class="doc-pager" aria-label="Pages">
-        <a class="prev" href="opening-data.html"><span>Previous</span>Opening your data</a>
+        <a class="prev" href="public-data.html"><span>Previous</span>Public data</a>
         <a class="next" href="scoring.html"><span>Next</span>Scoring</a>
       </nav>
     </main>

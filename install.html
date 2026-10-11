@@ -90,7 +90,7 @@
 
       <h2 id="options">Options</h2>
       <p>To install a particular release, or somewhere else:</p>
-      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh | MAVESCAPE_VERSION=v0.2.0 MAVESCAPE_INSTALL_DIR="$HOME/bin" sh</code></pre></div>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/robert-mcdermott/mavescape/main/install.sh | MAVESCAPE_VERSION=v0.3.0 MAVESCAPE_INSTALL_DIR="$HOME/bin" sh</code></pre></div>
       <p>In PowerShell, set <code>$env:MAVESCAPE_VERSION</code> and <code>$env:MAVESCAPE_INSTALL_DIR</code> before the same command. To read an installer before running it, download it first; <a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/INSTALLING.md">INSTALLING.md</a> describes every option, and how to install by hand.</p>
 
       <h2 id="command-line">Command-line options</h2>
@@ -104,6 +104,10 @@
             <tr><td><code>--data-dir DIR</code></td><td>Where the workspace library is kept</td></tr>
             <tr><td><code>--no-library</code></td><td>Keep workspaces in the browser's storage instead</td></tr>
             <tr><td><code>--keep-running</code></td><td>Keep serving after the window is closed</td></tr>
+            <tr><td><code>--mavedb URN</code></td><td>Open a MaveDB score set, as <code>mavescape urn:mavedb:…</code> does (<a href="docs/public-data.html#mavedb">Public data</a>)</td></tr>
+            <tr><td><code>--offline</code></td><td>Make no network request: public data only from copies already in the cache (<a href="docs/public-data.html">Public data</a>)</td></tr>
+            <tr><td><code>--no-fetch</code></td><td>Switch public data off</td></tr>
+            <tr><td><code>--cache-dir DIR</code></td><td>Where the cache of public data is kept</td></tr>
             <tr><td><code>--remote-control</code></td><td>Let programs on this computer drive the window (<a href="docs/scripting.html">Remote control</a>)</td></tr>
             <tr><td><code>--version</code></td><td>Print the version</td></tr>
             <tr><td><code>mavescape run …</code></td><td>Score a table with its design without a window (<a href="docs/scripting.html#headless">Headless runs</a>; <code>mavescape run -h</code>)</td></tr>

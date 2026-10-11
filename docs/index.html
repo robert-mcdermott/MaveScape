@@ -55,6 +55,7 @@
           <li><a href="getting-started.html">Getting started</a></li>
           <li><a href="examples.html">Examples</a></li>
           <li><a href="opening-data.html">Opening your data</a></li>
+          <li><a href="public-data.html">Public data</a></li>
         </ul>
         <h4>Analysis</h4>
         <ul>
@@ -85,7 +86,7 @@
       <h2 id="mave">MAVEs in brief</h2>
       <p>A <strong>multiplexed assay of variant effect</strong> (MAVE) measures what thousands of variants of a gene or protein do, in one experiment. A library of variants is put through a selection (cells grow, a protein binds, or cells are sorted by a fluorescent reporter), and sequencing counts every variant before and after. In a selection for function, a variant that becomes rarer has probably lost some of it; what a score means always depends on what the assay selects for. Protein <strong>deep mutational scanning</strong> (DMS) is the most common MAVE, and the one MaveScape starts with; other MAVEs test regulatory sequences or edit variants into the genome.</p>
       <p class="callout"><strong>experiment → sequencing reads → variant counts → MaveScape → (optionally) MaveDB</strong></p>
-      <p>Tools such as Enrich2, DiMSum or dms_variants turn the reads into counts; MaveScape starts there. <a href="https://www.mavedb.org">MaveDB</a> is the public repository of MAVE data. MaveScape is a separate program that needs no MaveDB account, and it writes scores in MaveDB's columns. Published scores without their counts can be explored, but they cannot be rescored or checked by count-based quality control.</p>
+      <p>Tools such as Enrich2, DiMSum or dms_variants turn the reads into counts; MaveScape starts there. <a href="https://www.mavedb.org">MaveDB</a> is the public repository of MAVE data. MaveScape is a separate program that needs no MaveDB account; it writes scores in MaveDB's columns, and a run as a deposit MaveDB takes. Published scores without their counts can be explored, but they cannot be rescored or checked by count-based quality control.</p>
 
       <h2 id="path">The path through an analysis</h2>
       <p>The workflow strip above every view shows the steps, which are done, and the one to take next:</p>
@@ -95,8 +96,8 @@
         <li><strong>Design:</strong> which column is which sample, replicate and time point, and what the assay measures (<a href="experiment.html">The design</a>).</li>
         <li><strong>Score:</strong> functional scores with standard errors, a run kept with everything needed to repeat it (<a href="scoring.html">Scoring</a>).</li>
         <li><strong>QC:</strong> whether the experiment supports the scores (<a href="qc.html">Quality control</a>).</li>
-        <li><strong>Map:</strong> every substitution by position, and each variant's evidence (<a href="map.html">The map and the inspector</a>).</li>
-        <li><strong>Record:</strong> scores in MaveDB's columns, the methods with references, and the workspace as one archive (<a href="record.html">Exports and the record</a>).</li>
+        <li><strong>Map:</strong> every substitution by position, tracks of what else is known about each position, and each variant's evidence (<a href="map.html">The map and the inspector</a>).</li>
+        <li><strong>Record:</strong> scores in MaveDB's columns, a run as a MaveDB deposit, the methods with references, and the workspace as one archive (<a href="record.html">Exports and the record</a>).</li>
       </ol>
       <figure class="hero-shot">
         <div class="shot shot-window" data-url="127.0.0.1:8820"><img class="shot-dark" src="../assets/img/experiment-dark.webp" width="2000" height="1250" loading="lazy" alt="The MaveScape window: the workflow strip with each step's state above the Experiment view, the dataset tree on the left and the inspector on the right" /><img class="shot-light" src="../assets/img/experiment-light.webp" width="2000" height="1250" loading="lazy" alt="The MaveScape window: the workflow strip with each step's state above the Experiment view, the dataset tree on the left and the inspector on the right" /></div>
@@ -107,6 +108,7 @@
       <ul>
         <li>New to MaveScape: <a href="getting-started.html">Getting started</a>, then an <a href="examples.html">example</a>.</li>
         <li>Bringing your own data: <a href="opening-data.html">Opening your data</a> says what to bring and how MaveScape reads it.</li>
+        <li>What MaveScape fetches from public services, what it sends, and working offline: <a href="public-data.html">Public data</a>.</li>
         <li>Automating MaveScape, running it in a pipeline, or capturing its screens: <a href="scripting.html">Remote control, headless runs and scripting</a>.</li>
       </ul>
 

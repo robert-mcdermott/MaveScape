@@ -55,6 +55,7 @@
           <li><a href="getting-started.html">Getting started</a></li>
           <li><a href="examples.html">Examples</a></li>
           <li><a href="opening-data.html">Opening your data</a></li>
+          <li><a href="public-data.html">Public data</a></li>
         </ul>
         <h4>Analysis</h4>
         <ul>
@@ -99,7 +100,7 @@
             <tr><td><strong>Low counts before selection</strong></td><td>Input variants below 10 reads</td><td>above 20% / 50%</td></tr>
             <tr><td><strong>Missing counts</strong></td><td>Variants missing in a sample beyond the others</td><td>above 20% / 50%</td></tr>
             <tr><td><strong>Missing after selection</strong></td><td>Variants that dropped out during selection but are written as missing rather than 0</td><td>review only</td></tr>
-            <tr><td><strong>Coverage of designed substitutions</strong></td><td>Substitutions observed, by position and class; of those a library of single-base changes can make, when the design says it is one</td><td>below 90% / 50%</td></tr>
+            <tr><td><strong>Coverage of designed substitutions</strong></td><td>Substitutions observed, by position and class; of those a library of single-base changes can make, when the design says it is one or the table's variants are single-base substitutions; nucleotide variants counted by the protein changes they make. Without tiles, the stretches of the protein the variants lie in, to give as tiles</td><td>below 90% / 50%</td></tr>
             <tr><td><strong>Replicate agreement</strong></td><td>Pearson and Spearman correlation of the replicates' log ratios</td><td>below 0.8 / 0.5</td></tr>
             <tr><td><strong>Variance beyond counting</strong></td><td>Replicate differences against the variance counting predicts: above 1, a bottleneck or noise between replicates</td><td>above 2× / 5×</td></tr>
             <tr><td><strong>Outlier replicates</strong></td><td>A replicate's leave-one-out variance against the others'</td><td>above 2× / 4×</td></tr>

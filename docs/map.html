@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The map and the inspector · MaveScape</title>
-  <meta name="description" content="MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, selections, SVG and PNG export, and the variant inspector's evidence." />
+  <meta name="description" content="MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, nucleotide variants read at the protein level and everything else listed beside the map, sequence tracks below it (domains, conservation, ClinVar, gnomAD, AlphaMissense and your own), selections, SVG and PNG export, and the variant inspector's evidence." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/map.html" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="The map and the inspector" />
-  <meta property="og:description" content="MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, selections, SVG and PNG export, and the variant inspector's evidence." />
+  <meta property="og:description" content="MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, nucleotide variants read at the protein level and everything else listed beside the map, sequence tracks below it (domains, conservation, ClinVar, gnomAD, AlphaMissense and your own), selections, SVG and PNG export, and the variant inspector's evidence." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/map.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -55,6 +55,7 @@
           <li><a href="getting-started.html">Getting started</a></li>
           <li><a href="examples.html">Examples</a></li>
           <li><a href="opening-data.html">Opening your data</a></li>
+          <li><a href="public-data.html">Public data</a></li>
         </ul>
         <h4>Analysis</h4>
         <ul>
@@ -80,7 +81,7 @@
 
     <main id="main" class="doc">
       <h1>The map and the inspector</h1>
-      <p class="doc-lede">The map shows a run's single substitutions, positions across and substitutions down, on a scale centered on the wild type. Click any cell for its evidence in the inspector.</p>
+      <p class="doc-lede">The map shows a run's single substitutions, positions across and substitutions down, on a scale centered on the wild type; a run of nucleotide variants is read for the protein changes they make. Click any cell for its evidence in the inspector.</p>
 
       <h2 id="reading">Reading the map</h2>
       <figure>
@@ -94,6 +95,17 @@
         <li>The <strong>reference residue</strong> at each position is outlined.</li>
       </ul>
       <p>Above the map, the median score of each position; at the right, of each substitution. Positions are numbered on the target and, with an offset, on the reference. The overview strip below shows where the view is.</p>
+
+      <h2 id="nucleotide">Nucleotide variants, at the protein level</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/brca1-sge-dark.webp" width="2000" height="1250" loading="lazy" alt="The map of BRCA1's saturation genome editing scores at the protein level, two stretches of the protein scored; in words, the 3,893 nucleotide variants make 2,251 protein variants, 391 merged; below, the table Not on the map of 1,090 variants, filtered to splice sites" /><img class="shot-light" src="../assets/img/brca1-sge-light.webp" width="2000" height="1250" loading="lazy" alt="The map of BRCA1's saturation genome editing scores at the protein level, two stretches of the protein scored; in words, the 3,893 nucleotide variants make 2,251 protein variants, 391 merged; below, the table Not on the map of 1,090 variants, filtered to splice sites" /></div>
+        <figcaption>BRCA1's saturation genome editing: 3,893 nucleotide variants read for the protein changes they make, and the 1,090 with none to draw listed beside the map.</figcaption>
+      </figure>
+      <p>A run whose variants are named at the nucleotide level, on a DNA target (a codon library, a saturation genome editing screen, a table from MaveDB's <code>hgvs_nt</code>), is scored variant by variant as named, and each variant is read for the protein change it makes (<a href="opening-data.html#names">Variant names</a>): <code>c.5559C&gt;G</code> is <code>p.Tyr1853Ter</code>, a nonsense variant; <code>c.6T&gt;C</code> may be <code>p.Ala2=</code>, synonymous; <code>c.5194-2A&gt;G</code> is at a splice site, with no protein change to name.</p>
+      <p>The map draws the protein: the nucleotide variants that make the same change (two codons for the same substitution, or two synonymous codons) are one cell, merged as DiMSum merges them: their scores weighted by 1/SE², the merged SE √(1/Σ 1/SE²) (averaged unweighted when the table gives no SEs). A variant that changes one amino acid and leaves another codon synonymous is left out of the cell, as DiMSum leaves it out. <strong>In words</strong> says how many nucleotide variants made how many protein variants, and how many were merged. The run's scores stay the nucleotide variants', and the Record menu also writes them at the protein level (<a href="record.html#run-files">A run's files</a>).</p>
+
+      <h3 id="not-on-map">Not on the map</h3>
+      <p>A map of substitutions cannot show a frameshift, an insertion or deletion, a multi-variant, a splice-site, intronic or UTR variant. Beside the map, <strong>Not on the map</strong> lists every one, in order along the target, with its class, its protein change and its score or why it has none; choose a class to see only those. Click one to inspect it.</p>
 
       <h2 id="controls">Settings</h2>
       <ul>
@@ -111,6 +123,18 @@
         <figcaption>Colored by the differential score: the binding site's variants lose fitness only with the ligand. The inspector gives the variant's score in each condition and the difference.</figcaption>
       </figure>
 
+      <h2 id="tracks">Tracks</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/map-tracks-dark.webp" width="2000" height="1250" loading="lazy" alt="The GRB2 example's map with tracks below it, on its positions: UniProt's SH3 domain, its sites and its strands and helices; conservation from PDBe-KB and from an alignment; AlphaMissense's classes at each position; ClinVar's three records; gnomAD's frequencies. Below them the Tracks panel; the inspector shows p.Trp36Ala's annotations: the SH3 2 domain, a beta strand, its conservation and AlphaMissense's 0.9981, likely pathogenic" /><img class="shot-light" src="../assets/img/map-tracks-light.webp" width="2000" height="1250" loading="lazy" alt="The GRB2 example's map with tracks below it, on its positions: UniProt's SH3 domain, its sites and its strands and helices; conservation from PDBe-KB and from an alignment; AlphaMissense's classes at each position; ClinVar's three records; gnomAD's frequencies. Below them the Tracks panel; the inspector shows p.Trp36Ala's annotations: the SH3 2 domain, a beta strand, its conservation and AlphaMissense's 0.9981, likely pathogenic" /></div>
+        <figcaption>GRB2's SH3 domain with its tracks: the intolerant positions are the ones AlphaMissense calls pathogenic; conservation follows them only in part.</figcaption>
+      </figure>
+      <p>Below the map, on its positions and moving with it, <strong>Tracks</strong> lines up what else is known about each position. Hover a track for what it holds there; click it to select that position's variants (a domain's: every position it covers). <strong>Add a track</strong>:</p>
+      <ul>
+        <li><strong>From public data</strong>, through the MaveScape program, by the target's accession or gene only (<a href="public-data.html#annotations">Public data</a>): UniProt's features (domains and regions, sites and motifs, secondary structure); conservation from PDBe-KB's profile of the protein's homologues; AlphaMissense's pathogenicity of every substitution (human proteins); ClinVar's classifications, with their review status as stars; gnomAD's allele frequencies; and for a run of a MaveDB record, MaveDB's own join of ClinVar and gnomAD to its variants.</li>
+        <li><strong>From a file</strong>: your alignment (A3M, FASTA, Stockholm, Clustal; conservation scored as Capra and Singh's <code>score_conservation.py</code> scores it), a predictor's scores (AlphaMissense's, EVE's or ESM1b's downloads, or any table of protein variants and scores), or a custom track (GFF3, or a table of values by position or of stretches). Alignments and GFF3 files can also be dropped on the window.</li>
+      </ul>
+      <p>The run's own tracks are there too, to show when wanted: the reference's residues, coverage (the share of each position's designed substitutions scored), the position effect (the median score, from the wild type's) and its uncertainty (the median SE). In the panel, each track can be shown or hidden, moved, filtered (features by kind; ClinVar by class and review status; gnomAD by frequency), or removed, and names its source: the service, its release and the date it was retrieved, or the file. An annotation numbered on a reference is placed by the target's offset, and only where the target has the residues it names: one that disagrees is refused, saying why, rather than drawn in the wrong place. Annotations are kept with the workspace and its archive, so they reopen offline, and the methods name each with its source and cite it. The inspector shows a variant's annotations: its ClinVar records, gnomAD frequency, predictors' scores, and the features and conservation at its position. <strong>Export</strong> writes the map with its tracks (SVG, PNG) and the tracks shown, position by position (CSV).</p>
+
       <h2 id="selections">Selections</h2>
       <p>Click a cell to select it and see it in the inspector; <kbd>⌘</kbd>-click adds to the selection; <kbd>⇧</kbd>-drag selects a rectangle. <strong>Save as…</strong> keeps the selection by name in the workspace, listed in the dataset tree and under the map; <strong>Export</strong> writes the selected variants with their scores (CSV) or the selection itself (JSON).</p>
       <figure>
@@ -120,12 +144,17 @@
 
       <h2 id="inspector">The variant inspector</h2>
       <p>For a variant, the inspector shows its name as written and in MAVE-HGVS, its class and position; its score with standard error and 95% interval (with the <a href="scoring.html#moderated">moderated combination</a>, by t at the degrees of freedom shown; for rescaled scores, the anchors' uncertainty, SE_scale, beside it), or why it has none (the filter stage that left it out); its flags; each replicate's counts before and after selection, score and whether it was used; with conditions compared, its score in each and each difference with its interval and q (paired, each pair's difference too); every sample's counts; the other substitutions at its position against the run's range; the sequence around it; and the run it comes from.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/merged-variant-dark.webp" width="2000" height="1250" loading="lazy" alt="The inspector for p.Tyr1853Ter of BRCA1's saturation genome editing: a nonsense variant at position 1853, made by two nucleotide variants, c.5559C&gt;G at −2.15 and c.5559C&gt;A at −1.49, averaged to −1.82" /><img class="shot-light" src="../assets/img/merged-variant-light.webp" width="2000" height="1250" loading="lazy" alt="The inspector for p.Tyr1853Ter of BRCA1's saturation genome editing: a nonsense variant at position 1853, made by two nucleotide variants, c.5559C&gt;G at −2.15 and c.5559C&gt;A at −1.49, averaged to −1.82" /></div>
+        <figcaption>A protein variant of a nucleotide run: made by two nucleotide variants, each scored, merged into the cell.</figcaption>
+      </figure>
+      <p>A nucleotide variant also shows its protein change and the base it is at. A protein variant of a nucleotide run (a cell of its map) shows its merged score and the nucleotide variants that make it, each with its score and whether it was used; click one to inspect it. When the table was opened from MaveDB with its mapped variants, the inspector adds <strong>Mapped by MaveDB</strong>: the variant's HGVS on the human reference, its GA4GH VRS identifier and its ClinGen allele (<a href="public-data.html#mapped">Public data</a>).</p>
 
       <h2 id="export">Export</h2>
-      <p><strong>Export</strong> writes the map as SVG (vector, for figures) or PNG at three times the resolution, in the export theme, with its legend.</p>
+      <p><strong>Export</strong> writes the map as SVG (vector, for figures) or PNG at three times the resolution, in the export theme, with its legend and the tracks shown, and the tracks shown as a table (CSV).</p>
 
       <h2 id="accessible">In words and by keyboard</h2>
-      <p>Below the map, <strong>In words</strong> describes it: the cells in each state, the least and most tolerant positions, the scale. Every cell is also in a table. With the map focused, the arrow keys move between cells, each announced, and <kbd>Enter</kbd> selects. Color-vision-friendly colors are a setting in the appearance menu.</p>
+      <p>Below the map, <strong>In words</strong> describes it: the cells in each state, the least and most tolerant positions, the scale, and each track shown. Every cell is also in a table. With the map focused, the arrow keys move between cells, each announced, and <kbd>Enter</kbd> selects. Color-vision-friendly colors are a setting in the appearance menu.</p>
 
       <nav class="doc-pager" aria-label="Pages">
         <a class="prev" href="qc.html"><span>Previous</span>Quality control</a>

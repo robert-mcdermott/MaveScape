@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Remote control, headless runs and scripting · MaveScape</title>
-  <meta name="description" content="Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), and check them before scoring (mavescape validate)." />
+  <meta name="description" content="Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), check them before scoring (mavescape validate), and write a saved run as a MaveDB deposit or tables (mavescape export)." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/scripting.html" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Remote control, headless runs and scripting" />
-  <meta property="og:description" content="Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), and check them before scoring (mavescape validate)." />
+  <meta property="og:description" content="Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), check them before scoring (mavescape validate), and write a saved run as a MaveDB deposit or tables (mavescape export)." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/scripting.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -55,6 +55,7 @@
           <li><a href="getting-started.html">Getting started</a></li>
           <li><a href="examples.html">Examples</a></li>
           <li><a href="opening-data.html">Opening your data</a></li>
+          <li><a href="public-data.html">Public data</a></li>
         </ul>
         <h4>Analysis</h4>
         <ul>
@@ -88,7 +89,7 @@
       <div class="code" data-no-copy><pre><code>{
   "url": "http://127.0.0.1:8820",
   "token": "…",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "pid": 41237
 }</code></pre></div>
       <p>Only programs on this computer can use remote control, addressing it as <code>127.0.0.1</code> or <code>localhost</code>, and web pages on other sites cannot. A MaveScape started with <code>--remote-control</code> while another is running starts on the next free port rather than handing its files over, so the script reaches a window it can drive.</p>
@@ -110,15 +111,24 @@
             <tr><td><code>focus</code></td><td>Shows a table, target, run, selection or variant in the inspector</td></tr>
             <tr><td><code>draft_design</code></td><td>Drafts the design from the column names and reports its problems</td></tr>
             <tr><td><code>set_design</code></td><td>Sets a <code>mavescape-design</code> document, refused with every problem when it does not fit the table</td></tr>
+            <tr><td><code>search_mavedb</code></td><td>Searches MaveDB's published score sets: each match's URN, title, targets, license and size, 100 a page (<code>text</code>, <code>page</code>). Sends only the words (<a href="public-data.html#mavedb">Public data</a>)</td></tr>
+            <tr><td><code>open_mavedb</code></td><td>Opens a published score set as a new workspace: its record, its published scores as the run "Published scores", its counts with a drafted design (<code>urn</code>, <code>counts</code>); a target named by a transcript fetched from NCBI or Ensembl; of several targets the one named by <code>target</code>; with <code>mapped</code>, MaveDB's mapping of the variants to the human reference (VRS); several URNs in <code>urn</code> open together, each record's published scores a run, their counts joined with a design drafted as a condition each</td></tr>
+            <tr><td><code>check_target</code></td><td>Checks the target against its UniProt entry, from MaveScape's cache or through its list of public services: where it sits, the differences, what the entry would change; <code>apply</code> uses them and records the check (<code>accession</code>, <code>target</code>). Sends only the accession (<a href="public-data.html">Public data</a>)</td></tr>
             <tr><td><code>check</code></td><td>Checks a table as scoring would, without scoring: its names against the design's target, the design against its columns, the parameters against the design; says what blocks scoring (<code>design</code>, <code>preset</code>, <code>parameters</code>)</td></tr>
             <tr><td><code>reproduce_run</code></td><td>Recomputes a saved run from its recorded inputs and checks its output hash; refused, saying why, when it differs</td></tr>
             <tr><td><code>score</code></td><td>Scores with a preset (<code>mavescape</code>, <code>enrich2</code> or <code>dimsum</code>, which returns each replicate's fitted scale, shift and error terms) and changed <code>parameters</code>, such as <code>{"model": "ratio"}</code> for a time series by its ends, <code>{"model": "bins-mle"}</code> for sorted bins by maximum likelihood or <code>{"differential": "paired"}</code> to compare conditions by pairs of replicates; with conditions compared, how many variants differ; the existing run when the inputs are the same</td></tr>
             <tr><td><code>qc_findings</code></td><td>Each finding of a run (or of the counts) with its status, value, threshold and rationale, what could cause it and what to do next, and its acknowledgement; <code>finding</code> shows one in the QC view</td></tr>
             <tr><td><code>acknowledge_finding</code></td><td>Acknowledges a finding to review or failing with the <code>reason</code> it is expected (an empty reason withdraws it). Its status stays; the reason goes into the history, the methods and the QC exports. A finding that passes needs none, and is left as it is</td></tr>
             <tr><td><code>select_variants</code></td><td>Selects <code>variants</code> or <code>positions</code> on the map, optionally only those scored, low, filtered or missing, and saves the selection (<code>save_as</code>)</td></tr>
-            <tr><td><code>inspect_variant</code></td><td>A variant's score, SE and interval (with the moderated combination, its degrees of freedom, <code>df</code>; rescaled, the anchors' uncertainty, <code>seScale</code>), flags, replicates and counts (for a regression, each replicate's time points and departure from a line; with conditions compared, each difference with its SE, interval and q)</td></tr>
+            <tr><td><code>inspect_variant</code></td><td>A variant's score, SE and interval (with the moderated combination, its degrees of freedom, <code>df</code>; rescaled, the anchors' uncertainty, <code>seScale</code>), flags, replicates and counts (for a regression, each replicate's time points and departure from a line; with conditions compared, each difference with its SE, interval and q); a nucleotide variant's protein change (<code>protein</code>); a protein variant of a nucleotide run, its nucleotide variants each with its score (<code>nucleotideVariants</code>); a variant MaveDB mapped, its HGVS on the reference, VRS identifier and ClinGen allele (<code>mapped</code>)</td></tr>
             <tr><td><code>render_map</code></td><td>Shows the map with the given coloring (<code>differential</code> for a comparison of conditions, and <code>contrast</code> to choose one), row order, palette and zoom, and returns it in words</td></tr>
-            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>qc-findings</code>, <code>barcodes</code> (a table of barcodes), <code>differential</code> (conditions compared), <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG), <code>selection</code>, <code>archive</code> or <code>package</code> (the analysis package of a run, or of the design with the default parameters) to <code>path</code>. Needs the token</td></tr>
+            <tr><td><code>list_tracks</code></td><td>The tracks beside a run's map, in order: each one's kind, source (service, release, retrieval date, or file), whether it is shown, its filter and the filters it offers, and what it holds; the annotations that could not be read; what can be added, and why not (<a href="map.html#tracks">Tracks</a>)</td></tr>
+            <tr><td><code>add_track</code></td><td>Adds an annotation's tracks: from public data by the target's accession or gene (<code>provider</code>: <code>uniprot-features</code>, <code>pdbe-conservation</code>, <code>alphamissense</code>, <code>clinvar</code>, <code>gnomad</code>, <code>mavedb-annotations</code>), or a file's <code>name</code> and <code>text</code> (an alignment, a predictor's table, a custom track). In the history</td></tr>
+            <tr><td><code>set_track</code></td><td>Shows or hides a <code>track</code> (<code>shown</code>), moves it (<code>position</code>, from 1), or filters it (<code>filter</code>: <code>{"types": […]}</code>, <code>{"classes": […], "stars": 2}</code>, <code>{"min": 1e-5}</code>)</td></tr>
+            <tr><td><code>remove_track</code></td><td>Removes an <code>annotation</code> and its tracks</td></tr>
+            <tr><td><code>mavedb_deposit</code></td><td>What a MaveDB deposit of a run (and <code>condition</code>) would hold: the variants and those left out with why, the target as MaveDB holds it, the columns, the keywords, and what MaveDB requires that the workspace lacks (<code>missing</code>). Writes nothing (<a href="record.html#mavedb">Depositing in MaveDB</a>)</td></tr>
+            <tr><td><code>set_mavedb_details</code></td><td>Sets the MaveDB details (<code>details</code>: title, abstract, license, publications such as <code>"PubMed 29785012"</code> or a DOI, raw reads, contributors' ORCID iDs, the experiment's URN, keywords…); undoable, in the history</td></tr>
+            <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>protein-scores</code> (a nucleotide run's scores at the protein level), <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>qc-findings</code>, <code>barcodes</code> (a table of barcodes), <code>differential</code> (conditions compared), <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG, with the tracks shown), <code>tracks</code> (the tracks shown, CSV), <code>selection</code>, <code>archive</code>, <code>package</code> (the analysis package of a run, or of the design with the default parameters) or <code>mavedb</code> (a run's MaveDB deposit, a ZIP) to <code>path</code>. Needs the token</td></tr>
           </tbody>
         </table>
       </div>
@@ -160,7 +170,7 @@ act("export", what="scores", path="/data/scores.csv")</code></pre></div>
       <h2 id="headless">Headless runs</h2>
       <p><code>mavescape run</code> scores a count table with its design without a window, for pipelines and continuous integration. It starts MaveScape on a private port with a temporary library, opens it in a headless Chrome (or Chromium, Edge or Brave: <code>--chrome</code>, or the <code>CHROME</code> variable), performs the analysis through the actions above, writes the files to a folder and stops.</p>
       <div class="code wrap"><pre><code><span class="prompt">$ </span>mavescape run --design design.json --out results/ counts.csv</code></pre></div>
-      <div class="code wrap" data-no-copy><pre><code>MaveScape 0.2.0: running in Google Chrome
+      <div class="code wrap" data-no-copy><pre><code>MaveScape 0.3.0: running in Google Chrome
 [1] new_workspace: ok (0.0 s) Started a new workspace, "GRB2 SH3 domain, Domainome abundance (aPCA)".
 [2] open_files: ok (0.1 s) Opened the table counts.csv.
 [3] set_design: ok (0.0 s) Set the design of counts.csv: two-population, 3 replicates.
@@ -176,9 +186,10 @@ Done in 1.2 s: 9 files written to results (run.json lists them).</code></pre></d
           <thead><tr><th>File</th><th>What it holds</th></tr></thead>
           <tbody>
             <tr><td><code>scores.csv</code></td><td>The scores in MaveDB's columns; with several conditions, <code>scores_&lt;condition&gt;.csv</code> for each</td></tr>
+            <tr><td><code>protein_scores.csv</code></td><td>For nucleotide variants of a DNA target, the scores at the protein level, the nucleotide variants of each protein variant merged as DiMSum merges them</td></tr>
             <tr><td><code>counts.csv</code>, <code>qc_samples.csv</code>, <code>qc_variants.csv</code>, <code>qc_findings.csv</code></td><td>The counts scored; quality control per sample and per variant; and the findings, each with what to do and its acknowledgement</td></tr>
             <tr><td><code>differential.csv</code>, <code>barcodes.csv</code></td><td>With conditions compared, the differential scores; for a table of barcodes, each barcode</td></tr>
-            <tr><td><code>map.svg</code></td><td>The variant-effect map (protein-level variants)</td></tr>
+            <tr><td><code>map.svg</code></td><td>The variant-effect map (protein variants, or nucleotide variants of a DNA target read at the protein level)</td></tr>
             <tr><td><code>provenance.json</code>, <code>methods.md</code>, <code>references.bib</code></td><td>The record and the methods paragraph with its references</td></tr>
             <tr><td><code>workspace.msz</code></td><td>The analysis as a workspace archive, to open in the window or run again</td></tr>
             <tr><td><code>run.json</code></td><td>The command, the inputs and every output with their SHA-256, each step with its outcome and time, the run's id and output hash, and its QC (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md">FORMATS.md</a>)</td></tr>
@@ -201,6 +212,12 @@ Done in 1.2 s: 9 files written to results (run.json lists them).</code></pre></d
   …
   What is missing:
   - Cells carried into selection: QC infers a bottleneck from how much replicates disagree; …</code></pre></div>
+
+      <h2 id="export">Exporting a saved run</h2>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>mavescape export --format mavedb --out deposit/ --details details.json analysis.msz</code></pre></div>
+      <p><code>mavescape export</code> writes a run of a saved workspace (the latest, or <code>--run</code>) without a window. <code>--format mavedb</code> writes it as a MaveDB deposit: the scores, counts, column descriptions, experiment and score set as MaveDB takes them (<a href="record.html#mavedb">Depositing in MaveDB</a>), one folder per condition when there are several (or <code>--condition</code>). <code>--details details.json</code> sets the MaveDB details first, as the <code>set_mavedb_details</code> action takes them:</p>
+      <div class="code wrap"><pre><code>{"abstract": "…", "license": "CC0", "publications": ["PubMed 29785012"], "contributors": ["0000-0002-1825-0097"]}</code></pre></div>
+      <p>What MaveDB requires that the workspace lacks is said on standard error and in <code>export.json</code>, and named in the deposit's README; the files are written all the same, and <code>--strict</code> exits 1 instead. <code>--format tables</code> writes the run's tables, methods and record as <code>mavescape run</code> does, from the saved workspace. With <code>--time</code> (or <code>SOURCE_DATE_EPOCH</code>) every file is the same bytes for the same workspace. Nothing is sent to MaveDB: upload the deposit yourself.</p>
 
       <h2 id="later">Coming</h2>
       <p>An MCP server for AI agents on the same actions (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/mavescape-spec/roadmap.md">roadmap</a>).</p>

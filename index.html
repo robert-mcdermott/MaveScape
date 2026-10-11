@@ -48,7 +48,7 @@
   <main id="main">
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="https://github.com/robert-mcdermott/mavescape/releases/tag/v0.2.0"><span class="pill">v0.2.0</span> Counts to a trustworthy map: scoring, quality control, the map and a record that reopens identically</a>
+        <a class="eyebrow" href="https://github.com/robert-mcdermott/mavescape/releases/tag/v0.3.0"><span class="pill">v0.3.0</span> Counts to a trustworthy map: scoring, quality control, the map and a record that reopens identically</a>
         <h1>Variant-effect scores <span class="accent">you can check</span></h1>
         <p class="lede">MaveScape turns the variant count tables of a deep mutational scan into functional scores with standard errors, quality control that says when not to trust them, and an interactive variant-effect map, and keeps every analysis decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R. Files are analyzed in your browser and never leave your machine.</p>
         <figure class="hero-shot">
@@ -132,6 +132,7 @@
               <li>MAVE-HGVS checked against mavehgvs on 16,959 strings</li>
               <li>Every problem that blocks scoring listed, by line</li>
               <li>One file per sample joined into one table</li>
+              <li>Several MaveDB score sets opened together, a condition each</li>
             </ul>
             <a class="more-link" href="docs/opening-data.html">Opening your data</a>
           </div>
@@ -207,6 +208,7 @@
             <h3>Every substitution, and what is not there</h3>
             <p>Positions across, substitutions down, colored on a scale centered on the wild type. Missing, filtered and low-confidence measurements are drawn their own way, never as "no effect". Click a cell for its evidence: the score with its interval, each replicate, every sample's counts and the sequence around it.</p>
             <ul class="checklist">
+              <li>Tracks below it: domains, conservation, AlphaMissense, ClinVar, gnomAD and your own</li>
               <li>Selections saved by name, exported with their scores</li>
               <li>SVG and PNG export; the map described in words</li>
               <li>Keyboard operation, with each cell announced</li>
@@ -223,8 +225,9 @@
           <div class="feature-text">
             <span class="kicker">The record</span>
             <h3>Files a reviewer can repeat</h3>
-            <p>Scores and counts in MaveDB's upload columns, QC per sample and per variant, provenance with every input's checksum, and a methods paragraph with its references in BibTeX. The workspace archive holds the tables, the design, the runs and the history, and reopens identically.</p>
+            <p>Scores and counts in MaveDB's upload columns, QC per sample and per variant, provenance with every input's checksum, and a methods paragraph with its references in BibTeX. A run becomes a MaveDB deposit that MaveDB's own validators accept, the methods as its analysis and the readout as its keywords. The workspace archive holds the tables, the design, the runs and the history, and reopens identically.</p>
             <ul class="checklist">
+              <li>MaveDB deposits checked by MaveDB's own validators, never sent</li>
               <li>Archives written the same bytes in every time zone</li>
               <li>Edited runs, tables and histories caught on reopening</li>
               <li>Every file described in FORMATS.md</li>
@@ -249,7 +252,7 @@
           <a class="card" href="docs/examples.html">
             <span class="icon-badge mint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 19l-6-10V3"/></svg></span>
             <h3>Examples with known answers</h3>
-            <p>Three published experiments from MaveDB (two populations, a growth time series, sorted bins) and six simulated ones whose true effects are known, one with problems to find; each with its question, guided steps and what to expect.</p>
+            <p>Three published experiments from MaveDB (two populations, a growth time series, sorted bins), two score sets opened from it (published scores; a saturation genome editing screen of nucleotide variants) and six simulated ones whose true effects are known, one with problems to find; each with its question, guided steps and what to expect.</p>
           </a>
           <a class="card" href="docs/scripting.html">
             <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
@@ -282,13 +285,17 @@
               <tr><td><strong>Sorted bins</strong></td><td>Factor IX's published scores (MaveDB); fitdistrplus on a simulated sort</td><td class="agree">within 1.3 × 10⁻¹⁵; 3 × 10⁻⁷</td></tr>
               <tr><td><strong>Barcodes</strong></td><td>dms_variants' <code>func_scores</code> by barcode and by substitution, on a simulated library read three ways</td><td class="agree">within 5 × 10⁻¹³</td></tr>
               <tr><td><strong>Replicates</strong></td><td>metafor 5.2 REML on 2,865 variants</td><td class="agree">within 3.4 × 10⁻¹²</td></tr>
-              <tr><td><strong>Examples</strong></td><td>Nine, three of them published experiments from MaveDB</td><td class="agree">exactly the findings each teaches; Hsp90's published fitness, r 0.95</td></tr>
+              <tr><td><strong>Examples</strong></td><td>Thirteen, three of them published experiments from MaveDB and four opened from it, two score sets as two conditions among them</td><td class="agree">exactly the findings each teaches; Hsp90's published fitness, r 0.95; BRCA1 RING's published replicate scores to 2 × 10⁻¹⁴</td></tr>
               <tr><td><strong>Readiness</strong></td><td>Every example and fixture with a part taken away: 74 workspaces</td><td class="agree">names what is missing; agrees with the engine on every analysis</td></tr>
               <tr><td><strong>Intervals</strong></td><td>1,040 simulated experiments of 26 kinds, and dms_variants' simulated libraries</td><td class="agree">hold the truth 94–97% of the time</td></tr>
-              <tr><td><strong>Variant names</strong></td><td>mavehgvs 0.8.1 on 16,959 strings</td><td class="agree">every decision and canonical form</td></tr>
+              <tr><td><strong>Variant names</strong></td><td>mavehgvs 0.8.1 on 16,959 strings and its target-sequence tests</td><td class="agree">every decision and canonical form</td></tr>
+              <tr><td><strong>Protein changes</strong></td><td>biocommons hgvs 1.5.7 on 16,188 nucleotide variants of three transcripts; the protein names of five MaveDB records</td><td class="agree">every one</td></tr>
+              <tr><td><strong>Nucleotide to protein</strong></td><td>DiMSum 1.4's merge of CBS's 11,478 codon variants</td><td class="agree">within 5 × 10⁻¹³</td></tr>
+              <tr><td><strong>GenBank</strong></td><td>Biopython 1.88 on two RefSeq mRNAs, a plasmid and a spliced gene</td><td class="agree">every feature, sequence and translation</td></tr>
               <tr><td><strong>Quality control</strong></td><td>Simulated experiments with one planted problem each</td><td class="agree">exactly their findings, three seeds</td></tr>
               <tr><td><strong>The map</strong></td><td>BRCA1's RING domain</td><td class="agree">the zinc ligands least tolerant</td></tr>
               <tr><td><strong>The record</strong></td><td>Workspaces saved, reopened and saved again</td><td class="agree">the same bytes; every export identical</td></tr>
+              <tr><td><strong>MaveDB deposits</strong></td><td>MaveDB's own validators (its <code>mavedb</code> package, mavehgvs, biocommons hgvs) on 19 deposits of every kind of run and target; each read back and written again</td><td class="agree">all accepted; the same bytes</td></tr>
               <tr><td><strong>Remote control</strong></td><td>Every action in the browser against the same analysis in Node</td><td class="agree">identical scores and exports</td></tr>
             </tbody>
           </table>
