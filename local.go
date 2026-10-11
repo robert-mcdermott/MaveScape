@@ -64,7 +64,7 @@ func fileKind(name string) string {
 		return "table"
 	case has(".fasta", ".fa", ".fna", ".faa", ".fas", ".seq"):
 		return "sequence"
-	case has(".gb", ".gbk", ".genbank"):
+	case has(".gb", ".gbk", ".gbff", ".genbank", ".ape"):
 		return "genbank"
 	case has(".a3m", ".aln", ".sto", ".stockholm"):
 		return "alignment"

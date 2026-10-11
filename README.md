@@ -31,12 +31,15 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > cause it and what to do. Replicates are combined under a shared error model whose 95% intervals
 > hold the truth 94–97% of the time in 26 kinds of simulated experiment. For the open workspace,
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
-> would add, and writes the analysis package that `mavescape run` reads. Ten examples are on the Start page (four published, six simulated);
+> would add, and writes the analysis package that `mavescape run` reads. Eleven examples are on the Start page (five published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
 > [roadmap](mavescape-spec/roadmap.md)'s wave 2 is complete; wave 3 brings public data in and out,
 > through a fixed list of services: a target checked against its UniProt entry, and any published
 > MaveDB score set opened by search or URN, its scores on the map as published and its counts ready
-> to score again.
+> to score again. The whole of MAVE-HGVS is read: nucleotide variants are read for the protein
+> changes they make (checked against biocommons hgvs) and drawn at the protein level as DiMSum
+> merges them, everything a map of substitutions cannot show listed beside it; targets come from
+> GenBank files, or from the RefSeq or Ensembl transcript a MaveDB record names.
 
 ## What is a MAVE?
 
@@ -83,7 +86,8 @@ opens in its own window.
 - **Variant counts**: a table with one row per variant and one column per sample (CSV, TSV or
   Excel), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per
   sample; or a table of barcode counts with its barcode-to-variant map.
-- **The target sequence** the variants are named against (FASTA, or pasted).
+- **The target sequence** the variants are named against (FASTA, a GenBank file such as a
+  plasmid map or a RefSeq record, or pasted).
 - **The design**: which column is which sample, its role, condition and replicate; a sample sheet
   fills it in.
 - Or **published scores**, from MaveDB and other sources.
@@ -147,7 +151,7 @@ mavescape run --design design.json --out strict/ --strict --acknowledge "coverag
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
 API calls from other web pages, and serves its page with a strict Content-Security-Policy, so the
 page contacts nothing but the program. Your files never leave your computer. The program fetches
-public data (MaveDB's score sets and a target's UniProt entry now; structures and annotations to come) from a
+public data (MaveDB's score sets, a target's UniProt entry, and the RefSeq or Ensembl transcript a record names now; structures and annotations to come) from a
 fixed list of services, sending public identifiers, and caches each answer with where and when it
 came from; a request that would send a sequence is made only after you confirm it.
 [`docs/NETWORK.md`](docs/NETWORK.md) lists every request. `--offline` uses cached copies only and

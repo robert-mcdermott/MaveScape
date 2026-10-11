@@ -5,9 +5,10 @@
 
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
-import { readArchive, writeArchive } from '../lib/archive.js';
+import { readArchive, writeArchive, sourceFiles } from '../lib/archive.js';
 import { writePackage } from '../lib/package.js';
-import { barcodesCSV, countsCSV, differentialCSV, provenanceJSON, provenanceText, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
+import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, provenanceJSON, provenanceText, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
+import { proteinView } from '../lib/collapse.js';
 import { writeMethods } from '../lib/methods.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../lib/findings.js';
 import { sha256 } from '../lib/sha256.js';
@@ -39,7 +40,7 @@ export async function methodsOf(app, run) {
 
 // --- A run's files ------------------------------------------------------------------------------
 
-export const RUN_FILES = ['scores', 'counts', 'qc-samples', 'qc-variants', 'qc-findings', 'barcodes', 'differential', 'provenance', 'methods', 'references'];
+export const RUN_FILES = ['scores', 'protein-scores', 'counts', 'qc-samples', 'qc-variants', 'qc-findings', 'barcodes', 'differential', 'provenance', 'methods', 'references'];
 
 // A run's file of one kind, made (not downloaded): { name, type, text }. Throws when the run's
 // scores cannot be recomputed.
@@ -51,6 +52,11 @@ export async function runFile(app, run, kind, condition = 0) {
   const base = `${safe(app.store.ws.name)}_${safe(run.name)}${results.conditions.length > 1 ? `_${safe(results.conditions[condition].name)}` : ''}`;
   const csv = (name, text) => ({ name: `${base}_${name}.csv`, type: 'text/csv', text });
   if (kind === 'scores') return csv('scores', scoresCSV(results, run, condition));
+  if (kind === 'protein-scores') {
+    const view = proteinView(results);
+    if (!view) throw new Error(`${run.name} names protein variants: its scores are at the protein level already.`);
+    return csv('protein_scores', proteinScoresCSV(view, condition));
+  }
   if (kind === 'counts') {
     if (run.inputs.design.model === 'scores') throw new Error(`${run.name} holds published scores: it has no counts to export.`);
     const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
@@ -93,6 +99,7 @@ export function runExportItems(app, run, condition = 0) {
   return [
     { section: 'MaveDB columns' },
     { label: 'Scores (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'scores', condition) },
+    ...(run.inputs.design.variants.level !== 'protein' && run.inputs.design.targets?.[0]?.sequenceType === 'dna' ? [{ label: 'Scores at the protein level, nucleotide variants merged (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'protein-scores', condition) }] : []),
     ...(published ? [] : [{ label: 'Counts scored (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'counts', condition) }]),
     ...((run.inputs.design.conditions?.length ?? 0) > 1 && run.inputs.parameters.differential ? [{ label: 'Differential scores between conditions (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'differential', condition) }] : []),
     '-',
@@ -149,7 +156,8 @@ export async function selectionFile(app, selection, format) {
   if (format === 'json') return { name: `${safe(selection.name ?? 'selection')}.json`, type: 'application/json', text: selectionJSON(selection, run) };
   const entry = run ? await ensureResults(app, run) : null;
   if (!entry?.results) throw new Error('The selection\'s run could not be recomputed, so its scores cannot be exported.');
-  return { name: `${safe(selection.name ?? 'selection')}.csv`, type: 'text/csv', text: selectionCSV(selection.keys, entry.results, run, selection.condition ?? 0) };
+  // A nucleotide run's selection is of its map's protein variants.
+  return { name: `${safe(selection.name ?? 'selection')}.csv`, type: 'text/csv', text: selectionCSV(selection.keys, proteinView(entry.results) ?? entry.results, run, selection.condition ?? 0) };
 }
 
 export async function exportSelection(app, selection, format) {
@@ -170,7 +178,7 @@ export async function archiveFile(app, { includeTables = true } = {}) {
   if (includeTables) {
     sources = new Map();
     for (const s of ws.sources) {
-      for (const f of s.files?.length ? s.files : [s]) {
+      for (const f of sourceFiles(s)) {
         const bytes = await app.library.getFile(f.sha256);
         if (!bytes) throw new Error(`${f.fileName ?? s.name} is not in the library; export with checksums only.`);
         sources.set(f.sha256, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));

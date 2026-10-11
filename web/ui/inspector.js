@@ -4,6 +4,7 @@
 
 import { h, icon, clear, relativeTime, formatBytes, formatCount } from './dom.js';
 import { variantSection } from './variant-inspector.js';
+import { targetOriginText } from '../lib/genbank.js';
 import { retrievalText } from '../lib/uniprot.js';
 import { recordView } from './mavedb.js';
 
@@ -58,7 +59,9 @@ export function mountInspector(app) {
         h('dt', 'Offset'), h('dd', String(target.offset ?? 0)),
         ids.uniprot ? [h('dt', 'UniProt'), h('dd', ids.uniprot)] : null,
         ids.gene ? [h('dt', 'Gene'), h('dd', ids.gene)] : null,
-        target.reference ? [h('dt', 'Checked'), h('dd', `against UniProt ${target.reference.accession} (${retrievalText(target.reference)}): positions ${target.reference.start}–${target.reference.end}${target.reference.identical ? ', identical' : ''}`)] : null),
+        target.reference ? [h('dt', 'Checked'), h('dd', `against UniProt ${target.reference.accession} (${retrievalText(target.reference)}): positions ${target.reference.start}–${target.reference.end}${target.reference.identical ? ', identical' : ''}`)] : null,
+        // Where its sequence came from (wave 3, slice 3): a GenBank file, NCBI, Ensembl.
+        target.origin ? [h('dt', 'From'), h('dd', targetOriginText(target.origin))] : null),
       h('p.mono', { style: { fontSize: '11px', wordBreak: 'break-all', margin: '8px 0 0', color: 'var(--text-2)' } }, target.sequence.length > 240 ? `${target.sequence.slice(0, 240)}…` : target.sequence));
   }
 

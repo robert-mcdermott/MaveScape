@@ -5,10 +5,10 @@
 //
 //   node validation/run.mjs [suite …] [--verbose] [--require-data]
 //
-// Suites: accessibility, designs (external data), enrich2 (external data), hgvs, import (external
-// data), experiment (external data), scoring, qc, map and roundtrip (their last checks need
-// external data), readiness, examples (its last checks need external data), public-data; all by
-// default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// Suites: accessibility, designs (external data), enrich2 (external data), hgvs, consequences
+// (external data), import (external data), experiment (external data), scoring, qc, map and
+// roundtrip (their last checks need external data), readiness, examples (its last checks need
+// external data), public-data; all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -24,21 +24,24 @@ import { DESIGN_CASES, dataChecks, readDesign, readTable } from './design-cases.
 import { checkSchema } from './json-schema.mjs';
 import { enrich2Combination, normalizers, ratioScores, regressionScores, replicateCounts } from './enrich2-formulas.mjs';
 import { summarizeDesign, validateDesign } from '../web/lib/design.js';
-import { parseHgvs, formatPosition } from '../web/lib/hgvs.js';
+import { parseHgvs, formatPosition, targetMismatches } from '../web/lib/hgvs.js';
+import { codingFrame, consequenceOf, nucleotideMismatches } from '../web/lib/consequence.js';
+import { compareConsequences, compareDimsumAggregate, compareGenBank, sameProtein, transcriptOf } from './consequence-cases.mjs';
+
 import { cellText, columnText, createTableParser, parseTable } from '../web/lib/csv.js';
 import { detectLayout, draftDesign, namesFromSequences, reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { buildCountSet, joinCountTables } from '../web/lib/counts.js';
-import { KIND_NAMES } from '../web/lib/variants.js';
+import { buildVariants, KIND_NAMES, summarizeVariants } from '../web/lib/variants.js';
 import { parseFasta, targetFromSequence } from '../web/lib/target.js';
 import { createRandom, shuffle } from '../web/lib/random.js';
 import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
 import { designFromSampleSheet, designStructure, sampleSheetCSV } from '../web/lib/samplesheet.js';
 import { readinessDatasets, REMOVALS, caseOf, probe, workspaceOf } from './readiness-cases.mjs';
 import { writePackage } from '../web/lib/package.js';
-import { EXAMPLE_DATASETS, MissingExampleData, openExampleInNode, raisedOf } from './example-cases.mjs';
+import { EXAMPLE_DATASETS, MissingExampleData, openExampleInNode, raisedOf, recordTarget } from './example-cases.mjs';
 import { proteinChange } from '../web/lib/codons.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf, uniparcEntries } from '../web/lib/uniprot.js';
-import { countsDesign, readoutOf, readScoreSet, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
+import { countsDesign, mappedCSV, mappedVariants, readMapped, readoutOf, readScoreSet, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
 import { writeMethods } from '../web/lib/methods.js';
 import { intervalOf } from '../web/lib/exports.js';
 import { readZip } from '../web/lib/zip.js';
@@ -370,6 +373,141 @@ const suites = {
     check('hgvs', `the reason for refusing, word for word (${reference.counts.invalid} refused)`, `${show(disagree.reason)} differ`, !disagree.reason.length, '0');
     check('hgvs', `the canonical form (${reference.counts.valid} valid)`, `${show(disagree.canonical)} differ`, !disagree.canonical.length, '0');
     check('hgvs', 'the prefix, target, variant types, positions, sequences, synonymous and identical flags', `${show(disagree.parts)} differ`, !disagree.parts.length, '0');
+    // mavehgvs's own tests against a target sequence (wave 3, slice 3): protein variants by
+    // hgvs.js's check, nucleotide variants by consequence.js's (the target read from its first base).
+    const against = reference.targets.map((t) => {
+      const p = parseHgvs(t.s);
+      const ok = p.ok && !(p.prefix === 'p' ? targetMismatches(p, t.target) : nucleotideMismatches(p, codingFrame({ sequenceType: 'dna', sequence: t.target, codingStart: 1 }))).length;
+      return { ...t, ours: ok };
+    });
+    const differ = against.filter((t) => t.ours !== t.ok);
+    check('hgvs', `against a target sequence, valid or not as mavehgvs decides: its own tests (${against.length} pairs, ${against.filter((t) => t.ok).length} valid)`, `${differ.length ? `${differ.length}: ${differ.slice(0, 3).map((t) => `${t.s} on ${t.target}`).join('; ')}` : 0} disagree`, against.length >= 50 && !differ.length, '0');
+  },
+
+  // Full MAVE-HGVS (wave 3, slice 3): each nucleotide variant's protein change against biocommons
+  // hgvs's (reference/consequences.json), the targets from GenBank against Biopython's reading
+  // (reference/genbank.json), the merge at the protein level against DiMSum's own code
+  // (reference/dimsum-aggregate.json), the protein names published beside nucleotide names, and
+  // every variant of the imported records read against its target.
+  consequences() {
+    const reference = JSON.parse(readFileSync(new URL('./reference/consequences.json', import.meta.url), 'utf8'));
+    const counted = reference.transcripts.map((t) => `${t.transcript} ${t.published} published + ${t.generated} generated`).join('; ');
+    check('consequences', 'reference made with', `biocommons hgvs ${reference.versions.hgvs}, Biopython ${reference.versions.biopython}: ${counted}`, reference.versions.hgvs === '1.5.7', 'hgvs 1.5.7');
+    const compared = compareConsequences(reference);
+    check('consequences', `each nucleotide variant's protein change as biocommons hgvs's, in MAVE-HGVS's forms (${compared.compared} variants on three transcripts: substitutions, nonsense, frameshifts, start and stop lost, deletions, insertions, duplications, deletion-insertions, UTR and splice)`, `${compared.agree} agree (${Object.entries(compared.byForm).map(([k, v]) => `${k} ${v}`).join(', ')}); ${compared.disagree.length ? `${compared.disagree.length} differ: ${compared.disagree.slice(0, 3).map((d) => `${d.c} ${d.theirs} → ${d.ours}`).join('; ')}` : 'none differs'}`, compared.compared >= 16000 && !compared.disagree.length, 'all');
+
+    // GenBank: four records as Biopython reads them.
+    const genbank = compareGenBank(JSON.parse(readFileSync(new URL('./reference/genbank.json', import.meta.url), 'utf8')));
+    check('consequences', 'GenBank records read as Biopython reads them (two RefSeq mRNAs, a plasmid of three coding features, one on the reverse strand, and a gene joined from three exons): each record\'s fields and sequence, every feature\'s location, each coding feature\'s bases, translation and check against the record\'s own', `${genbank.records} records, ${genbank.features} features, ${genbank.coding} coding; ${genbank.differ.length ? `${genbank.differ.length} differ: ${genbank.differ.slice(0, 3).map((d) => `${d.record} ${d.field}`).join('; ')}` : 'none differs'}`, genbank.records === 4 && genbank.coding === 6 && !genbank.differ.length, 'all');
+
+    // Every variant of the imported records, against its target: the feasibility tables, the
+    // examples' and the records with a transcript for their target.
+    const rec = (urn) => readScoreSet(JSON.parse(readFileSync(new URL(`fixtures/public-data/mavedb/${urn.replaceAll(':', '_')}.json`, import.meta.url), 'utf8')));
+    const designs = Object.fromEntries(DESIGN_CASES.map((c) => [c.name, readDesign(c.design)]));
+    const example = (id) => JSON.parse(readFileSync(new URL(`../web/${exampleById(id).files.design}`, import.meta.url), 'utf8'));
+    const cbs = cbsCase(dataset('mavedb-cbs')).design.targets[0];
+    const tables = [
+      ['GRB2 SH3 (counts)', 'mavedb-grb2-sh3', 'counts.csv', 'protein', example('grb2-sh3').targets[0]],
+      ['BRCA1 RING, amino acids', 'mavedb-brca1-ring', 'aa/counts.csv', 'protein', designs['brca1-ring-e2'].targets[0]],
+      ['BRCA1 RING, nucleotides', 'mavedb-brca1-ring', 'nt/counts.csv', 'nucleotide', designs['brca1-ring-e2'].targets[0]],
+      ['factor IX', 'mavedb-factor9', 'counts.csv', 'protein', designs.factor9.targets[0]],
+      ['Hsp90 (codons)', 'mavedb-hsp90', 'counts.csv', 'nucleotide', example('hsp90').targets[0]],
+      ['CBS, low B6', 'mavedb-cbs', 'low-b6-counts.csv', 'nucleotide', cbs],
+      ['CBS, high B6', 'mavedb-cbs', 'high-b6-counts.csv', 'nucleotide', cbs],
+      ['PTEN (scores)', 'mavedb-pten-vampseq', 'scores.csv', 'protein', recordTarget(rec('urn:mavedb:00000013-a-1'))],
+      ['BRCA1 SGE (scores; NM_007294.3)', 'mavedb-brca1-sge', 'scores.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00000097-0-2'))],
+      ['BRCA1 SGE (counts)', 'mavedb-brca1-sge', 'counts.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00000097-0-2'))],
+      ['TP53 DNA-binding domain (NM_000546.6)', 'mavedb-tp53-dbd', 'scores.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00001277-a-1'))],
+      ['BAP1 exon 1 (ENST00000460680.5, read on .6)', 'mavedb-bap1-sge', 'scores.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00000662-a-2'))],
+      ['TP53 base editing (ENST00000269305.9)', 'mavedb-tp53-base-editing', 'scores.csv', 'nucleotide', recordTarget(rec('urn:mavedb:00001245-a-1'))],
+    ];
+    const lines = [];
+    let all = true;
+    let names = 0;
+    let badNames = [];
+    const kinds = {};
+    const readTables = new Map();
+    for (const [label, set, path, level, target] of tables) {
+      const table = parseTable(dataset(set).bytes(path));
+      readTables.set(label, { table, target });
+      const column = level === 'protein' ? 'hgvs_pro' : 'hgvs_nt';
+      const v = buildVariants(columnText(table.columns.find((c) => c.name === column)), { level, target });
+      const s = summarizeVariants(v);
+      if (v.proKey) {
+        for (let i = 0; i < v.n; i += 1) {
+          if (!v.proKey[i]) continue;
+          names += 1;
+          if (!parseHgvs(v.proKey[i]).ok) badNames.push(v.proKey[i]);
+          kinds[KIND_NAMES[v.kind[i]]] = (kinds[KIND_NAMES[v.kind[i]]] ?? 0) + 1;
+        }
+      }
+      lines.push(`${label}: ${s.valid + s.warning} of ${s.total}${s.warning ? ` (${s.warning} leniently)` : ''}`);
+      all &&= s.invalid === 0 && s.total > 0;
+    }
+    check('consequences', 'every variant of the imported records parses and agrees with its target: the feasibility tables, the examples\' and the records whose target is a transcript (fetched as NCBI and Ensembl send them)', lines.join('; '), all, 'every one');
+    // Their protein changes, and the reference's, are MAVE-HGVS as mavehgvs reads it (strict).
+    for (const entry of reference.transcripts) {
+      const frame = codingFrame(transcriptOf(entry));
+      for (const [c] of entry.variants) {
+        const parsed = parseHgvs(c, { mode: 'lenient' });
+        const out = parsed.ok ? consequenceOf(parsed, frame) : null;
+        if (out?.protein) {
+          names += 1;
+          if (!parseHgvs(out.protein).ok) badNames.push(out.protein);
+        }
+      }
+    }
+    badNames = [...new Set(badNames)];
+    check('consequences', 'every protein change MaveScape names is MAVE-HGVS, strict (as mavehgvs reads it)', `${names} names (of the records: ${Object.entries(kinds).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ')}); ${badNames.length ? `${badNames.length} not: ${badNames.slice(0, 3).join(', ')}` : 'all are'}`, names > 20000 && !badNames.length, 'all');
+
+    // The protein names the records publish beside their nucleotide names: the same protein.
+    const published = [['TP53 base editing (ENST00000269305.9)', 465], ['CBS, low B6', 11478], ['CBS, high B6', 10802], ['BRCA1 RING, nucleotides', 20724], ['Hsp90 (codons)', 568]];
+    const pubLines = [];
+    let pubAll = true;
+    for (const [label, rows] of published) {
+      const { table, target } = readTables.get(label);
+      const nt = columnText(table.columns.find((c) => c.name === 'hgvs_nt'));
+      const pro = columnText(table.columns.find((c) => c.name === 'hgvs_pro'));
+      const v = buildVariants(nt, { level: 'nucleotide', target });
+      let exact = 0;
+      let same = 0;
+      const differ = [];
+      pro.forEach((p, i) => {
+        const theirs = p.replace(/^[^:]+:(?=p\.)/, '');
+        if (v.proKey[i] === theirs) exact += 1;
+        if (sameProtein(theirs, v.proKey[i], KIND_NAMES[v.kind[i]])) same += 1;
+        else differ.push(`${nt[i]}: ${theirs}, not ${v.proKey[i]}`);
+      });
+      pubLines.push(`${label}: ${same} of ${table.rows} (${exact} written alike)${differ.length ? `; ${differ.slice(0, 2).join('; ')}` : ''}`);
+      pubAll &&= table.rows === rows && same === rows;
+    }
+    check('consequences', 'the protein names the records publish beside their nucleotide names describe the protein MaveScape\'s translation makes (written alike, or as MaveScape writes them: p.Asp41= for p.Asp41Asp, a substitution\'s codon left synonymous unnamed, nothing after a stop, a change of the start codon start lost)', pubLines.join('; '), pubAll, 'every one');
+
+    // Several targets: VarChAMP's 28 genes, each opened on its own, the others' variants set aside.
+    {
+      const record = rec('urn:mavedb:00001237-a-1');
+      const table = parseTable(dataset('mavedb-varchamp').bytes('scores.csv'));
+      const names = columnText(table.columns.find((c) => c.name === 'hgvs_nt'));
+      const choices = targetsOf(record).choices;
+      let read = 0;
+      let elsewhere = true;
+      for (const choice of choices) {
+        const { targets, others } = targetsOf(record, { target: choice.label });
+        const v = buildVariants(names, { level: 'nucleotide', target: targets[0] });
+        const s = summarizeVariants(v);
+        read += s.valid + s.warning;
+        elsewhere &&= s.invalid === 0 && s.otherTarget + s.valid + s.warning === names.length && others.length === choices.length - 1;
+      }
+      const genome = targetsOf(rec('urn:mavedb:00001228-a-1'));
+      check('consequences', 'a score set of several targets (VarChAMP, 28 genes) opened one target at a time: each one\'s variants valid on it, the others\' set aside; a genome named as the target (DDX3X\'s saturation genome editing, NC_000023.11) is not fetched, and says so', `${choices.length} targets; ${read} of ${names.length} variants read on their own target${elsewhere ? ', the rest set aside each time' : ''}; the genome: ${genome.problems[0]?.slice(0, 80)}…`, choices.length === 28 && read === names.length && elsewhere && !genome.targets.length && !genome.pending.length && /does not fetch a genome/.test(genome.problems[0]), '28; all; refused');
+    }
+
+    // DiMSum's merge: CBS's codon variants with the fitness and sigma DiMSum was given.
+    {
+      const aggregate = JSON.parse(readFileSync(new URL('./reference/dimsum-aggregate.json', import.meta.url), 'utf8'));
+      const d = compareDimsumAggregate(aggregate, readTables.get('CBS, low B6').table, cbs);
+      check('consequences', 'nucleotide variants merged at the protein level as DiMSum 1.4 merges them (its dimsum__aggregate_AA_variants_fitness, mixedSubstitutions = FALSE): CBS\'s 11,478 codon variants, each amino-acid variant\'s fitness the inverse-variance mean of its codons\', its sigma √(1/Σ 1/σ²); synonymous codons, which DiMSum keeps apart, each a member of MaveScape\'s synonymous cell', `${d.merged} amino-acid variants (${d.view.collapse.merged} merged from ${d.view.collapse.mergedFrom} codon variants; ${d.unscored} with no fitness either side), largest relative difference ${d.worst.toExponential(1)}; ${d.missing.length} missing, ${d.extra.length} extra; ${d.synonymous - d.misplaced.length} of ${d.synonymous} synonymous in place`, d.merged === 7561 && d.worst <= 1e-12 && !d.missing.length && !d.extra.length && !d.misplaced.length, '≤ 1e-12; none');
+    }
   },
 
   // Import (wave 1, slice 3): the feasibility tables, DiMSum's demo and a table with one problem
@@ -2173,6 +2311,27 @@ const suites = {
       check('examples', 'the simulated problems: the recorded cells account for the excess between replicates 1 and 2, not with replicate 3; with replicate 3 the intervals are too wide and DiMSum\'s terms misplace the bottleneck after selection; without it the scores come closer to the truth, the intervals hold it about 95% of the time, and the bottleneck is placed before selection, where it was planted', `cells: rep1–rep2 ${verdict('rep1', 'rep2')}, rep1–rep3 ${verdict('rep1', 'rep3')}, rep2–rep3 ${verdict('rep2', 'rep3')}; all three r ${all.r.toFixed(3)}, intervals ${pct(all.held)}, DiMSum's terms at the ${placed(o)}; without replicate 3 r ${two.r.toFixed(3)}, ${pct(two.held)}, at the ${placed(without)}`, verdict('rep1', 'rep2') === 'explained' && verdict('rep1', 'rep3') === 'more' && verdict('rep2', 'rep3') === 'more' && all.held > 0.98 && two.held >= 0.93 && two.held <= 0.97 && two.r > all.r && placed(o) === 'output' && placed(without) === 'input', 'explained, more, more; > 98%, output; 93–97%, closer, input');
     }
 
+    // BRCA1's saturation genome editing (wave 3, slice 3): its counts, drafted from their names into
+    // two replicates of day 5 and day 11, scored, against the published scores (normalized exon by
+    // exon and for position within each, which the counts do not record).
+    if (opened.has('brca1-sge')) {
+      const o = opened.get('brca1-sge');
+      const record = readScoreSet(JSON.parse(readFileSync(new URL('fixtures/public-data/mavedb/urn_mavedb_00000097-0-2.json', import.meta.url), 'utf8')));
+      const counts = parseTable(dataset('mavedb-brca1-sge').bytes('counts.csv'));
+      const countsSha = sha256(dataset('mavedb-brca1-sge').bytes('counts.csv'));
+      const { design } = countsDesign(record, { table: counts, layout: detectLayout(counts), target: o.design.targets[0] });
+      const ws = workspaceOf(counts, design, { layout: 'mavedb-counts' });
+      const scored = scoreTable(counts, design, defaultParameters(design, ws.sources[0]));
+      const c = scored.results.conditions[0];
+      const published = new Map(columnText(o.table.columns.find((x) => x.name === 'hgvs_nt')).map((k, i) => [k, o.table.columns.find((x) => x.name === 'score').numeric[i]]));
+      const a = [];
+      const b = [];
+      scored.results.variants.original.forEach((k, i) => { if (!c.reason[i] && Number.isFinite(published.get(k))) { a.push(c.score[i]); b.push(published.get(k)); } });
+      const r = pearson(a, b);
+      const example = exampleById('brca1-sge');
+      check('examples', 'BRCA1\'s saturation genome editing: its counts (the example\'s table) drafted from their names into two replicates of day 5 and day 11, the library and RNA counts set aside, and scored with the defaults, agree with the published scores as the guide says (r ≈ 0.76): the published scores were normalized exon by exon and for position within each', `counts ${countsSha.slice(0, 12)}…; ${design.model}, ${design.replicates.map((x) => `${x.name}: ${x.timepoints.map((t) => t.time).join('→')}`).join(', ')}; set aside ${(design.ignoredColumns ?? []).map((x) => x.column).join(', ')}; ${c.scored} scored, r ${r.toFixed(3)} with ${a.length} published`, countsSha === example.mavedb.counts.sha256 && design.model === 'time-series' && design.replicates.length === 2 && design.replicates.every((x) => x.timepoints.length === 2) && r > 0.74 && r < 0.78, 'the example\'s; two replicates, 5→11; r 0.74–0.78');
+    }
+
     // With external data: Hsp90 against the published fitness; factor IX against MultiSTEP's scores.
     {
       const o = opened.get('hsp90');
@@ -2223,9 +2382,11 @@ const suites = {
     const root = new URL('fixtures/public-data/', import.meta.url);
     const cached = (kind, name) => JSON.parse(readFileSync(new URL(`${kind}/${name}`, root), 'utf8'));
     const records = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).flatMap((kind) => readdirSync(new URL(`${kind}/`, root)).filter((f) => f.endsWith('.meta.json')).map((f) => ({ kind, name: f.replace(/\.meta\.json$/, ''), meta: cached(kind, f) })));
-    // UniProt names its release; MaveDB none. A search records its words (the POST's body).
-    const hosts = { UniProt: /^https:\/\/rest\.uniprot\.org\//, MaveDB: /^https:\/\/api\.mavedb\.org\/api\/v1\// };
-    const complete = records.filter(({ kind, meta }) => hosts[meta.service]?.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && (meta.service !== 'UniProt' || meta.version) && (kind !== 'mavedb-search' || (meta.method === 'POST' && JSON.parse(meta.request).text)) && meta.contentType === (/\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json'));
+    // UniProt names its release; MaveDB none. A search records its words (the POST's body). NCBI's
+    // records are GenBank text (wave 3, slice 3).
+    const hosts = { UniProt: /^https:\/\/rest\.uniprot\.org\//, MaveDB: /^https:\/\/api\.mavedb\.org\/api\/v1\//, 'NCBI E-utilities': /^https:\/\/eutils\.ncbi\.nlm\.nih\.gov\/entrez\/eutils\/efetch\.fcgi\?db=nuccore&id=(?:[A-Z]{2}_\d+|[A-Z]{1,2}\d{5,8})\.\d+&rettype=gb/, Ensembl: /^https:\/\/rest\.ensembl\.org\/sequence\/id\/ENST\d{11}\?type=cdna&mask_feature=1$/ };
+    const typeOf = (meta) => (meta.service === 'NCBI E-utilities' ? 'text/plain; charset=utf-8' : /\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json');
+    const complete = records.filter(({ kind, meta }) => hosts[meta.service]?.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && (meta.service !== 'UniProt' || meta.version) && (kind !== 'mavedb-search' || (meta.method === 'POST' && JSON.parse(meta.request).text)) && meta.contentType === typeOf(meta));
     check('public-data', 'each cached response carries its retrieval record: the service, the URL on a listed host, when it was retrieved, UniProt\'s release, a search\'s words', `${complete.length} of ${records.length} records complete (${[...new Set(records.map((r) => r.kind))].map((k) => `${k} ${records.filter((r) => r.kind === k).length}`).join(', ')})`, records.length >= 14 && complete.length === records.length, 'all');
     for (const [id, accession] of Object.entries({ 'grb2-sh3': 'P62993', hsp90: 'P02829', factor9: 'P00740' })) {
       const example = exampleById(id);
@@ -2329,6 +2490,30 @@ const suites = {
       const reopened = await readArchive(archive.bytes);
       const again = recompute(reopened.ws, reopened.sources);
       check('public-data', 'a workspace of published scores from MaveDB saved as an archive reopens: its record and the table\'s origin kept, its run (read as published) recomputed to its recorded hash', `${reopened.problems.length} problems; record ${reopened.ws.records?.[0]?.urn}; origin ${reopened.ws.sources[0].origin?.urn}; output ${outputDigest(again.scored.results).slice(0, 12)}… against ${run.output.sha256.slice(0, 12)}…`, !reopened.problems.length && reopened.ws.records?.[0]?.urn === record.urn && reopened.ws.sources[0].origin?.file === 'scores' && outputDigest(again.scored.results) === run.output.sha256, 'kept; the same');
+    }
+    {
+      // MaveDB's mapped variants (wave 3, slice 3): GRB2's, joined to its scores by each variant's
+      // accession; each mapped protein name on NP_002077.1 the table's own at the target's position
+      // plus the UniProt offset (158), with the same amino acids.
+      const mapped = mappedVariants(cached('mavedb', 'urn_mavedb_00000835-a-1.mapped.json'));
+      const back = readMapped(parseTable(mappedCSV(mapped)));
+      const scores = parseTable(readFileSync(new URL('fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv', import.meta.url)), { fileName: 'scores.csv' });
+      const accession = columnText(scores.columns.find((c) => c.name === 'accession'));
+      const pro = columnText(scores.columns.find((c) => c.name === 'hgvs_pro'));
+      let joined = 0;
+      let agree = 0;
+      const differ = [];
+      accession.forEach((a, i) => {
+        const m = back.get(a);
+        if (!m) return;
+        joined += 1;
+        const ours = /^p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|=)$/.exec(pro[i]);
+        const theirs = /^NP_002077\.1:p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|=)$/.exec(m.hgvs ?? '');
+        if (ours && theirs && ours[1] === theirs[1] && Number(ours[2]) + 158 === Number(theirs[2]) && (ours[3] === theirs[3] || (ours[3] === '=' && theirs[3] === ours[1]))) agree += 1;
+        else differ.push(`${pro[i]} ↦ ${m.hgvs}`);
+      });
+      const wellFormed = mapped.every((m) => /^ga4gh:VA\.[A-Za-z0-9_-]{32}$/.test(m.vrs ?? ''));
+      check('public-data', 'MaveDB\'s mapped variants of GRB2 (VRS 2.0): each current mapping joined to its row of scores by the variant\'s accession, its VRS identifier well formed, its protein on NP_002077.1 the table\'s at the target\'s position plus the UniProt offset (158), the same amino acids', `${mapped.length} mapped; ${joined} of ${scores.rows} rows joined; ${agree} agree${differ.length ? `; ${differ.length} differ: ${differ.slice(0, 3).join('; ')}` : ''}; identifiers ${wellFormed ? 'well formed' : 'not all well formed'}`, joined === mapped.length && joined >= 1100 && agree === joined && wellFormed, 'joined; agree; well formed');
     }
     {
       // A score set of scores alone (PTEN, the example): what the readiness names, and where.

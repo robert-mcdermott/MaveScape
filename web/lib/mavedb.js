@@ -8,7 +8,8 @@
 //
 //   normalizeUrn(text) → urn | null                       a URN, or one in a MaveDB address
 //   readScoreSet(json) → record                           the parts MaveScape uses
-//   targetsOf(record) → { targets, problems }             MaveScape targets, or why not
+//   targetsOf(record, { target }) → { targets, pending, choices, others, problems }
+//   accessionTarget(pending, answer, { retrieval }) → { target, origin, messages } | { problem }
 //   licenseOf(license) → { short, long, link, terms, open }
 //   readoutOf(record) → { readout, libraryMethod, unknown }
 //   scoresDesign(record, { table, layout, target }) → design
@@ -16,6 +17,7 @@
 //   searchHits(json) → { total, hits }
 
 import { IDENTIFIER_COLUMNS } from './design.js';
+import { codingFeatures, parseGenBank, preferredFeature, targetFromGenBank } from './genbank.js';
 import { draftDesign, draftScoresDesign, suggestRoles } from './importer.js';
 import { setAsideOtherColumns } from './design-edit.js';
 import { ASSAY_MECHANISMS, ASSAY_METHODS, LIBRARY_METHODS, MODEL_SYSTEMS } from './readout.js';
@@ -148,43 +150,144 @@ export function readScoreSet(json) {
     calibrations: (json.scoreCalibrations ?? []).map(calibrationOf),
     experiment: { urn: experiment.urn ?? null, title: experiment.title ?? null, rawReads: (experiment.rawReadIdentifiers ?? []).map((r) => ({ id: r.identifier, url: r.url ?? null })) },
     superseded: json.supersedingScoreSet?.urn ?? null,
+    // MaveDB's mapping of the variants to the human reference: complete, incomplete, failed…
+    mapping: json.mappingState ?? null,
   };
 }
 
 const slug = (text) => String(text ?? 'target').replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'target';
 
-// MaveScape targets from a record's: its sequence (DNA read in frame from its first base), its
-// organism, and its UniProt, RefSeq and Ensembl identifiers, the UniProt offset as the target's
-// offset (MaveScape numbers reference positions on the protein). A target named by an accession,
-// with no sequence, and a score set of several targets are not yet read (their variants are named
-// on a transcript or genome, or prefixed by the target: full MAVE-HGVS, wave 3 slice 3).
-export function targetsOf(record) {
-  const problems = [];
-  if (record.targets.length > 1) problems.push(`The score set has ${record.targets.length} targets (${record.targets.map((t) => t.name).join(', ')}), its variants named with each target's label: MaveScape reads one target per score set for now.`);
-  const targets = [];
-  for (const t of record.targets) {
-    if (!t.sequence) {
-      problems.push(`The target ${t.name} is named by ${t.accession ? `the accession ${t.accession.accession}${t.accession.assembly ? ` (${t.accession.assembly})` : ''}` : 'no sequence'}, its variants on that ${/^(NC_|chr)/.test(t.accession?.accession ?? '') ? 'genome' : 'transcript'}: MaveScape reads variants named on an accession with full MAVE-HGVS (0.3, to come). The record, its license and calibrations can be read now.`);
-      continue;
-    }
-    const identifiers = {};
-    let offset = 0;
-    for (const x of t.identifiers) {
-      if (x.db === 'UniProt' && x.id) {
-        identifiers.uniprot = x.id;
-        offset = x.offset ?? 0;
-      } else if (x.db === 'RefSeq' && x.id) identifiers.refseq = x.id;
-      else if (x.db === 'Ensembl' && x.id) identifiers.ensembl = x.id;
-    }
-    const dna = t.sequenceType === 'dna';
-    targets.push({
-      id: slug(t.name), name: t.name, sequenceType: dna ? 'dna' : 'protein', sequence: t.sequence.toUpperCase(),
-      ...(dna ? { codingStart: 1 } : {}), offset,
-      ...(t.organism ? { organism: t.organism } : {}),
-      ...(Object.keys(identifiers).length ? { identifiers } : {}),
-    });
+// What an accession names, for fetching a target from it: a RefSeq or GenBank transcript (from
+// NCBI), an Ensembl transcript, a protein (named beside its transcript), or a genome (not fetched).
+export function accessionKind(accession) {
+  const a = String(accession ?? '');
+  if (/^(NM|NR|XM|XR)_\d+(\.\d+)?$/.test(a)) return 'refseq';
+  if (/^ENS[A-Z]*T\d{11}(\.\d+)?$/.test(a)) return 'ensembl';
+  if (/^(NP|XP)_\d+(\.\d+)?$/.test(a) || /^ENS[A-Z]*P\d{11}(\.\d+)?$/.test(a)) return 'protein';
+  if (/^(NC|NG|NT|NW|NZ|AC)_\d+(\.\d+)?$/.test(a) || /^chr/i.test(a)) return 'genome';
+  return 'unknown';
+}
+
+// A record target's UniProt, RefSeq and Ensembl identifiers, and the UniProt offset.
+function identifiersOf(t) {
+  const identifiers = {};
+  let offset = 0;
+  for (const x of t.identifiers) {
+    if (x.db === 'UniProt' && x.id) {
+      identifiers.uniprot = x.id;
+      offset = x.offset ?? 0;
+    } else if (x.db === 'RefSeq' && x.id) identifiers.refseq = x.id;
+    else if (x.db === 'Ensembl' && x.id) identifiers.ensembl = x.id;
   }
-  return { targets, problems };
+  return { identifiers, offset };
+}
+
+// MaveScape targets from a record's (wave 3, slices 2 and 3):
+//   - a sequence: the target itself (DNA read in frame from its first base), with its organism,
+//     identifiers and the UniProt offset as the target's offset (positions on the reference
+//     protein);
+//   - a transcript named by its accession (NM_007294.3, ENST00000460680.5): `pending`, to fetch
+//     (NCBI's GenBank record, Ensembl's sequence) and read with accessionTarget; a protein accession
+//     beside it (ENSP00000269305.4, the same gene's) names its protein;
+//   - several targets (each variant named with its target's label, LMNA:n.127G>A): `choices`, one
+//     opened at a time (options.target, a label or name), the others' variants set aside;
+//   - a genome (NC_000023.11) is not fetched.
+// Returns { targets, pending, choices, others, problems }.
+export function targetsOf(record, options = {}) {
+  const problems = [];
+  let entries = record.targets.map((t) => ({ t, label: t.label ?? t.accession?.accession ?? t.name, kind: t.sequence ? 'sequence' : accessionKind(t.accession?.accession) }));
+  // A transcript and its protein, named as two targets: one.
+  if (entries.length === 2) {
+    const transcript = entries.find((e) => e.kind === 'refseq' || e.kind === 'ensembl');
+    const protein = entries.find((e) => e.kind === 'protein');
+    if (transcript && protein && (transcript.t.name === protein.t.name || transcript.t.accession?.gene === protein.t.accession?.gene)) entries = [{ ...transcript, protein: protein.t.accession.accession }];
+  }
+  let choices = [];
+  let others = [];
+  if (entries.length > 1) {
+    choices = entries.map((e) => ({ label: e.label, name: e.t.name, kind: e.kind }));
+    const wanted = options.target ? entries.find((e) => e.label === options.target || e.t.name === options.target) : null;
+    if (!wanted) {
+      if (options.target) problems.push(`The score set has no target ${options.target}.`);
+      return { targets: [], pending: [], choices, others, problems };
+    }
+    others = entries.filter((e) => e !== wanted).map((e) => e.label);
+    entries = [wanted];
+  }
+  const targets = [];
+  const pending = [];
+  for (const { t, label, kind, protein } of entries) {
+    const { identifiers, offset } = identifiersOf(t);
+    if (kind === 'sequence') {
+      const dna = t.sequenceType === 'dna';
+      targets.push({
+        id: slug(t.name), name: t.name, ...(label && label !== t.name ? { label } : {}),
+        sequenceType: dna ? 'dna' : 'protein', sequence: t.sequence.toUpperCase(),
+        ...(dna ? { codingStart: 1 } : {}), offset,
+        ...(t.organism ? { organism: t.organism } : {}),
+        ...(Object.keys(identifiers).length ? { identifiers } : {}),
+      });
+    } else if (kind === 'refseq' || kind === 'ensembl') {
+      pending.push({ kind, accession: t.accession.accession, name: t.name, gene: t.accession.gene ?? null, assembly: t.accession.assembly ?? null, ...(protein ? { protein } : {}), identifiers, offset });
+    } else {
+      const accession = t.accession?.accession;
+      problems.push(kind === 'genome'
+        ? `${t.name === accession ? 'The target is' : `The target ${t.name} is named on`} the genome ${accession}${t.accession?.assembly ? ` (${t.accession.assembly})` : ''}: MaveScape fetches a target that is a transcript or reads one given as a sequence, and does not fetch a genome. The record, its license and calibrations can be read.`
+        : `The target ${t.name} is named by ${accession ? `the accession ${accession}` : 'no sequence'}, which MaveScape cannot fetch a transcript from (a RefSeq transcript, NM_…, or an Ensembl one, ENST…, it can). The record, its license and calibrations can be read.`);
+    }
+  }
+  return { targets, pending, choices, others, problems };
+}
+
+// A target fetched for a record (targetsOf's `pending`): from NCBI's GenBank record of a RefSeq
+// transcript (its coding feature; the whole transcript, so its UTRs are on it) or Ensembl's
+// sequence of a transcript (its coding part in capitals). Ensembl serves its current release only:
+// a transcript of another version than the record names is used and said, and the variants'
+// reference bases then show whether it differs where they are. answer: the GenBank text, or
+// Ensembl's JSON. retrieval: the cache's record (retrieval.js). Returns { target, origin,
+// messages } or { problem }.
+export function accessionTarget(pending, answer, { retrieval } = {}) {
+  const messages = [];
+  const identifiers = { ...pending.identifiers, ...(pending.gene ? { gene: pending.gene } : {}) };
+  let target;
+  let origin;
+  if (pending.kind === 'refseq') {
+    const { records, problems } = parseGenBank(answer);
+    if (!records.length) return { problem: `NCBI's record of ${pending.accession} could not be read: ${problems.join(' ')}` };
+    const record = records[0];
+    const coding = codingFeatures(record);
+    const chosen = preferredFeature(coding);
+    if (!chosen) return { problem: `NCBI's record of ${pending.accession} has no coding sequence (CDS) to number the variants by.` };
+    const made = targetFromGenBank(record, chosen, { id: slug(pending.name), name: pending.name, retrieval });
+    target = made.target;
+    origin = { ...made.origin, service: 'NCBI', named: pending.accession };
+    messages.push(...made.messages);
+    if (record.version && record.version !== pending.accession && /\.\d+$/.test(pending.accession)) messages.push({ level: 'warning', message: `MaveDB names ${pending.accession}; NCBI sent ${record.version}.` });
+    target.identifiers = { ...identifiers, ...target.identifiers, refseq: pending.accession };
+    if (coding.length > 1) messages.push({ level: 'info', message: `The record has ${coding.length} coding features; the target is numbered by ${chosen.label} (${chosen.location}).` });
+  } else {
+    let json;
+    try {
+      json = typeof answer === 'string' ? JSON.parse(answer) : answer;
+    } catch {
+      return { problem: `Ensembl's answer for ${pending.accession} could not be read.` };
+    }
+    const seq = String(json?.seq ?? '');
+    const first = seq.search(/[A-Z]/);
+    if (!seq || first < 0) return { problem: `Ensembl's sequence of ${pending.accession} has no coding part (in capitals) to number the variants by.` };
+    const served = `${json.id}${json.version ? `.${json.version}` : ''}`;
+    target = { id: slug(pending.name), name: pending.name, sequenceType: 'dna', sequence: seq.toUpperCase(), codingStart: first + 1, offset: 0, organism: 'Homo sapiens', identifiers: { ...identifiers, ensembl: pending.accession } };
+    if (!/^ENST/.test(json.id ?? '')) delete target.organism;
+    const named = /\.(\d+)$/.exec(pending.accession)?.[1];
+    origin = { format: 'Ensembl', service: 'Ensembl', accession: served, named: pending.accession, whole: true, ...(retrieval ? { retrieval } : {}) };
+    if (named && json.version && Number(named) !== json.version) {
+      origin.versionDiffers = true;
+      messages.push({ level: 'warning', message: `MaveDB names ${pending.accession}; Ensembl's current release has ${served}, which MaveScape uses: each variant's reference base is checked against it.` });
+    }
+  }
+  if (pending.protein) target.identifiers.protein = pending.protein;
+  if (pending.offset) target.offset = pending.offset;
+  return { target, origin, messages };
 }
 
 // A keyword's label in a list of MaveDB's terms (as listed), or null.
@@ -256,6 +359,37 @@ export function countsDesign(record, { table, layout, target }) {
     targets: target ? [target] : [],
   };
   return { design: setAsideOtherColumns(drafted, table.columns.map((c) => c.name), IDENTIFIER_COLUMNS), notes };
+}
+
+// MaveDB's mapped variants (GET /score-sets/{urn}/mapped-variants; wave 3, slice 3): for each
+// variant MaveDB has mapped to the human reference (Arbesfeld et al. 2025), the current mapping's
+// variant URN (the tables' accession column), its GA4GH VRS 2.0 allele identifier, the HGVS on the
+// reference sequence (NP_002077.1:p.Thr159Ter), its ClinGen allele id and the level it was aligned
+// at. Superseded mappings are left out. [{ urn, vrs, hgvs, clingen, level }]
+export function mappedVariants(json) {
+  const out = [];
+  for (const m of Array.isArray(json) ? json : []) {
+    if (!m?.current || !m.variantUrn || !m.postMapped) continue;
+    const post = m.postMapped;
+    const expression = (post.expressions ?? []).find((e) => /^hgvs/.test(e.syntax ?? ''))?.value ?? null;
+    out.push({ urn: m.variantUrn, vrs: post.id ?? null, hgvs: expression, clingen: m.clingenAlleleId ?? null, level: m.alignmentLevel ?? null });
+  }
+  return out;
+}
+
+const csvField = (x) => (x === null || x === undefined ? 'NA' : /[",\r\n]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : String(x));
+
+// The mapped variants as the CSV MaveScape keeps beside a score set's tables (docs/FORMATS.md).
+export function mappedCSV(rows) {
+  return ['accession,vrs_id,hgvs,clingen_allele_id,alignment_level', ...rows.map((r) => [r.urn, r.vrs, r.hgvs, r.clingen, r.level].map(csvField).join(','))].join('\n') + '\n';
+}
+
+// That CSV read back: Map(variant URN → { vrs, hgvs, clingen, level }).
+export function readMapped(table) {
+  const col = (name) => table.columns.find((c) => c.name === name)?.values ?? [];
+  const [urns, vrs, hgvs, clingen, level] = ['accession', 'vrs_id', 'hgvs', 'clingen_allele_id', 'alignment_level'].map(col);
+  const na = (x) => (x === undefined || x === '' || x === 'NA' ? null : x);
+  return new Map(urns.map((u, i) => [u, { vrs: na(vrs[i]), hgvs: na(hgvs[i]), clingen: na(clingen[i]), level: na(level[i]) }]));
 }
 
 // Search results (POST /score-sets/search): each score set's URN, title, description, targets,

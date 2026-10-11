@@ -1,0 +1,1544 @@
+{
+ "about": "GenBank records as Biopython reads them (generate_genbank.py): each record's fields, every feature's location parts [start, end, strand] (1-based, in reading order), and each CDS's bases, translation and the record's own /translation.",
+ "versions": {
+  "biopython": "1.88"
+ },
+ "records": [
+  {
+   "file": "fixtures/public-data/ncbi/MK476504.1.gb",
+   "name": "MK476504",
+   "length": 1824,
+   "molecule": "DNA",
+   "topology": "linear",
+   "accession": "MK476504",
+   "version": "MK476504.1",
+   "organism": "Homo sapiens",
+   "definition": "Homo sapiens voucher Yoruba_19_1 hemoglobin subunit beta (HBB) gene, complete cds",
+   "sha256": "cb16bab1463a0fff0e34eef253144512cddc5cc3f04e18c9fc2b886ebeb0b603",
+   "features": [
+    {
+     "type": "source",
+     "parts": [
+      [
+       1,
+       1824,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "gene",
+     "parts": [
+      [
+       138,
+       1561,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "mRNA",
+     "parts": [
+      [
+       138,
+       229,
+       1
+      ],
+      [
+       360,
+       582,
+       1
+      ],
+      [
+       1433,
+       1561,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "CDS",
+     "parts": [
+      [
+       138,
+       229,
+       1
+      ],
+      [
+       360,
+       582,
+       1
+      ],
+      [
+       1433,
+       1561,
+       1
+      ]
+     ],
+     "length": 444,
+     "sha256": "12303429964cd1eb18961005365b2e5d34b3d15278283188944f6b3afaec0776",
+     "translation": "MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH*",
+     "given": "MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH",
+     "gene": "HBB"
+    }
+   ]
+  },
+  {
+   "file": "fixtures/public-data/ncbi/NM_000546.6.gb",
+   "name": "NM_000546",
+   "length": 2512,
+   "molecule": "mRNA",
+   "topology": "linear",
+   "accession": "NM_000546",
+   "version": "NM_000546.6",
+   "organism": "Homo sapiens",
+   "definition": "Homo sapiens tumor protein p53 (TP53), transcript variant 1, mRNA",
+   "sha256": "0c886e7e551d310e2927798a67c9ec865664222ec36ef095711ba4e2d6dc1f42",
+   "features": [
+    {
+     "type": "source",
+     "parts": [
+      [
+       1,
+       2512,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "gene",
+     "parts": [
+      [
+       1,
+       2512,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       1,
+       114,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       35,
+       37,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       115,
+       216,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "CDS",
+     "parts": [
+      [
+       143,
+       1324,
+       1
+      ]
+     ],
+     "length": 1182,
+     "sha256": "828a93ac94731fa87ba0d1f085879938f5425efd2b030f8476575dfb0d914f79",
+     "translation": "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQKTYQGSYGFRLGFLHSGTAKSVTCTYSPALNKMFCQLAKTCPVQLWVDSTPPPGTRVRAMAIYKQSQHMTEVVRRCPHHERCSDSDGLAPPQHLIRVEGNLRVEYLDDRNTFRHSVVVPYEPPEVGSDCTTIHYNYMCNSSCMGGMNRRPILTIITLEDSSGNLLGRNSFEVRVCACPGRDRRTEEENLRKKGEPHHELPPGSTKRALPNNTSSSPQPKKKPLDGEYFTLQIRGRERFEMFRELNEALELKDAQAGKEPGGSRAHSSHLKSKKGQSTSRHKKLMFKTEGPDSD*",
+     "given": "MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQKTYQGSYGFRLGFLHSGTAKSVTCTYSPALNKMFCQLAKTCPVQLWVDSTPPPGTRVRAMAIYKQSQHMTEVVRRCPHHERCSDSDGLAPPQHLIRVEGNLRVEYLDDRNTFRHSVVVPYEPPEVGSDCTTIHYNYMCNSSCMGGMNRRPILTIITLEDSSGNLLGRNSFEVRVCACPGRDRRTEEENLRKKGEPHHELPPGSTKRALPNNTSSSPQPKKKPLDGEYFTLQIRGRERFEMFRELNEALELKDAQAGKEPGGSRAHSSHLKSKKGQSTSRHKKLMFKTEGPDSD",
+     "gene": "TP53"
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       143,
+       1102,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       143,
+       391,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       143,
+       274,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       167,
+       169,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       185,
+       187,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       191,
+       217,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       194,
+       196,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       200,
+       202,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       239,
+       241,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       251,
+       253,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       260,
+       262,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       278,
+       280,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       284,
+       310,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       290,
+       430,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       305,
+       307,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       338,
+       472,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       440,
+       1252,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       440,
+       1042,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       479,
+       850,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       488,
+       1018,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       500,
+       502,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       500,
+       502,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       689,
+       691,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       863,
+       886,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       908,
+       1024,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       947,
+       949,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       959,
+       982,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       986,
+       1117,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       992,
+       994,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1040,
+       1321,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1055,
+       1105,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1055,
+       1057,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1085,
+       1087,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1097,
+       1222,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1103,
+       1105,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1115,
+       1210,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1139,
+       1141,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1145,
+       1147,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1151,
+       1153,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1157,
+       1192,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1193,
+       1321,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1217,
+       1231,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1244,
+       1303,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1250,
+       1258,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1250,
+       1252,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1256,
+       1258,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1259,
+       1261,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1259,
+       1261,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1262,
+       1321,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1283,
+       1285,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1286,
+       1288,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1286,
+       1288,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1316,
+       1318,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       217,
+       238,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       239,
+       517,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       518,
+       701,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       702,
+       814,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       815,
+       924,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       925,
+       1061,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       1062,
+       1135,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       1136,
+       1242,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       1243,
+       2512,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "regulatory",
+     "parts": [
+      [
+       2495,
+       2500,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "polyA_site",
+     "parts": [
+      [
+       2512,
+       2512,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "file": "fixtures/public-data/ncbi/NM_007294.3.gb",
+   "name": "NM_007294",
+   "length": 7224,
+   "molecule": "mRNA",
+   "topology": "linear",
+   "accession": "NM_007294",
+   "version": "NM_007294.3",
+   "organism": "Homo sapiens",
+   "definition": "Homo sapiens BRCA1 DNA repair associated (BRCA1), transcript variant 1, mRNA",
+   "sha256": "8ac08f3837bb1b26051b2f364be76368d923e970cce64bf4480488d6fb00cf0d",
+   "features": [
+    {
+     "type": "source",
+     "parts": [
+      [
+       1,
+       7224,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "gene",
+     "parts": [
+      [
+       1,
+       7224,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       1,
+       213,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       93,
+       93,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       209,
+       211,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       214,
+       312,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "CDS",
+     "parts": [
+      [
+       233,
+       5824,
+       1
+      ]
+     ],
+     "length": 5592,
+     "sha256": "2a8bfbf3a33c29bc232c0624f2e685fbe1ca2f114d7e452e1e09d87c597e1929",
+     "translation": "MDLSALRVEEVQNVINAMQKILECPICLELIKEPVSTKCDHIFCKFCMLKLLNQKKGPSQCPLCKNDITKRSLQESTRFSQLVEELLKIICAFQLDTGLEYANSYNFAKKENNSPEHLKDEVSIIQSMGYRNRAKRLLQSEPENPSLQETSLSVQLSNLGTVRTLRTKQRIQPQKTSVYIELGSDSSEDTVNKATYCSVGDQELLQITPQGTRDEISLDSAKKAACEFSETDVTNTEHHQPSNNDLNTTEKRAAERHPEKYQGSSVSNLHVEPCGTNTHASSLQHENSSLLLTKDRMNVEKAEFCNKSKQPGLARSQHNRWAGSKETCNDRRTPSTEKKVDLNADPLCERKEWNKQKLPCSENPRDTEDVPWITLNSSIQKVNEWFSRSDELLGSDDSHDGESESNAKVADVLDVLNEVDEYSGSSEKIDLLASDPHEALICKSERVHSKSVESNIEDKIFGKTYRKKASLPNLSHVTENLIIGAFVTEPQIIQERPLTNKLKRKRRPTSGLHPEDFIKKADLAVQKTPEMINQGTNQTEQNGQVMNITNSGHENKTKGDSIQNEKNPNPIESLEKESAFKTKAEPISSSISNMELELNIHNSKAPKKNRLRRKSSTRHIHALELVVSRNLSPPNCTELQIDSCSSSEEIKKKKYNQMPVRHSRNLQLMEGKEPATGAKKSNKPNEQTSKRHDSDTFPELKLTNAPGSFTKCSNTSELKEFVNPSLPREEKEEKLETVKVSNNAEDPKDLMLSGERVLQTERSVESSSISLVPGTDYGTQESISLLEVSTLGKAKTEPNKCVSQCAAFENPKGLIHGCSKDNRNDTEGFKYPLGHEVNHSRETSIEMEESELDAQYLQNTFKVSKRQSFAPFSNPGNAEEECATFSAHSGSLKKQSPKVTFECEQKEENQGKNESNIKPVQTVNITAGFPVVGQKDKPVDNAKCSIKGGSRFCLSSQFRGNETGLITPNKHGLLQNPYRIPPLFPIKSFVKTKCKKNLLEENFEEHSMSPEREMGNENIPSTVSTISRNNIRENVFKEASSSNINEVGSSTNEVGSSINEIGSSDENIQAELGRNRGPKLNAMLRLGVLQPEVYKQSLPGSNCKHPEIKKQEYEEVVQTVNTDFSPYLISDNLEQPMGSSHASQVCSETPDDLLDDGEIKEDTSFAENDIKESSAVFSKSVQKGELSRSPSPFTHTHLAQGYRRGAKKLESSEENLSSEDEELPCFQHLLFGKVNNIPSQSTRHSTVATECLSKNTEENLLSLKNSLNDCSNQVILAKASQEHHLSEETKCSASLFSSQCSELEDLTANTNTQDPFLIGSSKQMRHQSESQGVGLSDKELVSDDEERGTGLEENNQEEQSMDSNLGEAASGCESETSVSEDCSGLSSQSDILTTQQRDTMQHNLIKLQQEMAELEAVLEQHGSQPSNSYPSIISDSSALEDLRNPEQSTSEKAVLTSQKSSEYPISQNPEGLSADKFEVSADSSTSKNKEPGVERSSPSKCPSLDDRWYMHSCSGSLQNRNYPSQEELIKVVDVEEQQLEESGPHDLTETSYLPRQDLEGTPYLESGISLFSDDPESDPSEDRAPESARVGNIPSSTSALKVPQLKVAESAQSPAAAHTTDTAGYNAMEESVSREKPELTASTERVNKRMSMVVSGLTPEEFMLVYKFARKHHITLTNLITEETTHVVMKTDAEFVCERTLKYFLGIAGGKWVVSYFWVTQSIKERKMLNEHDFEVRGDVVNGRNHQGPKRARESQDRKIFRGLEICCYGPFTNMPTDQLEWMVQLCGASVVKELSSFTLGTGVHPIVVVQPDAWTEDNGFHAIGQMCEAPVVTREWVLDSVALYQCQELDTYLIPQIPHSHY*",
+     "given": "MDLSALRVEEVQNVINAMQKILECPICLELIKEPVSTKCDHIFCKFCMLKLLNQKKGPSQCPLCKNDITKRSLQESTRFSQLVEELLKIICAFQLDTGLEYANSYNFAKKENNSPEHLKDEVSIIQSMGYRNRAKRLLQSEPENPSLQETSLSVQLSNLGTVRTLRTKQRIQPQKTSVYIELGSDSSEDTVNKATYCSVGDQELLQITPQGTRDEISLDSAKKAACEFSETDVTNTEHHQPSNNDLNTTEKRAAERHPEKYQGSSVSNLHVEPCGTNTHASSLQHENSSLLLTKDRMNVEKAEFCNKSKQPGLARSQHNRWAGSKETCNDRRTPSTEKKVDLNADPLCERKEWNKQKLPCSENPRDTEDVPWITLNSSIQKVNEWFSRSDELLGSDDSHDGESESNAKVADVLDVLNEVDEYSGSSEKIDLLASDPHEALICKSERVHSKSVESNIEDKIFGKTYRKKASLPNLSHVTENLIIGAFVTEPQIIQERPLTNKLKRKRRPTSGLHPEDFIKKADLAVQKTPEMINQGTNQTEQNGQVMNITNSGHENKTKGDSIQNEKNPNPIESLEKESAFKTKAEPISSSISNMELELNIHNSKAPKKNRLRRKSSTRHIHALELVVSRNLSPPNCTELQIDSCSSSEEIKKKKYNQMPVRHSRNLQLMEGKEPATGAKKSNKPNEQTSKRHDSDTFPELKLTNAPGSFTKCSNTSELKEFVNPSLPREEKEEKLETVKVSNNAEDPKDLMLSGERVLQTERSVESSSISLVPGTDYGTQESISLLEVSTLGKAKTEPNKCVSQCAAFENPKGLIHGCSKDNRNDTEGFKYPLGHEVNHSRETSIEMEESELDAQYLQNTFKVSKRQSFAPFSNPGNAEEECATFSAHSGSLKKQSPKVTFECEQKEENQGKNESNIKPVQTVNITAGFPVVGQKDKPVDNAKCSIKGGSRFCLSSQFRGNETGLITPNKHGLLQNPYRIPPLFPIKSFVKTKCKKNLLEENFEEHSMSPEREMGNENIPSTVSTISRNNIRENVFKEASSSNINEVGSSTNEVGSSINEIGSSDENIQAELGRNRGPKLNAMLRLGVLQPEVYKQSLPGSNCKHPEIKKQEYEEVVQTVNTDFSPYLISDNLEQPMGSSHASQVCSETPDDLLDDGEIKEDTSFAENDIKESSAVFSKSVQKGELSRSPSPFTHTHLAQGYRRGAKKLESSEENLSSEDEELPCFQHLLFGKVNNIPSQSTRHSTVATECLSKNTEENLLSLKNSLNDCSNQVILAKASQEHHLSEETKCSASLFSSQCSELEDLTANTNTQDPFLIGSSKQMRHQSESQGVGLSDKELVSDDEERGTGLEENNQEEQSMDSNLGEAASGCESETSVSEDCSGLSSQSDILTTQQRDTMQHNLIKLQQEMAELEAVLEQHGSQPSNSYPSIISDSSALEDLRNPEQSTSEKAVLTSQKSSEYPISQNPEGLSADKFEVSADSSTSKNKEPGVERSSPSKCPSLDDRWYMHSCSGSLQNRNYPSQEELIKVVDVEEQQLEESGPHDLTETSYLPRQDLEGTPYLESGISLFSDDPESDPSEDRAPESARVGNIPSSTSALKVPQLKVAESAQSPAAAHTTDTAGYNAMEESVSREKPELTASTERVNKRMSMVVSGLTPEEFMLVYKFARKHHITLTNLITEETTHVVMKTDAEFVCERTLKYFLGIAGGKWVVSYFWVTQSIKERKMLNEHDFEVRGDVVNGRNHQGPKRARESQDRKIFRGLEICCYGPFTNMPTDQLEWMVQLCGASVVKELSSFTLGTGVHPIVVVQPDAWTEDNGFHAIGQMCEAPVVTREWVLDSVALYQCQELDTYLIPQIPHSHY",
+     "gene": "BRCA1"
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       233,
+       235,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       572,
+       574,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1154,
+       1156,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1415,
+       1417,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1424,
+       1426,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1499,
+       1501,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1532,
+       1534,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       1883,
+       1885,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       2312,
+       2314,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       2354,
+       2356,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       2405,
+       2407,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       2489,
+       2491,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       2750,
+       2752,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       3194,
+       3196,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       3257,
+       3259,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       3659,
+       3661,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       3797,
+       3799,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       3803,
+       3805,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       3863,
+       3865,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       3881,
+       3883,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       3884,
+       3886,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4070,
+       4072,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4214,
+       4216,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4238,
+       4240,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4256,
+       4258,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4391,
+       4393,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4412,
+       4414,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4421,
+       4504,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4499,
+       4501,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4601,
+       4603,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4802,
+       4804,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "misc_feature",
+     "parts": [
+      [
+       4856,
+       4858,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       313,
+       366,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       367,
+       444,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       445,
+       533,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       534,
+       673,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       674,
+       779,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       780,
+       825,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       826,
+       902,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       903,
+       4328,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       4329,
+       4417,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       4418,
+       4589,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       4590,
+       4716,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       4717,
+       4907,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       4908,
+       5218,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       5219,
+       5306,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       5307,
+       5384,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       5385,
+       5425,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       5426,
+       5509,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       5510,
+       5564,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       5565,
+       5638,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       5639,
+       5699,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "exon",
+     "parts": [
+      [
+       5700,
+       7207,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "regulatory",
+     "parts": [
+      [
+       7182,
+       7187,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "polyA_site",
+     "parts": [
+      [
+       7207,
+       7207,
+       1
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "file": "fixtures/public-data/ncbi/ON605209.1.gb",
+   "name": "ON605209",
+   "length": 3438,
+   "molecule": "DNA",
+   "topology": "circular",
+   "accession": "ON605209",
+   "version": "ON605209.1",
+   "organism": "Cloning vector pMK-RQ-BCD_LacZ-cmyc-EB2-H6",
+   "definition": "Cloning vector pMK-RQ-BCD_LacZ-cmyc-EB2-H6, complete sequence",
+   "sha256": "f9da15f85f8b99d36634b7b8a352aa79dd474522165242c7fd8f5be917bde335",
+   "features": [
+    {
+     "type": "source",
+     "parts": [
+      [
+       1,
+       3438,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "CDS",
+     "parts": [
+      [
+       414,
+       473,
+       1
+      ]
+     ],
+     "length": 60,
+     "sha256": "78f8a132875afa68fff7df97fe72e877122b10c07eaffc368ccee3ff32f0347a",
+     "translation": "MTSLQHIINRRDWENKEVK*",
+     "given": "MTSLQHIINRRDWENKEVK",
+     "gene": null
+    },
+    {
+     "type": "gene",
+     "parts": [
+      [
+       473,
+       1519,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "CDS",
+     "parts": [
+      [
+       473,
+       1519,
+       1
+      ]
+     ],
+     "length": 1047,
+     "sha256": "e529eb340eb6ed8bbab34032ba08fc40ccc0fc19a23e7b76b2d226badb385439",
+     "translation": "MGEQKLISEEDLPGPTQTLSPNGENNNDIIQDNNGTIIPFRKHTVRGERSYSWGMAVNVYSTSITQETMSRHDIIAWVNDIVSLNYTKVEQLCSGAAYCQFMDMLFPGCISLKKVKFQAKLEHEYIHNFKLLQASFKRMNVDKVIPVEKLVKGRFQDNLDFIQWFKKFYDANYDGKEYDPVEARQGQDAIPPPDPGEQIFNLPKKSHHANSPTAGAAKSSPAAKPGSTPSRPSSAKRASSSGSASKSDKDLETQVIQLNEQVHSLKLALEGVEKERDFYFGKLREIELLCQEHGQENDDLVQRLMDILYASEEHEGHTEEPEAEEQAHEQQPPQQEEYHHHHHHKEVK*",
+     "given": "MGEQKLISEEDLPGPTQTLSPNGENNNDIIQDNNGTIIPFRKHTVRGERSYSWGMAVNVYSTSITQETMSRHDIIAWVNDIVSLNYTKVEQLCSGAAYCQFMDMLFPGCISLKKVKFQAKLEHEYIHNFKLLQASFKRMNVDKVIPVEKLVKGRFQDNLDFIQWFKKFYDANYDGKEYDPVEARQGQDAIPPPDPGEQIFNLPKKSHHANSPTAGAAKSSPAAKPGSTPSRPSSAKRASSSGSASKSDKDLETQVIQLNEQVHSLKLALEGVEKERDFYFGKLREIELLCQEHGQENDDLVQRLMDILYASEEHEGHTEEPEAEEQAHEQQPPQQEEYHHHHHHKEVK",
+     "gene": "cmyc-eb2-h6"
+    },
+    {
+     "type": "rep_origin",
+     "parts": [
+      [
+       1698,
+       2365,
+       1
+      ]
+     ]
+    },
+    {
+     "type": "gene",
+     "parts": [
+      [
+       2516,
+       3310,
+       -1
+      ]
+     ]
+    },
+    {
+     "type": "CDS",
+     "parts": [
+      [
+       2516,
+       3310,
+       -1
+      ]
+     ],
+     "length": 795,
+     "sha256": "8007041b7c62d65b20332662aa2b1f4403dbb9efa7878bea17811f343ba825bf",
+     "translation": "MIEQDGLHAGSPAAWVERLFGYDWAQQTIGCSDAAVFRLSAQGRPVLFVKTDLSGALNELQDEAARLSWLATTGVPCAAVLDVVTEAGRDWLLLGEVPGQDLLSSHLAPAEKVSIMADAMRRLHTLDPATCPFDHQAKHRIERARTRMEAGLVDQDDLDEEHQGLAPAELFARLKASMPDGEDLVVTHGDACLPNIMVENGRFSGFIDCGRLGVADRYQDIALATRDIAEELGGEWADRFLVLYGIAAPDSQRIAFYRLLDEFF*",
+     "given": "MIEQDGLHAGSPAAWVERLFGYDWAQQTIGCSDAAVFRLSAQGRPVLFVKTDLSGALNELQDEAARLSWLATTGVPCAAVLDVVTEAGRDWLLLGEVPGQDLLSSHLAPAEKVSIMADAMRRLHTLDPATCPFDHQAKHRIERARTRMEAGLVDQDDLDEEHQGLAPAELFARLKASMPDGEDLVVTHGDACLPNIMVENGRFSGFIDCGRLGVADRYQDIALATRDIAEELGGEWADRFLVLYGIAAPDSQRIAFYRLLDEFF",
+     "gene": "kanR"
+    }
+   ]
+  }
+ ]
+}

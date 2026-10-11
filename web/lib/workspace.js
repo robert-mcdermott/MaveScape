@@ -240,8 +240,9 @@ export function acknowledgeFinding(ws, finding, reason, time = clockNow()) {
 
 // Sets (or clears) the design, and the table it describes.
 export function setDesign(ws, design, detail, sourceId = ws.designSource) {
-  // A target's check against its entry (recordTargetCheck) is the workspace's, never the design's,
-  // even when the design takes its target from the workspace.
-  if (design?.targets?.some((t) => t.reference)) design = { ...design, targets: design.targets.map(({ reference, ...t }) => t) };
+  // A target's check against its entry (recordTargetCheck), and where its sequence came from (a
+  // GenBank record, NCBI or Ensembl: origin, wave 3 slice 3), are the workspace's, never the
+  // design's, even when the design takes its target from the workspace.
+  if (design?.targets?.some((t) => t.reference || t.origin)) design = { ...design, targets: design.targets.map(({ reference, origin, ...t }) => t) };
   return change(ws, { design, designSource: design ? sourceId : null }, 'design', detail);
 }

@@ -1,0 +1,6 @@
+{
+  "contentType": "text/plain; charset=utf-8",
+  "service": "NCBI E-utilities",
+  "source": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore\u0026id=ON605209.1\u0026rettype=gb\u0026retmode=text\u0026tool=mavescape",
+  "retrieved": "2026-10-11T04:43:20Z"
+}

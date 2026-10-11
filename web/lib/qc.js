@@ -31,7 +31,7 @@ import { barcodeDisagreement, groupBarcodes, OUTLIER_Z, sumByVariant } from './s
 import { scoreDimsumGroup, substitutionsOf } from './score-dimsum.js';
 import { auc, mad, mean, median, MEDIAN_CHI2_1, nonNegativeLine, pearson, quantileSorted, sorted, spearman, variance } from './stats.js';
 import { controlRows } from './score.js';
-import { CODONS } from './target.js';
+import { CODONS, targetProtein } from './target.js';
 import { lossSide, readoutOf, SINGLE_NUCLEOTIDE_LIBRARIES } from './readout.js';
 
 export const QC_VERSION = '1';
@@ -89,11 +89,16 @@ function sampleMetrics(sample, counts, lowCount) {
 
 // The designed single substitutions (every amino acid and stop at every position of the target,
 // or of its tiles) and which are in the table and observed (input reads in some replicate).
+// Nucleotide variants of a DNA target count by the protein change they make (wave 3, slice 3): a
+// substitution reached by several codons is covered when any of them is observed.
 function coverage(design, variants, observed) {
   const target = design.targets?.length === 1 ? design.targets[0] : null;
-  if (!target || design.variants.level !== 'protein') {
-    return { assessed: false, reason: !target ? 'the design has no single target' : 'coverage by position is computed for protein-level variants (nucleotide coverage comes with wave 3)' };
+  const nucleotide = design.variants.level !== 'protein';
+  if (!target || (nucleotide && !variants.proKey)) {
+    return { assessed: false, reason: !target ? 'the design has no single target' : 'coverage by position is computed on the protein a DNA target encodes, and this target is not DNA' };
   }
+  const position = nucleotide ? variants.proPosition : variants.position;
+  const altCode = nucleotide ? variants.proAlt : variants.alt;
   const length = targetLength(target, 'protein');
   const tiles = design.library?.tiles ?? [];
   const inDesign = (p) => !tiles.length || tiles.some((t) => p >= t.start && p <= t.end);
@@ -102,11 +107,11 @@ function coverage(design, variants, observed) {
   for (let p = 1; p <= length; p += 1) for (let a = 0; a < 21; a += 1) grid[(p - 1) * 21 + a] = inDesign(p) ? 0 : 4;
   for (let i = 0; i < variants.n; i += 1) {
     const kind = variants.kind[i];
-    if (variants.status[i] === STATUS.INVALID || !(kind === KIND.MISSENSE || kind === KIND.NONSENSE || kind === KIND.START_LOST || kind === KIND.SYNONYMOUS)) continue;
-    const p = variants.position[i];
-    if (p < 1 || p > length) continue;
+    if (variants.status[i] === STATUS.INVALID || variants.mixed?.[i] || !(kind === KIND.MISSENSE || kind === KIND.NONSENSE || kind === KIND.START_LOST || kind === KIND.SYNONYMOUS)) continue;
+    const p = position[i];
+    if (p < 1 || p > length || !altCode[i]) continue;
     if (kind === KIND.SYNONYMOUS) continue;
-    const cell = (p - 1) * 21 + variants.alt[i] - 1;
+    const cell = (p - 1) * 21 + altCode[i] - 1;
     if (grid[cell] === 4) continue;
     grid[cell] = Math.max(grid[cell], observed[i] ? 2 : 1);
   }
@@ -136,8 +141,21 @@ function coverage(design, variants, observed) {
   // substitutions one base change away from each wild-type codon: judged against those when the
   // target's codons are known (a DNA target), named as expected otherwise.
   const method = design.library?.method ?? null;
+  // A table of single-base substitutions (a saturation genome editing library, wave 3 slice 3)
+  // reaches the substitutions one base change makes, whatever the library's method.
+  let singleBase = false;
+  if (nucleotide) {
+    let any = false;
+    singleBase = true;
+    for (let i = 0; i < variants.n && singleBase; i += 1) {
+      if (variants.status[i] === STATUS.INVALID || variants.kind[i] === KIND.WT) continue;
+      any = true;
+      if (!/^(?:[^:]+:)?[cngmo]\.[-*]?\d+(?:[+-]\d+)?[ACGT]>[ACGT]$/.test(variants.key[i])) singleBase = false;
+    }
+    singleBase &&= any;
+  }
   let reach = null;
-  if (method && SINGLE_NUCLEOTIDE_LIBRARIES.has(method)) {
+  if ((method && SINGLE_NUCLEOTIDE_LIBRARIES.has(method)) || singleBase) {
     const dna = target.sequenceType === 'dna' ? target.sequence.toUpperCase().slice((target.codingStart ?? 1) - 1) : null;
     if (!dna) reach = { known: false };
     else {
@@ -160,21 +178,28 @@ function coverage(design, variants, observed) {
       reach = { known: true, designed: reachable, observed: reachableSeen, fraction: reachable ? reachableSeen / reachable : Number.NaN };
     }
   }
-  return { assessed: true, length, offset: target.offset ?? 0, grid, designed, inTable, observed: seen, fraction: designed ? seen / designed : Number.NaN, byClass, tiles: tiles.length, method, reach };
+  // Without tiles, the stretches of the protein the table's substitutions lie in (gaps of 15
+  // positions or fewer joined): a library designed for some regions shows them.
+  let stretches = null;
+  if (!tiles.length) {
+    const at = [];
+    for (let p = 1; p <= length; p += 1) {
+      let here = false;
+      for (let a = 0; a < 21 && !here; a += 1) here = grid[(p - 1) * 21 + a] === 1 || grid[(p - 1) * 21 + a] === 2;
+      if (here) at.push(p);
+    }
+    const runs = [];
+    for (const p of at) {
+      if (runs.length && p - runs.at(-1)[1] <= 16) runs.at(-1)[1] = p;
+      else runs.push([p, p]);
+    }
+    const spanned = runs.reduce((a, [x, y]) => a + y - x + 1, 0);
+    if (runs.length && spanned < 0.75 * length) stretches = runs;
+  }
+  return { assessed: true, length, offset: target.offset ?? 0, grid, designed, inTable, observed: seen, fraction: designed ? seen / designed : Number.NaN, byClass, tiles: tiles.length, method, reach, singleBase, stretches };
 }
 
-function targetProteinOf(target) {
-  if (target.sequenceType === 'protein') return target.sequence.toUpperCase();
-  const codons = { };
-  const order = 'TCAG';
-  const aas = 'FFLLSSSSYY**CC*WLLLLPPPPHHQQRRRRIIIMTTTTNNKKSSRRVVVVAAAADDEEGGGG';
-  let k = 0;
-  for (const a of order) for (const b of order) for (const c of order) codons[a + b + c] = aas[k++];
-  const dna = target.sequence.toUpperCase().slice((target.codingStart ?? 1) - 1);
-  let out = '';
-  for (let i = 0; i + 3 <= dna.length; i += 3) out += codons[dna.slice(i, i + 3)] ?? 'X';
-  return out;
-}
+const targetProteinOf = targetProtein;
 
 // One replicate's raw log ratio and counting variance per row (first and last samples, pseudocount
 // 0.5), and whether the row is usable (counted in every sample, enough input reads, valid name).
@@ -452,7 +477,7 @@ function scoreMetrics(results, design) {
     const missense = scoredWhere((i) => kind[i] === KIND.MISSENSE);
     // Every scored stop, controls or not, by position: where stops stop losing the function.
     const stops = [];
-    for (let i = 0; i < results.rows; i += 1) if (!c.reason[i] && kind[i] === KIND.NONSENSE && Number.isFinite(c.score[i])) stops.push({ position: results.variants.position[i], score: c.score[i] });
+    for (let i = 0; i < results.rows; i += 1) if (!c.reason[i] && kind[i] === KIND.NONSENSE && Number.isFinite(c.score[i])) stops.push({ position: results.variants.proPosition?.[i] ?? results.variants.position[i], score: c.score[i] });
     const wt = results.controls.wt >= 0 && !c.reason[results.controls.wt] ? c.score[results.controls.wt] : Number.NaN;
     const reference = synonymous.length >= 5 ? { what: 'synonymous', scores: synonymous } : Number.isFinite(wt) ? { what: 'wild type', scores: [wt] } : null;
     let separation = null;

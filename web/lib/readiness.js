@@ -228,7 +228,9 @@ function factsOf(ws, design) {
 function scoresAnalysesOf(f) {
   const out = [];
   const add = (...args) => out.push(analysis(...args));
-  const protein = f.level === 'protein' && (f.design?.targets?.length ?? 0) === 1;
+  // Coverage is counted on the protein: of protein variants, or of the nucleotide variants of a
+  // DNA target by the protein changes they make (wave 3, slice 3).
+  const protein = (f.design?.targets?.length ?? 0) === 1 && (f.level === 'protein' || f.design.targets[0].sequenceType === 'dna');
   add('Scoring', 'score.rescore', 'Rescored from the counts: MaveScape\'s models and choices, beside the published scores', { needs: [['counts', true]] });
   add('Quality control', 'qc.counts', 'Quality control of the counts: depth, replicate agreement, bottlenecks', { needs: [['counts', true]] });
   add('Quality control', 'qc.separation', 'Separation of controls', { needs: [['nonsense', !f.nonsense], [f.wildType ? 'synonymous' : 'wild-type', !f.synonymous && !f.wildType]], improves: [['readout', !f.readout]] });
@@ -236,7 +238,7 @@ function scoresAnalysesOf(f) {
   add('Quality control', 'qc.coverage', 'Coverage of substitutions with a score', {
     improves: [['library-method', !f.libraryMethod]],
     unavailable: !protein,
-    note: protein ? null : 'Coverage by position is computed for protein-level variants of a single target.',
+    note: protein ? null : 'Coverage by position is computed on the protein of a single target (nucleotide variants of a DNA target by the protein changes they make).',
   });
   add('Quality control', 'qc.scored-fraction', 'Variants with a score');
   add('Record', 'record.scores', 'The published scores on the map, explored and exported', { improves: [['score-se', !f.scoreSE]] });
@@ -330,8 +332,8 @@ function analysesOf(f) {
   if (!bins) qc('dropout', 'Missing after selection');
   qc('coverage', 'Coverage of designed substitutions', {
     improves: [['library-method', !f.libraryMethod]],
-    unavailable: f.level !== 'protein' || (f.design?.targets?.length ?? 0) !== 1,
-    note: f.level !== 'protein' ? 'Coverage by position is computed for protein-level variants; nucleotide coverage comes with MaveScape 0.3.' : (f.design?.targets?.length ?? 0) !== 1 ? 'Coverage is computed for a design with a single target.' : null,
+    unavailable: (f.design?.targets?.length ?? 0) !== 1 || (f.level !== 'protein' && f.design.targets[0].sequenceType !== 'dna'),
+    note: (f.design?.targets?.length ?? 0) !== 1 ? 'Coverage is computed for a design with a single target.' : f.level !== 'protein' && f.design.targets[0].sequenceType !== 'dna' ? 'Nucleotide variants are counted by the protein changes they make, which needs a DNA target.' : null,
   });
   qc('agreement', 'Replicate agreement', { needs: [['replicates', single]] });
   qc('excess-variance', 'Variance beyond counting (bottleneck)', {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { countsDesign, licenseOf, normalizeUrn, readoutOf, readScoreSet, scoresDesign, searchHits, targetsOf } from './mavedb.js';
+import { accessionKind, accessionTarget, countsDesign, licenseOf, mappedCSV, mappedVariants, normalizeUrn, readMapped, readoutOf, readScoreSet, scoresDesign, searchHits, targetsOf } from './mavedb.js';
 import { parseTable } from './csv.js';
 import { detectLayout } from './importer.js';
 import { validateDesign } from './design.js';
@@ -45,12 +45,13 @@ test('a record: its title, license and terms, citation, columns, target, keyword
   const moderate = excalibr.classes.find((c) => c.label === 'PS3 Moderate (2)');
   assert.deepEqual(moderate.evidence, { criterion: 'PS3', strength: 'moderate', points: 2 });
   assert.equal(moderate.range[0], 0.4573227064747745);
-  // CC BY: free use with credit; a target named by an accession is not read yet.
+  // CC BY: free use with credit.
   const bap1 = record('urn:mavedb:00000662-a-2');
   assert.equal(bap1.license.short, 'CC BY 4.0');
   assert.match(bap1.license.terms, /crediting the authors/);
-  assert.match(targetsOf(bap1).problems[0], /named by the accession ENST00000460680\.5 \(GRCh38\)/);
-  assert.equal(targetsOf(bap1).targets.length, 0);
+  // Its target is a transcript, fetched when it is opened (wave 3, slice 3).
+  assert.deepEqual(targetsOf(bap1).pending.map((p) => [p.kind, p.accession, p.gene]), [['ensembl', 'ENST00000460680.5', 'BAP1']]);
+  assert.deepEqual(targetsOf(bap1).problems, []);
   assert.match(licenseOf({ shortName: 'CC BY-NC-SA 4.0', longName: 'CC BY-NC-SA 4.0 (Attribution-NonCommercial-ShareAlike)' }).terms, /Non-commercial use only/);
   assert.equal(licenseOf({ shortName: 'CC BY-NC-SA 4.0' }).open, false);
   assert.match(licenseOf({ shortName: 'Other', longName: 'Custom terms', link: 'https://example.org/terms' }).terms, /read its terms before using the data \(https:\/\/example\.org\/terms\)/);
@@ -99,4 +100,41 @@ test('search results: each score set\'s URN, title, targets, license and size', 
   assert.equal(total, 1);
   assert.deepEqual({ ...hits[0], publication: hits[0].publication.slice(0, 7) }, { urn: GRB2, title: 'GRB2 SH3 domain domainome 1.0', shortDescription: 'Stability measurements of the GRB2 SH3 domain from domainome 1.0.', targets: ['GRB2 SH3 domain'], organism: 'Homo sapiens', accessionTarget: false, license: 'CC0', variants: 1121, published: '2024-05-17', publication: 'Beltran' });
   assert.deepEqual(searchHits({}), { total: 0, hits: [] });
+});
+
+// Wave 3, slice 3: targets named by a transcript, several targets, mapped variants.
+test('a target named by a transcript: NCBI\'s GenBank record or Ensembl\'s sequence, read as the target', () => {
+  const pending = { kind: 'refseq', accession: 'NM_000001.1', name: 'GENE', gene: 'GENE', identifiers: {}, offset: 0 };
+  const genbank = 'LOCUS       NM_000001                 27 bp    mRNA    linear   PRI 01-JAN-2026\nDEFINITION  A gene, mRNA.\nACCESSION   NM_000001\nVERSION     NM_000001.1\nFEATURES             Location/Qualifiers\n     CDS             4..24\n                     /gene="GENE"\n                     /protein_id="NP_000001.1"\n                     /translation="MAKKGW"\nORIGIN\n        1 gggatggcta aaaaaggctg gtaaccc\n//\n';
+  const made = accessionTarget(pending, genbank, { retrieval: { retrieved: '2026-10-11T00:00:00Z' } });
+  assert.deepEqual([made.target.codingStart, made.target.sequence.length, made.target.identifiers], [4, 27, { gene: 'GENE', refseq: 'NM_000001.1', protein: 'NP_000001.1' }]);
+  assert.deepEqual([made.origin.service, made.origin.accession, made.origin.check.status], ['NCBI', 'NM_000001.1', 'identical']);
+  const ensembl = accessionTarget({ ...pending, kind: 'ensembl', accession: 'ENST00000000001.5' }, { id: 'ENST00000000001', version: 6, seq: 'gggATGGCTAAATAAccc' });
+  assert.deepEqual([ensembl.target.codingStart, ensembl.target.identifiers.ensembl, ensembl.origin.accession, ensembl.origin.versionDiffers], [4, 'ENST00000000001.5', 'ENST00000000001.6', true]);
+  assert.match(ensembl.messages[0].message, /Ensembl's current release has ENST00000000001\.6/);
+  assert.match(accessionTarget(pending, 'nothing').problem, /could not be read/);
+  assert.equal(accessionKind('NC_000017.11'), 'genome');
+  assert.equal(accessionKind('ENSP00000269305.4'), 'protein');
+});
+
+test('several targets: one opened at a time; a transcript named beside its protein is one target', () => {
+  const record = (targets) => readScoreSet({ urn: 'urn:mavedb:00000001-a-1', title: 'T', license: { shortName: 'CC0' }, targetGenes: targets, datasetColumns: {}, experiment: {} });
+  const seq = (name) => ({ name, category: 'protein_coding', targetSequence: { sequence: 'ATGAAATAA', sequenceType: 'dna', label: name } });
+  const two = record([seq('LMNA'), seq('CCM2')]);
+  assert.deepEqual(targetsOf(two).choices.map((c) => c.label), ['LMNA', 'CCM2']);
+  assert.deepEqual(targetsOf(two).targets, []);
+  const one = targetsOf(two, { target: 'CCM2' });
+  assert.deepEqual([one.targets.map((t) => t.name), one.others], [['CCM2'], ['LMNA']]);
+  const pair = targetsOf(record([{ name: 'TP53', targetAccession: { accession: 'ENST00000269305.9' } }, { name: 'TP53', targetAccession: { accession: 'ENSP00000269305.4' } }]));
+  assert.deepEqual([pair.choices.length, pair.pending[0].accession, pair.pending[0].protein], [0, 'ENST00000269305.9', 'ENSP00000269305.4']);
+});
+
+test('MaveDB\'s mapped variants: the current mappings, kept as a table and read back', () => {
+  const rows = mappedVariants([
+    { variantUrn: 'urn:mavedb:00000835-a-1#1', current: true, clingenAlleleId: null, alignmentLevel: 'protein', postMapped: { id: 'ga4gh:VA.abc', expressions: [{ syntax: 'hgvs.p', value: 'NP_002077.1:p.Thr159Ter' }] } },
+    { variantUrn: 'urn:mavedb:00000835-a-1#1', current: false, postMapped: { id: 'ga4gh:VA.old' } },
+  ]);
+  assert.deepEqual(rows, [{ urn: 'urn:mavedb:00000835-a-1#1', vrs: 'ga4gh:VA.abc', hgvs: 'NP_002077.1:p.Thr159Ter', clingen: null, level: 'protein' }]);
+  const back = readMapped(parseTable(mappedCSV(rows)));
+  assert.deepEqual(back.get('urn:mavedb:00000835-a-1#1'), { vrs: 'ga4gh:VA.abc', hgvs: 'NP_002077.1:p.Thr159Ter', clingen: null, level: 'protein' });
 });

@@ -146,6 +146,9 @@ type publicRequest struct {
 	MaxAge  time.Duration `json:"-"`
 	Limit   int64         `json:"-"`
 	Version string        `json:"-"`
+	// Missing: an upstream status other than 404 that means "no such record" (NCBI and Ensembl
+	// answer an unknown accession with HTTP 400).
+	Missing int `json:"-"`
 	// resolve: the cache entry's name, the upstream URL and a POST's body, or what is wrong with
 	// the request.
 	resolve  func(r *http.Request) (call, error)
@@ -159,9 +162,11 @@ type call struct {
 }
 
 const (
-	formatJSON     = "json"
-	formatCSV      = "csv"
-	csvContentType = "text/csv; charset=utf-8"
+	formatJSON         = "json"
+	formatCSV          = "csv"
+	formatGenBank      = "genbank"
+	csvContentType     = "text/csv; charset=utf-8"
+	genbankContentType = "text/plain; charset=utf-8"
 )
 
 func (r publicRequest) method() string {
@@ -172,8 +177,11 @@ func (r publicRequest) method() string {
 }
 
 func (r publicRequest) contentType() string {
-	if r.Format == formatCSV {
+	switch r.Format {
+	case formatCSV:
 		return csvContentType
+	case formatGenBank:
+		return genbankContentType
 	}
 	return jsonContentType
 }
@@ -270,6 +278,19 @@ var publicRequests = []publicRequest{
 		},
 	},
 	{
+		Route:    "GET /api/fetch/mavedb/score-sets/{urn}/mapped-variants",
+		Service:  "MaveDB",
+		Upstream: mavedbAPI + "/score-sets/{urn}/mapped-variants",
+		Sends:    "a MaveDB URN",
+		Why:      "MaveDB's mapping of the score set's variants to the human reference: VRS identifiers, HGVS on the reference, ClinGen allele IDs",
+		Format:   formatJSON,
+		Kind:     "mavedb", MaxAge: 7 * 24 * time.Hour, Limit: maxDownloadBytes,
+		resolve: mavedbCall("/mapped-variants", ".mapped.json"),
+		notFound: func(r *http.Request) string {
+			return fmt.Sprintf("MaveDB has no mapped variants for %s.", r.PathValue("urn"))
+		},
+	},
+	{
 		Route:    "GET /api/fetch/mavedb/search",
 		Service:  "MaveDB",
 		Method:   http.MethodPost,
@@ -302,6 +323,76 @@ var publicRequests = []publicRequest{
 		},
 		notFound: func(*http.Request) string { return "MaveDB's search did not answer." },
 	},
+}
+
+// Targets named by an accession (wave 3, slice 3): a RefSeq or GenBank record from NCBI, and an
+// Ensembl transcript's sequence.
+var accessionRequests = []publicRequest{
+	{
+		Route:    "GET /api/fetch/ncbi/nuccore/{accession}",
+		Service:  "NCBI E-utilities",
+		Upstream: ncbiEfetch + "?db=nuccore&id={accession}&rettype=gb&retmode=text&tool=mavescape",
+		Sends:    "a RefSeq or GenBank nucleotide accession (NM_007294.3)",
+		Why:      "the record's sequence and features (GenBank), for a target named by its transcript",
+		Format:   formatGenBank,
+		Kind:     "ncbi", MaxAge: defaultCacheMaxAge, Limit: 32 << 20, Missing: http.StatusBadRequest,
+		resolve: func(r *http.Request) (call, error) {
+			accession, ok := normalizeNucleotideAccession(r.PathValue("accession"))
+			if !ok {
+				return call{}, errors.New("Not a nucleotide accession: give one such as NM_007294.3 or L09137.")
+			}
+			return call{name: accession + ".gb", source: ncbiEfetch + "?db=nuccore&id=" + accession + "&rettype=gb&retmode=text&tool=mavescape"}, nil
+		},
+		notFound: func(r *http.Request) string {
+			return fmt.Sprintf("NCBI has no nucleotide record %s.", strings.ToUpper(r.PathValue("accession")))
+		},
+	},
+	{
+		Route:    "GET /api/fetch/ensembl/transcript/{id}",
+		Service:  "Ensembl",
+		Upstream: "https://rest.ensembl.org/sequence/id/{id}?type=cdna&mask_feature=1",
+		Sends:    "an Ensembl transcript identifier, without its version (ENST00000460680)",
+		Why:      "the transcript's sequence in Ensembl's current release, its coding part in capitals, for a target named by its transcript",
+		Format:   formatJSON,
+		Kind:     "ensembl", MaxAge: defaultCacheMaxAge, Limit: 16 << 20, Missing: http.StatusBadRequest,
+		resolve: func(r *http.Request) (call, error) {
+			id, ok := normalizeEnsemblTranscript(r.PathValue("id"))
+			if !ok {
+				return call{}, errors.New("Not an Ensembl transcript: give one such as ENST00000460680.")
+			}
+			return call{name: id + ".json", source: "https://rest.ensembl.org/sequence/id/" + id + "?type=cdna&mask_feature=1"}, nil
+		},
+		notFound: func(r *http.Request) string {
+			return fmt.Sprintf("Ensembl has no transcript %s in its current release.", strings.ToUpper(r.PathValue("id")))
+		},
+	},
+}
+
+func init() {
+	publicRequests = append(publicRequests, accessionRequests...)
+}
+
+const ncbiEfetch = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+
+var (
+	// RefSeq (NM_007294.3) and INSDC (L09137.2) nucleotide accessions.
+	nucleotidePattern = regexp.MustCompile(`^((AC|NC|NG|NM|NR|NT|NW|NZ|XM|XR)_[0-9]{6,9}|[A-Z][0-9]{5}|[A-Z]{2}[0-9]{6,8})(\.[0-9]+)?$`)
+	// Ensembl transcripts, of human (ENST) and other species (ENSMUST…); the version is dropped,
+	// Ensembl serving its current release only.
+	ensemblTranscriptPattern = regexp.MustCompile(`^(ENS[A-Z]*T[0-9]{11})(\.[0-9]+)?$`)
+)
+
+func normalizeNucleotideAccession(raw string) (string, bool) {
+	accession := strings.ToUpper(strings.TrimSpace(raw))
+	return accession, nucleotidePattern.MatchString(accession)
+}
+
+func normalizeEnsemblTranscript(raw string) (string, bool) {
+	m := ensemblTranscriptPattern.FindStringSubmatch(strings.ToUpper(strings.TrimSpace(raw)))
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
 }
 
 const (
@@ -681,9 +772,12 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 		return fetched{}, -1, err
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf(userAgent, version))
-	if request.Format == formatCSV {
+	switch request.Format {
+	case formatCSV:
 		req.Header.Set("Accept", "text/csv")
-	} else {
+	case formatGenBank:
+		req.Header.Set("Accept", "text/plain")
+	default:
 		req.Header.Set("Accept", jsonContentType)
 	}
 	if payload != nil {
@@ -708,7 +802,7 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 	switch {
 	case resp.StatusCode == http.StatusNotModified && previous != nil:
 		return fetched{notModified: true}, 0, nil
-	case resp.StatusCode == http.StatusNotFound:
+	case resp.StatusCode == http.StatusNotFound || (request.Missing != 0 && resp.StatusCode == request.Missing):
 		return fetched{}, -1, errUpstreamNotFound
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusGatewayTimeout:
 		return fetched{}, retryAfter(resp.Header.Get("Retry-After")), &fetchError{status: http.StatusBadGateway, message: fmt.Sprintf("%s is not answering now (HTTP %d); try again later.", request.Service, resp.StatusCode), upstream: resp.StatusCode}
@@ -728,11 +822,16 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 	if err != nil {
 		return fetched{}, 0, upstreamFailure(request.Service, err)
 	}
-	if request.Format == formatCSV {
+	switch {
+	case request.Format == formatCSV:
 		if !looksLikeCSV(data) {
 			return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not a CSV table.", request.Service)
 		}
-	} else if !json.Valid(data) {
+	case request.Format == formatGenBank:
+		if !looksLikeGenBank(data) {
+			return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not a GenBank record.", request.Service)
+		}
+	case !json.Valid(data):
 		return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not JSON.", request.Service)
 	}
 	log.Printf("fetched %s%s (%d bytes)", resp.Request.URL.Host, resp.Request.URL.Path, len(data))
@@ -741,6 +840,11 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 		result.version = resp.Header.Get(request.Version)
 	}
 	return result, 0, nil
+}
+
+// looksLikeGenBank: a flat file that begins with its LOCUS line.
+func looksLikeGenBank(data []byte) bool {
+	return bytes.HasPrefix(bytes.TrimLeft(data, " \t\r\n\ufeff"), []byte("LOCUS "))
 }
 
 // looksLikeCSV: a header line with at least two comma-separated names, not a page of HTML or JSON.

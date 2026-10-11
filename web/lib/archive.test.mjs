@@ -35,3 +35,14 @@ test('foreign names are not read; a missing workspace is refused', async () => {
   assert.match(r.problems[0], /"\/etc\/passwd" is not part of a MaveScape archive/);
   await assert.rejects(readArchive(await createZip(files.filter((f) => f.name !== 'workspace.json'))), /no workspace.json/);
 });
+
+test('MaveDB\'s mapped variants kept beside a table travel with the archive, and their absence is said (wave 3, slice 3)', async () => {
+  const bytes = new TextEncoder().encode('accession,hgvs_pro,score\nurn:mavedb:00000835-a-1#1,p.Thr1Ter,-1\n');
+  const mapped = new TextEncoder().encode('accession,vrs_id,hgvs,clingen_allele_id,alignment_level\nurn:mavedb:00000835-a-1#1,ga4gh:VA.x,NP_002077.1:p.Thr159Ter,NA,protein\n');
+  const ws = addSource(createWorkspace('w', { now: '2026-10-11T00:00:00.000Z', id: 'ws-mapped' }), { name: 'scores', fileName: 'scores.csv', sha256: sha256(bytes), size: bytes.length, rows: 1, columns: [], origin: { database: 'MaveDB', urn: 'urn:mavedb:00000835-a-1', file: 'scores', mapped: { fileName: 'urn_mavedb_00000835-a-1.mapped.csv', sha256: sha256(mapped), size: mapped.length, variants: 1 } } }).ws;
+  await assert.rejects(writeArchive(ws, { sources: new Map([[sha256(bytes), bytes]]) }), /mapped\.csv .* is not in the library/);
+  const archive = await writeArchive(ws, { sources: new Map([[sha256(bytes), bytes], [sha256(mapped), mapped]]) });
+  const back = await readArchive(archive.bytes);
+  assert.deepEqual(back.problems, []);
+  assert.deepEqual([...back.sources.get(sha256(mapped))], [...mapped]);
+});

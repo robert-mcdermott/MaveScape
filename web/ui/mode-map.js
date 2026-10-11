@@ -3,11 +3,16 @@
 // state drawn its own way and named in the legend; the median of each position above and of each
 // substitution at the right; target and reference numbering. Select by click or rectangle (the
 // selection is shared, the inspector shows its first variant), save selections by name, export SVG
-// and PNG. The map is described in words, and every cell is in the table below it.
+// and PNG. The map is described in words, and every cell is in the table below it. A nucleotide
+// run is drawn from its protein view (collapse.js); every variant not on the map (frameshifts,
+// splice-site, intronic and UTR variants, insertions, deletions, multi-variants) is in a table
+// beside it (wave 3, slice 3).
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { promptDialog, showMenu, toast } from './overlays.js';
-import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, NO_DIFFERENTIAL, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, NO_DIFFERENTIAL, offMapRows, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { proteinView } from '../lib/collapse.js';
+import { KIND_NAMES } from '../lib/variants.js';
 import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, STAGE_BY_CODE } from '../lib/filters.js';
@@ -25,12 +30,14 @@ export function mountMapMode(app, container) {
   const { store } = app;
   const root = h('div.view');
   container.append(root);
-  app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0 };
+  app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0, offKind: 'all', offPage: 0 };
   const view = app.mapView;
   let map = null;
   let mapKey = '';
   let model = null;
   let results = null;
+  // The run's own results (a nucleotide run's, whose protein view is `results`).
+  let own = null;
   let run = null;
   let cellOfKey = new Map();
 
@@ -221,6 +228,47 @@ export function mountMapMode(app, container) {
     clear(tableEl).append(tableOf());
   }
 
+  // The variants not on the map, from the run's own rows: what each is, its protein change, its
+  // score or why it has none.
+  function offMapTable() {
+    const v = own.variants;
+    // In order along the target (the 5′ UTR first; an intronic variant after its exon's base).
+    const rows = offMapRows(own, model, own === results ? null : results).sort((a, b) => v.position[a] - v.position[b] || (v.key[a] < v.key[b] ? -1 : 1));
+    if (!rows.length) return null;
+    // Names shown without the target's accession, which every one of them repeats.
+    const shortName = (key) => key.replace(/^[A-Za-z0-9_.-]+:(?=[cgmnopr]\.)/, '');
+    const ci = conditionIndex();
+    const c = own.conditions[Math.max(0, ci)];
+    const kinds = [...new Set(rows.map((i) => v.kind[i]))].sort((a, b) => a - b);
+    const shownRows = view.offKind === 'all' ? rows : rows.filter((i) => KIND_NAMES[v.kind[i]] === view.offKind);
+    const pages = Math.max(1, Math.ceil(shownRows.length / PAGE));
+    view.offPage = Math.min(view.offPage, pages - 1);
+    const pick = h('select.input.small', { 'aria-label': 'Classes shown', onchange: () => { view.offKind = pick.value; view.offPage = 0; renderOffMap(); } },
+      h('option', { value: 'all', selected: view.offKind === 'all' }, 'Every class'),
+      ...kinds.map((k) => h('option', { value: KIND_NAMES[k], selected: view.offKind === KIND_NAMES[k] }, `${KIND_NAMES[k]} (${formatCount(rows.filter((i) => v.kind[i] === k).length)})`)));
+    const state = (i) => {
+      if (!c.reason[i]) return c.flags[i] ? 'low confidence' : 'scored';
+      const stage = STAGE_BY_CODE.get(c.reason[i]);
+      return stage?.id === 'measured' ? 'missing' : `filtered (${stage?.label.toLowerCase() ?? 'no score'})`;
+    };
+    return h('details.off-map', { open: view.offOpen ?? false, ontoggle: (e) => { view.offOpen = e.target.open; } },
+      h('summary', `Not on the map (${formatCount(rows.length)})`),
+      h('div.btn-row', { style: { margin: '8px 0' } }, pick, h('span.spacer'), h('span.muted', { style: { fontSize: '12px' } }, `${formatCount(shownRows.length)} variants`),
+        h('button.btn.small', { type: 'button', disabled: view.offPage === 0, 'aria-label': 'Previous page', onclick: () => { view.offPage -= 1; renderOffMap(); } }, '‹'),
+        h('span.muted', { style: { fontSize: '12px' } }, `${view.offPage + 1} / ${pages}`),
+        h('button.btn.small', { type: 'button', disabled: view.offPage >= pages - 1, 'aria-label': 'Next page', onclick: () => { view.offPage += 1; renderOffMap(); } }, '›')),
+      h('div.table-scroll', h('table.data', h('thead', h('tr', h('th', 'Variant'), h('th', 'Class'), v.proKey ? h('th', 'Protein') : null, h('th.r', 'Score'), h('th.r', 'SE'), h('th', 'State'))),
+        h('tbody', ...shownRows.slice(view.offPage * PAGE, (view.offPage + 1) * PAGE).map((i) => h('tr', { style: { cursor: 'pointer' }, onclick: () => app.focusItem({ kind: 'variant', id: v.key[i], run: run.id, condition: Math.max(0, ci) }) },
+          h('td.mono', { title: v.key[i] }, shortName(v.key[i])), h('td', KIND_NAMES[v.kind[i]]), v.proKey ? h('td.mono', v.proKey[i] || '—') : null,
+          h('td.r', c.reason[i] ? '—' : fmt(c.score[i])), h('td.r', c.reason[i] ? '—' : fmt(c.se[i])), h('td', state(i))))))));
+  }
+  const offMapEl = h('div');
+  function renderOffMap() {
+    clear(offMapEl);
+    const table = offMapTable();
+    if (table) offMapEl.append(table);
+  }
+
   // --- The view ----------------------------------------------------------------------------------
   function render() {
     clear(root);
@@ -242,7 +290,9 @@ export function mountMapMode(app, container) {
       destroyMap();
       return;
     }
-    results = entry.results;
+    own = entry.results;
+    // A nucleotide run is drawn at the protein level.
+    results = proteinView(own) ?? own;
     view.condition = Math.min(view.condition, results.conditions.length - 1);
     try {
       view.contrast = Math.min(view.contrast ?? 0, Math.max(0, (results.differential?.length ?? 1) - 1));
@@ -274,11 +324,13 @@ export function mountMapMode(app, container) {
     root.append(h('div.view-body.map-body',
       h('div.pane.map-pane', controls(), legendEl, map.el, selectionEl),
       h('div.pane', h('h3', icon('info'), 'In words'), ...description.map((line) => h('p.map-description', line)),
+        offMapEl,
         h('details', h('summary', 'Every cell as a table'), tableEl))));
     map.el.setAttribute('aria-description', description.join(' '));
     renderLegend();
     renderSelectionBar();
     renderTable();
+    renderOffMap();
   }
   function destroyMap() {
     map?.destroy();

@@ -81,3 +81,15 @@ test('the review blocks on duplicates and on counts that are not numbers; templa
   assert.equal(applyTemplate(template, table).variantColumn, 'variant');
   assert.equal(applyTemplate(template, parseTable('variant,input\nx,1\n')), null);
 });
+
+test('a lone sample is no replicate of a time series: set aside, with a note (BRCA1\'s saturation genome editing counts)', () => {
+  const table = parseTable('hgvs_nt,count_library,count_day5_rep1,count_day11_rep1,count_day5_rep2,count_day11_rep2\nc.1A>G,5,10,8,11,9\nc.2T>C,4,9,1,10,2\n');
+  const roles = suggestRoles(table.columns.slice(1).map((c) => c.name)).map((r) => (r.role ? r : { ...r, group: r.column }));
+  const target = { id: 't', name: 'T', sequenceType: 'dna', sequence: 'ATGAAATAA', codingStart: 1 };
+  const { design, notes } = draftDesign(table, roles, { variantColumn: 'hgvs_nt', level: 'nucleotide', target });
+  assert.equal(design.model, 'time-series');
+  assert.deepEqual(design.replicates.map((r) => [r.name, r.timepoints.map((t) => t.time)]), [['Replicate 1', [5, 11]], ['Replicate 2', [5, 11]]]);
+  assert.deepEqual(design.ignoredColumns, [{ column: 'count_library', reason: 'a single sample, not a replicate of the time series: set aside' }]);
+  assert.ok(notes.some((n) => /count_library: a sample on its own/.test(n)));
+  assert.ok(validateDesign(design, { columns: table.columns.map((c) => c.name) }).ok);
+});

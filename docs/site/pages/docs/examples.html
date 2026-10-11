@@ -1,7 +1,7 @@
 ---
 title: Examples
 description: MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), a published score set opened from MaveDB (PTEN's abundance, scores alone), and six simulated ones whose true effects are known, one of them with problems planted.
-lede: Ten examples come with MaveScape. Three are published experiments from MaveDB, their counts unchanged and bundled: two populations, a growth time series and sorted bins. One is a score set opened from MaveDB when you open it: published scores alone, with their record. Six are simulated, with every true effect known: two populations, a time series, a sort, a barcoded library, two conditions from shared inputs, and an experiment with two problems planted. Each opens scored, with its question, guided steps of a few minutes and what to expect, in the inspector.
+lede: Eleven examples come with MaveScape. Three are published experiments from MaveDB, their counts unchanged and bundled: two populations, a growth time series and sorted bins. Two are score sets opened from MaveDB when you open them: published scores alone, with their record; and a saturation genome editing screen of nucleotide variants on a RefSeq transcript, with its counts. Six are simulated, with every true effect known: two populations, a time series, a sort, a barcoded library, two conditions from shared inputs, and an experiment with two problems planted. Each opens scored, with its question, guided steps of a few minutes and what to expect, in the inspector.
 ---
       <h2 id="grb2">GRB2 SH3 domain (published)</h2>
       <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
@@ -45,6 +45,18 @@ lede: Ten examples come with MaveScape. Three are published experiments from Mav
         <li>About a quarter of missense variants score below 0.5; the least tolerant positions are spread through both the phosphatase and the C2 domain, as a stability readout expects.</li>
         <li>The record gives the assay in MaveDB's terms (a reporter, loss of function, human cells, a library by oligo-directed mutagenic PCR), which become the design's readout, but not what a higher score means: the example states it from the paper. Its six calibrations are in the inspector, ExCALIBR's for research use only.</li>
         <li>QC passes what it can assess from scores alone but coverage, 53% of all substitutions. Rescoring and QC of the counts need counts, which MaveDB does not hold for this record: the readiness says where they may be (the paper's supplement, the authors' repository, the raw reads PRJNA428380).</li>
+      </ul>
+
+      <h2 id="brca1-sge">BRCA1 saturation genome editing, opened from MaveDB (nucleotide variants)</h2>
+      <p>3,893 single-nucleotide variants of 13 exons of BRCA1 and their flanking introns, edited into the genome of HAP1 cells, which need BRCA1 to grow (urn:mavedb:00000097-0-2, CC0 1.0; Findlay et al., Nature 2018): named on the RefSeq transcript NM_007294.3, scored by their depletion between day 5 and day 11, with the counts the authors deposited. Opened from MaveDB when you open it (1 MB, then cached), its tables checked against their checksums, and its transcript fetched from NCBI. It needs the MaveScape program.</p>
+      <p><strong>The question:</strong> what do nucleotide variants of a gene do to its protein, which of them can a map of substitutions not show, and how close do the deposited counts come to the published scores?</p>
+      <shot name="brca1-sge" alt="The map of BRCA1's saturation genome editing scores at the protein level, two stretches of the protein scored; in words, the 3,893 nucleotide variants make 2,251 protein variants; below, Not on the map">BRCA1's function scores at the protein level, and the splice-site variants beside the map.</shot>
+      <ul>
+        <li>Every one of the 3,893 variants is valid on NM_007294.3: 2,077 missense, 579 synonymous, 138 nonsense and 9 at the start codon, with 891 intronic, 143 at splice sites and 56 in the 5′ UTR.</li>
+        <li>On the map, the coding variants read at the protein level: 2,251 protein variants, 391 made by more than one nucleotide variant and merged. The 1,090 with no protein change to draw are listed beside the map.</li>
+        <li>Nonsense variants score far below synonymous ones (medians −2.12 and −0.01; AUC 0.99). Splice-site variants score like nonsense (median −2.02); intronic ones a few bases further in, like synonymous ones (median −0.18).</li>
+        <li>QC fails coverage: 17% of the substitutions one base change makes, on the whole protein. The variants lie in two stretches, positions 1–101 and 1631–1855: the exons the experiment edited. Given as the library's tiles, coverage is judged within them.</li>
+        <li>The counts open with a design drafted from their names: two replicates, day 5 to day 11, the library and RNA counts set aside. Scored, they agree with the published scores at r ≈ 0.76: the authors normalized each exon apart and corrected for position within it, which the counts do not record.</li>
       </ul>
 
       <h2 id="simulated">A simulated experiment (known truth)</h2>

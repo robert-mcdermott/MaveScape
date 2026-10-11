@@ -35,13 +35,21 @@ const extension = (fileName) => {
 // Writes the archive. options: { software: { version, commit }, sources: Map(sha256 → bytes) or
 // null for checksums only, results: Map(run id → results) (runs without results are left out of
 // results/), methods: { markdown, bibtex } }. Returns { bytes, manifest }.
+// The files of a source the library keeps: its tables, and MaveDB's mapped variants beside them
+// (wave 3, slice 3).
+export function sourceFiles(source) {
+  const tables = source.files?.length ? source.files : [{ sha256: source.sha256, fileName: source.fileName }];
+  const mapped = source.origin?.mapped ? [{ sha256: source.origin.mapped.sha256, fileName: source.origin.mapped.fileName }] : [];
+  return [...tables, ...mapped];
+}
+
 export async function writeArchive(ws, options = {}) {
   const files = [];
   files.push({ name: 'workspace.json', data: encoder.encode(serializeWorkspace(ws)) });
   if (options.sources) {
     const seen = new Set();
     for (const source of ws.sources) {
-      for (const f of source.files?.length ? source.files : [{ sha256: source.sha256, fileName: source.fileName }]) {
+      for (const f of sourceFiles(source)) {
         if (seen.has(f.sha256)) continue;
         seen.add(f.sha256);
         const bytes = options.sources.get(f.sha256);
@@ -158,7 +166,7 @@ export async function readArchive(bytes, limits = LIMITS) {
     else sources.set(m[1], data);
   }
   if (manifest.sources === 'included') {
-    for (const s of ws.sources) for (const f of s.files?.length ? s.files : [s]) if (!sources.has(f.sha256)) problems.push(`The table ${f.fileName ?? s.name} is not in the archive.`);
+    for (const s of ws.sources) for (const f of sourceFiles(s)) if (!sources.has(f.sha256)) problems.push(`The table ${f.fileName ?? s.name} is not in the archive.`);
   }
   const results = new Map([...files].filter(([n]) => n.startsWith('results/')).map(([n, d]) => [n, decoder.decode(d)]));
   const methods = files.has('methods.md') ? { markdown: decoder.decode(files.get('methods.md')), bibtex: files.has('references.bib') ? decoder.decode(files.get('references.bib')) : '' } : null;

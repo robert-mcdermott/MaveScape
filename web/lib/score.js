@@ -540,7 +540,7 @@ function publishedResults({ variants, n, columns, design, p, controls, warnings,
     format: 'mavescape-scores',
     version: 1,
     rows: n,
-    variants: { key: variants.key, original: variants.original, kind: variants.kind, position: variants.position, ref: variants.ref, alt: variants.alt, status: variants.status },
+    variants: resultVariants(variants),
     controls: { wt: controls.wt, synonymous: controls.synonymous.length, nonsense: controls.nonsense.length },
     parameters: p,
     replicates: [],
@@ -561,6 +561,16 @@ function publishedResults({ variants, n, columns, design, p, controls, warnings,
     differential: null,
     warnings,
     info,
+  };
+}
+
+// The variant table a run's results carry: the columns every view reads, and, for nucleotide
+// variants of a DNA target, their protein changes (wave 3, slice 3).
+function resultVariants(v) {
+  return {
+    key: v.key, original: v.original, kind: v.kind, position: v.position, ref: v.ref, alt: v.alt, status: v.status,
+    ...(v.otherTarget?.some((x) => x) ? { otherTarget: v.otherTarget } : {}),
+    ...(v.proKey ? { proKey: v.proKey, proPosition: v.proPosition, proRef: v.proRef, proAlt: v.proAlt, mixed: v.mixed } : {}),
   };
 }
 
@@ -1124,7 +1134,7 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
     format: 'mavescape-scores',
     version: 1,
     rows: n,
-    variants: { key: variants.key, original: variants.original, kind: variants.kind, position: variants.position, ref: variants.ref, alt: variants.alt, status: variants.status },
+    variants: resultVariants(variants),
     controls: { wt: controls.wt, synonymous: controls.synonymous.length, nonsense: controls.nonsense.length },
     parameters: p,
     replicates,

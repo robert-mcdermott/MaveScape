@@ -9,7 +9,8 @@ lede: What leaves MaveScape is meant to be checked: scores in MaveDB's columns, 
         <table>
           <thead><tr><th>File</th><th>What it holds</th></tr></thead>
           <tbody>
-            <tr><td><code>*_scores.csv</code></td><td>Every variant's score, SE and 95% interval, the replicates used, its status (scored, low confidence, filtered at which stage, or not measured) and flags, τ², I², the leave-one-out change and each replicate's score, with MaveDB's identifier columns (<code>hgvs_nt</code>, <code>hgvs_splice</code>, <code>hgvs_pro</code>)</td></tr>
+            <tr><td><code>*_scores.csv</code></td><td>Every variant's score, SE and 95% interval, the replicates used, its status (scored, low confidence, filtered at which stage, or not measured) and flags, τ², I², the leave-one-out change and each replicate's score, with MaveDB's identifier columns (<code>hgvs_nt</code>, <code>hgvs_splice</code>, <code>hgvs_pro</code>; a nucleotide variant of a DNA target also with its protein change in <code>hgvs_pro</code>)</td></tr>
+            <tr><td><code>*_protein_scores.csv</code></td><td>For nucleotide variants of a DNA target: the scores at the protein level, as the map draws them, each protein variant's nucleotide variants merged as DiMSum merges them, and which they are (<a href="map.html#nucleotide">The map</a>)</td></tr>
             <tr><td><code>*_counts.csv</code></td><td>The counts the run scored, in the same columns (a table of barcodes: each barcode with its variant); scored again they give the run's output hash</td></tr>
             <tr><td><code>*_qc_samples.csv</code>, <code>*_qc_variants.csv</code></td><td>Quality control per sample and per variant</td></tr>
             <tr><td><code>*_qc_findings.csv</code></td><td>The QC findings: each with its status, value and threshold, what could cause it, what to do next, and its acknowledgement with the reason</td></tr>
@@ -24,7 +25,7 @@ lede: What leaves MaveScape is meant to be checked: scores in MaveDB's columns, 
       <p>Exported scores are read back to the last bit and open in MaveScape again as MaveDB score tables.</p>
 
       <h2 id="archive">The workspace archive</h2>
-      <p><strong>Workspace archive (.msz)…</strong> in the workspace menu writes one file with everything needed to reopen the analysis on another computer: the workspace (targets, design, runs, selections, QC thresholds and acknowledgements, and the chained history), each run's scores, the methods with references, and the count tables (or, if you prefer, only their checksums). Opened again, each run is recomputed from the archived table and must reproduce its recorded output hash.</p>
+      <p><strong>Workspace archive (.msz)…</strong> in the workspace menu writes one file with everything needed to reopen the analysis on another computer: the workspace (targets, design, runs, selections, QC thresholds and acknowledgements, and the chained history), each run's scores, the methods with references, and the count tables (or, if you prefer, only their checksums), and MaveDB's mapped variants when a table was opened with them. Opened again, each run is recomputed from the archived table and must reproduce its recorded output hash.</p>
       <ul>
         <li>Archives are deterministic: the same workspace gives the same bytes in every time zone.</li>
         <li>A manifest lists every file's SHA-256; an edited run, table or history entry is reported on opening.</li>

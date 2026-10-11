@@ -57,7 +57,7 @@ export function fileKind(name) {
   if (has('.import.json')) return 'template';
   if (has('.csv', '.tsv', '.tab', '.txt', '.csv.gz', '.tsv.gz', '.xlsx')) return 'table';
   if (has('.fasta', '.fa', '.fna', '.faa', '.fas', '.seq')) return 'sequence';
-  if (has('.gb', '.gbk', '.genbank')) return 'genbank';
+  if (has('.gb', '.gbk', '.gbff', '.genbank', '.ape')) return 'genbank';
   if (has('.a3m', '.aln', '.sto', '.stockholm')) return 'alignment';
   if (has('.gff', '.gff3')) return 'annotation';
   if (has('.pdb', '.ent', '.cif', '.mmcif', '.bcif')) return 'structure';
@@ -201,9 +201,10 @@ async function start() {
       if (!byKind.has(kind)) byKind.set(kind, []);
       byKind.get(kind).push(item);
     }
-    // Sequences first, so a table opened with its target's FASTA finds the target.
+    // Sequences first, so a table opened with its target's FASTA (or GenBank file) finds the target.
     const messages = [];
-    for (const kind of [...byKind.keys()].sort((a, b) => (a === 'sequence' ? -1 : b === 'sequence' ? 1 : 0))) {
+    const first = (k) => (k === 'sequence' || k === 'genbank' ? 0 : 1);
+    for (const kind of [...byKind.keys()].sort((a, b) => first(a) - first(b))) {
       try {
         await app.importers.get(kind)(byKind.get(kind), options);
       } catch (error) {
@@ -352,7 +353,7 @@ async function start() {
 
   app.commands = () => [
     ...MODES.filter((m) => m !== 'sep').map((m) => ({ label: `Go to ${m.label}`, icon: m.icon, run: () => app.setMode(m.id), keywords: m.id })),
-    { label: 'Open files', icon: 'table', hint: `${modKey}O`, run: () => app.pickFiles(), keywords: 'import counts scores csv tsv fasta' },
+    { label: 'Open files', icon: 'table', hint: `${modKey}O`, run: () => app.pickFiles(), keywords: 'import counts scores csv tsv fasta genbank' },
     { label: 'Open a folder', icon: 'folder', run: () => app.pickFolder() },
     { label: 'Open a score set from MaveDB', icon: 'globe', run: () => openMaveDBDialog(app), keywords: 'mavedb search urn published scores counts public data' },
     { label: 'New workspace', icon: 'plus', run: () => app.newWorkspace() },

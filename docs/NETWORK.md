@@ -42,13 +42,13 @@ host, path, port or scheme (HTTPS only) is refused before it is sent.
 | Host | Paths | Service | Used for |
 | --- | --- | --- | --- |
 | `rest.uniprot.org` | all | UniProt | a target's entry; finding a target by its sequence (MaveScape 0.3) |
-| `api.mavedb.org` | `/api/` | MaveDB | score sets' records, scores and counts, and the search (MaveScape 0.3) |
+| `api.mavedb.org` | `/api/` | MaveDB | score sets' records, scores, counts and mapped variants, and the search (MaveScape 0.3) |
 | `files.rcsb.org` | all | RCSB PDB | structures (MaveScape 0.5, to come) |
 | `data.rcsb.org` | all | RCSB PDB | structures' metadata (MaveScape 0.5, to come) |
 | `www.ebi.ac.uk` | `/pdbe/` | PDBe | structures and their residue mappings (to come) |
 | `alphafold.ebi.ac.uk` | all | AlphaFold DB | predicted structures and alignments (to come) |
-| `eutils.ncbi.nlm.nih.gov` | `/entrez/eutils/` | NCBI E-utilities | ClinVar observations (to come) |
-| `rest.ensembl.org` | all | Ensembl | transcripts and variant consequences (to come) |
+| `eutils.ncbi.nlm.nih.gov` | `/entrez/eutils/` | NCBI E-utilities | RefSeq and GenBank records, for targets named by a transcript (MaveScape 0.3); ClinVar observations (to come) |
+| `rest.ensembl.org` | all | Ensembl | transcripts, for targets named by one (MaveScape 0.3) |
 | `gnomad.broadinstitute.org` | `/api` | gnomAD | population frequencies (to come) |
 
 Hosts marked "to come" are on the list now so that the list is fixed in one place; no request
@@ -66,6 +66,9 @@ leaves your computer.
 | `/api/fetch/mavedb/score-sets/{urn}` | `https://api.mavedb.org/api/v1/score-sets/{urn}` | a MaveDB URN (urn:mavedb:00000835-a-1) | the score set's record: its title, target, license, publications, keywords, columns and calibrations (Open from MaveDB; `open_mavedb`; `mavescape --mavedb`) | 7 days; up to 32 MB |
 | `/api/fetch/mavedb/score-sets/{urn}/scores` | `https://api.mavedb.org/api/v1/score-sets/{urn}/scores` | a MaveDB URN | the score set's published scores (CSV) | 30 days; up to 256 MB |
 | `/api/fetch/mavedb/score-sets/{urn}/counts` | `https://api.mavedb.org/api/v1/score-sets/{urn}/counts` | a MaveDB URN | the counts the authors deposited beside the scores (CSV), when they did | 30 days; up to 256 MB |
+| `/api/fetch/mavedb/score-sets/{urn}/mapped-variants` | `https://api.mavedb.org/api/v1/score-sets/{urn}/mapped-variants` | a MaveDB URN | MaveDB's mapping of the score set's variants to the human reference: VRS identifiers, HGVS on the reference, ClinGen allele IDs (Open from MaveDB, **Mapped variants**, when you tick it) | 7 days; up to 256 MB |
+| `/api/fetch/ncbi/nuccore/{accession}` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id={accession}&rettype=gb&retmode=text&tool=mavescape` | a RefSeq or GenBank nucleotide accession (NM_007294.3) | the record's sequence and features (GenBank), for a score set's target named by a RefSeq transcript, or a target fetched by its accession (Experiment, Target) | 30 days; up to 32 MB |
+| `/api/fetch/ensembl/transcript/{id}` | `https://rest.ensembl.org/sequence/id/{id}?type=cdna&mask_feature=1` | an Ensembl transcript identifier, without its version (ENST00000460680) | the transcript's sequence in Ensembl's current release, its coding part in capitals, for a score set's target named by an Ensembl transcript | 30 days; up to 16 MB |
 | `/api/fetch/mavedb/search` with `?text=…&page=…` | `https://api.mavedb.org/api/v1/score-sets/search` (POST `{"text": …, "published": true, "limit": 100, "offset": …}`) | the words searched for (GRB2, abundance…) and the page of results | the published score sets that match, 100 at a time (Open from MaveDB; `search_mavedb`) | 1 day; up to 32 MB |
 
 The program also answers two requests of its own, which contact nothing: `/api/fetch` (the mode,
@@ -83,7 +86,7 @@ person at the window can decide to.
 ## What every request carries
 
 - `User-Agent: MaveScape/<version> (local research software; docs/NETWORK.md)`
-- `Accept: application/json`
+- `Accept: application/json` (`text/csv` for a table, `text/plain` for a GenBank record)
 - When a cached copy is being checked: `If-None-Match` (its ETag) and `If-Modified-Since` (its
   date), so an unchanged answer is confirmed (HTTP 304) rather than sent again.
 
@@ -96,7 +99,9 @@ nothing that names you, your computer or your files.
   refused, however it comes: declared, streamed, or compressed (a small compressed answer that
   expands beyond the limit stops at the limit).
 - **Only JSON**, or a CSV table where the request is for one (a header of comma-separated names,
-  not a page), is accepted from the requests above.
+  not a page), or a GenBank record where the request is for one (beginning with its `LOCUS`
+  line), is accepted from the requests above. NCBI and Ensembl answer an unknown accession with
+  HTTP 400: it is read as "not found".
 - **Redirects** stay on the same host, at most five, and are checked against the list too.
 - **Time.** 45 seconds for a service to start answering, 120 for the whole answer.
 - **Retries.** An answer of HTTP 429, 502, 503 or 504, or no answer, is tried twice more, after 1
@@ -107,15 +112,17 @@ nothing that names you, your computer or your files.
 
 Each answer is a file in `<cache dir>/<kind>/`, named by the accession (`uniprot/P62993.json`), by
 a score set's URN without its colons (`mavedb/urn_mavedb_00000835-a-1.json`, `….scores.csv`,
-`….counts.csv`), by the SHA-256 of a search's words and page (`mavedb-search/<sha256>.json`) or,
+`….counts.csv`, `….mapped.json`), by a nucleotide accession (`ncbi/NM_007294.3.gb`), by an
+Ensembl transcript without its version (`ensembl/ENST00000460680.json`), by the SHA-256 of a search's words and page (`mavedb-search/<sha256>.json`) or,
 for a sequence's lookup, by the SHA-256 of the sequence (`uniparc/<sha256>.json`), beside
 `<name>.meta.json`, its retrieval record (docs/FORMATS.md, "The cache of public data"): the
 service, the URL it came from, when it was retrieved and last confirmed, and the ETag, date and
 release the service gave. A lookup's record names its request with `{sequence}` in place of the
 sequence: the cache holds public answers only, never your sequence.
 
-- A copy younger than its kind's age (30 days for UniProt entries and MaveDB's tables, 7 for a
-  MaveDB record, which gains calibrations, 1 for a search; a sequence's lookup is kept) is
+- A copy younger than its kind's age (30 days for UniProt entries, MaveDB's tables, NCBI's and
+  Ensembl's records, 7 for a MaveDB record, which gains calibrations, and its mapped variants, 1
+  for a search; a sequence's lookup is kept) is
   served without asking. An older one is checked with the service: confirmed unchanged, or
   replaced.
 - When the service cannot be reached, or MaveScape is offline, an older copy is served, marked
@@ -128,14 +135,19 @@ Every answer the page receives says where it came from, in headers the page reco
 `X-MaveScape-Cache` (`hit`, `miss`, `revalidated` or `stale`), `X-MaveScape-Service`,
 `X-MaveScape-Source`, `X-MaveScape-Retrieved`, `X-MaveScape-Checked`, `X-MaveScape-ETag` and
 `X-MaveScape-Version` (UniProt's release, such as `2026_03`). MaveDB gives no ETag or release: a
-record's own dates (published, modified) say which version it is.
+record's own dates (published, modified) say which version it is. A RefSeq accession names its
+version (NM_007294.3), and NCBI sends that version. Ensembl serves its current release only, so
+the transcript is asked for without its version and its answer names the version it holds
+(ENST00000460680.6): where a score set names another (.5), MaveScape says so, and checks every
+variant's reference base against the sequence it got.
 
 ## How this is checked
 
 - `go test` (`fetch_test.go`): only the listed hosts, paths, scheme and port; nothing sent to an
   unlisted host; redirects; size limits, streamed and compressed answers included; retries; MaveDB's
-  records, tables and search (URNs of published score sets only, CSV answers, the search's words
-  POSTed and cached);
+  records, tables, mapped variants and search (URNs of published score sets only, CSV answers, the
+  search's words POSTed and cached); NCBI's GenBank records and Ensembl's transcripts (accessions
+  only, an unknown one "not found", an answer of the wrong kind refused);
   revalidation by ETag; stale copies; `--offline` and `--no-fetch`; the sequence sent only once
   confirmed; this page lists every request and host (`TestNetworkDocumentListsEveryRequest`); no
   script in the page names another origin in a request.

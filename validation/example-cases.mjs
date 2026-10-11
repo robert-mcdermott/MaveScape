@@ -12,7 +12,7 @@ import { computeQC } from '../web/lib/qc.js';
 import { defaultThresholds, findingsFrom } from '../web/lib/findings.js';
 import { readiness } from '../web/lib/readiness.js';
 import { simulatedExample } from '../web/lib/examples.js';
-import { readScoreSet, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
+import { readScoreSet, scoresDesign, targetsOf, accessionTarget } from '../web/lib/mavedb.js';
 import { detectLayout } from '../web/lib/importer.js';
 import { inputFor, scoreTable } from './roundtrip-cases.mjs';
 import { workspaceOf } from './readiness-cases.mjs';
@@ -21,11 +21,23 @@ const web = (path) => new URL(`../web/${path}`, import.meta.url);
 const encoder = new TextEncoder();
 
 // The data set of validation/sources.json each published example's counts come from.
-export const EXAMPLE_DATASETS = { 'grb2-sh3': 'mavedb-grb2-sh3', hsp90: 'mavedb-hsp90', factor9: 'mavedb-factor9', 'pten-mavedb': 'mavedb-pten-vampseq' };
+export const EXAMPLE_DATASETS = { 'grb2-sh3': 'mavedb-grb2-sh3', hsp90: 'mavedb-hsp90', factor9: 'mavedb-factor9', 'pten-mavedb': 'mavedb-pten-vampseq', 'brca1-sge': 'mavedb-brca1-sge' };
 
 // An example opened from MaveDB (wave 3, slice 2) needs its table, which the program downloads when
 // it is opened and the validation keeps in validation/cache/ (node validation/fetch.mjs).
 export class MissingExampleData extends Error {}
+
+// A record's target: its own sequence, or the transcript it names, from the fetcher's cached answer
+// (validation/fixtures/public-data: NCBI's GenBank record, Ensembl's sequence; wave 3, slice 3).
+export function recordTarget(record, options = {}) {
+  const { targets, pending } = targetsOf(record, options);
+  if (targets.length) return targets[0];
+  const p = pending[0];
+  const file = p.kind === 'refseq' ? `ncbi/${p.accession}.gb` : `ensembl/${p.accession.replace(/\.\d+$/, '')}.json`;
+  const made = accessionTarget(p, readFileSync(new URL(`fixtures/public-data/${file}`, import.meta.url), 'utf8'));
+  if (made.problem) throw new Error(made.problem);
+  return made.target;
+}
 
 // A MaveDB example's record (as the fetcher cached it, validation/fixtures/public-data) and table.
 function mavedbExample(example) {
@@ -35,7 +47,7 @@ function mavedbExample(example) {
   if (!existsSync(path)) throw new MissingExampleData(`${example.title} needs MaveDB's table: node validation/fetch.mjs ${EXAMPLE_DATASETS[example.id]}`);
   const bytes = new Uint8Array(readFileSync(path));
   const table = parseTable(bytes, { fileName: 'scores.csv' });
-  const target = targetsOf(record).targets[0];
+  const target = recordTarget(record);
   const design = scoresDesign(record, { table, layout: detectLayout(table), target });
   // What the example states that the record does not (its direction, from the paper).
   if (example.readout) design.readout = { ...(design.readout ?? {}), ...example.readout };

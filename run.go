@@ -379,6 +379,8 @@ type runSummary struct {
 	Map          bool     `json:"map"`
 	// Published: scores read as published (a design of model "scores"), with no counts to write.
 	Published bool `json:"published"`
+	// ProteinLevel: nucleotide variants of a DNA target, also read at the protein level.
+	ProteinLevel bool `json:"proteinLevel"`
 }
 
 type qcOverall struct {
@@ -516,6 +518,9 @@ func executeRun(ctx context.Context, opts runOptions, browser string, record *ru
 		}
 	} else {
 		exports = append(exports, struct{ what, file, condition string }{"scores", "scores.csv", ""})
+	}
+	if summary.ProteinLevel {
+		exports = append(exports, struct{ what, file, condition string }{"protein-scores", "protein_scores.csv", ""})
 	}
 	if !summary.Published {
 		exports = append(exports,

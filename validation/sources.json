@@ -146,6 +146,82 @@
      "sha256": "ceaf3f0720af8aa06012d60959efbcd7ab54a5317d2bebdace8a0f49de4b2b97"
     }
    ]
+  },
+  "mavedb-brca1-sge": {
+   "title": "BRCA1 saturation genome editing (urn:mavedb:00000097-0-2)",
+   "description": "3,893 single-nucleotide variants of 13 exons of BRCA1 and their flanking introns, named on the RefSeq transcript NM_007294.3 (coding, splice-site, intronic and 5′ UTR), each scored by its depletion from HAP1 cells between days 5 and 11, with the library, plasmid and RNA counts the authors deposited. The example opened from MaveDB (wave 3, slice 3): a target named by its transcript, nucleotide variants read at the protein level.",
+   "source": "MaveDB; Findlay et al., Nature 2018 (doi:10.1038/s41586-018-0461-z)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/scores",
+     "size": 610024,
+     "sha256": "906dc152f28b4c8261e4e532a03c9c42f2e45e211aa3ada12e3c826c151580ec"
+    },
+    {
+     "path": "counts.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/counts",
+     "size": 368636,
+     "sha256": "9d2e8281ff55d87e6ef0ada99a8fc6973073741d9c97ce6bea70e62eca7cdabc"
+    }
+   ]
+  },
+  "mavedb-tp53-dbd": {
+   "title": "TP53 DNA-binding domain, deletions and insertions (urn:mavedb:00001277-a-1)",
+   "description": "Published scores of 8,058 variants of TP53's DNA-binding domain named on NM_000546.6: 5,609 deletions, insertions, duplications and deletion-insertions, 1,631 substitutions and 818 intronic variants. Each name's protein change checked against biocommons hgvs (validation suite consequences).",
+   "source": "MaveDB (urn:mavedb:00001277-a-1); its record names the publication (PMID 39774325)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00001277-a-1/scores",
+     "size": 1071081,
+     "sha256": "15ed0e9933b302628a7326ba759231619406385ae518d3bdc174f41e79b14e62"
+    }
+   ]
+  },
+  "mavedb-bap1-sge": {
+   "title": "BAP1 saturation genome editing, exon 1 (urn:mavedb:00000662-a-2)",
+   "description": "620 variants of BAP1's first exon and its flanks, named on the Ensembl transcript ENST00000460680.5: substitutions, single-base deletions and deletion-insertions in the 5′ UTR, the coding sequence and the intron.",
+   "source": "MaveDB (urn:mavedb:00000662-a-2); its record names the authors and publication",
+   "license": "CC BY 4.0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000662-a-2/scores",
+     "size": 190536,
+     "sha256": "4117ec263777211adbe36301f30d5d8623f45bbc25be16a5327f51133d8cb8bc"
+    }
+   ]
+  },
+  "mavedb-tp53-base-editing": {
+   "title": "TP53 base editing, etoposide (urn:mavedb:00001245-a-1)",
+   "description": "465 base-editor outcomes named as multi-variants on ENST00000269305.9 (c.[1144A>G;1145A>G;1146A>G]) beside their protein changes on ENSP00000269305.4: the published protein names a multi-variant's translation must give.",
+   "source": "MaveDB (urn:mavedb:00001245-a-1)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00001245-a-1/scores",
+     "size": 80246,
+     "sha256": "c169c52891fcb42801e4d0430d4924652217607cb4369f335792360154538411"
+    }
+   ]
+  },
+  "mavedb-varchamp": {
+   "title": "VarChAMP imaging, 28 targets (urn:mavedb:00001237-a-1)",
+   "description": "430 variants of 28 genes in one score set, each named with its target's label (LMNA:n.127G>A): a score set of several targets, opened one target at a time.",
+   "source": "MaveDB (urn:mavedb:00001237-a-1)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00001237-a-1/scores",
+     "size": 33217,
+     "sha256": "6f2305fc10c76bba16d174e080974e4d91786ebf2e5df506f17d8098eb537f14"
+    }
+   ]
   }
  }
 }

@@ -16,6 +16,8 @@ import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
 import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
 import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { proteinView } from '../lib/collapse.js';
+import { mappedFor } from './mapped.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
@@ -118,8 +120,9 @@ export function installRemote(app) {
     return conditions.findIndex((c) => c.name === name);
   }
 
+  // A run's map: a nucleotide run's drawn from its protein view (collapse.js).
   function modelOf(run, results, condition, view = app.mapView ?? {}) {
-    return buildMapModel(results, run.inputs.design, { condition, contrast: view.contrast ?? 0, rowOrder: view.rowOrder ?? 'biochemical', colorBy: view.colorBy ?? 'score' });
+    return buildMapModel(proteinView(results) ?? results, run.inputs.design, { condition, contrast: view.contrast ?? 0, rowOrder: view.rowOrder ?? 'biochemical', colorBy: view.colorBy ?? 'score' });
   }
 
   // A run's differential scores in brief: per contrast, how they were made and how many differ.
@@ -179,7 +182,9 @@ export function installRemote(app) {
       conditions: run.output.conditions.map((c) => c.name),
       comparesConditions: Boolean(run.inputs.parameters?.differential) && run.output.conditions.length > 1,
       barcodes: run.inputs.design.library?.level === 'barcode',
-      map: run.inputs.design.variants?.level === 'protein' && (run.inputs.design.targets?.length ?? 0) === 1,
+      map: (run.inputs.design.targets?.length ?? 0) === 1 && (run.inputs.design.variants?.level === 'protein' || run.inputs.design.targets[0].sequenceType === 'dna'),
+      // Nucleotide variants of a DNA target, read at the protein level too (wave 3, slice 3).
+      proteinLevel: run.inputs.design.variants?.level !== 'protein' && run.inputs.design.targets?.[0]?.sequenceType === 'dna',
       // Published scores (wave 3, slice 2): read as published, with no counts or samples.
       published: run.inputs.design.model === 'scores',
     };
@@ -232,7 +237,7 @@ export function installRemote(app) {
         workspace: { id: w.id, name: w.name, example: w.example?.id ?? null },
         mode: store.ui.mode === 'welcome' ? 'start' : store.ui.mode,
         tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, sha256: s.sha256, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source, ...(s.origin ? { origin: { database: s.origin.database, urn: s.origin.urn, file: s.origin.file, retrieved: s.origin.retrieved, license: s.origin.license } } : {}) })),
-        targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0 })),
+        targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0, ...(t.sequenceType === 'dna' ? { codingStart: t.codingStart ?? 1 } : {}), ...(t.origin ? { from: t.origin.service ?? t.origin.format, accession: t.origin.accession } : {}) })),
         design: w.design ? designSummary(w.design, source) : null,
         runs: w.runs.map(runSummary),
         selections: w.selections.map((s) => ({ name: s.name, run: w.runs.find((r) => r.id === s.run)?.name ?? s.run, variants: s.keys.length })),
@@ -366,7 +371,7 @@ export function installRemote(app) {
     },
 
     async open_mavedb(args) {
-      const opened = await importMaveDB(app, String(args.urn ?? ''), { counts: args.counts !== false });
+      const opened = await importMaveDB(app, String(args.urn ?? ''), { counts: args.counts !== false, target: args.target ?? null, mapped: args.mapped === true });
       if (!opened.ok) throw new ActionError(opened.message);
       await settle();
       return { message: opened.message, data: opened.data };
@@ -618,11 +623,15 @@ export function installRemote(app) {
     async inspect_variant(args) {
       const run = resolveRun(args.run);
       const entry = await resultsOf(run);
-      const { results } = entry;
-      const condition = resolveCondition(results, args.condition);
+      const own = entry.results;
+      const condition = resolveCondition(own, args.condition);
+      const name = variantName(args.variant);
+      // A protein variant of a nucleotide run: its row in the run's protein view (wave 3, slice 3).
+      const view = proteinView(own);
+      const inView = view && own.variants.key.indexOf(name) < 0 && own.variants.original.indexOf(String(args.variant)) < 0 && view.variants.key.includes(name);
+      const results = inView ? view : own;
       const c = results.conditions[condition];
       const v = results.variants;
-      const name = variantName(args.variant);
       const row = v.key.indexOf(name) >= 0 ? v.key.indexOf(name) : v.original.indexOf(String(args.variant));
       app.focusItem({ kind: 'variant', id: row >= 0 ? v.key[row] : name, run: run.id, condition });
       await settle();
@@ -642,6 +651,9 @@ export function installRemote(app) {
         asWritten: v.original[row],
         class: KIND_NAMES[v.kind[row]],
         position: v.position[row] > 0 ? v.position[row] : null,
+        // A nucleotide variant's protein change; a protein variant's nucleotide variants, each scored.
+        ...(v.proKey ? { protein: v.proKey[row] || null, proteinPosition: v.proPosition[row] > 0 ? v.proPosition[row] : null } : {}),
+        ...(inView ? { nucleotideVariants: Array.from(v.members[row], (r) => ({ variant: own.variants.key[r], score: own.conditions[condition].reason[r] ? null : round(own.conditions[condition].score[r]), se: own.conditions[condition].reason[r] ? null : round(own.conditions[condition].se[r]) })), merged: v.members[row].length > 1 ? (Array.from(v.members[row]).every((r) => own.conditions[condition].reason[r] || own.conditions[condition].se[r] > 0) ? 'inverse-variance mean, as DiMSum merges them' : 'mean (not every one has an SE)') : null } : {}),
         condition: c.name,
         score: reasons ? null : round(c.score[row]),
         se: reasons ? null : round(c.se[row]),
@@ -664,9 +676,14 @@ export function installRemote(app) {
         run: run.name,
         reproduced: entry.status,
       };
+      // MaveDB's mapping of the variant to the human reference, when its table was opened with it.
+      if (!inView) {
+        const mapped = await mappedFor(app, run, row);
+        if (mapped !== undefined) data.mapped = mapped;
+      }
       const message = reasons
         ? `${data.variant} (${data.class}) is not scored: ${reasons.id === 'measured' ? 'not counted in every sample of any replicate' : `filtered at "${reasons.label}": ${reasons.reason}`}.`
-        : `${data.variant} (${data.class}): score ${data.score} ± ${data.se} (95% CI ${data.ci95[0]} to ${data.ci95[1]}) from ${data.replicatesUsed} of ${data.replicatesExpected} replicates${data.lowConfidence.length ? `; low confidence: ${data.lowConfidence.join('; ')}` : ''}.`;
+        : `${data.variant} (${data.class}${data.protein ? `, ${data.protein}` : ''}): score ${data.score}${data.se === null ? '' : ` ± ${data.se} (95% CI ${data.ci95[0]} to ${data.ci95[1]})`}${c.published ? ' as published' : ` from ${data.replicatesUsed} of ${data.replicatesExpected} replicates`}${data.nucleotideVariants ? `, from ${data.nucleotideVariants.length} nucleotide variant${data.nucleotideVariants.length > 1 ? `s (${data.merged})` : ''}` : ''}${data.lowConfidence.length ? `; low confidence: ${data.lowConfidence.join('; ')}` : ''}.`;
       return { message, data };
     },
 
@@ -697,7 +714,7 @@ export function installRemote(app) {
       }
       const model = modelOf(run, results, condition, view);
       const counts = Object.fromEntries(STATE_NAMES.map((name, i) => [name, model.counts[i]]));
-      const lines = describeMap(model, results);
+      const lines = describeMap(model, proteinView(results) ?? results);
       return { message: lines.join(' '), data: { run: run.name, condition: model.contrast ? null : results.conditions[condition].name, ...(model.contrast ? { contrast: model.contrast.name } : {}), colorBy: model.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines } };
     },
 
@@ -728,7 +745,7 @@ export function installRemote(app) {
       const condition = resolveCondition(results, args.condition);
       if (what === 'map') {
         const model = modelOf(run, results, condition);
-        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results }), message: `${run.name}'s map (SVG).` };
+        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results: proteinView(results) ?? results }), message: `${run.name}'s map (SVG).` };
       }
       file = await runFile(app, run, what, condition);
       return { file: file.text, message: `${run.name}: ${what}.` };

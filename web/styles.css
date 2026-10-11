@@ -947,3 +947,9 @@ table.matches td:last-child { width: 1%; }
 label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; }
 .btn-row .spacer { flex: 1; }
 .open-row { padding: 8px 10px; margin: 4px 0 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); }
+.open-options { display: grid; gap: 4px; }
+details.off-map { margin: 8px 0; }
+details.off-map > summary { cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.cds-list { display: grid; gap: 6px; margin-top: 8px; }
+.cds-choice { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); }
+.warn-text { color: var(--warn); }

@@ -79,7 +79,7 @@ func testFetcher(t *testing.T, service *fakeService) (*fetcher, http.Handler) {
 	t.Helper()
 	upstream := newUpstream(permitOnly(service))
 	upstream.retries = []time.Duration{time.Millisecond, time.Millisecond}
-	f := &fetcher{mode: "on", cache: &diskCache{dir: t.TempDir(), maxAge: defaultCacheMaxAge}, remote: upstream, origins: map[string]string{"https://rest.uniprot.org": service.URL, "https://api.mavedb.org": service.URL}, now: func() time.Time { return testNow }}
+	f := &fetcher{mode: "on", cache: &diskCache{dir: t.TempDir(), maxAge: defaultCacheMaxAge}, remote: upstream, origins: map[string]string{"https://rest.uniprot.org": service.URL, "https://api.mavedb.org": service.URL, "https://eutils.ncbi.nlm.nih.gov": service.URL, "https://rest.ensembl.org": service.URL}, now: func() time.Time { return testNow }}
 	return f, fetcherMux(f)
 }
 
@@ -589,6 +589,80 @@ func TestMaveDBScoreSetsAndTheirTables(t *testing.T) {
 	}
 	if service.count() != before {
 		t.Fatal("an invalid URN reached the service")
+	}
+}
+
+// Targets named by an accession (wave 3, slice 3): a nucleotide record from NCBI as GenBank, an
+// Ensembl transcript by its identifier without the version (Ensembl serves its current release),
+// and MaveDB's mapped variants; NCBI's and Ensembl's HTTP 400 for an unknown accession is "not
+// found", and an answer of the wrong kind is refused.
+func TestAccessionTargetsAndMappedVariants(t *testing.T) {
+	const record = "LOCUS       NM_007294               7088 bp    mRNA    linear   PRI 10-SEP-2026\nORIGIN\n        1 gcttagcggt\n//\n"
+	var asked []string
+	service := newFakeService(t, func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.Path+"?"+r.URL.RawQuery)
+		switch {
+		case r.URL.Path == "/entrez/eutils/efetch.fcgi" && r.URL.Query().Get("id") == "NM_007294.3":
+			if r.Header.Get("Accept") != "text/plain" || r.URL.Query().Get("rettype") != "gb" || r.URL.Query().Get("db") != "nuccore" {
+				t.Errorf("Accept %q, query %s", r.Header.Get("Accept"), r.URL.RawQuery)
+			}
+			w.Write([]byte(record))
+		case r.URL.Path == "/entrez/eutils/efetch.fcgi" && r.URL.Query().Get("id") == "L09137":
+			w.Write([]byte("<html>Error</html>"))
+		case r.URL.Path == "/entrez/eutils/efetch.fcgi":
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("Error: Failed to retrieve sequence"))
+		case r.URL.Path == "/sequence/id/ENST00000460680":
+			if r.URL.Query().Get("type") != "cdna" || r.URL.Query().Get("mask_feature") != "1" {
+				t.Errorf("query %s", r.URL.RawQuery)
+			}
+			w.Write([]byte(`{"id":"ENST00000460680","version":6,"molecule":"dna","seq":"gggATGTAAccc"}`))
+		case strings.HasPrefix(r.URL.Path, "/sequence/id/"):
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"ID not found"}`))
+		case r.URL.Path == "/api/v1/score-sets/urn:mavedb:00000835-a-1/mapped-variants":
+			w.Write([]byte(`[{"variantUrn":"urn:mavedb:00000835-a-1#1","current":true}]`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	f, handler := testFetcher(t, service)
+	rec := get(handler, "/api/fetch/ncbi/nuccore/nm_007294.3", nil)
+	if rec.Code != http.StatusOK || rec.Body.String() != record || rec.Header().Get("Content-Type") != genbankContentType {
+		t.Fatalf("GenBank: %d %v %q", rec.Code, rec.Header(), rec.Body)
+	}
+	if rec := get(handler, "/api/fetch/ncbi/nuccore/NM_999999999.1", nil); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "NCBI has no nucleotide record NM_999999999.1") {
+		t.Fatalf("unknown accession: %d %s", rec.Code, rec.Body)
+	}
+	if rec := get(handler, "/api/fetch/ncbi/nuccore/L09137", nil); rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "not a GenBank record") {
+		t.Fatalf("a page instead of a record: %d %s", rec.Code, rec.Body)
+	}
+	rec = get(handler, "/api/fetch/ensembl/transcript/ENST00000460680.5", nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"version":6`) || rec.Header().Get("X-MaveScape-Source") != "https://rest.ensembl.org/sequence/id/ENST00000460680?type=cdna&mask_feature=1" {
+		t.Fatalf("Ensembl: %d %v %s", rec.Code, rec.Header(), rec.Body)
+	}
+	if rec := get(handler, "/api/fetch/ensembl/transcript/ENST00000999999", nil); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "Ensembl has no transcript ENST00000999999") {
+		t.Fatalf("unknown transcript: %d %s", rec.Code, rec.Body)
+	}
+	if rec := get(handler, "/api/fetch/mavedb/score-sets/urn:mavedb:00000835-a-1/mapped-variants", nil); rec.Code != http.StatusOK {
+		t.Fatalf("mapped variants: %d %s", rec.Code, rec.Body)
+	}
+	for _, name := range []string{"ncbi/NM_007294.3.gb", "ensembl/ENST00000460680.json", "mavedb/urn_mavedb_00000835-a-1.mapped.json"} {
+		if _, err := os.Stat(filepath.Join(f.cache.dir, filepath.FromSlash(name))); err != nil {
+			t.Errorf("not cached as %s: %v", name, err)
+		}
+	}
+	if rec := get(handler, "/api/fetch/ncbi/nuccore/NM_007294.3", nil); rec.Header().Get("X-MaveScape-Cache") != "hit" {
+		t.Fatalf("the record again: %v", rec.Header())
+	}
+	before := len(asked)
+	for _, path := range []string{"/api/fetch/ncbi/nuccore/Q9Y6K9", "/api/fetch/ncbi/nuccore/NM_007294.3%3Bx", "/api/fetch/ncbi/nuccore/chr17", "/api/fetch/ensembl/transcript/ENSG00000163930", "/api/fetch/ensembl/transcript/ENSP00000269305"} {
+		if rec := get(handler, path, nil); rec.Code != http.StatusBadRequest && rec.Code != http.StatusNotFound {
+			t.Errorf("%s: %d", path, rec.Code)
+		}
+	}
+	if len(asked) != before {
+		t.Fatalf("an invalid accession reached the service: %v", asked[before:])
 	}
 }
 

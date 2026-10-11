@@ -4,6 +4,7 @@
 // (requirements E2–E6, V6). Every edit is undoable and goes into the workspace's history.
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
+import { targetOriginText } from '../lib/genbank.js';
 import { confirmDialog, showDialog, toast } from './overlays.js';
 import { summarizeDesign, validateDesign, IDENTIFIER_COLUMNS } from '../lib/design.js';
 import {
@@ -94,7 +95,7 @@ export function mountExperimentMode(app, container) {
   function targetPane(s) {
     const target = store.ws.targets.find((t) => t.id === (store.ws.design?.targets?.[0]?.id ?? s.target));
     if (!target) {
-      return h('div.pane', h('h3', icon('sequence'), 'Target'), h('div.callout.warn', icon('warning'), h('span', 'No target: open the target\'s FASTA (or paste it when importing) so that variant names can be checked and positions mapped.')));
+      return h('div.pane', h('h3', icon('sequence'), 'Target'), h('div.callout.warn', icon('warning'), h('span', 'No target: open the target\'s FASTA or GenBank file (or paste it when importing) so that variant names can be checked and positions mapped.')));
     }
     const field = (label, value, onCommit, attrs = {}) => {
       const input = h('input.input', { value: value ?? '', ...attrs, onchange: () => onCommit(input.value.trim()) });
@@ -112,8 +113,11 @@ export function mountExperimentMode(app, container) {
       if (!Number.isInteger(n)) toast(`${label} is a whole number.`, { kind: 'error' });
       else apply(n);
     };
+    const own = store.ws.targets.find((t) => t.id === target.id);
+    const numbered = target.sequenceType !== 'dna' ? 'Variants are numbered from the target\'s first residue' : (target.codingStart ?? 1) > 1 ? `c. positions count from the coding start (base ${target.codingStart}: c.1), c.-N before it and c.*N after the stop; n. positions from the first base` : 'Variants are numbered from the target\'s first base';
     return h('div.pane', { dataset: { place: 'target' } }, h('h3', icon('sequence'), 'Target'),
-      h('p.muted', { style: { margin: '0 0 8px', fontSize: '12px' } }, `${target.sequenceType === 'dna' ? 'DNA' : 'Protein'}, ${formatCount(target.sequence.length)} ${target.sequenceType === 'dna' ? 'nt' : 'aa'}. Variants are numbered from the target's first ${target.sequenceType === 'dna' ? 'base' : 'residue'}; the offset gives positions in the reference protein.`),
+      h('p.muted', { style: { margin: '0 0 8px', fontSize: '12px' } }, `${target.sequenceType === 'dna' ? 'DNA' : 'Protein'}, ${formatCount(target.sequence.length)} ${target.sequenceType === 'dna' ? 'nt' : 'aa'}. ${numbered}; the offset gives positions in the reference protein.`),
+      own?.origin ? h('p.small', { style: { margin: '0 0 8px' } }, h('b', 'From: '), targetOriginText(own.origin)) : null,
       h('div.form-grid',
         field('Name', target.name, (v) => v && patch({ name: v }, `Renamed the target ${v}`)),
         field('Offset (reference position − target position)', target.offset ?? 0, (v) => toInt(v, 'The offset', (n) => patch({ offset: n }, `Set the target's offset to ${n}`)), { inputmode: 'numeric' }),
@@ -410,7 +414,7 @@ export function mountExperimentMode(app, container) {
   // where to give it here. Nothing is filled in by guessing.
   function go(place) {
     if (place === 'open') return app.pickFiles();
-    if (place === 'open-fasta') return app.pickFiles('.fasta,.fa,.faa,.fna,.fas,.seq');
+    if (place === 'open-fasta') return app.pickFiles('.fasta,.fa,.faa,.fna,.fas,.seq,.gb,.gbk,.gbff,.genbank,.ape');
     const pane = [...root.querySelectorAll('[data-place]')].find((x) => x.dataset.place.split(' ').includes(place));
     if (!pane) return;
     pane.scrollIntoView({ behavior: 'smooth', block: 'start' });

@@ -21,17 +21,21 @@ import { launch, sleep } from '../docs/capture/cdp.mjs';
 import { readArchive, writeArchive } from '../web/lib/archive.js';
 import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../web/lib/findings.js';
-import { barcodesCSV, countsCSV, differentialCSV, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV } from '../web/lib/exports.js';
+import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV } from '../web/lib/exports.js';
+import { proteinView } from '../web/lib/collapse.js';
+import { readScoreSet, scoresDesign } from '../web/lib/mavedb.js';
+import { detectLayout } from '../web/lib/importer.js';
+import { defaultParameters } from '../web/lib/score.js';
 import { writeMethods } from '../web/lib/methods.js';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { outputDigest } from '../web/lib/runs.js';
-import { inputFor, recompute } from './roundtrip-cases.mjs';
+import { inputFor, recompute, scoreTable } from './roundtrip-cases.mjs';
 import { readZip } from '../web/lib/zip.js';
 import { parseTable } from '../web/lib/csv.js';
 import { readiness } from '../web/lib/readiness.js';
 import { workspaceOf } from './readiness-cases.mjs';
-import { openExampleInNode } from './example-cases.mjs';
+import { openExampleInNode, recordTarget } from './example-cases.mjs';
 import { exampleById } from '../web/lib/examples.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -253,6 +257,21 @@ try {
     parsed = logged.stdout.trim().split('\n').map((l) => JSON.parse(l));
   } catch { parsed = []; }
   check('--log json: one JSON object per line, from start to done, each step with its action and outcome', `${parsed.length} lines: ${[...new Set(parsed.map((p) => p.event))].join(', ')}; last ${JSON.stringify(parsed.at(-1) ?? {}).slice(0, 100)}`, logged.code === 0 && parsed.length > 5 && parsed[0].event === 'start' && parsed.at(-1).event === 'done' && parsed.at(-1).exit === 0 && parsed.filter((p) => p.event === 'step').every((p) => p.action && p.ok === true && typeof p.seconds === 'number'));
+
+  // Nucleotide variants of a transcript (wave 3, slice 3): BAP1's published scores, its target
+  // Ensembl's transcript, scored without a window: the map at the protein level, and the scores at
+  // the protein level as Node merges them.
+  {
+    const bapRecord = readScoreSet(JSON.parse(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000662-a-2.json'), 'utf8')));
+    const tablePath = join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000662-a-2.scores.csv');
+    const table = parseTable(readFileSync(tablePath), { fileName: 'scores.csv' });
+    const design = scoresDesign(bapRecord, { table, layout: detectLayout(table), target: recordTarget(bapRecord) });
+    writeFileSync(out('bap1.design.json'), JSON.stringify(design));
+    const bap1 = await mavescape(['run', '--design', out('bap1.design.json'), '--out', out('bap1'), '--time', TIME, tablePath]);
+    const scored = scoreTable(table, design, defaultParameters(design));
+    const written = bap1.code === 0 && existsSync(join(out('bap1'), 'protein_scores.csv')) ? readFileSync(join(out('bap1'), 'protein_scores.csv'), 'utf8') : '';
+    check('mavescape run on nucleotide variants of a transcript (BAP1 exon 1): the map drawn at the protein level, and protein_scores.csv as Node merges the variants', `exit ${bap1.code}; ${files(out('bap1')).filter((f) => /scores|map/.test(f)).join(', ')}; protein scores ${written === proteinScoresCSV(proteinView(scored.results)) ? 'Node\'s' : 'different'}`, bap1.code === 0 && files(out('bap1')).includes('map.svg') && written === proteinScoresCSV(proteinView(scored.results)) && record(out('bap1')).run?.outputSha256 === outputDigest(scored.results));
+  }
 
   // A table of codon variants (wave 2, slice 11): Hsp90's design names the protein variants derived
   // from MaveDB's nucleotide names, and mavescape run reads the table's codons for it.

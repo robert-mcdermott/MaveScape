@@ -69,9 +69,11 @@ var remoteActions = []remoteAction{
 		"text": textArg("The words to search for: a gene, a protein, an assay, an author."),
 		"page": map[string]any{"type": "integer", "minimum": 1, "description": "The page of 100 results (the first if not given)."},
 	}, "text")},
-	{Name: "open_mavedb", Description: "Opens a published MaveDB score set as a new workspace: its record (license and terms, citation, target, the assay's keywords, calibrations), its published scores read as published as the run \"Published scores\" on the map, and its counts, when deposited, with a design drafted from their column names to check and score. Cached for offline use.", InputSchema: schema(map[string]any{
+	{Name: "open_mavedb", Description: "Opens a published MaveDB score set as a new workspace: its record (license and terms, citation, target, the assay's keywords, calibrations), its published scores read as published as the run \"Published scores\" on the map, and its counts, when deposited, with a design drafted from their column names to check and score. A target named by a transcript (NM_007294.3, ENST00000460680.5) is fetched from NCBI or Ensembl; nucleotide variants are read at the protein level too. Cached for offline use.", InputSchema: schema(map[string]any{
 		"urn":    textArg("The score set's URN (urn:mavedb:00000835-a-1), or a MaveDB address that holds it."),
 		"counts": flagArg("Also open its counts, when it has them (the default)."),
+		"target": textArg("Of a score set of several targets, the one to open (its label, as the variants name it)."),
+		"mapped": flagArg("Also keep MaveDB's mapping of the variants to the human reference (VRS identifiers), when it has one."),
 	}, "urn"), long: true},
 	{Name: "check_target", Description: "Checks the target against its UniProt entry, fetched through MaveScape's list of public services (docs/NETWORK.md; cached, and from the cache only with --offline): where the target sits, the differences, and the fields the entry would change (offset, identifiers, organism). With apply, uses them and records the check with the workspace, for its history and methods. Only the accession is sent, never a sequence.", InputSchema: schema(map[string]any{
 		"accession": textArg("A UniProt accession (P62993); the target's own if not given."),

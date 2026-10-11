@@ -1,7 +1,7 @@
 ---
 title: The map and the inspector
-description: MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, selections, SVG and PNG export, and the variant inspector's evidence.
-lede: The map shows a run's single substitutions, positions across and substitutions down, on a scale centered on the wild type. Click any cell for its evidence in the inspector.
+description: MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, nucleotide variants read at the protein level and everything else listed beside the map, selections, SVG and PNG export, and the variant inspector's evidence.
+lede: The map shows a run's single substitutions, positions across and substitutions down, on a scale centered on the wild type; a run of nucleotide variants is read for the protein changes they make. Click any cell for its evidence in the inspector.
 ---
       <h2 id="reading">Reading the map</h2>
       <shot name="map" alt="The map of the GRB2 SH3 domain colored by score, with the legend of states and p.Trp36Ala's evidence in the inspector">GRB2's map colored by score: in this abundance assay blue is less function, red more, white like the wild type.</shot>
@@ -12,6 +12,14 @@ lede: The map shows a run's single substitutions, positions across and substitut
         <li>The <strong>reference residue</strong> at each position is outlined.</li>
       </ul>
       <p>Above the map, the median score of each position; at the right, of each substitution. Positions are numbered on the target and, with an offset, on the reference. The overview strip below shows where the view is.</p>
+
+      <h2 id="nucleotide">Nucleotide variants, at the protein level</h2>
+      <shot name="brca1-sge" alt="The map of BRCA1's saturation genome editing scores at the protein level, two stretches of the protein scored; in words, the 3,893 nucleotide variants make 2,251 protein variants, 391 merged; below, the table Not on the map of 1,090 variants, filtered to splice sites">BRCA1's saturation genome editing: 3,893 nucleotide variants read for the protein changes they make, and the 1,090 with none to draw listed beside the map.</shot>
+      <p>A run whose variants are named at the nucleotide level, on a DNA target (a codon library, a saturation genome editing screen, a table from MaveDB's <code>hgvs_nt</code>), is scored variant by variant as named, and each variant is read for the protein change it makes (<a href="opening-data.html#names">Variant names</a>): <code>c.5559C&gt;G</code> is <code>p.Tyr1853Ter</code>, a nonsense variant; <code>c.6T&gt;C</code> may be <code>p.Ala2=</code>, synonymous; <code>c.5194-2A&gt;G</code> is at a splice site, with no protein change to name.</p>
+      <p>The map draws the protein: the nucleotide variants that make the same change (two codons for the same substitution, or two synonymous codons) are one cell, merged as DiMSum merges them: their scores weighted by 1/SE², the merged SE √(1/Σ 1/SE²) (averaged unweighted when the table gives no SEs). A variant that changes one amino acid and leaves another codon synonymous is left out of the cell, as DiMSum leaves it out. <strong>In words</strong> says how many nucleotide variants made how many protein variants, and how many were merged. The run's scores stay the nucleotide variants', and the Record menu also writes them at the protein level (<a href="record.html#run-files">A run's files</a>).</p>
+
+      <h3 id="not-on-map">Not on the map</h3>
+      <p>A map of substitutions cannot show a frameshift, an insertion or deletion, a multi-variant, a splice-site, intronic or UTR variant. Beside the map, <strong>Not on the map</strong> lists every one, in order along the target, with its class, its protein change and its score or why it has none; choose a class to see only those. Click one to inspect it.</p>
 
       <h2 id="controls">Settings</h2>
       <ul>
@@ -29,6 +37,8 @@ lede: The map shows a run's single substitutions, positions across and substitut
 
       <h2 id="inspector">The variant inspector</h2>
       <p>For a variant, the inspector shows its name as written and in MAVE-HGVS, its class and position; its score with standard error and 95% interval (with the <a href="scoring.html#moderated">moderated combination</a>, by t at the degrees of freedom shown; for rescaled scores, the anchors' uncertainty, SE_scale, beside it), or why it has none (the filter stage that left it out); its flags; each replicate's counts before and after selection, score and whether it was used; with conditions compared, its score in each and each difference with its interval and q (paired, each pair's difference too); every sample's counts; the other substitutions at its position against the run's range; the sequence around it; and the run it comes from.</p>
+      <shot name="merged-variant" alt="The inspector for p.Tyr1853Ter of BRCA1's saturation genome editing: a nonsense variant at position 1853, made by two nucleotide variants, c.5559C>G at −2.15 and c.5559C>A at −1.49, averaged to −1.82">A protein variant of a nucleotide run: made by two nucleotide variants, each scored, merged into the cell.</shot>
+      <p>A nucleotide variant also shows its protein change and the base it is at. A protein variant of a nucleotide run (a cell of its map) shows its merged score and the nucleotide variants that make it, each with its score and whether it was used; click one to inspect it. When the table was opened from MaveDB with its mapped variants, the inspector adds <strong>Mapped by MaveDB</strong>: the variant's HGVS on the human reference, its GA4GH VRS identifier and its ClinGen allele (<a href="public-data.html#mapped">Public data</a>).</p>
 
       <h2 id="export">Export</h2>
       <p><strong>Export</strong> writes the map as SVG (vector, for figures) or PNG at three times the resolution, in the export theme, with its legend.</p>

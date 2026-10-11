@@ -44,8 +44,7 @@ this section grows with each.
   counts (when deposited) with a design drafted from their column names, the record kept with the
   workspace and named in the methods. The experiment's keywords give the design's readout and
   library method. Records, tables and searches are cached, so a score set opened once opens again
-  offline. A target named by an accession is shown, not yet opened (full MAVE-HGVS, later in 0.3).
-  Remote actions `search_mavedb` and `open_mavedb`.
+  offline. Remote actions `search_mavedb` and `open_mavedb`.
 - **Published scores, read as published (wave 3, slice 2).** A design of model `scores` reads a
   table's scores, standard errors and 95% intervals as they were published, into a run (the model
   `published`) for the map, QC, the inspector and every export, never rescoring them. Variants the
@@ -61,6 +60,44 @@ this section grows with each.
 - **An example opened from MaveDB:** PTEN's VAMP-seq abundance (urn:mavedb:00000013-a-1), scores
   alone, downloaded when opened and checked against its checksum, with its record and six
   calibrations. Ten examples now.
+- **Full MAVE-HGVS, and what a nucleotide variant does to the protein (wave 3, slice 3).** Every
+  form of MAVE-HGVS is read, intronic and UTR positions and names prefixed by their target
+  included. Each nucleotide variant of a DNA target is applied to its sequence and both coding
+  sequences translated: its class is what it does (synonymous, missense, nonsense, start or stop
+  lost, an in-frame deletion, insertion, duplication or deletion-insertion, a frameshift, a
+  multi-variant; a splice site, intronic, a UTR) and its protein change is named in MAVE-HGVS, as
+  biocommons hgvs names it. A nucleotide library's synonymous and nonsense variants are found by
+  translation; its scores export carries each variant's protein change.
+- **Nucleotide runs on the map (wave 3, slice 3).** A run of nucleotide variants is drawn at the
+  protein level: the variants that make the same protein change are one cell, merged as DiMSum
+  merges them (each score weighted by 1/SE²; a variant changing one amino acid and leaving another
+  codon synonymous left out). The inspector lists a cell's nucleotide variants, each scored, and a
+  nucleotide variant's protein change. A new export, *Scores at the protein level*, writes them
+  (`protein_scores.csv` from `mavescape run` too).
+- **Not on the map (wave 3, slice 3).** Beside every map, the variants a map of substitutions
+  cannot show (frameshifts, insertions and deletions, multi-variants, splice-site, intronic and UTR
+  variants), each with its class, protein change and score, in order along the target and by class.
+- **Targets from GenBank (wave 3, slice 3).** A plasmid or construct map (`.gb`, `.gbk`, `.gbff`,
+  `.genbank`, `.ape`; SnapGene, Benchling, ApE and Geneious export it) or a RefSeq record makes a
+  target: the coding feature is chosen when there are several, and its translation checked against
+  the record's. A plasmid's target is its coding sequence on its strand (joined across introns); an
+  mRNA's the whole record, numbered from its coding start, its UTRs on it. Where the target came
+  from is kept with the workspace, shown in the Experiment view and the inspector, and named in the
+  methods.
+- **MaveDB score sets whose target is a transcript (wave 3, slice 3).** A RefSeq transcript is
+  fetched from NCBI as GenBank, an Ensembl one from Ensembl (its current version, said where the
+  record names another, every variant's reference base checked against it); a transcript named
+  beside its protein is one target. A score set of several targets opens one, chosen, at a time,
+  the others' variants set aside. A genome named as the target is not fetched, and says so.
+- **MaveDB's mapped variants (wave 3, slice 3).** *Keep MaveDB's mapping to the human reference*
+  fetches a record's mapped variants and keeps them beside its tables (in the archive too): the
+  inspector shows each variant's HGVS on the reference, its GA4GH VRS identifier and its ClinGen
+  allele; the methods cite them. `open_mavedb` takes `target` and `mapped`; `inspect_variant`
+  gives `protein`, `nucleotideVariants` and `mapped`.
+- **An example of nucleotide variants:** BRCA1's saturation genome editing (urn:mavedb:00000097-0-2;
+  Findlay et al. 2018), opened from MaveDB with its counts, its target the RefSeq transcript fetched
+  from NCBI: the map at the protein level, the splice-site variants beside it, and the deposited
+  counts scored against the published scores. Eleven examples now.
 - **The Network dialog** (the status bar's *Public data*): the services MaveScape may contact,
   what it asks each, the cache's folder, and what the cache holds.
 - The guide page *Public data*; the GRB2 example's guide checks its target against UniProt; a
@@ -74,6 +111,15 @@ this section grows with each.
   deviation (`sd`) only when nothing else is there; 95% intervals (`lower_ci`, `upper_ci`…) are
   found too.
 - "Precomputed scores" are called published scores.
+- A DNA target's protein is its coding sequence to its first stop: a transcript's 3′ UTR is not
+  translated onto the map (wave 3, slice 3).
+- QC's coverage counts nucleotide variants by the protein changes they make, judges a table of
+  single-base substitutions on the substitutions one base change makes, and, without tiles, names
+  the stretches of the protein the variants lie in, to give as tiles (wave 3, slice 3).
+- A drafted time series or set of bins sets a lone sample aside (a library counted beside day 5
+  and day 11) instead of making it a replicate of one time point (wave 3, slice 3).
+- The map's description, the inspector and `inspect_variant` say "as published" of published
+  scores, not "from 0 of 0 replicates" (wave 3, slice 3).
 - The GRB2 example's two map steps are one, so that its guide keeps six steps.
 
 ### Validation
@@ -100,6 +146,25 @@ this section grows with each.
   r 0.994; BRCA1 E2's 50,043 replicate scores reproduced to 2 × 10⁻¹⁴; factor IX with MultiSTEP's
   settings r 0.9995).
 - `examples` (29 checks) opens the PTEN example from MaveDB's table, pinned in `sources.json`.
+- `consequences` validation suite (8 checks; wave 3, slice 3): every nucleotide variant's protein
+  change as biocommons hgvs 1.5.7 gives it, on BRCA1's, TP53's and BAP1's transcripts (16,188
+  variants: every name of three published score sets and generated ones of every kind); GenBank
+  records read as Biopython reads them (two RefSeq mRNAs, a plasmid, a spliced gene); every variant
+  of thirteen imported tables valid on its target; all 71,005 protein names MaveScape writes strict
+  MAVE-HGVS; the protein names five MaveDB records publish beside their nucleotide names the same
+  protein (CBS's 22,280 written alike); VarChAMP's 28 targets opened one at a time; the merge at the
+  protein level as DiMSum 1.4's own code merges CBS's 11,478 codon variants (within 5 × 10⁻¹³).
+- `hgvs` (6 checks): mavehgvs's own tests against a target sequence, 54 pairs.
+- `public-data` (16 checks): GRB2's mapped variants each joined to its row of scores, its protein on
+  NP_002077.1 the table's at the target's position plus the UniProt offset.
+- `examples` (33 checks): the BRCA1 example, its counts drafted and scored against the published
+  scores (r 0.76, as its guide says).
+- The remote-control session (90 checks): MaveDB's mapping of GRB2 kept and shown; BAP1's exon 1
+  opened offline on Ensembl's transcript (its version said), a merged protein variant inspected,
+  the scores at the protein level exported as Node writes them. Headless runs (24 checks): BAP1's
+  nucleotide variants run without a window, `protein_scores.csv` as Node writes it.
+  `mavedb-live.mjs` (18 checks): BRCA1's saturation genome editing and BAP1's exon 1 opened live,
+  their transcripts from NCBI and Ensembl.
 
 ## 0.2.0 (2026-10-10)
 

@@ -1,10 +1,12 @@
-// MaveDB, live (wave 3, slice 2): the three feasibility records (four score sets) opened from MaveDB
+// MaveDB, live (wave 3, slices 2 and 3): the three feasibility records (four score sets) opened from MaveDB
 // in the real program and a headless browser, by the remote action every script and agent uses, with
 // no code for any of them; the tables MaveDB sends equal the ones the validation pins
 // (sources.json); the published scores, read as published, equal MaveDB's column for column; and the
 // PRD's phase-0 exit, score agreement within documented tolerances, checked again from the live
 // import: each record's counts scored with its documented design and the parameters its authors
 // used, against its published scores, at the tolerances the suites `scoring` and `enrich2` hold.
+// And two records whose target is a transcript (wave 3, slice 3), fetched live from NCBI and
+// Ensembl, every variant read on it and at the protein level.
 //
 //   node validation/mavedb-live.mjs [--offline] [--verbose]
 //
@@ -182,6 +184,23 @@ try {
     const y = [];
     keysOf(f9Scores, 'hgvs_pro').forEach((k, i) => { const j = row.get(k); if (j !== undefined && Number.isFinite(mine[i]) && Number.isFinite(theirs[j])) { x.push(mine[i]); y.push(theirs[j]); } });
     check('Factor IX, from the live import: the documented design with MultiSTEP\'s settings follows the published scores (the scoring suite\'s tolerance)', `r ${pearson(x, y).toFixed(5)} over ${x.length} variants`, pearson(x, y) >= 0.999, 'r ≥ 0.999');
+  }
+
+  // Wave 3, slice 3: records whose target is a transcript, fetched live as MaveDB names it (BRCA1's
+  // RefSeq NM_007294.3 from NCBI as GenBank; BAP1's Ensembl ENST00000460680), every variant read on
+  // it and at the protein level.
+  {
+    const brca1 = await act('open_mavedb', { urn: 'urn:mavedb:00000097-0-2' });
+    const state = await act('get_state');
+    const files = sources.datasets['mavedb-brca1-sge'].files;
+    const pin = (which) => files.find((f) => f.path === `${which}.csv`)?.sha256;
+    const scores = state.data.tables.find((t) => t.origin?.file === 'scores');
+    const counts = state.data.tables.find((t) => t.origin?.file === 'counts');
+    check('BRCA1 saturation genome editing (urn:mavedb:00000097-0-2): opened live, its target the RefSeq transcript NCBI sends (NM_007294.3), every one of its 3,893 variants valid on it, its tables the ones the validation pins', `${brca1.message.slice(0, 220)}; scores ${scores?.sha256.slice(0, 12)}…, counts ${counts?.sha256.slice(0, 12)}…`, brca1.data.target?.accession === 'NM_007294.3' && state.data.targets[0]?.from === 'NCBI' && brca1.data.published?.scored === 3893 && scores?.sha256 === pin('scores') && counts?.sha256 === pin('counts'));
+    const map = await act('render_map', {});
+    check('BRCA1 saturation genome editing, from the live import: drawn at the protein level, 2,251 protein variants from 3,893 nucleotide variants, the rest beside the map', map.data.description.find((l) => /Read at the protein level/.test(l)) ?? 'not read at the protein level', map.data.description.some((l) => /3893 nucleotide variants make 2251 protein variants; 391 of them are made by more than one \(943 nucleotide variants\), merged as DiMSum merges them \(averaged: the scores have no SE/.test(l)));
+    const bap1 = await act('open_mavedb', { urn: 'urn:mavedb:00000662-a-2' });
+    check('BAP1 exon 1 (urn:mavedb:00000662-a-2): opened live, its target the transcript Ensembl serves (its current version, said where MaveDB names another), every one of its 620 variants\' reference bases agreeing with it', bap1.message.slice(0, 260), /^ENST00000460680\.\d+$/.test(bap1.data.target?.accession ?? '') && bap1.data.published?.scored === 620);
   }
 } catch (error) {
   check('the session ran to the end', error.stack ?? error.message, false);

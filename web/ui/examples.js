@@ -32,7 +32,8 @@ export async function openExample(app, id) {
   if (!example) return { ok: false, message: `No example "${id}".` };
   // An example opened from MaveDB (wave 3, slice 2): through the program's fetcher, as any record.
   if (example.mavedb) {
-    const opened = await importMaveDB(app, example.mavedb.urn, { counts: false, example });
+    // Its counts too when the example teaches them (BRCA1's saturation genome editing).
+    const opened = await importMaveDB(app, example.mavedb.urn, { counts: Boolean(example.mavedb.counts), example });
     if (opened.ok) await app.setMode(example.opens);
     return { ok: opened.ok, message: opened.ok ? `Opened the example "${example.title}" from MaveDB. ${opened.message}` : opened.message };
   }

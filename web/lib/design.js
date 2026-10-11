@@ -9,6 +9,7 @@
 // suite `designs`, wave 1 slice 2).
 
 import { checkReadout, describeReadout, inText } from './readout.js';
+import { targetProtein } from './target.js';
 
 export const DESIGN_FORMAT = 'mavescape-design';
 export const DESIGN_VERSION = 1;
@@ -43,10 +44,10 @@ function isObject(value) {
 }
 
 // The length of a target in the positions variants are numbered by: residues for a protein, or
-// for a DNA target named at the protein level, codons from its reading frame.
+// for a DNA target named at the protein level, the codons of its coding sequence (to its stop).
 export function targetLength(target, level = 'protein') {
   const sequence = String(target?.sequence ?? '');
-  if (target?.sequenceType === 'dna' && level === 'protein') return Math.floor((sequence.length - ((target.codingStart ?? 1) - 1)) / 3);
+  if (target?.sequenceType === 'dna' && level === 'protein') return targetProtein(target).length;
   return sequence.length;
 }
 

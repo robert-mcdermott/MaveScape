@@ -40,6 +40,7 @@ export async function fetchPublic(app, path, { confirmed = false, refresh = fals
   }
   const retrieval = retrievalOf((name) => response.headers.get(name));
   if (response.ok && as === 'bytes') return { ok: true, bytes: new Uint8Array(await response.arrayBuffer()), retrieval };
+  if (response.ok && as === 'text') return { ok: true, text: await response.text(), retrieval };
   const json = await response.json().catch(() => null);
   if (!response.ok) return { ok: false, status: response.status, message: json?.error ?? `HTTP ${response.status}`, confirm: json?.confirm ?? null };
   return { ok: true, json, retrieval };

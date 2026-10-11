@@ -11,6 +11,8 @@ export const STAGES = [
   // Published scores (a design of model 'scores', wave 3 slice 2): the table gives no score.
   { id: 'given', code: 10, label: 'A score in the table', rule: true, published: true, reason: 'the table gives it no score' },
   { id: 'copy', code: 11, label: 'Written once', rule: true, published: true, reason: 'a copy of an earlier row (the same variant and the same scores): read once' },
+  // A score set of several targets opened one target at a time (wave 3, slice 3).
+  { id: 'target', code: 12, label: 'On the target', rule: true, reason: 'named on another of the score set\'s targets' },
   { id: 'measured', code: 1, label: 'Counted in a replicate', rule: true, reason: 'not measured in any replicate (not counted in enough of its samples; a zero count with no pseudocount, scored by DiMSum; or, from sorted bins, no estimate)' },
   { id: 'identifier', code: 2, label: 'Valid identifier', rule: true, reason: 'the identifier is not valid or does not agree with the target' },
   { id: 'class', code: 3, label: 'Variant class', reason: 'its class is not scored' },
@@ -115,6 +117,7 @@ export function replicateState(counted, c0, total, filters, fewPoints = false) {
 // The variant-level stage before scoring that leaves a variant out, or 0: its identifier, class
 // or the exclusion list. `kind` and `invalid` from variants.js; `excluded` a Set of identifiers.
 export function variantStage(row, variants, excludeKinds, excluded) {
+  if (variants.otherTarget?.[row]) return STAGE_BY_ID.get('target').code;
   if (variants.status[row] === 3) return STAGE_BY_ID.get('identifier').code;
   if (excludeKinds.has(variants.kind[row])) return STAGE_BY_ID.get('class').code;
   if (excluded.size && (excluded.has(variants.key[row]) || excluded.has(variants.original[row]))) return STAGE_BY_ID.get('excluded').code;
@@ -128,9 +131,11 @@ export const kindCodes = (names) => new Set(names.map((name) => KIND_NAMES.index
 // listed for a barcode table only.
 export function filterFlow(reasons, barcodes = false, published = false) {
   // Published scores pass no stage of counts.
-  const stages = published ? STAGES.filter((s) => s.published || ['identifier', 'class', 'excluded', 'se'].includes(s.id)) : STAGES.filter((s) => !s.published && (barcodes || !s.barcodes));
-  const removed = new Map(stages.map((s) => [s.code, 0]));
+  const all = published ? STAGES.filter((s) => s.published || ['target', 'identifier', 'class', 'excluded', 'se'].includes(s.id)) : STAGES.filter((s) => !s.published && (barcodes || !s.barcodes));
+  const removed = new Map(all.map((s) => [s.code, 0]));
   for (const r of reasons) if (r) removed.set(r, removed.get(r) + 1);
+  // The target's stage is listed when it sets rows aside (a score set of several targets).
+  const stages = all.filter((s) => s.id !== 'target' || removed.get(s.code));
   let remaining = reasons.length;
   return stages.map((s) => {
     remaining -= removed.get(s.code);

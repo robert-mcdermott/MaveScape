@@ -254,6 +254,20 @@ export function draftDesign(table, roles, options = {}) {
     } else {
       replicate.bins = members.filter((m) => m.role === 'bin').map((m) => ({ sample: sampleFor(m.column), order: m.bin, value: m.bin })).sort((a, b) => a.order - b.order);
     }
+    // A lone sample is no replicate of a time series or of sorted bins (BRCA1's saturation genome
+    // editing counts its library and plasmid beside day 5 and day 11, wave 3 slice 3): set aside,
+    // for the person to give it a role if it has one.
+    const lone = model === 'time-series' ? replicate.timepoints.length < 2 : model === 'bins' ? replicate.bins.length < 2 : false;
+    if (lone) {
+      for (const m of members) {
+        const id = sampleFor(m.column);
+        const k = samples.findIndex((x) => x.id === id);
+        if (k >= 0) samples.splice(k, 1);
+        ignoredColumns.push({ column: m.column, reason: `a single sample, not a replicate of the ${model === 'bins' ? 'sorted bins' : 'time series'}: set aside` });
+      }
+      notes.push(`${members.map((m) => m.column).join(', ')}: ${members.length > 1 ? 'samples' : 'a sample'} on ${members.length > 1 ? 'their' : 'its'} own, not ${members.length > 1 ? '' : 'a '}replicate${members.length > 1 ? 's' : ''} of the ${model === 'bins' ? 'sorted bins' : 'time series'}: set aside. Give ${members.length > 1 ? 'them a role' : 'it a role'} in the Experiment view if ${members.length > 1 ? 'they have one' : 'it has one'}.`);
+      continue;
+    }
     replicates.push(replicate);
     groupOf.set(replicate, group);
   }

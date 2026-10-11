@@ -130,6 +130,40 @@ export const EXAMPLES = [
     ],
   },
   {
+    id: 'brca1-sge',
+    title: 'BRCA1 saturation genome editing, opened from MaveDB (nucleotide variants)',
+    summary: '3,893 single-nucleotide variants of 13 exons of BRCA1 and their flanking introns, edited into the genome of HAP1 cells, named on the RefSeq transcript (fetched from NCBI) and read at the protein level, with the counts the authors deposited.',
+    question: 'What do nucleotide variants of a gene do to its protein, which of them can a map of substitutions not show, and how close do the deposited counts come to the published scores?',
+    source: 'MaveDB urn:mavedb:00000097-0-2 (its scores and counts, downloaded when opened; SHA-256 checked) and NCBI\'s RefSeq NM_007294.3',
+    license: 'CC0 1.0',
+    citation: 'Findlay GM, et al. Accurate classification of BRCA1 variants with saturation genome editing. Nature 2018;562:217–222. doi:10.1038/s41586-018-0461-z',
+    simulated: false,
+    // Opened from MaveDB through the program's fetcher (wave 3, slice 3), its target the transcript
+    // its record names, fetched from NCBI as GenBank.
+    mavedb: { urn: 'urn:mavedb:00000097-0-2', scores: { sha256: '906dc152f28b4c8261e4e532a03c9c42f2e45e211aa3ada12e3c826c151580ec', size: 610024 }, counts: { sha256: '9d2e8281ff55d87e6ef0ada99a8fc6973073741d9c97ce6bea70e62eca7cdabc', size: 368636 } },
+    // Function scores: from the paper, a lower score is less of the function (depletion from the
+    // cells, which need BRCA1).
+    readout: { direction: 'higher-more' },
+    findings: { coverage: 'fail' },
+    teaches: [],
+    opens: 'map',
+    expected: [
+      'Every one of the 3,893 variants is valid on NM_007294.3: 2,077 missense, 579 synonymous, 138 nonsense and 9 at the start codon, with 891 intronic, 143 at splice sites and 56 in the 5′ UTR. MaveScape reads their scores as published.',
+      'On the map, the coding variants read at the protein level: 2,251 protein variants, 391 of them made by more than one nucleotide variant and merged as DiMSum merges them. The 1,090 variants with no protein change to draw (intronic, splice-site, UTR) are listed beside the map.',
+      'Nonsense variants score far below synonymous ones (medians −2.12 and −0.01; AUC 0.99); splice-site variants score like nonsense (median −2.02, 92% below −1), intronic ones a few bases further in like synonymous ones (median −0.18).',
+      'QC fails coverage: 17% of the substitutions one base change makes, on the whole protein. The variants lie in two stretches, positions 1–101 and 1631–1855, the exons the experiment edited.',
+      'The counts open with a design drafted from their names: two replicates, day 5 to day 11. Scored, they agree with the published scores at r ≈ 0.76: the authors normalized each exon apart and corrected for position within it, which the counts do not record.',
+    ],
+    steps: [
+      ['map', 'The map shows BRCA1\'s function scores as published, each coding variant read for the protein change it makes. Click the stop at codon 1853 (p.Tyr1853Ter): two nucleotide variants make it, each with its score, merged into the cell.'],
+      ['map', 'Open "Not on the map" beside it and choose splice site: the variants at the exons\' edges (c.5194-2A>G), scoring as low as stops. Intronic ones, a few bases further in, mostly score like synonymous variants.'],
+      ['experiment', 'Select the target in the sidebar: the RefSeq transcript NM_007294.3, fetched from NCBI as GenBank, numbered from its coding sequence (233–5,824), its translation the record\'s protein.'],
+      ['qc', 'In QC, the stops separate from the synonymous variants (AUC 0.99), but coverage fails: the whole protein counts as designed. The variants lie in two stretches (1–101, 1631–1855), the exons edited: given as the library\'s tiles in Experiment, coverage is judged within them.'],
+      ['experiment', 'Select the counts table: its design was drafted from the column names, two replicates from day 5 to day 11, the library and RNA counts set aside.'],
+      ['score', 'Score the counts and compare with the published scores: they agree at r ≈ 0.76. The published scores were normalized exon by exon and corrected for position within each exon, which the deposited counts do not record.'],
+    ],
+  },
+  {
     id: 'simulated',
     title: 'A simulated experiment (known truth)',
     summary: 'A simulated two-population selection of a 40-residue protein, three replicates, where every variant\'s true effect is known.',

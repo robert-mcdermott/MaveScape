@@ -45,6 +45,11 @@ const PTEN = join(ROOT, 'validation/cache/mavedb-pten-vampseq/scores.csv');
 if (wanted.length === 0 || wanted.includes('pten-mavedb')) {
   if (!existsSync(PTEN)) throw new Error('The PTEN example\'s scene needs MaveDB\'s table: run node validation/fetch.mjs mavedb-pten-vampseq');
 }
+// BRCA1's saturation genome editing (wave 3, slice 3): its scores and counts.
+const BRCA1_SGE = join(ROOT, 'validation/cache/mavedb-brca1-sge');
+if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant'].includes(w))) {
+  if (!existsSync(join(BRCA1_SGE, 'counts.csv'))) throw new Error('The BRCA1 example\'s scenes need MaveDB\'s tables: run node validation/fetch.mjs mavedb-brca1-sge');
+}
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
 
 // --- MaveScape ------------------------------------------------------------------------------------
@@ -66,6 +71,11 @@ async function startMaveScape() {
   if (existsSync(PTEN)) {
     cpSync(PTEN, join(cache, 'mavedb', 'urn_mavedb_00000013-a-1.scores.csv'));
     writeFileSync(join(cache, 'mavedb', 'urn_mavedb_00000013-a-1.scores.csv.meta.json'), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: 'https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000013-a-1/scores', retrieved: '2026-10-11T02:24:52Z' }, null, 2)}\n`);
+  }
+  for (const table of ['scores', 'counts']) {
+    if (!existsSync(join(BRCA1_SGE, `${table}.csv`))) continue;
+    cpSync(join(BRCA1_SGE, `${table}.csv`), join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv`));
+    writeFileSync(join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/${table}`, retrieved: '2026-10-11T04:13:31Z' }, null, 2)}\n`);
   }
   const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
@@ -189,6 +199,43 @@ const scenes = {
     await act('focus', { kind: 'table', name: 'scores' });
     await clearToasts();
     await sleep(800);
+  },
+  // A record whose target is a transcript (wave 3, slice 3): BRCA1's saturation genome editing,
+  // before it is opened.
+  async 'mavedb-transcript'() {
+    await act('set_mode', { mode: 'start' });
+    await js(`import('/ui/mavedb.js').then((m) => { m.openMaveDBDialog(window.mavescape, { query: 'urn:mavedb:00000097-0-2' }); return true; })`);
+    await waitFor(`Boolean(document.querySelector('.dialog .record-view .calibration'))`);
+    await sleep(500);
+  },
+  // Nucleotide variants at the protein level (wave 3, slice 3): BRCA1's saturation genome editing on
+  // the map, and beside it the splice-site variants a map of substitutions cannot show.
+  async 'brca1-sge'() {
+    await example('brca1-sge');
+    await act('set_mode', { mode: 'map' });
+    await clearToasts();
+    await js(`(() => { const d = document.querySelector('details.off-map'); d.open = true; d.dispatchEvent(new Event('toggle')); return true; })()`);
+    await sleep(300);
+    await js(`(() => { const s = document.querySelector('details.off-map select'); s.value = 'splice site'; s.dispatchEvent(new Event('change')); return true; })()`);
+    await sleep(400);
+    // The map's lower part, what it says in words, and the table's first rows.
+    await js(`(() => { const d = document.querySelector('details.off-map'); d.scrollIntoView({ block: 'start' }); const c = d.closest('.view-body'); if (c) c.scrollTop -= 560; return true; })()`);
+    await sleep(500);
+  },
+  // A protein variant of a nucleotide run in the inspector: BRCA1's p.Tyr1853Ter, made by two.
+  async 'merged-variant'() {
+    await example('brca1-sge');
+    await act('inspect_variant', { variant: 'p.Tyr1853Ter' });
+    await clearToasts();
+    await sleep(600);
+  },
+  // A GenBank plasmid map with three coding features (wave 3, slice 3): the chooser.
+  async 'genbank-cds'() {
+    await act('set_mode', { mode: 'start' });
+    const gb = readFileSync(join(ROOT, 'validation/fixtures/public-data/ncbi/ON605209.1.gb'), 'utf8');
+    await js(`(window.mavescape.importFiles([new File([${JSON.stringify(gb)}], 'pMK-RQ-BCD_LacZ-cmyc-EB2-H6.gb')]), true)`);
+    await waitFor(`Boolean(document.querySelector('.dialog .cds-list'))`);
+    await sleep(500);
   },
   // What the analysis can do (wave 2, slice 10): GRB2's readiness in the Experiment view, and what
   // the published counts leave out.

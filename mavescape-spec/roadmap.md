@@ -1269,12 +1269,113 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
      - **The workflow said "the design or the table changed"** when another table (the published
        scores) had the only run, and the Score view's draft took that run's parameters for the counts:
        a run of the same table, and parameters of the same kind, are now what count.
-3. **Full MAVE-HGVS and variant mapping (D3, D10).** Multi-variants, insertions, deletions,
-   delins, duplications, stop and start loss, splice; nucleotide-to-protein translation for
-   nucleotide-level libraries (and synonymous collapsing, as DiMSum's); targets from GenBank
-   files (a plasmid or construct map: the coding feature chosen, its translation checked);
-   optional VRS identifiers from MaveDB's mapped variants.
-   - Validation: every `mavehgvs` test case; every variant of the imported records parses.
+3. **Full MAVE-HGVS and variant mapping (D3, D10): done.** The parser has read the whole grammar
+   since wave 1; now every form is carried through. `web/lib/consequence.js` reads a nucleotide
+   variant of a DNA target for its protein change: the variant applied to the target's sequence
+   (c. counted from the coding start, c.-N and c.*N in the UTRs; n., g., m., o. from the first
+   base), both coding sequences translated (a frameshift's to its first stop; one in frame codon by
+   codon, into the 3′ UTR when its stop is lost), compared as HGVS describes protein changes and as
+   biocommons hgvs computes them, in MAVE-HGVS's forms (frameshifts short, a lost stop as the
+   substitution at it, a methionine start's change "start lost", substitutions of several codons a
+   multi-variant, nothing after a stop the variant makes); intronic positions are splice sites
+   within two bases of the exon (or across its edge), else intronic. The variant table
+   (`variants.js`) gives a nucleotide variant its consequence as its kind (new kinds: splice site,
+   intronic, 5′ UTR, 3′ UTR) and its protein change (`proKey`, `proPosition`, `proRef`,
+   `proAlt`, DiMSum's `mixed`); a name prefixed by another target is set aside (`otherTarget`, the
+   filter stage `target`). A DNA target's protein is its coding sequence to its first stop.
+
+   **Nucleotide runs at the protein level** (`web/lib/collapse.js`): the variants making the same
+   protein change merged as DiMSum merges them by default (inverse-variance; mixed substitutions
+   left out; synonymous codons merged into their codon's cell; frameshifts and variants with no
+   protein change apart), for the map, the inspector (a cell's nucleotide variants, each scored),
+   QC's coverage, remote control and a new export, the scores at the protein level
+   (`protein_scores.csv`, from `mavescape run` too). Beside every map, **Not on the map** lists what
+   a map of substitutions cannot show, by class and in order along the target.
+
+   **Targets from GenBank** (`web/lib/genbank.js`, `web/ui/genbank.js`): LOCUS, definition,
+   accession and version, organism, features with their locations (ranges, partial ends,
+   complement, join, order) and qualifiers, and the sequence; a coding feature chosen when there are
+   several (the longest whose translation checks offered first), its translation checked against
+   the record's; a plasmid's target its coding sequence on its strand, an mRNA's the whole record
+   from its coding start. The target's origin is kept with the workspace (not the design), shown in
+   the Experiment view and the inspector, and named in the methods (RefSeq, Ensembl and biocommons
+   hgvs cited).
+
+   **MaveDB records whose target is a transcript**, through the fetcher: NCBI's GenBank record of a
+   RefSeq transcript (`/api/fetch/ncbi/nuccore/{accession}`) and Ensembl's sequence of one of its
+   own (`/api/fetch/ensembl/transcript/{id}`, its current version said where the record names
+   another); a transcript named beside its protein is one target; a score set of several targets
+   opens one target at a time; a genome is not fetched. **MaveDB's mapped variants**
+   (`/api/fetch/mavedb/score-sets/{urn}/mapped-variants`), when asked for, kept as a CSV beside the
+   tables (and in the archive): the inspector shows each variant's HGVS on the reference, VRS
+   identifier and ClinGen allele. `open_mavedb` takes `target` and `mapped`; `inspect_variant` gives
+   `protein`, `nucleotideVariants` and `mapped`.
+
+   The example: BRCA1's saturation genome editing (`urn:mavedb:00000097-0-2`, CC0; Findlay et al.
+   2018), opened from MaveDB with its counts, its RefSeq transcript fetched from NCBI; eleven
+   examples.
+   - Validation:
+     - `consequences` (8 checks; `validation/consequence-cases.mjs`): each nucleotide variant's
+       protein change as biocommons hgvs 1.5.7's (`reference/consequences.json`,
+       `generate_consequences.py`, its own data provider holding each transcript), 16,188 variants
+       on NM_007294.3, NM_000546.6 and ENST00000460680 (every name of BRCA1's, TP53's and BAP1's
+       score sets, and generated substitutions, deletions, insertions, duplications and
+       deletion-insertions): all agree; GenBank records as Biopython 1.88 reads them (two RefSeq
+       mRNAs, a plasmid of three coding features, HBB joined from three exons; 143 features, 6 coding
+       sequences): all agree; every variant of thirteen imported tables valid on its target
+       (GRB2, BRCA1 RING aa and nt, factor IX, Hsp90, CBS low and high, PTEN, BRCA1 SGE scores and
+       counts, TP53's DNA-binding domain, BAP1, TP53 base editing); 71,005 protein names, all strict
+       MAVE-HGVS; the protein names five records publish beside their nucleotide names the same
+       protein (22,280 of CBS's written alike); VarChAMP's 28 targets each read on its own; DDX3X's
+       genome target refused; the merge at the protein level as DiMSum 1.4's own
+       `dimsum__aggregate_AA_variants_fitness` merges CBS's 11,478 codon variants
+       (`generate_dimsum_aggregate.R`): 7,561 amino-acid variants within 5 × 10⁻¹³, the 1,034
+       synonymous ones it keeps apart each in its codon's cell.
+     - `hgvs` (6 checks): every mavehgvs test case, its 54 tests against a target sequence now too.
+     - `public-data` (16 checks): GRB2's 1,120 mapped variants each joined to its row of scores, each
+       VRS identifier well formed, each protein on NP_002077.1 the table's at the target's position
+       plus 158.
+     - `examples` (33 checks): the BRCA1 example opens as the window opens it (QC coverage failing, as
+       its guide teaches); its counts drafted (two replicates, day 5 to day 11) and scored agree with
+       the published scores at r 0.76.
+     - `remote-session.mjs` (90 checks), `headless-run.mjs` (24), `mavedb-live.mjs` (18, live and
+       offline): MaveDB's mapping kept and shown; BAP1 opened on Ensembl's transcript, a merged
+       protein variant inspected, the scores at the protein level as Node writes them, by the window
+       and by `mavescape run`; BRCA1's saturation genome editing and BAP1 opened live, their
+       transcripts from NCBI and Ensembl.
+     - Go tests: the new requests (accessions only; NCBI's and Ensembl's HTTP 400 for an unknown
+       accession read as not found; an answer of the wrong kind refused). Unit tests 260:
+       `consequence.test.mjs`, `genbank.test.mjs`, `collapse.test.mjs`, kinds and prefixes in
+       `variants.test.mjs`, transcripts, several targets and mapped variants in `mavedb.test.mjs`,
+       the mapped variants carried by the archive in `archive.test.mjs`.
+   - Found by slice 3:
+     - **biocommons hgvs names the residues an in-frame insertion holds after the stop it makes**
+       (`p.Lys1171delinsGluTerGlu`): they are not made, and MaveScape names nothing after a stop
+       (`p.Lys1171delinsGluTer`); 12 of 16,188 variants, the only difference.
+     - **A duplicated stop codon is in the coding sequence** (the copy follows it, past the stop): no
+       amino acid changes (`p.=`), where a first reading placed it in the 3′ UTR.
+     - **MaveScape translated a DNA target past its stop**: a transcript's 3′ UTR would have been
+       drawn on the map. A target's protein now ends at its first stop.
+     - **Ensembl serves its current release only**: BAP1's record names ENST00000460680.5, Ensembl
+       serves .6; every one of the record's reference bases agrees with .6. NCBI and Ensembl answer
+       an unknown accession with HTTP 400, not 404.
+     - **Base-editing screens name the same edit from several guides** (TP53's: 95 of 351 names
+       repeated, with different scores): MaveScape refuses to merge them silently, so the record's
+       published run is not made; which guide is right is not for MaveScape to guess.
+     - **BRCA1's saturation genome editing counts a library beside day 5 and day 11**: the draft made
+       it a replicate of one time point, which nothing can score. A lone sample is set aside now.
+     - **A saturation genome editing screen covers exons, not the protein**: coverage of the whole
+       protein is 5% (17% of the substitutions one base change makes). The finding names the
+       stretches the variants lie in (BRCA1: 1–101, 1631–1855), to give as tiles.
+     - **Published protein names differ in form from MAVE-HGVS's**: BRCA1's RING record names changes
+       after a stop (`p.[Gly182Ter;Leu217Phe]`), TP53's base-editing record a codon left synonymous
+       (`p.[Ser96Ser;Val97Ala]`) and `p.Asp41Asp`; each describes the protein MaveScape's translation
+       makes.
+     - **MaveDB's mapping confirms the UniProt offset independently**: each of GRB2's 1,120 mapped
+       variants sits at its target position plus 158 on NP_002077.1.
+     - **The deposited counts of a saturation genome editing screen do not record its normalization**:
+       Findlay et al. normalized each exon apart and corrected for position within it; scored
+       globally, BRCA1's counts agree with the published scores at r 0.76.
 4. **MaveDB export (I2, M2).** A MaveDB-ready package (scores and counts CSV, metadata JSON) from
    any run, with the analysis description written from the methods and the experiment's keywords
    from the design's readout (the MAVE minimum information); `mavescape export --format mavedb`.
@@ -1292,7 +1393,7 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
    providers behind one interface (`web/lib/providers/*.js`), cached and usable offline.
 6. **Examples (T4).** The two-condition differential map (DHFR with Lon protease functional and
    deficient, `00000063-a-1`/`-b-1`) and the MaveDB round trip (BRCA1 RING), bringing the set to
-   eleven.
+   thirteen.
 
 ## 0.4.0: compare (wave 4)
 

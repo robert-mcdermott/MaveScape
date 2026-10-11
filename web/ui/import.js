@@ -13,6 +13,8 @@ import { headerlessMap } from '../lib/barcodes.js';
 import { cellText } from '../lib/csv.js';
 import { STATUS, KIND_NAMES } from '../lib/variants.js';
 import { parseFasta, targetFromSequence } from '../lib/target.js';
+import { looksLikeGenBank } from '../lib/genbank.js';
+import { importGenBank, targetsFromGenBank } from './genbank.js';
 import { addSource, addTarget, change, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { IDENTIFIER_COLUMNS, validateDesign, summarizeDesign } from '../lib/design.js';
@@ -25,6 +27,7 @@ export function installImport(app) {
   app.tables = new Map();
   app.importers.set('table', (items, options) => openImportWizard(app, items, options));
   app.importers.set('sequence', (items) => importSequences(app, items));
+  app.importers.set('genbank', (items) => importGenBank(app, items));
   app.importers.set('design', (items) => importDesigns(app, items));
   app.importers.set('json', (items) => importDesigns(app, items));
   app.parseTableFile = (item) => parseTableFile(app, item);
@@ -391,14 +394,27 @@ async function openImportWizard(app, items, options = {}) {
       }
       update();
     };
-    const fasta = h('input', { type: 'file', accept: '.fasta,.fa,.fna,.faa,.fas,.seq,.txt', hidden: true, onchange: async () => {
+    const fasta = h('input', { type: 'file', accept: '.fasta,.fa,.fna,.faa,.fas,.seq,.txt,.gb,.gbk,.gbff,.genbank,.ape', hidden: true, onchange: async () => {
       const file = fasta.files[0];
-      if (file) addRecords(await file.text(), file.name);
+      if (!file) return;
+      const text = await file.text();
+      if (!looksLikeGenBank(text)) {
+        addRecords(text, file.name);
+        return;
+      }
+      // A GenBank file (wave 3, slice 3): the target from the coding feature chosen.
+      for (const { target, origin, messages } of await targetsFromGenBank(text, file.name)) {
+        target.id = `${target.id}-${state.pendingTargets.length + app.store.ws.targets.length + 1}`;
+        state.pendingTargets.push({ ...target, origin });
+        state.targetId = target.id;
+        for (const m of messages) toast(`${target.name}: ${m.message}`, { kind: m.level === 'error' ? 'error' : undefined });
+      }
+      update();
     } });
     targetEl.append(h('h3', icon('sequence'), 'Target'),
       h('label.field', h('span', 'The sequence the variants are named against'), select),
       h('div.btn-row', fasta,
-        h('button.btn.small', { type: 'button', onclick: () => fasta.click() }, icon('file'), 'From a FASTA file…'),
+        h('button.btn.small', { type: 'button', onclick: () => fasta.click() }, icon('file'), 'From a FASTA or GenBank file…'),
         h('button.btn.small', { type: 'button', onclick: async () => { const text = await pasteSequence(); if (text) addRecords(text, 'The pasted sequence'); } }, icon('edit'), 'Paste a sequence…')),
       problem ? h('div.callout.warn', { style: { marginTop: '10px' } }, icon('warning'), h('span', problem)) : null,
       !problem && !state.targetId ? h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, 'With a target, every variant\'s position and reference residue is checked against it. Scoring needs one.') : null);

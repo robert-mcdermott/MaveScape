@@ -11,7 +11,8 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `accessibility` | WCAG AA contrast of every text-on-surface pair in both themes, with color-vision-friendly colors off and on; palettes, status colors and score maps apart in protanopia, deuteranopia and tritanopia (Machado et al. 2009, CIEDE2000) | `web/styles.css` |
 | `designs` | The design schema on three public data sets of different designs: each design satisfies `docs/schemas/design.v1.json` and `validateDesign` against its table, accounts for every column, and agrees with the data (copied columns identical, the wild type counted everywhere, every variant's reference residue the target's, tiles holding the variants counted in them) | MaveDB, external |
 | `enrich2` | Enrich2 2.0.2's scores of those data (`reference/enrich2.json`) against the formulas of `mavescape-spec/research.md` §2.1 computed independently, and the published BRCA1 scores against Enrich2 2.0.2 | MaveDB, external; `reference/enrich2.json` |
-| `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one | `reference/mavehgvs.json` |
+| `hgvs` | `web/lib/hgvs.js` against mavehgvs 0.8.1 on 16,959 strings: the same decision, reason, canonical form and parts for every one; mavehgvs's 54 tests against a target sequence (wave 3, slice 3) decided the same | `reference/mavehgvs.json` |
+| `consequences` | Full MAVE-HGVS (wave 3, slice 3; `consequence-cases.mjs`): each nucleotide variant's protein change (`web/lib/consequence.js`) as biocommons hgvs 1.5.7 gives it, on NM_007294.3, NM_000546.6 and ENST00000460680 (16,188 variants); GenBank records (`web/lib/genbank.js`) as Biopython 1.88 reads them; every variant of thirteen imported tables valid on its target; every protein name MaveScape writes strict MAVE-HGVS; the protein names five records publish beside their nucleotide names the same protein; VarChAMP's 28 targets one at a time, DDX3X's genome refused; the merge at the protein level (`web/lib/collapse.js`) as DiMSum 1.4's own code merges CBS's codon variants | `reference/consequences.json`, `genbank.json`, `dimsum-aggregate.json`; `fixtures/public-data/`; MaveDB, external |
 | `experiment` | The design editor's operations rebuild each feasibility design; sample sheets (`fixtures/*.samples.csv`) and DiMSum's design file give the same designs; every validation design written back as a sample sheet reads as itself (wave 2 slice 10); the workspace history's chain survives saving and catches an edited entry | MaveDB and DiMSum, external; `fixtures/` |
 | `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales; barcodes (wave 2): every barcode and every variant's summed counts against dms_variants 1.6.0 by barcode and by substitution, the counts read with MaveScape's map, in dms_variants' `variant_counts` and in Enrich2's layout, the barcode fixture's truth and planted outliers, row order, refusals; DiMSum's model (wave 2): the threshold, the variants fitted, the scales and shifts, the error model, every fitness and σ and the merge against DiMSum 1.4's own functions on the fixture, GRB2 and DiMSum's demo, GRB2's published scores, the 95% intervals' coverage under a simulated bottleneck, refusals; differential scores (wave 2): limma against mutscan 1.2.0 on the two-condition fixture and CBS, Enrich2's z between conditions, the paired differential from first principles, the edge cases, the truth; scores per unit of time against the whole-course scores, DiMSum's model on a table of barcodes, the bins' defaults without the wild type (wave 2 slice 10) | `reference/enrich2.json`, `dms_variants.json`, `dms_variants-barcodes.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `dimsum.json`, `mutscan.json`, `fixtures/`; MaveDB and DiMSum, external |
 | `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series, sorts and barcoded libraries) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks, and DiMSum's terms placing them before or after selection; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found; findings in context (wave 2 slice 8): every raised finding says what could cause it and what to do, the readout's direction, coverage of a single-base library, where BRCA1 Y2H's stops stop losing the function; the cells recorded against simulated bottlenecks (wave 2 slice 10) | simulated; MaveDB, external |
@@ -20,7 +21,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 | `readiness` | What each analysis can do with what a workspace holds (wave 2, slice 10; `readiness-cases.mjs`): the six examples, the five fixtures and a simulated bottleneck with its cells recorded, whole and with one part taken away (the wild-type row, a replicate, the gates, the cells, the times in generations, the middle time points, the readout, the nonsense or synonymous controls), 74 workspaces. The readiness model must name exactly what was taken away, and its verdict on every analysis must agree with the engine: each scoring analysis scored or refused with the parameters that use it, each QC finding assessed or not, and an analysis it leaves out for a design one the engine cannot do there either. An empty workspace and a broken design | `web/examples/`, `fixtures/`, simulated |
 | `examples` | Every bundled example opened as the window opens it (wave 2, slice 11; `example-cases.mjs`): assembled (Hsp90's codon variants read at the protein level), scored with its parameters, raising exactly the QC findings it teaches, its readout stated and its readiness naming what its guide points to, at most six guided steps; the published examples' counts MaveDB's, byte for byte. Hsp90's codons (568 rows, 188 protein variants, the wild type's nine copies read once) and its per-generation scores against the published fitness; a single replicate's own SEs; factor IX against MultiSTEP's scores; the simulated problems against their truth, with and without replicate 3 | `web/examples/`; MaveDB, external (`mavedb-hsp90`, `mavedb-factor9`, and `mavedb-pten-vampseq` for the PTEN example opened from MaveDB, wave 3 slice 2) |
-| `public-data` | UniProt's and MaveDB's answers as MaveScape's fetcher cached them (wave 3, slices 1 and 2): every cached answer with its retrieval record; each published example's target where its design says in its UniProt entry (identical, at one place, the entry changing nothing in the design); GRB2's whole sequence looked up, P62993 first; the GRB2 example checked as its guide says, the design unchanged and the methods naming the check and citing UniProt; the feasibility records (four MaveDB score sets) read with no code for any of them, their published scores read as published equal to MaveDB's columns row for row, their counts drafted into valid designs (GRB2's and factor IX's as documented, but for the bins' values); keywords as the readout; a record whose target is an accession, and a record of scores alone, its readiness naming the counts and where they may be; a workspace of published scores through its archive, its run reproduced | `fixtures/public-data/`; MaveDB, external |
+| `public-data` | UniProt's and MaveDB's answers as MaveScape's fetcher cached them (wave 3, slices 1 and 2): every cached answer with its retrieval record; each published example's target where its design says in its UniProt entry (identical, at one place, the entry changing nothing in the design); GRB2's whole sequence looked up, P62993 first; the GRB2 example checked as its guide says, the design unchanged and the methods naming the check and citing UniProt; the feasibility records (four MaveDB score sets) read with no code for any of them, their published scores read as published equal to MaveDB's columns row for row, their counts drafted into valid designs (GRB2's and factor IX's as documented, but for the bins' values); keywords as the readout; a record whose target is an accession, and a record of scores alone, its readiness naming the counts and where they may be; a workspace of published scores through its archive, its run reproduced; GRB2's mapped variants (wave 3, slice 3) each joined to its row of scores, its protein on NP_002077.1 the table's at the target's position plus the UniProt offset | `fixtures/public-data/`; MaveDB, external |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -48,10 +49,14 @@ the check with the workspace, the design and its run unchanged; the methods and 
 it; and every request the page makes in the whole session, recorded through the DevTools
 protocol, goes to its own origin, none beyond; and (slice 2) `search_mavedb` and `open_mavedb` on
 the cached answers: GRB2's record opened by its MaveDB address, both tables MaveDB's as pinned, the
-published scores' run with Node's output hash, a record whose table is not cached refused offline.
-85 checks; in CI as the `remote` job.
+published scores' run with Node's output hash, a record whose table is not cached refused offline;
+and (slice 3) GRB2 opened with MaveDB's mapped variants, `inspect_variant` giving p.Thr1Ter's
+reference HGVS (NP_002077.1:p.Thr159Ter) and VRS identifier; BAP1's exon 1 opened on Ensembl's
+cached transcript, its version said, its run Node's, a merged protein variant inspected (its
+nucleotide variants listed in the inspector), the scores at the protein level exported as Node
+writes them, and the map described at the protein level. 90 checks; in CI as the `remote` job.
 
-## MaveDB, live (`mavedb-live.mjs`, wave 3 slice 2)
+## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3)
 
 `node validation/mavedb-live.mjs [--offline] [--verbose]` builds MaveScape, starts it with remote
 control and the fetcher's cache in `validation/cache/mavedb-live/`, and opens the three feasibility
@@ -64,8 +69,12 @@ window with its documented design (`designs/`) and its authors' method, against 
 at the tolerance the suites hold: GRB2 by DiMSum's model on the drafted design, r 0.994 (≥ 0.99,
 `scoring`); BRCA1 E2 by Enrich2's weighted least squares with wild-type normalization, all 50,043
 published replicate scores reproduced to 1.8 × 10⁻¹⁴ (≤ 10⁻¹⁰, `enrich2`); factor IX with
-MultiSTEP's settings, r 0.9995 (≥ 0.999, `scoring`). 15 checks, about a minute live; `--offline`
-checks again from the cache, sending nothing. In CI in the `remote` job.
+MultiSTEP's settings, r 0.9995 (≥ 0.999, `scoring`). And two records whose target is a transcript
+(wave 3, slice 3): BRCA1's saturation genome editing, its RefSeq transcript fetched from NCBI as
+GenBank, its tables those `sources.json` pins, all 3,893 variants valid and drawn at the protein
+level; BAP1's exon 1, its Ensembl transcript's current version said and used, all 620 variants
+valid. 18 checks, about a minute live; `--offline` checks again from the cache, sending nothing. In
+CI in the `remote` job.
 
 ## Headless runs (`headless-run.mjs`, wave 2 slice 7)
 
@@ -100,7 +109,10 @@ pipeline would (headless Chrome: `CHROME`, else one installed):
 - Hsp90's design run on MaveDB's counts as they are (wave 2, slice 11): `mavescape run` reads the
   codon variants at the protein level for the design and gives Node's output hash.
 
-23 checks, in CI's `remote` job; about 25 s.
+- BAP1's published nucleotide variants on its Ensembl transcript (wave 3, slice 3): `mavescape run`
+  draws the map at the protein level and writes `protein_scores.csv` as Node merges the variants.
+
+24 checks, in CI's `remote` job; about 25 s.
 
 ## Coverage of intervals (`coverage.mjs`, wave 2 slice 9)
 
@@ -139,7 +151,7 @@ what the reference tools compute; this shows whether the intervals mean what the
 
 34 checks; about 35 s; in CI's `web` job with the external data.
 
-## Public data's answers, as the fetcher caches them (`fixtures/public-data/`, wave 3 slices 1–2)
+## Public data's answers, as the fetcher caches them (`fixtures/public-data/`, wave 3 slices 1–3)
 
 A cache of public data in the layout MaveScape's fetcher writes (`docs/FORMATS.md`, "The cache of
 public data"), so that the tests, the `public-data` suite, the remote-control session (started
@@ -157,11 +169,16 @@ retrieval record:
 | `mavedb/urn_mavedb_00000835-a-1.json`, `.scores.csv`, `.counts.csv` | GRB2 SH3's MaveDB record and tables, retrieved 2026-10-11 (the tables byte for byte those `sources.json` pins) |
 | `mavedb/urn_mavedb_00000003-a-1.json`, `-a-2`, `00001200-a-1`, `00000011-a-1` | the records of BRCA1 RING (two score sets), factor IX and Hsp90 |
 | `mavedb/urn_mavedb_00000013-a-1.json` | PTEN VAMP-seq's record (the example; its table is external data, `mavedb-pten-vampseq`) |
-| `mavedb/urn_mavedb_00000662-a-2.json` | BAP1 SGE exon 1's record: CC BY 4.0, its target named by an Ensembl accession |
+| `mavedb/urn_mavedb_00000662-a-2.json`, `.scores.csv` | BAP1 SGE exon 1's record and scores: CC BY 4.0, its target named by an Ensembl transcript (the remote-control session and the headless run open it) |
+| `mavedb/urn_mavedb_00000835-a-1.mapped.json` | GRB2's mapped variants: MaveDB's mapping of its 1,120 variants to the human reference, VRS 2.0 (wave 3, slice 3) |
+| `mavedb/urn_mavedb_00000097-0-2.json`, `00001277-a-1`, `00001245-a-1`, `00001237-a-1`, `00001228-a-1` | the records of BRCA1's saturation genome editing (RefSeq target), TP53's DNA-binding domain (RefSeq), TP53 base editing (an Ensembl transcript and its protein), VarChAMP (28 targets) and DDX3X's saturation genome editing (a genome) |
+| `ncbi/NM_007294.3.gb`, `NM_000546.6.gb` | NCBI's GenBank records of BRCA1's and TP53's RefSeq transcripts |
+| `ncbi/ON605209.1.gb`, `MK476504.1.gb` | a plasmid map with three coding features, one on the reverse strand, and HBB's gene joined from three exons: the GenBank reader against Biopython |
+| `ensembl/ENST00000460680.json`, `ENST00000269305.json` | Ensembl's sequences of BAP1's (version 6) and TP53's (version 9) transcripts, the coding part in capitals |
 | `mavedb-search/2f0e48c8….json`, `253d595f….json` | MaveDB's answers to the searches "GRB2" (1 score set) and "VAMP-seq" (22) |
 
 UniProt's data are under CC BY 4.0; MaveDB's records are CC0 but for BAP1's (CC BY 4.0, its
-authors cited in its record).
+authors cited in its record); NCBI's and Ensembl's records have no restriction on use.
 
 ## Public data (`sources.json`)
 
@@ -174,8 +191,13 @@ authors cited in its record).
 | `dimsum-demo` (lehner-lab/DiMSum `inst/demo`, MIT) | 40,591 whole nucleotide sequences × 4 inputs and 4 outputs; its design file | DiMSum's layout (variants as sequences, named against the 126-nt wild type); CR-only line ends |
 | `mavedb-cbs` (urn:mavedb:00000005-a-5, -a-6) | two populations × 4 replicates at low and at high vitamin B6, in two records whose non-selected samples are the same | two conditions from shared inputs (wave 2, slice 6); counts not whole numbers; codon variants with no wild-type row |
 | `mavedb-pten-vampseq` (urn:mavedb:00000013-a-1) | published scores only, no counts: VAMP-seq abundance of 4,409 PTEN variants, with SEs and 95% intervals | the PTEN example opened from MaveDB (wave 3, slice 2): its table as MaveDB writes it, which the example checks when it opens |
+| `mavedb-brca1-sge` (urn:mavedb:00000097-0-2) | saturation genome editing: 3,893 single-nucleotide variants on NM_007294.3 (coding, splice-site, intronic, 5′ UTR), scores and counts (library, day 5 and day 11 of two replicates, RNA) | the BRCA1 example (wave 3, slice 3): a RefSeq target, nucleotide variants at the protein level, its counts scored against its published scores |
+| `mavedb-tp53-dbd` (urn:mavedb:00001277-a-1) | published scores: 8,058 variants of TP53's DNA-binding domain on NM_000546.6, 5,609 of them deletions, insertions, duplications and deletion-insertions | the protein changes of insertions and deletions, against biocommons hgvs |
+| `mavedb-bap1-sge` (urn:mavedb:00000662-a-2) | published scores: 620 variants of BAP1's exon 1 on ENST00000460680.5 (UTR, coding, intronic; single-base deletions and deletion-insertions); CC BY 4.0 | an Ensembl target, its version not Ensembl's current one |
+| `mavedb-tp53-base-editing` (urn:mavedb:00001245-a-1) | published scores: 465 base-editor outcomes as multi-variants on ENST00000269305.9, with their protein names on ENSP00000269305.4 | multi-variants' protein changes against the authors' names |
+| `mavedb-varchamp` (urn:mavedb:00001237-a-1) | published scores: 430 variants of 28 genes, each named with its target's label | a score set of several targets |
 
-All are CC0 on MaveDB. The GRB2, factor IX and Hsp90 examples (`web/examples/`) are their count
+All are CC0 on MaveDB but `mavedb-bap1-sge` (CC BY 4.0). The GRB2, factor IX and Hsp90 examples (`web/examples/`) are their count
 files, unchanged. MaveDB's API writes these CSV files identically on every request (checked
 2026-10-08), with Windows line ends (CRLF) and `NA` for missing values; counts are written as
 decimals (`3232.0`).
@@ -215,6 +237,34 @@ sample of the others), 3,000 variants generated from the grammar and 4,000 singl
 (seed 20261008). mavehgvs accepts 7,741 and refuses 9,218 for nine reasons; for every valid string
 its canonical form is the string itself. `web/lib/hgvs.js` is written to the same grammar and
 rules, not ported from mavehgvs's regular expressions, and agrees on every string.
+
+## Protein changes, GenBank and DiMSum's merge (`reference/consequences.json`, `genbank.json`, `dimsum-aggregate.json`, wave 3 slice 3)
+
+`generate_consequences.py` gives biocommons hgvs 1.5.7 (Apache-2.0) each transcript through a data
+provider of its own that holds the transcript's sequence and coding region and nothing else (no
+database is consulted), and records its protein change for every name of BRCA1's, TP53's and BAP1's
+score sets and for generated variants on each transcript (substitutions at the coding sequence's
+ends and a sample, deletions, insertions, duplications and deletion-insertions of 1–9 bases; seed
+20261011): 16,188 variants. hgvs needs psycopg2, which it does not use here: the script's
+docstring installs it without its dependencies. `generate_genbank.py` reads the four GenBank
+records with Biopython 1.88: fields, features, locations, each CDS's bases and translation.
+`generate_dimsum_aggregate.R` sources DiMSum 1.4's `dimsum__aggregate_AA_variants_fitness` from its
+release (SHA-256 checked) and runs it on CBS's 11,478 codon variants with a count ratio as fitness,
+applying DiMSum's rule for mixed substitutions as `dimsum__process_merged_variants` does.
+
+### What the comparisons showed (wave 3, slice 3)
+
+- **Protein changes agree on all 16,188 variants**, after one rule: biocommons names the residues
+  an in-frame insertion holds after the stop it makes (`p.Lys1171delinsGluTerGlu`), which are not
+  made, and MaveScape does not (`p.Lys1171delinsGluTer`); 12 variants. The forms differ as
+  MAVE-HGVS's differ from HGVS's (`p.(Gly5AlafsTer12)` is `p.Gly5fs`; `p.(Ter7LysextTer?)`,
+  `p.Ter7Lys`; `p.Met1?`, start lost; a deletion-insertion as long as what it replaces, the
+  substitutions it holds), which the comparison writes out.
+- **GenBank agrees with Biopython** on all 4 records, 143 features and 6 coding sequences; each
+  coding sequence's translation is its record's.
+- **DiMSum's merge** gives 7,561 amino-acid variants from CBS's codon variants (2,522 of them from
+  6,065 codons); MaveScape's agree within 5 × 10⁻¹³, the order of summation. The 1,034 synonymous
+  codon variants DiMSum keeps apart are each a member of MaveScape's synonymous cell.
 
 ## Reference outputs (`reference/`)
 

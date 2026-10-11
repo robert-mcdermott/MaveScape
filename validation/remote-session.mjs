@@ -23,7 +23,8 @@ import { FINGERPRINT } from '../web/lib/dmath.js';
 import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
 import { exampleById, simulatedExample } from '../web/lib/examples.js';
 import { assembleTable } from '../web/lib/assemble.js';
-import { barcodesCSV, differentialCSV } from '../web/lib/exports.js';
+import { barcodesCSV, differentialCSV, proteinScoresCSV } from '../web/lib/exports.js';
+import { proteinView } from '../web/lib/collapse.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -361,6 +362,28 @@ try {
   check('the published scores\' run: Node\'s output hash, read as published (model "published"), and the record kept with the workspace', `${pRun.output.sha256.slice(0, 16)}… and ${outputDigest(pNode.results).slice(0, 16)}…; ${pRun.inputs.parameters.model}`, pRun.output.sha256 === outputDigest(pNode.results) && pRun.inputs.parameters.model === 'published' && (await browser.eval('window.mavescape.store.ws.records?.[0]?.urn')) === 'urn:mavedb:00000835-a-1');
   const ptenOffline = await send('open_mavedb', { urn: 'urn:mavedb:00000013-a-1' });
   check('open_mavedb offline, for a record whose table is not in the cache: refused, saying MaveScape is offline', ptenOffline.message, !ptenOffline.ok && /--offline/.test(ptenOffline.message));
+
+  // Wave 3, slice 3: GRB2 opened with MaveDB's mapped variants (VRS); a record whose target is an
+  // Ensembl transcript (BAP1, CC BY 4.0), its nucleotide variants read at the protein level.
+  const mappedOpen = await act('open_mavedb', { urn: 'urn:mavedb:00000835-a-1', counts: false, mapped: true });
+  const thr1 = await act('inspect_variant', { variant: 'p.Thr1Ter' });
+  check('open_mavedb with mapped: MaveDB\'s mapping kept beside the table; inspect_variant gives a variant\'s VRS identifier and HGVS on the reference, its position the target\'s plus the UniProt offset (1 + 158)', `${mappedOpen.data.mapped} mapped; p.Thr1Ter: ${thr1.data.mapped?.hgvs} ${thr1.data.mapped?.vrs}`, mappedOpen.data.mapped === 1120 && thr1.data.mapped?.hgvs === 'NP_002077.1:p.Thr159Ter' && /^ga4gh:VA\.[A-Za-z0-9_-]{32}$/.test(thr1.data.mapped?.vrs ?? ''));
+  const bap1 = await act('open_mavedb', { urn: 'urn:mavedb:00000662-a-2' });
+  const bState = await act('get_state');
+  const bRun = await browser.eval('window.mavescape.store.ws.runs.find((r) => r.name === "Published scores")');
+  const bTable = parseTable(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000662-a-2.scores.csv')), { fileName: 'scores.csv' });
+  const bNode = scoreTable(bTable, bRun.inputs.design, bRun.inputs.parameters);
+  check('open_mavedb, a target named by a transcript (BAP1 exon 1, ENST00000460680.5): Ensembl\'s cached transcript, its current version (.6) said and used, every variant\'s reference base agreeing with it, the run Node\'s', `${bap1.message} Target: ${JSON.stringify(bState.data.targets[0])}`, bap1.data.target?.accession === 'ENST00000460680.6' && /Ensembl's current release has ENST00000460680\.6/.test(bap1.message) && bState.data.targets[0]?.from === 'Ensembl' && bRun.inputs.design.targets[0].identifiers.ensembl === 'ENST00000460680.5' && bRun.output.sha256 === outputDigest(bNode.results) && bap1.data.published?.scored === 620);
+  const view = proteinView(bNode.results);
+  const mergedAt = view.variants.members.findIndex((m) => m.length > 1);
+  const mergedKey = view.variants.key[mergedAt];
+  const cell = await act('inspect_variant', { variant: mergedKey });
+  check(`inspect_variant on a protein variant of a nucleotide run (${mergedKey}): its score merged from its nucleotide variants as Node merges them, each listed`, cell.message, mergedAt >= 0 && cell.data.score === +view.conditions[0].score[mergedAt].toPrecision(4) && cell.data.nucleotideVariants?.length === view.variants.members[mergedAt].length && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Nucleotide variants')`)));
+  await act('export', { what: 'protein-scores', path: join(out, 'protein_scores.csv') });
+  const proteinWritten = readFileSync(join(out, 'protein_scores.csv'), 'utf8');
+  check('export protein-scores: the run\'s scores at the protein level, the same bytes as Node\'s', `${proteinWritten.split('\n').length - 2} protein variants`, proteinWritten === proteinScoresCSV(view));
+  const tMap = await act('render_map', {});
+  check('render_map of a nucleotide run: drawn at the protein level, saying how the variants were read and what is beside the map', tMap.message.slice(0, 200), /Read at the protein level/.test(JSON.stringify(tMap.data)) && /not on the map/.test(JSON.stringify(tMap.data)));
 
   const foreign = requested.filter((u) => !u.startsWith(URL) && !/^(data|blob):/.test(u));
   check('the page asked nothing of any origin but its own, public data through the program\'s /api/fetch/ only', `${requested.length} requests, ${requested.filter((u) => u.includes('/api/fetch/')).length} for public data; beyond the origin: ${foreign.slice(0, 3).join(', ') || 'none'}`, requested.length > 50 && !foreign.length && requested.some((u) => u.includes('/api/fetch/uniprot/P62993')));
