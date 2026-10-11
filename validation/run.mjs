@@ -32,7 +32,7 @@ import { cellText, columnText, createTableParser, parseTable } from '../web/lib/
 import { detectLayout, draftDesign, namesFromSequences, reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { buildCountSet, joinCountTables } from '../web/lib/counts.js';
 import { buildVariants, KIND_NAMES, summarizeVariants } from '../web/lib/variants.js';
-import { parseFasta, targetFromSequence } from '../web/lib/target.js';
+import { parseFasta, targetFromSequence, targetProtein } from '../web/lib/target.js';
 import { createRandom, shuffle } from '../web/lib/random.js';
 import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
 import { designFromSampleSheet, designStructure, sampleSheetCSV } from '../web/lib/samplesheet.js';
@@ -58,6 +58,16 @@ import { dmsVariantsName } from '../web/lib/barcodes.js';
 import { compareDimsum, demoCase, dimsumReference, fixtureCase, grb2Case } from './dimsum-cases.mjs';
 import { cbsCase, compareLimma, mutscanReference, twoConditionCase } from './differential-cases.mjs';
 import { DIFFERENTIAL_REASON_NAMES } from '../web/lib/differential.js';
+import { exampleContext, fixture as annotationFixture, publicAnnotations, reference as annotationReference } from './annotation-cases.mjs';
+import { annotationTracks, providerById as annotationProvider } from '../web/lib/providers/index.js';
+import { readProfile } from '../web/lib/providers/pdbe.js';
+import { readClinVarTable } from '../web/lib/providers/clinvar.js';
+import { gnomadRows } from '../web/lib/providers/gnomad.js';
+import { clinvarClass, REVIEW_STARS, tracksCSV } from '../web/lib/tracks.js';
+import { addAnnotation } from '../web/lib/workspace.js';
+import { createHash } from 'node:crypto';
+import { proteinView } from '../web/lib/collapse.js';
+import { spearman } from '../web/lib/stats.js';
 import { tQuantile } from '../web/lib/distributions.js';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
@@ -2386,10 +2396,20 @@ const suites = {
     const records = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).flatMap((kind) => readdirSync(new URL(`${kind}/`, root)).filter((f) => f.endsWith('.meta.json')).map((f) => ({ kind, name: f.replace(/\.meta\.json$/, ''), meta: cached(kind, f) })));
     // UniProt names its release; MaveDB none. A search records its words (the POST's body). NCBI's
     // records are GenBank text (wave 3, slice 3).
-    const hosts = { UniProt: /^https:\/\/rest\.uniprot\.org\//, MaveDB: /^https:\/\/api\.mavedb\.org\/api\/v1\//, 'NCBI E-utilities': /^https:\/\/eutils\.ncbi\.nlm\.nih\.gov\/entrez\/eutils\/efetch\.fcgi\?db=nuccore&id=(?:[A-Z]{2}_\d+|[A-Z]{1,2}\d{5,8})\.\d+&rettype=gb/, Ensembl: /^https:\/\/rest\.ensembl\.org\/sequence\/id\/ENST\d{11}\?type=cdna&mask_feature=1$/ };
-    const typeOf = (meta) => (meta.service === 'NCBI E-utilities' ? 'text/plain; charset=utf-8' : /\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json');
-    const complete = records.filter(({ kind, meta }) => hosts[meta.service]?.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && (meta.service !== 'UniProt' || meta.version) && (kind !== 'mavedb-search' || (meta.method === 'POST' && JSON.parse(meta.request).text)) && meta.contentType === typeOf(meta));
-    check('public-data', 'each cached response carries its retrieval record: the service, the URL on a listed host, when it was retrieved, UniProt\'s release, a search\'s words', `${complete.length} of ${records.length} records complete (${[...new Set(records.map((r) => r.kind))].map((k) => `${k} ${records.filter((r) => r.kind === k).length}`).join(', ')})`, records.length >= 14 && complete.length === records.length, 'all');
+    // The tracks' answers (wave 3, slice 5): ClinVar's search and summaries, PDBe-KB's profiles,
+    // AlphaFold DB's AlphaMissense tables, gnomAD's GraphQL answers (each with its query) and
+    // MaveDB's annotations.
+    const hosts = {
+      UniProt: /^https:\/\/rest\.uniprot\.org\//, MaveDB: /^https:\/\/api\.mavedb\.org\/api\/v1\//,
+      'NCBI E-utilities': /^https:\/\/eutils\.ncbi\.nlm\.nih\.gov\/entrez\/eutils\/(efetch\.fcgi\?db=nuccore&id=(?:[A-Z]{2}_\d+|[A-Z]{1,2}\d{5,8})\.\d+&rettype=gb|esearch\.fcgi\?db=clinvar&term=[^&]+&retmax=10000&retstart=\d+&retmode=json|esummary\.fcgi\?db=clinvar&id=\d+(,\d+)*&retmode=json)/,
+      Ensembl: /^https:\/\/rest\.ensembl\.org\/sequence\/id\/ENST\d{11}\?type=cdna&mask_feature=1$/,
+      'PDBe-KB': /^https:\/\/www\.ebi\.ac\.uk\/pdbe\/graph-api\/uniprot\/sequence_conservation\/[A-Z0-9]+$/,
+      'AlphaFold DB': /^https:\/\/alphafold\.ebi\.ac\.uk\/files\/AF-[A-Z0-9]+-F1-aa-substitutions\.csv$/,
+      gnomAD: /^https:\/\/gnomad\.broadinstitute\.org\/api$/,
+    };
+    const typeOf = (meta) => (/efetch\.fcgi/.test(meta.source) ? 'text/plain; charset=utf-8' : /\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) || /\/variants\/data\?/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json');
+    const complete = records.filter(({ kind, meta }) => hosts[meta.service]?.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && (meta.service !== 'UniProt' || meta.version) && (kind !== 'mavedb-search' || (meta.method === 'POST' && JSON.parse(meta.request).text)) && (kind !== 'gnomad' || (meta.method === 'POST' && JSON.parse(meta.request).query)) && meta.contentType === typeOf(meta));
+    check('public-data', 'each cached response carries its retrieval record: the service, the URL on a listed host, when it was retrieved, UniProt\'s release, a search\'s words, a GraphQL query', `${complete.length} of ${records.length} records complete (${[...new Set(records.map((r) => r.kind))].map((k) => `${k} ${records.filter((r) => r.kind === k).length}`).join(', ')})`, records.length >= 14 && complete.length === records.length, 'all');
     for (const [id, accession] of Object.entries({ 'grb2-sh3': 'P62993', hsp90: 'P02829', factor9: 'P00740' })) {
       const example = exampleById(id);
       const design = JSON.parse(readFileSync(new URL(`../web/${example.files.design}`, import.meta.url), 'utf8'));
@@ -2577,6 +2597,214 @@ const suites = {
     const keys = Object.keys(vocabulary.keywords);
     const vocabDiffer = keys.filter((k) => JSON.stringify([...(MAVEDB_KEYWORDS[k] ?? [])].sort()) !== JSON.stringify(vocabulary.keywords[k].map((x) => x.label).sort()));
     check('mavedb-export', `MaveScape's keyword vocabulary (readout.js, MAVEDB_KEYWORDS) is MaveDB's: every key and label of /api/v1/controlled-keywords (retrieved ${vocabulary.retrieved})`, `${keys.length} keys, ${keys.reduce((n, k) => n + vocabulary.keywords[k].length, 0)} labels${vocabDiffer.length ? `; differ: ${vocabDiffer.join(', ')}` : ''}`, !vocabDiffer.length && keys.length === Object.keys(MAVEDB_KEYWORDS).length, 'the same');
+  },
+
+  // Sequence tracks and annotations (wave 3, slice 5): the published examples' targets annotated
+  // from public data as the fetcher cached them (fixtures/public-data, offline), and the files a
+  // person may add (fixtures/annotations), each against an outside reference: Capra & Singh's
+  // score_conservation.py (reference/annotations.json, generate_annotations.py), UniProt's GFF3
+  // beside its JSON, AlphaFold DB's and ClinVar's own fields, MaveDB's join of gnomAD to BRCA1's
+  // variants.
+  async annotations() {
+    const ref = annotationReference();
+    const grb2 = exampleContext('grb2-sh3');
+    const f9 = exampleContext('factor9');
+    const hsp90 = exampleContext('hsp90');
+    const sha = (path) => createHash('sha256').update(readFileSync(new URL(`./fixtures/${path}`, import.meta.url))).digest('hex');
+    const stale = [ref.alignment, ...ref.profiles].filter((x) => sha(x.file) !== x.sha256);
+    check('annotations', 'reference made with', `score_conservation.py (SHA-256 ${ref.tool.sha256.slice(0, 12)}…) under Python ${ref.tool.python}; the fixtures it read unchanged${stale.length ? `; changed: ${stale.map((x) => x.file).join(', ')}` : ''}`, !stale.length, 'the same files');
+
+    // Conservation from an alignment, as the tool scores it.
+    {
+      const sto = annotationProvider('alignment').read(annotationFixture('annotations/grb2-sh3.sto'), { ...grb2, record: { file: 'grb2-sh3.sto' } });
+      const fasta = annotationProvider('alignment').read(annotationFixture('annotations/grb2-sh3.fasta'), { ...grb2, record: { file: 'grb2-sh3.fasta' } });
+      const t = fasta.tracks[0];
+      const { first, last } = t.alignment;
+      let worst = 0;
+      let unscored = 0;
+      ref.alignment.scores.forEach((x, j) => {
+        const mine = t.values[first - 1 + j];
+        if (x === null) unscored += Number.isNaN(mine) ? 0 : 1;
+        else worst = Math.max(worst, Math.abs(mine - x));
+      });
+      const same = [...sto.tracks[0].values].every((x, i) => Object.is(x, t.values[i]));
+      check('annotations', `conservation from an alignment (Pfam's SH3 seed with the human GRB2 SH3 first, ${ref.alignment.sequences} sequences) as Capra & Singh's score_conservation.py scores it by default, each of the query's residues on the GRB2 example's target; read the same from Stockholm and FASTA`, `${ref.alignment.scores.length} residues at positions ${first}–${last}, largest difference ${worst.toExponential(1)}${unscored ? `, ${unscored} scored where the tool scores none` : ''}; Stockholm and FASTA ${same ? 'the same' : 'differ'}`, worst <= 1e-9 && !unscored && same && first === 4 && last === 49, '≤ 10⁻⁹ (the tool prints 12 decimals); positions 4–49');
+    }
+    // PDBe-KB's profiles.
+    {
+      let positions = 0;
+      let worst = 0;
+      for (const p of ref.profiles) {
+        const mine = readProfile(JSON.parse(annotationFixture(p.file)));
+        positions += mine.length;
+        p.divergence.forEach((x, i) => { worst = Math.max(worst, Math.abs(mine[i].divergence - x)); });
+      }
+      const placed = [['GRB2', grb2, 'P62993'], ['factor IX', f9, 'P00740'], ['Hsp90', hsp90, 'P02829']].map(([name, c, a]) => {
+        const read = annotationProvider('pdbe-conservation').read(annotationFixture(`public-data/pdbe/${a}.conservation.json`), c);
+        return `${name} ${[...read.tracks[0].values].filter(Number.isFinite).length} of ${c.length}`;
+      });
+      check('annotations', 'conservation from PDBe-KB\'s profiles (GRB2, factor IX, Hsp90): each position\'s divergence as the tool\'s js_divergence gives it for the profile\'s probabilities; placed on each example\'s target by its offset', `${positions} positions, largest difference ${worst.toExponential(1)}; on the targets: ${placed.join(', ')}`, worst <= 1e-12 && placed[0] === 'GRB2 56 of 56', '≤ 10⁻¹²');
+    }
+    // UniProt's features, from its JSON and its GFF3.
+    {
+      const rows = [['GRB2', grb2, 'P62993'], ['factor IX', f9, 'P00740'], ['Hsp90', hsp90, 'P02829']].map(([name, c, a]) => {
+        const json = annotationProvider('uniprot-features').read(annotationFixture(`public-data/uniprot/${a}.features.json`), c);
+        const gff = annotationProvider('custom').read(annotationFixture(`annotations/${a}.gff`), c);
+        const shape = (tracks) => JSON.stringify(tracks.map((t) => [t.part, t.features.map((f) => `${f.type} ${f.start}-${f.end}`).sort()]));
+        return { name, same: shape(json.tracks) === shape(gff.tracks), count: json.tracks.reduce((n, t) => n + t.features.length, 0), json };
+      });
+      const domain = rows[0].json.tracks[0].features[0];
+      const wrong = annotationProvider('uniprot-features').read(annotationFixture('public-data/uniprot/P62993.features.json'), { ...grb2, offset: 0 });
+      check('annotations', 'UniProt\'s features as MaveScape reads its JSON and its GFF3 (release 2026_03): the same tracks of the same features on each example\'s target; GRB2\'s SH3 2 domain (156–215) over the whole target (159–214); a wrong offset refused, not drawn', `${rows.map((r) => `${r.name} ${r.count} features, ${r.same ? 'the same' : 'differ'}`).join('; ')}; GRB2: ${domain.label} ${domain.start}–${domain.end}${domain.clipped ? ' (clipped)' : ''}; offset 0: ${wrong.problem ? 'refused' : 'drawn'}`, rows.every((r) => r.same) && domain.start === 1 && domain.end === 56 && Boolean(wrong.problem), 'the same; refused');
+    }
+    // AlphaMissense.
+    {
+      const counts = [];
+      let differ = 0;
+      let classed = 0;
+      for (const [name, c, a] of [['GRB2', grb2, 'P62993'], ['factor IX', f9, 'P00740']]) {
+        const text = annotationFixture(`public-data/alphafold/${a}.aa-substitutions.csv`);
+        const table = new Map(text.trim().split(/\r?\n/).slice(1).map((l) => l.split(',')).map(([v, x, k]) => [v, { x: Number(x), k }]));
+        const t = annotationProvider('alphamissense').read(text, c).tracks[0];
+        for (const e of t.entries) {
+          const row = table.get(`${e.ref}${e.position + c.offset}${e.alt}`);
+          if (!row || row.x !== e.value || { LPath: 'pathogenic', Amb: 'ambiguous', LBen: 'benign' }[row.k] !== e.cls) differ += 1;
+        }
+        // AlphaMissense's classes are its thresholds on the score (Cheng et al. 2023).
+        for (const { x, k } of table.values()) if ((k === 'LPath') === (x > 0.564) && (k === 'LBen') === (x < 0.34)) classed += 1; else classed -= 1e9;
+        counts.push(`${name} ${t.entries.length.toLocaleString('en-US')} of ${(c.length * 19).toLocaleString('en-US')}`);
+      }
+      check('annotations', 'AlphaMissense as AlphaFold DB publishes it: every substitution of GRB2\'s and factor IX\'s targets with the table\'s score and class; each class the authors\' threshold on the score (likely pathogenic > 0.564, likely benign < 0.34)', `${counts.join(', ')} placed; ${differ} differ from the table; ${classed.toLocaleString('en-US')} rows classed by the thresholds`, differ === 0 && classed > 0, 'none differ; every row');
+    }
+    // ClinVar.
+    {
+      const [g] = await publicAnnotations(grb2, ['clinvar']);
+      const [f] = await publicAnnotations(f9, ['clinvar'], { gene: 'F9' });
+      const raw = (gene) => {
+        const out = [];
+        for (const file of readdirSync(new URL('./fixtures/public-data/clinvar/', import.meta.url)).filter((x) => x.endsWith('.summary.json'))) {
+          const result = JSON.parse(annotationFixture(`public-data/clinvar/${file}`)).result;
+          for (const uid of result.uids) if (result[uid].title.includes(`(${gene}):`)) out.push(result[uid]);
+        }
+        return out;
+      };
+      const agree = (got, gene) => {
+        const byAccession = new Map(raw(gene).map((r) => [r.accession, r]));
+        const entries = got.read.tracks[0].entries;
+        const rows = new Map(readClinVarTable(got.got.text).map((r) => [r.hgvs_c, r]));
+        let bad = 0;
+        for (const e of entries) {
+          const r = byAccession.get(rows.get(e.name)?.accession);
+          const c = r?.germline_classification ?? {};
+          if (!r || (clinvarClass(c.description) ?? 'other') !== e.cls || (REVIEW_STARS[String(c.review_status).toLowerCase()] ?? 0) !== e.stars) bad += 1;
+        }
+        return { records: byAccession.size, kept: got.got.record.kept, placed: entries.length, bad, residues: entries.every((e) => (gene === 'GRB2' ? grb2 : f9).protein[e.position - 1] === e.ref) };
+      };
+      const a = agree(g, 'GRB2');
+      const b = agree(f, 'F9');
+      check('annotations', 'ClinVar\'s records of GRB2 and F9 (NCBI E-utilities: the search, then the summaries 500 at a time): every record read; those on the GRB2 SH3 and the whole factor IX placed where their residues agree, each with ClinVar\'s own classification and review status (as stars)', `GRB2 ${a.kept} of ${a.records} read, ${a.placed} on the target; F9 ${b.kept} of ${b.records} read, ${b.placed} on the target; ${a.bad + b.bad} differ from ClinVar's fields; residues ${a.residues && b.residues ? 'all agree' : 'disagree'}`, a.kept === a.records && b.kept === b.records && b.records === 553 && !a.bad && !b.bad && a.residues && b.residues && b.placed > 400, 'all');
+    }
+    // gnomAD against MaveDB's own join of gnomAD to BRCA1's variants.
+    {
+      const answer = JSON.parse(annotationFixture('public-data/gnomad/ENST00000357654.variants.json'));
+      const ours = new Map(answer.data.transcript.variants.map((v) => [v.variant_id, v.joint]));
+      const csv = parseTable(readFileSync(new URL('./fixtures/public-data/mavedb/urn_mavedb_00000097-0-2.annotations.clinvar_2026_01.csv', import.meta.url)), { fileName: 'annotations.csv' });
+      const col = (n) => columnText(csv.columns.find((c) => c.name === n));
+      const [ids, afs, acs, ans] = ['gnomad.gnomad_id', 'gnomad.gnomad_af', 'gnomad.gnomad_ac', 'gnomad.gnomad_an'].map(col);
+      let compared = 0;
+      let worst = 0;
+      let missing = 0;
+      ids.forEach((id, r) => {
+        if (!id || id === 'NA') return;
+        const j = ours.get(id);
+        if (!j) {
+          missing += 1;
+          return;
+        }
+        compared += 1;
+        worst = Math.max(worst, Math.abs(j.ac / j.an - Number(afs[r])) / Number(afs[r]), j.ac === Number(acs[r]) && j.an === Number(ans[r]) ? 0 : 1);
+      });
+      const rows = gnomadRows(answer);
+      check('annotations', 'gnomAD v4\'s frequencies as MaveScape reads them (BRCA1\'s MANE Select transcript, exomes and genomes joined) equal MaveDB\'s own join of gnomAD v4.1 to BRCA1\'s saturation genome editing variants, variant by variant (by gnomAD\'s identifier)', `${compared} of ${compared + missing} of MaveDB's variants found, largest relative difference ${worst.toExponential(1)}; ${rows.length.toLocaleString('en-US')} variants of ENST00000357654 with a protein change`, compared >= 40 && !missing && worst <= 1e-12, 'all, ≤ 10⁻¹²');
+    }
+    // MaveDB's annotations joined to the BRCA1 example's run.
+    try {
+      const o = openExampleInNode(EXAMPLES.find((e) => e.id === 'brca1-sge'));
+      const results = proteinView(o.scored.results) ?? o.scored.results;
+      const own = o.scored.results;
+      const v = own.variants;
+      const accession = columnText(o.table.columns.find((c) => c.name === 'accession'));
+      const variants = new Map();
+      for (let i = 0; i < own.rows; i += 1) {
+        const key = v.proKey ? v.proKey[i] : v.key[i];
+        const item = { key: /^p\.[A-Z][a-z]{2}\d+([A-Z][a-z]{2}|=)$/.test(key ?? '') ? key : null, position: v.proPosition ? v.proPosition[i] : v.position[i] };
+        variants.set(accession[i], item);
+        variants.set(v.original[i], item);
+      }
+      const target = o.design.targets[0];
+      const protein = targetProtein(target).replace(/\*$/, '');
+      const text = readFileSync(new URL('./fixtures/public-data/mavedb/urn_mavedb_00000097-0-2.annotations.clinvar_2026_01.csv', import.meta.url), 'utf8');
+      const read = annotationProvider('mavedb-annotations').read(text, { target, protein, offset: 0, length: protein.length, variants });
+      const csv = parseTable(new TextEncoder().encode(text), { fileName: 'a.csv' });
+      const sig = columnText(csv.columns.find((c) => c.name === 'clinvar.2026_01.clinical_significance'));
+      const af = columnText(csv.columns.find((c) => c.name === 'gnomad.gnomad_af'));
+      const annotated = sig.filter((x, r) => (x && x !== 'NA' && x !== '-') || (af[r] && af[r] !== 'NA')).length;
+      const unmatched = read.notes.find((n) => /not in the run/.test(n));
+      const [clinvar, gnomad] = read.tracks;
+      const theirs = new Map();
+      sig.forEach((x) => { if (x && x !== 'NA' && x !== '-') theirs.set(x, (theirs.get(x) ?? 0) + 1); });
+      check('annotations', 'MaveDB\'s annotations of BRCA1\'s saturation genome editing score set (ClinVar 2026_01, gnomAD v4.1), joined to the example\'s run by MaveDB accession: every annotated variant found; those that change one residue on the map, the rest said', `${annotated.toLocaleString('en-US')} annotated variants${unmatched ? `; ${unmatched}` : ', all in the run'}; on the map: ClinVar ${clinvar?.entries.length ?? 0}, gnomAD ${gnomad?.entries.length ?? 0}; ${read.notes.join(' ')} MaveDB's classes: ${[...theirs].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, n]) => `${n} ${k}`).join(', ')}`, !unmatched && clinvar?.entries.length > 0 && gnomad?.entries.length > 0 && results.rows > 0, 'all found');
+    } catch (error) {
+      if (!(error instanceof MissingExampleData)) throw error;
+      throw new MissingData(error.message);
+    }
+    // The GRB2 example's tracks kept with a workspace, in its archive and back; each with its source.
+    {
+      const fetched = await publicAnnotations(grb2, ['uniprot-features', 'pdbe-conservation', 'alphamissense', 'clinvar', 'gnomad']);
+      const files = [['alignment', 'grb2-sh3.sto'], ['custom', 'P62993.gff']].map(([provider, name]) => ({ provider, name, text: annotationFixture(`annotations/${name}`), record: { service: 'a file', file: name } }));
+      let ws = createWorkspace('GRB2 tracks', { id: 'ws-tracks', now: '2026-10-11T00:00:00Z' });
+      const bytes = new Map();
+      for (const x of [...fetched.map((f) => ({ provider: f.provider, name: f.annotation.name, text: f.got.text, fileName: f.got.fileName, record: f.got.record })), ...files.map((f) => ({ ...f, fileName: f.name }))]) {
+        const data = new TextEncoder().encode(x.text);
+        const hash = sha256(data);
+        bytes.set(hash, data);
+        ws = addAnnotation(ws, { provider: x.provider, name: x.name, file: { fileName: x.fileName, sha256: hash, size: data.length }, record: x.record }).ws;
+      }
+      const tracksOf = (w, files) => w.annotations.flatMap((a) => annotationTracks(a, new TextDecoder().decode(files.get(a.file.sha256)), grb2).tracks);
+      const before = tracksOf(ws, bytes);
+      const archive = await writeArchive(ws, { annotations: bytes });
+      const back = await readArchive(archive.bytes);
+      const after = tracksOf(back.ws, back.sources);
+      const valuesOf = (t) => JSON.stringify(t.kind === 'values' ? [...t.values].map((x) => (Number.isNaN(x) ? null : x)) : t.kind === 'features' ? t.features : t.entries.map((e) => [e.key, e.value, e.cls]));
+      const same = before.length === after.length && before.every((t, i) => t.id === after[i].id && valuesOf(t) === valuesOf(after[i]));
+      const sourced = before.filter((t) => t.source?.service && (t.source.file || /^\d{4}-\d{2}-\d{2}T/.test(t.source.retrieved ?? '')));
+      const released = before.filter((t) => t.source?.service === 'UniProt').every((t) => t.source.release === '2026_03');
+      check('annotations', 'the GRB2 example\'s annotations (UniProt features, PDBe-KB conservation, AlphaMissense, ClinVar, gnomAD, an alignment, a GFF3 file) kept with a workspace, written to its archive and read back: the same tracks with the same values; every track naming its source (the service and when it was retrieved, UniProt\'s release; or its file)', `${ws.annotations.length} annotations, ${before.length} tracks; after the archive ${same ? 'the same' : 'different'}${back.problems.length ? `; problems: ${back.problems.join(' ')}` : ''}; ${sourced.length} of ${before.length} with their source${released ? ', UniProt\'s release 2026_03' : ''}`, same && !back.problems.length && sourced.length === before.length && released && before.length >= 9, 'the same; all');
+      // The tracks as a table, read back as custom tracks.
+      const values = before.filter((t) => t.kind === 'values');
+      const model = { length: grb2.length, protein: grb2.protein, target: { offset: grb2.offset } };
+      const reread = annotationProvider('custom').read(tracksCSV(values, model), grb2).tracks;
+      const round6 = (x) => (Number.isFinite(x) ? Number(x.toPrecision(6)) : null);
+      const roundTrip = values.every((t, i) => reread[i] && [...t.values].every((x, p) => Object.is(round6(x), round6(reread[i].values[p]))));
+      check('annotations', 'the tracks exported as a table (CSV, position by position) read back as custom tracks: every value as written (6 significant digits)', `${values.length} tracks of values, ${roundTrip ? 'the same' : 'different'}`, roundTrip && values.length >= 2, 'the same');
+      // What the GRB2 example's guide says of its tracks (lib/examples.js, expected).
+      try {
+        const o = openExampleInNode(EXAMPLES.find((e) => e.id === 'grb2-sh3'));
+        const model = buildMapModel(o.scored.results, o.design, {});
+        const am = before.find((t) => t.id === 'alphamissense:alphamissense').values;
+        const pdbe = before.find((t) => t.id === 'pdbe-conservation:conservation').values;
+        const least = [...model.columnMedian].map((x, i) => [x, i]).sort((a, b) => a[0] - b[0]).slice(0, 8);
+        const pairs = [...model.columnMedian].map((x, i) => [x, pdbe[i]]).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+        const rho = spearman(pairs.map((p) => p[0]), pairs.map((p) => p[1]));
+        check('annotations', 'the GRB2 example as its guide says: AlphaMissense calls the eight least tolerant positions likely pathogenic (each a mean above 0.9); conservation (PDBe-KB) follows the position effects only in part', `least tolerant ${least.map(([, i]) => `${grb2.protein[i]}${i + 159} ${am[i].toFixed(2)}`).join(', ')}; Spearman ρ of the position effect and conservation ${rho.toFixed(2)}`, least.every(([, i]) => am[i] > 0.9) && rho < -0.3 && rho > -0.6, 'all > 0.9; ρ from −0.6 to −0.3');
+      } catch (error) {
+        if (!(error instanceof MissingExampleData)) throw error;
+      }
+      // Offline, each provider asks only for what it needs, by public identifier.
+      const asked = fetched.map((f) => `${f.provider}: ${f.asked.map((p) => p.replace(/ids=[\d,]+/, 'ids=…')).join(', ')}`);
+      const expected = ['uniprot-features: uniprot/P62993/features', 'pdbe-conservation: pdbe/conservation/P62993', 'alphamissense: alphafold/P62993/missense', 'clinvar: clinvar/search?gene=GRB2&page=1, clinvar/summary?ids=…', 'gnomad: gnomad/gene/GRB2, gnomad/transcript/ENST00000316804'];
+      check('annotations', 'what each provider asks the fetcher (docs/NETWORK.md): an accession, a gene\'s symbol, ClinVar\'s record numbers, a transcript; never a sequence', asked.join('; '), JSON.stringify(asked) === JSON.stringify(expected), expected.join('; '));
+    }
   },
 };
 

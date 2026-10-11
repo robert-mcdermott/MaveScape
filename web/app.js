@@ -18,6 +18,7 @@ import { exampleGuide } from './ui/examples.js';
 import { mountWorkflow } from './ui/workflow.js';
 import { showNetwork } from './ui/public-data.js';
 import { findPackages, importMaveDB, importMaveDBPackage, openMaveDBDialog, openZips } from './ui/mavedb.js';
+import { importTrackFiles } from './ui/tracks.js';
 import { fixClock } from './lib/clock.js';
 
 const VERSION = '0.2.0';
@@ -107,6 +108,9 @@ async function start() {
   installImport(app);
   app.importers.set('workspace', (items) => openArchives(app, items));
   app.importers.set('archive', (items) => openZips(app, items));
+  // Alignments and GFF3 files: tracks beside the latest run's map (wave 3, slice 5).
+  app.importers.set('alignment', (items) => importTrackFiles(app, items));
+  app.importers.set('annotation', (items) => importTrackFiles(app, items));
   app.inspector.setSection('example', exampleGuide);
 
   // --- Views -------------------------------------------------------------------------------------

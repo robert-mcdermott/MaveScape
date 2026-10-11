@@ -3,7 +3,9 @@
 // wheel, a pinch, + and −), hover, click to select (⌘ or Ctrl to add), Shift-drag to select a
 // rectangle, and the keyboard: arrows move a focus cell, Enter or Space selects it, Escape clears
 // the selection, Home and End jump to the ends, Page Up and Page Down move a screen. Each focused
-// cell is announced in words.
+// cell is announced in words. The sequence tracks shown below the grid (wave 3, slice 5) pan and
+// zoom with it; hovering one says what it holds there, clicking it selects that position's
+// variants (a feature's, every position it covers).
 
 import { h } from './dom.js';
 import { cellAt } from '../lib/map-model.js';
@@ -18,11 +20,13 @@ export function themeFromPage() {
     background: cssVar('--panel'), empty: cssVar('--map-empty'), hatch: cssVar('--map-hatch'), dot: cssVar('--map-hatch'), mark: cssVar('--text'),
     text: cssVar('--text'), muted: cssVar('--text-3'), line: cssVar('--line-strong'), accent: cssVar('--accent'),
     gray: cssVar('--map-low').split(',').map(Number),
+    track: Object.fromEntries(['bar', 'feature', 'on-feature', 'helix', 'strand', 'turn', 'pathogenic', 'conflicting', 'uncertain', 'benign', 'other'].map((k) => [k.replace(/-(\w)/g, (_, c) => c.toUpperCase()), cssVar(`--track-${k}`)])),
   };
 }
 
 // options: { model, palette, selected (Set of cell indices), describe(cell) → text,
-// onHover(cell | null), onSelect(cells: Set, primary cell), cellH }.
+// onHover(cell | null), onSelect(cells: Set, primary cell), cellH, tracks (shown), describeTrack(track,
+// position | null) → text, onTrackClick(track, position, add) }.
 export function mountVariantMap(options) {
   let model = options.model;
   let palette = options.palette ?? 'rdbu';
@@ -33,7 +37,7 @@ export function mountVariantMap(options) {
   const live = h('div.sr-only', { 'aria-live': 'polite' });
   const band = h('div.map-band', { hidden: true });
   const el = h('div.variant-map', { tabindex: 0, role: 'application', 'aria-label': 'Variant-effect map. Arrow keys move between cells, Enter selects, plus and minus zoom.', 'aria-roledescription': 'map' }, canvas, band, tip, live);
-  const view = { width: 800, cellW: 10, cellH, x0: 1, hover: -1, focus: -1, selected: new Set() };
+  const view = { width: 800, cellW: 10, cellH, x0: 1, hover: -1, hoverPosition: -1, focus: -1, selected: new Set(), tracks: options.tracks ?? [] };
   let fitted = false;
   let frame = 0;
   let colors = null;
@@ -155,13 +159,17 @@ export function mountVariantMap(options) {
     const hit = hitTest(model, view, x, y);
     const cell = hit?.region === 'cell' ? cellAt(model, hit.position, hit.row) : null;
     const k = cell ? cell.k : -1;
-    if (k !== view.hover) {
+    const along = hit?.region === 'track' ? hit.position ?? -1 : -1;
+    if (k !== view.hover || along !== view.hoverPosition) {
+      const moved = k !== view.hover;
       view.hover = k;
+      view.hoverPosition = along;
       draw();
-      options.onHover?.(cell);
+      if (moved) options.onHover?.(cell);
     }
-    if (cell) {
-      tip.textContent = options.describe(cell);
+    const trackText = hit?.region === 'track' ? options.describeTrack?.(view.tracks[hit.track], hit.position) : null;
+    if (cell || trackText) {
+      tip.textContent = cell ? options.describe(cell) : trackText;
       tip.hidden = false;
       const left = Math.min(x + 14, view.width - 260);
       Object.assign(tip.style, { left: `${Math.max(0, left)}px`, top: `${y + 16}px` });
@@ -192,6 +200,10 @@ export function mountVariantMap(options) {
     }
     if (d.kind !== 'overview' && !d.moved) {
       const hit = hitTest(model, view, x, y);
+      if (hit?.region === 'track' && hit.position) {
+        options.onTrackClick?.(view.tracks[hit.track], hit.position, d.add);
+        return;
+      }
       if (hit?.region === 'cell') {
         const cell = cellAt(model, hit.position, hit.row);
         if (cell && cell.state !== 0) {
@@ -206,8 +218,9 @@ export function mountVariantMap(options) {
   canvas.addEventListener('pointercancel', () => { drag = null; band.hidden = true; });
   canvas.addEventListener('pointerleave', () => {
     tip.hidden = true;
-    if (view.hover >= 0) {
+    if (view.hover >= 0 || view.hoverPosition >= 0) {
       view.hover = -1;
+      view.hoverPosition = -1;
       draw();
       options.onHover?.(null);
     }
@@ -288,6 +301,11 @@ export function mountVariantMap(options) {
       model = next;
       refreshColors();
       if (!keepView) fitted = false;
+      clampView();
+      draw();
+    },
+    setTracks(tracks) {
+      view.tracks = tracks ?? [];
       clampView();
       draw();
     },

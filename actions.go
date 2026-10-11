@@ -131,8 +131,28 @@ var remoteActions = []remoteAction{
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
 	})},
-	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), or a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them). Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, selection, archive, package or mavedb."),
+	{Name: "list_tracks", Description: "The sequence tracks beside a run's map, in order: the run's own (reference, coverage, position effect, uncertainty) and the workspace's annotations' (UniProt features, conservation, AlphaMissense, ClinVar, gnomAD, MaveDB's annotations, an alignment, a predictor, a custom track), each with its source (service, release, retrieval date), whether it is shown, its filter and the filters it offers, and what it holds; the annotations that could not be read; and what can be added.", InputSchema: schema(map[string]any{
+		"run":       runArg,
+		"condition": conditionArg,
+	}), long: true},
+	{Name: "add_track", Description: "Adds an annotation's tracks beside the map. From public data, through MaveScape's list of services (docs/NETWORK.md; from the cache only with --offline; only an accession, gene symbol or URN is sent): provider uniprot-features, pdbe-conservation, alphamissense, clinvar, gnomad or mavedb-annotations, for the run's target. Or from a file, given as name and text: an alignment (A3M, FASTA, Stockholm, Clustal), a predictor's table (AlphaMissense, EVE, ESM1b, or variants with scores) or a custom track (GFF3, or a table with position, or start and end). The annotation is kept with the workspace (and its archive); in the history.", InputSchema: schema(map[string]any{
+		"provider": textArg("The public source: uniprot-features, pdbe-conservation, alphamissense, clinvar, gnomad or mavedb-annotations."),
+		"name":     textArg("A file's name (grb2-sh3.sto), with its text."),
+		"text":     textArg("A file's text: an alignment, a predictor's table or a custom track."),
+		"run":      runArg,
+	}), long: true},
+	{Name: "set_track", Description: "Shows or hides a track, moves it, or filters it: features by kind (types), variants by class (classes) or ClinVar's review status (stars, 0-4), gnomAD's frequency (min). The arrangement is kept with the workspace; it is a view, not in the history.", InputSchema: schema(map[string]any{
+		"track":    textArg("The track by id or label (list_tracks)."),
+		"shown":    flagArg("Show it (true) or hide it (false)."),
+		"position": map[string]any{"type": "integer", "minimum": 1, "description": "Its place among the tracks, from 1 (the top)."},
+		"filter":   map[string]any{"type": "object", "description": "{types: [...]}, {classes: [...], stars: n} or {min: x}, as the track offers (list_tracks); {} removes its filter."},
+		"run":      runArg,
+	}, "track")},
+	{Name: "remove_track", Description: "Removes an annotation and its tracks (undoable, in the history).", InputSchema: schema(map[string]any{
+		"annotation": textArg("The annotation by id or name (list_tracks)."),
+	}, "annotation")},
+	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), or a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them). Needs the token.", InputSchema: schema(map[string]any{
+		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package or mavedb."),
 		"path":           textArg("The absolute path of the file to write."),
 		"overwrite":      flagArg("Replace the file if it exists."),
 		"run":            runArg,

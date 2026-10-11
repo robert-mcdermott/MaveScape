@@ -1454,15 +1454,107 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
      - **MaveDB's own checks of a transcript need no database**: given each transcript by a data
        provider holding only its sequence and coding region, biocommons hgvs validates every name
        offline (BRCA1's 3,893, a wrong reference base refused).
-5. **Sequence tracks and annotations (V5, I3, I4).** Tracks synchronized with the map:
-   reference, coverage, position effect and uncertainty, UniProt domains, motifs and secondary
-   structure, conservation (Jensen–Shannon divergence, Proteoscope's `conservation.js` and
-   `msa.js`, from the AlphaFold DB alignment or the user's FASTA or A3M alignment), ClinVar
-   observations, gnomAD frequencies, AlphaMissense and other imported predictors (their CSV/TSV
-   downloads), custom tracks from CSV or GFF3 (UniProt's feature format) (for MaveDB
-   records, MaveDB's own `clinvar`, `gnomad` and `vep` namespaces first); show, hide,
-   reorder, filter, export; each record with source, version and retrieval date. Annotation
-   providers behind one interface (`web/lib/providers/*.js`), cached and usable offline.
+5. **Sequence tracks and annotations (V5, I3, I4): done.** Tracks synchronized with the map
+   (`web/lib/tracks.js`, drawn by `track-render.js` into the map's canvas and its SVG): one row
+   each below the grid, on its positions, panned and zoomed with it, its name in the margin; hover
+   for what it holds at a position, click to select that position's variants (a feature's, every
+   position it covers). Four kinds: the reference's residues; values by position; features
+   (domains, sites, secondary structure: boxes in lanes, a helix, a strand's arrow); variants
+   (classes stacked by position, or a value as a bar, an allele frequency on a log scale), given to
+   each variant in the inspector. The run's own: reference, coverage, position effect (the median
+   score from the wild type's) and uncertainty (the median SE), hidden until shown, so a map
+   without tracks draws and exports as before. **Annotation providers behind one interface**
+   (`web/lib/providers/`: `needs`, `fetch` through the fetcher, `accepts` a file, `read` → tracks),
+   each annotation kept in `ws.annotations` with its record (service, URL, release, retrieval date,
+   license) and its file in the library and the archive by SHA-256, so its tracks reopen offline:
+   UniProt's features (`/api/fetch/uniprot/{accession}/features`; domains and regions, sites and
+   motifs, secondary structure); conservation from PDBe-KB's profile
+   (`/api/fetch/pdbe/conservation/{accession}`; each position's Jensen–Shannon divergence from the
+   BLOSUM62 background, `distributionDivergence`) or the person's alignment (A3M, FASTA, Stockholm,
+   Clustal; Proteoscope's `conservation.js`, Capra & Singh's defaults, the query placed by its
+   residues); AlphaMissense (`/api/fetch/alphafold/{accession}/missense`); ClinVar
+   (`/api/fetch/clinvar/search` and `/summary`, kept as one table of what MaveScape reads;
+   classes, review status as stars); gnomAD v4 (`/api/fetch/gnomad/gene/{symbol}` and
+   `/transcript/{id}`, GraphQL; the MANE Select transcript's variants, exomes and genomes joined);
+   MaveDB's own join of ClinVar's latest release and gnomAD to a record's variants
+   (`/api/fetch/mavedb/score-sets/{urn}/namespaces` and `/annotations`), found in the run by
+   accession; predictors' downloads (AlphaMissense's, EVE's, ESM1b-style matrices, any table of
+   variants and scores) and custom tracks (GFF3, tables of values or stretches). Every annotation
+   numbered on a reference is placed by the target's offset where the target has the residues it
+   names, refused when they disagree. The Map view's Tracks panel: show, hide, reorder, filter
+   (features by kind, ClinVar by class and stars, gnomAD by frequency), remove, each with its
+   source (`ws.tracks`, the arrangement: a view, not in the history); export of the tracks shown
+   (CSV) and the map with them (SVG, PNG); the map's words and the methods name and cite each;
+   alignments and GFF3 files dropped on the window. Remote actions `list_tracks`, `add_track`,
+   `set_track`, `remove_track`, `export` of `tracks`; `inspect_variant`'s `annotations`. The GRB2
+   example's guide adds tracks to its map; a screenshot scene (`map-tracks`); the guide's *Tracks*
+   and *Annotations beside the map*. Structure availability as a track comes with the structures
+   (wave 5).
+   - Validation:
+     - `annotations` (12 checks; `validation/annotation-cases.mjs`, served the fetcher's cached
+       answers by `cached-fetch.mjs`): conservation from an alignment (Pfam PF00018's seed with the
+       human GRB2 SH3 first, 56 sequences, `fixtures/annotations/`) as Capra & Singh's
+       `score_conservation.py` scores it by default, the query's 46 residues on positions 4–49,
+       within 4.8 × 10⁻¹³ (the tool prints 12 decimals), Stockholm and FASTA the same; PDBe-KB's
+       profiles of GRB2, factor IX and Hsp90 as the tool's divergence gives them (1,382 positions,
+       within 3.3 × 10⁻¹⁶; `reference/annotations.json`, `generate_annotations.py`, the tool
+       GPL and only an external reference); UniProt's features the same from its JSON and its
+       GFF3 for the three examples, GRB2's SH3 2 over the whole target, a wrong offset refused;
+       AlphaMissense's every substitution of GRB2's and factor IX's targets as AlphaFold DB's
+       tables give it (9,823), each class the authors' threshold on the score; ClinVar's records
+       of GRB2 (10) and F9 (553, two pages of summaries) read with ClinVar's own classification and
+       review status, those placed agreeing with the targets' residues; gnomAD's frequencies of
+       BRCA1's variants equal MaveDB's own join of gnomAD v4.1 to its saturation genome editing
+       score set, 41 of 41 exactly; MaveDB's annotations of that score set (1,376 ClinVar
+       classifications, 41 gnomAD frequencies) joined to the BRCA1 example's run by accession, all
+       found; seven annotations of GRB2 kept through an archive, the same 11 tracks, each naming its
+       source; the tracks' table read back as custom tracks; what each provider asks the fetcher
+       (accessions, a gene's symbol, ClinVar's record numbers, a transcript; never a sequence);
+       the GRB2 example as its guide says (AlphaMissense calls its eight least tolerant positions
+       likely pathogenic; conservation follows the position effect only in part, ρ −0.43).
+     - Go tests (`annotations_test.go`): each new request asks what `docs/NETWORK.md` says, is
+       cached under its own name, and refuses anything but public identifiers before a byte is
+       sent (an isoform for AlphaMissense, a gene's symbol with a query in it, more than 500
+       ClinVar records, a transcript of another species); gnomAD's GraphQL errors read as "not
+       found" or refused, never cached; no request writes to MaveDB.
+     - `remote-session.mjs` (105 checks): the tracks added offline from the cached answers and
+       from files, refused twice or for a run not from MaveDB, shown, moved and filtered (not in
+       the history), a variant's annotations, the tracks' table and the map with its tracks the
+       same bytes as Node's from the archive, the methods citing each source, an annotation
+       removed with its tracks.
+     - Unit tests 302: `tracks.test.mjs`, `providers.test.mjs` (every provider on the fixtures),
+       `conservation.test.mjs` (Proteoscope's, with the profile's divergence).
+   - Found by slice 5:
+     - **AlphaFold DB lists an alignment for each entry but refuses to send it** (HTTP 403 from its
+       storage, for GRB2, factor IX, BRCA1, PTEN, TP53, Hsp90), as Proteoscope found: conservation
+       is read from PDBe-KB's profile of the protein's homologues, on a path the fetcher already
+       allowed, or from the person's own alignment. PDBe-KB's profile leaves out a protein's
+       ends where its HMM has no match state (GRB2's last residue; factor IX's first three and
+       last): said, not filled.
+     - **gnomAD's GraphQL API answers an unknown gene with HTTP 200 and an error**: the fetcher
+       now checks an answer's body where a service says "not found" so (`answer`), and caches
+       neither that nor any other error as data.
+     - **ClinVar keeps records with no classification at all** (two of GRB2's ten), and writes
+       "1/01/01 00:00" where a record was never evaluated: read as not classified, with no date.
+       A gene's summaries are about 2.4 KB a record (BRCA1's 9,384 coding records about 23 MB):
+       MaveScape keeps one table of what it reads (about 150 bytes a record) with the workspace,
+       the raw answers only in the cache.
+     - **MaveDB annotates only the variants it maps at the nucleotide level**: GRB2's
+       protein-level score set has no ClinVar or gnomAD annotation; BRCA1's saturation genome
+       editing has 1,376 ClinVar classifications and 41 gnomAD frequencies. MaveDB's frequencies
+       are gnomAD v4.1's, exomes and genomes joined, exactly as MaveScape reads gnomAD's own.
+     - **UniProt's GFF3 and JSON name some features differently** ("Signal peptide" and
+       "Signal"), and only the JSON names a binding site's ligand: otherwise the same features,
+       read into the same tracks.
+     - **Conservation and the position effect agree only in part** on GRB2's SH3 domain (Spearman
+       ρ −0.43 with PDBe-KB's profile, −0.49 with AlphaMissense's mean): abundance is not all a
+       residue is conserved for. The guide says so.
+     - **Proteoscope's `conservation.js` used `Math.log`**, which MaveScape's determinism rule
+       forbids in code that computes results: `dmath.js`'s log and exp in its place (within the
+       tool's agreement either way).
+     - **Built-in tracks shown by default would have changed every map export** (the headless
+       `mavescape run` writes the map through the window): the run's own tracks are hidden until
+       shown, an annotation's shown once added.
 6. **Examples (T4).** The two-condition differential map (DHFR with Lon protease functional and
    deficient, `00000063-a-1`/`-b-1`) and the MaveDB round trip (BRCA1 RING), bringing the set to
    thirteen.

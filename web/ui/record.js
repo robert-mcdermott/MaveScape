@@ -5,7 +5,7 @@
 
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
-import { readArchive, writeArchive, sourceFiles } from '../lib/archive.js';
+import { annotationFiles, readArchive, writeArchive, sourceFiles } from '../lib/archive.js';
 import { writePackage } from '../lib/package.js';
 import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, provenanceJSON, provenanceText, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
 import { proteinView } from '../lib/collapse.js';
@@ -187,6 +187,13 @@ export async function archiveFile(app, { includeTables = true } = {}) {
       }
     }
   }
+  // The annotations' files always go: they are small, and the tracks need them.
+  const annotations = new Map();
+  for (const f of annotationFiles(ws)) {
+    const bytes = await app.library.getFile(f.sha256);
+    if (!bytes) throw new Error(`The annotation ${f.name} (${f.fileName}) is not in the library: remove it, or add it again.`);
+    annotations.set(f.sha256, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));
+  }
   const results = new Map();
   for (const run of ws.runs) {
     const entry = await ensureResults(app, run);
@@ -194,7 +201,7 @@ export async function archiveFile(app, { includeTables = true } = {}) {
   }
   const last = ws.runs.at(-1);
   const methods = last ? await methodsOf(app, last) : null;
-  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, results, methods });
+  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, annotations, results, methods });
   return { name: `${safe(ws.name)}.msz`, bytes };
 }
 

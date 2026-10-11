@@ -43,7 +43,10 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > MaveDB deposit (scores, counts, what each column is, the experiment and score set, the methods as
 > the analysis and the readout as the MAVE minimum information's keywords) that MaveDB's own
 > validators accept, written on your computer and never sent; `mavescape export` writes one from a
-> saved workspace, and a deposit opens again as a MaveDB record does.
+> saved workspace, and a deposit opens again as a MaveDB record does. Below the map, tracks line up
+> UniProt's domains and secondary structure, conservation (PDBe-KB's profile, or your alignment
+> scored as Capra and Singh's tool scores it), AlphaMissense, ClinVar, gnomAD, MaveDB's own
+> annotations and your own files (predictors' scores, GFF3, tables), each with its source and date.
 
 ## What is a MAVE?
 
@@ -157,7 +160,7 @@ mavescape export --format mavedb --details details.json --out deposit/ results/w
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
 API calls from other web pages, and serves its page with a strict Content-Security-Policy, so the
 page contacts nothing but the program. Your files never leave your computer. The program fetches
-public data (MaveDB's score sets, a target's UniProt entry, and the RefSeq or Ensembl transcript a record names now; structures and annotations to come) from a
+public data (MaveDB's score sets, a target's UniProt entry and features, the RefSeq or Ensembl transcript a record names, and annotations from ClinVar, gnomAD, AlphaMissense and PDBe-KB now; structures to come) from a
 fixed list of services, sending public identifiers, and caches each answer with where and when it
 came from; a request that would send a sequence is made only after you confirm it.
 [`docs/NETWORK.md`](docs/NETWORK.md) lists every request. `--offline` uses cached copies only and

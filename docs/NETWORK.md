@@ -10,8 +10,9 @@ can make, every host it may contact, and what each request sends (requirement P3
   fetcher (`fetch.go`) asks the services.
 - **One list.** The fetcher may contact only the hosts below, and checks every request against
   that list as it is sent, redirects included. Anything else is refused before a byte leaves.
-- **Public identifiers.** Requests carry accessions and URNs. A request that would send a
-  sequence is made only after you have seen exactly what it sends and confirmed it.
+- **Public identifiers.** Requests carry accessions, URNs, gene symbols and ClinVar's record
+  numbers. A request that would send a sequence is made only after you have seen exactly what it
+  sends and confirmed it.
 - **Cached.** Each answer is kept, with the record of where and when it was retrieved, so the same
   request is not sent again for a month, and works offline.
 
@@ -41,18 +42,21 @@ host, path, port or scheme (HTTPS only) is refused before it is sent.
 
 | Host | Paths | Service | Used for |
 | --- | --- | --- | --- |
-| `rest.uniprot.org` | all | UniProt | a target's entry; finding a target by its sequence (MaveScape 0.3) |
-| `api.mavedb.org` | `/api/` | MaveDB | score sets' records, scores, counts and mapped variants, and the search (MaveScape 0.3) |
+| `rest.uniprot.org` | all | UniProt | a target's entry and its features; finding a target by its sequence (MaveScape 0.3) |
+| `api.mavedb.org` | `/api/` | MaveDB | score sets' records, scores, counts, mapped variants and annotations, and the search (MaveScape 0.3) |
 | `files.rcsb.org` | all | RCSB PDB | structures (MaveScape 0.5, to come) |
 | `data.rcsb.org` | all | RCSB PDB | structures' metadata (MaveScape 0.5, to come) |
-| `www.ebi.ac.uk` | `/pdbe/` | PDBe | structures and their residue mappings (to come) |
-| `alphafold.ebi.ac.uk` | all | AlphaFold DB | predicted structures and alignments (to come) |
-| `eutils.ncbi.nlm.nih.gov` | `/entrez/eutils/` | NCBI E-utilities | RefSeq and GenBank records, for targets named by a transcript (MaveScape 0.3); ClinVar observations (to come) |
+| `www.ebi.ac.uk` | `/pdbe/` | PDBe | a protein's conservation profile (PDBe-KB; MaveScape 0.3); structures and their residue mappings (to come) |
+| `alphafold.ebi.ac.uk` | all | AlphaFold DB | AlphaMissense's predictions of a human protein (MaveScape 0.3); predicted structures (to come) |
+| `eutils.ncbi.nlm.nih.gov` | `/entrez/eutils/` | NCBI E-utilities | RefSeq and GenBank records, for targets named by a transcript; a gene's ClinVar records (MaveScape 0.3) |
 | `rest.ensembl.org` | all | Ensembl | transcripts, for targets named by one (MaveScape 0.3) |
-| `gnomad.broadinstitute.org` | `/api` | gnomAD | population frequencies (to come) |
+| `gnomad.broadinstitute.org` | `/api` | gnomAD | a gene's variants and their frequencies (MaveScape 0.3) |
 
-Hosts marked "to come" are on the list now so that the list is fixed in one place; no request
-uses them yet. Each later version that adds a request adds it to the table below.
+Uses marked "to come" are on the list now so that it is fixed in one place; no request makes them
+yet. Each later version that adds a request adds it to the table below. AlphaFold DB lists a
+multiple sequence alignment for each entry but has refused to send them since 2026 (HTTP 403):
+MaveScape does not ask for them, and reads conservation from PDBe-KB's profile or your own
+alignment.
 
 ## Requests
 
@@ -69,6 +73,15 @@ leaves your computer.
 | `/api/fetch/mavedb/score-sets/{urn}/mapped-variants` | `https://api.mavedb.org/api/v1/score-sets/{urn}/mapped-variants` | a MaveDB URN | MaveDB's mapping of the score set's variants to the human reference: VRS identifiers, HGVS on the reference, ClinGen allele IDs (Open from MaveDB, **Mapped variants**, when you tick it) | 7 days; up to 256 MB |
 | `/api/fetch/ncbi/nuccore/{accession}` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&id={accession}&rettype=gb&retmode=text&tool=mavescape` | a RefSeq or GenBank nucleotide accession (NM_007294.3) | the record's sequence and features (GenBank), for a score set's target named by a RefSeq transcript, or a target fetched by its accession (Experiment, Target) | 30 days; up to 32 MB |
 | `/api/fetch/ensembl/transcript/{id}` | `https://rest.ensembl.org/sequence/id/{id}?type=cdna&mask_feature=1` | an Ensembl transcript identifier, without its version (ENST00000460680) | the transcript's sequence in Ensembl's current release, its coding part in capitals, for a score set's target named by an Ensembl transcript | 30 days; up to 16 MB |
+| `/api/fetch/uniprot/{accession}/features` | `https://rest.uniprot.org/uniprotkb/{accession}.json?fields=accession,sequence,ft_domain,ft_region,ft_repeat,ft_zn_fing,ft_dna_bind,ft_compbias,ft_coiled,ft_motif,ft_topo_dom,ft_transmem,ft_intramem,ft_signal,ft_transit,ft_propep,ft_act_site,ft_binding,ft_site,ft_mod_res,ft_lipid,ft_carbohyd,ft_disulfid,ft_crosslnk,ft_helix,ft_strand,ft_turn` | a UniProt accession (P62993) | the entry's features: domains, regions, motifs, sites, modified residues and secondary structure, as tracks beside the map (Map, Tracks: **UniProt features**; `add_track`) | 30 days; up to 16 MB |
+| `/api/fetch/pdbe/conservation/{accession}` | `https://www.ebi.ac.uk/pdbe/graph-api/uniprot/sequence_conservation/{accession}` | a UniProt accession | each position's amino-acid probabilities in a profile of the protein's homologues (PDBe-KB, from 3DPatch's HMMER search), as a conservation track | 30 days; up to 16 MB |
+| `/api/fetch/alphafold/{accession}/missense` | `https://alphafold.ebi.ac.uk/files/AF-{accession}-F1-aa-substitutions.csv` | a UniProt accession (canonical, without an isoform) | AlphaMissense's pathogenicity of every substitution of a human protein (CSV), as a track and beside each variant | 30 days; up to 64 MB |
+| `/api/fetch/clinvar/search` with `?gene=…&page=…` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar&term={term}&retmax=10000&retstart={start}&retmode=json&tool=mavescape` | a gene's symbol and the page of results, in the term `GRB2[gene] AND ("missense variant"[molecular consequence] OR "nonsense"[molecular consequence] OR "synonymous variant"[molecular consequence])` | the numbers of the ClinVar records of the gene's missense, nonsense and synonymous variants, 10,000 a page | 7 days; up to 16 MB |
+| `/api/fetch/clinvar/summary` with `?ids=…` | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=clinvar&id={ids}&retmode=json&tool=mavescape` | up to 500 ClinVar record numbers (from the search) | each record's variant, classification, review status and date | 7 days; up to 32 MB |
+| `/api/fetch/gnomad/gene/{symbol}` | `https://gnomad.broadinstitute.org/api` (POST, GraphQL: the gene's identifiers and MANE Select transcript) | a gene's symbol (GRB2) | which transcript's variants to ask for | 30 days; up to 1 MB |
+| `/api/fetch/gnomad/transcript/{id}` | `https://gnomad.broadinstitute.org/api` (POST, GraphQL: the transcript's variants in gnomAD v4, `gnomad_r4`) | an Ensembl transcript identifier (ENST00000316804) | each variant's change to the protein and its allele count and number, exomes and genomes joined, as a track | 30 days; up to 128 MB |
+| `/api/fetch/mavedb/score-sets/{urn}/namespaces` | `https://api.mavedb.org/api/v1/score-sets/{urn}/csv-namespaces` | a MaveDB URN | which annotations MaveDB keeps for the score set's variants (gnomAD, ClinVar's releases) | 7 days; up to 4 MB |
+| `/api/fetch/mavedb/score-sets/{urn}/annotations` with `?clinvar=…` | `https://api.mavedb.org/api/v1/score-sets/{urn}/variants/data?namespaces=gnomad&namespaces=clinvar.{release}` | a MaveDB URN and a ClinVar release (2026_01) | MaveDB's annotations of the score set's variants: gnomAD's frequencies and ClinVar's classifications, by variant (CSV) | 30 days; up to 256 MB |
 | `/api/fetch/mavedb/search` with `?text=…&page=…` | `https://api.mavedb.org/api/v1/score-sets/search` (POST `{"text": …, "published": true, "limit": 100, "offset": …}`) | the words searched for (GRB2, abundance…) and the page of results | the published score sets that match, 100 at a time (Open from MaveDB; `search_mavedb`) | 1 day; up to 32 MB |
 
 The program also answers two requests of its own, which contact nothing: `/api/fetch` (the mode,
@@ -89,12 +102,14 @@ A MaveDB deposit (MaveScape 0.3: the run's Export menu, **Deposit in MaveDB**; `
 --format mavedb`) is written on your computer from what the workspace holds, and checked there:
 MaveScape never sends your scores, counts or variant names to MaveDB (not to its `/hgvs/validate`,
 not to its upload). You upload the package yourself, on mavedb.org or through its API, when you
-decide to. None of the requests above writes to MaveDB; only the search is a POST.
+decide to. None of the requests above writes to MaveDB; of MaveDB's, only the search is a POST
+(gnomAD's queries are POSTs too, as its GraphQL API takes them, and write nothing).
 
 ## What every request carries
 
 - `User-Agent: MaveScape/<version> (local research software; docs/NETWORK.md)`
-- `Accept: application/json` (`text/csv` for a table, `text/plain` for a GenBank record)
+- `Accept: application/json` (`text/csv` for a table, `text/plain` for a GenBank record), and
+  `Content-Type: application/json` with a POST's body (MaveDB's search, gnomAD's GraphQL queries)
 - When a cached copy is being checked: `If-None-Match` (its ETag) and `If-Modified-Since` (its
   date), so an unchanged answer is confirmed (HTTP 304) rather than sent again.
 
@@ -109,7 +124,9 @@ nothing that names you, your computer or your files.
 - **Only JSON**, or a CSV table where the request is for one (a header of comma-separated names,
   not a page), or a GenBank record where the request is for one (beginning with its `LOCUS`
   line), is accepted from the requests above. NCBI and Ensembl answer an unknown accession with
-  HTTP 400: it is read as "not found".
+  HTTP 400: it is read as "not found". gnomAD answers an unknown gene or transcript with HTTP 200 and
+  an error in its GraphQL answer: also read as "not found"; any other error in it is refused, and
+  not cached.
 - **Redirects** stay on the same host, at most five, and are checked against the list too.
 - **Time.** 45 seconds for a service to start answering, 120 for the whole answer.
 - **Retries.** An answer of HTTP 429, 502, 503 or 504, or no answer, is tried twice more, after 1

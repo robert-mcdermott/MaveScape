@@ -263,3 +263,34 @@ export function setDeposit(ws, patch, detail = null) {
   if (!changed.length) return ws;
   return change(ws, { deposit: Object.keys(next).length ? next : null }, 'deposit', detail ?? `MaveDB details: ${changed.join(', ')} ${changed.length === 1 ? 'was' : 'were'} changed`);
 }
+
+// --- Annotations and tracks (wave 3, slice 5) ------------------------------------------------------
+
+// Adds an annotation (ws.annotations, absent until the first): { id, provider, name, file: {
+// fileName, sha256, size }, record (the source: service, url, retrieved, release, license…),
+// added }. Its file is kept in the library and the archive, so its tracks reopen offline.
+export function addAnnotation(ws, annotation, detail = null) {
+  const list = ws.annotations ?? [];
+  const id = uniqueId(annotation.id ?? annotation.provider, list);
+  const entry = { ...annotation, id };
+  return { ws: change(ws, { annotations: [...list, entry] }, 'annotation', detail ?? `Added the annotation "${entry.name}"`), id };
+}
+
+export function removeAnnotation(ws, id) {
+  const list = ws.annotations ?? [];
+  const gone = list.find((a) => a.id === id);
+  if (!gone) return ws;
+  const rest = list.filter((a) => a.id !== id);
+  // Its tracks leave the arrangement too.
+  const prefix = `${id}:`;
+  const layout = ws.tracks ? { ...ws.tracks, order: (ws.tracks.order ?? []).filter((t) => !t.startsWith(prefix)), hidden: (ws.tracks.hidden ?? []).filter((t) => !t.startsWith(prefix)), filters: Object.fromEntries(Object.entries(ws.tracks.filters ?? {}).filter(([t]) => !t.startsWith(prefix))) } : undefined;
+  return change(ws, { annotations: rest.length ? rest : undefined, ...(layout ? { tracks: layout } : {}) }, 'annotation', `Removed the annotation "${gone.name}"`);
+}
+
+// The arrangement of tracks (ws.tracks: { order, hidden, filters }; lib/tracks.js, arrangement): a
+// view of the analysis, not a change to it, so not in the history.
+export function setTrackLayout(ws, layout) {
+  if (canonicalJSON(ws.tracks ?? null) === canonicalJSON(layout ?? null)) return ws;
+  return change(ws, { tracks: layout ?? undefined });
+}
+

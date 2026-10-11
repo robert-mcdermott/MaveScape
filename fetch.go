@@ -153,6 +153,9 @@ type publicRequest struct {
 	// the request.
 	resolve  func(r *http.Request) (call, error)
 	notFound func(r *http.Request) string
+	// answer: a check of a JSON answer beyond its being JSON (gnomAD's GraphQL answers an unknown
+	// gene with HTTP 200 and an error): errUpstreamNotFound, another error, or nil.
+	answer func(body []byte) error
 }
 
 // A request resolved: the cache entry's name, the URL asked for, and a POST's body.
@@ -833,6 +836,10 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 		}
 	case !json.Valid(data):
 		return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not JSON.", request.Service)
+	case request.answer != nil:
+		if err := request.answer(data); err != nil {
+			return fetched{}, -1, err
+		}
 	}
 	log.Printf("fetched %s%s (%d bytes)", resp.Request.URL.Host, resp.Request.URL.Path, len(data))
 	result := fetched{body: data, etag: resp.Header.Get("ETag"), lastModified: resp.Header.Get("Last-Modified")}

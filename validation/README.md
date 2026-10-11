@@ -22,6 +22,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `readiness` | What each analysis can do with what a workspace holds (wave 2, slice 10; `readiness-cases.mjs`): the six examples, the five fixtures and a simulated bottleneck with its cells recorded, whole and with one part taken away (the wild-type row, a replicate, the gates, the cells, the times in generations, the middle time points, the readout, the nonsense or synonymous controls), 74 workspaces. The readiness model must name exactly what was taken away, and its verdict on every analysis must agree with the engine: each scoring analysis scored or refused with the parameters that use it, each QC finding assessed or not, and an analysis it leaves out for a design one the engine cannot do there either. An empty workspace and a broken design | `web/examples/`, `fixtures/`, simulated |
 | `examples` | Every bundled example opened as the window opens it (wave 2, slice 11; `example-cases.mjs`): assembled (Hsp90's codon variants read at the protein level), scored with its parameters, raising exactly the QC findings it teaches, its readout stated and its readiness naming what its guide points to, at most six guided steps; the published examples' counts MaveDB's, byte for byte. Hsp90's codons (568 rows, 188 protein variants, the wild type's nine copies read once) and its per-generation scores against the published fitness; a single replicate's own SEs; factor IX against MultiSTEP's scores; the simulated problems against their truth, with and without replicate 3 | `web/examples/`; MaveDB, external (`mavedb-hsp90`, `mavedb-factor9`, and `mavedb-pten-vampseq` for the PTEN example opened from MaveDB, wave 3 slice 2) |
 | `public-data` | UniProt's and MaveDB's answers as MaveScape's fetcher cached them (wave 3, slices 1 and 2): every cached answer with its retrieval record; each published example's target where its design says in its UniProt entry (identical, at one place, the entry changing nothing in the design); GRB2's whole sequence looked up, P62993 first; the GRB2 example checked as its guide says, the design unchanged and the methods naming the check and citing UniProt; the feasibility records (four MaveDB score sets) read with no code for any of them, their published scores read as published equal to MaveDB's columns row for row, their counts drafted into valid designs (GRB2's and factor IX's as documented, but for the bins' values); keywords as the readout; a record whose target is an accession, and a record of scores alone, its readiness naming the counts and where they may be; a workspace of published scores through its archive, its run reproduced; GRB2's mapped variants (wave 3, slice 3) each joined to its row of scores, its protein on NP_002077.1 the table's at the target's position plus the UniProt offset | `fixtures/public-data/`; MaveDB, external |
+| `annotations` | Sequence tracks and annotations (wave 3, slice 5; `annotation-cases.mjs`, the fetcher's cached answers served by `cached-fetch.mjs`): conservation from an alignment as Capra & Singh's `score_conservation.py` scores it, and PDBe-KB's profiles as its divergence gives them; UniProt's features the same from its JSON and its GFF3; AlphaMissense as AlphaFold DB's tables give it; ClinVar's records of GRB2 and F9 with ClinVar's own classifications; gnomAD's frequencies of BRCA1's variants against MaveDB's own join of gnomAD to its saturation genome editing score set; MaveDB's annotations joined to the BRCA1 example's run; annotations kept through an archive; the tracks' table read back; what each provider asks; the GRB2 example as its guide says | `reference/annotations.json`; `fixtures/public-data/`, `fixtures/annotations/`; the BRCA1 example's table, external |
 | `mavedb-export` | MaveDB deposits (wave 3, slice 4; `mavedb-export-cases.mjs`): 19 deposits (`web/lib/mavedb-export.js`) of every kind of run and target, from the examples and published records, checked by MaveDB's own validators: every table accepted by `validate_and_standardize_dataframe_pair` with its column descriptions and targets (mavehgvs against a sequence, biocommons hgvs against a transcript), every name strict MAVE-HGVS, the experiment and score set taken by MaveDB's models where MaveScape says nothing is missing and refused for what it says is; the files written now those the reference checked (each SHA-256); export → import → export the same bytes; MaveScape's keyword vocabulary MaveDB's | `reference/mavedb-export.json`; `fixtures/public-data/` (`mavedb-keywords.json`, the transcripts); MaveDB, external |
 
 ## The remote-control session (`remote-session.mjs`)
@@ -59,8 +60,13 @@ writes them, and the map described at the protein level; and (slice 4) `mavedb_d
 published scores (named by ENST00000460680.6, nothing missing), `export` of `mavedb` the same
 bytes as Node writes it (suite `mavedb-export`), the deposit opened again from its folder and from
 its ZIP and written again the same, and GRB2's MaveDB details set by `set_mavedb_details` (an
-unknown one refused), its deposit's scores, counts and method text. 96 checks; in CI as the
-`remote` job.
+unknown one refused), its deposit's scores, counts and method text; and (slice 5) `list_tracks`
+(the run's own four, hidden until shown), `add_track` from the cached answers (UniProt's features,
+PDBe-KB's conservation, AlphaMissense, ClinVar, gnomAD) and from files (an alignment, UniProt's
+GFF3), refused twice or for a run not from MaveDB, `set_track` (shown, moved, filtered; not in the
+history), `inspect_variant`'s annotations, the tracks' table and the map with its tracks the same
+bytes as Node's from the archive, the methods citing each source, `remove_track`. 105 checks; in CI
+as the `remote` job.
 
 ## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3)
 
@@ -163,7 +169,7 @@ what the reference tools compute; this shows whether the intervals mean what the
 
 34 checks; about 35 s; in CI's `web` job with the external data.
 
-## Public data's answers, as the fetcher caches them (`fixtures/public-data/`, wave 3 slices 1–4)
+## Public data's answers, as the fetcher caches them (`fixtures/public-data/`, wave 3 slices 1–5)
 
 A cache of public data in the layout MaveScape's fetcher writes (`docs/FORMATS.md`, "The cache of
 public data"), so that the tests, the `public-data` suite, the remote-control session (started
@@ -189,9 +195,37 @@ retrieval record:
 | `ensembl/ENST00000460680.json`, `ENST00000269305.json` | Ensembl's sequences of BAP1's (version 6) and TP53's (version 9) transcripts, the coding part in capitals |
 | `mavedb-search/2f0e48c8….json`, `253d595f….json` | MaveDB's answers to the searches "GRB2" (1 score set) and "VAMP-seq" (22) |
 | `mavedb-keywords.json` | MaveDB's controlled keywords for experiments, every key with its labels (retrieved 2026-10-10): the vocabulary a deposit's keywords are checked against (wave 3, slice 4) |
+| `uniprot/P62993.features.json`, `P00740`, `P02829` | the three examples' entries' features: domains, regions, sites, secondary structure (wave 3, slice 5) |
+| `pdbe/P62993.conservation.json`, `P00740`, `P02829` | PDBe-KB's conservation profiles of the three (each position's amino-acid probabilities) |
+| `alphafold/P62993.aa-substitutions.csv`, `P00740` | AlphaMissense's tables of GRB2 and factor IX, as AlphaFold DB publishes them |
+| `clinvar/GRB2.search.1.json`, `F9.search.1.json`, `<sha256>.summary.json` | ClinVar's search for GRB2's and F9's missense, nonsense and synonymous records (10 and 553), and their summaries (one page for GRB2, two for F9; named by the SHA-256 of the record numbers asked) |
+| `gnomad/GRB2.gene.json`, `F9`, `BRCA1`; `ENST00000316804.variants.json`, `ENST00000218099`, `ENST00000357654` | gnomAD's answers for the three genes (their MANE Select transcripts) and the transcripts' variants in gnomAD v4 (each with its GraphQL query in its record) |
+| `mavedb/urn_mavedb_00000097-0-2.namespaces.json`, `.annotations.clinvar_2026_01.csv` | the annotations MaveDB keeps for BRCA1's saturation genome editing score set, and its ClinVar 2026_01 and gnomAD annotations of its variants |
 
 UniProt's data are under CC BY 4.0; MaveDB's records are CC0 but for BAP1's (CC BY 4.0, its
-authors cited in its record); NCBI's and Ensembl's records have no restriction on use.
+authors cited in its record); NCBI's and Ensembl's records, and ClinVar's, have no restriction on
+use; PDBe-KB's and AlphaFold DB's data (AlphaMissense's predictions) are CC BY 4.0; gnomAD's are
+CC0.
+
+## The tracks' own fixtures (`fixtures/annotations/`, wave 3 slice 5)
+
+| File | What |
+| --- | --- |
+| `grb2-sh3.sto`, `grb2-sh3.fasta` | Pfam PF00018's (SH3_1) seed alignment, 55 sequences (CC0), with the human GRB2 C-terminal SH3 (residues 162–207) added first, aligned as its chicken orthologue GRB2_CHICK/162-207 is (they differ by substitutions only); the same alignment as Stockholm and as aligned FASTA |
+| `P62993.gff`, `P00740.gff`, `P02829.gff` | UniProt's GFF3 of the three examples' entries (release 2026_03, CC BY 4.0): the custom-track reader against UniProt's JSON |
+
+## Conservation (`reference/annotations.json`, wave 3 slice 5)
+
+```
+SCORE_CONSERVATION=/path/to/conservation_code python3 validation/reference/generate_annotations.py
+```
+
+Capra & Singh's `score_conservation.py` (<https://compbio.cs.princeton.edu/conservation/>; Python 2
+code under the GPL, not part of MaveScape) is run as an external reference, in a Python 3 copy the
+generator makes as Proteoscope's `port-score-conservation.py` does (printing 12 decimals): the
+alignment's query residues scored by default; and PDBe-KB's three profiles, each position's
+probabilities scored by the tool's own divergence (its `js_divergence` from the background on,
+with its BLOSUM62 background). The reference records the tool's SHA-256 and each fixture's.
 
 ## Public data (`sources.json`)
 

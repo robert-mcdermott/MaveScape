@@ -7,13 +7,16 @@
 // compared, its score in each and each difference (with the pairs of replicates behind it). A
 // nucleotide variant of a DNA target shows its protein change; a protein variant of a nucleotide
 // run (a cell of its map) its score merged from the nucleotide variants that make it, and each of
-// theirs (wave 3, slice 3). Focus: { kind: 'variant', id: MAVE-HGVS key, run, condition }.
+// theirs (wave 3, slice 3); its annotations from the tracks beside the map: ClinVar, gnomAD,
+// predictors, the features at its position (wave 3, slice 5). Focus: { kind: 'variant', id:
+// MAVE-HGVS key, run, condition }.
 
 import { h, icon } from './dom.js';
 import { KIND_NAMES } from '../lib/variants.js';
 import { targetProtein } from '../lib/target.js';
 import { proteinView } from '../lib/collapse.js';
 import { mappedBlock } from './mapped.js';
+import { annotationBlock } from './tracks.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { describeParameters, isBarcodeRun, unitOf } from '../lib/runs.js';
 import { DIFFERENTIAL_REASON_NAMES, pairDifference, transformOf } from '../lib/differential.js';
@@ -180,6 +183,8 @@ export function variantSection(app, focus) {
   parts.push(h('h3', icon('target'), h('span.mono', focus.id)));
   if (row < 0) {
     parts.push(h('p', { style: { margin: '0 0 8px', fontSize: '12.5px' } }, 'Not in the table: this substitution was not measured (missing on the map, not "no effect").'));
+    const annotations = annotationBlock(app, run, [focus.id], position);
+    if (annotations) parts.push(...annotations);
   } else {
     const kv = inView ? [
       ['Class', KIND_NAMES[v.kind[row]]],
@@ -271,6 +276,8 @@ export function variantSection(app, focus) {
       const mapped = mappedBlock(app, run, row);
       if (mapped) parts.push(...mapped);
     }
+    const annotations = annotationBlock(app, run, [focus.id, v.proKey?.[row] ?? null], position);
+    if (annotations) parts.push(...annotations);
     const strip = position > 0 && !v.proKey ? positionStrip(results, c, row, position, focus.id) : null;
     if (strip) parts.push(h('h4.inspector-sub', `Position ${position}`), strip);
   }

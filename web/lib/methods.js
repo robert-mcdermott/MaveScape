@@ -33,6 +33,15 @@ export const REFERENCES = {
   ensembl: { type: 'article', authors: ['Harrison, Peter W', 'Amode, M Ridwan', 'Austine-Orimoloye, Olanrewaju', 'Azov, Andrey G', 'Barba, Matthieu', 'Barnes, If', 'Becker, Arne', 'others'], title: 'Ensembl 2024', journal: 'Nucleic Acids Research', year: 2024, volume: 52, number: 'D1', pages: 'D891--D899', doi: '10.1093/nar/gkad1049' },
   vrs: { type: 'article', authors: ['Wagner, Alex H', 'Babb, Lawrence', 'Alterovitz, Gil', 'Baudis, Michael', 'Brush, Matthew', 'Cameron, Daniel L', 'Cline, Melissa', 'others'], title: 'The GA4GH Variation Representation Specification: a computational framework for variation representation and federated identification', journal: 'Cell Genomics', year: 2021, volume: 1, number: 2, pages: '100027', doi: '10.1016/j.xgen.2021.100027' },
   mavedbMapping: { type: 'article', authors: ['Arbesfeld, Jeremy A', 'Da, Estelle Y', 'Stevenson, James S', 'Kuzma, Kori', 'Paul, Anika', 'Farris, Tierra', 'Capodanno, Benjamin J', 'others'], title: 'Mapping MAVE data for use in human genomics applications', journal: 'Genome Biology', year: 2025, volume: 26, pages: '179', doi: '10.1186/s13059-025-03647-x' },
+  // Wave 3, slice 5: the annotations beside the map.
+  clinvar: { type: 'article', authors: ['Landrum, Melissa J', 'Lee, Jennifer M', 'Benson, Mark', 'Brown, Garth R', 'Chao, Chen', 'Chitipiralla, Shanmuga', 'Gu, Baoshan', 'others'], title: 'ClinVar: improving access to variant interpretations and supporting evidence', journal: 'Nucleic Acids Research', year: 2018, volume: 46, number: 'D1', pages: 'D1062--D1067', doi: '10.1093/nar/gkx1153' },
+  gnomad: { type: 'article', authors: ['Chen, Siwei', 'Francioli, Laurent C', 'Goodrich, Julia K', 'Collins, Ryan L', 'Wang, Qingbo', 'Alf{\\"o}ldi, Jessica', 'Watts, Nicholas A', 'others'], title: 'A genomic mutational constraint map using variation in 76,156 human genomes', journal: 'Nature', year: 2024, volume: 625, pages: '92--100', doi: '10.1038/s41586-023-06045-0' },
+  alphamissense: { type: 'article', authors: ['Cheng, Jun', 'Novati, Guido', 'Pan, Joshua', 'Bycroft, Clare', 'Žemgulytė, Akvilė', 'Applebaum, Taylor', 'Pritzel, Alexander', 'others'], title: 'Accurate proteome-wide missense variant effect prediction with AlphaMissense', journal: 'Science', year: 2023, volume: 381, number: 6664, pages: 'eadg7492', doi: '10.1126/science.adg7492' },
+  alphafolddb: { type: 'article', authors: ['Varadi, Mihaly', 'Bertoni, Damian', 'Magana, Paulyna', 'Paramval, Urmila', 'Pidruchna, Ivanna', 'Radhakrishnan, Malarvizhi', 'Tsenkov, Maxim', 'others'], title: 'AlphaFold Protein Structure Database in 2024: providing structure coverage for over 214 million protein sequences', journal: 'Nucleic Acids Research', year: 2024, volume: 52, number: 'D1', pages: 'D368--D375', doi: '10.1093/nar/gkad1011' },
+  pdbekb: { type: 'article', authors: ['{PDBe-KB consortium}'], title: 'PDBe-KB: collaboratively defining the biological context of structural data', journal: 'Nucleic Acids Research', year: 2022, volume: 50, number: 'D1', pages: 'D534--D542', doi: '10.1093/nar/gkab988' },
+  threedpatch: { type: 'article', authors: ['Jakubec, David', 'Vondrášek, Jiří', 'Finn, Robert D'], title: '3DPatch: fast 3D structure visualization with residue conservation', journal: 'Bioinformatics', year: 2019, volume: 35, number: 2, pages: '332--334', doi: '10.1093/bioinformatics/bty464' },
+  capra2007: { type: 'article', authors: ['Capra, John A', 'Singh, Mona'], title: 'Predicting functionally important residues from sequence conservation', journal: 'Bioinformatics', year: 2007, volume: 23, number: 15, pages: '1875--1882', doi: '10.1093/bioinformatics/btm270' },
+  henikoff1994: { type: 'article', authors: ['Henikoff, Steven', 'Henikoff, Jorja G'], title: 'Position-based sequence weights', journal: 'Journal of Molecular Biology', year: 1994, volume: 243, number: 4, pages: '574--578', doi: '10.1016/0022-2836(94)90032-9' },
   mavedb: { type: 'article', authors: ['Esposito, Daniel', 'Weile, Jochen', 'Shendure, Jay', 'Starita, Lea M', 'Papenfuss, Anthony T', 'Roth, Frederick P', 'Fowler, Douglas M', 'Rubin, Alan F'], title: 'MaveDB: an open-source platform to distribute and interpret data from multiplexed assays of variant effect', journal: 'Genome Biology', year: 2019, volume: 20, pages: '223', doi: '10.1186/s13059-019-1845-6' },
 };
 
@@ -199,6 +208,14 @@ export function writeMethods(ws, run, options = {}) {
     paragraphs.push(`Quality control: ${f.filter((x) => x.status === 'pass').length} findings passed, ${f.filter((x) => x.status === 'review').length} were to review and ${f.filter((x) => x.status === 'fail').length} failed${f.some((x) => x.status === 'na') ? ` (${f.filter((x) => x.status === 'na').length} not assessed)` : ''}.${flagged.length ? ` ${flagged.map((x) => `${x.title}: ${x.value} (${x.status}; ${x.threshold})`).join('. ')}.` : ''}${acknowledged.length ? ` ${acknowledged.length === 1 ? 'One finding was' : `${acknowledged.length} findings were`} acknowledged, ${acknowledged.length === 1 ? 'its status' : 'their statuses'} unchanged: ${acknowledged.map((x) => `${x.title.charAt(0).toLowerCase()}${x.title.slice(1)} ("${x.acknowledged.reason.replace(/[.\s]+$/, '')}")`).join('; ')}.` : ''}${bottleneck ? ` Variance beyond counting is read as in DiMSum's error model ${cite('dimsum')}.` : ''} Thresholds are recorded with the workspace.`);
   }
 
+  // The annotations beside the map (wave 3, slice 5): each one's source, release and date, and
+  // how MaveScape read it.
+  const annotations = ws.annotations ?? [];
+  if (annotations.length) {
+    const lines = annotations.map((a) => annotationSentence(a, cite)).filter(Boolean);
+    if (lines.length) paragraphs.push(`Annotations shown beside the map: ${lines.join(' ')}`);
+  }
+
   // Software.
   const sw = run.software;
   const mavescape = { type: 'software', authors: ['McDermott, Robert'], title: 'MaveScape', version: sw.version, year: Number((run.created ?? '').slice(0, 4)) || null, url: 'https://github.com/robert-mcdermott/mavescape' };
@@ -207,5 +224,33 @@ export function writeMethods(ws, run, options = {}) {
   const references = cited.map(({ key, ref }, i) => ({ n: i + 1, key, text: referenceText(ref) }));
   const markdown = `# Methods\n\n${paragraphs.join('\n\n')}\n\n## References\n\n${references.map((r) => `${r.n}. ${r.text}`).join('\n')}\n`;
   return { paragraphs, references, markdown, bibtex: toBibTeX(cited) };
+}
+
+// An annotation in the methods: what it is, where from and when, and what MaveScape did with it.
+function annotationSentence(a, cite) {
+  const r = a.record ?? {};
+  const day = r.retrieved ? `, retrieved ${String(r.retrieved).slice(0, 10)}` : '';
+  switch (a.provider) {
+    case 'uniprot-features':
+      return `UniProt ${r.accession}'s features ${cite('uniprot')}${r.release ? ` (release ${r.release}${day})` : day.replace(/^, /, ' (') + (day ? ')' : '')}, placed by the target's offset.`;
+    case 'pdbe-conservation':
+      return `conservation from PDBe-KB's profile of ${r.accession}'s homologues ${cite('pdbekb')} ${cite('threedpatch')}${day}, each position scored as the Jensen–Shannon divergence of its amino-acid probabilities from the BLOSUM62 background ${cite('capra2007')}.`;
+    case 'alphamissense':
+      return `AlphaMissense's pathogenicity of ${r.accession}'s substitutions ${cite('alphamissense')}, from AlphaFold DB ${cite('alphafolddb')}${day} (CC BY 4.0; not for clinical use).`;
+    case 'clinvar':
+      return `ClinVar's records of ${r.gene}'s missense, nonsense and synonymous variants ${cite('clinvar')}${day} (${r.kept ?? '?'} of ${r.records ?? '?'} records read), placed where their protein's residues agree with the target's.`;
+    case 'gnomad':
+      return `gnomAD v4's allele frequencies of ${r.gene}'s variants on ${r.transcript}${r.mane ? ` (MANE Select, ${r.mane})` : ''} ${cite('gnomad')}${day}, exomes and genomes joined, variants failing gnomAD's filters left out.`;
+    case 'mavedb-annotations':
+      return `MaveDB's annotations of ${r.urn}'s variants ${cite('mavedbMapping')}${r.clinvar ? `: ClinVar ${r.clinvar} ${cite('clinvar')} and gnomAD ${cite('gnomad')}` : `: gnomAD ${cite('gnomad')}`}${day}.`;
+    case 'alignment':
+      return `conservation from the alignment ${r.file ?? a.file?.fileName} (SHA-256 ${a.file?.sha256}), scored as Capra and Singh's score_conservation.py scores it by default ${cite('capra2007')}: the Jensen–Shannon divergence from the BLOSUM62 background, with position-based sequence weights ${cite('henikoff1994')}, a gap penalty, columns of more than 30% gaps unscored and a window of 3.`;
+    case 'predictor':
+      return `a predictor's scores from ${r.file ?? a.file?.fileName} (SHA-256 ${a.file?.sha256}).`;
+    case 'custom':
+      return `the custom track ${r.file ?? a.file?.fileName} (SHA-256 ${a.file?.sha256}).`;
+    default:
+      return null;
+  }
 }
 

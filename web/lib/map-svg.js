@@ -6,10 +6,13 @@
 
 import { STATE, STATE_NAMES, colorPosition, describeMap } from './map-model.js';
 import { mapPalette } from './map-render.js';
+import { describeTrack } from './tracks.js';
+import { shapesSVG, trackShapes, tracksHeight } from './track-render.js';
 
-// The light theme's map colors (web/styles.css, --map-*), for figures.
+// The light theme's map and track colors (web/styles.css, --map-*, --track-*), for figures.
 export const EXPORT_THEME = {
   background: '#ffffff', empty: '#c8c6c2', hatch: '#6e6c68', dot: '#6e6c68', mark: '#171b26', text: '#171b26', muted: '#4b5468', line: '#d0d6e2', accent: '#5b4ce6', gray: [110, 110, 110],
+  track: { bar: '#5b6b8c', feature: '#0f8f7c', onFeature: '#ffffff', helix: '#cc5f8e', strand: '#d99a1e', turn: '#5aa6d9', pathogenic: '#d55e00', conflicting: '#a05ba8', uncertain: '#e0b000', benign: '#0072b2', other: '#9a9a9a' },
 };
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -21,14 +24,16 @@ function tickStep(cellW) {
   return 10000;
 }
 
-// options: { cellW, cellH, palette, title, results (for the description) }.
+// options: { cellW, cellH, palette, title, results (for the description), tracks (shown below the
+// grid, as in the window; wave 3, slice 5) }.
 export function mapSVG(model, options = {}) {
   const cellW = options.cellW ?? 8;
   const cellH = options.cellH ?? 10;
   const theme = EXPORT_THEME;
   const { color, paler } = mapPalette(model, options.palette ?? 'rdbu', theme.gray);
   const R = model.rows.length;
-  const left = 34;
+  const tracks = options.tracks ?? [];
+  const left = tracks.length ? 132 : 34;
   const titleH = 22;
   const track = 12;
   const axis = 14;
@@ -36,7 +41,8 @@ export function mapSVG(model, options = {}) {
   const gridW = model.length * cellW;
   const gridH = R * cellH;
   const refAxis = model.target.offset ? 14 : 0;
-  const legendTop = top + gridH + refAxis + 12;
+  const tracksH = tracksHeight(tracks);
+  const legendTop = top + gridH + refAxis + tracksH + 12;
   const width = left + gridW + 30;
   const height = legendTop + 44;
   const w = cellW - 1;
@@ -45,7 +51,7 @@ export function mapSVG(model, options = {}) {
   const title = options.title ?? `${model.target.name}${model.condition.name && model.condition.id !== 'all' ? ` · ${model.condition.name}` : ''}`;
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="Helvetica, Arial, sans-serif" role="img">`);
   out.push(`<title>${esc(`Variant-effect map: ${title}`)}</title>`);
-  if (options.results) out.push(`<desc>${esc(describeMap(model, options.results).join(' '))}</desc>`);
+  if (options.results) out.push(`<desc>${esc([...describeMap(model, options.results), ...tracks.map(describeTrack)].join(' '))}</desc>`);
   out.push(`<defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="${theme.empty}"/><line x1="0" y1="0" x2="0" y2="4" stroke="${theme.hatch}" stroke-width="1.2"/></pattern></defs>`);
   out.push(`<rect width="${width}" height="${height}" fill="${theme.background}"/>`);
   out.push(`<text x="${left}" y="15" font-size="12" font-weight="bold" fill="${theme.text}">${esc(title)}</text>`);
@@ -65,7 +71,7 @@ export function mapSVG(model, options = {}) {
   }
   out.push('</g>');
   out.push(`<g font-size="${Math.min(10, cellH - 1)}" font-family="Menlo, monospace" fill="${theme.muted}" text-anchor="middle">`);
-  for (let r = 0; r < R; r += 1) out.push(`<text x="${left / 2}" y="${n(top + r * cellH + h / 2 + 3)}">${esc(model.rows[r])}</text>`);
+  for (let r = 0; r < R; r += 1) out.push(`<text x="${left - 17}" y="${n(top + r * cellH + h / 2 + 3)}">${esc(model.rows[r])}</text>`);
   out.push('</g>');
   // Cells.
   out.push('<g>');
@@ -94,6 +100,14 @@ export function mapSVG(model, options = {}) {
     if (Number.isFinite(t) && model.domain.kind === 'diverging') out.push(`<rect x="${left + gridW + 8}" y="${top + r * cellH}" width="10" height="${h}" fill="${color(t)}"/>`);
   }
   out.push('</g>');
+  // Tracks.
+  if (tracks.length) {
+    const tracksTop = top + gridH + refAxis;
+    out.push(`<defs><clipPath id="tracks-clip"><rect x="${left}" y="${tracksTop}" width="${gridW}" height="${tracksH}"/></clipPath></defs>`);
+    out.push('<g font-family="Helvetica, Arial, sans-serif">');
+    out.push(shapesSVG(trackShapes(tracks, { left, gridW, cellW, x0: 1, first: 1, last: model.length, top: tracksTop, gutter: left }, theme, color), 'tracks-clip'));
+    out.push('</g>');
+  }
   // Legend: the color bar, then the states.
   const barW = 160;
   out.push(`<g font-size="9" fill="${theme.muted}">`);

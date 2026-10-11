@@ -17,7 +17,8 @@ Blank, annotated layouts of each are on the Start page and in
 | Workspaces | `*.msz` archives | `*.msz` archives; the workspace document (JSON) |
 | Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3) |
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
-| Public data (0.3) | UniProt entries and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records, Ensembl's transcripts, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
+| Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
+| Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
 
 Coming later: Excel workbooks (0.3), structures (0.5).
 
@@ -333,7 +334,8 @@ manifest.json            format "mavescape-archive", version 1, created, softwar
                          sources ("included" or "checksums"), and every other file with its
                          SHA-256 and size
 workspace.json           the workspace document (below)
-sources/<sha256>.<ext>   each imported table, byte for byte (left out with "checksums only")
+sources/<sha256>.<ext>   each imported table, byte for byte (left out with "checksums only"), and
+                         each annotation's file (always; MaveScape 0.3)
 results/<run-id>.csv     each run's scores (results/<run-id>.<condition>.csv for further
                          conditions), as the scores export below
 methods.md               the latest run's methods
@@ -386,6 +388,26 @@ license }`.
 `deposit` (MaveScape 0.3, absent until given) holds the **MaveDB details**: what a MaveDB deposit
 says that the workspace does not hold otherwise (below, "A MaveDB deposit"). Each change is in the
 history.
+
+`annotations` (MaveScape 0.3, absent until the first) lists the **annotations** whose tracks are
+drawn beside the map (below, "Tracks"), each `{ id, provider, name, file: { fileName, sha256,
+size }, record, added }`. `provider` is one of `uniprot-features`, `pdbe-conservation`,
+`alphamissense`, `clinvar`, `gnomad`, `mavedb-annotations` (public data) or `alignment`,
+`predictor`, `custom` (a file). The file is kept in the library and the archive by its SHA-256, so
+the tracks are read again from it offline: public data as MaveScape keeps them (below), a person's
+file as it was opened. `record` says where it came from: for public data `{ service, url,
+retrieved, release, requests, license, citation }` and what was asked (`accession`, `gene`, `urn`;
+ClinVar's `records` and `kept`; gnomAD's `transcript` and `mane`), the earliest retrieval of the
+answers it holds; for a file `{ service: "a file", file, bytes }`. Adding and removing one are in
+the history.
+
+`tracks` (MaveScape 0.3, absent until changed) is the arrangement of the tracks: `{ order: [track
+ids], hidden: [track ids], filters: { track id: filter } }`. A track's id is a built-in one
+(`reference`, `coverage`, `effect`, `uncertainty`) or its annotation's id and part
+(`clinvar:clinvar`, `uniprot-features:domains`). A filter is `{ types: [...] }` (features),
+`{ classes: [...], stars: n }` (ClinVar's, AlphaMissense's) or `{ min: x }` (gnomAD's allele
+frequency). The arrangement is a view, not an analysis: it is saved with the workspace but not in
+the history.
 
 A **target** (in `targets`, and as the design's copy in `design.targets`) is as in a design
 file (above). A target made from a GenBank record or fetched for a MaveDB record keeps `origin`,
@@ -470,6 +492,65 @@ are present when the service gave them. A copy's age, for when it is checked aga
 The same fields reach the page as `X-MaveScape-*` headers with each answer. Answers saved by hand
 in this layout are served like any other, which is how the validation and the screenshots work
 offline ([`validation/fixtures/public-data/`](../validation/fixtures/public-data/)).
+
+## Tracks
+
+The sequence tracks beside the map (MaveScape 0.3; the Map view's **Tracks**; the remote actions
+`list_tracks`, `add_track`, `set_track`, `remove_track`) are on the map's positions: the target's
+numbering, 1 to its length. Each annotation is read by a provider (`web/lib/providers/`) from the
+file the workspace keeps. A track is one of four kinds: the reference's residues; a value per
+position; features (stretches); or variants (single substitutions), drawn by position and given to
+each variant in the inspector.
+
+**Placed on the target.** An annotation numbered on a reference (UniProt's, a transcript's protein)
+is placed by the target's offset (target position = reference position − offset), and a variant or
+residue only where the target has the residue it names; when more than a tenth of five or more
+residues disagree, the offset is taken to be wrong and the annotation is refused, saying so, rather
+than drawn in the wrong place. What is left out (beyond the target's ends, naming another residue,
+on another transcript) is said in its notes.
+
+**Kept as.** Public data are kept as they came, but for ClinVar and gnomAD, which are kept as one
+table each of what MaveScape reads:
+
+```csv
+accession,variation_id,title,transcript,hgvs_c,hgvs_p,classification,review_status,last_evaluated,consequence
+VCV004673731,4673731,NM_002086.5(GRB2):c.643C>T (p.Arg215Trp),NM_002086.5,c.643C>T,p.Arg215Trp,Uncertain significance,"criteria provided, single submitter",2025-10-22,missense variant
+```
+
+```csv
+variant_id,hgvsc,hgvsp,consequence,ac,an,filters,flags
+17-75320471-T-C,c.106A>G,p.Thr36Ala,missense_variant,6,1613890,,
+```
+
+ClinVar's: each record of the gene's missense, nonsense and synonymous variants (its title's
+transcript and names), its germline classification, review status (as ClinVar's gold stars, 0–4)
+and the date it was last evaluated; the records on the transcript most of them name are placed.
+gnomAD's: each variant of the gene's MANE Select transcript with a protein change, its allele
+count and number with exomes and genomes joined, and gnomAD's filters (a variant failing them, or
+with no allele seen, is left out); a protein change's frequency is its variants' frequencies
+added.
+
+**Files a person adds.**
+
+- An **alignment** (A3M, aligned FASTA, Stockholm, Clustal; `.a3m`, `.a2m`, `.sto`, `.stk`,
+  `.aln`, `.clustal`, or a FASTA file of several gapped sequences), its first sequence the query:
+  each query residue scored as Capra and Singh's `score_conservation.py` scores its column by
+  default (the Jensen–Shannon divergence from the BLOSUM62 background, in bits; Henikoff sequence
+  weights; a gap penalty; columns of more than 30% gaps unscored; a window of 3), the query placed
+  on the target where 80% of its residues at least agree, ungapped.
+- A **predictor's table** (CSV or TSV): AlphaMissense's (`protein_variant`, `am_pathogenicity`,
+  `am_class`; the whole proteome's, with `uniprot_id`, read for the target's accession), EVE's
+  (`wt_aa`, `position`, `mt_aa`, `EVE_scores_ASM`), a matrix with the amino acids down its first
+  column and a column for each position (`M1`, `E2`, …; ESM1b's), or any table with a column of
+  protein variants (`protein_variant`, `variant`, `hgvs_pro`, `mutant`, `mutation`…; `A123V` or
+  `p.Ala123Val`) and a column of scores (`score`, else its first column of numbers). Positions are
+  the reference's where the residues agree there, else the target's.
+- A **custom track**: GFF3 (UniProt's feature format among others: tab-separated `seqid`, source,
+  `type`, `start`, `end`, …, attributes with `Name` or `Note`; numbered as the reference is when
+  the `seqid` is the target's UniProt accession, else as the target is; UniProt's types read into
+  the tracks UniProt's features give); or a table with a column `position` (the target's
+  numbering) or `reference_position`, and a track for each other column of numbers; or with
+  columns `start` and `end` (the target's numbering), `label` and `type`, a track of stretches.
 
 ## Exports
 
@@ -706,7 +787,16 @@ bins' scales for a selection.
 The whole map at a fixed cell size on a light background, with the position and row medians, both
 numberings, the color scale and a key to the states; the SVG carries the map's description as its
 `<desc>`, and each cell its variant as a `<title>`. The PNG is the SVG drawn at three times its
-size.
+size. With tracks shown (MaveScape 0.3), they are below the grid as in the window, their names in
+the margin, and their descriptions in the `<desc>`.
+
+### The tracks (`*_tracks_*.csv`)
+
+The tracks shown, position by position: `position`, `reference_position` (with an offset),
+`residue`, then a column for each track: its value at the position (a variants track: its summary,
+the count, largest or mean as the track draws it, and a second column, `<track>: variants`, each
+variant there with its label; a features track: the features covering the position). Read again,
+it is a custom track (above).
 
 ## Headless runs: `run.json`
 

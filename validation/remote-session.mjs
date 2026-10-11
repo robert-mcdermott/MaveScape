@@ -28,6 +28,10 @@ import { proteinView } from '../web/lib/collapse.js';
 import { readZip } from '../web/lib/zip.js';
 import { MAVEDB_FILES } from '../web/lib/mavedb-export.js';
 import { depositPackages } from './mavedb-export-cases.mjs';
+import { nodeTracks } from './annotation-cases.mjs';
+import { buildMapModel } from '../web/lib/map-model.js';
+import { mapSVG } from '../web/lib/map-svg.js';
+import { tracksCSV } from '../web/lib/tracks.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -266,6 +270,54 @@ try {
   delete provenance.files;
   delete expectedProvenance.files;
   check('export provenance.json: Node\'s, but for the file names', `${Object.keys(provenance).length} fields`, JSON.stringify(provenance) === JSON.stringify(expectedProvenance));
+
+  // Sequence tracks (wave 3, slice 5), offline, from the cached answers: the run's own, hidden until
+  // shown; annotations from public data and from files; shown, moved, filtered; beside a variant;
+  // in the exports, the archive and the methods, as Node makes them.
+  const bare = await act('list_tracks', { run: 'Run 1' });
+  const why = Object.fromEntries(bare.data.available.map((p) => [p.provider, p.unavailable ?? null]));
+  check('list_tracks: the run\'s own four (reference, coverage, position effect, uncertainty), hidden until shown; what can be added, and why a MaveDB record\'s annotations cannot', `${bare.message} mavedb-annotations: ${why['mavedb-annotations']}`, bare.data.tracks.length === 4 && bare.data.tracks.every((t) => !t.shown) && why.clinvar === null && why['uniprot-features'] === null && /not of a MaveDB record/.test(why['mavedb-annotations'] ?? ''));
+  const historyBefore = await browser.eval('window.mavescape.store.ws.history.length');
+  const addedPublic = [];
+  for (const provider of ['uniprot-features', 'pdbe-conservation', 'alphamissense', 'clinvar', 'gnomad']) addedPublic.push(await act('add_track', { provider, run: 'Run 1' }));
+  check('add_track from public data, offline from the cache: UniProt\'s features, PDBe-KB\'s conservation, AlphaMissense, ClinVar and gnomAD for GRB2\'s SH3 domain, each in the history', addedPublic.map((a) => `${a.data.name}: ${a.data.tracks.map((t) => t.label).join(', ')}`).join('; '), addedPublic.length === 5 && addedPublic.map((a) => a.data.tracks.length).join() === '3,1,1,1,1' && (await browser.eval('window.mavescape.store.ws.history.length')) === historyBefore + 5);
+  const twice = await send('add_track', { provider: 'clinvar' });
+  const notMaveDB = await send('add_track', { provider: 'mavedb-annotations' });
+  check('the same annotation twice, and MaveDB\'s annotations of a run not from MaveDB: refused, saying why', `${twice.message} ${notMaveDB.message}`, !twice.ok && /already/.test(twice.message) && !notMaveDB.ok && /not of a MaveDB record/.test(notMaveDB.message));
+  const fromAlignment = await act('add_track', { name: 'grb2-sh3.sto', text: readFileSync(join(ROOT, 'validation/fixtures/annotations/grb2-sh3.sto'), 'utf8') });
+  const fromGFF = await act('add_track', { name: 'P62993.gff', text: readFileSync(join(ROOT, 'validation/fixtures/annotations/P62993.gff'), 'utf8') });
+  const notATrack = await send('add_track', { name: 'notes.txt', text: 'Nothing to draw.' });
+  check('add_track from files: an alignment (conservation, the query on positions 4–49) and UniProt\'s GFF3; a file that is neither refused', `${fromAlignment.message.slice(0, 160)}… ${fromGFF.data.tracks.length} tracks from the GFF3; ${notATrack.message.slice(0, 80)}`, /4–49/.test(fromAlignment.message) && fromGFF.data.tracks.length === 3 && !notATrack.ok);
+  const historyAfterAdding = await browser.eval('window.mavescape.store.ws.history.length');
+  const shownCoverage = await act('set_track', { track: 'Coverage', shown: true });
+  const moved = await act('set_track', { track: 'ClinVar', position: 1 });
+  const uncertain = await act('set_track', { track: 'ClinVar', filter: { classes: ['uncertain'] } });
+  const frequent = await act('set_track', { track: 'gnomAD', filter: { min: 1e-5 } });
+  const wrongFilter = await send('set_track', { track: 'Coverage', filter: { stars: 2 } });
+  const arranged = await act('list_tracks');
+  const clinvarNow = arranged.data.tracks[0];
+  check('set_track: coverage shown, ClinVar moved to the top and filtered to uncertain significance, gnomAD to AF ≥ 10⁻⁵; a filter a track does not offer refused; none of it in the history (a view)', `${shownCoverage.message} ${moved.message} ${uncertain.message} ${frequent.message} ${wrongFilter.message}`, clinvarNow.label === 'ClinVar' && clinvarNow.variants === 1 && /uncertain/.test(clinvarNow.filtered ?? '') && arranged.data.tracks.find((t) => t.label === 'Coverage').shown && !wrongFilter.ok && (await browser.eval('window.mavescape.store.ws.history.length')) === historyAfterAdding);
+  const annotated = await act('inspect_variant', { variant: 'W36A', run: 'Run 1' });
+  const notes = Object.fromEntries((annotated.data.annotations ?? []).map((a) => [a.track, a.text]));
+  check('inspect_variant: a variant\'s annotations, from the tracks (AlphaMissense\'s score and class, the domain and strand it lies in, its conservation)', JSON.stringify(notes).slice(0, 300), /likely pathogenic/.test(notes.AlphaMissense ?? '') && /SH3 2/.test(notes['Domains and regions'] ?? '') && /Beta strand/.test(notes['Secondary structure'] ?? '') && /bits/.test(notes['Conservation (PDBe-KB)'] ?? ''));
+  await act('export', { what: 'tracks', run: 'Run 1', path: join(out, 'tracks.csv') });
+  await act('export', { what: 'map', run: 'Run 1', path: join(out, 'map-tracks.svg') });
+  await act('export', { what: 'methods', run: 'Run 1', path: join(out, 'methods-tracks.md') });
+  await act('export', { what: 'archive', path: join(out, 'grb2-tracks.msz') });
+  const withTracks = await readArchive(readFileSync(join(out, 'grb2-tracks.msz')));
+  const tRun = withTracks.ws.runs[0];
+  const { scored: tScored } = recompute(withTracks.ws, withTracks.sources);
+  const tModel = buildMapModel(proteinView(tScored.results) ?? tScored.results, tRun.inputs.design);
+  const tShown = nodeTracks(withTracks.ws, tRun, tModel, withTracks.sources).filter((t) => t.shown);
+  const tracksWritten = readFileSync(join(out, 'tracks.csv'), 'utf8');
+  const svgWritten = readFileSync(join(out, 'map-tracks.svg'), 'utf8');
+  check('the archive keeps the annotations\' files and the arrangement; the tracks exported (CSV) and the map with its tracks (SVG) are the same bytes as Node\'s from the archive', `${withTracks.ws.annotations.length} annotations, ${withTracks.problems.length} problems; ${tShown.length} tracks shown (${tShown.map((t) => t.label).join(', ')}); tracks.csv ${tracksWritten === tracksCSV(tShown, tModel) ? 'Node\'s' : 'different'}; map ${svgWritten === mapSVG(tModel, { results: proteinView(tScored.results) ?? tScored.results, tracks: tShown }) ? 'Node\'s' : 'different'}`, withTracks.ws.annotations.length === 7 && !withTracks.problems.length && tracksWritten === tracksCSV(tShown, tModel) && svgWritten === mapSVG(tModel, { results: proteinView(tScored.results) ?? tScored.results, tracks: tShown }) && /ClinVar/.test(svgWritten));
+  const tMethods = readFileSync(join(out, 'methods-tracks.md'), 'utf8');
+  check('the methods name each annotation with its source and date, and cite ClinVar, gnomAD, AlphaMissense, PDBe-KB and Capra & Singh', /Annotations shown beside the map: [^\n]{0,200}/.exec(tMethods)?.[0] ?? 'not named', /Annotations shown beside the map/.test(tMethods) && ['Landrum', 'Chen S', 'Cheng J', 'PDBe-KB consortium', 'Capra JA'].every((who) => tMethods.includes(who)));
+  const gffId = fromGFF.data.annotation;
+  const removedTrack = await act('remove_track', { annotation: gffId });
+  const afterRemoval = await act('list_tracks');
+  check('remove_track: the GFF3\'s annotation and its tracks gone', `${removedTrack.message} ${afterRemoval.data.tracks.length} tracks`, !afterRemoval.data.tracks.some((t) => t.annotation === gffId) && afterRemoval.data.tracks.length === 4 + 3 + 1 + 1 + 1 + 1 + 1);
 
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.
   const noTokenOpen = await send('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] }, { withToken: false });

@@ -1,0 +1,9 @@
+{
+  "contentType": "application/json",
+  "service": "gnomAD",
+  "source": "https://gnomad.broadinstitute.org/api",
+  "method": "POST",
+  "request": "{\"query\":\"query MaveScapeGene($gene: String!) { gene(gene_symbol: $gene, reference_genome: GRCh38) { gene_id symbol name canonical_transcript_id mane_select_transcript { ensembl_id ensembl_version refseq_id refseq_version } } }\",\"variables\":{\"gene\":\"F9\"}}",
+  "retrieved": "2026-10-11T15:14:20Z",
+  "etag": "W/\"105-X2Xu517oQ+0WkoY5nlBePF9+qGM\""
+}

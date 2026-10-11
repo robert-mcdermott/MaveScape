@@ -38,6 +38,9 @@ import { depositFile, runDeposit } from './mavedb-export.js';
 import { DEPOSIT_FIELDS, depositDetails, readPublication } from '../lib/mavedb-export.js';
 import { searchHits } from '../lib/mavedb.js';
 import { retrievalText } from '../lib/uniprot.js';
+import { addFileTrack, addPublicTrack, arrangeTrack, removeTrack, runTrackState } from './tracks.js';
+import { annotationsOf, describeTrack, sourceText, trackFilters, tracksCSV } from '../lib/tracks.js';
+import { PROVIDERS } from '../lib/providers/index.js';
 
 export class ActionError extends Error {}
 
@@ -125,6 +128,17 @@ export function installRemote(app) {
   // A run's map: a nucleotide run's drawn from its protein view (collapse.js).
   function modelOf(run, results, condition, view = app.mapView ?? {}) {
     return buildMapModel(proteinView(results) ?? results, run.inputs.design, { condition, contrast: view.contrast ?? 0, rowOrder: view.rowOrder ?? 'biochemical', colorBy: view.colorBy ?? 'score' });
+  }
+
+  // A track as remote control describes it.
+  function trackData(t, notes = new Map()) {
+    const filters = trackFilters(t).map((f) => ({ filter: f.id, label: f.label, options: f.options }));
+    return {
+      id: t.id, label: t.label, kind: t.kind, shown: t.shown, annotation: t.annotation ?? null, source: t.source ?? null, summary: describeTrack(t),
+      filter: ws().tracks?.filters?.[t.id] ?? null, ...(t.filtered ? { filtered: t.filtered } : {}), filters,
+      ...(t.kind === 'variants' ? { variants: t.entries.length } : {}), ...(t.kind === 'features' ? { features: t.features.map((f) => ({ type: f.type, label: f.label, start: f.start, end: f.end })) } : {}),
+      ...(t.annotation ? { notes: notes.get(t.annotation) ?? [] } : {}),
+    };
   }
 
   // A run's differential scores in brief: per contrast, how they were made and how many differ.
@@ -724,6 +738,20 @@ export function installRemote(app) {
         const mapped = await mappedFor(app, run, row);
         if (mapped !== undefined) data.mapped = mapped;
       }
+      // Its annotations, from the tracks of the workspace's annotations (wave 3, slice 5).
+      if (ws().annotations?.length) {
+        const state = await runTrackState(app, run, { condition });
+        const position = v.proPosition ? v.proPosition[row] : v.position[row];
+        const seen = new Set();
+        data.annotations = [];
+        for (const key of [v.key[row], v.proKey?.[row]].filter(Boolean)) {
+          for (const item of annotationsOf(state.tracks.filter((t) => t.annotation), key, position)) {
+            if (seen.has(item.track.id)) continue;
+            seen.add(item.track.id);
+            data.annotations.push({ track: item.track.label, source: sourceText(item.track.source), text: item.text });
+          }
+        }
+      }
       const message = reasons
         ? `${data.variant} (${data.class}) is not scored: ${reasons.id === 'measured' ? 'not counted in every sample of any replicate' : `filtered at "${reasons.label}": ${reasons.reason}`}.`
         : `${data.variant} (${data.class}${data.protein ? `, ${data.protein}` : ''}): score ${data.score}${data.se === null ? '' : ` ± ${data.se} (95% CI ${data.ci95[0]} to ${data.ci95[1]})`}${c.published ? ' as published' : ` from ${data.replicatesUsed} of ${data.replicatesExpected} replicates`}${data.nucleotideVariants ? `, from ${data.nucleotideVariants.length} nucleotide variant${data.nucleotideVariants.length > 1 ? `s (${data.merged})` : ''}` : ''}${data.lowConfidence.length ? `; low confidence: ${data.lowConfidence.join('; ')}` : ''}.`;
@@ -761,8 +789,99 @@ export function installRemote(app) {
       return { message: lines.join(' '), data: { run: run.name, condition: model.contrast ? null : results.conditions[condition].name, ...(model.contrast ? { contrast: model.contrast.name } : {}), colorBy: model.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines } };
     },
 
+    // --- Tracks (wave 3, slice 5) -------------------------------------------------------------------
+
+    // The tracks beside a run's map, in order: each one's id, kind, source, whether shown, its
+    // filter and what it holds; the annotations that could not be read; what can be added.
+    async list_tracks(args) {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      const state = await runTrackState(app, run, { condition: resolveCondition(proteinView(results) ?? results, args.condition) });
+      const target = run.inputs.design.targets?.[0];
+      const source = ws().sources.find((x) => x.sha256 === run.inputs.source.sha256);
+      const origin = source?.origin?.database === 'MaveDB' ? { urn: source.origin.urn } : null;
+      const available = PROVIDERS.map((p) => ({ provider: p.id, name: p.name, kind: p.kind, what: p.what, ...(p.kind === 'public' ? { unavailable: p.needs(target, { origin }) } : {}) }));
+      const tracks = state.arranged.map((t) => trackData(t, state.notes));
+      const shown = tracks.filter((t) => t.shown).length;
+      return { message: `${run.name}: ${plural(tracks.length, 'track')}, ${shown} shown (${tracks.filter((t) => t.shown).map((t) => t.label).join(', ') || 'none'}).${state.problems.length ? ` Not read: ${state.problems.map((p) => `${p.annotation.name}: ${p.message}`).join(' ')}` : ''}`, data: { run: run.name, tracks, problems: state.problems.map((p) => ({ annotation: p.annotation.id, name: p.annotation.name, problem: p.message })), available } };
+    },
+
+    // Adds an annotation's tracks: from public data (provider: uniprot-features, pdbe-conservation,
+    // alphamissense, clinvar, gnomad, mavedb-annotations), or a file given as name and text (an
+    // alignment, a predictor's table, a custom track).
+    async add_track(args) {
+      const run = resolveRun(args.run);
+      await resultsOf(run);
+      let result;
+      if (args.text !== undefined) {
+        if (!args.name) throw new ActionError('Give the file\'s name with its text (name: "grb2-sh3.sto").');
+        result = await addFileTrack(app, run, { name: String(args.name), text: String(args.text) });
+      } else {
+        const id = choose(args.provider, PROVIDERS.filter((p) => p.kind === 'public').map((p) => p.id), 'provider');
+        result = await addPublicTrack(app, run, id, { quiet: true });
+      }
+      if (!result.ok) throw new ActionError(result.message);
+      await settle();
+      return { message: result.message, data: { annotation: result.id, name: result.name, tracks: result.tracks.map((t) => ({ label: t.label, kind: t.kind, summary: describeTrack(t) })), notes: result.notes } };
+    },
+
+    // Shows or hides a track, moves it (position from 1), or filters it: { types }, { classes,
+    // stars }, { min } (list_tracks names each track's filters and their options).
+    async set_track(args) {
+      const run = resolveRun(args.run);
+      await resultsOf(run);
+      const state = await runTrackState(app, run);
+      const ids = state.arranged.map((t) => t.id);
+      const labels = state.arranged.map((t) => t.label);
+      const ref = String(args.track ?? '');
+      const track = state.arranged.find((t) => t.id === ref) ?? state.arranged[labels.indexOf(choose(ref, labels, 'track'))];
+      const change = { id: track.id };
+      if (args.shown !== undefined) change.shown = Boolean(args.shown);
+      if (args.position !== undefined) {
+        const to = Number(args.position);
+        if (!Number.isInteger(to) || to < 1 || to > ids.length) throw new ActionError(`position is from 1 to ${ids.length}.`);
+        change.to = to - 1;
+      }
+      if (args.filter !== undefined) {
+        const offered = trackFilters(track);
+        const filter = {};
+        for (const [key, value] of Object.entries(args.filter ?? {})) {
+          const f = offered.find((x) => x.id === key);
+          if (!f) throw new ActionError(`${track.label} has ${offered.length ? `the filters ${offered.map((x) => x.id).join(', ')}` : 'no filter'}; not "${key}".`);
+          if (key === 'types' || key === 'classes') {
+            const list = (Array.isArray(value) ? value : [value]).map((v) => choose(v, f.options.map(String), key === 'types' ? 'kind of feature' : 'class'));
+            filter[key] = f.options.filter((o) => list.includes(String(o)));
+          } else if (key === 'stars') {
+            if (!f.options.includes(Number(value))) throw new ActionError('stars is from 0 to 4.');
+            filter.stars = Number(value);
+          } else if (key === 'min') {
+            if (!(Number(value) > 0)) throw new ActionError('min is a positive number.');
+            filter.min = Number(value);
+          }
+        }
+        change.filter = filter;
+      }
+      if (Object.keys(change).length === 1) throw new ActionError('Say what to change: shown, position or filter.');
+      arrangeTrack(app, state.tracks, change);
+      await settle();
+      const after = await runTrackState(app, run);
+      const now = after.arranged.find((t) => t.id === track.id);
+      return { message: `${now.label}: ${now.shown ? 'shown' : 'hidden'}, ${after.arranged.indexOf(now) + 1} of ${after.arranged.length}${now.filtered ? `, filtered: ${now.filtered}` : ''}.`, data: { track: trackData(now, after.notes), order: after.arranged.map((t) => t.id) } };
+    },
+
+    // Removes an annotation and its tracks (by its id or name).
+    async remove_track(args) {
+      const list = ws().annotations ?? [];
+      if (!list.length) throw new ActionError('The workspace has no annotation to remove.');
+      const ref = String(args.annotation ?? args.track ?? '').replace(/:.*$/, '');
+      const a = list.find((x) => x.id === ref) ?? list.find((x) => x.name === choose(ref, list.map((y) => y.name), 'annotation'));
+      removeTrack(app, a.id);
+      await settle();
+      return { message: `Removed ${a.name} and its tracks.`, data: { removed: a.id } };
+    },
+
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks'];
       const what = choose(args.what, kinds, 'export');
       let file;
       // The analysis package (wave 2, slice 10): of a run when named, else of the current run, else
@@ -802,7 +921,14 @@ export function installRemote(app) {
       const condition = resolveCondition(results, args.condition);
       if (what === 'map') {
         const model = modelOf(run, results, condition);
-        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results: proteinView(results) ?? results }), message: `${run.name}'s map (SVG).` };
+        const shown = (await runTrackState(app, run, { condition })).arranged.filter((t) => t.shown);
+        const tracks = shown.length && shown.every((t) => t.length === model.length) ? shown : [];
+        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results: proteinView(results) ?? results, tracks }), message: `${run.name}'s map (SVG)${tracks.length ? `, with ${plural(tracks.length, 'track')}` : ''}.` };
+      }
+      if (what === 'tracks') {
+        const state = await runTrackState(app, run, { condition });
+        const shown = state.arranged.filter((t) => t.shown);
+        return { file: tracksCSV(shown, state.model), message: `${run.name}'s tracks shown, position by position (CSV): ${shown.map((t) => t.label).join(', ') || 'none'}.` };
       }
       file = await runFile(app, run, what, condition);
       return { file: file.text, message: `${run.name}: ${what}.` };

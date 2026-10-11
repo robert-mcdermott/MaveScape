@@ -79,7 +79,7 @@ func testFetcher(t *testing.T, service *fakeService) (*fetcher, http.Handler) {
 	t.Helper()
 	upstream := newUpstream(permitOnly(service))
 	upstream.retries = []time.Duration{time.Millisecond, time.Millisecond}
-	f := &fetcher{mode: "on", cache: &diskCache{dir: t.TempDir(), maxAge: defaultCacheMaxAge}, remote: upstream, origins: map[string]string{"https://rest.uniprot.org": service.URL, "https://api.mavedb.org": service.URL, "https://eutils.ncbi.nlm.nih.gov": service.URL, "https://rest.ensembl.org": service.URL}, now: func() time.Time { return testNow }}
+	f := &fetcher{mode: "on", cache: &diskCache{dir: t.TempDir(), maxAge: defaultCacheMaxAge}, remote: upstream, origins: map[string]string{"https://rest.uniprot.org": service.URL, "https://api.mavedb.org": service.URL, "https://eutils.ncbi.nlm.nih.gov": service.URL, "https://rest.ensembl.org": service.URL, "https://www.ebi.ac.uk": service.URL, "https://alphafold.ebi.ac.uk": service.URL, "https://gnomad.broadinstitute.org": service.URL}, now: func() time.Time { return testNow }}
 	return f, fetcherMux(f)
 }
 
@@ -709,14 +709,16 @@ func TestMaveDBSearchPostsTheWords(t *testing.T) {
 
 // A MaveDB deposit stays on this computer (wave 3, slice 4): MaveScape writes it from what the
 // workspace holds and checks it itself, and none of the requests it can make sends variants to
-// MaveDB's validators (/hgvs/validate and the like) or writes to MaveDB (only searches are POSTed).
+// MaveDB's validators (/hgvs/validate and the like) or writes to MaveDB: of MaveDB's requests only
+// the search is POSTed; MaveDB's annotations of a published score set's variants (wave 3, slice
+// 5) are read with a GET. The only other POSTs are gnomAD's GraphQL queries, which read.
 func TestNoRequestSendsADepositToMaveDB(t *testing.T) {
 	for _, request := range publicRequests {
 		upstream := strings.ToLower(request.Upstream)
-		if request.Service == "MaveDB" && (strings.Contains(upstream, "/hgvs/") || strings.Contains(upstream, "validate") || strings.Contains(upstream, "/variants/data") || strings.HasSuffix(strings.TrimSuffix(upstream, "/"), "/score-sets") || strings.HasSuffix(strings.TrimSuffix(upstream, "/"), "/experiments")) {
+		if request.Service == "MaveDB" && (strings.Contains(upstream, "/hgvs/") || strings.Contains(upstream, "validate") || strings.HasSuffix(strings.TrimSuffix(upstream, "/"), "/score-sets") || strings.HasSuffix(strings.TrimSuffix(upstream, "/"), "/experiments")) {
 			t.Errorf("%s asks MaveDB %s", request.Route, request.Upstream)
 		}
-		if request.Method != "" && request.Method != "GET" && !strings.Contains(upstream, "/search") {
+		if request.Method != "" && request.Method != "GET" && !(request.Service == "MaveDB" && strings.HasSuffix(upstream, "/score-sets/search")) && request.Upstream != gnomadAPI {
 			t.Errorf("%s sends a %s to %s", request.Route, request.Method, request.Upstream)
 		}
 	}

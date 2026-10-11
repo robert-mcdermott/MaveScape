@@ -30,6 +30,18 @@
   --map-empty: #c8c6c2;
   --map-hatch: #6e6c68;
   --map-low: 110, 110, 110;
+  /* The sequence tracks (lib/track-render.js): ClinVar's classes in Okabe–Ito's colors. */
+  --track-bar: #5b6b8c;
+  --track-feature: #0f8f7c;
+  --track-on-feature: #ffffff;
+  --track-helix: #cc5f8e;
+  --track-strand: #d99a1e;
+  --track-turn: #5aa6d9;
+  --track-pathogenic: #d55e00;
+  --track-conflicting: #a05ba8;
+  --track-uncertain: #e0b000;
+  --track-benign: #0072b2;
+  --track-other: #9a9a9a;
   --active: #eceefe;
   --line: #e3e7ef;
   --line-strong: #d0d6e2;
@@ -67,6 +79,17 @@
   --map-empty: #3b3e45;
   --map-hatch: #9a9ca3;
   --map-low: 70, 74, 82;
+  --track-bar: #8d9bbd;
+  --track-feature: #1fb39c;
+  --track-on-feature: #08130f;
+  --track-helix: #e07aa6;
+  --track-strand: #e8b13f;
+  --track-turn: #7cc0ec;
+  --track-pathogenic: #ef7a2d;
+  --track-conflicting: #c58bcc;
+  --track-uncertain: #f0c93a;
+  --track-benign: #4ea3e0;
+  --track-other: #9a9ca3;
   --active: #232a45;
   --line: #222a38;
   --line-strong: #2e3849;
@@ -967,3 +990,22 @@ details.keywords summary { cursor: pointer; font-size: 12.5px; font-weight: 600;
 .keyword-row { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; margin: 4px 0; }
 .keyword-row select.input.small { width: 100%; }
 @media (max-width: 640px) { .keyword-row { grid-template-columns: 1fr; } }
+
+/* Sequence tracks (wave 3, slice 5; ui/tracks.js). */
+details.tracks-panel { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+details.tracks-panel > summary { cursor: pointer; font-weight: 600; font-size: 12.5px; display: flex; gap: 6px; align-items: center; }
+.track-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.track-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 5px 8px; border-radius: var(--radius-sm); }
+.track-row:hover { background: var(--hover); }
+.track-name { display: inline-flex; gap: 8px; align-items: center; font-size: 12.5px; min-width: 0; }
+.track-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-actions { display: inline-flex; gap: 2px; }
+.track-actions .icon-button { width: 26px; height: 26px; font-size: 13px; }
+.track-source { grid-column: 1 / -1; margin: 0 0 0 26px; font-size: 11.5px; color: var(--text-3); overflow-wrap: anywhere; }
+.track-filters { grid-column: 1 / -1; margin-left: 26px; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 11.5px; }
+.track-checks { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
+.track-checks label { display: inline-flex; gap: 4px; align-items: center; }
+details.track-notes { grid-column: 1 / -1; margin-left: 26px; font-size: 11.5px; color: var(--text-2); }
+details.track-notes summary { cursor: pointer; }
+details.track-notes ul { margin: 2px 0 0; padding-left: 16px; }
+dl.kv.annotations dd { white-space: normal; }

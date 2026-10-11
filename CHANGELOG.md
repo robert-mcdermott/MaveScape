@@ -125,6 +125,35 @@ this section grows with each.
   read from MaveDB records and GenBank records' `/db_xref="taxon:…"`.
 - The guide's *Depositing in MaveDB* (Exports and the record), `mavescape export` (Scripting), and
   a screenshot of the deposit dialog; the GRB2 example's guide prepares a deposit.
+- **Sequence tracks beside the map (wave 3, slice 5).** Below the map, on its positions and
+  moving with it, *Tracks* lines up what else is known about each position: hover a track for what
+  it holds there, click it to select that position's variants (a domain's, every position it
+  covers). From public data, by the target's accession or gene only: UniProt's features (domains
+  and regions, sites and motifs, secondary structure), conservation from PDBe-KB's profile of the
+  protein's homologues, AlphaMissense's pathogenicity of every substitution (human proteins),
+  ClinVar's classifications with their review status as stars, gnomAD v4's allele frequencies
+  (exomes and genomes joined), and, for a run of a MaveDB record, MaveDB's own join of ClinVar and
+  gnomAD to its variants. From a file: an alignment (A3M, FASTA, Stockholm, Clustal), scored as
+  Capra and Singh's `score_conservation.py` scores it (Proteoscope's `conservation.js`); a
+  predictor's scores (AlphaMissense's, EVE's, ESM1b's downloads, or any table of protein variants
+  and scores); a custom track (GFF3, or a table of values by position or of stretches). The run's
+  own tracks (reference, coverage, position effect, uncertainty) are there to show. Each track can
+  be shown, hidden, moved, filtered (features by kind; ClinVar by class and review status; gnomAD
+  by frequency) or removed, and names its source: the service, release and retrieval date, or the
+  file. An annotation numbered on a reference is placed by the target's offset where the target has
+  the residues it names, and refused, saying why, when they disagree. Annotations are kept with the
+  workspace and its archive (their files by SHA-256), so they reopen offline; the methods name and
+  cite each. The inspector shows a variant's annotations; the map exports (SVG, PNG) carry the
+  tracks shown, and the tracks export as a table (CSV). Annotation providers sit behind one
+  interface (`web/lib/providers/`). Alignments and GFF3 files can be dropped on the window. Remote
+  actions `list_tracks`, `add_track`, `set_track`, `remove_track`, `export` of `tracks`;
+  `inspect_variant` gives `annotations`.
+- New requests through the fetcher: UniProt's features of an entry, PDBe-KB's conservation
+  profile, AlphaFold DB's AlphaMissense table, ClinVar's search and summaries (NCBI E-utilities),
+  gnomAD's gene and transcript (its GraphQL API), MaveDB's annotations of a score set's variants
+  (wave 3, slice 5); [`docs/NETWORK.md`](docs/NETWORK.md) lists each and what it sends.
+- The guide's *Tracks* (The map) and *Annotations beside the map* (Public data), and a screenshot
+  of the GRB2 example's tracks; the GRB2 example's guide adds tracks to its map.
 - **The Network dialog** (the status bar's *Public data*): the services MaveScape may contact,
   what it asks each, the cache's folder, and what the cache holds.
 - The guide page *Public data*; the GRB2 example's guide checks its target against UniProt; a
@@ -155,6 +184,10 @@ this section grows with each.
   2026-10-10 (one assay method added) (wave 3, slice 4).
 - The program opens a MaveDB package's JSON files (`score_set.json`, `experiment.json`,
   `score_columns.json`, `count_columns.json`) with its tables, from a folder too (wave 3, slice 4).
+- A run's `export` of the map (SVG) carries the tracks shown; the map's description names them
+  (wave 3, slice 5). With no track shown, the map and its exports are as before.
+- `conservation.js`, copied from Proteoscope, uses `dmath.js`'s log and exp, so its scores do not
+  depend on the JavaScript engine (wave 3, slice 5).
 
 ### Validation
 
@@ -214,6 +247,24 @@ this section grows with each.
   written. Headless runs (29 checks): `mavescape export` twice the same bytes, as Node writes the
   deposit from the archive; `--strict`, `--details`, a folder per condition, `--format tables` the
   same bytes as `mavescape run` wrote, and wrong command lines.
+- `annotations` validation suite (12 checks; wave 3, slice 5): conservation from an alignment
+  (Pfam's SH3 seed with the human GRB2 SH3 first) as Capra and Singh's `score_conservation.py`
+  scores it (within 5 × 10⁻¹³; `reference/annotations.json`, `generate_annotations.py`; the tool is
+  GPL, used only as an external reference), and PDBe-KB's profiles as its divergence gives them
+  (1,382 positions, within 4 × 10⁻¹⁶); UniProt's features the same from its JSON and its GFF3;
+  AlphaMissense's every substitution of GRB2 and factor IX as AlphaFold DB's tables give it;
+  ClinVar's records of GRB2 and F9 (553) read with their own classification and review status;
+  gnomAD's frequencies of BRCA1's variants equal MaveDB's own join of gnomAD to its saturation
+  genome editing score set (41 of 41); MaveDB's annotations joined to the BRCA1 example's run by
+  accession; seven annotations kept through an archive, the same tracks; the tracks' table read
+  back; what each provider asks the fetcher; and the GRB2 example as its guide says.
+- Go tests: each new request asks what NETWORK.md says, is cached under its own name, and refuses
+  anything but public identifiers before a byte is sent; gnomAD's GraphQL errors read as "not
+  found" or refused, never cached.
+- The remote-control session (105 checks): the tracks added offline from the cached answers and
+  from files, shown, moved and filtered (not in the history), a variant's annotations, and the
+  tracks' table and the map with its tracks the same bytes as Node's from the archive; the methods
+  cite each source. Unit tests: `tracks.test.mjs`, `providers.test.mjs`, `conservation.test.mjs`.
 
 ## 0.2.0 (2026-10-10)
 

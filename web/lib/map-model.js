@@ -182,6 +182,8 @@ export function buildMapModel(results, design, options = {}) {
     if (vals.length) columnMedian[p - 1] = median(vals);
   }
   const rowMedian = Float64Array.from(rowValues, (vals) => (vals.length ? median(vals) : Number.NaN));
+  // The score of no effect, whatever the map is colored by: the wild type's (0 for a contrast).
+  const scoreCenter = differential ? 0 : Number.isFinite(wt) ? wt : (c.rescale?.anchors.find((a) => a.what === 'wild type')?.to ?? 0);
   return {
     target: { id: target.id, name: target.name, offset: target.offset ?? 0 },
     protein,
@@ -203,6 +205,7 @@ export function buildMapModel(results, design, options = {}) {
     value,
     columnMedian,
     columnCount,
+    scoreCenter,
     rowMedian,
     counts,
     offMap,

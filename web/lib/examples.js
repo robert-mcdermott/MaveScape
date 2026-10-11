@@ -28,11 +28,12 @@ export const EXAMPLES = [
       'Nonsense variants score about −4.6 against the wild type\'s 0: the assay separates loss of function cleanly.',
       'The least tolerant positions are buried hydrophobic and glycine residues of the fold (A163, G196, G203, I183 on GRB2\'s numbering).',
       'Checked against UniProt, the domain is residues 159–214 of P62993, identical: the offset of 158 the design gives.',
+      'Beside the map, AlphaMissense calls the eight least tolerant positions likely pathogenic (a mean above 0.9 each), while conservation follows the position effects only in part (Spearman ρ about −0.4): abundance is not all a residue is conserved for.',
     ],
     steps: [
       ['qc', 'Read the QC findings. Open "Variance beyond counting" and its plot: replicate differences sit above the dashed line of counting noise, in parallel, as a bottleneck does. DiMSum\'s terms below it show where: the inputs.'],
       ['score', 'In Score, the run with MaveScape\'s defaults is ready. Run it again with the DiMSum-compatible preset: its error model carries the bottleneck into every SE. Compare the runs\' tables of replicates.'],
-      ['map', 'Open the map. The darkest columns are the positions that tolerate nothing; click a cell to see its replicates in the inspector. Shift-drag over a stretch of positions, save the selection, and export the map as SVG.'],
+      ['map', 'Open the map. The darkest columns are the positions that tolerate nothing; click a cell to see its replicates in the inspector. Below it, Tracks, "Add a track": UniProt\'s features, conservation (PDBe-KB) and AlphaMissense line up with the positions, asked for by GRB2\'s accession only. Shift-drag over a stretch, save the selection, and export the map with its tracks as SVG.'],
       ['experiment', 'In Experiment, Target, "Check against UniProt" fetches GRB2\'s entry (P62993) through the MaveScape program and finds the SH3 domain at positions 159–214, identical: the design\'s offset is the entry\'s. "Record the check" keeps the release and the date with the workspace, and the methods cite them. Only the accession is sent.'],
       ['score', 'From the run\'s Export menu, "Deposit in MaveDB" writes the run as MaveDB takes a score set: the scores and counts, what each column is, and the experiment and score set, the methods as the analysis and the readout as the MAVE minimum information\'s keywords. It names what MaveDB still requires (an abstract): give it there, and download the package.'],
       ['experiment', 'In Experiment, read "What the analysis can do": the published counts do not say how the library was made or how many cells were carried into selection. With the cells recorded, QC would check the bottleneck it finds against them.'],

@@ -295,6 +295,20 @@ const scenes = {
     await act('inspect_variant', { variant: 'p.Trp36Ala' });
     await sleep(600);
   },
+  // Sequence tracks (wave 3, slice 5): GRB2's map with UniProt's features, conservation (PDBe-KB's
+  // and an alignment's), AlphaMissense, ClinVar and gnomAD below it, from the cached answers; the
+  // Tracks panel; a variant's annotations in the inspector.
+  async 'map-tracks'() {
+    await example('grb2-sh3');
+    for (const provider of ['uniprot-features', 'pdbe-conservation', 'alphamissense', 'clinvar', 'gnomad']) await act('add_track', { provider });
+    await act('add_track', { name: 'grb2-sh3.sto', text: readFileSync(join(ROOT, 'validation/fixtures/annotations/grb2-sh3.sto'), 'utf8') });
+    await act('set_track', { track: 'Conservation (grb2-sh3.sto)', position: 9 });
+    await act('render_map', { color_by: 'score', rows: 'biochemical' });
+    await act('inspect_variant', { variant: 'p.Trp36Ala' });
+    await clearToasts();
+    await scrollTo('.map-pane .map-legend', 'start');
+    await sleep(800);
+  },
   // A position selected and saved, on the map zoomed in.
   async 'map-selection'() {
     await example('grb2-sh3');

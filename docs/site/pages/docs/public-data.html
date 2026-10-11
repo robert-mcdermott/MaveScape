@@ -1,10 +1,10 @@
 ---
 title: Public data
-description: What MaveScape fetches from public services (MaveDB's score sets, UniProt's entries, NCBI's and Ensembl's transcripts; annotations to come), what it sends, the cache and its records, opening a published score set from MaveDB (its target a sequence or a transcript, one of several targets, its variants mapped to the human reference), checking a target against its UniProt entry, and working offline.
+description: What MaveScape fetches from public services (MaveDB's score sets, UniProt's entries and features, NCBI's and Ensembl's transcripts, ClinVar, gnomAD, AlphaMissense and PDBe-KB's conservation as tracks beside the map), what it sends, the cache and its records, opening a published score set from MaveDB (its target a sequence or a transcript, one of several targets, its variants mapped to the human reference), checking a target against its UniProt entry, and working offline.
 lede: Your files never leave your computer. MaveScape reaches the internet only for public data, such as a score set published in MaveDB or a protein's UniProt entry, through a fixed list of services, sending public identifiers. Each answer is cached with where and when it came from, so it works offline and the record says which version you used.
 ---
       <h2 id="how">How MaveScape fetches</h2>
-      <p>The page in your window asks the MaveScape program, and nothing else. The program asks the services on one list, and checks every request against it as it is sent, redirects included: MaveDB, UniProt, NCBI and Ensembl now; RCSB PDB, PDBe, AlphaFold DB and gnomAD as later versions use them. Requests carry accessions and URNs. One that would send a sequence is made only after you have seen it and confirmed it.</p>
+      <p>The page in your window asks the MaveScape program, and nothing else. The program asks the services on one list, and checks every request against it as it is sent, redirects included: MaveDB, UniProt, NCBI (RefSeq, GenBank and ClinVar), Ensembl, PDBe-KB, AlphaFold DB and gnomAD; RCSB PDB as a later version uses it. Requests carry accessions, URNs and gene symbols. One that would send a sequence is made only after you have seen it and confirmed it.</p>
       <p>The status bar's <strong>Public data</strong> opens the Network dialog: the services MaveScape may contact, what it asks each, where its cache is, and what the cache holds. <a href="{{github}}/blob/main/docs/NETWORK.md">NETWORK.md</a> lists every request, what it sends and what it is for.</p>
 
       <h2 id="mavedb">Opening a score set from MaveDB</h2>
@@ -45,12 +45,29 @@ lede: Your files never leave your computer. MaveScape reaches the internet only 
       <p>The placement allows a few residues to hang over either end, as a tag or a linker does, and says so. If fewer than 80% of the target's residues agree wherever it is placed, the entry is another protein or isoform, and nothing changes. A short or repeated target may fit equally well at several places; then the offset is left for you to set.</p>
       <p>An inactive accession (merged, split or deleted) is reported with the entries that replaced it.</p>
 
+      <h2 id="annotations">Annotations beside the map</h2>
+      <p>The Map view's <strong>Tracks</strong> (<a href="map.html#tracks">The map</a>) adds what public data say about the target's positions and variants, each asked for by a public identifier:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Track</th><th>From</th><th>Sent</th></tr></thead>
+          <tbody>
+            <tr><td>Domains and regions, sites and motifs, secondary structure</td><td>UniProt's features of the entry (CC BY 4.0)</td><td>the UniProt accession</td></tr>
+            <tr><td>Conservation</td><td>PDBe-KB's profile of the protein's homologues (3DPatch, HMMER), each position scored as the Jensen–Shannon divergence of its amino acids from the background</td><td>the UniProt accession</td></tr>
+            <tr><td>AlphaMissense</td><td>AlphaFold DB's table of every substitution's pathogenicity, for human proteins (CC BY 4.0; not for clinical use)</td><td>the UniProt accession</td></tr>
+            <tr><td>ClinVar</td><td>NCBI's records of the gene's missense, nonsense and synonymous variants: classification and review status</td><td>the gene's symbol, then ClinVar's record numbers</td></tr>
+            <tr><td>gnomAD</td><td>gnomAD v4's variants of the gene's MANE Select transcript: allele counts, exomes and genomes joined (CC0)</td><td>the gene's symbol, then the transcript</td></tr>
+            <tr><td>ClinVar, gnomAD (MaveDB)</td><td>MaveDB's own join of ClinVar's latest release and gnomAD to a score set's variants, for a run of a MaveDB record</td><td>the URN</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>An annotation is placed on the target by its offset, and only where the target has the residues it names, so a wrong offset is said rather than drawn. What it holds is kept with the workspace, with the service, release and date it was retrieved, and opens again offline. AlphaFold DB lists an alignment for each entry but has refused to send them since 2026; conservation comes from PDBe-KB's profile, or from your own alignment.</p>
+
       <h2 id="sequence">Finding a target by its sequence</h2>
       <p>A target with no accession can be looked up by its sequence: <strong>Find in UniProt by sequence…</strong> asks UniProt for the entries with exactly the target's protein sequence. This request sends the sequence, which may be unpublished, so MaveScape first shows the request it would make, sequence included, and sends it only if you click <strong>Send it</strong>. Nothing else goes with it: not the target's name, nor your counts or design. The matches are listed, reviewed entries first; <strong>Check</strong> on one goes on as above.</p>
       <p>Only identical sequences match. A domain, a fragment or a construct with changes is found by its protein's accession instead: type it in the UniProt field and check against it. A lookup is cached, so the same one is never sent twice.</p>
 
       <h2 id="cache">The cache and its records</h2>
-      <p>Each answer is cached with its retrieval record: the service, the address it came from, when it was retrieved and last confirmed, and the release (UniProt's, such as <code>2026_03</code>). A copy is used without asking while it is young (a MaveDB table, a UniProt entry, an NCBI or Ensembl record for 30 days, a MaveDB record or its mapped variants for 7, a search for one); an older one is checked with the service and confirmed unchanged or replaced. If the service cannot be reached, the older copy is used and the dialog says so. A score set opened once opens again offline.</p>
+      <p>Each answer is cached with its retrieval record: the service, the address it came from, when it was retrieved and last confirmed, and the release (UniProt's, such as <code>2026_03</code>). A copy is used without asking while it is young (a MaveDB table, a UniProt entry, an NCBI or Ensembl record, AlphaMissense's table, PDBe-KB's profile and gnomAD's variants for 30 days, a MaveDB record, its mapped variants and ClinVar's records for 7, a search for one); an older one is checked with the service and confirmed unchanged or replaced. If the service cannot be reached, the older copy is used and the dialog says so. A score set opened once opens again offline.</p>
       <p>The cache is in <code>~/Library/Caches/MaveScape</code> on macOS, <code>~/.cache/MaveScape</code> on Linux and <code>%LocalAppData%\MaveScape</code> on Windows; <code>--cache-dir</code> moves it. To empty it, delete the folder. Its layout and records are in <a href="{{github}}/blob/main/docs/FORMATS.md#the-cache-of-public-data">FORMATS.md</a>.</p>
 
       <h2 id="offline">Offline, or off</h2>
@@ -62,3 +79,5 @@ lede: Your files never leave your computer. MaveScape reaches the internet only 
       <div class="code wrap"><pre><code><span class="prompt">$ </span>curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "open_mavedb", "args": {"urn": "urn:mavedb:00000835-a-1"}}'</code></pre></div>
       <p>The <code>check_target</code> action does the check for a script (<a href="scripting.html#actions">Remote control</a>): it returns where the target sits, the differences and the changes, and with <code>apply</code> uses them and records the check. It sends only the accession; no action sends a sequence.</p>
       <div class="code wrap"><pre><code><span class="prompt">$ </span>curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "check_target", "args": {"apply": true}}'</code></pre></div>
+      <p><code>add_track</code> adds an annotation's tracks, from public data (<code>provider</code>: <code>uniprot-features</code>, <code>pdbe-conservation</code>, <code>alphamissense</code>, <code>clinvar</code>, <code>gnomad</code>, <code>mavedb-annotations</code>) or a file's text; <code>list_tracks</code>, <code>set_track</code> and <code>remove_track</code> list, arrange and remove them.</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "add_track", "args": {"provider": "clinvar"}}'</code></pre></div>

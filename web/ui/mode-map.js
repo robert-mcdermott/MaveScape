@@ -6,7 +6,9 @@
 // and PNG. The map is described in words, and every cell is in the table below it. A nucleotide
 // run is drawn from its protein view (collapse.js); every variant not on the map (frameshifts,
 // splice-site, intronic and UTR variants, insertions, deletions, multi-variants) is in a table
-// beside it (wave 3, slice 3).
+// beside it (wave 3, slice 3). Sequence tracks below the grid (ui/tracks.js; wave 3, slice 5): the
+// run's own and the workspace's annotations, arranged in the Tracks panel, in the exports and in
+// words.
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { promptDialog, showMenu, toast } from './overlays.js';
@@ -20,6 +22,8 @@ import { addSelection, removeSelection } from '../lib/workspace.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { mountVariantMap } from './variant-map.js';
 import { exportSelection } from './record.js';
+import { annotationsSignature, exportTracks, runTracks, tracksPanel } from './tracks.js';
+import { arrangeTracks, describeTrack, describeTrackAt, sourceText } from '../lib/tracks.js';
 
 // Named by their colors only: which end is loss of function depends on the assay (the readout).
 const PALETTES = [['rdbu', 'Blue (lower) – red (higher)'], ['puor', 'Purple (lower) – orange (higher)']];
@@ -40,6 +44,11 @@ export function mountMapMode(app, container) {
   let own = null;
   let run = null;
   let cellOfKey = new Map();
+  // The tracks read for the model shown: { run, model, all, tracks (arranged), problems, notes }.
+  let trackState = null;
+  let tracksToken = 0;
+  const panel = tracksPanel(app);
+  const shownTracks = () => (trackState && trackState.model === model ? trackState.tracks.filter((t) => t.shown) : []);
 
   function currentRun() {
     const ws = store.ws;
@@ -92,13 +101,50 @@ export function mountMapMode(app, container) {
     renderSelectionBar();
   }
 
+  // A click on a track selects the variants of its position (a feature's: every position it covers).
+  function onTrackClick(track, position, add) {
+    const spans = track.kind === 'features' ? track.features.filter((f) => position >= f.start && position <= f.end).map((f) => [f.start, f.end]) : [];
+    if (!spans.length) spans.push([position, position]);
+    const R = model.rows.length;
+    const cells = new Set(add ? selectionCells() : []);
+    for (const [a, b] of spans) {
+      for (let p = a; p <= b; p += 1) {
+        for (let r = 0; r < R; r += 1) {
+          const k = (p - 1) * R + r;
+          if (model.state[k] === STATE.SCORED || model.state[k] === STATE.LOW || model.state[k] === STATE.FILTERED) cells.add(k);
+        }
+      }
+    }
+    map?.setSelection([...cells]);
+    onSelect(cells, null);
+  }
+
+  const trackWordsEl = h('div');
+  // Reads the run's tracks (its own at once, the annotations' from the library) and shows them.
+  async function refreshTracks() {
+    const token = (tracksToken += 1);
+    const r = run;
+    const m = model;
+    const state = await runTracks(app, r, m);
+    if (token !== tracksToken || m !== model) return;
+    trackState = { run: r, model: m, all: state.tracks, tracks: arrangeTracks(state.tracks, store.ws.tracks), problems: state.problems, notes: state.notes, signature: annotationsSignature(store.ws) };
+    app.trackStates ??= new Map();
+    app.trackStates.set(r.id, trackState);
+    map?.setTracks(shownTracks());
+    panel.update(trackState);
+    clear(trackWordsEl);
+    const shown = shownTracks();
+    if (shown.length) trackWordsEl.append(h('p.map-description', `Tracks below the map: ${shown.map((t) => describeTrack(t)).join(' ')}`));
+    if (store.ui.focus?.kind === 'variant') store.notify(['tracks']);
+  }
+
   // --- Export ------------------------------------------------------------------------------------
   const fileBase = () => `${(model.target.name || 'map').replace(/[^\w.-]+/g, '_')}${results.conditions.length > 1 ? `_${model.condition.name.replace(/[^\w.-]+/g, '_')}` : ''}${model.contrast ? '_differential' : ''}_${run.name.replace(/\s+/g, '')}`;
   function exportSVG() {
-    downloadBlob(new Blob([mapSVG(model, { palette: view.palette, results })], { type: 'image/svg+xml' }), `${fileBase()}.svg`);
+    downloadBlob(new Blob([mapSVG(model, { palette: view.palette, results, tracks: shownTracks() })], { type: 'image/svg+xml' }), `${fileBase()}.svg`);
   }
   async function exportPNG() {
-    const svg = mapSVG(model, { palette: view.palette, results });
+    const svg = mapSVG(model, { palette: view.palette, results, tracks: shownTracks() });
     const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
     try {
       const img = new Image();
@@ -142,6 +188,7 @@ export function mountMapMode(app, container) {
       h('button.btn.small', { type: 'button', onclick: (event) => showMenu(event.currentTarget, [
         { label: 'SVG (vector, for figures)', icon: 'download', onSelect: exportSVG },
         { label: 'PNG (3× resolution)', icon: 'download', onSelect: exportPNG },
+        { label: 'The tracks shown (CSV)', icon: 'download', disabled: !shownTracks().length, onSelect: () => exportTracks(app, run, model, shownTracks()) },
       ]) }, icon('download'), 'Export'));
   }
 
@@ -312,7 +359,10 @@ export function mountMapMode(app, container) {
     const key = `${run.id}|${model.contrast ? `Δ${view.contrast}` : view.condition}`;
     if (!map || mapKey !== key) {
       destroyMap();
-      map = mountVariantMap({ model, palette: view.palette, selected: [], describe: describeCell, onSelect });
+      map = mountVariantMap({
+        model, palette: view.palette, selected: [], describe: describeCell, onSelect, onTrackClick,
+        describeTrack: (t, p) => (p ? describeTrackAt(t, p, model.target.offset) : `${t.label}${t.source ? `: ${sourceText(t.source)}` : ''}`),
+      });
       mapKey = key;
       // Remote control zooms the map shown (ui/remote.js, render_map).
       app.mapControl = map;
@@ -322,8 +372,8 @@ export function mountMapMode(app, container) {
     map.setSelection(selectionCells());
     const description = describeMap(model, results);
     root.append(h('div.view-body.map-body',
-      h('div.pane.map-pane', controls(), legendEl, map.el, selectionEl),
-      h('div.pane', h('h3', icon('info'), 'In words'), ...description.map((line) => h('p.map-description', line)),
+      h('div.pane.map-pane', controls(), legendEl, map.el, selectionEl, panel.el),
+      h('div.pane', h('h3', icon('info'), 'In words'), ...description.map((line) => h('p.map-description', line)), trackWordsEl,
         offMapEl,
         h('details', h('summary', 'Every cell as a table'), tableEl))));
     map.el.setAttribute('aria-description', description.join(' '));
@@ -331,6 +381,7 @@ export function mountMapMode(app, container) {
     renderSelectionBar();
     renderTable();
     renderOffMap();
+    refreshTracks();
   }
   function destroyMap() {
     map?.destroy();

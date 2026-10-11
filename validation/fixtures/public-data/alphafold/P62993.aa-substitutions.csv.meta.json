@@ -1,0 +1,8 @@
+{
+  "contentType": "text/csv; charset=utf-8",
+  "service": "AlphaFold DB",
+  "source": "https://alphafold.ebi.ac.uk/files/AF-P62993-F1-aa-substitutions.csv",
+  "retrieved": "2026-10-11T15:14:17Z",
+  "etag": "\"dbdddd1e059fd3977fe02c56fe25efbb\"",
+  "lastModified": "Tue, 30 Sep 2025 16:25:17 GMT"
+}

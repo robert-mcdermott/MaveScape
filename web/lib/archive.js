@@ -5,7 +5,8 @@
 //   workspace.json         the workspace document (targets, design, runs, selections, QC
 //                          thresholds, the hash-chained history)
 //   sources/<sha256>.<ext> the imported tables, byte for byte (left out when exported with
-//                          checksums only: the workspace names each by its SHA-256)
+//                          checksums only: the workspace names each by its SHA-256), and the files
+//                          of the annotations beside the map (always: wave 3, slice 5)
 //   results/<run>.csv      each run's scores (one file per condition beyond the first)
 //   methods.md, references.bib   the latest run's methods and references
 //
@@ -33,14 +34,21 @@ const extension = (fileName) => {
 };
 
 // Writes the archive. options: { software: { version, commit }, sources: Map(sha256 → bytes) or
-// null for checksums only, results: Map(run id → results) (runs without results are left out of
-// results/), methods: { markdown, bibtex } }. Returns { bytes, manifest }.
+// null for checksums only, annotations: Map(sha256 → bytes) of the annotations' files, results:
+// Map(run id → results) (runs without results are left out of results/), methods: { markdown,
+// bibtex } }. Returns { bytes, manifest }.
 // The files of a source the library keeps: its tables, and MaveDB's mapped variants beside them
 // (wave 3, slice 3).
 export function sourceFiles(source) {
   const tables = source.files?.length ? source.files : [{ sha256: source.sha256, fileName: source.fileName }];
   const mapped = source.origin?.mapped ? [{ sha256: source.origin.mapped.sha256, fileName: source.origin.mapped.fileName }] : [];
   return [...tables, ...mapped];
+}
+
+// The files of the workspace's annotations (ws.annotations: public data as kept, or the person's
+// files; wave 3, slice 5).
+export function annotationFiles(ws) {
+  return (ws.annotations ?? []).filter((a) => a.file?.sha256).map((a) => ({ sha256: a.file.sha256, fileName: a.file.fileName, name: a.name }));
 }
 
 export async function writeArchive(ws, options = {}) {
@@ -56,6 +64,16 @@ export async function writeArchive(ws, options = {}) {
         if (!bytes) throw new Error(`The table ${f.fileName ?? source.name} (SHA-256 ${f.sha256.slice(0, 12)}…) is not in the library: export with checksums only, or open it again.`);
         files.push({ name: `sources/${f.sha256}${extension(f.fileName ?? source.fileName)}`, data: bytes });
       }
+    }
+  }
+  {
+    const seen = new Set(files.map((f) => f.name.slice(8, 72)));
+    for (const f of annotationFiles(ws)) {
+      if (seen.has(f.sha256)) continue;
+      seen.add(f.sha256);
+      const bytes = options.annotations?.get(f.sha256) ?? options.sources?.get(f.sha256);
+      if (!bytes) throw new Error(`The annotation ${f.name} (${f.fileName}) is not in the library: remove it, or add it again.`);
+      files.push({ name: `sources/${f.sha256}${extension(f.fileName)}`, data: bytes });
     }
   }
   for (const run of ws.runs) {
@@ -168,6 +186,7 @@ export async function readArchive(bytes, limits = LIMITS) {
   if (manifest.sources === 'included') {
     for (const s of ws.sources) for (const f of sourceFiles(s)) if (!sources.has(f.sha256)) problems.push(`The table ${f.fileName ?? s.name} is not in the archive.`);
   }
+  for (const f of annotationFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The annotation ${f.name}'s file (${f.fileName}) is not in the archive: its tracks will not show.`);
   const results = new Map([...files].filter(([n]) => n.startsWith('results/')).map(([n, d]) => [n, decoder.decode(d)]));
   const methods = files.has('methods.md') ? { markdown: decoder.decode(files.get('methods.md')), bibtex: files.has('references.bib') ? decoder.decode(files.get('references.bib')) : '' } : null;
   return { manifest, ws, sources, results, methods, problems };

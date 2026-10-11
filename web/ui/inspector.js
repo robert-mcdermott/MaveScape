@@ -144,7 +144,7 @@ export function mountInspector(app) {
       render();
     },
     update(topics) {
-      if (topics.has('ws') || topics.has('focus') || topics.has('selection') || topics.has('results') || topics.has('workspace-loaded')) render();
+      if (topics.has('ws') || topics.has('focus') || topics.has('selection') || topics.has('results') || topics.has('workspace-loaded') || topics.has('tracks')) render();
     },
   };
 }

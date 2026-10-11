@@ -1,0 +1,6 @@
+{
+  "contentType": "application/json",
+  "service": "NCBI E-utilities",
+  "source": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=clinvar\u0026id=4673731,4426949,4426947,4266715,4032142,3855614,3855613,3855612,2229783,778748\u0026retmode=json\u0026tool=mavescape",
+  "retrieved": "2026-10-11T15:14:31Z"
+}
