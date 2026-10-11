@@ -78,7 +78,11 @@ export function writeMethods(ws, run, options = {}) {
   // The data.
   const summary = source?.summary;
   const data = [];
-  data.push(`Variant counts were read from ${run.inputs.source.name} (SHA-256 ${run.inputs.source.sha256}${run.inputs.source.rows ? `; ${run.inputs.source.rows} rows` : ''}).`);
+  const published = p.model === 'published';
+  data.push(`${published ? 'Published scores' : 'Variant counts'} were read from ${run.inputs.source.name} (SHA-256 ${run.inputs.source.sha256}${run.inputs.source.rows ? `; ${run.inputs.source.rows} rows` : ''}).`);
+  // A table retrieved from MaveDB (wave 3, slice 2): which record and file, and when.
+  const origin = source?.origin;
+  if (origin?.database === 'MaveDB') data.push(`The table is MaveDB's ${origin.file} of ${origin.urn}${origin.license ? ` (${origin.license})` : ''}, retrieved ${String(origin.retrieved ?? '').slice(0, 10)}.`);
   if (summary) {
     const kinds = Object.entries(summary.byKind ?? {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n} ${k}`).join(', ');
     data.push(`Variant identifiers in the ${design.variants.column} column were read as MAVE-HGVS, MaveDB's nomenclature ${cite('mavedb')}${run.inputs.mapping.mode === 'lenient' ? ', accepting common legacy forms,' : ' (strict),'} and checked against the target: ${summary.valid} valid${summary.warning ? `, ${summary.warning} read leniently` : ''}${summary.invalid ? `, ${summary.invalid} not valid (not scored)` : ''}${kinds ? ` (${kinds})` : ''}.`);
@@ -102,7 +106,15 @@ export function writeMethods(ws, run, options = {}) {
 
   // Scoring.
   const scoring = [];
-  if (p.model === 'dimsum') {
+  if (published) {
+    // Published scores (wave 3, slice 2): read, not computed.
+    const sc = design.scores ?? {};
+    const f = p.filters;
+    const left = [f.maxSE !== null ? `SE above ${f.maxSE}` : null, f.excludeKinds.length ? `classes ${f.excludeKinds.join(', ')}` : null, f.exclude.length ? `${f.exclude.length} variants by name` : null].filter(Boolean);
+    scoring.push(`Scores are as published, read from the column "${sc.score}"${sc.se ? ` with standard errors from "${sc.se}"` : ' (the table gives no standard errors)'}${sc.ciLow ? ` and 95% intervals from "${sc.ciLow}" and "${sc.ciHigh}"` : sc.se ? '; 95% intervals are ±1.96 SE' : ''}: MaveScape did not rescore them. A variant whose name is not valid against the target, or to which the table gives no score, is reported as NA${left.length ? `, as are those left out by filter (${left.join('; ')})` : ''}.`);
+    scoring.push(`${run.output.conditions[0]?.scored ?? 0} of ${run.output.variants} variants have a score.`);
+    if (run.warnings.length) scoring.push(`Notes: ${run.warnings.map((w) => w.message).join(' ')}`);
+  } else if (p.model === 'dimsum') {
     scoring.push(dimsumSentence(p, cite('dimsum')).replace(/ \((\[\d+\])\)/, ' $1'));
     // The fitted model, from the run record.
     const fits = (run.output.replicates ?? []).filter((r) => r.dimsum);
@@ -116,6 +128,12 @@ export function writeMethods(ws, run, options = {}) {
   else if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ` (the first and last time points${p.timeScale === 'unit' ? `, over the time between them: a score per ${unitOf(design)}` : ''})` : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
   else if (p.model === 'wls' || p.model === 'ols') scoring.push(regressionSentence(p, cite('enrich2'), design).replace(/ \((\[\d+\])\)/, ' $1'));
   else scoring.push(binSentence(p, { average: cite('vampseq'), mle: cite('peterman') }).replace(/ \((\[\d+\])\)/, ' $1'));
+  if (!published) countsScoring();
+  paragraphs.push(scoring.join(' '));
+
+  // The rest of a run scored from counts: technical and biological replicates, their combination,
+  // heterogeneity, filters, rescaling, conditions, and the counts of scored variants.
+  function countsScoring() {
   if (design.library?.level === 'barcode') scoring.push(barcodeSentence(p, p.aggregation === 'sum' ? { enrich2: cite('enrich2') } : { dmsVariants: cite('dmsVariants') }).replace(/ \((\[\d+\])\)/, ' $1'));
   scoring.push('Technical replicates were summed before scoring; biological replicates were scored separately.');
   if (p.combination === 'moderated') {
@@ -148,7 +166,7 @@ export function writeMethods(ws, run, options = {}) {
   const conditions = run.output.conditions.map((c) => `${run.output.conditions.length > 1 ? `${c.name}: ` : ''}${c.scored} of ${run.output.variants} variants scored`).join('; ');
   scoring.push(`${conditions}.`);
   if (run.warnings.length) scoring.push(`Notes: ${run.warnings.map((w) => w.message).join(' ')}`);
-  paragraphs.push(scoring.join(' '));
+  }
 
   // Quality control.
   if (options.findings) {

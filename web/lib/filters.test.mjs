@@ -21,11 +21,13 @@ test('variant stages in order: identifier, class, exclusion list (by key or as w
 
 test('the flow counts each stage\'s removals and what remains', () => {
   const flow = filterFlow([0, 1, 5, 5, 0, 8]);
-  assert.equal(flow.length, STAGES.length - 1, 'the barcode stage only for a barcode table');
+  assert.equal(flow.length, STAGES.filter((x) => !x.published).length - 1, 'the barcode stage only for a barcode table; published scores\' stages only for them');
   assert.deepEqual(flow.filter((x) => x.removed).map((x) => [x.stage, x.removed, x.remaining]), [['measured', 1, 5], ['input-count', 2, 3], ['se', 1, 2]]);
   const barcodes = filterFlow([0, 9, 5, 7], true);
   assert.deepEqual(barcodes.map((x) => x.stage).slice(4, 8), ['input-count', 'total-count', 'barcodes', 'replicates']);
   assert.deepEqual(barcodes.filter((x) => x.removed).map((x) => [x.stage, x.removed, x.remaining]), [['input-count', 1, 3], ['barcodes', 1, 2], ['replicates', 1, 1]]);
+  // Published scores (wave 3, slice 2): no stage of counts.
+  assert.deepEqual(filterFlow([0, 10, 11, 2, 8], false, true).map((x) => [x.stage, x.removed]), [['given', 1], ['copy', 1], ['identifier', 1], ['class', 0], ['excluded', 0], ['se', 1]]);
 });
 
 test('filter parameters are checked and described', () => {

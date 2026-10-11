@@ -18,6 +18,7 @@ import { pearson } from '../lib/stats.js';
 import { intervalOf } from '../lib/exports.js';
 import { runScore, workerInput } from './score-input.js';
 import { runEntry } from './run-results.js';
+import { importMaveDB } from './mavedb.js';
 
 const fetchBytes = async (path) => {
   const response = await fetch(path);
@@ -29,6 +30,12 @@ const fetchBytes = async (path) => {
 export async function openExample(app, id) {
   const example = exampleById(id);
   if (!example) return { ok: false, message: `No example "${id}".` };
+  // An example opened from MaveDB (wave 3, slice 2): through the program's fetcher, as any record.
+  if (example.mavedb) {
+    const opened = await importMaveDB(app, example.mavedb.urn, { counts: false, example });
+    if (opened.ok) await app.setMode(example.opens);
+    return { ok: opened.ok, message: opened.ok ? `Opened the example "${example.title}" from MaveDB. ${opened.message}` : opened.message };
+  }
   const busy = progressToast(`Opening the example "${example.title}"…`);
   try {
     // The example's files: its counts (and a barcoded library's barcode-to-variant map).

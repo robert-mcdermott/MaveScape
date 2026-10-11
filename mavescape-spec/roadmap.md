@@ -1187,21 +1187,88 @@ MaveDB both ways, annotations beside the map, and the full variant grammar that 
        design would have asked for a rescore that changes nothing: the record is kept with the
        workspace's target instead.
      - The three published examples' targets are exactly where their designs say in UniProt.
-2. **MaveDB import (I1).** Search (`POST /score-sets/search`, 100 per page) and fetch by URN
-   (`mavescape --mavedb urn:mavedb:…`): scores, counts, metadata, targets (sequence or
-   accession, with UniProt/RefSeq/Ensembl offsets), license and citation, published
-   calibrations; counts mapped into a design with the same wizard; the readout (wave 2, slice 8)
-   taken from the record's experiment keywords; retries with backoff; cached for offline use.
-   Records under CC BY-NC-SA or "other" licenses are shown with their terms.
+2. **MaveDB import (I1): done.** Through the fetcher of slice 1: a score set's record
+   (`GET /score-sets/{urn}`, cached 7 days), its scores and counts (CSV, 30 days; CSV answers accepted
+   where asked, a page refused), and the search (`POST /score-sets/search`, its words and page, 100 a
+   page, a day); URNs of published score sets only (`tmp:` refused); cache names without colons.
+   `web/lib/mavedb.js` reads a record: title and descriptions, license and what it allows (CC0, CC BY,
+   CC BY-SA open; CC BY-NC-SA and "other" with a warning and their terms), citation (MaveDB's
+   reference, rewritten from the publication's fields where it holds placeholders), target (a
+   sequence; UniProt's offset as the target's, RefSeq and Ensembl as identifiers), what it holds, the
+   experiment's controlled keywords (giving the design's readout and library method in MaveDB's
+   terms; the direction is no keyword and stays unstated), raw-read identifiers, and published
+   calibrations (functional classes as WT-like and abnormal-like, ranges, the evidence strength each
+   assigns, research use flagged). *Open from MaveDB* (`web/ui/mavedb.js`; the Start page, the
+   workspace menu, ⌘K) searches or takes a URN or MaveDB address and shows the record before opening
+   it; `mavescape urn:mavedb:…` and `--mavedb` open one at start or hand it to the running window
+   (`/api/info`'s `mavedb`, `/api/open`). Opened, a record becomes a workspace: its published
+   scores, its counts (when deposited) with a design drafted from their column names by the same
+   draft as any table (`countsDesign`), the record kept in `workspace.records` and each table's
+   `origin`, shown in the inspector and named in the methods. A target named by an accession, or
+   several targets, is shown and not opened (full MAVE-HGVS, slice 3). Remote actions
+   `search_mavedb` and `open_mavedb`.
 
-   **Readiness** (wave 2, slice 10) applied to a MaveDB record. A record with scores alone supports
-   the map, exploration and comparison; counts allow rescoring and count-based QC. What the record
-   lacks (counts, replicates, a design, the readout) is named with where it is usually found: the
-   paper's methods, its supplement, the authors' repository. Rebuilding a published experiment's
-   design from scattered records is often the hardest part of a reanalysis.
-   - Validation: the three feasibility records import through the UI with no dataset-specific
-     code; imported scores equal MaveDB's; the PRD's phase-0 exit ("score agreement within
-     documented tolerances") re-checked from the live import.
+   **Published scores, read as published.** The design model `scores` (in the schema since wave 1)
+   now has a run: the model `published` reads each score, SE and 95% interval as given (the scores
+   export writes the given interval; the output hash covers it), with the stages `given` (no score in
+   the table) and `copy` (a row repeating an earlier row's variant and scores, read once; different
+   scores refused), and the classes, exclusions and maximum SE a person sets. It serves the map, QC
+   (separation, resolution, coverage of substitutions with a score; the findings about counts not
+   assessed), the inspector, the exports (no counts or package), the methods ("as published, not
+   rescored") and the workflow. *Draft the design* reads any table with a column of scores this way
+   (`draftScoresDesign`), and the Experiment and Score views show its columns and filters.
+
+   **Readiness** applied to a MaveDB record: for published scores, the base is the scores, target and
+   design; the map, exploration, QC of what scores show and comparison are ready; rescoring and QC of
+   the counts need the counts, named with where they usually are: MaveDB when it keeps them, else
+   the paper's supplement, the authors' repository, or the raw reads the record names, counted again
+   with the design the paper's methods describe. The readout's where names the record's method text.
+
+   The example: PTEN's VAMP-seq abundance (`urn:mavedb:00000013-a-1`), scores alone, opened from
+   MaveDB when opened and checked against its checksum (pinned in `sources.json`), its direction
+   stated from the paper; ten examples.
+   - Validation:
+     - Go tests: MaveDB's records, tables and search (URNs only, temporary ones refused, CSV accepted,
+       a page of HTML refused, the search's words POSTed, cached by words and page, its record
+       keeping the body); `--mavedb`, URNs among the arguments, forwarded to a running MaveScape.
+     - `public-data` (15 checks): the feasibility records (four score sets) read with no code for any
+       of them; their published scores read as published equal MaveDB's columns row for row (score
+       and SE; 1,108, 11,530, 6,847 and 9,009 scored, the rest NA in MaveDB); their counts drafted
+       into valid designs, GRB2's and factor IX's as documented but for the bins' values; factor IX's
+       keywords as its readout; a target named by an accession (BAP1, CC BY 4.0) shown with its
+       terms; PTEN's readiness naming the counts and its raw reads; a workspace of published scores saved as an archive, reopened and its run reproduced.
+     - `validation/mavedb-live.mjs` (15 checks, in CI): the feasibility records opened from MaveDB,
+       live, through the window: the tables MaveDB sends are the ones `sources.json` pins, the
+       published scores equal MaveDB's, and the PRD's phase-0 exit holds again from the live import,
+       at the suites' tolerances: GRB2 by DiMSum's model on the drafted design, r 0.994 (≥ 0.99);
+       BRCA1 E2 with the documented design and Enrich2's weighted least squares, 50,043 published
+       replicate scores reproduced to 1.8 × 10⁻¹⁴ (≤ 10⁻¹⁰); factor IX with MultiSTEP's settings,
+       r 0.9995 (≥ 0.999). `--offline` repeats it from the cache.
+     - `remote-session.mjs` 85 checks: `search_mavedb` and `open_mavedb` offline on the cached answers
+       (GRB2 by its MaveDB address; the published run with Node's output hash; a record whose table is
+       not cached refused offline).
+     - `examples` (29 checks), unit tests 235: `mavedb.test.mjs`, the published model in
+       `score.test.mjs`, the stages in `filters.test.mjs`, the SE ranking in `importer.test.mjs`.
+   - Found by slice 2:
+     - **PTEN's record lists `sd` before `se`**, and the importer took the first column with a
+       standard-error-like name: the standard deviation across experiments would have been read as
+       each score's SE. SE names are now ranked, `se` first; intervals are found too.
+     - **MaveDB's references hold placeholders** ("(None). 2024; (Unknown volume):(Unknown pages)" for
+       a preprint, "9:None", a title repeated as the journal), and some titles HTML (`<i>G6PD</i>`):
+       such references are written again from the publication's fields.
+     - **Hsp90's score table writes its wild type nine times** (`c.[1=;2=;3=]`, one per position),
+       each scoring 0.0: copies, read once, as its counts were in slice 11.
+     - **MaveDB answers a score set without counts** with a counts table of identifier columns alone
+       (HTTP 200), not a 404: the record's list of count columns decides whether there are counts.
+     - **MaveDB sends no ETag, date or release**: a cached copy is checked by its age, and a record's
+       own dates say which version it is.
+     - **A record's calibrations can be many**: PTEN has six (the investigators' classes by a class
+       column; ExCALIBR's twice, research use only; a Gaussian mixture; IGVF's twice, one primary).
+     - **BRCA1's counts table holds two assays**: its draft is one time series of two conditions (E2
+       and Y2H), where the documented designs keep them apart; both are valid.
+     - **The workflow said "the design or the table changed"** when another table (the published
+       scores) had the only run, and the Score view's draft took that run's parameters for the counts:
+       a run of the same table, and parameters of the same kind, are now what count.
 3. **Full MAVE-HGVS and variant mapping (D3, D10).** Multi-variants, insertions, deletions,
    delins, duplications, stop and start loss, splice; nucleotide-to-protein translation for
    nucleotide-level libraries (and synonymous collapsing, as DiMSum's); targets from GenBank

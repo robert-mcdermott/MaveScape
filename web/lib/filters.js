@@ -8,6 +8,9 @@ import { KIND, KIND_NAMES } from './variants.js';
 
 // The stages in the order they apply. `rule`: always on (not a parameter).
 export const STAGES = [
+  // Published scores (a design of model 'scores', wave 3 slice 2): the table gives no score.
+  { id: 'given', code: 10, label: 'A score in the table', rule: true, published: true, reason: 'the table gives it no score' },
+  { id: 'copy', code: 11, label: 'Written once', rule: true, published: true, reason: 'a copy of an earlier row (the same variant and the same scores): read once' },
   { id: 'measured', code: 1, label: 'Counted in a replicate', rule: true, reason: 'not measured in any replicate (not counted in enough of its samples; a zero count with no pseudocount, scored by DiMSum; or, from sorted bins, no estimate)' },
   { id: 'identifier', code: 2, label: 'Valid identifier', rule: true, reason: 'the identifier is not valid or does not agree with the target' },
   { id: 'class', code: 3, label: 'Variant class', reason: 'its class is not scored' },
@@ -123,8 +126,9 @@ export const kindCodes = (names) => new Set(names.map((name) => KIND_NAMES.index
 // The filter flow: how many variants each stage leaves out, and how many remain after it.
 // reasons: per variant the code of the stage that left it out (0: scored). The barcode stage is
 // listed for a barcode table only.
-export function filterFlow(reasons, barcodes = false) {
-  const stages = STAGES.filter((s) => barcodes || !s.barcodes);
+export function filterFlow(reasons, barcodes = false, published = false) {
+  // Published scores pass no stage of counts.
+  const stages = published ? STAGES.filter((s) => s.published || ['identifier', 'class', 'excluded', 'se'].includes(s.id)) : STAGES.filter((s) => !s.published && (barcodes || !s.barcodes));
   const removed = new Map(stages.map((s) => [s.code, 0]));
   for (const r of reasons) if (r) removed.set(r, removed.get(r) + 1);
   let remaining = reasons.length;

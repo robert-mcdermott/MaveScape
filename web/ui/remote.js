@@ -30,7 +30,9 @@ import { archiveFile, packageFile, RUN_FILES, runFile, selectionFile } from './r
 import { intervalOf } from '../lib/exports.js';
 import { anchorUncertainty } from '../lib/anchors.js';
 import { readiness, readinessText } from '../lib/readiness.js';
-import { applyCheck, checkTarget, placementText } from './public-data.js';
+import { applyCheck, checkTarget, fetchPublic, placementText } from './public-data.js';
+import { importMaveDB } from './mavedb.js';
+import { searchHits } from '../lib/mavedb.js';
 import { retrievalText } from '../lib/uniprot.js';
 
 export class ActionError extends Error {}
@@ -65,6 +67,9 @@ export function variantName(text) {
   if (three) return `p.${three[1]}${three[2]}${three[3] === '*' ? 'Ter' : three[3]}`;
   return t;
 }
+
+// A design's shape in a few words: its kind and replicates, or its column of published scores.
+const shapeOf = (d) => (d.model === 'scores' ? `published scores in "${d.scoreColumn ?? 'score'}"` : `${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')}`);
 
 export function installRemote(app) {
   const { store } = app;
@@ -152,6 +157,7 @@ export function installRemote(app) {
       model: design.model,
       samples: design.samples?.length ?? 0,
       replicates: design.replicates?.length ?? 0,
+      ...(design.model === 'scores' ? { scoreColumn: design.scores?.score ?? null } : {}),
       valid: result.ok,
       problems: result.errors.map((e) => e.message),
       warnings: result.warnings.map((w) => w.message),
@@ -174,6 +180,8 @@ export function installRemote(app) {
       comparesConditions: Boolean(run.inputs.parameters?.differential) && run.output.conditions.length > 1,
       barcodes: run.inputs.design.library?.level === 'barcode',
       map: run.inputs.design.variants?.level === 'protein' && (run.inputs.design.targets?.length ?? 0) === 1,
+      // Published scores (wave 3, slice 2): read as published, with no counts or samples.
+      published: run.inputs.design.model === 'scores',
     };
   }
 
@@ -223,7 +231,7 @@ export function installRemote(app) {
       const data = {
         workspace: { id: w.id, name: w.name, example: w.example?.id ?? null },
         mode: store.ui.mode === 'welcome' ? 'start' : store.ui.mode,
-        tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source })),
+        tables: w.sources.map((s) => ({ name: s.name, rows: s.rows, layout: s.layout, sha256: s.sha256, countColumns: s.mapping?.countColumns ?? [], problems: s.problems?.blocking ?? [], current: s === source, ...(s.origin ? { origin: { database: s.origin.database, urn: s.origin.urn, file: s.origin.file, retrieved: s.origin.retrieved, license: s.origin.license } } : {}) })),
         targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0 })),
         design: w.design ? designSummary(w.design, source) : null,
         runs: w.runs.map(runSummary),
@@ -317,7 +325,7 @@ export function installRemote(app) {
       await settle();
       const design = ws().design;
       const summary = designSummary(design, source);
-      return { message: `Drafted the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')} of ${plural(summary.samples, 'sample')}. ${summary.valid ? 'It is valid.' : `${plural(summary.problems.length, 'problem')}: ${summary.problems.join(' ')}`}`, data: { design, ...summary } };
+      return { message: `Drafted the design of ${source.name}: ${shapeOf(summary)}. ${summary.valid ? 'It is valid.' : `${plural(summary.problems.length, 'problem')}: ${summary.problems.join(' ')}`}`, data: { design, ...summary } };
     },
 
     async set_design(args) {
@@ -345,10 +353,25 @@ export function installRemote(app) {
       return { message: `Set the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')}.${summary.warnings.length ? ` Warnings: ${summary.warnings.join(' ')}` : ''}`, data: summary };
     },
 
-    // Checks a table as scoring would, without scoring (mavescape validate; mavescape run checks
-    // first): its names against the design's target, its problems, the design against its
-    // columns, and the parameters against the design. design: one to check (else the
-    // workspace's, if any). valid: nothing blocks scoring.
+    // MaveDB (wave 3, slice 2): a search, and a score set opened as a workspace.
+    async search_mavedb(args) {
+      const text = String(args.text ?? '').trim();
+      if (!text) throw new ActionError('Give the words to search MaveDB for.');
+      const page = Number.isInteger(args.page) && args.page > 0 ? args.page : 1;
+      const got = await fetchPublic(app, `mavedb/search?text=${encodeURIComponent(text)}&page=${page}`);
+      if (!got.ok) throw new ActionError(got.message);
+      const { total, hits } = searchHits(got.json);
+      const listed = hits.map((x) => `${x.urn} "${x.title}" (${[x.targets.join(', '), x.organism, x.variants !== null ? `${x.variants} variants` : null, x.license].filter(Boolean).join('; ')})`);
+      return { message: `${total} published score set${total === 1 ? ' matches' : 's match'} "${text}"${total > hits.length ? ` (page ${page}: ${hits.length} shown)` : ''}${listed.length ? `: ${listed.slice(0, 10).join('; ')}${listed.length > 10 ? '; …' : ''}` : ''}.`, data: { total, page, hits, retrieval: got.retrieval } };
+    },
+
+    async open_mavedb(args) {
+      const opened = await importMaveDB(app, String(args.urn ?? ''), { counts: args.counts !== false });
+      if (!opened.ok) throw new ActionError(opened.message);
+      await settle();
+      return { message: opened.message, data: opened.data };
+    },
+
     // The target checked against its UniProt entry (wave 3, slice 1), through the program's fetcher:
     // only the accession is sent. A lookup by sequence is not offered here: it sends the sequence,
     // and only the person at the window may decide that.
@@ -375,6 +398,10 @@ export function installRemote(app) {
       return { message: `${placementText(target, check)}${what} (UniProt ${retrievalText(check.retrieval) || 'entry'}.)`, data };
     },
 
+    // Checks a table as scoring would, without scoring (mavescape validate; mavescape run checks
+    // first): its names against the design's target, its problems, the design against its
+    // columns, and the parameters against the design. design: one to check (else the
+    // workspace's, if any). valid: nothing blocks scoring.
     async check(args) {
       const design = args.design ?? ws().design ?? null;
       if (design && (typeof design !== 'object' || design.format !== 'mavescape-design')) throw new ActionError('The design must be a mavescape-design document (docs/FORMATS.md).');
@@ -385,7 +412,7 @@ export function installRemote(app) {
         const blocking = d.problems.map((m) => `The design: ${m}`);
         const ready = readiness(ws(), { design });
         return {
-          message: blocking.length ? `Not valid: ${plural(blocking.length, 'problem')} in the design. ${blocking.join(' ')}` : `Valid: the design (${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')}), checked without its table.${d.warnings.length ? ` ${plural(d.warnings.length, 'warning')}: ${d.warnings.join(' ')}` : ''}`,
+          message: blocking.length ? `Not valid: ${plural(blocking.length, 'problem')} in the design. ${blocking.join(' ')}` : `Valid: the design (${shapeOf(d)}), checked without its table.${d.warnings.length ? ` ${plural(d.warnings.length, 'warning')}: ${d.warnings.join(' ')}` : ''}`,
           data: { valid: !blocking.length, table: null, design: d, blocking, warnings: d.warnings, readiness: ready, readinessText: readinessText(ready, { all: false }) },
         };
       }
@@ -433,7 +460,7 @@ export function installRemote(app) {
       };
       const message = blocking.length
         ? `Not valid: ${plural(blocking.length, 'problem')} ${blocking.length > 1 ? 'block' : 'blocks'} scoring. ${blocking.join(' ')}`
-        : `Valid: ${source.name}, ${plural(table.rows, 'row')} (${data.table.names.valid} names valid${data.table.names.readLeniently ? `, ${data.table.names.readLeniently} read leniently` : ''})${d ? `, with the design (${d.model}, ${plural(d.replicates, 'replicate')} of ${plural(d.samples, 'sample')})` : ''}.${warnings.length ? ` ${plural(warnings.length, 'warning')}: ${warnings.join(' ')}` : ''}`;
+        : `Valid: ${source.name}, ${plural(table.rows, 'row')} (${data.table.names.valid} names valid${data.table.names.readLeniently ? `, ${data.table.names.readLeniently} read leniently` : ''})${d ? `, with the design (${shapeOf(d)})` : ''}.${warnings.length ? ` ${plural(warnings.length, 'warning')}: ${warnings.join(' ')}` : ''}`;
       return { message, data };
     },
 

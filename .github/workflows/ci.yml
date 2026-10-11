@@ -91,6 +91,10 @@ jobs:
         run: node validation/headless-run.mjs --verbose
         env:
           CHROME: /usr/bin/google-chrome
+      - name: The feasibility records opened from MaveDB, live, and the phase-0 exit checked again
+        run: node validation/mavedb-live.mjs --verbose
+        env:
+          CHROME: /usr/bin/google-chrome
 
   installers:
     name: Installer syntax

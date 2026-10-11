@@ -53,7 +53,7 @@ export function readinessDatasets() {
 }
 
 // The workspace the window builds for a table and its design (import as the wizard does).
-export function workspaceOf(table, design) {
+export function workspaceOf(table, design, sourceExtra = {}) {
   const countColumns = design.samples.flatMap((s) => s.columns);
   const barcodeColumn = design.library?.level === 'barcode' ? design.library.barcodeColumn : undefined;
   const review = reviewImport(table, { variantColumn: design.variants.column, level: design.variants.level, countColumns, target: design.targets[0], barcodeColumn });
@@ -66,6 +66,7 @@ export function workspaceOf(table, design) {
     mapping: { variantColumn: design.variants.column, level: design.variants.level, mode: 'lenient', countColumns, ...(barcodeColumn ? { barcodeColumn } : {}) },
     target: target.id, summary: review.summary,
     problems: { blocking: review.blocking.map((p) => p.message), warnings: review.warnings.map((p) => p.message) },
+    ...sourceExtra,
   };
   const added = addSource(ws, source);
   return setDesign(added.ws, design, 'The design', added.id);

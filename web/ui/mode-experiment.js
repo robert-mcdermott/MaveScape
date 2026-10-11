@@ -137,7 +137,37 @@ export function mountExperimentMode(app, container) {
       ...result.warnings.map((w) => h('div.callout.warn', { style: { marginTop: '6px' } }, icon('info'), h('span', w.message))));
   }
 
+  // Published scores (wave 3, slice 2): which columns hold the scores, their SEs and 95% intervals.
+  // Every other column is set aside; the scores are read as published, never rescored.
+  function scoresPane(design, s) {
+    const numeric = s.columns.filter((c) => c.type === 'number' || c.type === 'mixed' || c.type === 'empty').map((c) => c.name).filter((c) => !IDENTIFIER_COLUMNS.includes(c));
+    const sc = design.scores ?? {};
+    const choose = (key, label, optional = true) => h('label.field', h('span', label), h('select.input', { 'aria-label': label, onchange: (e) => setScores({ ...sc, [key]: e.target.value || undefined }, `${label}: ${e.target.value || 'none'}`) },
+      optional ? h('option', { value: '', selected: !sc[key] }, 'none') : null,
+      ...numeric.map((c) => h('option', { value: c, selected: sc[key] === c }, c))));
+    function setScores(next, label) {
+      const scores = Object.fromEntries(Object.entries(next).filter(([, v]) => v));
+      if (!scores.ciLow || !scores.ciHigh) {
+        delete scores.ciLow;
+        delete scores.ciHigh;
+      }
+      const read = new Set([design.variants.column, ...IDENTIFIER_COLUMNS, ...Object.values(scores)]);
+      const reasons = new Map((design.ignoredColumns ?? []).map((x) => [x.column, x]));
+      const ignoredColumns = s.columns.map((c) => c.name).filter((c) => !read.has(c)).map((column) => reasons.get(column) ?? { column, reason: 'published with the scores; not read' });
+      edit((d) => ({ ...d, scores, ignoredColumns }), label);
+    }
+    return h('div.pane', h('h3', icon('score'), 'Published scores'),
+      h('p.muted', { style: { margin: '0 0 8px', fontSize: '12px' } }, 'The scores are read as published, with the standard errors and 95% intervals the table gives; MaveScape does not rescore them. Rescoring needs the counts and a design saying which column is which sample.'),
+      h('div.form-grid', choose('score', 'Scores', false), choose('se', 'Standard errors'), choose('ciLow', '95% interval, from'), choose('ciHigh', '95% interval, to')),
+      h('p.muted', { style: { margin: '6px 0 0', fontSize: '12px' } }, `${design.ignoredColumns?.length ?? 0} other column${design.ignoredColumns?.length === 1 ? '' : 's'} set aside: ${(design.ignoredColumns ?? []).slice(0, 8).map((x) => x.column).join(', ')}${(design.ignoredColumns?.length ?? 0) > 8 ? ', …' : ''}.`));
+  }
+
   function settingsPane(design, s) {
+    if (design.model === 'scores') {
+      return h('div.pane', h('h3', icon('settings'), 'Experiment'),
+        h('label.field', h('span', 'Name'), h('input.input', { value: design.name ?? '', onchange: (e) => edit((d) => setField(d, { name: e.target.value.trim() }), 'Renamed the design') })),
+        h('div.field', h('span', 'Kind of experiment'), h('span', 'Published scores, read as published')));
+    }
     const model = h('div.segmented', { role: 'group', 'aria-label': 'Kind of experiment' },
       ...MODELS.map(([id, label]) => h(`button${design.model === id ? '.active' : ''}`, { type: 'button', 'aria-pressed': design.model === id ? 'true' : 'false', onclick: () => edit((d) => setModel(d, id), `Made the design ${label.toLowerCase()}`) }, label)));
     const extra = [];
@@ -422,7 +452,7 @@ export function mountExperimentMode(app, container) {
     const design = store.ws.design;
     const actions = [];
     if (s) {
-      actions.push(h('button.btn', { type: 'button', onclick: () => sampleSheet(), title: 'A CSV with one row per sample: column, role, replicate, condition, time or bin…' }, icon('upload'), 'Sample sheet…'));
+      if (design?.model !== 'scores') actions.push(h('button.btn', { type: 'button', onclick: () => sampleSheet(), title: 'A CSV with one row per sample: column, role, replicate, condition, time or bin…' }, icon('upload'), 'Sample sheet…'));
       if (design) actions.push(h('button.btn', { type: 'button', onclick: exportDesign }, icon('download'), 'Export the design'));
       actions.push(h('button.btn', { type: 'button', onclick: () => app.pickFiles('.json') }, icon('upload'), 'Open a design…'));
     }
@@ -435,15 +465,16 @@ export function mountExperimentMode(app, container) {
     }
     if (!design) {
       const suggested = s.roleSuggestions?.length ?? 0;
+      const scoresTable = !countColumns(s).length && s.mapping?.scoreColumns?.score;
       root.append(h('div.view-body', h('div.split', h('div', sourcePane(s), targetPane(s)), h('div', h('div.pane', h('h3', icon('experiment'), 'Design'),
-        h('p', suggested ? `MaveScape suggested roles for ${suggested} of ${countColumns(s).length} columns from their names. Start from that draft, then check and correct it here; or fill the design from a sample sheet.` : 'Start a design from the columns, or fill it from a sample sheet.'),
+        h('p', scoresTable ? `${s.name} holds published scores ("${s.mapping.scoreColumns.score}"${s.mapping.scoreColumns.se ? `, with standard errors in "${s.mapping.scoreColumns.se}"` : ''}): start from the design that reads them as published.` : suggested ? `MaveScape suggested roles for ${suggested} of ${countColumns(s).length} columns from their names. Start from that draft, then check and correct it here; or fill the design from a sample sheet.` : 'Start a design from the columns, or fill it from a sample sheet.'),
         h('div.btn-row', h('button.btn.primary', { type: 'button', onclick: () => draftFromColumns(app, s) }, icon('sparkles'), suggested ? 'Start from the suggested design' : 'Start a design'),
           h('button.btn', { type: 'button', onclick: () => sampleSheet() }, icon('upload'), 'Sample sheet…')))))));
       return;
     }
     root.append(h('div.view-body', h('div.split.experiment-split',
       h('div', sourcePane(s), summaryPane(design, s), readinessPane(), settingsPane(design, s), readoutPane(design), targetPane(s)),
-      h('div', replicatesPane(design), design.model === 'bins' ? gatesPane(design) : null, columnsPane(design, s),
+      h('div', ...(design.model === 'scores' ? [scoresPane(design, s)] : [replicatesPane(design), design.model === 'bins' ? gatesPane(design) : null, columnsPane(design, s)]),
         h('div.btn-row', { style: { marginTop: '12px' } }, h('button.btn', { type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Draft the design again?', message: 'The design is replaced by the draft from the column names. Undo (⌘Z) brings this one back.', confirm: 'Draft again' })) draftFromColumns(app, s); } }, icon('sparkles'), 'Draft again from the column names'))))));
   }
 

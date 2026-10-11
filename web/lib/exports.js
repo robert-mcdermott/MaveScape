@@ -48,6 +48,8 @@ export function statusOf(c, i) {
 // of freedom (wave 2, slice 9), else the normal's.
 const QUANTILES = new Map();
 export function intervalOf(c, i) {
+  // Published scores with their own 95% interval (a design of model 'scores'): as given.
+  if (c.ciLow) return [c.ciLow[i], c.ciHigh[i]];
   const d = c.df ? c.df[i] : Infinity;
   if (!QUANTILES.has(d)) QUANTILES.set(d, Number.isFinite(d) ? tQuantile(0.975, d) : Z);
   const q = QUANTILES.get(d);

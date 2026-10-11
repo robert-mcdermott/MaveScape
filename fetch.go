@@ -12,6 +12,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -28,7 +29,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 )
 
 const (
@@ -133,15 +136,46 @@ type publicRequest struct {
 	Why      string `json:"why"`
 	// Sequence: the request sends a sequence, and is made only once the person confirms it.
 	Sequence bool `json:"sequence"`
+	// Method: GET, or POST with the body resolve makes (a search).
+	Method string `json:"method"`
+	// Format: what the answer must be, JSON or CSV.
+	Format string `json:"format"`
 	// The cache folder, how long a copy is used before it is checked again (negative: always), the
 	// largest response accepted, and the response header that names the service's release.
 	Kind    string        `json:"-"`
 	MaxAge  time.Duration `json:"-"`
 	Limit   int64         `json:"-"`
 	Version string        `json:"-"`
-	// resolve: the cache entry's name and the upstream URL of a request, or what is wrong with it.
-	resolve  func(r *http.Request) (name, source string, err error)
+	// resolve: the cache entry's name, the upstream URL and a POST's body, or what is wrong with
+	// the request.
+	resolve  func(r *http.Request) (call, error)
 	notFound func(r *http.Request) string
+}
+
+// A request resolved: the cache entry's name, the URL asked for, and a POST's body.
+type call struct {
+	name, source string
+	body         []byte
+}
+
+const (
+	formatJSON     = "json"
+	formatCSV      = "csv"
+	csvContentType = "text/csv; charset=utf-8"
+)
+
+func (r publicRequest) method() string {
+	if r.Method == "" {
+		return http.MethodGet
+	}
+	return r.Method
+}
+
+func (r publicRequest) contentType() string {
+	if r.Format == formatCSV {
+		return csvContentType
+	}
+	return jsonContentType
 }
 
 const (
@@ -157,13 +191,14 @@ var publicRequests = []publicRequest{
 		Upstream: "https://rest.uniprot.org/uniprotkb/{accession}.json?fields=" + uniprotEntryFields,
 		Sends:    "a UniProt accession (P62993)",
 		Why:      "the entry's names, organism and sequence, to place the target in it",
+		Format:   formatJSON,
 		Kind:     "uniprot", MaxAge: defaultCacheMaxAge, Limit: 8 << 20, Version: "X-UniProt-Release",
-		resolve: func(r *http.Request) (string, string, error) {
+		resolve: func(r *http.Request) (call, error) {
 			accession, ok := normalizeAccession(r.PathValue("accession"))
 			if !ok {
-				return "", "", errors.New("Not a UniProt accession: give one such as P62993 or P62993-2.")
+				return call{}, errors.New("Not a UniProt accession: give one such as P62993 or P62993-2.")
 			}
-			return accession + ".json", "https://rest.uniprot.org/uniprotkb/" + accession + ".json?fields=" + uniprotEntryFields, nil
+			return call{name: accession + ".json", source: "https://rest.uniprot.org/uniprotkb/" + accession + ".json?fields=" + uniprotEntryFields}, nil
 		},
 		notFound: func(r *http.Request) string {
 			return fmt.Sprintf("UniProt has no entry %s.", strings.ToUpper(r.PathValue("accession")))
@@ -176,24 +211,180 @@ var publicRequests = []publicRequest{
 		Sends:    "a protein sequence (the target's)",
 		Why:      "the entries with exactly that sequence, to find a target that has no accession",
 		Sequence: true,
+		Format:   formatJSON,
 		Kind:     "uniparc", MaxAge: -1, Limit: 16 << 20, Version: "X-UniProt-Release",
-		resolve: func(r *http.Request) (string, string, error) {
+		resolve: func(r *http.Request) (call, error) {
 			sequence := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("sequence")))
 			switch {
 			case sequence == "":
-				return "", "", errors.New("Give the protein sequence to look up (?sequence=…).")
+				return call{}, errors.New("Give the protein sequence to look up (?sequence=…).")
 			case !sequencePattern.MatchString(sequence):
-				return "", "", errors.New("A protein sequence is written in the one-letter amino-acid code, without stops or gaps.")
+				return call{}, errors.New("A protein sequence is written in the one-letter amino-acid code, without stops or gaps.")
 			case len(sequence) > maxLookupResidues:
-				return "", "", fmt.Errorf("UniProt looks up sequences of up to %d residues; this one has %d.", maxLookupResidues, len(sequence))
+				return call{}, fmt.Errorf("UniProt looks up sequences of up to %d residues; this one has %d.", maxLookupResidues, len(sequence))
 			}
-			sum := sha256.Sum256([]byte(sequence))
-			return hex.EncodeToString(sum[:]) + ".json", "https://rest.uniprot.org/uniparc/sequence?sequence=" + sequence + uniparcQuery, nil
+			return call{name: sha256Hex(sequence) + ".json", source: "https://rest.uniprot.org/uniparc/sequence?sequence=" + sequence + uniparcQuery}, nil
 		},
 		notFound: func(*http.Request) string {
 			return "No UniProt entry has exactly this sequence. A domain or a construct is found by its protein's accession instead."
 		},
 	},
+	// MaveDB (wave 3, slice 2): a score set's record, its scores and counts, and the search.
+	{
+		Route:    "GET /api/fetch/mavedb/score-sets/{urn}",
+		Service:  "MaveDB",
+		Upstream: mavedbAPI + "/score-sets/{urn}",
+		Sends:    "a MaveDB URN (urn:mavedb:00000835-a-1)",
+		Why:      "the score set's record: its title, target, license, publications, keywords, columns and calibrations",
+		Format:   formatJSON,
+		Kind:     "mavedb", MaxAge: 7 * 24 * time.Hour, Limit: 32 << 20,
+		resolve: mavedbCall("", ".json"),
+		notFound: func(r *http.Request) string {
+			return fmt.Sprintf("MaveDB has no published score set %s.", r.PathValue("urn"))
+		},
+	},
+	{
+		Route:    "GET /api/fetch/mavedb/score-sets/{urn}/scores",
+		Service:  "MaveDB",
+		Upstream: mavedbAPI + "/score-sets/{urn}/scores",
+		Sends:    "a MaveDB URN",
+		Why:      "the score set's published scores (CSV)",
+		Format:   formatCSV,
+		Kind:     "mavedb", MaxAge: defaultCacheMaxAge, Limit: maxDownloadBytes,
+		resolve: mavedbCall("/scores", ".scores.csv"),
+		notFound: func(r *http.Request) string {
+			return fmt.Sprintf("MaveDB has no published score set %s.", r.PathValue("urn"))
+		},
+	},
+	{
+		Route:    "GET /api/fetch/mavedb/score-sets/{urn}/counts",
+		Service:  "MaveDB",
+		Upstream: mavedbAPI + "/score-sets/{urn}/counts",
+		Sends:    "a MaveDB URN",
+		Why:      "the counts the authors deposited beside the scores (CSV)",
+		Format:   formatCSV,
+		Kind:     "mavedb", MaxAge: defaultCacheMaxAge, Limit: maxDownloadBytes,
+		resolve: mavedbCall("/counts", ".counts.csv"),
+		notFound: func(r *http.Request) string {
+			return fmt.Sprintf("MaveDB has no published score set %s.", r.PathValue("urn"))
+		},
+	},
+	{
+		Route:    "GET /api/fetch/mavedb/search",
+		Service:  "MaveDB",
+		Method:   http.MethodPost,
+		Upstream: mavedbAPI + "/score-sets/search",
+		Sends:    "the words searched for (GRB2, abundance…) and the page of results",
+		Why:      "the published score sets that match, 100 at a time",
+		Format:   formatJSON,
+		Kind:     "mavedb-search", MaxAge: 24 * time.Hour, Limit: 32 << 20,
+		resolve: func(r *http.Request) (call, error) {
+			text := strings.Join(strings.Fields(r.URL.Query().Get("text")), " ")
+			page := 1
+			if raw := r.URL.Query().Get("page"); raw != "" {
+				n, err := strconv.Atoi(raw)
+				if err != nil || n < 1 || n > maxSearchPages {
+					return call{}, fmt.Errorf("The page of results is a whole number from 1 to %d.", maxSearchPages)
+				}
+				page = n
+			}
+			switch {
+			case text == "":
+				return call{}, errors.New("Give the words to search MaveDB for (?text=…).")
+			case len(text) > maxSearchText || strings.IndexFunc(text, unicode.IsControl) >= 0:
+				return call{}, fmt.Errorf("A search is up to %d characters of text.", maxSearchText)
+			}
+			body, err := json.Marshal(mavedbSearch{Text: text, Published: true, Limit: mavedbPage, Offset: (page - 1) * mavedbPage})
+			if err != nil {
+				return call{}, err
+			}
+			return call{name: sha256Hex(fmt.Sprintf("%s\x00%d", strings.ToLower(text), page)) + ".json", source: mavedbAPI + "/score-sets/search", body: body}, nil
+		},
+		notFound: func(*http.Request) string { return "MaveDB's search did not answer." },
+	},
+}
+
+const (
+	mavedbAPI = "https://api.mavedb.org/api/v1"
+	// MaveDB returns at most 100 score sets a page.
+	mavedbPage     = 100
+	maxSearchPages = 100
+	maxSearchText  = 200
+)
+
+// MaveDB's search, as its API takes it (POST /score-sets/search).
+type mavedbSearch struct {
+	Text      string `json:"text"`
+	Published bool   `json:"published"`
+	Limit     int    `json:"limit"`
+	Offset    int    `json:"offset"`
+}
+
+// A published score set's URN (urn:mavedb:00000835-a-1); temporary ones (tmp:…) are not public.
+var mavedbURN = regexp.MustCompile(`^urn:mavedb:[0-9]{8}-[a-z0-9]+-[0-9]+$`)
+
+func normalizeURN(raw string) (string, bool) {
+	urn := strings.ToLower(strings.TrimSpace(raw))
+	return urn, mavedbURN.MatchString(urn)
+}
+
+// Score sets to open in the window, named on the command line (mavescape --mavedb urn:…) or by a
+// later launch; each with an id, so the page opens it once (wave 3, slice 2).
+type startupRecord struct {
+	ID  int    `json:"id"`
+	URN string `json:"urn"`
+}
+
+type startupRecords struct {
+	mu      sync.Mutex
+	records []startupRecord
+}
+
+// add takes URNs (and MaveDB addresses that hold one), and returns what is not a published score
+// set's URN.
+func (s *startupRecords) add(urns []string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var problems []string
+	for _, raw := range urns {
+		found := mavedbURNIn.FindString(strings.ToLower(raw))
+		if urn, ok := normalizeURN(found); ok {
+			s.records = append(s.records, startupRecord{ID: len(s.records) + 1, URN: urn})
+		} else {
+			problems = append(problems, fmt.Sprintf("%q is not the URN of a published MaveDB score set (urn:mavedb:00000835-a-1).", raw))
+		}
+	}
+	return problems
+}
+
+func (s *startupRecords) list() []startupRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]startupRecord{}, s.records...)
+}
+
+var mavedbURNIn = regexp.MustCompile(`urn:mavedb:[0-9]{8}-[a-z0-9]+-[0-9]+`)
+
+// looksLikeURN: a command-line argument that names a score set rather than a file.
+func looksLikeURN(arg string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(arg)), "urn:mavedb:")
+}
+
+// mavedbCall resolves a request about a score set: its URL (the score set's, then suffix) and its
+// cache name (the URN without colons, which some file systems refuse, then extension).
+func mavedbCall(suffix, extension string) func(r *http.Request) (call, error) {
+	return func(r *http.Request) (call, error) {
+		urn, ok := normalizeURN(r.PathValue("urn"))
+		if !ok {
+			return call{}, errors.New("Not the URN of a published MaveDB score set: give one such as urn:mavedb:00000835-a-1.")
+		}
+		return call{name: strings.ReplaceAll(urn, ":", "_") + extension, source: mavedbAPI + "/score-sets/" + urn + suffix}, nil
+	}
+}
+
+func sha256Hex(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
 }
 
 func requestOfKind(kind string) (publicRequest, bool) {
@@ -291,11 +482,12 @@ func (f *fetcher) status(w http.ResponseWriter, r *http.Request) {
 // marked stale, when the service cannot be reached or MaveScape is offline.
 func (f *fetcher) serve(request publicRequest) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		name, source, err := request.resolve(r)
+		c, err := request.resolve(r)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		name, source := c.name, c.source
 		refresh := r.URL.Query().Get("refresh") != ""
 		entry, ok, stale := f.cache.load(request.Kind, name, request.MaxAge)
 		if ok && !stale && !refresh {
@@ -324,7 +516,7 @@ func (f *fetcher) serve(request publicRequest) http.HandlerFunc {
 		if ok {
 			previous = &entry.meta
 		}
-		fresh, err := f.remote.get(r.Context(), f.origin(source), request, previous)
+		fresh, err := f.remote.get(r.Context(), f.origin(source), request, previous, c.body)
 		if err != nil {
 			log.Printf("fetch %s/%s: %v", request.Kind, name, err)
 			if ok && !errors.Is(err, errUpstreamNotFound) {
@@ -350,8 +542,8 @@ func (f *fetcher) serve(request publicRequest) http.HandlerFunc {
 			recorded = request.Upstream
 		}
 		entry = cached{body: fresh.body, meta: cacheMeta{
-			ContentType: jsonContentType, Service: request.Service, Source: recorded, Retrieved: now.Format(time.RFC3339),
-			ETag: fresh.etag, LastModified: fresh.lastModified, Version: fresh.version,
+			ContentType: request.contentType(), Service: request.Service, Source: recorded, Method: request.Method, Request: string(c.body),
+			Retrieved: now.Format(time.RFC3339), ETag: fresh.etag, LastModified: fresh.lastModified, Version: fresh.version,
 		}}
 		f.cache.store(request.Kind, name, entry)
 		writeCached(w, entry, "miss")
@@ -460,9 +652,9 @@ type fetched struct {
 // get asks for source, retrying when the service is briefly unavailable (HTTP 429, 502, 503, 504,
 // or no answer), with previous's ETag and date so that an unchanged copy is confirmed (HTTP 304)
 // rather than sent again.
-func (u *upstream) get(ctx context.Context, source string, request publicRequest, previous *cacheMeta) (fetched, error) {
+func (u *upstream) get(ctx context.Context, source string, request publicRequest, previous *cacheMeta, body []byte) (fetched, error) {
 	for attempt := 0; ; attempt++ {
-		result, wait, err := u.attempt(ctx, source, request, previous)
+		result, wait, err := u.attempt(ctx, source, request, previous, body)
 		if err == nil || wait < 0 || attempt >= len(u.retries) {
 			return result, err
 		}
@@ -479,13 +671,24 @@ func (u *upstream) get(ctx context.Context, source string, request publicRequest
 
 // attempt makes one request. wait is how long to wait before trying again: negative for an error
 // that another try would not change, zero for the usual wait, or what the service asked.
-func (u *upstream) attempt(ctx context.Context, source string, request publicRequest, previous *cacheMeta) (fetched, time.Duration, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
+func (u *upstream) attempt(ctx context.Context, source string, request publicRequest, previous *cacheMeta, payload []byte) (fetched, time.Duration, error) {
+	var reader io.Reader
+	if payload != nil {
+		reader = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(ctx, request.method(), source, reader)
 	if err != nil {
 		return fetched{}, -1, err
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf(userAgent, version))
-	req.Header.Set("Accept", jsonContentType)
+	if request.Format == formatCSV {
+		req.Header.Set("Accept", "text/csv")
+	} else {
+		req.Header.Set("Accept", jsonContentType)
+	}
+	if payload != nil {
+		req.Header.Set("Content-Type", jsonContentType)
+	}
 	if previous != nil {
 		if previous.ETag != "" {
 			req.Header.Set("If-None-Match", previous.ETag)
@@ -525,7 +728,11 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 	if err != nil {
 		return fetched{}, 0, upstreamFailure(request.Service, err)
 	}
-	if !json.Valid(data) {
+	if request.Format == formatCSV {
+		if !looksLikeCSV(data) {
+			return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not a CSV table.", request.Service)
+		}
+	} else if !json.Valid(data) {
 		return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not JSON.", request.Service)
 	}
 	log.Printf("fetched %s%s (%d bytes)", resp.Request.URL.Host, resp.Request.URL.Path, len(data))
@@ -534,6 +741,16 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 		result.version = resp.Header.Get(request.Version)
 	}
 	return result, 0, nil
+}
+
+// looksLikeCSV: a header line with at least two comma-separated names, not a page of HTML or JSON.
+func looksLikeCSV(data []byte) bool {
+	text := bytes.TrimLeft(data, " \t\r\n\ufeff")
+	if len(text) == 0 || text[0] == '<' || text[0] == '{' || text[0] == '[' {
+		return false
+	}
+	line, _, _ := bytes.Cut(text, []byte("\n"))
+	return bytes.Count(line, []byte(",")) >= 1
 }
 
 func unwrapURLError(err error) error {

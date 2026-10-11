@@ -97,6 +97,39 @@ export const EXAMPLES = [
     ],
   },
   {
+    id: 'pten-mavedb',
+    title: 'PTEN abundance, opened from MaveDB (published scores)',
+    summary: 'VAMP-seq abundance of 4,409 PTEN variants, opened from MaveDB as published: scores alone, no counts, with the record\'s license, citation, assay and six calibrations.',
+    question: 'What can a published record of scores alone show, what does it leave out, and where would the rest be found?',
+    source: 'MaveDB urn:mavedb:00000013-a-1 (the scores, downloaded when opened; SHA-256 checked)',
+    license: 'CC0 1.0',
+    citation: 'Matreyek KA, et al. Multiplex assessment of protein variant abundance by massively parallel sequencing. Nat Genet 2018;50:874–882. doi:10.1038/s41588-018-0122-z',
+    simulated: false,
+    // Opened from MaveDB through the program's fetcher (wave 3, slice 2), its table checked against
+    // the checksum it had when the example was made.
+    mavedb: { urn: 'urn:mavedb:00000013-a-1', scores: { sha256: 'ceaf3f0720af8aa06012d60959efbcd7ab54a5317d2bebdace8a0f49de4b2b97', size: 1735960 } },
+    // The record gives the assay in MaveDB's terms, not what a higher score means: from the paper,
+    // more abundance.
+    readout: { direction: 'higher-more' },
+    findings: { coverage: 'review' },
+    teaches: ['counts'],
+    opens: 'map',
+    expected: [
+      'All 4,409 variants have a score, with the standard error and 95% interval the record gives: synonymous median 1.00, nonsense 0.06 (the separation of the controls, AUC 0.98). MaveScape reads them as published and does not rescore them.',
+      'About a quarter of missense variants (25%) score below 0.5; the least tolerant positions are spread through both the phosphatase and the C2 domain, as a stability readout expects.',
+      'QC passes what it can assess from scores alone, but coverage: 53% of all possible substitutions, the library made by oligo-directed mutagenic PCR. Every finding about counts is not assessed.',
+      'What the analysis can do: rescoring and QC of the counts need counts, which MaveDB does not hold for this record; the readiness says where they may be found.',
+    ],
+    steps: [
+      ['map', 'The map shows PTEN\'s abundance as MaveDB publishes it, the wild type at 1 and nonsense near 0, in the run "Published scores". Click a cell: its score, SE and 95% interval are the record\'s own.'],
+      ['experiment', 'Select the table in the sidebar: the inspector shows the MaveDB record, its license and citation, and the assay in MaveDB\'s terms (a reporter, loss of function, human cells), which became the design\'s readout. The record does not say what a higher score means: the example states it, from the paper.'],
+      ['experiment', 'Below the record, its six calibrations: the investigators\' classes, and ExCALIBR\'s evidence strengths for research use only. MaveScape shows them as published and classifies no variant.'],
+      ['qc', 'In QC, what scores alone show: the controls separate (AUC 0.98) and the scores resolve them; coverage is 53% of all substitutions. The findings about counts are not assessed.'],
+      ['experiment', 'In Experiment, read "What the analysis can do": the map and comparison need only the scores; rescoring and QC of the counts need the counts, and the readiness says where they may be (the paper\'s supplement, the authors\' repository, the raw reads PRJNA428380).'],
+      ['score', 'In Score, set a maximum SE of 0.15 and read the scores again: the second run leaves the uncertain variants out, each with the stage that left it out.'],
+    ],
+  },
+  {
     id: 'simulated',
     title: 'A simulated experiment (known truth)',
     summary: 'A simulated two-population selection of a 40-residue protein, three replicates, where every variant\'s true effect is known.',

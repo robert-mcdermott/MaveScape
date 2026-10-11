@@ -28,9 +28,12 @@ type diskCache struct {
 
 // The record beside each cached response.
 type cacheMeta struct {
-	ContentType  string `json:"contentType"`
-	Service      string `json:"service"`
-	Source       string `json:"source"`
+	ContentType string `json:"contentType"`
+	Service     string `json:"service"`
+	Source      string `json:"source"`
+	// A POST's method and body (a search: the words searched for).
+	Method       string `json:"method,omitempty"`
+	Request      string `json:"request,omitempty"`
 	Retrieved    string `json:"retrieved"`
 	Checked      string `json:"checked,omitempty"`
 	ETag         string `json:"etag,omitempty"`

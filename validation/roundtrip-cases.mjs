@@ -5,6 +5,7 @@
 
 import { columnText, parseTable } from '../web/lib/csv.js';
 import { assembleTable } from '../web/lib/assemble.js';
+import { engineColumns } from '../web/lib/design.js';
 import { reviewImport, suggestRoles } from '../web/lib/importer.js';
 import { scoreExperiment, DEFAULT_PARAMETERS } from '../web/lib/score.js';
 import { computeQC } from '../web/lib/qc.js';
@@ -21,7 +22,7 @@ export const SOFTWARE = { version: '0.1.0', commit: '0123456789abcdef' };
 
 const columnsFor = (table, design) => {
   const out = {};
-  for (const s of design.samples) for (const c of s.columns) out[c] = table.columns.find((x) => x.name === c).numeric;
+  for (const c of engineColumns(design)) out[c] = table.columns.find((x) => x.name === c).numeric;
   return out;
 };
 

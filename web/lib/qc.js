@@ -593,12 +593,15 @@ export function computeQC({ names, barcodes = null, columns, design, mode = 'len
     });
   }
   const samples = design.samples.map((s) => ({ ...sampleMetrics(s, pooled.get(s.id), m.lowCount), roles: roles.get(s.id), input: firstSamples.has(s.id) }));
-  // Observed: reads before selection in some replicate (in any bin, for sorted bins).
+  // Observed: reads before selection in some replicate (in any bin, for sorted bins); for published
+  // scores (wave 3, slice 2), a score in the table.
   const observed = new Uint8Array(n);
   for (const id of [...firstSamples, ...binSamples]) {
     const c = pooled.get(id);
     for (let i = 0; i < n; i += 1) if (c[i] > 0) observed[i] = 1;
   }
+  const published = design.model === 'scores' ? columns[design.scores?.score] : null;
+  if (published) for (let i = 0; i < n; i += 1) if (Number.isFinite(published[i])) observed[i] = 1;
   // Replicates, by condition.
   const replicates = design.replicates.map((r) => ({ ...(design.model === 'bins' ? binRatios(r, pooled, variants, m.agreementInput) : rawRatios(r, pooled, variants, m.agreementInput)), tile: r.tile ?? null }));
   const conditionList = design.conditions?.length ? design.conditions : [{ id: null, name: 'All replicates' }];
@@ -629,7 +632,7 @@ export function computeQC({ names, barcodes = null, columns, design, mode = 'len
     rows: n,
     model: design.model,
     samples,
-    coverage: coverage(design, variants, observed),
+    coverage: { ...coverage(design, variants, observed), basis: published ? 'scores' : 'counts' },
     conditions,
     missingness: { samples: design.samples.map((s) => s.id), patterns: [...patterns].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pattern, count]) => ({ pattern, count })) },
     scores: results ? scoreMetrics(results, design) : null,

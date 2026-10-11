@@ -33,11 +33,12 @@ import { parseFasta, targetFromSequence } from '../web/lib/target.js';
 import { createRandom, shuffle } from '../web/lib/random.js';
 import { meaning, modelRoundTrip, rebuild } from './experiment-cases.mjs';
 import { designFromSampleSheet, designStructure, sampleSheetCSV } from '../web/lib/samplesheet.js';
-import { readinessDatasets, REMOVALS, caseOf, probe } from './readiness-cases.mjs';
+import { readinessDatasets, REMOVALS, caseOf, probe, workspaceOf } from './readiness-cases.mjs';
 import { writePackage } from '../web/lib/package.js';
-import { EXAMPLE_DATASETS, openExampleInNode, raisedOf } from './example-cases.mjs';
+import { EXAMPLE_DATASETS, MissingExampleData, openExampleInNode, raisedOf } from './example-cases.mjs';
 import { proteinChange } from '../web/lib/codons.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf, uniparcEntries } from '../web/lib/uniprot.js';
+import { countsDesign, readoutOf, readScoreSet, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
 import { writeMethods } from '../web/lib/methods.js';
 import { intervalOf } from '../web/lib/exports.js';
 import { readZip } from '../web/lib/zip.js';
@@ -2094,7 +2095,16 @@ const suites = {
     const pct = (x) => `${(100 * x).toFixed(1)}%`;
     const opened = new Map();
     for (const example of EXAMPLES) {
-      const o = openExampleInNode(example);
+      let o;
+      try {
+        o = openExampleInNode(example);
+      } catch (error) {
+        // An example opened from MaveDB needs its table (external data).
+        if (!(error instanceof MissingExampleData)) throw error;
+        console.log(`  ${example.title}: skipped (${error.message})`);
+        if (requireData) check('examples', `${example.title}: its table present`, error.message, false, 'present (--require-data)');
+        continue;
+      }
       opened.set(example.id, o);
       const valid = validateDesign(o.design, { columns: o.table.columns.map((c) => c.name) });
       const raised = raisedOf(o.findings);
@@ -2103,7 +2113,12 @@ const suites = {
       const missing = (example.teaches ?? []).filter((g) => !gaps.includes(g));
       check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
       check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
-      if (!example.simulated) {
+      if (example.mavedb) {
+        // Opened from MaveDB: its table the one the example was made with (and the validation pins).
+        const bytes = o.parts[0].bytes;
+        const file = sources.datasets[EXAMPLE_DATASETS[example.id]]?.files.find((f) => f.path === 'scores.csv');
+        check('examples', `${example.title}: MaveDB's table is the one the example was made with, and its record names the license and citation the example gives`, `${sha256(bytes).slice(0, 16)}… against ${example.mavedb.scores.sha256.slice(0, 16)}…; ${o.ws.sources[0].origin.license}`, sha256(bytes) === example.mavedb.scores.sha256 && file?.sha256 === example.mavedb.scores.sha256 && example.license.startsWith(o.ws.sources[0].origin.license), 'the same; CC0');
+      } else if (!example.simulated) {
         const bytes = o.parts[0].bytes;
         const file = sources.datasets[EXAMPLE_DATASETS[example.id]]?.files.find((f) => f.path === 'counts.csv');
         const notice = readFileSync(new URL(`../web/${example.files.notice}`, import.meta.url), 'utf8');
@@ -2204,12 +2219,14 @@ const suites = {
 
   // Public data (wave 3, slice 1): UniProt's answers as MaveScape's fetcher cached them
   // (validation/fixtures/public-data, release 2026_03), read as the page reads them.
-  'public-data'() {
+  async 'public-data'() {
     const root = new URL('fixtures/public-data/', import.meta.url);
     const cached = (kind, name) => JSON.parse(readFileSync(new URL(`${kind}/${name}`, root), 'utf8'));
     const records = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).flatMap((kind) => readdirSync(new URL(`${kind}/`, root)).filter((f) => f.endsWith('.meta.json')).map((f) => ({ kind, name: f.replace(/\.meta\.json$/, ''), meta: cached(kind, f) })));
-    const complete = records.filter(({ meta }) => meta.service === 'UniProt' && /^https:\/\/rest\.uniprot\.org\//.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && meta.version && meta.contentType === 'application/json');
-    check('public-data', 'each cached response carries its retrieval record: the service, the URL on a listed host, when it was retrieved, and the release', `${complete.length} of ${records.length} records complete (${records.map((r) => `${r.kind}/${r.name.slice(0, 12)}`).join(', ')})`, records.length >= 4 && complete.length === records.length, 'all');
+    // UniProt names its release; MaveDB none. A search records its words (the POST's body).
+    const hosts = { UniProt: /^https:\/\/rest\.uniprot\.org\//, MaveDB: /^https:\/\/api\.mavedb\.org\/api\/v1\// };
+    const complete = records.filter(({ kind, meta }) => hosts[meta.service]?.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && (meta.service !== 'UniProt' || meta.version) && (kind !== 'mavedb-search' || (meta.method === 'POST' && JSON.parse(meta.request).text)) && meta.contentType === (/\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json'));
+    check('public-data', 'each cached response carries its retrieval record: the service, the URL on a listed host, when it was retrieved, UniProt\'s release, a search\'s words', `${complete.length} of ${records.length} records complete (${[...new Set(records.map((r) => r.kind))].map((k) => `${k} ${records.filter((r) => r.kind === k).length}`).join(', ')})`, records.length >= 14 && complete.length === records.length, 'all');
     for (const [id, accession] of Object.entries({ 'grb2-sh3': 'P62993', hsp90: 'P02829', factor9: 'P00740' })) {
       const example = exampleById(id);
       const design = JSON.parse(readFileSync(new URL(`../web/${example.files.design}`, import.meta.url), 'utf8'));
@@ -2240,6 +2257,90 @@ const suites = {
       const methods = writeMethods(ws, run, { results: o.scored.results });
       const sentence = /Its position in the reference was checked against UniProt P62993 \[\d+\], release 2026_03, retrieved 2026-10-10: residues 159–214, identical\./.exec(methods.markdown)?.[0];
       check('public-data', 'the GRB2 example checked against UniProt as its guide says: the design unchanged, the check kept with the workspace and written in the methods, with UniProt cited', sentence ?? 'no sentence', ws.design === o.ws.design && ws.targets[0].reference?.release === '2026_03' && Boolean(sentence) && methods.references.some((r) => r.key === 'uniprot'), 'unchanged; kept; written; cited');
+    }
+
+    // MaveDB (wave 3, slice 2): the three feasibility records (four score sets), read with no code
+    // for any of them; their published scores read as published equal MaveDB's columns.
+    const FEASIBILITY = [
+      ['urn:mavedb:00000835-a-1', 'mavedb-grb2-sh3', '', 'grb2-sh3'],
+      ['urn:mavedb:00000003-a-1', 'mavedb-brca1-ring', 'nt/', null],
+      ['urn:mavedb:00000003-a-2', 'mavedb-brca1-ring', 'aa/', null],
+      ['urn:mavedb:00001200-a-1', 'mavedb-factor9', '', 'factor9'],
+    ];
+    for (const [urn] of FEASIBILITY) {
+      const record = readScoreSet(cached('mavedb', `${urn.replaceAll(':', '_')}.json`));
+      const { targets, problems } = targetsOf(record);
+      check('public-data', `MaveDB ${urn}: the record read (title, license and terms, citation, target, columns)`, `"${record.title}", ${record.license.short}, ${targets.map((t) => `${t.name} ${t.sequenceType} ${t.sequence.length}${t.offset ? ` (offset ${t.offset})` : ''}`).join('; ')}; ${record.scoreColumns.length} score and ${record.countColumns.length} count columns; ${record.calibrations.length} calibrations; ${record.citation?.slice(0, 50)}…`, targets.length === 1 && !problems.length && record.license.open && Boolean(record.citation) && record.hasCounts, 'one target; open license; cited; counts');
+    }
+    const fx = readoutOf(readScoreSet(cached('mavedb', 'urn_mavedb_00001200-a-1.json')));
+    check('public-data', 'MaveDB urn:mavedb:00001200-a-1: the experiment\'s keywords give the design\'s readout and library method, in MaveDB\'s terms', JSON.stringify(fx), fx.readout.method === 'Reporter' && fx.readout.mechanism === 'Loss of function' && fx.readout.modelSystem === 'Immortalized human cells' && fx.libraryMethod === 'Microarray synthesis', 'Reporter; Loss of function; Immortalized human cells; Microarray synthesis');
+    const bap1 = readScoreSet(cached('mavedb', 'urn_mavedb_00000662-a-2.json'));
+    check('public-data', 'a record whose target is named by an accession (BAP1, CC BY 4.0): shown with its terms, its target said not readable yet', `${bap1.license.short}: ${bap1.license.terms} ${targetsOf(bap1).problems[0]?.slice(0, 90)}…`, !bap1.license.open === false && /crediting the authors/.test(bap1.license.terms) && targetsOf(bap1).targets.length === 0, 'terms shown; not read');
+    {
+      // The published scores read as published: every row's score, SE and the variants left out,
+      // against MaveDB's own columns (external data).
+      const lines = [];
+      let exact = true;
+      for (const [urn, set, dir, exampleId] of FEASIBILITY) {
+        const record = readScoreSet(cached('mavedb', `${urn.replaceAll(':', '_')}.json`));
+        const target = targetsOf(record).targets[0];
+        const scores = parseTable(dataset(set).bytes(`${dir}scores.csv`), { fileName: 'scores.csv' });
+        const layout = detectLayout(scores);
+        const design = scoresDesign(record, { table: scores, layout, target });
+        const read = scoreTable(scores, design, defaultParameters(design));
+        const given = scores.columns.find((c) => c.name === design.scores.score).numeric;
+        const se = scores.columns.find((c) => c.name === design.scores.se).numeric;
+        const c = read.results.conditions[0];
+        let same = 0;
+        for (let i = 0; i < scores.rows; i += 1) if (Object.is(c.score[i], given[i]) && Object.is(c.se[i], se[i])) same += 1;
+        const na = given.reduce((a, x) => a + (Number.isNaN(x) ? 1 : 0), 0);
+        exact &&= read.ok && same === scores.rows && c.scored === scores.rows - na;
+        // The counts' design, drafted from their column names: against the documented design where
+        // one describes the same table.
+        const counts = parseTable(dataset(set).bytes(`${dir}counts.csv`), { fileName: 'counts.csv' });
+        const { design: drafted } = countsDesign(record, { table: counts, layout: detectLayout(counts), target });
+        const valid = validateDesign(drafted, { columns: counts.columns.map((x) => x.name) }).ok;
+        const reference = exampleId ? JSON.parse(readFileSync(new URL(`designs/${exampleId}.design.json`, import.meta.url), 'utf8')) : null;
+        // Bins compared by their order: MaveDB records no bin values, so the draft numbers them 1, 2, 3, 4
+        // (the same scores, scaled per replicate, as the documented weights 0.25–1).
+        const structure = (d) => meaning(d).slots.map((x) => x.replace(/\|b(\d+):[^=]+=/, '|b$1='));
+        const agree = reference ? JSON.stringify(structure(drafted)) === JSON.stringify(structure(reference)) : null;
+        const values = reference && drafted.model === 'bins' && JSON.stringify(meaning(drafted).slots) !== JSON.stringify(meaning(reference).slots);
+        lines.push(`${urn}: ${c.scored} of ${scores.rows} as published (${na} NA), ${same} rows identical; counts drafted ${drafted.model}${valid ? ', valid' : ', NOT valid'}${agree === null ? '' : agree ? `, as the documented design${values ? ' but for the bins\' values (ranks 1–4; documented 0.25–1)' : ''}` : ', unlike the documented design'}`);
+        exact &&= valid && agree !== false;
+      }
+      check('public-data', 'each feasibility record\'s published scores read as published equal MaveDB\'s columns, row for row (score and SE, NA left out); its counts get a valid design drafted from their names, as the documented design where one describes the same table', lines.join('; '), exact, 'identical; valid; as documented');
+    }
+    {
+      // A workspace of published scores, opened from MaveDB, saved as an archive and reopened: its
+      // record and the table's origin kept, its run recomputed to its recorded hash.
+      const record = readScoreSet(cached('mavedb', 'urn_mavedb_00000835-a-1.json'));
+      const target = targetsOf(record).targets[0];
+      const bytes = new Uint8Array(readFileSync(new URL('fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv', import.meta.url)));
+      const scores = parseTable(bytes, { fileName: 'scores.csv' });
+      const design = scoresDesign(record, { table: scores, layout: detectLayout(scores), target });
+      let ws = workspaceOf(scores, design, { layout: 'mavedb-scores', sha256: sha256(bytes), size: bytes.length, files: [{ fileName: 'scores.csv', sha256: sha256(bytes), size: bytes.length }], origin: { database: 'MaveDB', urn: record.urn, file: 'scores', license: 'CC0', retrieved: '2026-10-11T02:08:41Z' } });
+      ws = { ...ws, records: [{ database: 'MaveDB', ...record }] };
+      const parameters = defaultParameters(design);
+      const read = scoreTable(scores, design, parameters);
+      const run = makeRun({ inputs: runInputs({ source: ws.sources[0], design: ws.design, parameters }), source: ws.sources[0], results: read.results, software: SOFTWARE, name: 'Published scores', created: '2026-10-11T02:10:00.000Z' });
+      ws = addRun(ws, run).ws;
+      const archive = await writeArchive(ws, { software: SOFTWARE, sources: new Map([[sha256(bytes), bytes]]), results: new Map([[run.id, read.results]]) });
+      const reopened = await readArchive(archive.bytes);
+      const again = recompute(reopened.ws, reopened.sources);
+      check('public-data', 'a workspace of published scores from MaveDB saved as an archive reopens: its record and the table\'s origin kept, its run (read as published) recomputed to its recorded hash', `${reopened.problems.length} problems; record ${reopened.ws.records?.[0]?.urn}; origin ${reopened.ws.sources[0].origin?.urn}; output ${outputDigest(again.scored.results).slice(0, 12)}… against ${run.output.sha256.slice(0, 12)}…`, !reopened.problems.length && reopened.ws.records?.[0]?.urn === record.urn && reopened.ws.sources[0].origin?.file === 'scores' && outputDigest(again.scored.results) === run.output.sha256, 'kept; the same');
+    }
+    {
+      // A score set of scores alone (PTEN, the example): what the readiness names, and where.
+      const record = readScoreSet(cached('mavedb', 'urn_mavedb_00000013-a-1.json'));
+      const target = targetsOf(record).targets[0];
+      const scores = parseTable(dataset('mavedb-pten-vampseq').bytes('scores.csv'), { fileName: 'scores.csv' });
+      const design = scoresDesign(record, { table: scores, layout: detectLayout(scores), target });
+      const ws = workspaceOf(scores, design, { layout: 'mavedb-scores', origin: { database: 'MaveDB', urn: record.urn, file: 'scores', hasCounts: false, rawReads: record.experiment.rawReads.map((r) => r.id) } });
+      const r = readiness(ws);
+      const counts = r.gaps.find((g) => g.id === 'counts');
+      const status = Object.fromEntries(r.analyses.map((a) => [a.id, a.status]));
+      check('public-data', 'a record of scores alone: the map, QC of what scores show and comparison possible; rescoring and QC of the counts not, the counts named with where they may be (the record names its raw reads)', `${JSON.stringify(r.base)}; rescore ${status['score.rescore']}, map ${status['record.scores']}, compare ${status['record.compare']}; counts: ${counts?.where}`, r.base.scores && status['score.rescore'] === 'unavailable' && status['qc.counts'] === 'unavailable' && status['record.scores'] === 'ready' && status['record.compare'] === 'ready' && /MaveDB has no counts for urn:mavedb:00000013-a-1/.test(counts?.where) && /PRJNA428380/.test(counts?.where), 'as said');
     }
   },
 };

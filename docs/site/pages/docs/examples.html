@@ -1,7 +1,7 @@
 ---
 title: Examples
-description: MaveScape's bundled examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), and six simulated ones whose true effects are known, one of them with problems planted.
-lede: Nine examples come with MaveScape. Three are published experiments from MaveDB, their counts unchanged: two populations, a growth time series and sorted bins. Six are simulated, with every true effect known: two populations, a time series, a sort, a barcoded library, two conditions from shared inputs, and an experiment with two problems planted. Each opens scored, with its question, guided steps of a few minutes and what to expect, in the inspector.
+description: MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), a published score set opened from MaveDB (PTEN's abundance, scores alone), and six simulated ones whose true effects are known, one of them with problems planted.
+lede: Ten examples come with MaveScape. Three are published experiments from MaveDB, their counts unchanged and bundled: two populations, a growth time series and sorted bins. One is a score set opened from MaveDB when you open it: published scores alone, with their record. Six are simulated, with every true effect known: two populations, a time series, a sort, a barcoded library, two conditions from shared inputs, and an experiment with two problems planted. Each opens scored, with its question, guided steps of a few minutes and what to expect, in the inspector.
 ---
       <h2 id="grb2">GRB2 SH3 domain (published)</h2>
       <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
@@ -34,6 +34,17 @@ lede: Nine examples come with MaveScape. Three are published experiments from Ma
         <li>Quality control fails the variance beyond counting, about 2,300×: some 10,000 reads per variant in each bin far exceed the cells sorted. The moderated combination carries the excess into every SE.</li>
         <li>The cells per bin are not assessed, and the bins cannot be scored by maximum likelihood: MaveDB records neither the cells sorted nor the gates, which the sorter's report has.</li>
         <li>With MaveScape's defaults (each replicate scaled to nonsense 0 and wild type 1) the scores follow the published ones with r 0.994. With MultiSTEP's own scale (the lowest 5% of missense at 0) and the replicates' mean, set in the Score view, r 0.9995; on that scale the nonsense median is 0.47.</li>
+      </ul>
+
+      <h2 id="pten">PTEN abundance, opened from MaveDB (published scores)</h2>
+      <p>VAMP-seq abundance of 4,409 PTEN variants, as MaveDB publishes them (urn:mavedb:00000013-a-1, CC0 1.0; Matreyek et al., Nature Genetics 2018): scores alone, scaled with the wild type at 1 and nonsense at 0, with their standard errors and 95% intervals, and no counts. Opened from MaveDB through MaveScape's list of public services when you open it (1.7 MB, then cached), its table checked against the checksum it had when the example was made. It needs the MaveScape program.</p>
+      <p><strong>The question:</strong> what can a published record of scores alone show, what does it leave out, and where would the rest be found?</p>
+      <shot name="pten-mavedb" alt="The map of PTEN's published abundance scores over 404 positions, the wild type at 1.00; the inspector shows the scores table opened from MaveDB, CC0, retrieved 2026-10-11, and the record: PTEN VAMP-seq, its citation, target and what it holds">PTEN's abundance as MaveDB publishes it, and the record in the inspector.</shot>
+      <ul>
+        <li>All 4,409 variants have a score, read as published: synonymous median 1.00, nonsense 0.06, the controls well separated (AUC 0.98).</li>
+        <li>About a quarter of missense variants score below 0.5; the least tolerant positions are spread through both the phosphatase and the C2 domain, as a stability readout expects.</li>
+        <li>The record gives the assay in MaveDB's terms (a reporter, loss of function, human cells, a library by oligo-directed mutagenic PCR), which become the design's readout, but not what a higher score means: the example states it from the paper. Its six calibrations are in the inspector, ExCALIBR's for research use only.</li>
+        <li>QC passes what it can assess from scores alone but coverage, 53% of all substitutions. Rescoring and QC of the counts need counts, which MaveDB does not hold for this record: the readiness says where they may be (the paper's supplement, the authors' repository, the raw reads PRJNA428380).</li>
       </ul>
 
       <h2 id="simulated">A simulated experiment (known truth)</h2>

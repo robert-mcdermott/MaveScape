@@ -1,7 +1,8 @@
 # Network requests
 
 MaveScape analyses your files on your computer and sends them nowhere. It reaches the internet
-for one purpose: public data, such as a protein's UniProt entry. This page lists every request it
+for one purpose: public data, such as a protein's UniProt entry or a score set published in
+MaveDB. This page lists every request it
 can make, every host it may contact, and what each request sends (requirement P3).
 
 - **One way out.** The page in your window contacts nothing but the MaveScape program that serves
@@ -23,6 +24,7 @@ cache.
 | --- | --- |
 | `--offline` | No network request at all. Public data come only from copies already in the cache; anything else is refused with a message saying so. |
 | `--no-fetch` | Public data are off: no request, no cache. The page says so where it would have offered them. |
+| `--mavedb URN` | Opens a MaveDB score set when MaveScape starts (as `mavescape urn:mavedb:…`): its record and tables, through the requests below. |
 | `--cache-dir DIR` | The cache's folder. The default is `<user cache dir>/MaveScape`: `~/Library/Caches/MaveScape` on macOS, `~/.cache/MaveScape` on Linux, `%LocalAppData%\MaveScape` on Windows. |
 
 `mavescape run` and `mavescape validate` read only the files they are given: public data are off
@@ -40,7 +42,7 @@ host, path, port or scheme (HTTPS only) is refused before it is sent.
 | Host | Paths | Service | Used for |
 | --- | --- | --- | --- |
 | `rest.uniprot.org` | all | UniProt | a target's entry; finding a target by its sequence (MaveScape 0.3) |
-| `api.mavedb.org` | `/api/` | MaveDB | score sets, counts and their metadata (MaveScape 0.3, to come) |
+| `api.mavedb.org` | `/api/` | MaveDB | score sets' records, scores and counts, and the search (MaveScape 0.3) |
 | `files.rcsb.org` | all | RCSB PDB | structures (MaveScape 0.5, to come) |
 | `data.rcsb.org` | all | RCSB PDB | structures' metadata (MaveScape 0.5, to come) |
 | `www.ebi.ac.uk` | `/pdbe/` | PDBe | structures and their residue mappings (to come) |
@@ -61,6 +63,10 @@ leaves your computer.
 | --- | --- | --- | --- | --- |
 | `/api/fetch/uniprot/{accession}` | `https://rest.uniprot.org/uniprotkb/{accession}.json?fields=accession,id,protein_name,gene_names,organism_name,length,sequence` | a UniProt accession (P62993) | the entry's names, organism and sequence, to place the target in it (Experiment, Target: **Check against UniProt**; the `check_target` action) | 30 days; up to 8 MB |
 | `/api/fetch/uniparc` with `?sequence=…` | `https://rest.uniprot.org/uniparc/sequence?sequence={sequence}&fields=upi,accession,organism,protein,gene&dbTypes=UniProtKB/Swiss-Prot,UniProtKB/Swiss-Prot%20protein%20isoforms,UniProtKB/TrEMBL&active=true` | **a protein sequence (the target's), only once you confirm** | the UniProt entries with exactly that sequence, to find a target that has no accession (Experiment, Target: **Find in UniProt by sequence…**) | kept; up to 16 MB |
+| `/api/fetch/mavedb/score-sets/{urn}` | `https://api.mavedb.org/api/v1/score-sets/{urn}` | a MaveDB URN (urn:mavedb:00000835-a-1) | the score set's record: its title, target, license, publications, keywords, columns and calibrations (Open from MaveDB; `open_mavedb`; `mavescape --mavedb`) | 7 days; up to 32 MB |
+| `/api/fetch/mavedb/score-sets/{urn}/scores` | `https://api.mavedb.org/api/v1/score-sets/{urn}/scores` | a MaveDB URN | the score set's published scores (CSV) | 30 days; up to 256 MB |
+| `/api/fetch/mavedb/score-sets/{urn}/counts` | `https://api.mavedb.org/api/v1/score-sets/{urn}/counts` | a MaveDB URN | the counts the authors deposited beside the scores (CSV), when they did | 30 days; up to 256 MB |
+| `/api/fetch/mavedb/search` with `?text=…&page=…` | `https://api.mavedb.org/api/v1/score-sets/search` (POST `{"text": …, "published": true, "limit": 100, "offset": …}`) | the words searched for (GRB2, abundance…) and the page of results | the published score sets that match, 100 at a time (Open from MaveDB; `search_mavedb`) | 1 day; up to 32 MB |
 
 The program also answers two requests of its own, which contact nothing: `/api/fetch` (the mode,
 the cache's folder, these hosts and requests) and `/api/fetch/cache` (what is in the cache).
@@ -89,7 +95,8 @@ nothing that names you, your computer or your files.
 - **Size.** Each request has a largest answer it accepts (the table above). An answer beyond it is
   refused, however it comes: declared, streamed, or compressed (a small compressed answer that
   expands beyond the limit stops at the limit).
-- **Only JSON** is accepted from the requests above.
+- **Only JSON**, or a CSV table where the request is for one (a header of comma-separated names,
+  not a page), is accepted from the requests above.
 - **Redirects** stay on the same host, at most five, and are checked against the list too.
 - **Time.** 45 seconds for a service to start answering, 120 for the whole answer.
 - **Retries.** An answer of HTTP 429, 502, 503 or 504, or no answer, is tried twice more, after 1
@@ -98,14 +105,17 @@ nothing that names you, your computer or your files.
 
 ## The cache
 
-Each answer is a file in `<cache dir>/<kind>/`, named by the accession (`uniprot/P62993.json`) or,
+Each answer is a file in `<cache dir>/<kind>/`, named by the accession (`uniprot/P62993.json`), by
+a score set's URN without its colons (`mavedb/urn_mavedb_00000835-a-1.json`, `….scores.csv`,
+`….counts.csv`), by the SHA-256 of a search's words and page (`mavedb-search/<sha256>.json`) or,
 for a sequence's lookup, by the SHA-256 of the sequence (`uniparc/<sha256>.json`), beside
 `<name>.meta.json`, its retrieval record (docs/FORMATS.md, "The cache of public data"): the
 service, the URL it came from, when it was retrieved and last confirmed, and the ETag, date and
 release the service gave. A lookup's record names its request with `{sequence}` in place of the
 sequence: the cache holds public answers only, never your sequence.
 
-- A copy younger than its kind's age (30 days for UniProt entries; a sequence's lookup is kept) is
+- A copy younger than its kind's age (30 days for UniProt entries and MaveDB's tables, 7 for a
+  MaveDB record, which gains calibrations, 1 for a search; a sequence's lookup is kept) is
   served without asking. An older one is checked with the service: confirmed unchanged, or
   replaced.
 - When the service cannot be reached, or MaveScape is offline, an older copy is served, marked
@@ -117,14 +127,19 @@ sequence: the cache holds public answers only, never your sequence.
 Every answer the page receives says where it came from, in headers the page records:
 `X-MaveScape-Cache` (`hit`, `miss`, `revalidated` or `stale`), `X-MaveScape-Service`,
 `X-MaveScape-Source`, `X-MaveScape-Retrieved`, `X-MaveScape-Checked`, `X-MaveScape-ETag` and
-`X-MaveScape-Version` (UniProt's release, such as `2026_03`).
+`X-MaveScape-Version` (UniProt's release, such as `2026_03`). MaveDB gives no ETag or release: a
+record's own dates (published, modified) say which version it is.
 
 ## How this is checked
 
 - `go test` (`fetch_test.go`): only the listed hosts, paths, scheme and port; nothing sent to an
-  unlisted host; redirects; size limits, streamed and compressed answers included; retries;
+  unlisted host; redirects; size limits, streamed and compressed answers included; retries; MaveDB's
+  records, tables and search (URNs of published score sets only, CSV answers, the search's words
+  POSTed and cached);
   revalidation by ETag; stale copies; `--offline` and `--no-fetch`; the sequence sent only once
   confirmed; this page lists every request and host (`TestNetworkDocumentListsEveryRequest`); no
   script in the page names another origin in a request.
 - `validation/remote-session.mjs` drives a whole session offline, and records every request the
   page makes: none goes beyond its own origin.
+- `validation/mavedb-live.mjs` opens the feasibility records from MaveDB, live (CI runs it), and
+  checks that the tables MaveDB sends are the ones the validation pins.

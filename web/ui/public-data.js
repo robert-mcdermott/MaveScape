@@ -25,9 +25,10 @@ const UNAVAILABLE = {
   off: 'Public data are switched off (MaveScape was started with --no-fetch).',
 };
 
-// A request to the fetcher: { ok, json, retrieval } or { ok: false, status, message, confirm }.
-// confirm, on a refusal, is what the request would send, for the person to see (HTTP 428).
-export async function fetchPublic(app, path, { confirmed = false, refresh = false } = {}) {
+// A request to the fetcher: { ok, json, retrieval } (or bytes for as: 'bytes', a table) or
+// { ok: false, status, message, confirm }. confirm, on a refusal, is what the request would send,
+// for the person to see (HTTP 428).
+export async function fetchPublic(app, path, { confirmed = false, refresh = false, as = 'json' } = {}) {
   const state = publicDataState(app);
   if (UNAVAILABLE[state]) return { ok: false, status: 0, message: UNAVAILABLE[state] };
   const url = `api/fetch/${path}${refresh ? `${path.includes('?') ? '&' : '?'}refresh=1` : ''}`;
@@ -37,9 +38,11 @@ export async function fetchPublic(app, path, { confirmed = false, refresh = fals
   } catch {
     return { ok: false, status: 0, message: 'The MaveScape program did not answer: is it still running?' };
   }
+  const retrieval = retrievalOf((name) => response.headers.get(name));
+  if (response.ok && as === 'bytes') return { ok: true, bytes: new Uint8Array(await response.arrayBuffer()), retrieval };
   const json = await response.json().catch(() => null);
   if (!response.ok) return { ok: false, status: response.status, message: json?.error ?? `HTTP ${response.status}`, confirm: json?.confirm ?? null };
-  return { ok: true, json, retrieval: retrievalOf((name) => response.headers.get(name)) };
+  return { ok: true, json, retrieval };
 }
 
 // The target checked against a UniProt entry (its own accession unless another is given): the

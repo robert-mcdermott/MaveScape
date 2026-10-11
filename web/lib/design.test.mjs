@@ -143,7 +143,7 @@ test('a score-only design names its score columns', () => {
   const design = { ...twoPopulation(), model: 'scores', samples: [], replicates: [], scores: { score: 'score', se: 'SE' } };
   assert.equal(validateDesign(design, { columns: ['hgvs_pro', 'score', 'SE'] }).ok, true);
   assert.match(messages(validateDesign(design, { columns: ['hgvs_pro', 'score'] })), /no column "SE"/);
-  assert.match(summarizeDesign(design).lines.join('\n'), /Precomputed scores: column "score" with standard errors in "SE"/);
+  assert.match(summarizeDesign(design).lines.join('\n'), /Published scores: column "score" with standard errors in "SE"/);
 });
 
 test('the summary describes the design in plain language', () => {

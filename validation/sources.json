@@ -132,6 +132,20 @@
      "sha256": "247ed53735d626eb46fb1af162ee57e084ec596e6808438e51aef2b297da9f46"
     }
    ]
+  },
+  "mavedb-pten-vampseq": {
+   "title": "PTEN abundance by VAMP-seq (urn:mavedb:00000013-a-1)",
+   "description": "Published scores only (no counts): VAMP-seq abundance of 4,409 PTEN variants, scaled with the wild type at 1 and nonsense at 0, with SEs, 95% intervals and each experiment's scores; six published calibrations in the record. The example opened from MaveDB (wave 3, slice 2).",
+   "source": "MaveDB; Matreyek et al., Nat Genet 2018 (doi:10.1038/s41588-018-0122-z)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000013-a-1/scores",
+     "size": 1735960,
+     "sha256": "ceaf3f0720af8aa06012d60959efbcd7ab54a5317d2bebdace8a0f49de4b2b97"
+    }
+   ]
   }
  }
 }

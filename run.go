@@ -377,6 +377,8 @@ type runSummary struct {
 	Differential bool     `json:"comparesConditions"`
 	Barcodes     bool     `json:"barcodes"`
 	Map          bool     `json:"map"`
+	// Published: scores read as published (a design of model "scores"), with no counts to write.
+	Published bool `json:"published"`
 }
 
 type qcOverall struct {
@@ -515,9 +517,13 @@ func executeRun(ctx context.Context, opts runOptions, browser string, record *ru
 	} else {
 		exports = append(exports, struct{ what, file, condition string }{"scores", "scores.csv", ""})
 	}
+	if !summary.Published {
+		exports = append(exports,
+			struct{ what, file, condition string }{"counts", "counts.csv", ""},
+			struct{ what, file, condition string }{"qc-samples", "qc_samples.csv", ""},
+		)
+	}
 	exports = append(exports,
-		struct{ what, file, condition string }{"counts", "counts.csv", ""},
-		struct{ what, file, condition string }{"qc-samples", "qc_samples.csv", ""},
 		struct{ what, file, condition string }{"qc-variants", "qc_variants.csv", ""},
 		struct{ what, file, condition string }{"qc-findings", "qc_findings.csv", ""},
 	)

@@ -6,3 +6,11 @@ request and when it was retrieved.
 UniProt is licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
 The UniProt Consortium. UniProt: the Universal Protein Knowledgebase in 2025. Nucleic Acids
 Research 2025;53(D1):D609-D617. doi:10.1093/nar/gkae1010
+
+MaveDB's answers (mavedb/, mavedb-search/), retrieved 2026-10-11 from api.mavedb.org, unchanged:
+the records of urn:mavedb:00000835-a-1 (with its scores and counts), 00000003-a-1, 00000003-a-2,
+00001200-a-1, 00000011-a-1, 00000013-a-1 and 00000662-a-2, and two searches. The score sets are
+CC0, but for urn:mavedb:00000662-a-2 (BAP1, CC BY 4.0), whose authors and publication its record
+names. MaveDB: Rubin AF, et al. MaveDB 2024: a curated community database with over seven million
+variant effects from multiplexed functional assays. Genome Biology 2025;26.
+doi:10.1186/s13059-025-03476-y

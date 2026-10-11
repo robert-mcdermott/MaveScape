@@ -41,6 +41,10 @@ const wanted = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--t
 const audit = args.includes('--audit');
 const shots = !args.includes('--no-shots');
 const AXE = join(ROOT, 'validation/cache/axe-core/axe.min.js');
+const PTEN = join(ROOT, 'validation/cache/mavedb-pten-vampseq/scores.csv');
+if (wanted.length === 0 || wanted.includes('pten-mavedb')) {
+  if (!existsSync(PTEN)) throw new Error('The PTEN example\'s scene needs MaveDB\'s table: run node validation/fetch.mjs mavedb-pten-vampseq');
+}
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
 
 // --- MaveScape ------------------------------------------------------------------------------------
@@ -57,6 +61,12 @@ async function startMaveScape() {
   // so the scenes that check a target are answered from the cache and send nothing.
   const cache = mkdtempSync(join(temp, 'cache-'));
   cpSync(join(ROOT, 'validation/fixtures/public-data'), cache, { recursive: true });
+  // The PTEN example's table, from the validation's external data (node validation/fetch.mjs
+  // mavedb-pten-vampseq), with the retrieval record the fetcher would write.
+  if (existsSync(PTEN)) {
+    cpSync(PTEN, join(cache, 'mavedb', 'urn_mavedb_00000013-a-1.scores.csv'));
+    writeFileSync(join(cache, 'mavedb', 'urn_mavedb_00000013-a-1.scores.csv.meta.json'), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: 'https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000013-a-1/scores', retrieved: '2026-10-11T02:24:52Z' }, null, 2)}\n`);
+  }
   const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
@@ -156,6 +166,30 @@ const scenes = {
     await clearToasts();
     await sleep(600);
   },
+  // Open from MaveDB (wave 3, slice 2): a search for VAMP-seq, MaveDB's answer from the cache.
+  async 'mavedb-search'() {
+    await act('set_mode', { mode: 'start' });
+    await js(`import('/ui/mavedb.js').then((m) => { m.openMaveDBDialog(window.mavescape, { query: 'VAMP-seq' }); return true; })`);
+    await waitFor(`document.querySelectorAll('.mavedb-hit').length > 3`);
+    await sleep(500);
+  },
+  // A record before it is opened: PTEN's VAMP-seq, its license, the assay in MaveDB's terms, and
+  // its calibrations.
+  async 'mavedb-record'() {
+    await act('set_mode', { mode: 'start' });
+    await js(`import('/ui/mavedb.js').then((m) => { m.openMaveDBDialog(window.mavescape, { query: 'urn:mavedb:00000013-a-1' }); return true; })`);
+    await waitFor(`Boolean(document.querySelector('.dialog .record-view .calibration'))`);
+    await js(`document.querySelector('.dialog .record-view .section-title:nth-of-type(3)')?.scrollIntoView({ block: 'start' })`);
+    await sleep(500);
+  },
+  // GRB2 opened from MaveDB: its published scores on the map, the record in the inspector.
+  async 'mavedb-published'() {
+    await act('open_mavedb', { urn: 'urn:mavedb:00000835-a-1' });
+    await act('set_mode', { mode: 'map' });
+    await act('focus', { kind: 'table', name: 'scores' });
+    await clearToasts();
+    await sleep(800);
+  },
   // What the analysis can do (wave 2, slice 10): GRB2's readiness in the Experiment view, and what
   // the published counts leave out.
   async readiness() {
@@ -235,6 +269,14 @@ const scenes = {
     await sleep(600);
   },
   // Factor IX: 461 positions in three overlapping tiles, a variant's distribution over the bins.
+  // PTEN opened from MaveDB (wave 3, slice 2): its published scores on the map, the record and its
+  // calibrations in the inspector.
+  async 'pten-mavedb'() {
+    await example('pten-mavedb');
+    await act('focus', { kind: 'table', name: 'scores' });
+    await clearToasts();
+    await sleep(800);
+  },
   async factor9() {
     await example('factor9');
     await act('render_map', { color_by: 'score', rows: 'biochemical' });

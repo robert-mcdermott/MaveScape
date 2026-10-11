@@ -929,3 +929,21 @@ table.matches td:last-child { width: 1%; }
 .reference-row { display: grid; gap: 6px; margin-top: 10px; }
 .reference-row .reference-line { margin: 0; }
 .statusbar-link.network .dot { margin-right: 2px; }
+
+/* MaveDB (wave 3, slice 2): the search, a record, its calibrations. */
+.search-row { display: flex; gap: 8px; align-items: center; }
+.search-row .input { flex: 1; }
+.mavedb-results { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.mavedb-hit { display: grid; gap: 3px; width: 100%; text-align: left; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); font: inherit; cursor: pointer; }
+.mavedb-hit:hover, .mavedb-hit:focus-visible { border-color: var(--accent); background: var(--hover); }
+.mavedb-hit .badge, .entry-card .badge { margin-left: 8px; }
+.record-view { display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.record-view > *, .calibration > * { min-width: 0; }
+.inspector-details { min-width: 0; }
+.record-view .section-title { margin-top: 8px; }
+.record-view p.small { margin: 2px 0; }
+.calibration { display: grid; gap: 4px; margin: 6px 0 10px; }
+.calibration-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; }
+.btn-row .spacer { flex: 1; }
+.open-row { padding: 8px 10px; margin: 4px 0 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); }

@@ -10,7 +10,7 @@
 //   placementPatch(target, entry, placement) → the design's target fields the entry changes
 //   referenceOf(entry, retrieval, placement) → target.reference
 //   uniparcEntries(json) → { uniparc, entries: [{ accession, reviewed, isoform, gene, name, organism }] }
-//   retrievalOf(header) → { service, source, retrieved, checked, version, etag, cache }
+//   retrievalOf, retrievalText (retrieval.js)
 
 import { targetProtein } from './target.js';
 
@@ -150,16 +150,4 @@ export function uniparcEntries(json) {
   return { uniparc: json?.uniParcId ?? null, entries: entries.map((e, i) => [e, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([e]) => e) };
 }
 
-// The retrieval record the host sends with a response (fetch.go, writeCached): header(name) reads
-// one of its headers.
-export function retrievalOf(header) {
-  const read = (name) => header(`X-MaveScape-${name}`) || null;
-  return { service: read('Service'), source: read('Source'), retrieved: read('Retrieved'), checked: read('Checked'), version: read('Version'), etag: read('ETag'), cache: read('Cache') };
-}
-
-// "release 2026_03, retrieved 2026-10-10" for a record (the same text in every browser).
-export function retrievalText(record) {
-  const release = record?.release ?? record?.version ?? null;
-  const day = /^\d{4}-\d{2}-\d{2}/.exec(record?.retrieved ?? '')?.[0] ?? null;
-  return [release ? `release ${release}` : null, day ? `retrieved ${day}` : null].filter(Boolean).join(', ');
-}
+export { retrievalOf, retrievalText } from './retrieval.js';

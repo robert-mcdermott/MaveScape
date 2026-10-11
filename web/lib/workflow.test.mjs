@@ -24,10 +24,20 @@ test('from nothing to the counts; a FASTA alone asks for its count table', () =>
   assert.equal(fasta[1].state, 'done');
 });
 
-test('a table of scores, or with blocking problems, needs attention, and says why', () => {
-  const scores = workflowSteps(ws({ sources: [{ ...source, layout: 'mavedb-scores', mapping: { countColumns: [] } }], targets: [target] }));
-  assert.equal(focusStep(scores).id, 'counts');
-  assert.match(focusStep(scores).detail, /holds scores, not counts/);
+test('a table of published scores is read by a design of its own; a table with neither counts nor scores, or with blocking problems, needs attention', () => {
+  const scoresSource = { ...source, layout: 'mavedb-scores', mapping: { variantColumn: 'hgvs_pro', level: 'protein', countColumns: [], scoreColumns: { score: 'score', se: 'se' } } };
+  const scores = workflowSteps(ws({ sources: [scoresSource], targets: [target] }));
+  assert.equal(states(scores), 'counts:done target:done design:next score:todo qc:todo map:todo record:optional');
+  assert.equal(scores[0].label, 'Scores');
+  assert.match(scores[2].detail, /found "score", with SEs in "se"\): the design reads them as published/);
+  assert.equal(scores[2].action.kind, 'draft');
+  const published = { format: 'mavescape-design', version: 1, model: 'scores', variants: { column: 'hgvs_pro', level: 'protein' }, targets: [target], samples: [], replicates: [], scores: { score: 'score', se: 'se' }, controls: { wildType: 'auto', synonymous: 'auto', nonsense: 'auto' } };
+  const toRead = workflowSteps(ws({ sources: [{ ...scoresSource, columns: [{ name: 'hgvs_pro' }, { name: 'score' }, { name: 'se' }] }], targets: [target], design: published, designSource: 's' }));
+  assert.equal(states(toRead), 'counts:done target:done design:done score:next qc:todo map:todo record:optional');
+  assert.equal(toRead[3].action.label, 'Read them');
+  const neither = workflowSteps(ws({ sources: [{ ...source, layout: 'mavedb-scores', mapping: { countColumns: [] } }], targets: [target] }));
+  assert.equal(focusStep(neither).id, 'counts');
+  assert.match(focusStep(neither).detail, /no columns of counts and no column of scores/);
   const broken = workflowSteps(ws({ sources: [{ ...source, problems: { blocking: ['"p.Ser2Ala" is on two rows'] } }], targets: [target] }));
   assert.equal(broken[0].state, 'attention');
   assert.equal(broken[0].action.kind, 'focus');

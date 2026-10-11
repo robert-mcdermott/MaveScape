@@ -52,6 +52,7 @@ export async function runFile(app, run, kind, condition = 0) {
   const csv = (name, text) => ({ name: `${base}_${name}.csv`, type: 'text/csv', text });
   if (kind === 'scores') return csv('scores', scoresCSV(results, run, condition));
   if (kind === 'counts') {
+    if (run.inputs.design.model === 'scores') throw new Error(`${run.name} holds published scores: it has no counts to export.`);
     const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
     if (!source) throw new Error(`The table ${run.name} scored is not in this workspace.`);
     return csv('counts', countsCSV(await app.sourceTable(source), run.inputs.design));
@@ -87,14 +88,16 @@ export async function exportRunFile(app, run, kind, condition = 0) {
 }
 
 export function runExportItems(app, run, condition = 0) {
+  // Published scores (wave 3, slice 2) have no counts, no samples and no package of counts.
+  const published = run.inputs.design.model === 'scores';
   return [
     { section: 'MaveDB columns' },
     { label: 'Scores (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'scores', condition) },
-    { label: 'Counts scored (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'counts', condition) },
+    ...(published ? [] : [{ label: 'Counts scored (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'counts', condition) }]),
     ...((run.inputs.design.conditions?.length ?? 0) > 1 && run.inputs.parameters.differential ? [{ label: 'Differential scores between conditions (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'differential', condition) }] : []),
     '-',
     { section: 'Quality control' },
-    { label: 'QC per sample (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'qc-samples', condition) },
+    ...(published ? [] : [{ label: 'QC per sample (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'qc-samples', condition) }]),
     { label: 'QC per variant (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'qc-variants', condition) },
     { label: 'QC findings, with what to do and acknowledgements (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'qc-findings', condition) },
     ...(run.inputs.design.library?.level === 'barcode' ? [{ label: 'Barcodes, one by one (CSV)', icon: 'download', onSelect: () => exportRunFile(app, run, 'barcodes', condition) }] : []),
@@ -102,7 +105,7 @@ export function runExportItems(app, run, condition = 0) {
     { section: 'Record' },
     { label: 'Provenance (JSON)', icon: 'download', onSelect: () => exportRunFile(app, run, 'provenance', condition) },
     { label: 'Methods and references (.md, .bib)', icon: 'download', onSelect: () => exportRunFile(app, run, 'methods', condition) },
-    { label: 'Analysis package: counts, target, design, parameters (.zip)', icon: 'download', onSelect: () => exportPackage(app, run) },
+    ...(published ? [] : [{ label: 'Analysis package: counts, target, design, parameters (.zip)', icon: 'download', onSelect: () => exportPackage(app, run) }]),
   ];
 }
 

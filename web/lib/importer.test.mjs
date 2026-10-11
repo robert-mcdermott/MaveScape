@@ -13,6 +13,11 @@ test('layouts in common use are recognized', () => {
   assert.equal(scores.layout, 'mavedb-scores');
   assert.equal(scores.variantColumn, 'hgvs_nt', 'MaveDB indexes by hgvs_nt when it is given');
   assert.deepEqual(scores.scoreColumns, { score: 'score', se: 'SE' });
+  // A standard error is preferred to a standard deviation listed before it, and an interval is
+  // read with its two bounds (PTEN's VAMP-seq record on MaveDB).
+  const vamp = detectLayout(parseTable('accession,hgvs_nt,hgvs_splice,hgvs_pro,score,sd,expts,se,lower_ci,upper_ci\nurn:1,NA,NA,p.Met1Val,1.06,0.13,4.0,0.06,0.94,1.19\n'));
+  assert.deepEqual(vamp.scoreColumns, { score: 'score', se: 'se', ciLow: 'lower_ci', ciHigh: 'upper_ci' });
+  assert.deepEqual(detectLayout(parseTable('accession,hgvs_nt,hgvs_splice,hgvs_pro,score,sigma,raw_score,raw_sigma\nurn:1,NA,NA,p.=,0,0.1,1,0.2\n')).scoreColumns, { score: 'score', se: 'sigma' });
   assert.equal(detectLayout(parseTable('nt_seq\tinput1\toutput1A\nacgt\t1\t0\n')).layout, 'dimsum');
   const generic = detectLayout(parseTable('mutation,pre,post,fitness\nA12V,10,3,0.2\nG13D,8,8,0\nWT,100,90,0\n'));
   assert.equal(generic.layout, 'generic');

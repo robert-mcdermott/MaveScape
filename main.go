@@ -50,7 +50,9 @@ type config struct {
 	offline  bool
 	noFetch  bool
 	cacheDir string
-	files    []string
+	// Score sets to open from MaveDB (--mavedb, or URNs among the arguments).
+	mavedb listFlag
+	files  []string
 }
 
 type app struct {
@@ -64,6 +66,8 @@ type app struct {
 	control *remoteHub
 	// fetch: public data from the listed services, through the cache (fetch.go).
 	fetch *fetcher
+	// records: score sets to open from MaveDB, named on the command line or by a later launch.
+	records *startupRecords
 }
 
 func init() {
@@ -106,18 +110,19 @@ func main() {
 			fmt.Printf("The running MaveScape keeps its own setting for public data (%s, not %s): stop it and start again to change it.\n", fetchModeName(running.Fetch), fetchModeName(want))
 		}
 		handed := false
-		if len(cfg.files) > 0 {
-			if err := forwardFiles(existing, cfg.files); err != nil {
+		if len(cfg.files) > 0 || len(cfg.mavedb) > 0 {
+			if err := forwardFiles(existing, cfg.files, cfg.mavedb); err != nil {
 				log.Printf("could not pass the files to the running MaveScape: %v", err)
 			} else {
 				handed = true
 			}
 		}
 		if handed {
-			names := make([]string, len(cfg.files))
-			for i, f := range cfg.files {
-				names[i] = filepath.Base(f)
+			names := make([]string, 0, len(cfg.files)+len(cfg.mavedb))
+			for _, f := range cfg.files {
+				names = append(names, filepath.Base(f))
 			}
+			names = append(names, cfg.mavedb...)
 			fmt.Printf("MaveScape is already running at %s: %s handed to it.\nSwitch to its window (the files open when it comes to the front); stop it with Ctrl+C in the terminal that started it.\n", existing, strings.Join(names, ", "))
 		} else {
 			fmt.Printf("MaveScape is already running at %s; stop it with Ctrl+C in the terminal that started it.\n", existing)
@@ -277,13 +282,14 @@ func parseConfig(args []string) (config, error) {
 	flags.BoolVar(&cfg.noStore, "no-library", false, "do not keep a workspace library on disk (the browser's own storage is used)")
 	flags.BoolVar(&cfg.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
 	flags.BoolVar(&cfg.showVersion, "version", false, "print the version and exit")
+	flags.Var(&cfg.mavedb, "mavedb", "a MaveDB score set to open, by its URN (urn:mavedb:00000835-a-1); give it more than once for several")
 	flags.BoolVar(&cfg.offline, "offline", false, "make no network requests: public data (MaveDB, UniProt…) come only from copies already in the cache (docs/NETWORK.md)")
 	flags.BoolVar(&cfg.noFetch, "no-fetch", false, "switch public data off entirely: no requests, no cache")
 	flags.StringVar(&cfg.cacheDir, "cache-dir", "", "folder for the cache of public data (default: <user cache dir>/MaveScape)")
 	flags.BoolVar(&cfg.remote, "remote-control", false, "accept actions from programs on this computer at /api/remote/action (scripts, the documentation's screenshots)")
 	noOpen := flags.Bool("no-open", false, "same as --window none")
 	flags.Usage = func() {
-		fmt.Fprintln(flags.Output(), "Usage: mavescape [flags] [count or score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif), workspaces (.msz) or folders of them...]")
+		fmt.Fprintln(flags.Output(), "Usage: mavescape [flags] [count or score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif), workspaces (.msz) or folders of them, MaveDB URNs...]")
 		fmt.Fprintln(flags.Output(), "       mavescape run --design design.json --out results/ counts.csv   (scores without a window; mavescape run -h)")
 		fmt.Fprintln(flags.Output(), "       mavescape validate [--design design.json] [tables...]         (checks them as scoring would; mavescape validate -h)")
 		flags.PrintDefaults()
@@ -303,7 +309,14 @@ func parseConfig(args []string) (config, error) {
 	if cfg.dataDir == "" && err == nil {
 		cfg.dataDir = defaultDataDir()
 	}
-	cfg.files = files
+	// A URN among the arguments names a score set, not a file.
+	for _, arg := range files {
+		if looksLikeURN(arg) {
+			cfg.mavedb = append(cfg.mavedb, arg)
+		} else {
+			cfg.files = append(cfg.files, arg)
+		}
+	}
 	return cfg, err
 }
 
@@ -333,6 +346,10 @@ func newApp(cfg config) (*app, error) {
 		assets:  content,
 		files:   newLocalFiles(),
 		fetch:   newFetcher(cfg),
+		records: &startupRecords{},
+	}
+	for _, problem := range a.records.add(cfg.mavedb) {
+		log.Print(problem)
 	}
 	if problems := a.files.add(cfg.files); len(problems) > 0 {
 		for _, problem := range problems {
@@ -380,6 +397,9 @@ func (a *app) printBanner(out io.Writer, url, connection string) {
 	if n := len(a.files.list()); n > 0 {
 		fmt.Fprintf(out, "Opening %d file(s) named on the command line\n", n)
 	}
+	if n := len(a.records.list()); n > 0 {
+		fmt.Fprintf(out, "Opening %d score set(s) from MaveDB\n", n)
+	}
 	if a.control != nil {
 		fmt.Fprintf(out, "Remote control: POST {\"action\": ..., \"args\": {...}} to %s/api/remote/action (the actions: %s/api/remote/tools)\n", url, url)
 		fmt.Fprintf(out, "Reading and writing files (open_files, export) need the header %s: %s\n", remoteTokenHeader, a.control.token)
@@ -419,11 +439,13 @@ type info struct {
 	RemoteControl bool `json:"remoteControl"`
 	// Fetch: public data on, offline (cached copies only) or off (fetch.go).
 	Fetch string `json:"fetch"`
+	// MaveDB: score sets to open, named on the command line or by a later launch.
+	MaveDB []startupRecord `json:"mavedb"`
 }
 
 func (a *app) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
-		body := info{Name: "MaveScape", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", Files: a.files.list(), Platform: platformName(), RemoteControl: a.control != nil, Fetch: a.fetch.mode}
+		body := info{Name: "MaveScape", Session: a.session, Version: version, Commit: buildCommit(), Mode: "desktop", Files: a.files.list(), Platform: platformName(), RemoteControl: a.control != nil, Fetch: a.fetch.mode, MaveDB: a.records.list()}
 		if a.store != nil {
 			body.Library = true
 			body.DataDir = a.store.dir
@@ -459,14 +481,15 @@ func (a *app) openPaths(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Paths []string `json:"paths"`
+		Paths  []string `json:"paths"`
+		MaveDB []string `json:"mavedb"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "Send {\"paths\": [...]}.")
+		writeError(w, http.StatusBadRequest, "Send {\"paths\": [...], \"mavedb\": [...]}.")
 		return
 	}
-	problems := a.files.add(body.Paths)
-	writeJSON(w, map[string]any{"files": a.files.list(), "problems": problems})
+	problems := append(a.files.add(body.Paths), a.records.add(body.MaveDB)...)
+	writeJSON(w, map[string]any{"files": a.files.list(), "mavedb": a.records.list(), "problems": problems})
 }
 
 func listen(host string, port int) (net.Listener, int, error) {
@@ -512,14 +535,14 @@ func fetchModeName(mode string) string {
 	}
 }
 
-func forwardFiles(url string, paths []string) error {
+func forwardFiles(url string, paths, mavedb []string) error {
 	absolute := make([]string, 0, len(paths))
 	for _, path := range paths {
 		if abs, err := absPath(path); err == nil {
 			absolute = append(absolute, abs)
 		}
 	}
-	payload, _ := json.Marshal(map[string]any{"paths": absolute})
+	payload, _ := json.Marshal(map[string]any{"paths": absolute, "mavedb": mavedb})
 	request, err := http.NewRequest(http.MethodPost, url+"/api/open", strings.NewReader(string(payload)))
 	if err != nil {
 		return err

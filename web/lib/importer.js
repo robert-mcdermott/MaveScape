@@ -22,6 +22,9 @@ export const TEMPLATE_VERSION = 1;
 
 const SCORE_NAMES = /^(score|scores|fitness|effect|log_?ratio|lfc|log2fc|enrichment|abundance_score|raw_score|nor_fitness)$/i;
 const SE_NAMES = /^(se|sem|std_?err(or)?|sigma|raw_sigma|score_?se|se_score|sd|nor_fitness_sigma|error)$/i;
+const SE_RANK = [/^(se|sem|std_?err(or)?|score_?se|se_score)$/i, /^(sigma|nor_fitness_sigma)$/i, /^(raw_sigma|error)$/i];
+const CI_LOW = /^(lower_ci|ci_?lower|ci95_lower|ci_?low|lower_95)$/i;
+const CI_HIGH = /^(upper_ci|ci_?upper|ci95_upper|ci_?high|upper_95)$/i;
 
 function column(table, name) {
   return table.columns.find((c) => c.name === name) ?? null;
@@ -100,12 +103,17 @@ export function detectLayout(table) {
   return { layout: 'generic', variantColumn: best.name, level: best.level, countColumns, scoreColumns: scores, notes };
 }
 
+// The columns of scores, their standard errors and their 95% interval. A standard error is
+// preferred to a standard deviation (PTEN's VAMP-seq record has both, sd first).
 function scoreColumnsOf(names) {
   const out = {};
   const score = names.find((n) => SCORE_NAMES.test(n));
-  const se = names.find((n) => SE_NAMES.test(n));
+  const se = SE_RANK.map((re) => names.find((n) => re.test(n))).find(Boolean) ?? names.find((n) => SE_NAMES.test(n));
+  const low = names.find((n) => CI_LOW.test(n));
+  const high = names.find((n) => CI_HIGH.test(n));
   if (score) out.score = score;
   if (se) out.se = se;
+  if (low && high) Object.assign(out, { ciLow: low, ciHigh: high });
   return out;
 }
 
@@ -171,6 +179,25 @@ const slug = (text) => String(text).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^
 // Returns { design, notes }; the design is a draft for the Experiment view (validateDesign
 // checks it there). options: { variantColumn, level, target, name, barcodeColumn (a table of
 // barcodes) }.
+// The design of a table of published scores (wave 3, slice 2): read as published from its column
+// of scores, with the standard errors and 95% intervals it gives; every other column set aside.
+// scoreColumns: { score, se, ciLow, ciHigh } (detectLayout's).
+export function draftScoresDesign(table, { variantColumn, level, target, name, scoreColumns = {} }) {
+  const scores = { score: scoreColumns.score ?? 'score', ...(scoreColumns.se ? { se: scoreColumns.se } : {}), ...(scoreColumns.ciLow && scoreColumns.ciHigh ? { ciLow: scoreColumns.ciLow, ciHigh: scoreColumns.ciHigh } : {}) };
+  const design = {
+    format: 'mavescape-design', version: 1, name: name ?? 'Published scores', model: 'scores',
+    variants: { column: variantColumn, level: level === 'nucleotide' ? 'nucleotide' : 'protein' },
+    targets: target ? [target] : [],
+    library: { level: 'variant' },
+    samples: [], replicates: [], scores,
+    controls: { wildType: 'auto', synonymous: 'auto', nonsense: 'auto' },
+  };
+  const read = new Set([variantColumn, ...IDENTIFIER_COLUMNS, ...Object.values(scores)]);
+  const others = table.columns.map((c) => c.name).filter((c) => !read.has(c));
+  if (others.length) design.ignoredColumns = others.map((column) => ({ column, reason: 'published with the scores; not read' }));
+  return design;
+}
+
 export function draftDesign(table, roles, options = {}) {
   const notes = [];
   const used = roles.filter((r) => r.role);

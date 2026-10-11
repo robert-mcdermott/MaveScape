@@ -31,10 +31,12 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > cause it and what to do. Replicates are combined under a shared error model whose 95% intervals
 > hold the truth 94–97% of the time in 26 kinds of simulated experiment. For the open workspace,
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
-> would add, and writes the analysis package that `mavescape run` reads. Nine examples are on the Start page (three published, six simulated);
+> would add, and writes the analysis package that `mavescape run` reads. Ten examples are on the Start page (four published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
 > [roadmap](mavescape-spec/roadmap.md)'s wave 2 is complete; wave 3 brings public data in and out,
-> starting with a target checked against its UniProt entry through a fixed list of services.
+> through a fixed list of services: a target checked against its UniProt entry, and any published
+> MaveDB score set opened by search or URN, its scores on the map as published and its counts ready
+> to score again.
 
 ## What is a MAVE?
 
@@ -98,6 +100,8 @@ MaveScape starts from counts; reads (FASTQ) are counted by those upstream tools.
 | `--data-dir DIR` | Where the workspace library is kept |
 | `--no-library` | Keep workspaces in the browser's storage instead |
 | `--keep-running` | Keep serving after the window is closed |
+| `mavescape urn:mavedb:…`, `--mavedb URN` | Open a MaveDB score set: its record, published scores and counts ([public data](https://robert-mcdermott.github.io/mavescape/docs/public-data.html)) |
+| `--offline`, `--no-fetch`, `--cache-dir DIR` | Public data from the cache only, or none; where the cache is ([`docs/NETWORK.md`](docs/NETWORK.md)) |
 | `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)) |
 | `--version` | Print the version |
 | `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/mavescape/docs/scripting.html#headless)) |
@@ -143,7 +147,7 @@ mavescape run --design design.json --out strict/ --strict --acknowledge "coverag
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
 API calls from other web pages, and serves its page with a strict Content-Security-Policy, so the
 page contacts nothing but the program. Your files never leave your computer. The program fetches
-public data (a target's UniProt entry now; MaveDB, structures and annotations to come) from a
+public data (MaveDB's score sets and a target's UniProt entry now; structures and annotations to come) from a
 fixed list of services, sending public identifiers, and caches each answer with where and when it
 came from; a request that would send a sequence is made only after you confirm it.
 [`docs/NETWORK.md`](docs/NETWORK.md) lists every request. `--offline` uses cached copies only and

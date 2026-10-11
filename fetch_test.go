@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -78,7 +79,7 @@ func testFetcher(t *testing.T, service *fakeService) (*fetcher, http.Handler) {
 	t.Helper()
 	upstream := newUpstream(permitOnly(service))
 	upstream.retries = []time.Duration{time.Millisecond, time.Millisecond}
-	f := &fetcher{mode: "on", cache: &diskCache{dir: t.TempDir(), maxAge: defaultCacheMaxAge}, remote: upstream, origins: map[string]string{"https://rest.uniprot.org": service.URL}, now: func() time.Time { return testNow }}
+	f := &fetcher{mode: "on", cache: &diskCache{dir: t.TempDir(), maxAge: defaultCacheMaxAge}, remote: upstream, origins: map[string]string{"https://rest.uniprot.org": service.URL, "https://api.mavedb.org": service.URL}, now: func() time.Time { return testNow }}
 	return f, fetcherMux(f)
 }
 
@@ -155,7 +156,7 @@ func TestPermitPublicAllowsOnlyTheListedHosts(t *testing.T) {
 // before anything is sent.
 func TestTheFetcherSendsNothingToAnUnlistedHost(t *testing.T) {
 	service := uniprotService(t)
-	_, err := newUpstream(permitPublic).get(context.Background(), service.URL+"/uniprotkb/P62993.json", publicRequests[0], nil)
+	_, err := newUpstream(permitPublic).get(context.Background(), service.URL+"/uniprotkb/P62993.json", publicRequests[0], nil, nil)
 	if !errors.Is(err, errNotAllowed) {
 		t.Fatalf("expected a refusal, got %v", err)
 	}
@@ -285,14 +286,14 @@ func TestResponsesBeyondTheLimitAreRefused(t *testing.T) {
 	}
 	for name, handler := range cases {
 		service := newFakeService(t, handler)
-		_, err := newUpstream(permitOnly(service)).get(context.Background(), service.URL+"/x", small, nil)
+		_, err := newUpstream(permitOnly(service)).get(context.Background(), service.URL+"/x", small, nil, nil)
 		if !errors.Is(err, errTooLarge) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
 	// Within the limit, compressed data are read.
 	service := newFakeService(t, func(w http.ResponseWriter, r *http.Request) { w.Write(gzipped(t, []byte(entryJSON))) })
-	result, err := newUpstream(permitOnly(service)).get(context.Background(), service.URL+"/x", small, nil)
+	result, err := newUpstream(permitOnly(service)).get(context.Background(), service.URL+"/x", small, nil, nil)
 	if err != nil || string(result.body) != entryJSON {
 		t.Fatalf("%q %v", result.body, err)
 	}
@@ -538,5 +539,96 @@ func TestThePageAsksOnlyItsOwnOrigin(t *testing.T) {
 	}
 	if !strings.Contains(contentSecurityPolicy, "connect-src 'self';") || !strings.Contains(contentSecurityPolicy, "default-src 'self';") {
 		t.Fatal("the page's connections must be limited to its origin")
+	}
+}
+
+// MaveDB (wave 3, slice 2): a score set's record (JSON) and its tables (CSV), by a published
+// score set's URN only, cached under names without colons.
+func TestMaveDBScoreSetsAndTheirTables(t *testing.T) {
+	const scores = "accession,hgvs_nt,hgvs_splice,hgvs_pro,score\r\nurn:mavedb:00000835-a-1#1,NA,NA,p.=,0.0\r\n"
+	service := newFakeService(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/score-sets/urn:mavedb:00000835-a-1":
+			w.Write([]byte(`{"urn":"urn:mavedb:00000835-a-1"}`))
+		case "/api/v1/score-sets/urn:mavedb:00000835-a-1/scores":
+			if r.Header.Get("Accept") != "text/csv" {
+				t.Errorf("Accept %q", r.Header.Get("Accept"))
+			}
+			w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+			w.Write([]byte(scores))
+		case "/api/v1/score-sets/urn:mavedb:00000835-a-1/counts":
+			w.Write([]byte("<html>Bad gateway</html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	f, handler := testFetcher(t, service)
+	if rec := get(handler, "/api/fetch/mavedb/score-sets/URN:MAVEDB:00000835-a-1", nil); rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != jsonContentType {
+		t.Fatalf("record: %d %v", rec.Code, rec.Header())
+	}
+	rec := get(handler, "/api/fetch/mavedb/score-sets/urn:mavedb:00000835-a-1/scores", nil)
+	if rec.Code != http.StatusOK || rec.Body.String() != scores || rec.Header().Get("Content-Type") != csvContentType || rec.Header().Get("X-MaveScape-Source") != "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000835-a-1/scores" {
+		t.Fatalf("scores: %d %q %v", rec.Code, rec.Body, rec.Header())
+	}
+	for _, name := range []string{"urn_mavedb_00000835-a-1.json", "urn_mavedb_00000835-a-1.scores.csv"} {
+		if _, err := os.Stat(filepath.Join(f.cache.dir, "mavedb", name)); err != nil {
+			t.Errorf("not cached as %s: %v", name, err)
+		}
+	}
+	if rec := get(handler, "/api/fetch/mavedb/score-sets/urn:mavedb:00000835-a-1/counts", nil); rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "not a CSV table") {
+		t.Fatalf("a page instead of a table: %d %s", rec.Code, rec.Body)
+	}
+	if rec := get(handler, "/api/fetch/mavedb/score-sets/urn:mavedb:00009999-a-1", nil); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "no published score set urn:mavedb:00009999-a-1") {
+		t.Fatalf("unknown: %d %s", rec.Code, rec.Body)
+	}
+	before := service.count()
+	for _, urn := range []string{"tmp:6d1c4e0e-5e1b-4d0b-9f3e-1e3c3c1b1b1b", "urn:mavedb:00000835", "urn:mavedb:00000835-a", "00000835-a-1", "urn:mavedb:00000835-a-1%2F..%2Fx"} {
+		if rec := get(handler, "/api/fetch/mavedb/score-sets/"+urn, nil); rec.Code != http.StatusBadRequest && rec.Code != http.StatusNotFound {
+			t.Errorf("%s: %d", urn, rec.Code)
+		}
+	}
+	if service.count() != before {
+		t.Fatal("an invalid URN reached the service")
+	}
+}
+
+// MaveDB's search is a POST of the words searched for, 100 results a page, cached for a day by
+// the words (whatever their case) and the page.
+func TestMaveDBSearchPostsTheWords(t *testing.T) {
+	var bodies []string
+	service := newFakeService(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/score-sets/search" || r.Header.Get("Content-Type") != jsonContentType {
+			t.Errorf("%s %s %q", r.Method, r.URL.Path, r.Header.Get("Content-Type"))
+		}
+		raw, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(raw))
+		w.Write([]byte(`{"scoreSets":[],"numScoreSets":0}`))
+	})
+	f, handler := testFetcher(t, service)
+	if rec := get(handler, "/api/fetch/mavedb/search?text=GRB2%20%20SH3&page=2", nil); rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if len(bodies) != 1 || bodies[0] != `{"text":"GRB2 SH3","published":true,"limit":100,"offset":100}` {
+		t.Fatalf("posted %q", bodies)
+	}
+	if rec := get(handler, "/api/fetch/mavedb/search?text=grb2+sh3&page=2", nil); rec.Header().Get("X-MaveScape-Cache") != "hit" || len(bodies) != 1 {
+		t.Fatalf("the same search again: %v, %d posts", rec.Header(), len(bodies))
+	}
+	var meta cacheMeta
+	entries := f.cache.list()
+	if len(entries) != 1 || entries[0].Kind != "mavedb-search" {
+		t.Fatalf("cache %+v", entries)
+	}
+	meta = entries[0].Meta
+	if meta.Method != http.MethodPost || meta.Request != bodies[0] {
+		t.Fatalf("record %+v", meta)
+	}
+	for _, query := range []string{"", "?text=", "?text=GRB2&page=0", "?text=GRB2&page=x", "?text=" + strings.Repeat("a", maxSearchText+1), "?text=a%00b"} {
+		if rec := get(handler, "/api/fetch/mavedb/search"+query, nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("%q: %d", query, rec.Code)
+		}
+	}
+	if len(bodies) != 1 {
+		t.Fatal("an invalid search reached the service")
 	}
 }

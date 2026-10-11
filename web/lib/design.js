@@ -13,6 +13,14 @@ import { checkReadout, describeReadout, inText } from './readout.js';
 export const DESIGN_FORMAT = 'mavescape-design';
 export const DESIGN_VERSION = 1;
 export const MODELS = ['two-population', 'time-series', 'bins', 'scores'];
+
+// The numeric columns the scoring engine reads: every sample's, and for a design of published
+// scores (model 'scores') its columns of scores, standard errors and intervals.
+export function engineColumns(design) {
+  const names = (design.samples ?? []).flatMap((s) => s.columns);
+  if (design.model === 'scores') for (const key of ['score', 'se', 'ciLow', 'ciHigh']) if (design.scores?.[key]) names.push(design.scores[key]);
+  return [...new Set(names)];
+}
 export const TIME_UNITS = ['round', 'generation', 'hour', 'day', 'minute', 'other'];
 export const BIN_WEIGHTS = ['rank', 'fluorescence', 'other'];
 
@@ -27,7 +35,7 @@ const MODEL_NAMES = {
   'two-population': 'Two-population selection',
   'time-series': 'Time series',
   bins: 'FACS bins',
-  scores: 'Precomputed scores',
+  scores: 'Published scores',
 };
 
 function isObject(value) {

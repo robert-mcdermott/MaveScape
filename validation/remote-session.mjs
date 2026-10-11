@@ -347,6 +347,21 @@ try {
   const paired = await act('score', { parameters: { differential: 'paired' } });
   check('score with the paired differential: a second run, summarized per contrast', paired.message, paired.data.name === 'Run 2' && paired.data.differential?.[0]?.method === 'paired' && paired.data.differential[0].compared > 800);
 
+  // MaveDB (wave 3, slice 2), offline on the fetcher's cached answers: a search, and GRB2's record
+  // opened as a workspace by its address, its published scores read as Node reads them.
+  const found = await act('search_mavedb', { text: 'grb2' });
+  check('search_mavedb: MaveDB\'s published score sets matching "grb2", from the cache', found.message, found.data.total === 1 && found.data.hits[0].urn === 'urn:mavedb:00000835-a-1' && found.data.retrieval.cache === 'hit');
+  const fromMaveDB = await act('open_mavedb', { urn: 'https://www.mavedb.org/score-sets/urn:mavedb:00000835-a-1' });
+  const mState = await act('get_state');
+  const mTables = Object.fromEntries(mState.data.tables.map((t) => [t.origin?.file, t]));
+  check('open_mavedb: GRB2\'s record as a workspace: its published scores read as published, its counts with a two-population design drafted from their names, both tables MaveDB\'s as pinned', `${fromMaveDB.message} Tables ${mState.data.tables.map((t) => `${t.origin?.file} ${t.sha256.slice(0, 12)}…`).join(', ')}; design ${mState.data.design?.model}`, fromMaveDB.data.published?.scored === 1108 && fromMaveDB.data.counts?.design === 'two-population' && mTables.scores?.sha256 === 'f04ee5723ab52c6d470925e3300c4b198f75f836afd42dd33f7c1eb08c5bb7c0' && mTables.counts?.sha256 === 'd4c966d5e7b9605227b5931904685358b68f1952818cb7523e606d86dff9e016' && mState.data.design?.model === 'two-population');
+  const pRun = await browser.eval('window.mavescape.store.ws.runs.find((r) => r.name === "Published scores")');
+  const pTable = parseTable(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv')), { fileName: 'scores.csv' });
+  const pNode = scoreTable(pTable, pRun.inputs.design, pRun.inputs.parameters);
+  check('the published scores\' run: Node\'s output hash, read as published (model "published"), and the record kept with the workspace', `${pRun.output.sha256.slice(0, 16)}… and ${outputDigest(pNode.results).slice(0, 16)}…; ${pRun.inputs.parameters.model}`, pRun.output.sha256 === outputDigest(pNode.results) && pRun.inputs.parameters.model === 'published' && (await browser.eval('window.mavescape.store.ws.records?.[0]?.urn')) === 'urn:mavedb:00000835-a-1');
+  const ptenOffline = await send('open_mavedb', { urn: 'urn:mavedb:00000013-a-1' });
+  check('open_mavedb offline, for a record whose table is not in the cache: refused, saying MaveScape is offline', ptenOffline.message, !ptenOffline.ok && /--offline/.test(ptenOffline.message));
+
   const foreign = requested.filter((u) => !u.startsWith(URL) && !/^(data|blob):/.test(u));
   check('the page asked nothing of any origin but its own, public data through the program\'s /api/fetch/ only', `${requested.length} requests, ${requested.filter((u) => u.includes('/api/fetch/')).length} for public data; beyond the origin: ${foreign.slice(0, 3).join(', ') || 'none'}`, requested.length > 50 && !foreign.length && requested.some((u) => u.includes('/api/fetch/uniprot/P62993')));
   check('every action listed was exercised', `${[...called].length} of ${names.length}: missing ${names.filter((n) => !called.has(n)).join(', ') || 'none'}`, names.every((n) => called.has(n)));

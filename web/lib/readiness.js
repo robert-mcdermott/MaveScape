@@ -37,6 +37,19 @@ export const GAPS = {
     where: 'The pipeline that counted the reads (Enrich2, DiMSum, dms_variants, mutscan or the laboratory\'s own scripts), or the count tables MaveDB keeps beside the scores.',
     how: 'Open the table (Open files, or drop it on the window).',
   },
+  // Published scores (a design of model 'scores'; wave 3, slice 2).
+  scores: {
+    label: 'The scores', kind: 'required', place: 'open',
+    why: 'A table of published scores: one row per variant, a column of scores, and of their standard errors when given.',
+    where: 'MaveDB (Open from MaveDB), or the paper\'s supplement.',
+    how: 'Open the table, or a score set from MaveDB.',
+  },
+  'score-se': {
+    label: 'Each score\'s standard error', kind: 'counts', place: 'design',
+    why: 'Without them a published score\'s uncertainty is unknown: its interval, the resolution of the scores and the map by uncertainty need them.',
+    where: 'The analysis that made the scores reports them (Enrich2, DiMSum, the spread of a VAMP-seq\'s replicates); MaveDB keeps them beside the scores when the authors gave them.',
+    how: 'Name the column of standard errors in the design (Experiment), or rescore from the counts.',
+  },
   target: {
     label: 'The target sequence', kind: 'required', place: 'open-fasta',
     why: 'Variant names are checked against it, positions are mapped on it and coverage is judged by it.',
@@ -201,7 +214,50 @@ function factsOf(ws, design) {
     readoutTerms: Boolean(readout.method && readout.mechanism && readout.modelSystem),
     libraryMethod: Boolean(design?.library?.method),
     identifiers: Boolean(target?.identifiers?.uniprot || target?.identifiers?.refseq || target?.identifiers?.ensembl),
+    // Published scores: the column of scores in the table, and of their SEs.
+    scores: Boolean(source && design?.scores?.score && (source.columns ?? []).some((c) => c.name === design.scores.score) && !(source.problems?.blocking ?? []).length),
+    scoreSE: Boolean(design?.scores?.se),
+    // Where the table came from (MaveDB, wave 3 slice 2).
+    origin: source?.origin ?? null,
   };
+}
+
+// What a design of published scores allows (wave 3, slice 2): the scores on the map, explored,
+// exported and compared, and QC of what scores alone show; rescoring and QC of the counts need the
+// counts.
+function scoresAnalysesOf(f) {
+  const out = [];
+  const add = (...args) => out.push(analysis(...args));
+  const protein = f.level === 'protein' && (f.design?.targets?.length ?? 0) === 1;
+  add('Scoring', 'score.rescore', 'Rescored from the counts: MaveScape\'s models and choices, beside the published scores', { needs: [['counts', true]] });
+  add('Quality control', 'qc.counts', 'Quality control of the counts: depth, replicate agreement, bottlenecks', { needs: [['counts', true]] });
+  add('Quality control', 'qc.separation', 'Separation of controls', { needs: [['nonsense', !f.nonsense], [f.wildType ? 'synonymous' : 'wild-type', !f.synonymous && !f.wildType]], improves: [['readout', !f.readout]] });
+  add('Quality control', 'qc.resolution', 'Resolution of scores', { needs: [['score-se', !f.scoreSE], ['nonsense', !f.nonsense], [f.wildType ? 'synonymous' : 'wild-type', !f.synonymous && !f.wildType]] });
+  add('Quality control', 'qc.coverage', 'Coverage of substitutions with a score', {
+    improves: [['library-method', !f.libraryMethod]],
+    unavailable: !protein,
+    note: protein ? null : 'Coverage by position is computed for protein-level variants of a single target.',
+  });
+  add('Quality control', 'qc.scored-fraction', 'Variants with a score');
+  add('Record', 'record.scores', 'The published scores on the map, explored and exported', { improves: [['score-se', !f.scoreSE]] });
+  add('Record', 'record.compare', 'Compared with a rescoring or another assay (comparisons come with MaveScape 0.4)');
+  add('Record', 'record.methods', 'The methods paragraph and its references', { improves: [['readout', !f.readout]] });
+  add('Record', 'record.deposit', 'Everything a MaveDB deposit asks for (deposits come with MaveScape 0.3)', { needs: [['readout', !f.readout], ['readout-terms', !f.readoutTerms], ['target-identifiers', !f.identifiers]] });
+  return out;
+}
+
+// Where a gap is usually found, for published scores from MaveDB: what the record holds and names.
+function whereFor(id, f) {
+  const o = f.origin;
+  if (o?.database !== 'MaveDB') return null;
+  if (id === 'counts') {
+    return o.hasCounts
+      ? `MaveDB keeps the counts of ${o.urn} beside its scores: open it again from MaveDB with its counts.`
+      : `MaveDB has no counts for ${o.urn}. They are often in the paper's supplement or the authors' repository (GitHub, Zenodo or the laboratory's site); failing that, count them again from the raw reads${o.rawReads?.length ? ` the record names (${o.rawReads.join(', ')})` : ' (SRA or ENA)'}, with the design the paper's methods describe.`;
+  }
+  if (id === 'readout' || id === 'readout-terms') return `The record's method text and keywords (the inspector shows them), and the paper's methods: ${GAPS[id].where.charAt(0).toLowerCase()}${GAPS[id].where.slice(1)}`;
+  if (id === 'score-se') return `The record gives none: the paper's supplement or the authors' repository may hold each score's error, else rescoring from the counts gives them.`;
+  return null;
 }
 
 // An analysis: ready unless it needs something missing; partial when only what improves it is
@@ -319,16 +375,11 @@ function analysesOf(f) {
 export function readiness(ws, options = {}) {
   const design = options.design ?? ws.design ?? null;
   const f = factsOf(ws, design);
-  const base = { counts: f.counts, target: Boolean(f.target), design: f.designOk };
+  // Published scores need their scores, not counts.
+  const base = f.model === 'scores' ? { scores: f.scores, target: Boolean(f.target), design: f.designOk } : { counts: f.counts, target: Boolean(f.target), design: f.designOk };
   let analyses = [];
   const missingBase = Object.entries(base).filter(([, ok]) => !ok).map(([id]) => id);
-  if (!missingBase.length && f.model !== 'scores') analyses = analysesOf(f);
-  else if (!missingBase.length) {
-    analyses = [
-      analysis('Record', 'record.scores', 'The imported scores on the map, explored and exported'),
-      analysis('Record', 'record.deposit', 'Everything a MaveDB deposit asks for (deposits come with MaveScape 0.3)', { needs: [['readout', !f.readout], ['readout-terms', !f.readoutTerms], ['target-identifiers', !f.identifiers]] }),
-    ];
-  }
+  if (!missingBase.length) analyses = f.model === 'scores' ? scoresAnalysesOf(f) : analysesOf(f);
   // The gaps: the missing base, then each gap an analysis needs or would be improved by, in the
   // order of GAPS.
   const unlocks = new Map(missingBase.map((id) => [id, []]));
@@ -339,6 +390,7 @@ export function readiness(ws, options = {}) {
   }
   const gaps = Object.keys(GAPS).filter((id) => unlocks.has(id) || improves.has(id)).map((id) => ({
     id, ...GAPS[id],
+    ...(whereFor(id, f) ? { where: whereFor(id, f) } : {}),
     ...(id === 'design' && design && f.designErrors.length ? { detail: f.designErrors[0].message } : {}),
     unlocks: unlocks.get(id) ?? [], improves: improves.get(id) ?? [],
   }));

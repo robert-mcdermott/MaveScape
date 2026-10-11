@@ -346,6 +346,42 @@ func TestOpenRequiresThisComputer(t *testing.T) {
 	}
 }
 
+// Score sets named on the command line, or handed over by a later launch, are listed for the page
+// to open, each once (wave 3, slice 2).
+func TestMaveDBScoreSetsToOpen(t *testing.T) {
+	cfg, err := parseConfig([]string{"counts.csv", "urn:mavedb:00000835-a-1", "--mavedb", "URN:MAVEDB:00000013-a-1"})
+	if err != nil || len(cfg.files) != 1 || len(cfg.mavedb) != 2 {
+		t.Fatalf("files %v, score sets %v (%v)", cfg.files, cfg.mavedb, err)
+	}
+	a, err := newApp(config{dataDir: t.TempDir(), cacheDir: t.TempDir(), mavedb: cfg.mavedb})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := a.records.list(); len(got) != 2 || got[0] != (startupRecord{ID: 1, URN: "urn:mavedb:00000013-a-1"}) || got[1].URN != "urn:mavedb:00000835-a-1" {
+		t.Fatalf("listed %+v", got)
+	}
+	inner, _ := a.handler()
+	handler := protect(inner, "127.0.0.1", defaultPort)
+	req := httptest.NewRequest(http.MethodPost, "/api/open", strings.NewReader(`{"mavedb":["https://www.mavedb.org/score-sets/urn:mavedb:00001200-a-1","tmp:abc"]}`))
+	req.Host = "127.0.0.1:8820"
+	req.RemoteAddr = "127.0.0.1:5555"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	var body struct {
+		MaveDB   []startupRecord `json:"mavedb"`
+		Problems []string        `json:"problems"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &body) != nil || len(body.MaveDB) != 3 || body.MaveDB[2].URN != "urn:mavedb:00001200-a-1" || len(body.Problems) != 1 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	var info struct {
+		MaveDB []startupRecord `json:"mavedb"`
+	}
+	if json.Unmarshal(request(t, handler, http.MethodGet, "/api/info", nil, nil).Body.Bytes(), &info) != nil || len(info.MaveDB) != 3 {
+		t.Fatal("/api/info should list the score sets to open")
+	}
+}
+
 func TestUnknownAPIAndStaticPaths(t *testing.T) {
 	_, handler := testApp(t)
 	if rec := request(t, handler, http.MethodGet, "/api/nothing", nil, nil); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "Unknown API endpoint") {

@@ -82,6 +82,18 @@ export async function readCodonsFor(app, source, design) {
   return next;
 }
 
+// A table's bytes stored in the library under their SHA-256 (as the wizard stores a file):
+// { sha256, size }.
+export async function storeBytes(app, bytes) {
+  if (app.library.kind === 'desktop' && app.library.addFile) {
+    const stored = await app.library.addFile(new Blob([bytes]));
+    return { sha256: stored.sha256, size: stored.size };
+  }
+  const sha256 = await sha256Hex(bytes);
+  await app.library.putFile(sha256, bytes);
+  return { sha256, size: bytes.length };
+}
+
 async function parseTableFile(app, item) {
   const file = item.file instanceof Blob ? item.file : new Blob([item.bytes ?? new Uint8Array()]);
   const job = app.worker('csv').run('parse', { file, name: item.name });

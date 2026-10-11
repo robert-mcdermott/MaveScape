@@ -33,6 +33,34 @@ this section grows with each.
   accession can be found by its exact sequence (*Find in UniProt by sequence…*), after
   confirming that the sequence may be sent. The remote action `check_target` (with `apply`)
   does the same for scripts and sends only the accession.
+- **MaveDB, opened by search or URN (wave 3, slice 2).** *Open from MaveDB* (the Start page, the
+  workspace menu, ⌘K) searches MaveDB's published score sets, 100 at a time, or takes a URN or a
+  MaveDB address; `mavescape urn:mavedb:…` (or `--mavedb`) opens one at start, or in the MaveScape
+  already running. A record is shown before it is opened: its license and what it allows (with a
+  warning for one that restricts use: CC BY-NC-SA, or the record's own terms), citation, target (with its UniProt offset), what it
+  holds, the assay in MaveDB's controlled terms, and its published calibrations, each class with its
+  range of scores and, for a clinical calibration, the evidence strength it assigns (as published,
+  for research). Opened, it becomes a workspace: its published scores as a run of their own, its
+  counts (when deposited) with a design drafted from their column names, the record kept with the
+  workspace and named in the methods. The experiment's keywords give the design's readout and
+  library method. Records, tables and searches are cached, so a score set opened once opens again
+  offline. A target named by an accession is shown, not yet opened (full MAVE-HGVS, later in 0.3).
+  Remote actions `search_mavedb` and `open_mavedb`.
+- **Published scores, read as published (wave 3, slice 2).** A design of model `scores` reads a
+  table's scores, standard errors and 95% intervals as they were published, into a run (the model
+  `published`) for the map, QC, the inspector and every export, never rescoring them. Variants the
+  table gives no score, and rows repeating an earlier row's variant and scores (read once), are left
+  out with their stages; classes, an exclusion list and a maximum SE can be set. *Draft the design*
+  reads any table with a column of scores this way; the Experiment view names its columns of scores,
+  SEs and intervals. QC judges what scores alone show (the controls' separation, the scores'
+  resolution, coverage of substitutions with a score), and says the findings about counts are not
+  assessed. What the analysis can do, for published scores: the map, exploration and comparison
+  ready; rescoring and QC of the counts needing the counts, and where they may be found (MaveDB,
+  when it keeps them; else the paper's supplement, the authors' repository, or the raw reads the
+  record names).
+- **An example opened from MaveDB:** PTEN's VAMP-seq abundance (urn:mavedb:00000013-a-1), scores
+  alone, downloaded when opened and checked against its checksum, with its record and six
+  calibrations. Ten examples now.
 - **The Network dialog** (the status bar's *Public data*): the services MaveScape may contact,
   what it asks each, the cache's folder, and what the cache holds.
 - The guide page *Public data*; the GRB2 example's guide checks its target against UniProt; a
@@ -42,6 +70,10 @@ this section grows with each.
 
 - `mavescape run` and `mavescape validate` start their private window with public data off: they
   read only the files they are given.
+- A table's standard errors are found by rank: a column named `se` before `sigma`, and a standard
+  deviation (`sd`) only when nothing else is there; 95% intervals (`lower_ci`, `upper_ci`…) are
+  found too.
+- "Precomputed scores" are called published scores.
 - The GRB2 example's two map steps are one, so that its guide keeps six steps.
 
 ### Validation
@@ -55,8 +87,19 @@ this section grows with each.
 - `public-data` validation suite (6 checks) on UniProt's answers as the fetcher cached them
   (`validation/fixtures/public-data/`): the three published examples' targets sit exactly where
   their designs say in UniProt, and the GRB2 example's check reaches its methods.
-- The remote-control session (81 checks) runs offline on those cached answers, exercises
-  `check_target`, and records every request the page makes: none goes beyond its own origin.
+- The remote-control session (85 checks) runs offline on those cached answers, exercises
+  `check_target`, `search_mavedb` and `open_mavedb` (the published run with Node's output hash), and
+  records every request the page makes: none goes beyond its own origin.
+- `public-data` (15 checks) reads the feasibility records (four score sets) with no code for any of
+  them: their published scores read as published equal MaveDB's columns row for row, and their
+  counts get valid designs drafted from their names, GRB2's and factor IX's as documented (but for
+  the bins' values, which MaveDB does not record); a workspace of published scores reopens from its archive and reproduces its run.
+- `validation/mavedb-live.mjs` (15 checks; in CI) opens the feasibility records from MaveDB, live,
+  through the window: the tables MaveDB sends are the ones the validation pins, the published scores
+  equal MaveDB's, and the PRD's phase-0 exit holds again from the live import (GRB2 by DiMSum's model
+  r 0.994; BRCA1 E2's 50,043 replicate scores reproduced to 2 × 10⁻¹⁴; factor IX with MultiSTEP's
+  settings r 0.9995).
+- `examples` (29 checks) opens the PTEN example from MaveDB's table, pinned in `sources.json`.
 
 ## 0.2.0 (2026-10-10)
 

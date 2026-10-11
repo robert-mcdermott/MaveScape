@@ -22,7 +22,7 @@
 // rescaling anchor missing) is refused with the reasons, never quietly done another way.
 
 import { buildVariants, duplicateKeys, KIND, STATUS } from './variants.js';
-import { replicateSamples, sharedSamples, validateDesign } from './design.js';
+import { engineColumns, replicateSamples, sharedSamples, validateDesign } from './design.js';
 import { parseHgvs } from './hgvs.js';
 import { median, normalizers, ratioScores, NORMALIZATIONS } from './score-ratio.js';
 import { MODELS as TIME_MODELS, REGRESSION_SE, regressionScores } from './score-regression.js';
@@ -56,6 +56,8 @@ export const MODELS = {
   dimsum: 'DiMSum\'s fitness and error model',
   bins: 'weighted average of the bins\' values',
   'bins-mle': 'maximum likelihood (censored log-normal, from the gates)',
+  // A design of published scores (model 'scores'; wave 3, slice 2): read, not scored.
+  published: 'the scores as published (read, not scored)',
 };
 const BIN_MODELS = new Set(['bins', 'bins-mle']);
 // A time series' scores: over the whole time course, or per unit of time (wave 2, slice 10).
@@ -120,6 +122,8 @@ export const PRESETS = {
 // nonsense variants (else to the lowest 5%), unscaled without the wild type (both scales need it).
 // Controls the design names as none count as absent (wave 2, slice 10).
 export function defaultParameters(design, source = null, preset = 'mavescape') {
+  // Published scores are read as published: no normalization, rescaling or comparison applies.
+  if (design?.model === 'scores') return withDefaults({ ...DEFAULT_PARAMETERS, model: 'published', filters: { ...DEFAULT_FILTERS, minInputCount: 0 } });
   const controls = design?.controls ?? {};
   const hasWildType = controls.wildType === 'none' ? false : source ? (source.summary?.byKind?.['wild type'] ?? 0) > 0 || Boolean(controls.wildType && controls.wildType !== 'auto' && !/^(p\.=|c\.=|n\.=|_wt)$/i.test(controls.wildType)) : true;
   if (design?.model === 'bins') {
@@ -188,7 +192,10 @@ export function checkParameters(parameters, design) {
         if (short.length) errors.push(`A regression on time needs three or more time points in every replicate; ${short.map((r) => r.name ?? r.id).slice(0, 4).join(', ')} ${short.length > 1 ? 'have' : 'has'} fewer: score by the log ratio of the first and last samples.`);
       }
     }
-    if (design.model === 'scores') errors.push('This design holds precomputed scores: there are no counts to score.');
+    if (design.model === 'scores' && p.model !== 'published') errors.push('This design holds published scores: they are read as published, not scored from counts (the model "published").');
+    if (design.model === 'scores' && p.rescale !== 'none') errors.push('Published scores are read as published: rescaling them comes with comparisons between assays (MaveScape 0.4).');
+    if (design.model === 'scores' && p.differential) errors.push('Published scores have no counts to compare conditions with.');
+    if (p.model === 'published' && design.model !== 'scores') errors.push('Scores as published need a design of published scores (model "scores"); this design describes counts.');
     if (p.timeScale === 'unit' && design.model !== 'time-series') errors.push('Scores per unit of time need a time series; this design is not one: score over the time course (the default).');
     if (p.model === 'dimsum') {
       if (design.model !== 'two-population') errors.push(`DiMSum scores an input and an output; this design is ${design.model === 'time-series' ? 'a time series: score it by regression, or by the log ratio of its first and last samples' : `of kind "${design.model}"`}.`);
@@ -208,7 +215,7 @@ export function checkParameters(parameters, design) {
       }
     }
   }
-  if (p.pseudocount === 0 && p.model !== 'dimsum') errors.push('A pseudocount of 0 leaves every variant with a zero count unscorable (log 0); use a positive pseudocount.');
+  if (p.pseudocount === 0 && p.model !== 'dimsum' && p.model !== 'published') errors.push('A pseudocount of 0 leaves every variant with a zero count unscorable (log 0); use a positive pseudocount.');
   return { errors, warnings: [] };
 }
 
@@ -484,6 +491,79 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info 
   return { entries, fits };
 }
 
+// Published scores (a design of model 'scores'; wave 3, slice 2): each variant's score, standard
+// error and 95% interval as the table gives them, read, not computed; one condition, no
+// replicates. A variant is left out when its name is not valid against the target, its class or
+// itself is excluded, the table gives it no score, or its SE is above the maximum.
+function publishedResults({ variants, n, columns, design, p, controls, warnings, info, copies }) {
+  const s = design.scores;
+  const column = (key) => {
+    if (!s[key]) return null;
+    if (!columns[s[key]]) throw new Refused([`The table has no column "${s[key]}" of ${key === 'score' ? 'scores' : key === 'se' ? 'standard errors' : 'intervals'}.`]);
+    return columns[s[key]];
+  };
+  const given = column('score');
+  const givenSE = column('se');
+  const low = column('ciLow');
+  const high = column('ciHigh');
+  const f = p.filters;
+  const excludeKinds = kindCodes(f.excludeKinds);
+  const excluded = new Set(f.exclude);
+  const score = new Float64Array(n).fill(Number.NaN);
+  const se = new Float64Array(n).fill(Number.NaN);
+  const ciLow = low ? new Float64Array(n).fill(Number.NaN) : null;
+  const ciHigh = high ? new Float64Array(n).fill(Number.NaN) : null;
+  const reason = new Uint8Array(n);
+  const none = STAGE_BY_ID.get('given').code;
+  for (let i = 0; i < n; i += 1) {
+    const stage = variantStage(i, variants, excludeKinds, excluded);
+    if (copies?.has(i)) reason[i] = STAGE_BY_ID.get('copy').code;
+    else if (stage) reason[i] = stage;
+    else if (!Number.isFinite(given[i])) reason[i] = none;
+    else if (f.maxSE !== null && !(givenSE?.[i] <= f.maxSE)) reason[i] = STAGE_BY_ID.get('se').code;
+    if (reason[i]) continue;
+    score[i] = given[i];
+    if (givenSE) se[i] = givenSE[i];
+    if (ciLow) {
+      ciLow[i] = low[i];
+      ciHigh[i] = high[i];
+    }
+  }
+  const scored = reason.reduce((a, r) => a + (r ? 0 : 1), 0);
+  const without = reason.reduce((a, r) => a + (r === none ? 1 : 0), 0);
+  info.push(`Scores as published, read from "${s.score}"${givenSE ? `, with standard errors from "${s.se}"` : ' (no standard errors given)'}${ciLow ? ` and 95% intervals from "${s.ciLow}" and "${s.ciHigh}"` : ''}: not rescored.`);
+  if (without) info.push(`${without} row${without > 1 ? 's give' : ' gives'} no score (NA in the table).`);
+  if (copies?.size) info.push(`${copies.size} row${copies.size > 1 ? 's repeat' : ' repeats'} an earlier row's variant and scores (${[...new Set([...copies].map((i) => variants.key[i]))].slice(0, 3).join(', ')}): read once.`);
+  if (!givenSE) warnings.push({ code: 'no-se', message: 'The table gives no standard errors: the scores\' uncertainty is unknown, and QC cannot judge their resolution.' });
+  const nan = () => new Float64Array(n).fill(Number.NaN);
+  return {
+    format: 'mavescape-scores',
+    version: 1,
+    rows: n,
+    variants: { key: variants.key, original: variants.original, kind: variants.kind, position: variants.position, ref: variants.ref, alt: variants.alt, status: variants.status },
+    controls: { wt: controls.wt, synonymous: controls.synonymous.length, nonsense: controls.nonsense.length },
+    parameters: p,
+    replicates: [],
+    conditions: [{
+      id: 'published', name: 'Published', replicates: [],
+      score, se, tau2: nan(), i2: nan(), q: nan(), loo: nan(), looReplicate: new Int16Array(n).fill(-1), epsilon: null,
+      k: new Uint8Array(n), expected: new Uint8Array(n), reason, flags: new Uint8Array(n),
+      ...(ciLow ? { ciLow, ciHigh } : {}),
+      rescale: null,
+      flow: filterFlow(reason, false, true),
+      scored,
+      combinedFromAll: 0,
+      published: true,
+    }],
+    samples: [],
+    barcodes: null,
+    dimsum: null,
+    differential: null,
+    warnings,
+    info,
+  };
+}
+
 class Refused extends Error {
   constructor(errors) {
     super(errors.join(' '));
@@ -526,13 +606,23 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   const groups = design.library?.level === 'barcode' ? barcodeGroups(names, barcodes, design, mode, target) : null;
   const variants = groups ? groups.variants : buildVariants(names, { level: design.variants.level, mode, target });
   const n = variants.n;
+  // Published scores (a design of model 'scores') may write a variant on several rows with the same
+  // scores (Hsp90's record writes its wild type once per position): copies, read once.
+  let copies = null;
   if (!groups) {
-    const duplicates = duplicateKeys(variants);
-    if (duplicates.length) throw new Refused([`${duplicates.length} variant${duplicates.length > 1 ? 's are' : ' is'} on more than one row (${duplicates.slice(0, 3).map((d) => d.key).join(', ')}): resolve them at import before scoring.`]);
+    let duplicates = duplicateKeys(variants);
+    if (duplicates.length && design.model === 'scores') {
+      const read = engineColumns(design).map((c) => columns[c]).filter(Boolean);
+      const same = (a, b) => read.every((x) => Object.is(x[a], x[b]) || (Number.isNaN(x[a]) && Number.isNaN(x[b])));
+      copies = new Set(duplicates.filter((d) => d.rows.every((r) => same(d.rows[0], r))).flatMap((d) => d.rows.slice(1)));
+      duplicates = duplicates.filter((d) => !d.rows.every((r) => same(d.rows[0], r)));
+    }
+    if (duplicates.length) throw new Refused([`${duplicates.length} variant${duplicates.length > 1 ? 's are' : ' is'} on more than one row (${duplicates.slice(0, 3).map((d) => d.key).join(', ')})${design.model === 'scores' ? ' with different scores' : ''}: resolve them at import before scoring.`]);
   }
   const controls = controlRows(design, variants);
   const warnings = [];
   const info = [];
+  if (design.model === 'scores') return publishedResults({ variants, n, columns, design, p, controls, warnings, info, copies });
   if (p.normalization === 'wt' && controls.wtProblem) throw new Refused([controls.wtProblem]);
 
   // Samples: technical replicates summed; a barcode table's counts also summed per variant.

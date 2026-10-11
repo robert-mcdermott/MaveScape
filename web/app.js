@@ -17,6 +17,7 @@ import { chooseArchiveExport, openArchives } from './ui/record.js';
 import { exampleGuide } from './ui/examples.js';
 import { mountWorkflow } from './ui/workflow.js';
 import { showNetwork } from './ui/public-data.js';
+import { importMaveDB, openMaveDBDialog } from './ui/mavedb.js';
 import { fixClock } from './lib/clock.js';
 
 const VERSION = '0.2.0';
@@ -337,6 +338,7 @@ async function start() {
       { section: 'Import' },
       { label: 'Files…', icon: 'table', hint: `${modKey}O`, onSelect: () => app.pickFiles() },
       { label: 'A folder…', icon: 'folder', onSelect: () => app.pickFolder() },
+      { label: 'From MaveDB…', icon: 'globe', onSelect: () => openMaveDBDialog(app) },
       '-',
       { section: 'Export' },
       { label: 'Workspace archive (.msz)…', icon: 'download', onSelect: () => chooseArchiveExport(app) },
@@ -352,6 +354,7 @@ async function start() {
     ...MODES.filter((m) => m !== 'sep').map((m) => ({ label: `Go to ${m.label}`, icon: m.icon, run: () => app.setMode(m.id), keywords: m.id })),
     { label: 'Open files', icon: 'table', hint: `${modKey}O`, run: () => app.pickFiles(), keywords: 'import counts scores csv tsv fasta' },
     { label: 'Open a folder', icon: 'folder', run: () => app.pickFolder() },
+    { label: 'Open a score set from MaveDB', icon: 'globe', run: () => openMaveDBDialog(app), keywords: 'mavedb search urn published scores counts public data' },
     { label: 'New workspace', icon: 'plus', run: () => app.newWorkspace() },
     { label: 'Open a saved workspace', icon: 'library', hint: `${modKey}⇧O`, run: openLibraryDialog },
     { label: 'Save workspace now', icon: 'save', hint: `${modKey}S`, run: saveNow },
@@ -636,6 +639,19 @@ async function start() {
     await app.importFiles(items);
   };
   if (info?.files?.length) await app.openStartupFiles(info.files);
+  // Score sets named on the command line (mavescape --mavedb urn:mavedb:…), each opened once per
+  // program run, as files are (wave 3, slice 2).
+  app.openStartupRecords = async (records) => {
+    const opened = new Set(prefs.get(`opened:${info.session}`, []));
+    const pending = records.filter((r) => !opened.has(`mavedb:${r.id}`));
+    for (const r of records) opened.add(`mavedb:${r.id}`);
+    prefs.set(`opened:${info.session}`, [...opened]);
+    for (const r of pending) {
+      const result = await importMaveDB(app, r.urn);
+      if (!result.ok) toast(result.message, { kind: 'error' });
+    }
+  };
+  if (info?.mavedb?.length) await app.openStartupRecords(info.mavedb);
   // A second "mavescape <files>" launch hands its files to this window.
   if (info) {
     // The second launch also brings this window forward, so checking on focus is enough.
@@ -645,6 +661,7 @@ async function start() {
       checking = true;
       const fresh = await detectBackend();
       if (fresh?.files?.length) await app.openStartupFiles(fresh.files);
+      if (fresh?.mavedb?.length) await app.openStartupRecords(fresh.mavedb);
       checking = false;
     };
     window.addEventListener('focus', check);

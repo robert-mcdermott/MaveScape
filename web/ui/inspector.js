@@ -5,6 +5,7 @@
 import { h, icon, clear, relativeTime, formatBytes, formatCount } from './dom.js';
 import { variantSection } from './variant-inspector.js';
 import { retrievalText } from '../lib/uniprot.js';
+import { recordView } from './mavedb.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -32,11 +33,19 @@ export function mountInspector(app) {
       h('dt', 'Layout'), h('dd', source.layout),
       h('dt', 'Variant names'), h('dd', `${source.mapping.variantColumn} (${source.mapping.level})`),
       h('dt', 'Count columns'), h('dd', String(source.mapping.countColumns.length)),
-      h('dt', 'Target'), h('dd', app.store.ws.targets.find((t) => t.id === source.target)?.name ?? 'none'));
+      h('dt', 'Target'), h('dd', app.store.ws.targets.find((t) => t.id === source.target)?.name ?? 'none'),
+      // A table from MaveDB (wave 3, slice 2): which record and file, its license, when retrieved.
+      source.origin?.database === 'MaveDB' ? [
+        h('dt', 'From'), h('dd', `MaveDB ${source.origin.urn} (${source.origin.file})`),
+        h('dt', 'License'), h('dd', source.origin.license ?? ''),
+        h('dt', 'Retrieved'), h('dd', String(source.origin.retrieved ?? '').slice(0, 10)),
+      ] : null);
+    const record = source.origin?.database === 'MaveDB' ? (app.store.ws.records ?? []).find((r) => r.urn === source.origin.urn) : null;
     const problems = [...(source.problems?.blocking ?? []).map((m) => h('div.callout.danger', { style: { marginTop: '6px', fontSize: '12px' } }, m)), ...(source.problems?.warnings ?? []).map((m) => h('div.callout.warn', { style: { marginTop: '6px', fontSize: '12px' } }, m))];
     return h('section.inspector-section', h('h3', icon('table'), source.name), kv,
       s ? h('p.muted', { style: { fontSize: '12px', margin: '8px 0 0' } }, `${formatCount(s.total)} variants: ${formatCount(s.valid)} valid, ${formatCount(s.warning)} read leniently, ${formatCount(s.invalid)} not valid.`) : null,
-      ...problems);
+      ...problems,
+      record ? h('details.inspector-details', { open: true }, h('summary', 'The MaveDB record'), recordView(record)) : null);
   }
 
   function targetSection(target) {

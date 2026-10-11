@@ -8,7 +8,8 @@ Blank, annotated layouts of each are on the Start page and in
 | Kind | Read | Written |
 | --- | --- | --- |
 | Count tables | CSV, TSV, TXT, gzip of these; one table or one file per sample; tables of barcodes with their barcode-to-variant maps; dms_variants' `variant_counts`; Enrich2's counts files and barcode maps | the counts a run scored (CSV); a barcode table's barcodes, one by one (CSV) |
-| Score tables | MaveDB's score layout, recognized at import (shown on the map from 0.3) | a run's scores (CSV) |
+| Score tables | MaveDB's score layout, and any table with a column of scores: read as published by a design of model `scores`, as a run on the map (0.3) | a run's scores (CSV) |
+| MaveDB score sets (0.3) | a record (JSON), its scores and counts (CSV), and searches, through the program's fetcher | (kept in the workspace: the record, and each table's origin) |
 | Targets | FASTA, DNA or protein, one or several records | (in the workspace and its archive) |
 | Designs | `*.design.json`; sample sheets (CSV, TSV); DiMSum's experiment design file | `*.design.json` |
 | Import templates | `*.import.json` | `*.import.json` |
@@ -187,6 +188,32 @@ bins can be scored by maximum likelihood, whose reads are reweighted by the cell
 control checks the bottleneck it infers against them (MaveScape 0.2). Written by the Experiment view; the validation designs are examples
 ([`validation/designs/`](../validation/designs/)).
 
+A design of **published scores** (model `scores`, MaveScape 0.3) reads a table of scores as they
+were published, without counts: `scores` names its columns, `score` and, when the table gives them,
+`se` (standard errors) and `ciLow`, `ciHigh` (a 95% interval); `samples` and `replicates` are empty,
+and every other column is in `ignoredColumns`. Its run (the model `published`) takes each score,
+SE and interval as given, never rescoring them; a variant is left out when its name is not valid
+against the target, its class or itself is excluded, its SE is above a maximum, the table gives it
+no score (the stage `given`), or it repeats an earlier row's variant with the same scores (`copy`:
+read once; with other scores the table is refused). The scores export writes the given interval.
+A design of a MaveDB record (Open from MaveDB) also has the record's `source` (URN, citation,
+license), and its `readout` and `library.method` from the experiment's controlled keywords.
+
+```json
+{
+  "format": "mavescape-design", "version": 1, "name": "PTEN VAMP-seq", "model": "scores",
+  "source": { "mavedb": "urn:mavedb:00000013-a-1", "citation": "Matreyek KA, et al. …", "license": "CC0" },
+  "readout": { "method": "Reporter", "mechanism": "Loss of function", "modelSystem": "Immortalized human cells", "phenotype": "Regulation of protein stability" },
+  "variants": { "column": "hgvs_pro", "level": "protein" },
+  "targets": [{ "id": "PTEN", "name": "PTEN", "sequenceType": "dna", "sequence": "ATG…", "codingStart": 1, "offset": 0, "organism": "Homo sapiens", "identifiers": { "uniprot": "P60484" } }],
+  "library": { "level": "variant", "method": "Oligo-directed mutagenic PCR" },
+  "samples": [], "replicates": [],
+  "scores": { "score": "score", "se": "se", "ciLow": "lower_ci", "ciHigh": "upper_ci" },
+  "controls": { "wildType": "auto", "synonymous": "auto", "nonsense": "auto" },
+  "ignoredColumns": [{ "column": "sd", "reason": "published with the scores; not read" }]
+}
+```
+
 #### What the assay measures (MaveScape 0.2)
 
 `readout` says what the scores mean, in MaveDB's controlled keywords for an experiment (the MAVE
@@ -263,6 +290,14 @@ name, SHA-256, size, rows, encoding, layout, mapping and import summary), `targe
 material change, `{ time, action, detail, hash }`, each hash the SHA-256 of the one before and the
 entry, so that a change made later breaks the chain.
 
+A table opened from MaveDB (MaveScape 0.3) keeps where it came from, as its source's `origin`:
+`{ database: "MaveDB", urn, file: "scores" | "counts", url, retrieved, license, hasCounts,
+rawReads }`. The workspace keeps each record opened in `records`: MaveDB's record as MaveScape reads
+it (its title, short description and method text, license and its terms, citation and publications,
+target, columns, the experiment's keywords and raw-read identifiers, and its published calibrations:
+each with its functional classes, their ranges and the evidence strength each assigns), with when
+and from where it was retrieved, so that the methods can cite it and the inspector show it offline.
+
 A **target** (in `targets`, and as the design's copy in `design.targets`) is as in a design
 file (above). From MaveScape 0.3 the workspace's target can also keep `reference`, the record of
 its last check against its UniProt entry (Experiment, Target: **Check against UniProt**). It is
@@ -312,6 +347,11 @@ uniprot/P62993.json              UniProt's answer, byte for byte
 uniprot/P62993.json.meta.json    its retrieval record
 uniparc/<sha256>.json            a sequence's lookup, named by the SHA-256 of the sequence (its
                                  record's source has {sequence} in place of the sequence)
+mavedb/urn_mavedb_00000835-a-1.json         a MaveDB score set's record (its URN without colons)
+mavedb/urn_mavedb_00000835-a-1.scores.csv   its scores, as MaveDB writes them
+mavedb/urn_mavedb_00000835-a-1.counts.csv   its counts
+mavedb-search/<sha256>.json      a search, named by the SHA-256 of its words and page (its record
+                                 keeps the POST: "method": "POST", "request": its body)
 ```
 
 The **retrieval record** (`*.meta.json`):
