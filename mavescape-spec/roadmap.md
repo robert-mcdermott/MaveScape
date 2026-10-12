@@ -2167,6 +2167,58 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    experimental structures and the AlphaFold model keeps the mapping.
    - Validation: mappings equal SIFTS for every example protein (GRB2 SH3 2VWF, BRCA1 1JM7,
      Hsp90 2CG9, DHFR 1RX2, Factor IX 1RFN) and their AlphaFold models.
+   - **Done.** `lib/mapping.js` aligns the workspace's target to every protein chain (Proteoscope's
+     `align.js`, copied with its tests, against the entry's SEQRES with its residues observed
+     marked) and gives each target position its state: on a residue (identical, or another with
+     the entry's reason from `struct_ref_seq_dif`/`SEQADV`), not observed, missing from the
+     structure's sequence, or outside; ambiguous where an alignment scoring the same places it
+     otherwise. The entry's own record of the UniProt residues (`struct_ref_seq`/`DBREF`) is
+     compared residue by residue. The chain holding the most of the target is chosen.
+     - **Structures of the target:** PDBe's `best_structures` (a new request, the accession only),
+       ranked by the target positions each entry covers, then resolution, the AlphaFold DB model
+       first.
+     - **Interchangeable structures:** `pos` and `uniprot` select by the target's and the
+       reference's positions, placed by the mapping; a selection is kept, position by position,
+       when another structure, experimental or predicted, is opened.
+     - The Structure view's pane *The target on the structure*; the mapping's file (FORMATS.md);
+       remote control's `find_structures` and `map_structure`, `open_structure`'s `chain`,
+       `export` of `structure-mapping`. Factor IX's sixth step reads 1RFN's mapping; a screenshot
+       scene (`structure-mapping`); the guide page *Structures*, its section on the mapping.
+     - Validation:
+       - `structures` (10 checks, 4 new): every example's target on its entry as residue-level
+         SIFTS places it (`reference/sifts.json`: PDBe's updated mmCIF read with gemmi by
+         `generate_sifts.py`), not observed where SIFTS says so, the one parting ambiguous; on each
+         AlphaFold DB model, the model's numbering, with the targets' own differences; the entries'
+         records (2VWF's engineered mutation, 1RFN's light chain, PTEN's removed loop); each
+         target's structures ranked.
+       - `remote-session.mjs` (138 checks): the list, the mappings and the mapping's file as Node
+         makes them, a selection kept from 2VWF to GRB2's model, a chain refused.
+       - Unit tests: `mapping.test.mjs` (8), `align.test.mjs` (8, Proteoscope's). Go: a file
+         stored again is read to its end.
+   - Found by slice 2:
+     - **1RFN's own record of its light chain is five off.** Its `struct_ref_seq` numbers chain B
+       (the second EGF domain) as UniProt 128–183; SIFTS and the alignment place it at 132–188,
+       its first residue an initiator methionine where factor IX has V132. The mapping reports the
+       record's shift rather than trusting it.
+     - **Two alignments can score the same, and SIFTS takes one.** Where PTEN's loop (287–308) was
+       removed from 1D5R's construct, the valine at the join scores as well against T286 as
+       against A309; SIFTS places it at 286, the entry's own record and MaveScape's alignment at
+       309. Ambiguity was first defined by identical residues; it is now by equal scores, and
+       both positions are called ambiguous.
+     - **2VWF engineers GRB2's P212 to alanine** (target position 54 of the SH3 example): the only
+       difference between the example's target and its structure.
+     - **SIFTS's ranking is not observation.** `best_structures` gives the span of each entry's
+       sequence: TP53's first-ranked entries are cryo-EM structures whose sequence is the whole
+       protein (p53 on a nucleosome, 9R2Q), how much of it observed only the entry says. The list
+       says that its positions are the sequence's, observed or not; opened, the mapping says which
+       are observed.
+     - **Opening the factor IX example a second time in one library failed** ("Failed to fetch"):
+       the program answered that it already had the 2 MB table before reading the upload, and its
+       connection was closed under the browser. The program now reads the upload first.
+     - **A PDB-format file without residue numbers in its SEQRES** places observed residues by
+       name, and a run of repeated residues next to unobserved ones can be placed either way
+       (Proteoscope's `alignResidueNames`). The mmCIF files the program fetches number every
+       residue; RCSB's PDB-format 2VWF maps as its mmCIF does.
 3. **Scores on the structure (X3).** Residues colored by a position summary (median, mean,
    minimum, fraction abnormal-like, number of scored substitutions), one substitution, the
    uncertainty, a comparison's disagreement (wave 4's difference coloring) or the QC state, with the map's visual grammar:

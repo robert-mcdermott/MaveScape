@@ -41,7 +41,8 @@ import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
 import { sha256 } from '../web/lib/sha256.js';
-import { EXAMPLE_STRUCTURES, modelFile, openCached, pdbFile } from './structure-cases.mjs';
+import { EXAMPLE_STRUCTURES, cachedJSON, exampleTarget, modelFile, openCached, pdbFile } from './structure-cases.mjs';
+import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/lib/mapping.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -732,6 +733,28 @@ try {
   const fromFile = await act('open_files', { paths: [join(ROOT, 'validation/fixtures/structures/2VWF.pdb.gz')] });
   const withStructure = await act('get_state');
   check('open_files with a structure file (RCSB\'s PDB-format 2VWF, gzipped): shown in the Structure view, in get_state', `${fromFile.message} get_state: ${withStructure.data.structure?.name}, ${withStructure.data.structure?.atoms} atoms`, /the structure 2VWF\.pdb/.test(fromFile.message) && withStructure.data.structure?.name === '2VWF' && withStructure.data.structure.origin.kind === 'file' && withStructure.data.structure.atoms === first.data.atoms);
+  // Wave 5, slice 2: the target mapped onto structures, as Node maps it. The workspace is GRB2's.
+  const grb2Target = exampleTarget('grb2-sh3');
+  const listed = await act('find_structures', {});
+  const listedNode = rankStructures(cachedJSON('pdbe', 'P62993.best-structures.json'), grb2Target);
+  check('find_structures: the PDB entries that cover GRB2\'s SH3 domain, from PDBe\'s SIFTS in the cache, ranked as Node ranks them', listed.message.slice(0, 200), listed.data.total === listedNode.length && listed.data.structures.slice(0, 20).map((r) => `${r.id}:${r.from}-${r.to}`).join() === listedNode.slice(0, 20).map((r) => `${r.id}:${r.from}-${r.to}`).join() && listed.data.structures[0].id === '2VWF');
+  const onVWF = await act('open_structure', { pdb: '2VWF' });
+  const [vwfNode] = mapTarget(await openCached('pdb', pdbFile('2VWF')), grb2Target);
+  check('open_structure maps the workspace\'s target: GRB2\'s SH3 domain on chain A of 2VWF, 56 positions, P54A an engineered mutation, as Node maps it', JSON.stringify(onVWF.data.mapping?.positions.different), onVWF.data.mapping?.chain === 'A' && onVWF.data.mapping.onStructure === vwfNode.onStructure && onVWF.data.mapping.counts.identical === vwfNode.counts.identical && onVWF.data.mapping.positions.different[0]?.reason === 'engineered mutation' && onVWF.data.mapping.positions.different[0].reference === 212);
+  const byPosition = await act('set_structure', { select: 'pos 30-40' });
+  const keptOnModel = await act('open_structure', { alphafold: 'target' });
+  const byReference = await act('set_structure', { select: 'uniprot 188-198' });
+  check('a selection by target position ("pos 30-40") on 2VWF, kept when GRB2\'s AlphaFold DB model is opened: the same positions, at UniProt 188–198 on the model, as "uniprot 188-198" selects them', `${byPosition.data.selected.runs.join(', ')} → ${keptOnModel.data.selected.runs.join(', ')} (${keptOnModel.data.selected.count}); by reference ${byReference.data.selected.runs.join(', ')}`, byPosition.data.selected.count === 11 && keptOnModel.data.selected.runs.join() === 'Asn 188–Cys 198 · A' && byReference.data.selected.runs.join() === 'Asn 188–Cys 198 · A');
+  await act('export', { what: 'structure-mapping', path: join(out, 'mapping.csv') });
+  const [modelNode] = mapTarget(await openCached('alphafold', modelFile('P62993', 6)), grb2Target);
+  check('export structure-mapping: the target on the structure shown, position by position, the same bytes as Node\'s', `${readFileSync(join(out, 'mapping.csv'), 'utf8').split('\n').length - 2} positions`, readFileSync(join(out, 'mapping.csv'), 'utf8') === mappingCSV(modelNode, 'AF-P62993-F1'));
+  await act('open_example', { id: 'factor9' });
+  await act('open_structure', { pdb: '1RFN' });
+  const lightChain = await act('map_structure', { chain: 'B' });
+  const lightNode = mapTargetOnChain(await openCached('pdb', pdbFile('1RFN')), 'B', exampleTarget('factor9'));
+  const noChain = await send('map_structure', { chain: 'X' });
+  check('map_structure: factor IX on 1RFN\'s light chain (chain B), at 132–188, the entry\'s own record five earlier, as Node maps it; a chain that does not hold it refused, naming those that do', `${lightChain.message.slice(0, 260)} | ${noChain.message}`, lightChain.data.chain === 'B' && lightChain.data.onStructure === lightNode.onStructure && lightChain.data.positions.onStructure.join() === '132–188' && lightChain.data.record.differ.length === 56 && /5 earlier/.test(lightChain.message) && !noChain.ok && /Chains that hold it: A, B/.test(noChain.message));
+
   // The Canvas renderer, the page opened again.
   await browser.goto(`${URL}?renderer=canvas`, 1500);
   for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);

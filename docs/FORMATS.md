@@ -19,7 +19,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
-| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries and AlphaFold DB models through the program's fetcher | an image of the Structure view (PNG) |
+| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV) |
 
 Coming later: Excel workbooks, structures kept with the workspace (0.5).
 
@@ -41,8 +41,11 @@ Proteoscope's (`web/lib/structure/`):
 - **Compressed:** any of these gzipped (`.gz`).
 
 The first model of a file is drawn; an assembly is built from the deposited coordinates by its
-operators. The view's image is a PNG at twice the view's size. A structure is shown for the session:
-it is not yet saved with the workspace.
+operators. The entry's record of the UniProt residues each chain covers (`DBREF`, `struct_ref_seq`)
+and of where its sequence differs from UniProt's (`SEQADV`, `struct_ref_seq_dif`) are read, and
+reported beside the mapping of the target (below, "Structure mappings"). The view's image is a PNG
+at twice the view's size. A structure is shown for the session: it is not yet saved with the
+workspace.
 
 ## Count tables
 
@@ -512,6 +515,7 @@ ncbi/NM_007294.3.gb              a nucleotide record, as GenBank text (named by 
 ensembl/ENST00000460680.json     an Ensembl transcript's sequence (named without its version; the
                                  answer names the version Ensembl serves)
 pdb/2VWF.cif.gz                  a PDB entry's coordinates, gzipped mmCIF as RCSB sends it (0.5)
+pdbe/P62993.best-structures.json the PDB entries that cover a protein, by SIFTS, as PDBe gives them (0.5)
 alphafold/P62993.prediction.json AlphaFold DB's entries for an accession: each model's version (0.5)
 alphafold/AF-P62993-F1-model_v6.cif
                                  a predicted model, mmCIF gzipped as AlphaFold DB stores it (0.5)
@@ -870,6 +874,30 @@ The tracks shown, position by position: `position`, `reference_position` (with a
 the count, largest or mean as the track draws it, and a second column, `<track>: variants`, each
 variant there with its label; a features track: the features covering the position). Read again,
 it is a custom track (above).
+
+### Structure mappings
+
+`<entry>_chain-<chain>_mapping.csv` (the Structure view's **Mapping**; `export` with `what:
+"structure-mapping"`; MaveScape 0.5): the workspace's target on one chain of the structure shown,
+one row per target position:
+
+```csv
+target_position,reference_position,target_residue,structure,chain,residue_number,insertion_code,structure_residue,state,ambiguous,entry_record_position,difference
+54,212,Pro,2VWF,A,54,,Ala,different,,212,engineered mutation
+```
+
+- `target_position`, `reference_position` (the target's offset added: UniProt's numbering when the
+  target is placed in its entry), `target_residue` (three letters);
+- `structure` (the PDB ID, or the file's name), `chain`, `residue_number` and `insertion_code` (the
+  entry's own numbering), `structure_residue`, empty for a position on no residue of the entry's
+  sequence;
+- `state`: `identical`, `different`, `unobserved` (in the entry's sequence, without coordinates),
+  `deleted` (missing from the entry's sequence within the stretch it holds) or `outside`;
+- `ambiguous`: `yes` where an alignment that scores the same places the position otherwise;
+- `entry_record_position`: the UniProt position the entry's own record (`DBREF`,
+  `struct_ref_seq`) gives the residue, to set beside `reference_position`;
+- `difference`: the entry's reason for another residue (`engineered mutation`, `conflict`…), as it
+  records it (`SEQADV`, `struct_ref_seq_dif`).
 
 ## Comparisons
 

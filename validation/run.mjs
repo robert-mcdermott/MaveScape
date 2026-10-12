@@ -110,7 +110,8 @@ import { addSelection } from '../web/lib/workspace.js';
 import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
-import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, modelFile, openCached, openFixture, pdbFile } from './structure-cases.mjs';
+import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, modelFile, openCached, openFixture, pdbFile, siftsOf, siftsRetrieved } from './structure-cases.mjs';
+import { describeMapping, mapTarget, mapTargetOnChain, rankStructures } from '../web/lib/mapping.js';
 import { assemblyChoices, chainSummaries, readStructureBytes } from '../web/lib/structures.js';
 import { deriveStructure, materializeAssemblyModels } from '../web/lib/structure/structure.js';
 import { buildCartoon } from '../web/lib/structure/cartoon.js';
@@ -2664,6 +2665,7 @@ const suites = {
       gnomAD: /^https:\/\/gnomad\.broadinstitute\.org\/api$/,
       // Structures (wave 5, slice 1), kept compressed as they came.
       'RCSB PDB': /^https:\/\/files\.rcsb\.org\/download\/[0-9][A-Z0-9]{3}\.cif\.gz$/,
+      PDBe: /^https:\/\/www\.ebi\.ac\.uk\/pdbe\/graph-api\/mappings\/best_structures\/[A-Z0-9]+$/,
     };
     const typeOf = (meta) => (/efetch\.fcgi/.test(meta.source) ? 'text/plain; charset=utf-8' : /\.cif(\.gz)?$/.test(meta.source) ? 'application/gzip' : /\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) || /\/variants\/data\?/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json');
     const complete = records.filter(({ kind, meta }) => hosts[meta.service]?.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && (meta.service !== 'UniProt' || meta.version) && (kind !== 'mavedb-search' || (meta.method === 'POST' && JSON.parse(meta.request).text)) && (kind !== 'gnomad' || (meta.method === 'POST' && JSON.parse(meta.request).query)) && meta.contentType === typeOf(meta));
@@ -3783,6 +3785,119 @@ const suites = {
     const byDistance = pm.residues.filter((r) => r.chain === 'B' && r.kind === 'protein' && r.atoms.some((a) => dna.some((n) => Math.hypot(a.x - n.x, a.y - n.y, a.z - n.z) <= 4))).map((r) => r.key).sort();
     const named = (keys) => keys.map((k) => k.split(':').slice(1).reverse().join('')).join(', ');
     check('structures', 'TP53 bound to DNA (1TUP): the residues of chain B within 4 Å of the DNA, selected in words ("byres (chain B and protein and within 4 of nucleic)"), are those every distance between atoms finds; the hotspot arginines R248 and R273 among them', `${byLanguage.length} by the selection, ${byDistance.length} by distance: ${named(byDistance)}`, byLanguage.join() === byDistance.join() && byDistance.includes('B:248:ARG') && byDistance.includes('B:273:ARG'), 'the same; R248 and R273');
+
+    // Wave 5, slice 2 (X2): the target mapped onto structures. Each example's target is aligned to
+    // its entry's chains; SIFTS (PDBe's residue-level mapping, reference/sifts.json, read from its
+    // updated mmCIF with gemmi) says independently which UniProt residue each residue is.
+    const base = (accession) => String(accession ?? '').split('-')[0];
+    const toSifts = [];
+    for (const e of EXAMPLE_STRUCTURES) {
+      const structure = await openCached('pdb', pdbFile(e.pdb));
+      const residueMap = structure.models[0].residueMap;
+      const sifts = siftsOf(e.pdb);
+      for (const id of e.examples) {
+        const target = exampleTarget(id);
+        const maps = mapTarget(structure, target);
+        let agree = 0;
+        const differ = [];
+        const missed = [];
+        // Where SIFTS takes the other of two alignments as good: a position the mapping calls
+        // ambiguous (an equal score either way), SIFTS's position too.
+        const tied = new Set();
+        const states = { unobserved: 0, unobservedSifts: 0 };
+        for (const m of maps) {
+          const residues = m.positions.filter((p) => p.residue).map((p) => [p, residueMap.get(p.residue)]);
+          const labelChain = residues[0]?.[1].labelChain;
+          const chain = sifts.get(labelChain) ?? new Map();
+          const ambiguous = new Set(m.positions.filter((p) => p.ambiguous).map((p) => p.reference));
+          for (const [p, residue] of residues) {
+            const row = chain.get(Number(residue.labelSeq));
+            if (row && base(row.accession) === e.accession && row.position === p.reference) agree += 1;
+            else if (row && ambiguous.has(p.reference) && ambiguous.has(row.position)) tied.add(`${p.reference}/${row.position}`);
+            else differ.push(`${p.residue} at ${p.reference}, SIFTS ${row ? `${row.accession} ${row.position}` : 'none'}`);
+          }
+          // What SIFTS places on the chain within the target, observed and not, the alignment too.
+          const placed = new Set(m.positions.filter((p) => p.residue).map((p) => p.reference));
+          const unobserved = new Set(m.positions.filter((p) => p.state === 'unobserved').map((p) => p.reference));
+          for (const row of chain.values()) {
+            if (base(row.accession) !== e.accession || row.position < target.offset + 1 || row.position > target.offset + target.length) continue;
+            if (row.observed && !placed.has(row.position)) missed.push(`${m.chain} ${row.position}`);
+            if (!row.observed) {
+              states.unobservedSifts += 1;
+              if (unobserved.has(row.position)) states.unobserved += 1;
+              else if (ambiguous.has(row.position)) tied.add(`${row.position} (unobserved)`);
+              else missed.push(`${m.chain} ${row.position} (unobserved)`);
+            }
+          }
+        }
+        toSifts.push({ id, entry: e.pdb, chains: maps.map((m) => m.chain).join(''), agree, differ, missed, tied: [...tied], states, ok: maps.length > 0 && agree > 0 && !differ.length && !missed.length });
+      }
+    }
+    check('structures', `each example's target mapped onto its PDB entry (aligned to every chain that holds it) places every residue where SIFTS does (PDBe, retrieved ${siftsRetrieved}, read with gemmi), and on the residues SIFTS says are not observed, says so; nothing SIFTS places in the target missed, but where two alignments score the same, which the mapping calls ambiguous and SIFTS takes the other`, toSifts.map((x) => `${x.id} on ${x.entry} (chains ${x.chains}): ${x.agree} residues as SIFTS, ${x.states.unobserved} of SIFTS's ${x.states.unobservedSifts} unobserved${x.tied.length ? `, ambiguous ${x.tied.join(', ')}` : ''}${x.differ.length ? `; differ: ${x.differ.slice(0, 3).join(', ')}` : ''}${x.missed.length ? `; missed: ${x.missed.slice(0, 3).join(', ')}` : ''}`).join('; '), toSifts.length === 8 && toSifts.every((x) => x.ok), 'all as SIFTS, but the ambiguous');
+
+    // AlphaFold DB's models number their residues as UniProt: each target on its protein's model is
+    // checked against the model's own numbering, and its differences against the model's sequence
+    // read at the target's place.
+    const onModels = [];
+    for (const e of EXAMPLE_STRUCTURES) {
+      const model = await openCached('alphafold', modelFile(e.accession, e.model));
+      const residues = model.models[0].residues.filter((r) => r.kind === 'protein');
+      for (const id of e.examples) {
+        const target = exampleTarget(id);
+        const [m] = mapTarget(model, target);
+        const numbered = m.positions.filter((p) => p.residue).every((p) => model.models[0].residueMap.get(p.residue).resSeq === p.reference);
+        const read = target.sequence.split('').map((code, i) => [i + 1, code, residues[i + target.offset]?.code]).filter(([, code, there]) => code !== there).map(([position, code, there]) => `${code}${position}${there}`);
+        const different = m.positions.filter((p) => p.state === 'different').map((p) => `${p.code}${p.position}${p.structureCode}`);
+        onModels.push({ id, model: `AF-${e.accession}`, on: m.onStructure, length: target.length, numbered, different, read, ok: m.onStructure === target.length && numbered && different.join() === read.join() });
+      }
+    }
+    check('structures', 'each example\'s target on its protein\'s AlphaFold DB model: every position on the residue the model numbers as its reference position; another residue exactly where the target differs from the model\'s sequence read at the target\'s place (BRCA1 RING\'s R175K and TP53\'s R72P, the targets\' own)', onModels.map((x) => `${x.id} on ${x.model}: ${x.on} of ${x.length}${x.numbered ? '' : ', numbered otherwise'}${x.different.length ? `, different ${x.different.join(', ')}` : ''}`).join('; '), onModels.every((x) => x.ok), 'all');
+
+    // What the mapping reports, against what the entries record and SIFTS: 2VWF's engineered
+    // mutation; 1RFN's light chain, which its own record numbers five earlier than SIFTS; PTEN's
+    // loop missing from 1D5R's sequence, where SIFTS places nothing; the PDB-format 2VWF mapped as
+    // its mmCIF.
+    const grb2 = exampleTarget('grb2-sh3');
+    const [onVWF] = mapTarget(await openCached('pdb', pdbFile('2VWF')), grb2);
+    const mutation = onVWF.positions.find((p) => p.state === 'different');
+    const [onPDBFormat] = mapTarget(await openFixture('2VWF.pdb.gz'), grb2);
+    const sameAsMMCIF = onPDBFormat.positions.every((p, i) => p.state === onVWF.positions[i].state && p.residue === onVWF.positions[i].residue && (p.reason ?? '') === (onVWF.positions[i].reason ?? ''));
+    const f9 = exampleTarget('factor9');
+    const factorIX = await openCached('pdb', pdbFile('1RFN'));
+    const light = mapTargetOnChain(factorIX, 'B', f9);
+    const lightRecord = light.positions.filter((p) => p.recorded != null).every((p) => p.recorded === p.reference - 5);
+    const lightSifts = siftsOf('1RFN').get('B');
+    const lightAsSifts = light.positions.filter((p) => p.residue).every((p) => lightSifts.get(Number(factorIX.models[0].residueMap.get(p.residue).labelSeq))?.position === p.reference);
+    const pten = exampleTarget('pten-mavedb');
+    const [onD5R] = mapTarget(await openCached('pdb', pdbFile('1D5R')), pten);
+    const deleted = onD5R.positions.filter((p) => p.state === 'deleted' && !p.ambiguous).map((p) => p.reference);
+    const siftsPTEN = new Set([...siftsOf('1D5R').get('A').values()].map((r) => r.position));
+    // At the join, the construct's valine scores the same against T286 and A309: ambiguous. SIFTS
+    // takes 286, the entry's own record (struct_ref_seq_dif) 309. Around the loop and its join,
+    // SIFTS places the residues on either side.
+    const join = onD5R.positions.filter((p) => p.ambiguous).map((p) => p.reference);
+    const span = [...deleted, ...join];
+    const loopAbsent = deleted.length > 0 && deleted.every((position) => !siftsPTEN.has(position)) && siftsPTEN.has(Math.min(...span) - 1) && siftsPTEN.has(Math.max(...span) + 1);
+    const recordedJoin = (await openCached('pdb', pdbFile('1D5R'))).sequenceDifferences.find((d) => d.resName === 'VAL' && d.label === 280)?.dbPosition;
+    const siftsJoin = siftsOf('1D5R').get('A').get(280)?.position;
+    const words = describeMapping(light, '1RFN').join(' ');
+    const f9Listed = rankStructures(cachedJSON('pdbe', 'P00740.best-structures.json'), { ...f9, accession: 'P00740' }).length;
+    const guideSays = exampleById('factor9').expected.some((t) => t.includes('on chain B at 132–188') && t.includes('five earlier')) && exampleById('factor9').steps.some(([mode, t]) => mode === 'structure' && t.includes('chain B, at 132–188') && t.includes(`lists the ${f9Listed} PDB entries`));
+    check('structures', 'the mapping reports what the entries record and SIFTS says: 2VWF\'s engineered mutation of GRB2\'s P212 (target position 54) to alanine, the same from its PDB-format file; 1RFN\'s light chain (chain B) at factor IX\'s 132–188 as SIFTS places it, the entry\'s own record numbering it five earlier, said so; PTEN\'s loop missing from 1D5R\'s sequence, where SIFTS places nothing between its neighbors, and at its join a valine an alignment places as well at T286 (SIFTS\'s choice) as at A309 (the entry\'s own record): ambiguous', `2VWF: ${mutation ? `${mutation.code}${mutation.position}${mutation.structureCode} (${mutation.reason}, reference ${mutation.reference})` : 'none'}; PDB format ${sameAsMMCIF ? 'the same' : 'different'}; 1RFN B: ${light.positions.find((p) => p.residue)?.reference}–${light.positions.filter((p) => p.residue).at(-1)?.reference}, ${lightAsSifts ? 'as SIFTS' : 'not as SIFTS'}, record ${lightRecord ? 'five earlier' : 'otherwise'} ("${/it numbers them \d+ earlier/.exec(words)?.[0] ?? 'not said'}"), the guide ${guideSays ? 'says so' : 'says otherwise'}; 1D5R: missing ${deleted.length ? `${Math.min(...deleted)}–${Math.max(...deleted)}` : 'nothing'}, ${loopAbsent ? 'absent from SIFTS' : 'in SIFTS'}; ambiguous ${join.join(' and ')} (SIFTS ${siftsJoin}, the record ${recordedJoin})`, mutation?.position === 54 && mutation.reference === 212 && mutation.structureCode === 'A' && mutation.reason === 'engineered mutation' && sameAsMMCIF && lightAsSifts && lightRecord && light.record.compared === 56 && /numbers them 5 earlier/.test(words) && loopAbsent && join.join() === '286,309' && siftsJoin === 286 && recordedJoin === 309 && guideSays, 'as recorded; the guide saying so');
+
+    // The structures that cover each example's target, ranked from PDBe's best_structures (the
+    // fetcher's cached answers): the most of the target first, then the best resolution; the
+    // entry the example's guide or the roadmap names among them.
+    const ranked = [];
+    for (const e of EXAMPLE_STRUCTURES) {
+      const target = exampleTarget(e.examples[0]);
+      const rows = rankStructures(cachedJSON('pdbe', `${e.accession}.best-structures.json`), { ...target, accession: e.accession });
+      const ordered = rows.every((r, i) => i === 0 || rows[i - 1].covered > r.covered || (rows[i - 1].covered === r.covered && (rows[i - 1].resolution ?? Infinity) <= (r.resolution ?? Infinity)));
+      const within = rows.every((r) => r.from >= 1 && r.to <= target.length && r.covered === r.to - r.from + 1);
+      const named = rows.find((r) => r.id === e.pdb);
+      ranked.push({ e, n: rows.length, first: rows[0], named, ok: rows.length > 0 && ordered && within && named?.chains.some((c) => c.id === e.chain) });
+    }
+    check('structures', 'the PDB entries that cover each example\'s target, ranked from PDBe\'s SIFTS (best_structures, from the cache): the most of the target first, then the best resolution, each within the target; the entry the guide names among them, with its chain', ranked.map((x) => `${x.e.accession}: ${x.n} entries, first ${x.first?.id} (${x.first?.covered} positions), ${x.e.pdb} ${x.named ? `${x.named.covered} positions, rank ${ranked.length && x.n ? 1 + rankStructures(cachedJSON('pdbe', `${x.e.accession}.best-structures.json`), { ...exampleTarget(x.e.examples[0]), accession: x.e.accession }).findIndex((r) => r.id === x.e.pdb) : '?'}` : 'missing'}`).join('; '), ranked.every((x) => x.ok), 'all');
   },
 };
 

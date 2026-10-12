@@ -251,6 +251,9 @@ func (s *store) putFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := os.Stat(path); err == nil {
+		// The upload is read before the answer: answered first, a large one's connection is closed
+		// under the browser (Go's server closes it past 256 KB unread), and its request fails.
+		io.Copy(io.Discard, io.LimitReader(r.Body, maxFileBytes+1))
 		writeJSON(w, map[string]any{"ok": true, "existing": true})
 		return
 	}

@@ -40,12 +40,48 @@ section grows with each.
   - **The factor IX example's sixth step** opens PDB 1RFN and draws its cysteines as sticks: seven
     disulfide bonds, one joining its two chains. The guide page *Structures*.
 
+- **The target mapped onto structures (wave 5, slice 2; X2).** The workspace's target is placed on
+  the structure shown, position by position, whatever the entry's numbering.
+  - **The mapping** (`lib/mapping.js`): the target's protein aligned to each chain's sequence (the
+    entry's SEQRES, its residues observed marked) by Proteoscope's overlap alignment
+    (`structure/align.js`, copied with its tests: BLOSUM62, affine gaps, free end gaps). Each
+    position is on a residue (identical, or another with the entry's reason: an engineered
+    mutation, a conflict), not observed, missing from the structure's sequence, or outside it; a
+    position is ambiguous where an alignment that scores the same places it otherwise. The entry's
+    own record of the UniProt residues each chain covers is compared, residue by residue, and a
+    shift said. Every chain that holds the target is mapped; the one that holds the most is
+    chosen, and another can be.
+  - **Structures of the target:** the PDB entries that cover it, from PDBe's SIFTS
+    (`/api/fetch/pdbe/best-structures/{accession}`, the accession only), ranked by the target
+    positions each covers, then resolution, with its AlphaFold DB model first; each opens with the
+    target mapped on its chain.
+  - **Positions on the structure:** `pos 30-40` (the target's) and `uniprot 188-198` (the
+    reference's) in the selection language; a selection is kept, position by position, when
+    another structure is opened, an experimental one or the AlphaFold DB model; a residue pointed
+    at says its target position.
+  - **The mapping** in words beside the view, its residues selected by state, and written out
+    (`<entry>_chain-<chain>_mapping.csv`; FORMATS.md).
+  - **Remote control:** `find_structures`, `map_structure`; `open_structure` takes a `chain`;
+    `export` writes `structure-mapping`; `get_state` and `open_structure` give the mapping.
+  - **Factor IX's sixth step** opens 1RFN from the structures of the target and reads its
+    mapping: chain A at 227–461 though numbered as chymotrypsin is, chain B at 132–188, which the
+    entry's own record numbers five earlier.
+
 ### Changed
+
+- The Structure view's words give a chain's UniProt residues as the entry gives them ("the entry
+  gives UniProt P00740 128–183"): the mapping may place them otherwise.
 
 - Headless Chrome is started with WebGPU allowed (`docs/capture/cdp.mjs`), for the screenshots and
   the validation's sessions.
 - Unit tests are run as `node --test "web/lib/**/*.test.mjs"`, the structure viewer's included;
   `MAVESCAPE_TIME_SCALE` gives its performance tests more time on shared runners (CI sets 5).
+
+### Fixed
+
+- A file the library already holds is read to its end before the program answers that it has it.
+  Answered first, a large upload's connection was closed under the browser: opening the factor IX
+  example (a 2 MB table) a second time in one library failed with "Failed to fetch".
 
 ### Validation
 
@@ -64,18 +100,36 @@ section grows with each.
     between their sulfur atoms are the entry's own disulfide records, one joining the two chains;
     on 1TUP, the residues within 4 Å of the DNA selected in words are those every distance between
     atoms finds, R248 and R273 among them.
-- The remote-control session (133 checks): every example protein's PDB entry and AlphaFold DB model
+- `structures`, slice 2 (4 more checks, 10 in all):
+  - **Against SIFTS:** each example's target aligned to its PDB entry places every residue where
+    SIFTS does (PDBe's residue-level mapping, read from its updated mmCIF with gemmi, an mmCIF
+    reader independent of MaveScape's: `reference/sifts.json`, by `generate_sifts.py`), and calls
+    not observed the residues SIFTS does; where they part (PTEN's join in 1D5R), two alignments
+    score the same, which the mapping calls ambiguous.
+  - **On the AlphaFold DB models:** every position on the residue numbered as its reference
+    position; another residue exactly where the target differs from the model's sequence (BRCA1
+    RING's R175K, TP53's R72P).
+  - **What the entries record:** 2VWF's engineered mutation (the same from its PDB-format file),
+    1RFN's light chain and its own record five off, PTEN's removed loop and its ambiguous join.
+  - **The structures of each target**, ranked from PDBe's answers in the cache, the example's entry
+    among them with its chain.
+- The remote-control session (138 checks): every example protein's PDB entry and AlphaFold DB model
   opened and drawn, with WebGPU and then with the Canvas renderer, each with the atoms Node reads
   and an image that is not empty; `set_structure`'s selections, styles, labels, focus, surface and
-  assembly; refusals, saying why; a structure file opened with `open_files`.
-- Unit tests: Proteoscope's tests of the copied modules (66: parsers, structure, chemistry, DSSP,
-  surfaces, selection language, formats) and `structures.test.mjs` (6).
-- Go tests: the structure requests ask what NETWORK.md says, keep what the service sent, refuse a
-  cut-off file or a page that is not a structure, and refuse anything but a PDB ID or an accession
-  before it is sent.
-- The fixtures (`validation/fixtures/public-data/pdb/`, `…/alphafold/`) are the program's cached
-  answers for the examples' proteins and the structures Proteoscope's tests read, retrieved
-  2026-10-12; `validation/fixtures/structures/` holds 2VWF's PDB-format file and BinaryCIF and GRB2's
+  assembly; refusals, saying why; a structure file opened with `open_files`. Slice 2:
+  `find_structures`, `open_structure`'s and `map_structure`'s mappings and the mapping's file as
+  Node makes them; a selection by target position kept from 2VWF to GRB2's model.
+- Unit tests: Proteoscope's tests of the copied modules (74: parsers, structure, chemistry, DSSP,
+  surfaces, selection language, formats, alignment), `structures.test.mjs` (6) and
+  `mapping.test.mjs` (8).
+- Go tests: a file stored again is read to its end before the answer
+  (`TestAFileStoredAgainIsReadToItsEnd`).
+- Go tests: the structure requests (and PDBe's best structures) ask what NETWORK.md says, keep what
+  the service sent, refuse a cut-off file or a page that is not a structure, and refuse anything
+  but a PDB ID or an accession before it is sent.
+- The fixtures (`validation/fixtures/public-data/pdb/`, `…/alphafold/`, `…/pdbe/*.best-structures.json`)
+  are the program's cached answers for the examples' proteins and the structures Proteoscope's
+  tests read, retrieved 2026-10-12; `validation/fixtures/structures/` holds 2VWF's PDB-format file and BinaryCIF and GRB2's
   model's BinaryCIF.
 
 ## 0.4.0 (2026-10-11)

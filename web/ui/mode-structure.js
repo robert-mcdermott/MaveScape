@@ -4,8 +4,11 @@
 // and then available offline); choose a biological assembly; draw it as a cartoon, sticks,
 // spheres or a trace, with a surface; color it; select residues in Proteoscope's selection
 // language ("chain A and resi 40-80", "resn CYS", "within 5 of ligand"), draw them as sticks,
-// label them, and focus on a neighborhood. The structure is kept for the session; the map's
-// positions on it come with the mapping (roadmap, wave 5).
+// label them, and focus on a neighborhood. The structure is kept for the session. Wave 5, slice 2
+// (X2): the workspace's target is mapped onto it (lib/mapping.js: every chain that holds it, each
+// position's state, the entry's own record compared), the structures that cover the target are
+// listed from PDBe's SIFTS, residues are selected by target position (`pos`) or reference
+// (`uniprot`), and a selection is kept, position by position, from one structure to the next.
 
 import { h, icon, clear, downloadBlob } from './dom.js';
 import { toast } from './overlays.js';
@@ -15,6 +18,8 @@ import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { colorToHex, colormapGradientCSS } from '../lib/structure/colors.js';
 import { countMask, residueKeysFromMask, SelectionError, selectAtoms } from '../lib/structure/select.js';
 import { alphafoldEntry, applyAlphafoldEntry, ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, openStructureText, readStructureBytes, residueLabel, residueRuns, structureRequest } from '../lib/structures.js';
+import { describeMapping, mapTarget, mappedLabel, mappingCSV, rankStructures, stretches } from '../lib/mapping.js';
+import { targetProtein } from '../lib/target.js';
 import { now } from '../lib/clock.js';
 
 // Residue styles for a selection, as the selection pane offers them.
@@ -23,7 +28,9 @@ export const RESIDUE_STYLES = { sticks: 'Sticks', 'ball-stick': 'Ball and stick'
 // The session's structure: the viewer (kept between visits to the view), where the structure
 // came from, and the last selection typed.
 export function structureState(app) {
-  app.structureState ??= { viewer: null, origin: null, query: '', message: null, busy: '' };
+  // mapping: the target on the chosen chain; maps: on every chain that holds it; mapTarget: the
+  // target mapped; structures: the PDB entries that cover it, ranked; serial: the structure's.
+  app.structureState ??= { viewer: null, origin: null, query: '', message: null, busy: '', mapping: null, maps: [], mapTarget: null, mapKey: '', structures: null, serial: 0 };
   return app.structureState;
 }
 
@@ -33,8 +40,68 @@ function viewerOf(app) {
     onPick: (residue, how) => state.handlers?.onPick?.(residue, how),
     onFocus: (residues) => state.handlers?.onFocus?.(residues),
     onChange: () => state.handlers?.onChange?.(),
+    describe: (residue) => mappedLabel(state.mapping, residue.key),
   });
   return state.viewer;
+}
+
+// The workspace's target as the mapping reads it (the design's target, else the first): its protein,
+// offset and UniProt accession; null without one.
+export function workspaceTarget(ws) {
+  const target = ws.targets.find((t) => t.id === ws.design?.targets?.[0]?.id) ?? ws.targets[0];
+  if (!target?.sequence) return null;
+  let sequence;
+  try {
+    sequence = targetProtein(target).replace(/\*+$/, '');
+  } catch {
+    return null;
+  }
+  return { id: target.id, name: target.name || 'The target', sequence, offset: target.offset ?? 0, accession: target.identifiers?.uniprot ?? '', length: sequence.length };
+}
+
+const targetKey = (t) => (t ? `${t.id}|${t.offset}|${t.accession}|${t.sequence}` : '');
+
+// Maps the workspace's target onto the structure shown: every chain that holds it, the chain asked
+// for current (else the best). Returns the current mapping, or null (no target, or on no chain).
+export function mapStructure(app, chain = null) {
+  const state = structureState(app);
+  const structure = state.viewer?.structure;
+  const target = workspaceTarget(app.store.ws);
+  state.mapTarget = target;
+  state.mapKey = `${state.serial}|${structure?.activeAssemblyId ?? ''}|${targetKey(target)}`;
+  state.maps = structure && target ? mapTarget(structure, target) : [];
+  state.mapping = state.maps.find((m) => m.chain === chain) ?? state.maps[0] ?? null;
+  return state.mapping;
+}
+
+// The target positions of the residues selected, on the current mapping.
+function selectedPositions(state) {
+  const mapping = state.mapping;
+  if (!mapping || !state.viewer) return [];
+  return [...state.viewer.selection].map((key) => mapping.residuePosition.get(key)).filter(Boolean).sort((a, b) => a - b);
+}
+
+// Selects the residues of target positions on the current mapping; returns how many were placed.
+export function selectPositions(app, positions) {
+  const state = structureState(app);
+  const keys = positions.map((p) => state.mapping?.positions[p - 1]?.residue).filter(Boolean);
+  state.viewer.select(keys);
+  return keys.length;
+}
+
+// The PDB entries that cover the target, ranked (PDBe's best_structures, through the program).
+export async function findStructures(app) {
+  const state = structureState(app);
+  const target = workspaceTarget(app.store.ws);
+  if (!target) return { ok: false, message: 'This workspace has no target: the structures listed are those that cover it.' };
+  if (!target.accession) return { ok: false, message: `${target.name} has no UniProt accession: give it in Experiment, Target, and the PDB entries that cover it are listed.` };
+  const key = `${target.accession}|${target.offset}|${target.length}`;
+  if (state.structures?.key === key && state.structures.ok) return state.structures;
+  const got = await fetchPublic(app, `pdbe/best-structures/${encodeURIComponent(target.accession)}`);
+  state.structures = got.ok
+    ? { ok: true, key, target, rows: rankStructures(got.json, target), retrieval: got.retrieval }
+    : { ok: false, key, target, message: got.status === 404 ? `PDBe knows no structure of ${target.accession}.` : got.message };
+  return state.structures;
 }
 
 // The target's UniProt accession, for its AlphaFold DB model: the design's target, else the first.
@@ -43,8 +110,9 @@ export function targetAccession(ws) {
   return target?.identifiers?.uniprot ?? '';
 }
 
-// Opens a structure: { pdb }, { alphafold } (an accession), or { file: { name, bytes } }. Returns
-// { ok, message, structure, origin }; the structure is shown, replacing any other.
+// Opens a structure: { pdb }, { alphafold } (an accession), or { file: { name, bytes } }, and the
+// chain to map the target on (`chain`; the best otherwise). Returns { ok, message, structure,
+// origin, mapping }; the structure is shown, replacing any other, the selection kept by position.
 export async function openStructure(app, what) {
   const state = structureState(app);
   const viewer = viewerOf(app);
@@ -85,12 +153,22 @@ export async function openStructure(app, what) {
     const { text, name: textName } = await readStructureBytes(bytes, name);
     const structure = openStructureText(text, textName);
     if (entry) applyAlphafoldEntry(structure, entry);
+    // The selection's target positions, to select them again on the new structure.
+    const kept = selectedPositions(state);
     state.origin = origin;
     state.query = '';
     state.message = null;
+    state.serial += 1;
     await viewer.show(structure);
+    const mapping = mapStructure(app, what.chain);
+    if (kept.length && mapping) {
+      const placed = selectPositions(app, kept);
+      state.message = { kind: 'ok', text: `The selection is kept by target position: ${placed} of its ${kept.length} positions are on this structure${placed < kept.length ? ` (${stretches(kept.filter((p) => !mapping.positions[p - 1]?.residue), mapping.target.offset).join(', ')} not)` : ''}.` };
+    }
     app.store.notify(['structure']);
-    return { ok: true, structure, origin, message: `${originText(origin, structure)}: ${describeStructure(structure).slice(1).join(' ')}` };
+    const words = describeStructure(structure).slice(1).join(' ');
+    const mapped = mapping ? ` ${describeMapping(mapping, structure.meta.code || name)[0]}` : '';
+    return { ok: true, structure, origin, mapping, message: `${originText(origin, structure)}: ${words}${mapped}` };
   } catch (error) {
     return { ok: false, message: `${name ?? 'The structure'} could not be read: ${error.message}` };
   } finally {
@@ -115,12 +193,29 @@ export function selectResidues(app, text) {
   const viewer = viewerOf(app);
   const model = viewer.model;
   if (!model) throw new SelectionError('Open a structure first.');
-  // UniProt's positions are placed on a structure by aligning the target to it, not by the entry's
-  // own record of what it covers (roadmap, wave 5: mapping).
-  const uniprot = /\b(uniprot|unp)\b/i.exec(text);
-  if (uniprot) throw new SelectionError('MaveScape does not place UniProt\'s positions on a structure yet: select by the entry\'s own numbering (resi).', uniprot.index);
-  const target = { id: 1, index: 1, name: viewer.structure.meta.code || 'structure', model, structure: viewer.structure, context: { selected: viewer.selection, focus: viewer.focused.length ? new Set(viewer.focused) : null, values: {} } };
-  const mask = selectAtoms(text, [target]).get(target.id);
+  // Target positions (`pos`) and the reference's (`uniprot`) are placed by the mapping, the target
+  // aligned to the chain, not by the entry's own numbering or record.
+  const state = structureState(app);
+  const mapping = state.mapping;
+  const numbering = /\b(pos|uniprot|unp)\b/i.exec(text);
+  if (numbering && !mapping) {
+    throw new SelectionError(state.mapTarget ? `${state.mapTarget.name} is on no chain of this structure: positions on it cannot be selected.` : 'This workspace has no target: positions are the target\'s, placed on the structure by mapping it.', numbering.index);
+  }
+  const shift = (list) => list.split(/([+,])/).map((item) => item.replace(/^(\d+)(?:-(\d+))?$/, (m, a, b) => (b ? `${Number(a) + mapping.target.offset}-${Number(b) + mapping.target.offset}` : `${Number(a) + mapping.target.offset}`))).join('');
+  const read = mapping ? text.replace(/\bpos\s+([0-9][0-9,+-]*)/gi, (m, list) => `uniprot ${shift(list)}`) : text;
+  const uniprot = mapping ? (residue) => {
+    const position = mapping.residuePosition.get(residue.key);
+    return position ? position + mapping.target.offset : null;
+  } : undefined;
+  const target = { id: 1, index: 1, name: viewer.structure.meta.code || 'structure', model, structure: viewer.structure, context: { selected: viewer.selection, focus: viewer.focused.length ? new Set(viewer.focused) : null, values: {}, uniprot } };
+  let mask;
+  try {
+    mask = selectAtoms(read, [target]).get(target.id);
+  } catch (error) {
+    // Where the text the person typed goes wrong, when `pos` was read as `uniprot`.
+    if (error instanceof SelectionError && read !== text) throw new SelectionError(error.message, -1);
+    throw error;
+  }
   return { keys: [...residueKeysFromMask(model, mask)], atoms: countMask(mask) };
 }
 
@@ -212,6 +307,7 @@ export function mountStructureMode(app, container) {
   function setAssembly(id) {
     try {
       viewer.setAssembly(id);
+      mapStructure(app, state.mapping?.chain);
       state.query = '';
       render();
     } catch (error) {
@@ -315,6 +411,72 @@ export function mountStructureMode(app, container) {
       })()) : null);
   }
 
+  // The target on the structure: the chain chosen, its positions' states in words, and ways to
+  // select them and to write the mapping out.
+  function mappingPane() {
+    const structure = viewer.structure;
+    const code = structure.meta.code || structure.label;
+    const target = state.mapTarget;
+    const head = h('h3', icon('target'), 'The target on the structure');
+    if (!target) return h('div.pane.structure-mapping', head, h('p.muted', 'This workspace has no target. With one (a table and its target, or an example), each of its positions is placed on a residue of the structure, whatever the entry\'s numbering.'));
+    if (!state.maps.length) return h('div.pane.structure-mapping', head, h('p', `${target.name} is on no chain of ${code}: no chain holds five of its residues aligned identical, and half of those aligned.`));
+    const m = state.mapping;
+    const [first, ...rest] = describeMapping(m, code);
+    const positionsOf = (test) => m.positions.filter(test).map((p) => p.position);
+    const on = positionsOf((p) => p.residue);
+    const different = positionsOf((p) => p.state === 'different');
+    const ambiguous = positionsOf((p) => p.ambiguous && p.residue);
+    const pick = (label, positions, title) => (positions.length ? h('button.btn.small', { type: 'button', title, onclick: () => { selectPositions(app, positions); state.query = ''; renderSide(); } }, label) : null);
+    const exportCSV = () => downloadBlob(new Blob([mappingCSV(m, code)], { type: 'text/csv' }), `${code.toLowerCase()}_chain-${m.chain}_mapping.csv`);
+    return h('div.pane.structure-mapping', head,
+      state.maps.length > 1 ? h('div.structure-chain', h('label', 'Chain'), select('Chain the target is mapped on', m.chain, state.maps.map((x) => [x.chain, `${x.chain} · ${fmtCount(x.onStructure)} positions, ${fmtCount(x.counts.identical)} identical`]), (chain) => { mapStructure(app, chain); renderSide(); })) : null,
+      h('p.structure-mapping-lead', first),
+      ...rest.map((line) => h('p', line)),
+      h('div.btn-row',
+        pick('Select the target', on, 'Select the residues the target\'s positions are on'),
+        pick(`Select the ${different.length === 1 ? 'difference' : 'differences'}`, different, 'Select the residues where the structure has another residue than the target'),
+        pick('Select the ambiguous', ambiguous, 'Select the residues an alignment as good would place otherwise'),
+        h('button.btn.small', { type: 'button', title: 'The mapping, position by position (CSV)', onclick: exportCSV }, icon('download'), 'Mapping')),
+      h('p.muted.small', 'Positions can be selected under Residues: "pos 30-40" (the target\'s), "uniprot 188-198" (the reference\'s). A selection is kept, position by position, when another structure is opened.'));
+  }
+
+  const METHOD_WORDS = { 'X-ray diffraction': 'X-ray', 'Electron Microscopy': 'cryo-EM', 'Solution NMR': 'NMR', 'Solid-state NMR': 'solid-state NMR', 'Electron Crystallography': 'electron crystallography', 'Neutron Diffraction': 'neutron' };
+
+  // The structures that cover the target: its AlphaFold DB model, then the PDB entries SIFTS places
+  // it on, ranked.
+  function structuresPane(compact) {
+    const target = workspaceTarget(store.ws);
+    if (!target) return null;
+    const head = h('h3', icon('layers'), 'Structures of the target');
+    if (!target.accession) return h('div.pane.structure-list', head, h('p.muted', `Give ${target.name} its UniProt accession (Experiment, Target), and the PDB entries that cover it are listed here, from PDBe's SIFTS.`));
+    const listed = state.structures?.key === `${target.accession}|${target.offset}|${target.length}` ? state.structures : null;
+    if (!listed) {
+      // One request at a time for the target's list; the side is drawn again when it comes.
+      const key = `${target.accession}|${target.offset}|${target.length}`;
+      if (state.structuresAsked !== key) {
+        state.structuresAsked = key;
+        findStructures(app).then(() => { if (state.handlers) renderSide(); });
+      }
+      return h('div.pane.structure-list', head, h('p.muted', `Asking PDBe for the structures of ${target.accession}…`));
+    }
+    const range = (a, b) => (a === b ? `${a}` : `${a}–${b}`);
+    const row = (label, detail, onOpen, current) => h(`li${current ? '.current' : ''}`, h('div', h('strong', label), h('span.muted', detail)), h('button.btn.small', { type: 'button', onclick: onOpen, disabled: Boolean(current) }, current ? 'Shown' : 'Open'));
+    const shown = state.origin;
+    const items = [row('AlphaFold DB model', `predicted · all ${fmtCount(target.length)} positions`, () => open({ alphafold: target.accession }), shown?.kind === 'alphafold' && shown.id === target.accession)];
+    if (listed.ok) {
+      const rows = state.allStructures ? listed.rows : listed.rows.slice(0, compact ? 6 : 10);
+      for (const r of rows) {
+        const method = METHOD_WORDS[r.method] ?? r.method;
+        const detail = `${method}${r.resolution ? ` ${r.resolution} Å` : ''} · chain${r.chains.length > 1 ? 's' : ''} ${r.chains.map((c) => c.id).slice(0, 6).join(', ')}${r.chains.length > 6 ? '…' : ''} · positions ${range(r.from, r.to)}`;
+        items.push(row(r.id, detail, () => open({ pdb: r.id, chain: r.chains[0].id }), shown?.kind === 'pdb' && shown.id === r.id));
+      }
+    }
+    return h('div.pane.structure-list', head,
+      listed.ok ? h('p.muted.small', `${fmtCount(listed.rows.length)} PDB ${listed.rows.length === 1 ? 'entry covers' : 'entries cover'} ${target.name} (${target.accession}${target.offset ? `, from ${target.offset + 1}` : ''}), by SIFTS: the most of it first, then the best resolution. The positions are those the entry's sequence covers, observed or not.`) : h('p.muted.small', listed.message),
+      h('ul.structure-rows', ...items),
+      listed.ok && listed.rows.length > (compact ? 6 : 10) ? h('button.btn.small', { type: 'button', onclick: () => { state.allStructures = !state.allStructures; renderSide(); } }, state.allStructures ? 'Fewer' : `All ${fmtCount(listed.rows.length)}`) : null);
+  }
+
   function renderSide() {
     // Typing in the query field survives a redraw.
     const typing = document.activeElement?.classList.contains('structure-query-input') ? document.activeElement.selectionStart : null;
@@ -323,13 +485,18 @@ export function mountStructureMode(app, container) {
     if (state.message) sideEl.append(h(`div.callout.${state.message.kind === 'warn' ? 'warn' : 'ok'}`, icon(state.message.kind === 'warn' ? 'warning' : 'info'), h('span', state.message.text)));
     if (!structure) {
       sideEl.append(openPane(false));
+      const list = structuresPane(false);
+      if (list) sideEl.append(list);
       return;
     }
     const lines = describeStructure(structure);
     sideEl.append(
       h('div.pane.structure-words', h('h3', icon('info'), 'In words'), h('p.structure-origin', originText(state.origin, structure)), ...lines.map((line) => h('p', line))),
-      selectionPane(),
-      openPane(true));
+      mappingPane(),
+      selectionPane());
+    const list = structuresPane(true);
+    if (list) sideEl.append(list);
+    sideEl.append(openPane(true));
     const input = sideEl.querySelector('.structure-query-input');
     if (input && Number.isInteger(state.errorAt)) {
       input.focus();
@@ -366,11 +533,23 @@ export function mountStructureMode(app, container) {
     renderSide();
   }
 
+  if (viewer.structure && state.mapKey !== `${state.serial}|${viewer.structure.activeAssemblyId ?? ''}|${targetKey(workspaceTarget(store.ws))}`) mapStructure(app, state.mapping?.chain);
   render();
   return {
     update(topics) {
       if (topics.has('theme')) viewer.setTheme(document.documentElement.dataset.theme === 'dark');
-      if (topics.has('structure')) render();
+      if (topics.has('structure')) {
+        render();
+        return;
+      }
+      // Another target (the workspace changed): mapped again.
+      if (topics.has('ws') && viewer.structure) {
+        const target = workspaceTarget(store.ws);
+        if (state.mapKey !== `${state.serial}|${viewer.structure.activeAssemblyId ?? ''}|${targetKey(target)}`) {
+          mapStructure(app, state.mapping?.chain);
+          renderSide();
+        }
+      } else if (topics.has('ws') && !viewer.structure) renderSide();
     },
     destroy() {
       viewer.detach();

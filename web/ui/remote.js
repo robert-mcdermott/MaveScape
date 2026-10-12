@@ -50,7 +50,8 @@ import { setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 import { possessive } from '../lib/words.js';
-import { openStructure, originText, RESIDUE_STYLES, selectResidues, structureState, targetAccession } from './mode-structure.js';
+import { findStructures, mapStructure, openStructure, originText, RESIDUE_STYLES, selectResidues, structureState, targetAccession, workspaceTarget } from './mode-structure.js';
+import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
@@ -282,19 +283,40 @@ export function installRemote(app) {
       labels: viewer.labels.size,
       focused: viewer.focused.length,
     };
+    if (state.mapping) summary.mapping = mappingSummary(state);
     if (!full) return summary;
     return { ...summary, chains: chainSummaries(structure), assemblies: assemblyChoices(structure), words: describeStructure(structure) };
   }
 
+  // The target on the structure (wave 5, slice 2): the chain, the counts by state, the stretches,
+  // the entry's own record compared, and every chain that holds it.
+  function mappingSummary(state) {
+    const m = state.mapping;
+    const of = (test) => m.positions.filter(test).map((p) => p.position);
+    return {
+      target: m.target.name,
+      chain: m.chain,
+      onStructure: m.onStructure,
+      identity: +m.identity.toFixed(4),
+      counts: m.counts,
+      positions: { onStructure: stretches(of((p) => p.residue)), different: m.positions.filter((p) => p.state === 'different').map((p) => ({ position: p.position, reference: p.reference, target: p.code, structure: p.structureCode, residue: p.residue, reason: p.reason ?? null })), unobserved: stretches(of((p) => p.state === 'unobserved')), deleted: stretches(of((p) => p.state === 'deleted')), outside: stretches(of((p) => p.state === 'outside')), ambiguous: stretches(of((p) => p.ambiguous)) },
+      record: m.record,
+      chains: state.maps.map((x) => ({ chain: x.chain, onStructure: x.onStructure, identical: x.counts.identical })),
+      words: describeMapping(m, state.viewer.structure.meta.code || state.viewer.structure.label),
+    };
+  }
+
   function setAssembly(id) {
-    const viewer = structureState(app).viewer;
+    const state = structureState(app);
+    const viewer = state.viewer;
     const choices = assemblyChoices(viewer.structure);
     if (!choices.length) throw new ActionError(`${viewer.structure.meta.code || 'The structure'} defines no assembly other than its coordinates as deposited.`);
     const chosen = choose(String(id) === 'au' ? ASYMMETRIC_UNIT_ID : String(id), choices.map((c) => c.id), 'assembly');
     const choice = choices.find((c) => c.id === chosen);
     if (choice.tooLarge) throw new ActionError(`${choice.label} would have ${choice.atoms.toLocaleString('en-US')} atoms, more than MaveScape draws.`);
     viewer.setAssembly(chosen);
-    structureState(app).query = '';
+    mapStructure(app, state.mapping?.chain);
+    state.query = '';
   }
 
   // Waits for the surface asked for (WebGPU), at most 30 seconds.
@@ -389,12 +411,39 @@ export function installRemote(app) {
         what = { alphafold: accession };
       }
       if (store.ui.mode !== 'structure') await app.setMode('structure');
+      if (args.chain) what.chain = String(args.chain);
       const result = await openStructure(app, what);
       if (!result.ok) throw new ActionError(result.message);
       if (args.assembly) setAssembly(args.assembly);
       await surfaceReady(structureState(app).viewer);
       await settle();
       return { message: result.message, data: structureSummary() };
+    },
+
+    async find_structures() {
+      const found = await findStructures(app);
+      if (!found.ok) throw new ActionError(found.message);
+      const { target, rows } = found;
+      const range = (r) => (r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`);
+      const top = rows.slice(0, 5).map((r) => `${r.id} (${r.method}${r.resolution ? ` ${r.resolution} Å` : ''}, chain ${r.chains[0].id}, positions ${range(r)})`).join('; ');
+      return {
+        message: `${rows.length.toLocaleString('en-US')} PDB ${rows.length === 1 ? 'entry covers' : 'entries cover'} ${target.name} (${target.accession}), by SIFTS, the most of it first: ${top}${rows.length > 5 ? '; …' : ''}. Its AlphaFold DB model covers all ${target.length} positions.`,
+        data: { target: { name: target.name, accession: target.accession, offset: target.offset, length: target.length }, retrieval: found.retrieval ?? null, structures: rows.slice(0, 100).map((r) => ({ id: r.id, method: r.method, resolution: r.resolution, from: r.from, to: r.to, covered: r.covered, coverage: +r.coverage.toFixed(4), chains: r.chains.map((c) => ({ id: c.id, from: c.from, to: c.to })) })), total: rows.length },
+      };
+    },
+
+    async map_structure(args) {
+      const state = structureState(app);
+      if (!state.viewer?.structure) throw new ActionError('No structure is open: open one with open_structure (a PDB ID or an AlphaFold DB model), or a file with open_files.');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      if (!workspaceTarget(ws())) throw new ActionError('This workspace has no target to map onto the structure: open a table and its target, or an example.');
+      const mapping = mapStructure(app, args.chain ? String(args.chain) : state.mapping?.chain);
+      if (!mapping) throw new ActionError(`${state.mapTarget.name} is on no chain of ${state.viewer.structure.meta.code || 'the structure'}: no chain holds five of its residues aligned identical, and half of those aligned.`);
+      if (args.chain && mapping.chain !== String(args.chain)) throw new ActionError(`${state.mapTarget.name} is not on chain ${args.chain}. Chains that hold it: ${state.maps.map((m) => m.chain).join(', ')}.`);
+      store.notify(['structure']);
+      await settle();
+      const summary = mappingSummary(state);
+      return { message: summary.words.join(' '), data: summary };
     },
 
     async set_structure(args) {
@@ -1167,9 +1216,16 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping'];
       const what = choose(args.what, kinds, 'export');
       let file;
+      // The target on the structure shown (wave 5, slice 2), position by position.
+      if (what === 'structure-mapping') {
+        const state = structureState(app);
+        if (!state.mapping) throw new ActionError(state.viewer?.structure ? 'The target is not mapped onto the structure shown (map_structure says why).' : 'No structure is open: open one with open_structure.');
+        const name = state.viewer.structure.meta.code || state.viewer.structure.label;
+        return { file: mappingCSV(state.mapping, name), message: `The mapping of ${state.mapping.target.name} onto chain ${state.mapping.chain} of ${name}: ${state.mapping.target.length} positions.` };
+      }
       // A run's robustness to analysis choices (wave 4, slice 4): its variants (CSV, or its record to
       // a path ending in .json) and its positions, checked first when it has not been.
       if (what.startsWith('robustness')) {

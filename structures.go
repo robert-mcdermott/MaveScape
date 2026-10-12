@@ -1,8 +1,9 @@
 package main
 
-// The requests behind the Structure view (wave 5, slice 1; requirement X1): a PDB entry's
-// coordinates from RCSB, and a protein's AlphaFold DB entries and predicted model. Each carries a
-// public identifier only: a PDB ID or a UniProt accession. A structure is kept in the cache as the
+// The requests behind the Structure view (wave 5, slices 1 and 2; requirements X1, X2): a PDB
+// entry's coordinates from RCSB, a protein's AlphaFold DB entries and predicted model, and the
+// structures that cover a protein, ranked by PDBe's SIFTS. Each carries a public identifier only: a
+// PDB ID or a UniProt accession. A structure is kept in the cache as the
 // service sent it, compressed (RCSB's .cif.gz file; AlphaFold DB's file as it stores it, gzip), and
 // the page decompresses it; the program checks that it is a whole structure file first.
 
@@ -23,6 +24,7 @@ const (
 	gzipContentType     = "application/gzip"
 	structureTextType   = "chemical/x-mmcif"
 	alphafoldPrediction = "https://alphafold.ebi.ac.uk/api/prediction/"
+	pdbeBestStructures  = "https://www.ebi.ac.uk/pdbe/graph-api/mappings/best_structures/"
 	alphafoldFiles      = "https://alphafold.ebi.ac.uk/files/"
 	// The largest structure accepted once decompressed: far more than a browser can draw.
 	maxStructureText = 2 << 30
@@ -107,6 +109,25 @@ var structureRequests = []publicRequest{
 		},
 		notFound: func(r *http.Request) string {
 			return fmt.Sprintf("AlphaFold DB has no model %s of %s.", r.PathValue("version"), strings.ToUpper(r.PathValue("accession")))
+		},
+	},
+	{
+		Route:    "GET /api/fetch/pdbe/best-structures/{accession}",
+		Service:  "PDBe",
+		Upstream: pdbeBestStructures + "{accession}",
+		Sends:    "a UniProt accession (P62993)",
+		Why:      "the PDB entries that cover the protein, each chain with the UniProt residues SIFTS places on it, its method and resolution, to list the structures of the target (Structure: **Structures of the target**; `find_structures`)",
+		Format:   formatJSON,
+		Kind:     "pdbe", MaxAge: defaultCacheMaxAge, Limit: 32 << 20,
+		resolve: func(r *http.Request) (call, error) {
+			accession, ok := normalizeAccession(r.PathValue("accession"))
+			if !ok {
+				return call{}, errors.New("Not a UniProt accession: give one such as P62993.")
+			}
+			return call{name: accession + ".best-structures.json", source: pdbeBestStructures + accession}, nil
+		},
+		notFound: func(r *http.Request) string {
+			return fmt.Sprintf("PDBe knows no structure of %s.", strings.ToUpper(r.PathValue("accession")))
 		},
 	},
 }

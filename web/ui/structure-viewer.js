@@ -62,7 +62,8 @@ const DISPLAY = {
 
 let surfaceWorker = null;
 
-// options: { onPick(residue | null, { additive }), onFocus(residues), onChange() }.
+// options: { onPick(residue | null, { additive }), onFocus(residues), onChange(), describe(residue)
+// (more words for the tooltip) }.
 export function createStructureViewer(options = {}) {
   const canvas = h('canvas.structure-canvas', { tabindex: '0', 'aria-label': 'The structure, drawn in 3D' });
   const labelLayer = h('div.structure-labels', { 'aria-hidden': 'true' });
@@ -338,14 +339,16 @@ export function createStructureViewer(options = {}) {
     if (residue?.kind === 'protein') parts.push({ helix: 'helix', sheet: 'strand', turn: 'turn' }[residue.ss] ?? 'coil');
     if (state.structure.meta.isPredicted && Number.isFinite(residue?.confidence)) parts.push(`pLDDT ${residue.confidence.toFixed(1)}`);
     else if (Number.isFinite(atom.bFactor)) parts.push(`B ${atom.bFactor.toFixed(1)}`);
-    return [residueLabel(residue), parts.join(' · ')];
+    // The view's own words for the residue: its target position (mode-structure.js).
+    const more = residue ? options.describe?.(residue) : '';
+    return [residueLabel(residue), parts.join(' · '), more];
   }
 
   function setHover(atomIndex, clientX, clientY) {
     const residue = residueOf(atomIndex);
     if (residue) {
-      const [title, detail] = describeHover(atomIndex);
-      tooltip.replaceChildren(h('strong', title), h('span', detail));
+      const [title, detail, more] = describeHover(atomIndex);
+      tooltip.replaceChildren(h('strong', title), h('span', detail), more ? h('span', more) : '');
       const box = el.getBoundingClientRect();
       const x = Math.min(box.width - 220, clientX - box.left + 14);
       tooltip.style.transform = `translate(${Math.max(0, x)}px, ${clientY - box.top + 14}px)`;

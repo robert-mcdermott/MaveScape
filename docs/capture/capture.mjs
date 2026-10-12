@@ -621,6 +621,16 @@ const scenes = {
     await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'resi 159-214'; })()`);
     await sleep(1200);
   },
+  // The target on the structure (wave 5, slice 2): factor IX mapped onto 1RFN's light chain, where
+  // the entry's own record numbers it five earlier than SIFTS and the alignment; the target's
+  // residues selected.
+  async 'structure-mapping'() {
+    await example('factor9');
+    await act('open_structure', { pdb: '1RFN', chain: 'B' });
+    await act('set_structure', { select: 'pos 132-188' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'pos 132-188'; })()`);
+    await sleep(1200);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

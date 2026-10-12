@@ -46,7 +46,7 @@ host, path, port or scheme (HTTPS only) is refused before it is sent.
 | `api.mavedb.org` | `/api/` | MaveDB | score sets' records, scores, counts, mapped variants and annotations, and the search (MaveScape 0.3) |
 | `files.rcsb.org` | all | RCSB PDB | a PDB entry's coordinates, for the Structure view (MaveScape 0.5) |
 | `data.rcsb.org` | all | RCSB PDB | structures' metadata (MaveScape 0.5, to come) |
-| `www.ebi.ac.uk` | `/pdbe/` | PDBe | a protein's conservation profile (PDBe-KB; MaveScape 0.3); structures and their residue mappings (to come) |
+| `www.ebi.ac.uk` | `/pdbe/` | PDBe | a protein's conservation profile (PDBe-KB; MaveScape 0.3); the structures that cover a protein, by SIFTS (MaveScape 0.5) |
 | `alphafold.ebi.ac.uk` | all | AlphaFold DB | AlphaMissense's predictions of a human protein (MaveScape 0.3); a protein's predicted structure (MaveScape 0.5) |
 | `eutils.ncbi.nlm.nih.gov` | `/entrez/eutils/` | NCBI E-utilities | RefSeq and GenBank records, for targets named by a transcript; a gene's ClinVar records (MaveScape 0.3) |
 | `rest.ensembl.org` | all | Ensembl | transcripts, for targets named by one (MaveScape 0.3) |
@@ -86,6 +86,7 @@ leaves your computer.
 | `/api/fetch/pdb/{id}` | `https://files.rcsb.org/download/{id}.cif.gz` | a PDB ID (2VWF) | the entry's coordinates (mmCIF, compressed as RCSB keeps it), with its chains and biological assemblies, for the Structure view (Structure: **Open a structure**; `open_structure`) | 30 days; up to 512 MB compressed |
 | `/api/fetch/alphafold/{accession}/prediction` | `https://alphafold.ebi.ac.uk/api/prediction/{accession}` | a UniProt accession (P62993, or an isoform's, P62993-2) | the protein's AlphaFold DB entries: each model's version, the residues it covers and its mean confidence, to ask for the latest model | 30 days; up to 4 MB |
 | `/api/fetch/alphafold/{accession}/model/{version}` | `https://alphafold.ebi.ac.uk/files/AF-{accession}-F1-model_v{version}.cif` | a UniProt accession and the model's version (6) | the predicted model (mmCIF, compressed as AlphaFold DB stores it) with each residue's confidence (pLDDT), for the Structure view | 30 days; up to 256 MB compressed |
+| `/api/fetch/pdbe/best-structures/{accession}` | `https://www.ebi.ac.uk/pdbe/graph-api/mappings/best_structures/{accession}` | a UniProt accession (P62993) | the PDB entries that cover the protein: each chain with the UniProt residues SIFTS places on it, its method and resolution, ranked for the target (Structure: **Structures of the target**; `find_structures`) | 30 days; up to 32 MB |
 
 The program also answers two requests of its own, which contact nothing: `/api/fetch` (the mode,
 the cache's folder, these hosts and requests) and `/api/fetch/cache` (what is in the cache).
@@ -146,7 +147,7 @@ a score set's URN without its colons (`mavedb/urn_mavedb_00000835-a-1.json`, `�
 `….counts.csv`, `….mapped.json`), by a nucleotide accession (`ncbi/NM_007294.3.gb`), by an
 Ensembl transcript without its version (`ensembl/ENST00000460680.json`), by a structure's file
 name upstream (`pdb/2VWF.cif.gz`, `alphafold/AF-P62993-F1-model_v6.cif`, kept compressed as it
-came: the page decompresses it), by the SHA-256 of a search's words and page
+came: the page decompresses it), by an accession for its structures (`pdbe/P62993.best-structures.json`), by the SHA-256 of a search's words and page
 (`mavedb-search/<sha256>.json`) or,
 for a sequence's lookup, by the SHA-256 of the sequence (`uniparc/<sha256>.json`), beside
 `<name>.meta.json`, its retrieval record (docs/FORMATS.md, "The cache of public data"): the

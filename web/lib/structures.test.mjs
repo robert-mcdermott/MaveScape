@@ -47,8 +47,8 @@ test('a structure in words: its title, method, chains, the UniProt residues each
     '1RFN: Human Coagulation Factor IXa In Complex With P-Amino Benzamidine.',
     'X-ray diffraction, 2.8 Å; Homo sapiens.',
     '2 protein chains, 2 ligands (PBZ, TBU), an ion (CA); 2,306 atoms.',
-    'Chain A: Coagulation Factor IX, 235 residues observed (16–245), UniProt P00740 227–461.',
-    'Chain B: Coagulation Factor IX, 57 residues observed (86–142), UniProt P00740 128–183.',
+    'Chain A: Coagulation Factor IX, 235 residues observed (16–245); the entry gives UniProt P00740 227–461.',
+    'Chain B: Coagulation Factor IX, 57 residues observed (86–142); the entry gives UniProt P00740 128–183.',
   ]);
   const p53 = await open('public-data/pdb/1TUP.cif.gz', '1TUP.cif.gz');
   assert.deepEqual(chainSummaries(p53).map((c) => `${c.id} ${c.kind} ${c.description}`), ['A protein P53 Tumor Suppressor', 'B protein P53 Tumor Suppressor', 'C protein P53 Tumor Suppressor', 'E nucleic DNA', 'F nucleic DNA']);

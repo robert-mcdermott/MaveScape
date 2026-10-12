@@ -5,7 +5,7 @@
 // MaveScape's, and pure.
 
 import { binaryCIFToText, isBinaryCIF } from './structure/bcif.js';
-import { ASYMMETRIC_UNIT_ID, parseStructure } from './structure/parse.js';
+import { ASYMMETRIC_UNIT_ID, cleanCIFValue, getCIFRows, parseCIFDocument, parseStructure } from './structure/parse.js';
 import { MAX_ASSEMBLY_ATOMS, deriveStructure, prepareAssemblyEstimates } from './structure/structure.js';
 import { titleCase } from './structure/coloring.js';
 
@@ -58,14 +58,62 @@ export async function readStructureBytes(bytes, name) {
 }
 
 // Text → a structure ready to draw: its residues, bonds, secondary structure (the file's, else
-// DSSP's) and the sizes of its assemblies. Throws when nothing in it is a structure.
+// DSSP's), the sizes of its assemblies, and the entry's record of where its sequence differs from
+// the database's (wave 5, slice 2). Throws when nothing in it is a structure.
 export function openStructureText(text, name) {
   const structure = parseStructure(text, name);
   if (!structure.models.length || !structure.models[0].atoms.length) throw new Error(`${name} holds no atoms: is it a PDB or mmCIF file?`);
   structure.baseModels = structure.models;
   prepareAssemblyEstimates(structure);
   deriveStructure(structure, { secondaryMode: 'auto' });
+  structure.sequenceDifferences = readSequenceDifferences(text, structure.format);
   return structure;
+}
+
+const intOrNull = (value) => (/^-?\d+$/.test(String(value ?? '').trim()) ? Number(String(value).trim()) : null);
+
+// The entry's record of each residue whose sequence differs from the database's: mmCIF's
+// struct_ref_seq_dif, PDB's SEQADV. Each { chain, label (the entry's sequence number, mmCIF), auth,
+// iCode, resName, dbResName, dbPosition, accession, details }, details in lower case ("engineered
+// mutation", "conflict", "expression tag", "cloning artifact"…). Only that category is read again.
+export function readSequenceDifferences(text, format) {
+  if (format === 'pdb') {
+    return text.split(/\r?\n/).filter((line) => line.startsWith('SEQADV')).map((line) => ({
+      chain: line.slice(16, 17).trim() || '_',
+      label: null,
+      auth: intOrNull(line.slice(18, 22)),
+      iCode: line.slice(22, 23).trim(),
+      resName: line.slice(12, 15).trim(),
+      dbResName: line.slice(39, 42).trim(),
+      dbPosition: intOrNull(line.slice(43, 48)),
+      accession: line.slice(29, 38).trim(),
+      details: line.slice(49, 70).trim().toLowerCase(),
+    }));
+  }
+  const at = text.indexOf('\n_struct_ref_seq_dif.');
+  if (at < 0) return [];
+  const before = text.lastIndexOf('\n', at - 1);
+  const start = /^loop_\s*$/.test(text.slice(before + 1, at)) ? before + 1 : at + 1;
+  const lines = text.slice(start).split('\n');
+  const block = [];
+  let data = false;
+  for (const [i, line] of lines.entries()) {
+    if (i > 0 && (line.startsWith('#') || line.startsWith('data_') || (line.startsWith('loop_') && i > 1) || (line.startsWith('_') && !line.startsWith('_struct_ref_seq_dif.')) || (data && line.startsWith('_')))) break;
+    if (!line.startsWith('_') && !line.startsWith('loop_')) data = true;
+    block.push(line);
+  }
+  const cif = parseCIFDocument(`data_differences\n${block.join('\n')}\n`);
+  return getCIFRows(cif, 'struct_ref_seq_dif').map((row) => ({
+    chain: cleanCIFValue(row.pdbx_pdb_strand_id) || '_',
+    label: intOrNull(cleanCIFValue(row.seq_num)),
+    auth: intOrNull(cleanCIFValue(row.pdbx_auth_seq_num)),
+    iCode: cleanCIFValue(row.pdbx_pdb_ins_code),
+    resName: cleanCIFValue(row.mon_id),
+    dbResName: cleanCIFValue(row.db_mon_id),
+    dbPosition: intOrNull(cleanCIFValue(row.pdbx_seq_db_seq_num)),
+    accession: cleanCIFValue(row.pdbx_seq_db_accession_code),
+    details: cleanCIFValue(row.details).toLowerCase(),
+  }));
 }
 
 // The assemblies a person can choose: the asymmetric unit and each the file defines, unless a PDB
@@ -181,7 +229,7 @@ export function describeStructure(structure) {
   if (parts.length) lines.push(`${capitalize(parts.join(', '))}; ${plural(model.atoms.length, 'atom')}${structure.models.length > 1 ? ` in each of ${structure.models.length} models` : ''}.`);
   for (const c of chains) {
     const where = c.uniprot.map((u) => `UniProt ${u.accession} ${u.from}–${u.to}`).join(', ');
-    lines.push(`Chain ${c.id}: ${c.description || c.kind}, ${plural(c.residues, 'residue')} observed${c.first ? ` (${c.first}–${c.last})` : ''}${where ? `, ${where}` : ''}.`);
+    lines.push(`Chain ${c.id}: ${c.description || c.kind}, ${plural(c.residues, 'residue')} observed${c.first ? ` (${c.first}–${c.last})` : ''}${where ? `; the entry gives ${where}` : ''}.`);
   }
   return lines;
 }

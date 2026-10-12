@@ -7,6 +7,9 @@
 
 import { readFileSync } from 'node:fs';
 import { readStructureBytes, openStructureText } from '../web/lib/structures.js';
+import { exampleById } from '../web/lib/examples.js';
+import { targetProtein } from '../web/lib/target.js';
+import { cachedRecord, recordTarget } from './example-cases.mjs';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
 
@@ -22,6 +25,27 @@ export const EXAMPLE_STRUCTURES = [
   { protein: 'TP53', examples: ['tp53-screens'], accession: 'P04637', pdb: '1TUP', chain: 'B', covers: [94, 312], model: 6 },
   { protein: 'PTEN', examples: ['pten-mavedb'], accession: 'P60484', pdb: '1D5R', chain: 'A', covers: [7, 353], model: 6 },
 ];
+
+// An example's target as its workspace holds it (wave 5, slice 2): its design's, or its MaveDB
+// record's (the transcript a record names read from the fetcher's cached answer), as the mapping
+// reads it.
+export function exampleTarget(id) {
+  const example = exampleById(id);
+  const target = example.files?.design
+    ? JSON.parse(readFileSync(new URL(`../web/${example.files.design}`, import.meta.url), 'utf8')).targets[0]
+    : recordTarget(cachedRecord(example.mavedb.urn));
+  const sequence = targetProtein(target).replace(/\*+$/, '');
+  return { id: target.id, name: target.name, sequence, offset: target.offset ?? 0, accession: target.identifiers?.uniprot ?? '', length: sequence.length };
+}
+
+// SIFTS's residue-level mapping of an entry (reference/sifts.json): label chain → label sequence
+// number → { accession, position, residue, observed }.
+const SIFTS = JSON.parse(readFileSync(new URL('./reference/sifts.json', import.meta.url), 'utf8'));
+export const siftsRetrieved = SIFTS.retrieved;
+export function siftsOf(entry) {
+  const chains = SIFTS.entries[entry]?.chains ?? {};
+  return new Map(Object.entries(chains).map(([asym, c]) => [asym, new Map(c.residues.map(([seq, accession, position, residue, observed]) => [seq, { accession, position, residue, observed, author: c.author }]))]));
+}
 
 // A file of the fetcher's cache, as the page receives it (the bytes kept: gzipped).
 export function cachedBytes(kind, name) {
