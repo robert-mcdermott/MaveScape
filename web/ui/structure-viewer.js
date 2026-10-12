@@ -117,11 +117,30 @@ export function createStructureViewer(options = {}) {
       state.renderer = await withTimeout(createRenderer(canvas, { onDeviceLost: (info) => fallBack(`the graphics device was lost (${info?.message || 'unknown reason'})`) }), 5000, 'WebGPU did not start within 5 seconds');
       state.kind = 'webgpu';
     } catch (error) {
-      state.renderer = createCanvasRenderer(canvas);
+      // A canvas WebGPU took before failing cannot have a 2D context: a fresh one then.
+      if (!canvas.getContext('2d', { willReadFrequently: true })) replaceCanvas();
+      state.renderer = canvasRenderer();
       state.kind = 'canvas';
       state.failure = error.message;
     }
     return state.kind;
+  }
+
+  // The Canvas renderer, on a 2D context made for reading back (willReadFrequently): its images are
+  // read from it.
+  function canvasRenderer() {
+    canvas.getContext('2d', { willReadFrequently: true });
+    return createCanvasRenderer(canvas);
+  }
+
+  // A 2D context the browser lost all the same (its graphics process crashed: the context comes back
+  // cleared) draws nothing until it is restored: waited for, at most 3 s.
+  async function canvasRestored() {
+    if (state.kind !== 'canvas' || !canvas.getContext('2d')?.isContextLost?.()) return;
+    await new Promise((resolve) => {
+      canvas.addEventListener('contextrestored', resolve, { once: true });
+      setTimeout(resolve, 3000);
+    });
   }
 
   // WebGPU lost (its device lost, as when the GPU process crashes or is reset, or a capture that
@@ -129,15 +148,8 @@ export function createStructureViewer(options = {}) {
   // context cannot have a 2D one), everything drawn again, and says why. A reload tries WebGPU again.
   function fallBack(reason) {
     if (state.kind !== 'webgpu') return;
-    const fresh = h('canvas.structure-canvas', { tabindex: '0', 'aria-label': canvas.getAttribute('aria-label') });
-    const focused = document.activeElement === canvas;
-    resize.unobserve(canvas);
-    canvas.replaceWith(fresh);
-    canvas = fresh;
-    bindCanvas(canvas);
-    resize.observe(canvas);
-    if (focused) canvas.focus();
-    state.renderer = createCanvasRenderer(canvas);
+    replaceCanvas();
+    state.renderer = canvasRenderer();
     state.kind = 'canvas';
     state.failure = `${reason}; the view went on with the Canvas renderer (reload the page to try WebGPU again)`;
     state.meshes.clear();
@@ -414,8 +426,23 @@ export function createStructureViewer(options = {}) {
     }
   }
 
-  // The canvas's handlers, bound again to a fresh canvas (fallBack).
+  // A fresh canvas in the old one's place, its handlers bound (a canvas that had a WebGPU context
+  // cannot have a 2D one).
+  function replaceCanvas() {
+    const fresh = h('canvas.structure-canvas', { tabindex: '0', 'aria-label': canvas.getAttribute('aria-label') });
+    const focused = document.activeElement === canvas;
+    resize.unobserve(canvas);
+    canvas.replaceWith(fresh);
+    canvas = fresh;
+    bindCanvas(canvas);
+    resize.observe(canvas);
+    if (focused) canvas.focus();
+  }
+
+  // The canvas's handlers, bound again to a fresh canvas (replaceCanvas).
   function bindCanvas(target) {
+    // A 2D context restored after a loss comes back cleared: drawn again.
+    target.addEventListener('contextrestored', () => requestRender());
     target.addEventListener('pointerdown', (event) => {
       canvas.setPointerCapture(event.pointerId);
       state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -855,9 +882,15 @@ export function createStructureViewer(options = {}) {
       const height = Math.max(1, Math.round((size ? size.height : canvas.height) * factor));
       const view = size ? { ...cameraMatrices(state.camera, width / height), orthographic: state.camera.orthographic } : currentView();
       let image;
+      await canvasRestored();
       const kind = state.kind;
       try {
         image = kind === 'webgpu' ? await state.renderer.capture(view, renderSettings(), width, height, 2) : await state.renderer.capture(view, renderSettings(), width, height);
+        // Its 2D context lost under the capture: drawn again once it is back.
+        if (kind === 'canvas' && canvas.getContext('2d')?.isContextLost?.()) {
+          await canvasRestored();
+          image = await state.renderer.capture(view, renderSettings(), width, height);
+        }
       } catch (error) {
         // WebGPU lost under the capture (its device lost meanwhile, the view perhaps already on the
         // Canvas renderer): drawn again by the Canvas renderer.
@@ -868,8 +901,9 @@ export function createStructureViewer(options = {}) {
         if (state.dirty.flags) updateFlags();
         image = await state.renderer.capture(view, renderSettings(), width, height);
       }
+      // Written in memory, not on the GPU, as the Canvas renderer draws (canvasRenderer).
       const out = h('canvas', { width: image.width, height: image.height });
-      out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength), image.width, image.height), 0, 0);
+      out.getContext('2d', { willReadFrequently: true }).putImageData(new ImageData(new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength), image.width, image.height), 0, 0);
       return new Promise((resolve) => out.toBlob(resolve, 'image/png'));
     },
     destroy() {

@@ -700,7 +700,7 @@ try {
   // opened by remote control, from the cache, and drawn: with WebGPU where the browser offers it,
   // then, the page opened again with ?renderer=canvas, with the Canvas renderer; each with the
   // atoms Node reads, and an image of the view that is not empty.
-  const drawnShare = `(async () => { const m = await import('/ui/mode-structure.js'); const v = m.structureState(window.mavescape).viewer; const blob = await v.capturePNG(0.5); const bitmap = await createImageBitmap(blob); const c = new OffscreenCanvas(bitmap.width, bitmap.height); const g = c.getContext('2d'); g.drawImage(bitmap, 0, 0); const d = g.getImageData(0, 0, bitmap.width, bitmap.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - d[0]) + Math.abs(d[i + 1] - d[1]) + Math.abs(d[i + 2] - d[2]) > 30) n += 1; return n / (d.length / 4); })()`;
+  const drawnShare = `(async () => { const m = await import('/ui/mode-structure.js'); const v = m.structureState(window.mavescape).viewer; const blob = await v.capturePNG(0.5); const bitmap = await createImageBitmap(blob); const c = new OffscreenCanvas(bitmap.width, bitmap.height); const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bitmap, 0, 0); const d = g.getImageData(0, 0, bitmap.width, bitmap.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - d[0]) + Math.abs(d[i + 1] - d[1]) + Math.abs(d[i + 2] - d[2]) > 30) n += 1; return n / (d.length / 4); })()`;
   async function openEveryStructure() {
     const opened = [];
     for (const e of EXAMPLE_STRUCTURES) {
