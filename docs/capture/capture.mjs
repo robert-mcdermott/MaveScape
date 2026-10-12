@@ -698,12 +698,16 @@ const scenes = {
     await waitFor('Boolean(globalThis.proteoscope?.state?.active?.proteomics?.data)', 90000);
     await sleep(3000);
   },
-  // Figures (wave 6, slice 1): GRB2's map with its sequence and its position effect below it and a
-  // caption, on a page two columns wide; panel A selected, its properties beside the page.
+  // Figures (wave 6, slices 1–2): GRB2's map with its sequence and its position effect below it,
+  // its replicates' agreement, its scores by class and a variant's evidence, on a page two columns
+  // wide; panel A selected, its properties beside the page.
   async figures() {
     await example('grb2-sh3');
-    await act('add_figure_panel', { run: 'Run 1', tracks: ['reference', 'effect'], height_mm: 96 });
-    await act('add_figure_panel', { figure: 'Figure 1', kind: 'text', text: 'Abundance of every substitution in the SH3 domain of GRB2, three replicates (Human Domainome; MaveDB urn:mavedb:00000835-a-1). Lower scores: less abundant.', x_mm: 3, y_mm: 101, width_mm: 168, height_mm: 16 });
+    await act('create_figure', { name: 'Figure 1', height_mm: 160 });
+    await act('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', tracks: ['reference', 'effect'], x_mm: 3, y_mm: 3, width_mm: 168, height_mm: 92 });
+    await act('add_figure_panel', { figure: 'Figure 1', kind: 'qc', subject: 'Run 1', finding: 'agreement', x_mm: 3, y_mm: 98, width_mm: 56, height_mm: 58 });
+    await act('add_figure_panel', { figure: 'Figure 1', kind: 'scores', run: 'Run 1', x_mm: 62, y_mm: 98, width_mm: 58, height_mm: 58 });
+    await act('add_figure_panel', { figure: 'Figure 1', kind: 'variant', run: 'Run 1', variant: 'p.Trp36Ala', x_mm: 123, y_mm: 98, width_mm: 48, height_mm: 58 });
     await js(`(() => { window.mavescape.figuresView = { figure: window.mavescape.store.ws.figures[0].id, panel: 'panel-1' }; window.mavescape.store.notify(['ws']); })()`);
     await sleep(1500);
   },

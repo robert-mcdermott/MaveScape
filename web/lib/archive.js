@@ -10,7 +10,8 @@
 //                          files of the structures saved views show, as they came (wave 5, slice
 //                          5; left out when exported with checksums only: a PDB entry or
 //                          AlphaFold DB model is then fetched again by its ID, its SHA-256
-//                          checked)
+//                          checked), and the images of figures' structure panels (always:
+//                          wave 6, slice 2)
 //   results/<run>.csv      each run's scores (one file per condition beyond the first)
 //   methods.md, references.bib   the latest run's methods and references
 //
@@ -39,7 +40,8 @@ const extension = (fileName) => {
 };
 
 // Writes the archive. options: { software: { version, commit }, sources: Map(sha256 → bytes) or
-// null for checksums only, annotations: Map(sha256 → bytes) of the annotations' files, structures:
+// null for checksums only, annotations: Map(sha256 → bytes) of the annotations' files, figures:
+// Map(sha256 → bytes) of the figures' images, structures:
 // Map(sha256 → bytes) of the structures' files or null for checksums only, results:
 // Map(run id → results) (runs without results are left out of results/), methods: { markdown,
 // bibtex } }. Returns { bytes, manifest }.
@@ -66,6 +68,12 @@ export function structureFiles(ws) {
   ]);
 }
 
+// The images of the figures' structure panels (wave 6, slice 2): each saved view's figure panel as
+// drawn for the figure, kept in the library by its SHA-256.
+export function figureFiles(ws) {
+  return (ws.figures ?? []).flatMap((f) => f.panels.filter((p) => p.kind === 'structure' && p.image?.sha256).map((p) => ({ sha256: p.image.sha256, fileName: 'panel.png', name: `the structure panel of "${f.name}"` })));
+}
+
 export async function writeArchive(ws, options = {}) {
   const files = [];
   files.push({ name: 'workspace.json', data: encoder.encode(serializeWorkspace(ws)) });
@@ -89,6 +97,14 @@ export async function writeArchive(ws, options = {}) {
       const bytes = options.annotations?.get(f.sha256) ?? options.sources?.get(f.sha256);
       if (!bytes) throw new Error(`The annotation ${f.name} (${f.fileName}) is not in the library: remove it, or add it again.`);
       files.push({ name: `sources/${f.sha256}${extension(f.fileName)}`, data: bytes });
+    }
+    // The figures' images (wave 6, slice 2), always: a figure is drawn from them.
+    for (const f of figureFiles(ws)) {
+      if (seen.has(f.sha256)) continue;
+      seen.add(f.sha256);
+      const bytes = options.figures?.get(f.sha256);
+      if (!bytes) throw new Error(`The image of ${f.name} is not in the library: draw it again from its saved view.`);
+      files.push({ name: `sources/${f.sha256}.png`, data: bytes });
     }
     // The structures' files (wave 5, slice 5), unless named by their checksums only.
     if (options.structures) {
@@ -212,6 +228,7 @@ export async function readArchive(bytes, limits = LIMITS) {
   if (manifest.sources === 'included') {
     for (const s of ws.sources) for (const f of sourceFiles(s)) if (!sources.has(f.sha256)) problems.push(`The table ${f.fileName ?? s.name} is not in the archive.`);
   }
+  for (const f of figureFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The image of ${f.name} is not in the archive: draw it again from its saved view.`);
   for (const f of annotationFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The annotation ${possessive(f.name)} file (${f.fileName}) is not in the archive: its tracks will not show.`);
   if (manifest.structures === 'included') for (const f of structureFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The structure file of ${f.name} (${f.fileName}) is not in the archive: its saved views will fetch it again or ask for it.`);
   const results = new Map([...files].filter(([n]) => n.startsWith('results/')).map(([n, d]) => [n, decoder.decode(d)]));

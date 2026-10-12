@@ -24,7 +24,7 @@ import { parseTable } from '../web/lib/csv.js';
 import { makeRun, outputDigest, recordedInputs, runInputs } from '../web/lib/runs.js';
 import { DEFAULT_PARAMETERS, PRESETS, defaultParameters } from '../web/lib/score.js';
 import { FINGERPRINT } from '../web/lib/dmath.js';
-import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
+import { allExports, inputFor, recompute, scoreTable } from './roundtrip-cases.mjs';
 import { exampleById, simulatedExample } from '../web/lib/examples.js';
 import { assembleTable } from '../web/lib/assemble.js';
 import { barcodesCSV, differentialCSV, proteinScoresCSV } from '../web/lib/exports.js';
@@ -37,7 +37,11 @@ import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { builtinTracks, tracksCSV } from '../web/lib/tracks.js';
 import { figureSVG } from '../web/lib/figures.js';
-import { asPDFText, readPDF, readSVG, sameRects } from './figure-cases.mjs';
+import { asPDFText, decodePNG, readPDF, readSVG, sameRects } from './figure-cases.mjs';
+import { qcPanelData } from '../web/lib/qc-plots.js';
+import { comparisonCharts, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
+import { computeQC } from '../web/lib/qc.js';
+import { findingsFrom, withDefaultThresholds } from '../web/lib/findings.js';
 import { openExampleInNode } from './example-cases.mjs';
 import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
 import { predictorSide, scoreSetSide } from './compare-cases.mjs';
@@ -377,6 +381,33 @@ try {
   const repCompare = await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2' });
   const repNode = nodeCompare([0, { run: nodeRuns[0].run.id, replicate: reps[0] }], [0, { run: nodeRuns[0].run.id, replicate: reps[1] }]);
   check('compare: GRB2\'s replicates 1 and 2 in the Compare view, the report and every statistic as Node compares them', repCompare.message.slice(0, 200), JSON.stringify(repCompare.data) === withoutSoftware(comparisonJSON(repNode)) && repCompare.data.report.status === 'ok' && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'compare' && (await browser.eval(`Boolean(document.querySelector('.compare-report'))`)));
+  // Every view's plots as panels (wave 6, slice 2): drawn in the window as Node draws them from the
+  // runs it recomputes from the archive.
+  await act('create_figure', { name: 'Every view', height_mm: 200 });
+  const qcPanel = await act('add_figure_panel', { figure: 'Every view', kind: 'qc', subject: 'Run 1', finding: 'agreement', x_mm: 3, y_mm: 3, width_mm: 83, height_mm: 62 });
+  await act('add_figure_panel', { figure: 'Every view', kind: 'scores', run: 'Run 1', x_mm: 89, y_mm: 3, width_mm: 82, height_mm: 62 });
+  await act('add_figure_panel', { figure: 'Every view', kind: 'compare', a: 'Run 1', b: 'Run 2', x_mm: 3, y_mm: 68, width_mm: 83, height_mm: 70 });
+  await act('add_figure_panel', { figure: 'Every view', kind: 'variant', run: 'Run 1', variant: 'p.Trp36Ala', x_mm: 89, y_mm: 68, width_mm: 82, height_mm: 50 });
+  const noFinding = await send('add_figure_panel', { figure: 'Every view', kind: 'qc', finding: 'no-such-finding' });
+  const noVariant = await send('add_figure_panel', { figure: 'Every view', kind: 'variant', variant: 'p.Trp999Ala' });
+  const everyDoc = (await act('figures', { figure: 'Every view' })).data.figures[0].document;
+  await act('export_figure', { figure: 'Every view', path: join(out, 'every-view.svg') });
+  const everySVG = readFileSync(join(out, 'every-view.svg'), 'utf8');
+  {
+    const [r1, r2] = nodeRuns;
+    const t = withDefaultThresholds(archive.ws.qc?.thresholds);
+    const qcNode = computeQC({ ...inputFor(table, r1.run.inputs.design), design: r1.run.inputs.design, results: r1.results });
+    const finding = findingsFrom(qcNode, t, { acknowledged: archive.ws.qc?.acknowledged }).find((f) => f.id === 'agreement');
+    const sides = [describeSide(archive.ws, r1.run, r1.results, { run: r1.run.id, condition: 0 }), describeSide(archive.ws, r2.run, r2.results, { run: r2.run.id, condition: 0 })];
+    const resolvedNode = new Map([
+      [everyDoc.panels[0].id, qcPanelData(finding, qcNode, t, { pair: 0 })],
+      [everyDoc.panels[1].id, scoreCharts(r1.results, r1.run)],
+      [everyDoc.panels[2].id, comparisonCharts({ ...compareSides(sides[0], sides[1]), sides }, 'agreement')],
+      [everyDoc.panels[3].id, variantCharts(r1.results, r1.run, 'p.Trp36Ala')],
+    ]);
+    const nodeEverySVG = await figureSVG(everyDoc, resolvedNode);
+    check('add_figure_panel of every view\'s plots (a QC finding\'s, the scores by class, a comparison, a variant\'s evidence) and export_figure: the window\'s SVG the same bytes as Node draws the same document from Run 1 and Run 2 recomputed from the archive; an unknown finding and a variant not measured refused, saying why', `${everySVG.length} bytes against ${nodeEverySVG.length}; ${qcPanel.data.panel.shows}; ${noFinding.message.slice(0, 60)}; ${noVariant.message.slice(0, 60)}`, everySVG === nodeEverySVG && !noFinding.ok && /Name the finding|not raised|no-such/.test(noFinding.message) && !noVariant.ok && /is not in Run \d/.test(noVariant.message));
+  }
   const runsCompare = await act('compare', { a: 'Run 1', b: 'Run 2' });
   check('compare: Run 1 against Run 2 (the Enrich2 preset): one table scored twice, qualified, on one scale', runsCompare.data.report.items.find((i) => i.id === 'independence').text, runsCompare.data.report.status === 'qualified' && runsCompare.data.sameScale === true && runsCompare.data.statistics.concordance !== null);
   const scalesCompare = await act('compare', { a: 'Run 1', b: 'Run 3' });
@@ -927,9 +958,21 @@ try {
   const grb2RunState = await act('get_state');
   const run1 = grb2RunState.data.runs.find((r) => r.name === 'Run 1');
   check('export structure-image: a figure panel, twice the view saved, its legend below it, what it shows written into it (PNG text): the structure\'s file by its SHA-256, the view, the coloring of Run 1 by its output\'s SHA-256, the legend', JSON.stringify({ structure: panel.structure.sha256.slice(0, 12), view: panel.view.saved, coloring: panel.coloring.how, run: panel.coloring.run?.name, legend: panel.legend?.title, image: panel.image }), panel.format === 'mavescape-figure-panel' && panel.structure.sha256 === vwfSha && panel.view.saved === 'Core' && panel.coloring.how === 'median' && panel.coloring.run?.output === run1?.outputSha256 && panel.legend?.title === 'Median score, Run 1' && panel.image.legend && panel.image.width === 2 * panel.image.view.width && panel.image.height > 2 * panel.image.view.height);
+  // A saved view as a figure's panel (wave 6, slice 2): its figure panel drawn on white at 4×, kept
+  // with the figure in the library and the archive, the same pixels as the view's own figure panel.
+  const structureFigure = await act('add_figure_panel', { kind: 'structure', view: 'Core' });
+  await act('export', { what: 'structure-image', path: join(out, 'core-4x.png'), scale: 4, light: true });
+  await act('export_figure', { figure: structureFigure.data.figure, path: join(out, 'structure-figure.svg') });
+  const structureSVG = readFileSync(join(out, 'structure-figure.svg'), 'utf8');
+  const panelImage = Buffer.from(structureSVG.match(/href="data:image\/png;base64,([^"]+)"/)?.[1] ?? '', 'base64');
+  const own4x = decodePNG(readFileSync(join(out, 'core-4x.png')));
+  const inFigure = panelImage.length ? decodePNG(panelImage) : null;
+  const imageField = structureFigure.data.panel.options.image;
   // Through the archive, opened again in the page (a copy: the workspace is in the library).
   await act('export', { what: 'archive', path: join(out, 'grb2-views.msz') });
   const viewsArchive = await readArchive(readFileSync(join(out, 'grb2-views.msz')));
+  const archivedImage = viewsArchive.sources.get(imageField.sha256);
+  check('add_figure_panel of a saved structure view: its figure panel drawn at 4× on white and kept with the figure, the same pixels as export structure-image draws the view (light: on white), the same bytes in the figure\'s SVG and in the archive', `${structureFigure.message.slice(0, 80)}; ${inFigure ? `${inFigure.width} × ${inFigure.height}` : 'no image'} against ${own4x.width} × ${own4x.height}, ${inFigure && Buffer.compare(Buffer.from(inFigure.rgba), Buffer.from(own4x.rgba)) === 0 ? 'the same pixels' : 'different pixels'}; archive ${archivedImage && Buffer.compare(Buffer.from(archivedImage), panelImage) === 0 ? 'the same bytes' : 'not the same'}`, inFigure && inFigure.width === own4x.width && inFigure.height === own4x.height && Buffer.compare(Buffer.from(inFigure.rgba), Buffer.from(own4x.rgba)) === 0 && imageField.width === own4x.width && archivedImage && Buffer.compare(Buffer.from(archivedImage), panelImage) === 0);
   const methodsText = viewsArchive.methods?.markdown ?? '';
   await act('open_files', { paths: [join(out, 'grb2-views.msz')] });
   const fromArchive = await act('open_structure_view', { name: 'Core' });

@@ -5,7 +5,7 @@
 
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
-import { annotationFiles, readArchive, structureFiles, writeArchive, sourceFiles } from '../lib/archive.js';
+import { annotationFiles, figureFiles, readArchive, structureFiles, writeArchive, sourceFiles } from '../lib/archive.js';
 import { writePackage } from '../lib/package.js';
 import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, provenanceJSON, provenanceText, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
 import { proteinView } from '../lib/collapse.js';
@@ -207,6 +207,13 @@ export async function archiveFile(app, { includeTables = true, includeStructures
     if (!bytes) throw new Error(`The annotation ${f.name} (${f.fileName}) is not in the library: remove it, or add it again.`);
     annotations.set(f.sha256, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));
   }
+  // The figures' images (wave 6, slice 2) always go: the figures are drawn from them.
+  const figures = new Map();
+  for (const f of figureFiles(ws)) {
+    const bytes = await app.library.getFile(f.sha256);
+    if (!bytes) throw new Error(`The image of ${f.name} is not in the library: draw it again from its saved view.`);
+    figures.set(f.sha256, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));
+  }
   let structures = null;
   if (includeStructures) {
     structures = new Map();
@@ -223,7 +230,7 @@ export async function archiveFile(app, { includeTables = true, includeStructures
   }
   const last = ws.runs.at(-1);
   const methods = last ? await methodsOf(app, last) : null;
-  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, annotations, structures, results, methods });
+  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, annotations, figures, structures, results, methods });
   return { name: `${safe(ws.name)}.msz`, bytes, structures: structureFiles(ws).length ? (includeStructures ? 'included' : 'checksums') : null };
 }
 

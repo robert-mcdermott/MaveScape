@@ -20,7 +20,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
 | Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV); a figure panel (PNG); the view as a Proteoscope session (JSON, or a link to a running Proteoscope) |
-| Figures (0.6) | (kept in the workspace and its archive: `figures`) | a figure as SVG (vector, text as text), PDF (vector, one page at its printed size) or PNG (at a resolution of its printed size) |
+| Figures (0.6) | (kept in the workspace and its archive: `figures`, and the images of structure panels) | a figure as SVG (vector, text as text), PDF (vector, one page at its printed size) or PNG (at a resolution of its printed size) |
 
 Coming later: Excel workbooks.
 
@@ -928,6 +928,8 @@ one was opened), `coloring` (`kind`, `how`, `label`, `source`, `run` with its ou
 `condition`, `palette`, `domain`; or the structure's own `scheme`), `legend` (`title`, `low`,
 `center`, `high`, `meaning`, `items`) and `image` (`width`, `height`, `scale`, `view`, `legend`,
 `renderer`). Wave 6's figure builder reads it; any PNG reader that lists text chunks shows it.
+`light: true` (MaveScape 0.6) draws it on white whatever the page's theme, as a figure's structure
+panel draws it.
 
 ### Proteoscope sessions (`*.proteoscope.json`, and the link)
 
@@ -1080,9 +1082,27 @@ Lengths are in points (1/72 inch).
   leave out the medians and the legend.
 - A `text` panel: `text` (wrapped to the panel's width; `\n` starts a line), `size`, `bold`,
   `align` (`left`, `center`, `right`).
+- The views' plots (MaveScape 0.6, wave 6 slice 2), each drawn as its view draws it, with `title`
+  (absent: the plot's own; `""`: none):
+  - `qc`: `subject` (a run's id, or `"counts"`: the counts with the current design), `finding` (its
+    id, as `qc_findings` gives it) and `findingTitle`, `pair` (replicate agreement: the pair drawn,
+    from 0): the finding's charts.
+  - `scores`: `run`, `plot` (`distribution`: the scores by class, `flow`: the filter flow, with
+    `condition`; `volcano`: a contrast's differences against their p, with `contrast`).
+  - `compare`: `a` and `b` (the sides as the Compare view keeps them: a run's condition or
+    replicate, or an annotation kept beside the workspace), `scale`, `filters`, `plot`
+    (`agreement`, `bland-altman`, `positions`, `classes`, `map-first`, `map-second`,
+    `map-difference`), `labels` (the sides' names when the panel was made).
+  - `variant`: `run`, `condition`, `variant` (its MAVE-HGVS name), `plot` (`evidence`: its score and
+    95% interval with each replicate's score ± 1.96 SE; `time-course`; `bins`).
+  - `structure`: `view` (a saved view's id) and `image` (`sha256`, `width`, `height`, `scale`,
+    `drawn`: the saved view's time when the image was drawn): the view's figure panel (below,
+    *Figure panels of a structure*) drawn on white at 4× and kept in the library by its SHA-256; a
+    view saved again since is said, and the image drawn again on request.
 
 A figure read from an archive or sent by a script is checked before it is drawn (every field what a
-figure holds, every panel on the page). Making or deleting a figure, and adding or removing a
+figure holds, every panel on the page). A structure panel's image goes into the archive with the
+workspace, always (`sources/<sha256>.png`), and back into the library when the archive is opened. Making or deleting a figure, and adding or removing a
 panel, are in the workspace's history; moving and resizing panels are not, but can be undone.
 
 ### A figure written (`*.svg`, `*.pdf`, `*.png`)

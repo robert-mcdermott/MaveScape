@@ -28,6 +28,21 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
 - Remote control: `figures`, `create_figure`, `add_figure_panel`, `set_figure` and
   `export_figure`. FORMATS.md describes a figure's document and files; the guide's *Figures* page,
   with a screenshot.
+- **Every view's plots as figure panels** (wave 6, slice 2). **Add to figure** beside each plot:
+  a QC finding's charts (in its detail pane), a run's scores by class, its filter flow and a
+  contrast's volcano (Score), the comparison shown (one against the other, Bland–Altman, the
+  disagreement by position, a predictor's classes, either side's map or the map of the
+  difference), a variant's evidence (the inspector: its score and 95% interval with each
+  replicate's ± 1.96 SE; its time course or bins chosen in the Figures view), and a saved
+  structure view (its figure panel, drawn at 4× on white and kept with the figure, in the library
+  and the archive; drawn again on request when the view is saved again). A plot panel lays out its
+  charts at the figure's text size, each with its heading and legend, the room shared by what each
+  needs, and its properties choose what it shows and its title; a bar label shrunk under 6 pt, too
+  little room and an image under 300 dpi are said. `add_figure_panel` takes every kind, and
+  `export` with `what: "structure-image"` takes `light`.
+- The views draw their plots with the same module as figures (`web/lib/plots.js`; the QC
+  findings' charts in `web/lib/qc-plots.js`, the Score, Compare and inspector plots in
+  `web/lib/view-plots.js`), so a panel is the view's plot at the figure's size.
 
 ### Changed
 
@@ -52,6 +67,14 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   positions exactly its cells; a difference between conditions; a figure through the archive. The
   remote session (171 checks) drives the figure actions in a window, its SVG the same bytes as Node
   draws the same figure, its PDF the same marks, its PNG the pixels and resolution asked for.
+- The `figures` suite grows to 13 checks (wave 6, slice 2): every QC finding with a plot of eight
+  examples as a panel (96), each bar the QC results' value and every point drawn; the scores by
+  class each class's count from the run; a contrast's volcano a point per difference; a variant's
+  evidence each replicate's score and the combined interval as exported; a comparison a point per
+  variant where its scores put it; a figure of every kind, its PDF the SVG's marks and its
+  structure image kept byte for byte. The remote session: the window's SVG of a QC finding, the
+  scores by class, a comparison and a variant's evidence the same bytes as Node's; a saved
+  structure view's panel the same pixels as the view's own figure panel, and in the archive.
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
   was lost on CI's runner when the command's exit was seen before its output.
 

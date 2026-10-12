@@ -132,10 +132,11 @@ guides to every view, with screenshots.
     positions cluster beyond what burial explains.
   - Views saved with the workspace, its archive and methods; figure panels with their legend.
   - Opened in Proteoscope as its own session, when it runs on your computer.
-- **Figures.** A page at a journal's column width (85, 114 or 174 mm) or a slide, its panels the
-  variant-effect map of a run (a condition or a difference between conditions, a range of
-  positions, its tracks, color bar and key) and text, lettered A, B, C… in reading order and laid
-  out by dragging, snapping to each other. A panel says what it shows, so the figure follows the
+- **Figures.** A page at a journal's column width (85, 114 or 174 mm) or a slide, its panels any
+  view's plots, added with **Add to figure**: the variant-effect map of a run (a range of
+  positions, its tracks, color bar and key), a QC finding's charts, the scores by class, a
+  comparison, a variant's evidence, a saved structure view, and text; lettered A, B, C… in reading
+  order and laid out by dragging, snapping to each other. A panel says what it shows, so the figure follows the
   analysis until it is exported: SVG and PDF as vectors with the text as text, PNG at 300 or 600 dpi
   of the printed size, or the clipboard. Text under 6 pt at the printed size is flagged.
 - **Public data.** Any published MaveDB score set opened by search or URN: its record, its
@@ -311,7 +312,7 @@ every file MaveScape reads and writes, and the start page has blank layouts to f
 | **Map** | The variant-effect map of a run or a difference between conditions, with tracks, selections and the inspector |
 | **Compare** | Two replicates, conditions, runs, score sets or a predictor; robustness to analysis choices |
 | **Structure** | The scores on a PDB entry, AlphaFold DB model or file, and the structure as evidence |
-| **Figures** | Pages of panels for a paper or a talk, exported as SVG, PDF or PNG |
+| **Figures** | Pages of panels (any view's plots, maps and text) for a paper or a talk, exported as SVG, PDF or PNG |
 
 The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page for each.
 
@@ -393,7 +394,7 @@ integration on every change.
 | Structures | PDBe's SIFTS; DSSP 4.6.1; SciPy 1.18.1's Mann–Whitney test | Every residue placed where SIFTS places it; every secondary-structure code but five π-helix residues; tests to 10⁻¹² |
 | Examples | All fourteen, against MaveDB's files and the published comparisons | Each raises exactly the QC findings it teaches; published counts byte for byte |
 | The record | Archives saved by every release since 0.1.0, reopened | Every run recomputed to its recorded hash |
-| Figures | Nine examples' maps as figure panels, against the map's own SVG; the PDF's content read back; the window's export against Node's | Every cell the map's own color; the PDF the SVG's rectangles and text, mark for mark; the window's SVG Node's, byte for byte |
+| Figures | Nine examples' maps and every view's plots as figure panels (96 QC panels), against the map's own SVG and the results themselves; the PDF's content read back; the window's export against Node's | Every cell the map's own color, every bar and point the results'; the PDF the SVG's rectangles and text, mark for mark; the window's SVG Node's, byte for byte |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |
 | Scale | A million barcodes and their million-line map | Imported in 3.5 s, scored in 1.3 s |
 
@@ -439,8 +440,9 @@ check, its tolerance and how the reference outputs were made are in
   structure alone, with the scores and the view in a session file to open there.
 - MaveScape is developed and tested in Chrome, Edge and Brave; `mavescape run` needs one of them
   or Chromium.
-- A figure's panels are maps and text so far; the other views' plots, and exported figures that
-  carry the analysis behind them, come next. A PDF's text is in Helvetica's standard encoding, so a
+- Exported figures do not yet carry the analysis behind them, to be checked or rebuilt (wave 6).
+  A structure panel is an image of its saved view, drawn again on request rather than with every
+  change. A PDF's text is in Helvetica's standard encoding, so a
   character outside it (− or Δ) is written as its nearest ASCII (- or delta).
 - Calibration and a review report are planned for later releases; see the
   [roadmap](mavescape-spec/roadmap.md).

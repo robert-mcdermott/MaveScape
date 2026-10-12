@@ -120,3 +120,61 @@ export function sameRects(a, b, tol = 0.006) {
 export function asPDFText(texts) {
   return texts.map((t) => winAnsi(t));
 }
+
+// A PNG's pixels (8-bit RGBA or RGB, not interlaced, as browsers and lib/png.js write them):
+// { width, height, rgba }. Its IDAT inflated with zlib and each row unfiltered (PNG's five filters).
+export function decodePNG(bytes) {
+  const b = Buffer.from(bytes);
+  if (b.toString('latin1', 1, 4) !== 'PNG') throw new Error('Not a PNG.');
+  let at = 8;
+  let width = 0;
+  let height = 0;
+  let channels = 4;
+  const idat = [];
+  while (at < b.length) {
+    const length = b.readUInt32BE(at);
+    const type = b.toString('latin1', at + 4, at + 8);
+    const data = b.subarray(at + 8, at + 8 + length);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      if (data[8] !== 8 || data[12] !== 0) throw new Error('Only 8-bit, non-interlaced PNGs.');
+      channels = data[9] === 6 ? 4 : data[9] === 2 ? 3 : 0;
+      if (!channels) throw new Error('Only RGB and RGBA PNGs.');
+    } else if (type === 'IDAT') idat.push(data);
+    at += 12 + length;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = width * channels;
+  const out = new Uint8Array(height * stride);
+  for (let y = 0; y < height; y += 1) {
+    const filter = raw[y * (stride + 1)];
+    const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    for (let x = 0; x < stride; x += 1) {
+      const a = x >= channels ? out[y * stride + x - channels] : 0;
+      const up = y ? out[(y - 1) * stride + x] : 0;
+      const c = y && x >= channels ? out[(y - 1) * stride + x - channels] : 0;
+      let v = line[x];
+      if (filter === 1) v += a;
+      else if (filter === 2) v += up;
+      else if (filter === 3) v += Math.floor((a + up) / 2);
+      else if (filter === 4) {
+        const p = a + up - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - up);
+        const pc = Math.abs(p - c);
+        v += pa <= pb && pa <= pc ? a : pb <= pc ? up : c;
+      }
+      out[y * stride + x] = v & 255;
+    }
+  }
+  if (channels === 4) return { width, height, rgba: out };
+  const rgba = new Uint8Array(width * height * 4);
+  for (let i = 0; i < width * height; i += 1) {
+    rgba[i * 4] = out[i * 3];
+    rgba[i * 4 + 1] = out[i * 3 + 1];
+    rgba[i * 4 + 2] = out[i * 3 + 2];
+    rgba[i * 4 + 3] = 255;
+  }
+  return { width, height, rgba };
+}

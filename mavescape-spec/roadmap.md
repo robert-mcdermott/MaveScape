@@ -2603,6 +2603,40 @@ and the review report are found. The wave ends with its examples, as waves 2 to 
    - Validation: each panel's numbers are the view's (a scatter's points, a histogram's bars) on
      the examples; a structure panel the same pixels as wave 5's; no text under 6 pt at the
      figure's printed size (checked, and said in the view).
+   - **Done.** `lib/plots.js`: every chart the views draw as marks for any size and text size (bars,
+     lines, scatters, class histograms, the filter flow, coverage, disagreement by position, a
+     predictor's class boxes, a variant's evidence, legends), with the deterministic logarithms of
+     `dmath.js` and ticks thinned where they would crowd. `ui/plots.js` keeps its functions and draws
+     them in the page's colors, so the QC, Score and Compare views and the inspector draw through it;
+     Compare's own canvas and SVG plots moved there too, keeping their hover and click.
+     `lib/qc-plots.js` gives each QC finding's charts (the QC view draws them beside its tables),
+     `lib/view-plots.js` the Score view's, Compare's and the inspector's (scores by class, the
+     flow, a contrast's volcano; agreement, Bland–Altman, positions, classes; a variant's evidence,
+     time course and bins). `lib/figure-plots.js` lays out a panel's charts (title; each chart's
+     heading, legend and chart; the room shared by what each needs) and an image.
+     - **Panels:** `qc` (a finding of a run or of the counts, the agreement pair), `scores`
+       (distribution, flow, volcano), `compare` (the sides, scale and filters; seven plots, three of
+       them maps drawn by `figure-map.js`), `variant` (evidence, time course, bins) and `structure`
+       (a saved view's figure panel drawn at 4× on white, kept in the library by its SHA-256 and in
+       the archive, `sources/<sha256>.png`; a view saved again since is said, and drawn again on
+       request). **Add to figure** beside each plot in the QC, Score, Compare and Structure views
+       and the inspector (`ui/figure-data.js`, `figureMenu`); the Figures view's properties choose
+       what a plot shows, its title and the agreement pair. `add_figure_panel` takes every kind,
+       `set_figure` a plot's `plot`, `title` and `pair`; `export` structure-image takes `light`.
+     - **Robustness** has no plot in its view (its verdicts are tables), so no panel yet.
+     - Found while building it: a panel placed by a script was clipped from where it would have
+       gone, not where it was put (a structure panel drawn at a third of its size); a structure
+       panel drawn in the dark theme came out black (now on white, whatever the theme).
+     - Validation: `figures` grows to 13 checks: every QC finding with a plot of eight examples as a
+       panel one column wide (96), each bar the QC results' value and every point drawn, 91 with no
+       text under 6 pt and the other five (many bars in 90 mm) said; the scores by class each class's
+       count read from the run; a contrast's volcano a point per difference; a variant's evidence
+       each replicate's score and the combined interval as exported, with a time course and bins; a
+       comparison a point per variant compared, in order; a figure of every kind, its PDF the SVG's
+       marks and its image the PNG byte for byte. The remote session (173 checks): the window's SVG
+       of a QC finding, the scores by class, a comparison and a variant's evidence the same bytes as
+       Node's from the runs recomputed from the archive; a structure panel the same pixels as the
+       view's own figure panel drawn on white, its image in the archive.
 3. **Figures that carry their analysis (R5, part 3).** An exported figure carries its manifest:
    each panel with what it shows, its run and the run's output hash, the parameters, the
    selection, every input's SHA-256, MaveScape's version and commit (SVG `<metadata>`, a PNG

@@ -62,8 +62,9 @@ import { handOff, sessionFile } from './proteoscope.js';
 import { structureWords, viewWords } from '../lib/structure-record.js';
 import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
-import { addPanel, checkFigure, createFigure, FIGURE_SIZES, figureSize, mm, panelLetters, panelSummary, PANEL_KINDS, pngSize, removePanel, toMM, updatePanel } from '../lib/figures.js';
-import { drawFigure, exportFigure } from './figure-data.js';
+import { addPanel, checkFigure, createFigure, FIGURE_SIZES, figureSize, mm, panelLetters, panelSummary, PANEL_KINDS, PANEL_PLOTS, pngSize, removePanel, toMM, updatePanel } from '../lib/figures.js';
+import { drawFigure, drawStructureImage, exportFigure } from './figure-data.js';
+import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
 import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
@@ -282,6 +283,66 @@ export function installRemote(app) {
     for (const key of ['title']) if (args[key] !== undefined) out[key] = args[key] === null ? undefined : String(args[key]);
     for (const key of ['medians', 'legend']) if (args[key] !== undefined) out[key] = args[key] === false ? false : undefined;
     return out;
+  }
+
+  // A plot panel's fields from add_figure_panel's arguments (wave 6, slice 2).
+  async function plotPanelFrom(kind, args) {
+    const plotOf = (fallback) => (args.plot ? choose(args.plot, Object.keys(PANEL_PLOTS[kind]), 'plot') : fallback);
+    if (kind === 'qc') {
+      // The subject: a run by name, "counts", or the latest run.
+      let sub;
+      if (args.subject === undefined) sub = qcSubjects(ws())[0];
+      else if (/^counts$/i.test(String(args.subject))) sub = qcSubjects(ws()).find((o) => o.id === 'counts');
+      else sub = qcSubjects(ws()).find((o) => o.id === `run:${resolveRun(args.subject).id}`);
+      if (!sub) throw new ActionError('There is nothing to check: score a run, or set the design of the counts.');
+      const inputs = qcInputsOf(ws(), sub);
+      if (inputs.problem) throw new ActionError(inputs.problem);
+      const entry = await computeQc(app, inputs);
+      if (entry.status !== 'done') throw new ActionError(`Quality control could not be computed: ${entry.message}`);
+      const findings = findingsFrom(entry.qc, withDefaultThresholds(ws().qc?.thresholds), { acknowledged: ws().qc?.acknowledged });
+      if (!args.finding) throw new ActionError(`Name the finding: ${findings.map((f) => f.id).join(', ')}.`);
+      const finding = findings.find((f) => f.id === args.finding) ?? findings.find((f) => f.title === choose(args.finding, findings.map((x) => x.title), 'finding'));
+      if (!qcCharts(finding.plot, entry.qc, withDefaultThresholds(ws().qc?.thresholds)).charts.length) throw new ActionError(`The finding "${finding.title}" has no chart (it is a table, or there is nothing to draw).`);
+      return { kind, subject: sub.run ? sub.run.id : 'counts', finding: finding.id, findingTitle: finding.title, ...(finding.plot === 'agreement' ? { pair: Math.max(0, Math.round(Number(args.pair ?? 1)) - 1) } : {}), h: 170 };
+    }
+    if (kind === 'scores') {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      const plot = plotOf('distribution');
+      if (plot === 'volcano') {
+        const names = (results.differential ?? []).map((d) => d.name);
+        if (!names.length) throw new ActionError(`${run.name} compares no conditions: it has no volcano.`);
+        return { kind, run: run.id, plot, contrast: args.contrast ? names.indexOf(choose(args.contrast, names, 'contrast')) : 0, h: 180 };
+      }
+      return { kind, run: run.id, plot, condition: resolveCondition(results, args.condition), h: 150 };
+    }
+    if (kind === 'compare') {
+      if (args.a !== undefined || args.b !== undefined || args.scale !== undefined) await actions.compare({ a: args.a, b: args.b, ...(args.scale ? { scale: args.scale } : {}) });
+      const pair = currentPair(app);
+      if (!pair) throw new ActionError('There is nothing compared: give a and b (as compare takes them).');
+      const plot = plotOf('agreement');
+      const c = await computeComparison(app, pair, currentFilters(app), plot.startsWith('map-') ? 'protein' : null, currentScale(app));
+      if (c.error) throw new ActionError(c.error);
+      return { kind, a: pair.a, b: pair.b, scale: currentScale(app), filters: currentFilters(app), plot, labels: { a: c.a.label, b: c.b.label }, h: 200 };
+    }
+    if (kind === 'variant') {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      if (!args.variant) throw new ActionError('Name the variant (its MAVE-HGVS name, such as p.Trp36Ala).');
+      const name = String(args.variant).startsWith('p.') || String(args.variant).includes(':') || /^[cgnmr]\./.test(String(args.variant)) ? String(args.variant) : `p.${args.variant}`;
+      const view = proteinView(results);
+      if (!results.variants.key.includes(name) && !view?.variants.key.includes(name)) throw new ActionError(`${name} is not in ${run.name}.`);
+      return { kind, run: run.id, condition: resolveCondition(results, args.condition), variant: name, plot: plotOf('evidence'), w: 240, h: 130 };
+    }
+    if (kind === 'structure') {
+      const views = ws().structureViews ?? [];
+      if (!views.length) throw new ActionError('No saved structure view: save one first (save_structure_view).');
+      const name = args.view ? choose(args.view, views.map((v) => v.name), 'saved view') : views.at(-1).name;
+      const view = views.find((v) => v.name === name);
+      const image = await drawStructureImage(app, view.id);
+      return { kind, view: view.id, image, w: 220, h: 220 };
+    }
+    throw new ActionError(`A panel is ${Object.keys(PANEL_KINDS).join(', ')}.`);
   }
 
   // A figure as figures returns it: in millimeters, its panels lettered, what is wrong with each.
@@ -841,8 +902,10 @@ export function installRemote(app) {
       if (kind === 'text') {
         if (typeof args.text !== 'string' || !args.text.trim()) throw new ActionError('A text panel needs its text.');
         panel = { kind: 'text', text: args.text };
-      } else {
+      } else if (kind === 'map') {
         panel = await mapPanelFrom(args, null);
+      } else {
+        panel = await plotPanelFrom(kind, args);
       }
       const existing = args.figure ? resolveFigure(args.figure) : null;
       let fig = existing ?? createFigure(`Figure ${(ws().figures?.length ?? 0) + 1}`, 'double');
@@ -892,7 +955,11 @@ export function installRemote(app) {
         }
         const patch = { ...placement(change, fig, target) };
         if (target.kind === 'map') Object.assign(patch, await mapPanelFrom(change, target));
-        else {
+        else if (target.kind !== 'text') {
+          if (change.plot !== undefined && PANEL_PLOTS[target.kind]) patch.plot = choose(change.plot, Object.keys(PANEL_PLOTS[target.kind]), 'plot');
+          if (change.title !== undefined) patch.title = change.title === null ? undefined : String(change.title);
+          if (change.pair !== undefined && target.kind === 'qc') patch.pair = Math.max(0, Math.round(Number(change.pair)) - 1);
+        } else {
           if (change.text !== undefined) patch.text = String(change.text);
           if (change.size !== undefined) patch.size = Number(change.size);
           if (change.bold !== undefined) patch.bold = Boolean(change.bold) || undefined;
@@ -1660,7 +1727,7 @@ export function installRemote(app) {
         if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure.');
         const scale = args.scale === undefined || args.scale === null ? 4 : Number(args.scale);
         if (!(scale >= 1 && scale <= 8)) throw new ActionError('scale is from 1 to 8: the image\'s size against the view\'s.');
-        const panel = await figurePanel(app, { scale, legend: args.legend !== false });
+        const panel = await figurePanel(app, { scale, legend: args.legend !== false, light: args.light === true });
         return { file: panel.bytes, message: `A figure panel of ${panel.metadata.structure.name}: ${panel.metadata.image.width} × ${panel.metadata.image.height} pixels (${scale}× the view${panel.metadata.image.legend ? ', its legend below it' : ''}), what it shows written into it (PNG text "mavescape-figure-panel").` };
       }
       // The view shown as a Proteoscope session (wave 5, slice 6), whether Proteoscope runs or not.

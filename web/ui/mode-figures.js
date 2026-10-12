@@ -9,12 +9,12 @@
 import { h, icon, clear, downloadBlob } from './dom.js';
 import { confirmDialog, showMenu, toast } from './overlays.js';
 import { paintMarks } from '../lib/draw.js';
-import { addPanel, createFigure, FIGURE_SIZES, figureSize, mm, panelSummary, removePanel, toMM, updatePanel } from '../lib/figures.js';
+import { addPanel, createFigure, FIGURE_SIZES, figureSize, mm, PANEL_KINDS, PANEL_PLOTS, panelSummary, removePanel, toMM, updatePanel } from '../lib/figures.js';
 import { MIN_TEXT } from '../lib/figure-map.js';
 import { COLOR_BY, ROW_ORDERS } from '../lib/map-model.js';
 import { arrangeTracks } from '../lib/tracks.js';
 import { removeFigure, saveFigure } from '../lib/workspace.js';
-import { copyFigure, drawFigure, exportFigure, imageOf } from './figure-data.js';
+import { copyFigure, drawFigure, drawStructureImage, exportFigure, imageOf } from './figure-data.js';
 import { activeRun } from './selections.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { runTracks } from './tracks.js';
@@ -438,6 +438,32 @@ export function mountFiguresMode(app, container) {
     }
   }
 
+  // A plot panel's own options (wave 6, slice 2): which plot, its title, the pair of replicates of an
+  // agreement plot, and a structure image drawn again from its saved view.
+  function plotProps(p) {
+    const plots = PANEL_PLOTS[p.kind];
+    if (plots) {
+      const keys = Object.keys(plots).filter((k) => p.kind !== 'compare' || k.startsWith('map-') === p.plot.startsWith('map-'));
+      propsEl.append(field('Shows', h('select.input.small', { onchange: (event) => setPanel({ plot: event.target.value }, 'Panel shows') }, ...keys.map((k) => h('option', { value: k, selected: k === p.plot }, plots[k])))));
+    }
+    if (p.kind === 'qc' && Number.isInteger(p.pair)) {
+      propsEl.append(field('Replicates (pair, from 1)', h('input.input.small', { type: 'number', min: 1, step: 1, value: p.pair + 1, onchange: (event) => { const v = Math.round(Number(event.target.value)) - 1; if (v >= 0) setPanel({ pair: v }, 'Panel pair'); } })));
+    }
+    propsEl.append(field('Title', h('input.input.small', { value: p.title ?? '', placeholder: 'The plot\'s own (empty: none)', onchange: (event) => setPanel({ title: event.target.value === '' && p.title === undefined ? undefined : event.target.value }, 'Panel title') })));
+    if (p.kind === 'structure') {
+      const view = (store.ws.structureViews ?? []).find((v) => v.id === p.view);
+      propsEl.append(h('p.muted', { style: { fontSize: '11.5px' } }, view ? `The saved view "${view.name}", drawn at ${p.image.scale ?? 4}× (${p.image.width} × ${p.image.height} pixels).` : 'Its saved view was removed; the image is the one drawn from it then.'),
+        view ? h('button.btn.small', { type: 'button', title: 'Opens the saved view in the Structure view and draws its figure panel again', onclick: async () => {
+          try {
+            const image = await drawStructureImage(app, view.id);
+            setPanel({ image }, 'Draw the structure again');
+          } catch (error) {
+            toast(`Could not draw the view again: ${error.message}`, { kind: 'error' });
+          }
+        } }, icon('structure'), 'Draw again from the saved view') : null);
+    }
+  }
+
   function textProps(p) {
     const area = h('textarea.input', { rows: 4, value: p.text });
     area.addEventListener('change', () => setPanel({ text: area.value }, 'Edit text'));
@@ -462,10 +488,11 @@ export function mountFiguresMode(app, container) {
     }
     const letter = drawn?.panels.find((x) => x.id === p.id)?.letter ?? null;
     propsLetter = letter;
-    propsEl.append(h('h3', icon(p.kind === 'map' ? 'heatmap' : 'figure'), `${letter ? `Panel ${letter}: ` : ''}${p.kind === 'map' ? 'Map' : 'Text'}`, h('span.spacer'),
+    propsEl.append(h('h3', icon(p.kind === 'map' ? 'heatmap' : 'figure'), `${letter ? `Panel ${letter}: ` : ''}${PANEL_KINDS[p.kind] ?? p.kind}`, h('span.spacer'),
       h('button.icon-button.small', { type: 'button', title: 'Remove the panel', onclick: removeSelected }, icon('trash'))));
     if (p.kind === 'map') mapProps(p);
-    else textProps(p);
+    else if (p.kind === 'text') textProps(p);
+    else plotProps(p);
     propsEl.append(
       h('div.section-title', 'Place'),
       h('div.row',

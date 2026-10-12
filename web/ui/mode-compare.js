@@ -24,7 +24,10 @@ import { trackTarget } from '../lib/tracks.js';
 import { KIND } from '../lib/variants.js';
 import { setScoreSetDirection } from '../lib/workspace.js';
 import { publicDataState } from './public-data.js';
-import { cssVar, legend, ticks } from './plots.js';
+import { legend, plotCanvas, plotSVG, viewTheme } from './plots.js';
+import * as plots from '../lib/plots.js';
+import { comparisonPoints, positionTitle } from '../lib/view-plots.js';
+import { figureButton } from './figure-data.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { addFileTrack, addPublicTrack, annotationText } from './tracks.js';
 import { toast } from './overlays.js';
@@ -289,203 +292,72 @@ export async function addCompared(app, run, { urn = null, direction = null, prov
   return result;
 }
 
-// A scatter of x against y on a canvas, colored by class, with lines. pick(k): the k-th point
-// clicked. lines: [{ y, dash }].
+// A scatter of x against y on a canvas (lib/plots.js), colored by class, with lines. pick(k): the
+// k-th point clicked. lines: [{ y, dash }].
 function plotPairs({ x, y, kinds, xLabel, yLabel, label, lines = [], diagonal = false, pick, width = 560, height = 320, name, focus = -1 }) {
-  const wrap = h('div.plot-canvas.compare-plot', { role: 'img', 'aria-label': label });
-  const canvas = h('canvas', { width: width * 2, height: height * 2, style: { width: '100%', height: 'auto', cursor: pick ? 'crosshair' : 'default' } });
-  const hover = h('div.muted.compare-hover', { style: { fontSize: '11px', minHeight: '15px' } });
-  wrap.append(canvas, hover);
-  const ctx = canvas.getContext('2d');
   const n = x.length;
-  if (!ctx || !n) return wrap;
-  ctx.scale(2, 2);
-  const pad = { l: 52, r: 12, t: 8, b: 34 };
-  let [x0, x1, y0, y1] = [Infinity, -Infinity, Infinity, -Infinity];
-  for (let k = 0; k < n; k += 1) {
-    x0 = Math.min(x0, x[k]); x1 = Math.max(x1, x[k]);
-    y0 = Math.min(y0, y[k]); y1 = Math.max(y1, y[k]);
-  }
-  for (const l of lines) if (Number.isFinite(l.y)) { y0 = Math.min(y0, l.y); y1 = Math.max(y1, l.y); }
-  if (diagonal) {
-    x0 = y0 = Math.min(x0, y0);
-    x1 = y1 = Math.max(x1, y1);
-  }
-  const mx = (x1 - x0) * 0.04 || 1;
-  const my = (y1 - y0) * 0.04 || 1;
-  x0 -= mx; x1 += mx; y0 -= my; y1 += my;
-  const sx = (v) => pad.l + ((v - x0) / (x1 - x0)) * (width - pad.l - pad.r);
-  const sy = (v) => height - pad.b - ((v - y0) / (y1 - y0)) * (height - pad.t - pad.b);
-  ctx.font = '10px system-ui, sans-serif';
-  ctx.strokeStyle = cssVar('--line-strong');
-  ctx.fillStyle = cssVar('--text-3');
-  ctx.beginPath();
-  ctx.moveTo(pad.l, pad.t);
-  ctx.lineTo(pad.l, height - pad.b);
-  ctx.lineTo(width - pad.r, height - pad.b);
-  ctx.stroke();
-  const text = (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : Number(v.toPrecision(3)).toString());
-  ctx.textAlign = 'center';
-  for (const v of ticks(x0, x1)) ctx.fillText(text(v), sx(v), height - pad.b + 13);
-  ctx.textAlign = 'right';
-  for (const v of ticks(y0, y1, 4)) ctx.fillText(text(v), pad.l - 4, sy(v) + 3);
-  // An axis label shortened to its axis's length, with an ellipsis (a score set's title and URN).
-  const fit = (text, room) => {
-    if (ctx.measureText(text).width <= room) return text;
-    let cut = text;
-    while (cut.length > 4 && ctx.measureText(`${cut}…`).width > room) cut = cut.slice(0, -1);
-    return `${cut.trimEnd()}…`;
-  };
-  ctx.textAlign = 'center';
-  ctx.fillText(fit(xLabel, width - pad.l - pad.r), (pad.l + width - pad.r) / 2, height - 3);
-  ctx.save();
-  ctx.translate(10, (pad.t + height - pad.b) / 2);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText(fit(yLabel, height - pad.t - pad.b), 0, 0);
-  ctx.restore();
-  const dashed = (fx0, fy0, fx1, fy1, dash) => {
-    ctx.setLineDash(dash);
-    ctx.beginPath();
-    ctx.moveTo(fx0, fy0);
-    ctx.lineTo(fx1, fy1);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  };
-  if (diagonal) dashed(sx(x0), sy(y0), sx(x1), sy(y1), [4, 3]);
-  for (const l of lines) dashed(sx(x0), sy(l.y), sx(x1), sy(l.y), l.dash ?? []);
-  ctx.globalAlpha = n > 1500 ? 0.4 : 0.65;
-  const px = new Float32Array(n);
-  const py = new Float32Array(n);
-  // Missense first, the controls drawn over them.
-  const order = Array.from({ length: n }, (_, k) => k).sort((a, b) => classOf(kinds[b]) - classOf(kinds[a]));
-  for (const k of order) {
-    px[k] = sx(x[k]);
-    py[k] = sy(y[k]);
-    ctx.fillStyle = categoricalColor(CLASSES[classOf(kinds[k])][2]);
-    ctx.fillRect(px[k] - 1.5, py[k] - 1.5, 3, 3);
-  }
-  ctx.globalAlpha = 1;
-  // The variant in the inspector, ringed.
-  if (focus >= 0) {
-    ctx.strokeStyle = cssVar('--text');
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(px[focus], py[focus], 5, 0, 2 * Math.PI);
-    ctx.stroke();
-    ctx.lineWidth = 1;
-  }
+  const { order, points, colorOf } = comparisonPoints(x, y, kinds);
+  const drawn = plots.scatter({ points, colorOf, xLabel, yLabel, lines, diagonal, focus: focus >= 0 ? order.indexOf(focus) : -1 }, { width, height, text: 10, theme: viewTheme() });
+  const { wrap, canvas } = plotCanvas(drawn, label, 'plot-canvas compare-plot');
+  canvas.style.cursor = pick ? 'crosshair' : 'default';
+  const hover = h('div.muted.compare-hover', { style: { fontSize: '11px', minHeight: '15px' } });
+  wrap.append(hover);
+  if (!n) return wrap;
+  const { px, py } = drawn.hits;
   const nearest = (event) => {
     const rect = canvas.getBoundingClientRect();
     const cx = ((event.clientX - rect.left) / rect.width) * width;
     const cy = ((event.clientY - rect.top) / rect.height) * height;
     let best = -1;
     let bestD = 36;
-    for (let k = 0; k < n; k += 1) {
-      const d = (px[k] - cx) ** 2 + (py[k] - cy) ** 2;
-      if (d < bestD) { bestD = d; best = k; }
+    for (let j = 0; j < n; j += 1) {
+      const d = (px[j] - cx) * (px[j] - cx) + (py[j] - cy) * (py[j] - cy);
+      if (d < bestD) {
+        bestD = d;
+        best = j;
+      }
     }
-    return best;
+    return best < 0 ? -1 : order[best];
   };
   canvas.addEventListener('mousemove', (event) => {
     const k = nearest(event);
     hover.textContent = k >= 0 ? `${name(k)}: ${fmt(x[k])}, ${fmt(y[k])}` : '';
   });
   canvas.addEventListener('mouseleave', () => { hover.textContent = ''; });
-  if (pick) canvas.addEventListener('click', (event) => {
-    const k = nearest(event);
-    if (k >= 0) pick(k);
-  });
+  if (pick) {
+    canvas.addEventListener('click', (event) => {
+      const k = nearest(event);
+      if (k >= 0) pick(k);
+    });
+  }
   return wrap;
 }
 
-// Disagreement by position as bars: each position's mean difference (first − second), darker where
-// its q is below DISCORDANT_Q. pick(position entry) on a click.
+// Disagreement by position as bars (lib/plots.js): each position's mean difference (first −
+// second), darker where its q is below DISCORDANT_Q. pick(position entry) on a click.
 function positionBars({ list, length, label, pick }) {
-  const W = 560;
-  const H = 150;
-  const pad = { l: 40, r: 8, t: 8, b: 24 };
-  const NS = 'http://www.w3.org/2000/svg';
-  const el = document.createElementNS(NS, 'svg');
-  el.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  el.setAttribute('class', 'plot compare-positions');
-  el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', label);
-  const add = (name, attrs, text = null) => {
-    const node = document.createElementNS(NS, name);
-    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-    if (text !== null) node.textContent = text;
-    el.append(node);
-    return node;
-  };
-  const span = Math.max(1e-9, ...list.map((x) => Math.abs(x.mean)));
-  const sx = (p) => pad.l + ((p - 0.5) / length) * (W - pad.l - pad.r);
-  const sy = (v) => pad.t + ((span - v) / (2 * span)) * (H - pad.t - pad.b);
-  const bw = Math.max(1, (W - pad.l - pad.r) / length - 0.5);
-  add('line', { x1: pad.l, x2: W - pad.r, y1: sy(0), y2: sy(0), stroke: cssVar('--line-strong') });
-  for (const v of [-span, 0, span]) add('text', { x: pad.l - 4, y: sy(v) + 3, 'text-anchor': 'end', class: 'tick' }, Number(v.toPrecision(2)).toString());
-  for (const t of ticks(1, length)) if (t >= 1) add('text', { x: sx(t), y: H - 8, 'text-anchor': 'middle', class: 'tick' }, String(Math.round(t)));
-  for (const x of list) {
-    const strong = x.q < DISCORDANT_Q;
-    const rect = add('rect', { x: sx(x.position) - bw / 2, y: Math.min(sy(0), sy(x.mean)), width: bw, height: Math.max(0.5, Math.abs(sy(x.mean) - sy(0))), fill: strong ? cssVar('--danger') : cssVar('--text-3'), opacity: strong ? 0.9 : 0.45, ...(pick ? { style: 'cursor:pointer' } : {}) });
-    const title = document.createElementNS(NS, 'title');
-    title.textContent = `${x.residue}${x.position}${x.reference !== x.position ? ` (reference ${x.reference})` : ''}: ${x.n} variants, mean difference ${fmt(x.mean)}${Number.isFinite(x.q) ? `, q ${qText(x.q)}` : ''}${x.discordant ? `, ${x.discordant} discordant` : ''}`;
-    rect.append(title);
-    if (pick) rect.addEventListener('click', () => pick(x));
+  const drawn = plots.positionBars({ list: list.map((x) => ({ ...x, title: positionTitle(x) })), length, label, q: DISCORDANT_Q }, { width: 560, height: 150, text: 10, theme: viewTheme() });
+  const el = plotSVG(drawn, label, 'plot compare-positions');
+  if (pick) {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', (event) => {
+      const rect = el.getBoundingClientRect();
+      const at = ((event.clientX - rect.left) / rect.width) * drawn.width;
+      const { left, right } = drawn.hits;
+      const position = Math.round(0.5 + ((at - left) / (right - left)) * length);
+      const hit = list.reduce((best, x) => (Math.abs(x.position - position) < Math.abs((best?.position ?? Infinity) - position) ? x : best), null);
+      if (hit && Math.abs(hit.position - position) <= 1) pick(hit);
+    });
   }
   return el;
 }
 
-// A predictor's classes as boxes (wave 4, slice 3): for each class, the measured side's scores of
-// its variants compared (the quartiles as a box, the median as a line), with the measured side's
-// synonymous and nonsense medians as dashed lines.
+// A predictor's classes as boxes (wave 4, slice 3; lib/plots.js): for each class, the measured
+// side's scores of its variants compared (the quartiles as a box, the median as a line), with the
+// measured side's synonymous and nonsense medians as dashed lines.
 function classBoxes({ list, references, label, xLabel }) {
-  const W = 420;
-  const rowH = 34;
-  const pad = { l: 118, r: 12, t: 18, b: 34 };
-  const H = pad.t + pad.b + rowH * list.length;
-  const NS = 'http://www.w3.org/2000/svg';
-  const el = document.createElementNS(NS, 'svg');
-  el.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  el.setAttribute('class', 'plot compare-classes');
-  el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', label);
-  const add = (name, attrs, text = null) => {
-    const node = document.createElementNS(NS, name);
-    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-    if (text !== null) node.textContent = text;
-    el.append(node);
-    return node;
-  };
-  const values = [...list.flatMap((x) => (x.n ? [x.low, x.high] : [])), references.synonymous.median, references.nonsense.median].filter(Number.isFinite);
-  if (!values.length) return el;
-  let lo = Math.min(...values);
-  let hi = Math.max(...values);
-  const margin = (hi - lo) * 0.06 || 1;
-  lo -= margin;
-  hi += margin;
-  const sx = (v) => pad.l + ((v - lo) / (hi - lo)) * (W - pad.l - pad.r);
-  const bottom = H - pad.b;
-  add('line', { x1: pad.l, x2: W - pad.r, y1: bottom, y2: bottom, stroke: cssVar('--line-strong') });
-  for (const v of ticks(lo, hi)) add('text', { x: sx(v), y: bottom + 13, 'text-anchor': 'middle', class: 'tick' }, Number(v.toPrecision(3)).toString());
-  add('text', { x: (pad.l + W - pad.r) / 2, y: H - 4, 'text-anchor': 'middle', class: 'tick' }, xLabel);
-  for (const [what, ref] of [['synonymous', references.synonymous], ['nonsense', references.nonsense]]) {
-    if (!Number.isFinite(ref.median)) continue;
-    add('line', { x1: sx(ref.median), x2: sx(ref.median), y1: pad.t, y2: bottom, stroke: cssVar('--text-3'), 'stroke-dasharray': '4 3' });
-    add('text', { x: sx(ref.median), y: pad.t - 6, 'text-anchor': 'middle', class: 'tick' }, what);
-  }
-  list.forEach((x, k) => {
-    const y = pad.t + 4 + k * rowH;
-    add('text', { x: pad.l - 8, y: y + rowH / 2 - 4, 'text-anchor': 'end', class: 'label' }, x.label.replace(/ \(.*\)$/, ''));
-    add('text', { x: pad.l - 8, y: y + rowH / 2 + 9, 'text-anchor': 'end', class: 'tick' }, `${x.n.toLocaleString('en-US')} variants`);
-    if (!x.n) return;
-    const color = x.id === 'pathogenic' ? cssVar('--danger') : x.id === 'benign' ? cssVar('--ok') : cssVar('--text-3');
-    const box = add('rect', { x: sx(x.low), y: y + 4, width: Math.max(1, sx(x.high) - sx(x.low)), height: rowH - 14, fill: color, opacity: 0.35, stroke: color });
-    const title = document.createElementNS(NS, 'title');
-    title.textContent = `${x.label}: ${x.n} variants, median ${fmt(x.median)}, quartiles ${fmt(x.low)} to ${fmt(x.high)}`;
-    box.append(title);
-    add('line', { x1: sx(x.median), x2: sx(x.median), y1: y + 2, y2: y + rowH - 8, stroke: color, 'stroke-width': 2.5 });
-  });
-  return el;
+  const drawn = plots.classBoxes({ list, references, label, xLabel }, { width: 420, text: 10, theme: viewTheme() });
+  return plotSVG(drawn, label, 'plot compare-classes');
 }
 
 export function mountCompareMode(app, container) {
@@ -658,6 +530,11 @@ export function mountCompareMode(app, container) {
   };
   const runSide = (c) => (isRun(c.a) ? c.a : isRun(c.b) ? c.b : null);
 
+  // The comparison shown as a figure's panel (wave 6, slice 2): its two sides, scale and filters,
+  // and the plot.
+  const comparisonPanel = (c, plot, extra = {}) => () => ({ kind: 'compare', a: currentPair(app).a, b: currentPair(app).b, scale: currentScale(app), filters: currentFilters(app), plot, labels: { a: c.a.label, b: c.b.label }, h: 200, ...extra });
+  const compareButton = (c, plot, what, extra) => figureButton(app, comparisonPanel(c, plot, extra), what);
+
   function agreementPane(c) {
     const { a: va } = c.values;
     const kinds = Uint8Array.from(c.rows, ([i]) => va.kind[i]);
@@ -671,12 +548,13 @@ export function mountCompareMode(app, container) {
     const files = comparisonFiles(app, c);
     const used = CLASSES.filter((_, idx) => kinds.some((k) => classOf(k) === idx));
     return h('div',
+      h('div.btn-row.figure-add-row', compareButton(c, 'agreement', `the comparison of ${c.a.label} and ${c.b.label}`)),
       plotPairs({ x: c.x, y: c.y, kinds, xLabel: axis(c.a.label, 'a'), yLabel: axis(c.b.label, 'b'), label: `${c.b.label} against ${c.a.label}: one point per variant compared${c.sameScale ? ', with the line y = x' : ''}`, diagonal: c.sameScale, pick, name, focus }),
       legend(used.map(([label, , color]) => ({ label, color: categoricalColor(color) }))),
       h('p.muted', { style: { fontSize: '11.5px', margin: '4px 0 8px' } }, `${shown ? `Click a point to see the variant in the inspector (as ${shown.label} scored it).` : ''}${c.sameScale ? ' The dashed line is y = x: on it, the two agree.' : ''}${rescaled ? ' Both are drawn rescaled by their anchors.' : ''}`),
       statisticsTable(c),
       ba ? h('div', { style: { marginTop: '12px' } },
-        h('h4', 'Bland–Altman'),
+        h('div.row', h('h4', { style: { margin: 0 } }, 'Bland–Altman'), h('span.spacer'), compareButton(c, 'bland-altman', `the Bland–Altman plot of ${c.a.label} and ${c.b.label}`)),
         plotPairs({ x: Float64Array.from(c.x, (v, k) => (v + c.y[k]) / 2), y: Float64Array.from(c.x, (v, k) => v - c.y[k]), kinds, xLabel: 'mean of the two', yLabel: 'first − second', label: 'Each variant\'s difference against its mean, with the bias and the limits of agreement', lines: [{ y: ba.bias }, { y: ba.lower, dash: [4, 3] }, { y: ba.upper, dash: [4, 3] }], pick, name, height: 240, focus }),
         h('p.muted', { style: { fontSize: '11.5px', margin: '4px 0 0' } }, `The solid line is the bias (${fmt(ba.bias)}); between the dashed lines (${fmt(ba.lower)} to ${fmt(ba.upper)}) lie 95% of the differences, if they are normal.`)) : null,
       h('div.btn-row', { style: { marginTop: '12px' } },
@@ -753,7 +631,7 @@ export function mountCompareMode(app, container) {
       const colors = e.map.colors();
       const title = e.which === 'difference' ? `${e.label}: ${blue} where the first is lower, ${red} where higher${cm.scale?.applied && cm.scale.anchors ? ' (rescaled by their anchors)' : ''}` : `${e.label}, on its own scale: ${blue} lower, ${red} higher than its wild type`;
       const heading = e.which === 'first' ? `First: ${e.label}` : e.which === 'second' ? `Second: ${e.label}` : `Difference: ${e.label}`;
-      return h('div.compare-map', h('h4', heading), colors ? mapLegend(e.m.model, colors, title) : null, e.map.el);
+      return h('div.compare-map', h('div.row', h('h4', { style: { margin: 0 } }, heading), h('span.spacer'), compareButton(cm, `map-${e.which}`, `the ${e.which === 'difference' ? 'difference' : `${e.which} side's`} map of ${cm.a.label} and ${cm.b.label}`, { palette: palette() })), colors ? mapLegend(e.m.model, colors, title) : null, e.map.el);
     });
     const files = comparisonFiles(app, cm);
     const svgOf = (which) => mapSVG(maps.models[which].model, { palette: palette(), results: maps.models[which].results });
@@ -843,7 +721,7 @@ export function mountCompareMode(app, container) {
       }
     }
     const pos = c.positions;
-    out.push(h('h4', { style: { marginTop: '14px' } }, 'By position'));
+    out.push(h('div.row', { style: { marginTop: '14px' } }, h('h4', { style: { margin: 0 } }, 'By position'), h('span.spacer'), c.positions?.valid ? compareButton(c, 'positions', `the disagreement by position of ${c.a.label} and ${c.b.label}`) : null));
     if (!pos?.valid) {
       out.push(h('p.muted', { style: { margin: 0 } }, `Not shown: ${pos?.reason ?? 'see the report'}`));
     } else {
@@ -880,7 +758,7 @@ export function mountCompareMode(app, container) {
     const tolerated = k.list.find((x) => x.id === 'benign')?.label.replace(/ \(.*\)$/, '') ?? 'tolerated';
     const damaging = k.list.find((x) => x.id === 'pathogenic')?.label.replace(/ \(.*\)$/, '') ?? 'damaging';
     return h('div',
-      h('p', { style: { margin: '0 0 6px' } }, `${k.measured}, as scored, in each of ${possessive(k.predictor)} classes (the variants compared): the box holds the middle half, the line is the median.`),
+      h('div.row', h('p', { style: { margin: '0 0 6px' } }, `${k.measured}, as scored, in each of ${possessive(k.predictor)} classes (the variants compared): the box holds the middle half, the line is the median.`), h('span.spacer'), compareButton(c, 'classes', `${k.measured} by ${possessive(k.predictor)} classes`)),
       classBoxes({ list: k.list, references: k.references, label: `${k.measured} in each of ${possessive(k.predictor)} classes, with its synonymous and nonsense medians`, xLabel: k.measured }),
       h('table.data.compact', { style: { marginTop: '8px' } }, h('thead', h('tr', h('th', 'Class'), h('th.r', 'Variants'), h('th.r', 'Median'), h('th.r', 'Quartiles'))),
         h('tbody', ...k.list.map((x) => h('tr', h('td', x.label), h('td.r', formatCount(x.n)), h('td.r', fmt(x.median)), h('td.r', `${fmt(x.low)} to ${fmt(x.high)}`))))),

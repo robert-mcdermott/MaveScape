@@ -4,11 +4,11 @@
 // units (points, 1/72 inch), x right and y down from the top left.
 //
 // Marks are plain objects:
-//   { type: 'rect', x, y, w, h, fill?, stroke?, width?, radius?, dash?, title? }
+//   { type: 'rect', x, y, w, h, fill?, stroke?, width?, radius?, dash?, opacity?, title? }
 //   { type: 'hatch', x, y, w, h, fill, stroke, spacing?, width?, title? }   diagonal lines on a fill
-//   { type: 'line', x1, y1, x2, y2, stroke, width?, dash? }
-//   { type: 'path', d, fill?, stroke?, width?, title? }    d: absolute M L H V C Z commands
-//   { type: 'circle', x, y, r, fill?, stroke?, width? }
+//   { type: 'line', x1, y1, x2, y2, stroke, width?, dash?, opacity? }
+//   { type: 'path', d, fill?, stroke?, width?, dash?, opacity?, title? }    d: absolute M L H V C Z
+//   { type: 'circle', x, y, r, fill?, stroke?, width?, opacity?, title? }
 //   { type: 'text', x, y, text, size, bold?, fill?, anchor?, baseline?, rotate?, title? }
 //       anchor 'start' | 'middle' | 'end'; baseline 'alphabetic' | 'middle' | 'top'; rotate in
 //       degrees clockwise about (x, y)
@@ -17,7 +17,7 @@
 // Text is set in Helvetica (Arial where the system has no Helvetica), whose widths textWidth gives
 // for layout; PDF writes it as text in the standard font every reader has.
 
-import { PDFPage, ellipsizeText, textWidth } from './pdf.js';
+import { PDFPage, ellipsizeText, parseColor, textWidth } from './pdf.js';
 import { encodePNG } from './png.js';
 
 export { ellipsizeText, textWidth };
@@ -150,8 +150,23 @@ function base64(bytes) {
 }
 
 // The marks as an SVG document of width × height points. options: { title, desc, metadata (text
-// placed in <metadata>, escaped), background }. Deterministic: the same marks, the same text.
+// placed in <metadata>, escaped), background, sized (false: a viewBox only, for a page that sizes
+// it), font }. Deterministic: the same marks, the same text.
 export async function marksToSVG(marks, width, height, options = {}) {
+  const images = [];
+  const collect = (list) => {
+    for (const m of list) {
+      if (m.type === 'image') images.push(m.image);
+      else if (m.type === 'group') collect(m.marks);
+    }
+  };
+  collect(marks);
+  for (const image of images) await pngOf(image);
+  return marksToSVGSync(marks, width, height, options);
+}
+
+// As marksToSVG, without waiting: every image mark has its PNG (image.png) already.
+export function marksToSVGSync(marks, width, height, options = {}) {
   const defs = [];
   const patterns = new Map();
   let clips = 0;
@@ -168,10 +183,11 @@ export async function marksToSVG(marks, width, height, options = {}) {
   const paint = (m) => {
     const fill = m.fill ?? 'none';
     const stroke = m.stroke ? ` stroke="${m.stroke}" stroke-width="${num(m.width ?? 1)}"${m.dash ? ` stroke-dasharray="${m.dash.map(num).join(' ')}"` : ''}` : '';
-    return ` fill="${fill}"${stroke}`;
+    const opacity = m.opacity !== undefined && m.opacity < 1 ? ` opacity="${num(m.opacity)}"` : '';
+    return ` fill="${fill}"${stroke}${opacity}`;
   };
   const title = (m) => (m.title ? `<title>${esc(m.title)}</title>` : '');
-  const write = async (list, out) => {
+  const write = (list, out) => {
     for (const m of list) {
       if (m.type === 'rect') {
         const close = m.title ? `>${title(m)}</rect>` : '/>';
@@ -180,7 +196,7 @@ export async function marksToSVG(marks, width, height, options = {}) {
         const close = m.title ? `>${title(m)}</rect>` : '/>';
         out.push(`<rect x="${num(m.x)}" y="${num(m.y)}" width="${num(m.w)}" height="${num(m.h)}" fill="url(#${pattern(m)})"${close}`);
       } else if (m.type === 'line') {
-        out.push(`<line x1="${num(m.x1)}" y1="${num(m.y1)}" x2="${num(m.x2)}" y2="${num(m.y2)}" stroke="${m.stroke}" stroke-width="${num(m.width ?? 1)}"${m.dash ? ` stroke-dasharray="${m.dash.map(num).join(' ')}"` : ''}/>`);
+        out.push(`<line x1="${num(m.x1)}" y1="${num(m.y1)}" x2="${num(m.x2)}" y2="${num(m.y2)}" stroke="${m.stroke}" stroke-width="${num(m.width ?? 1)}"${m.dash ? ` stroke-dasharray="${m.dash.map(num).join(' ')}"` : ''}${m.opacity !== undefined && m.opacity < 1 ? ` opacity="${num(m.opacity)}"` : ''}/>`);
       } else if (m.type === 'path') {
         const close = m.title ? `>${title(m)}</path>` : '/>';
         out.push(`<path d="${pathText(parsePath(m.d))}"${paint(m)}${close}`);
@@ -191,7 +207,8 @@ export async function marksToSVG(marks, width, height, options = {}) {
         const rotate = m.rotate ? ` transform="rotate(${num(m.rotate)} ${num(m.x)} ${num(m.y)})"` : '';
         out.push(`<text x="${num(m.x)}" y="${num(y)}" font-size="${num(m.size)}"${m.bold ? ' font-weight="bold"' : ''}${m.anchor && m.anchor !== 'start' ? ` text-anchor="${m.anchor}"` : ''} fill="${m.fill ?? '#171b26'}"${rotate}>${esc(m.text)}${title(m)}</text>`);
       } else if (m.type === 'image') {
-        out.push(`<image x="${num(m.x)}" y="${num(m.y)}" width="${num(m.w)}" height="${num(m.h)}" preserveAspectRatio="none"${m.smooth ? '' : ' image-rendering="pixelated"'} href="data:image/png;base64,${base64(await pngOf(m.image))}"/>`);
+        if (!m.image.png) throw new Error('An image mark has no PNG yet: write the SVG with marksToSVG.');
+        out.push(`<image x="${num(m.x)}" y="${num(m.y)}" width="${num(m.w)}" height="${num(m.h)}" preserveAspectRatio="none"${m.smooth ? '' : ' image-rendering="pixelated"'} href="data:image/png;base64,${base64(m.image.png)}"/>`);
       } else if (m.type === 'group') {
         let open = '<g';
         if (m.clip) {
@@ -201,7 +218,7 @@ export async function marksToSVG(marks, width, height, options = {}) {
         }
         if (m.label) open += ` aria-label="${esc(m.label)}"`;
         out.push(`${open}>`);
-        await write(m.marks, out);
+        write(m.marks, out);
         out.push('</g>');
       } else {
         throw new Error(`Unknown mark "${m.type}"`);
@@ -209,8 +226,9 @@ export async function marksToSVG(marks, width, height, options = {}) {
     }
   };
   const body = [];
-  await write(marks, body);
-  const head = [`<svg xmlns="http://www.w3.org/2000/svg" width="${num(width)}pt" height="${num(height)}pt" viewBox="0 0 ${num(width)} ${num(height)}" font-family="${FONT}" role="img">`];
+  write(marks, body);
+  const size = options.sized === false ? '' : ` width="${num(width)}pt" height="${num(height)}pt"`;
+  const head = [`<svg xmlns="http://www.w3.org/2000/svg"${size} viewBox="0 0 ${num(width)} ${num(height)}" font-family="${esc(options.font ?? FONT)}" role="img">`];
   if (options.title) head.push(`<title>${esc(options.title)}</title>`);
   if (options.desc) head.push(`<desc>${esc(options.desc)}</desc>`);
   if (options.metadata) head.push(`<metadata>${esc(options.metadata)}</metadata>`);
@@ -225,6 +243,11 @@ export async function marksToSVG(marks, width, height, options = {}) {
 // something drawImage takes for an image mark (the page makes one from its RGBA).
 export function paintMarks(ctx, marks, { imageOf = null } = {}) {
   const fillStroke = (m) => {
+    const alpha = m.opacity !== undefined && m.opacity < 1;
+    if (alpha) {
+      ctx.save();
+      ctx.globalAlpha = m.opacity;
+    }
     if (m.fill && m.fill !== 'none') {
       ctx.fillStyle = m.fill;
       ctx.fill();
@@ -236,6 +259,7 @@ export function paintMarks(ctx, marks, { imageOf = null } = {}) {
       ctx.stroke();
       ctx.setLineDash?.([]);
     }
+    if (alpha) ctx.restore();
   };
   for (const m of marks) {
     if (m.type === 'rect') {
@@ -263,7 +287,7 @@ export function paintMarks(ctx, marks, { imageOf = null } = {}) {
       ctx.beginPath();
       ctx.moveTo(m.x1, m.y1);
       ctx.lineTo(m.x2, m.y2);
-      fillStroke({ stroke: m.stroke, width: m.width, dash: m.dash });
+      fillStroke({ stroke: m.stroke, width: m.width, dash: m.dash, opacity: m.opacity });
     } else if (m.type === 'path') {
       ctx.beginPath();
       for (const s of parsePath(m.d)) {
@@ -310,9 +334,17 @@ export function paintMarks(ctx, marks, { imageOf = null } = {}) {
 
 // --- PDF --------------------------------------------------------------------------------------------
 
+// A color with an opacity, as lib/pdf.js reads it (a translucent fill or stroke).
+function withOpacity(color, opacity) {
+  if (!color || color === 'none' || opacity === undefined || opacity >= 1) return color;
+  const c = parseColor(color);
+  return c ? `rgba(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}, ${opacity})` : color;
+}
+
 // The marks written on a PDFPage drawn in points (scale 1).
 export function marksToPDF(page, marks) {
-  for (const m of marks) {
+  for (const raw of marks) {
+    const m = raw.opacity !== undefined && raw.opacity < 1 ? { ...raw, fill: withOpacity(raw.fill, raw.opacity), stroke: withOpacity(raw.stroke, raw.opacity) } : raw;
     if (m.type === 'rect') {
       if (m.radius) page.roundRect(m.x, m.y, m.w, m.h, m.radius);
       else page.rect(m.x, m.y, m.w, m.h);
@@ -336,7 +368,7 @@ export function marksToPDF(page, marks) {
         else if (s.op === 'C') page.curveTo(...s.args);
         else page.closePath();
       }
-      page.draw({ fill: m.fill === 'none' ? null : m.fill, stroke: m.stroke ?? null, width: m.width ?? 1 });
+      page.draw({ fill: m.fill === 'none' ? null : m.fill, stroke: m.stroke ?? null, width: m.width ?? 1, dash: m.dash ?? null, join: 1 });
     } else if (m.type === 'circle') {
       const k = 0.5523 * m.r;
       page.moveTo(m.x + m.r, m.y);

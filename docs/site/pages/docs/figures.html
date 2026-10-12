@@ -1,19 +1,30 @@
 ---
 title: Figures
-description: Figures for a paper or a talk: a page at a journal's column width or a slide, the variant-effect map of a run (a condition or a difference between conditions, a range of positions, its tracks, color bar and key) and text as panels, laid out, lettered and exported as SVG, PDF or PNG at a printed resolution; how the figures are checked.
+description: Figures for a paper or a talk: a page at a journal's column width or a slide, its panels any view's plots (the map of a run, a QC finding's charts, the scores by class, a comparison, a variant's evidence, a saved structure view) and text, laid out, lettered and exported as SVG, PDF or PNG at a printed resolution; how the figures are checked.
 lede: A figure is a page of panels at a journal's column width or a slide. Each panel says what it shows, so the figure is drawn again from the analysis whenever you look at it, and follows a rescoring until you export it.
 ---
       <h2 id="what">A figure</h2>
-      <shot name="figures" alt="The Figures view: a page two columns wide holding GRB2's variant-effect map, the target's sequence and each position's median below it, the color bar and the key to its states, and a caption below; panel A selected, its run, condition, coloring, positions and tracks on the right">GRB2's map as panel A of a figure two columns wide, with the sequence and each position's effect below it, and a caption.</shot>
+      <shot name="figures" alt="The Figures view: a page two columns wide holding GRB2's variant-effect map with the target's sequence and each position's effect below it, and below the map three panels: two replicates' log ratios against each other, the scores by class, and p.Trp36Ala's score with each replicate's; panel A selected, its properties on the right">GRB2's map as panel A, with its replicates' agreement, its scores by class and one variant's evidence below it.</shot>
       <p>The <strong>Figures</strong> view holds the workspace's figures. A figure is a page of a set size: one column (85 mm wide), one and a half (114 mm), two columns (174 mm), or a 16:9 slide; any size in millimeters can be typed instead. Its text is set at a size in points at the printed size (7 pt; 14 on a slide), and its panels are lettered A, B, C… in reading order: rows from the top, each from the left.</p>
       <p>A panel keeps what it shows, not a picture of it: the map's run, its condition or contrast, what colors it, the positions and tracks shown. Every time the figure is shown or exported it is drawn again from the workspace, so a figure of a run you rescore shows the new scores. Figures are saved with the workspace and go into its archive (<a href="record.html">Exports and the record</a>).</p>
 
       <h2 id="making">Making a figure</h2>
-      <ul>
-        <li><strong>From the map:</strong> in the Map view, <strong>Add to figure</strong> puts the map as it is shown on a figure, or on a new one: its run, condition or difference between conditions, its coloring, row order and palette, the positions in view when you have zoomed in, and the tracks shown below it.</li>
-        <li><strong>In the Figures view:</strong> <strong>New figure</strong> makes an empty page of a size; <strong>Map</strong> and <strong>Text</strong> (in the page's properties) add a panel, the map of the run in focus.</li>
-      </ul>
-      <p>A new panel goes below those already on the page, as wide as the page.</p>
+      <p><strong>Add to figure</strong> is beside each plot in the views. It puts the plot on a figure, or on a new one, drawn as the view draws it:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>View</th><th>What a panel shows</th></tr></thead>
+          <tbody>
+            <tr><td>Map</td><td>The map as it is shown: its run, condition or difference between conditions, coloring, row order and palette, the positions in view when you have zoomed in, and the tracks shown below it</td></tr>
+            <tr><td>QC</td><td>A finding's charts (in its detail pane): replicate agreement for the pair shown, the variance beyond counting with DiMSum's terms, the depth, coverage, the controls' distributions, and the rest</td></tr>
+            <tr><td>Score</td><td>A run's scores by class, its filter flow, a contrast's volcano</td></tr>
+            <tr><td>Compare</td><td>The comparison shown: one against the other, Bland–Altman, the disagreement by position, a predictor's classes, either side's map or the map of the difference</td></tr>
+            <tr><td>The inspector</td><td>A variant's evidence: its score and 95% interval with each replicate's; in the Figures view, its time course or its distribution over the bins instead</td></tr>
+            <tr><td>Structure</td><td>A saved view, as its figure panel: drawn on white at 4× with its legend, and kept with the figure</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>In the Figures view, <strong>New figure</strong> makes an empty page of a size; <strong>Map</strong> and <strong>Text</strong> (in the page's properties) add a panel. A new panel goes below those already on the page.</p>
+      <p>A panel keeps what it shows: the run and condition, the QC finding of a run, the two sides of a comparison with their scale and filters, the variant. Rescore a run and its panels follow. A structure panel keeps its image, which a 3D view cannot be drawn without: when its saved view is saved again, the figure says so, and <strong>Draw again from the saved view</strong> (in the panel's properties) draws it anew.</p>
 
       <h2 id="layout">Laying out the page</h2>
       <ul>
@@ -22,6 +33,9 @@ lede: A figure is a page of panels at a journal's column width or a slide. Each 
         <li><strong>Exactly:</strong> a panel's place and size in millimeters, and the page's size, name, text size and lettering, are in the properties on the right. A panel can be left without a letter.</li>
       </ul>
       <p>Every change can be undone. Making or deleting a figure and adding or removing a panel are written in the workspace's history; moving and resizing are not.</p>
+
+      <h2 id="plots">Plots as panels</h2>
+      <p>A plot panel lays out its charts in the panel's box at the figure's text size: its title, then for each chart its heading, its legend and the chart, the room shared by what each chart needs. Its properties choose what it shows (a run's flow instead of its scores, a comparison's Bland–Altman instead of its scatter, a variant's time course), its title, and for replicate agreement the pair of replicates. A plot drawn too small to read, or a bar chart whose labels shrink below 6 pt to fit its rows, is said under the page; an image under 300 dpi at its printed size too.</p>
 
       <h2 id="map">The map as a panel</h2>
       <p>A map panel draws the run's map as the Map view does: every state its own way (missing, filtered, low confidence, the reference residue), the medians of each position above and of each substitution at the right, the target's numbering above and the reference's below, the color bar with what it measures, and the key to the states. Its properties choose the run, the condition or a difference between conditions, the coloring, row order and palette, the first and last positions shown, the title, whether the medians and the legend are drawn, and which of the run's tracks go below it.</p>
@@ -38,12 +52,12 @@ lede: A figure is a page of panels at a journal's column width or a slide. Each 
       <p>The same figure is the same bytes when it is exported again (the PDF's creation date aside, which <code>mavescape run</code>'s <code>--time</code> fixes). Scripts make, change and export figures with <code>create_figure</code>, <code>add_figure_panel</code>, <code>set_figure</code> and <code>export_figure</code> (<a href="scripting.html">Remote control</a>). <a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md#figures">FORMATS.md</a> describes a figure's document and files.</p>
 
       <h2 id="validation">How figures are checked</h2>
-      <p>The validation suite draws each example's map as a figure panel with its tracks and checks, for nine examples (<a href="../science.html">Science</a>):</p>
+      <p>The views and figures draw their plots with one module, so a panel is the view's plot at the figure's size. The validation suite checks, on the examples (<a href="../science.html">Science</a>):</p>
       <ul>
-        <li>every cell takes the color the map's own SVG gives it, 9,681 of factor IX's included;</li>
-        <li>the PDF draws what the SVG draws: its content read back gives the same rectangles, in the same order and colors, and the same text;</li>
-        <li>a figure written again is the same bytes, and a figure through the workspace archive is the same figure;</li>
-        <li>no text is under 6 pt at a sensible size, a range of positions holds exactly its cells, and a difference between conditions is drawn as the map draws it.</li>
+        <li>each example's map as a panel: every cell takes the color the map's own SVG gives it, 9,681 of factor IX's included; a range of positions holds exactly its cells; a difference between conditions is drawn as the map draws it;</li>
+        <li>every QC finding with a plot, of eight examples (96 panels): each bar the QC results' value, every point drawn; the scores by class each class's count from the run itself; a contrast's volcano a point for each difference; a variant's evidence each replicate's score and the combined score with its interval, as exported; a comparison a point for every variant compared, where its two scores put it;</li>
+        <li>the PDF draws what the SVG draws, panel of every kind: its content read back gives the same rectangles, in the same order and colors, and the same text; a structure's image is kept byte for byte;</li>
+        <li>a figure written again is the same bytes, and a figure through the workspace archive is the same figure.</li>
       </ul>
-      <p>In the window, through remote control, a figure exported as SVG is the same bytes as Node draws it from the same document and the same run scored in Node, its PDF draws the same marks, and its PNG has the pixels and resolution asked for.</p>
-      <p>Coming next (wave 6): the other views' plots as panels (QC, score distributions, comparisons, robustness, a saved structure view, a variant's evidence), and exported figures that carry the analysis behind them, to be checked or rebuilt.</p>
+      <p>In the window, through remote control: a figure of a QC finding, the scores by class, a comparison and a variant's evidence exported as SVG is the same bytes as Node draws the same document from the runs it recomputes; a saved structure view's panel has the same pixels as the view's own figure panel, and its image goes into the archive.</p>
+      <p>Coming next (wave 6): exported figures that carry the analysis behind them, to be checked or rebuilt.</p>

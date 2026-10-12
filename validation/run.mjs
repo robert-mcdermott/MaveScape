@@ -111,7 +111,12 @@ import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 import { asPDFText, readPDF, readSVG, sameRects } from './figure-cases.mjs';
-import { addPanel, checkFigure, createFigure, figureMarks, figurePDF, figureSVG } from '../web/lib/figures.js';
+import { addPanel, checkFigure, createFigure, figureMarks, figurePDF, figureSVG, mm } from '../web/lib/figures.js';
+import { chartsPanel } from '../web/lib/figure-plots.js';
+import { qcCharts } from '../web/lib/qc-plots.js';
+import { comparisonCharts, comparisonPoints, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
+import { encodePNG } from '../web/lib/png.js';
+import { textMarks } from '../web/lib/draw.js';
 import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, nodeEvidence, openCached, openFixture, paeFixture, pdbFile, positionScores, replayStructureViews, siftsOf, siftsRetrieved } from './structure-cases.mjs';
 import { bhAdjust, clusterTest, CONTACT_DISTANCE, effectsByClass, mannWhitney, MAX_ASA, structureTracks } from '../web/lib/structure-evidence.js';
 import { mappingChanges, mappingSummary } from '../web/lib/structure-record.js';
@@ -4444,6 +4449,117 @@ const suites = {
     const backSVG = back ? await figureSVG(checkFigure(back), new Map([[back.panels[0].id, grb2.resolved.get(grb2.fig.panels[0].id)]])) : null;
     const original = await figureSVG(fig, grb2.resolved);
     check('figures', 'a figure through the workspace archive: the same document, checked as a figure from outside is, and the same SVG drawn from it', `${back ? `${back.panels.length} panels (${back.panels.map((p) => p.kind).join(', ')})` : 'no figure'}; ${backSVG === original ? 'the same SVG' : 'a different SVG'}`, back && JSON.stringify(back) === JSON.stringify(fig) && backSVG === original && text.kind === 'text', 'the same');
+
+    // Wave 6, slice 2: every view's plots as panels, drawing the view's numbers.
+    const qcRows = [];
+    for (const id of ['grb2-sh3', 'hsp90', 'factor9', 'simulated-time-series', 'simulated-sort-seq', 'simulated-barcodes', 'simulated-conditions', 'simulated-problems']) {
+      const g = built.get(id).g;
+      const design = g.run.inputs.design;
+      const qc = computeQC({ ...inputFor(g.o.table, design), design, results: g.results });
+      const t = withDefaultThresholds(null);
+      for (const f of findingsFrom(qc, t)) {
+        const { charts } = qcCharts(f.plot, qc, t);
+        if (!charts.length) continue;
+        const box = { x: 0, y: 0, w: mm(85), h: mm(90) };
+        const drawn = chartsPanel(box, { title: f.title, charts }, { text: 7 });
+        // What each chart drew against the QC results it comes from, read independently.
+        let same = true;
+        drawn.charts.forEach((d, k) => {
+          const c = charts[k];
+          if (c.kind === 'bar') same &&= JSON.stringify(d.drawn.bars.map((b) => b.value)) === JSON.stringify(c.spec.items.map((x) => (Number.isFinite(x.value) && (!c.spec.log || x.value > 0) ? x.value : null)));
+          if (c.kind === 'scatter') same &&= d.drawn.drawn === c.spec.points.filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])).length;
+          if (c.kind === 'histogram') same &&= d.drawn.groups.every((gr) => gr.n === c.spec.groups.find((x) => x.label === gr.label).values.length);
+          if (c.kind === 'line') same &&= d.drawn.series.reduce((a, x) => a + x.points.length, 0) === c.spec.series.reduce((a, x) => a + x.points.filter(([px, py]) => Number.isFinite(px) && Number.isFinite(py) && (!c.spec.xLog || px > 0) && (!c.spec.yLog || py > 0)).length, 0);
+        });
+        if (f.plot === 'depth') same &&= JSON.stringify(drawn.charts[0].drawn.bars.map((b) => b.value)) === JSON.stringify(qc.samples.map((x) => (x.readsPerVariant > 0 ? x.readsPerVariant : null)));
+        if (f.plot === 'agreement') same &&= drawn.charts[0].drawn.drawn === qc.conditions.flatMap((cc) => cc.pairs)[0].points.length;
+        const sizes = textMarks(drawn.marks).map((m) => m.size);
+        qcRows.push({ id, finding: f.id, plot: f.plot, charts: charts.length, same, smallest: Math.min(...sizes), notes: drawn.notes });
+      }
+    }
+    const qcSmall = qcRows.filter((r) => r.smallest < 6);
+    check('figures', 'every QC finding with a plot, of eight examples, as a panel one column wide (85 × 90 mm): its charts drawn with the QC results\' own numbers (each bar the value, every point and line point drawn, each class\'s count; sequencing depth\'s bars every sample\'s reads per variant, agreement\'s points the pair\'s)', `${qcRows.length} panels, ${qcRows.filter((r) => r.same).length} the same; ${qcRows.filter((r) => !r.same).map((r) => `${r.id}/${r.finding}`).join(', ') || 'none different'}`, qcRows.length > 40 && qcRows.every((r) => r.same), 'every one');
+    check('figures', 'the QC panels\' text at 7 pt, a bar\'s label shrunk to its row only where a panel holds many bars, and said', `${qcRows.filter((r) => r.smallest >= 6).length} of ${qcRows.length} with no text under 6 pt; ${qcSmall.map((r) => `${r.id}/${r.finding} ${r.smallest.toFixed(1)} pt`).join(', ') || 'none smaller'}`, qcRows.filter((r) => r.smallest >= 6).length >= qcRows.length * 0.8, 'at least 80% (the rest said in the figure)');
+    // A run's scores by class: each class's count, read from the run's own arrays.
+    const scoreRows = [];
+    for (const id of ['grb2-sh3', 'factor9', 'simulated', 'simulated-conditions']) {
+      const g = built.get(id).g;
+      const out = scoreCharts(g.results, g.run);
+      const drawn = chartsPanel({ x: 0, y: 0, w: mm(85), h: mm(60) }, out, { text: 7 });
+      const c = g.results.conditions[0];
+      const count = (kind) => {
+        let n = 0;
+        for (let i = 0; i < g.results.rows; i += 1) if (!c.reason[i] && g.results.variants.kind[i] === kind && Number.isFinite(c.score[i])) n += 1;
+        return n;
+      };
+      const groups = Object.fromEntries(drawn.charts[0].drawn.groups.map((gr) => [gr.label, gr.n]));
+      scoreRows.push({ id, groups, ok: (groups.Missense ?? 0) === count(KIND.MISSENSE) && (groups.Nonsense ?? 0) === count(KIND.NONSENSE) && (groups.Synonymous ?? 0) === count(KIND.SYNONYMOUS) });
+    }
+    const volcano = scoreCharts(built.get('simulated-conditions').g.results, built.get('simulated-conditions').g.run, { plot: 'volcano' });
+    const d0 = built.get('simulated-conditions').g.results.differential[0];
+    const vDrawn = chartsPanel({ x: 0, y: 0, w: mm(85), h: mm(70) }, volcano, { text: 7 });
+    const vCount = Array.from(d0.reason).filter((r) => !r).length;
+    check('figures', 'a run\'s scores by class as a panel: each class\'s count the run\'s own (synonymous, nonsense, missense); a contrast\'s volcano a point for every variant with a difference', `${scoreRows.map((r) => `${r.id} ${Object.entries(r.groups).map(([k, v]) => `${k.toLowerCase()} ${v}`).join(' ')}`).join('; ')}; volcano ${vDrawn.charts[0].drawn.drawn} of ${vCount}`, scoreRows.every((r) => r.ok) && vDrawn.charts[0].drawn.drawn === vCount, 'the same');
+    // A variant's evidence.
+    const evRows = [];
+    for (const [id, key] of [['grb2-sh3', 'p.Trp36Ala'], ['factor9', null], ['simulated-time-series', null], ['simulated-sort-seq', null]]) {
+      const g = built.get(id).g;
+      const c = g.results.conditions[0];
+      const row = key ? g.results.variants.key.indexOf(key) : Array.from(c.reason).findIndex((r, i) => !r && g.results.variants.kind[i] === KIND.MISSENSE);
+      const name = g.results.variants.key[row];
+      const ev = variantCharts(g.results, g.run, name);
+      const reps = ev.rows.map((r) => r.score);
+      const own = g.results.replicates.filter((r) => c.replicates.includes(r.id) && Number.isFinite(r.score[row])).map((r) => r.score[row]);
+      const [lo, hi] = intervalOf(c, row);
+      const extra = g.run.inputs.parameters.model === 'wls' || g.run.inputs.parameters.model === 'ols' ? variantCharts(g.results, g.run, name, { plot: 'time-course' }) : g.results.replicates.some((r) => r.bins) ? variantCharts(g.results, g.run, name, { plot: 'bins' }) : null;
+      evRows.push({ id, name, ok: JSON.stringify(reps.filter(Number.isFinite)) === JSON.stringify(own) && ev.combined.score === c.score[row] && ev.combined.low === lo && ev.combined.high === hi && (!extra || extra.charts.length === 1), extra: extra?.title ?? null });
+    }
+    check('figures', 'a variant\'s evidence as a panel: each replicate\'s score the run\'s, the combined score and its 95% interval as exported; a time series\' variant its time course, a sort\'s its bins', evRows.map((r) => `${r.id} ${r.name}${r.extra ? ` (and ${r.extra.split(': ')[1]})` : ''} ${r.ok ? 'the same' : 'different'}`).join('; '), evRows.every((r) => r.ok), 'the same');
+    // A comparison: GRB2's Run 1 against its rescoring by the Enrich2-compatible preset.
+    const g2 = built.get('grb2-sh3').g;
+    const enrich2Run = exampleRun('grb2-sh3', { name: 'Run 2', parameters: PRESETS.enrich2.parameters });
+    const sides = [describeSide(g2.ws, g2.run, g2.results, { condition: 0 }), describeSide(g2.ws, enrich2Run.run, enrich2Run.results, { condition: 0 })];
+    // As the Compare view computes it (ui/mode-compare.js): compareSides, with its sides.
+    const cmp = { ...compareSides(sides[0], sides[1]), sides };
+    const agreement = chartsPanel({ x: 0, y: 0, w: mm(85), h: mm(80) }, comparisonCharts(cmp, 'agreement'), { text: 7 });
+    const ba = comparisonCharts(cmp, 'bland-altman');
+    const pos = comparisonCharts(cmp, 'positions');
+    const hits = agreement.charts[0].drawn.hits;
+    const { order } = comparisonPoints(cmp.x, cmp.y, Uint8Array.from(cmp.rows, ([i]) => cmp.values.a.kind[i]));
+    // The points' order on the page: x rank against the comparison's x rank.
+    let monotone = true;
+    for (let j = 1; j < order.length; j += 1) if ((cmp.x[order[j]] - cmp.x[order[j - 1]]) * (hits.px[j] - hits.px[j - 1]) < -1e-9) monotone = false;
+    check('figures', 'a comparison as panels (GRB2\'s Run 1 against its Enrich2 rescoring): a point for every variant compared, where its two scores put it; Bland–Altman, or why not; the disagreement by position, or why not', `${agreement.charts[0].drawn.drawn} of ${cmp.rows.length} points${monotone ? ', in order' : ', out of order'}; Bland–Altman ${ba.charts.length ? 'drawn' : `not: ${ba.reason}`}; by position ${pos.charts.length ? `${pos.charts[0].spec.list.length} positions` : `not: ${pos.reason}`}`, agreement.charts[0].drawn.drawn === cmp.rows.length && monotone && (ba.charts.length || ba.reason) && (pos.charts.length || pos.reason), 'every point');
+    // A figure of every kind written as SVG and PDF: the PDF draws the SVG's marks; an image's pixels kept.
+    let all = createFigure('Every kind', 'double', { height: mm(240) });
+    const gq = built.get('grb2-sh3').g;
+    const qcG = computeQC({ ...inputFor(gq.o.table, gq.run.inputs.design), design: gq.run.inputs.design, results: gq.results });
+    const rgba = new Uint8Array(40 * 30 * 4).map((_, i) => (i % 4 === 3 ? 255 : (i * 7) % 256));
+    const imagePng = await encodePNG(rgba, 40, 30);
+    const kinds = [
+      [{ kind: 'qc', subject: gq.run.id, finding: 'agreement', pair: 0, x: 8, y: 8, w: 236, h: 180 }, { title: 'Replicate agreement', charts: qcCharts('agreement', qcG, withDefaultThresholds(null)).charts }],
+      [{ kind: 'scores', run: gq.run.id, plot: 'distribution', x: 250, y: 8, w: 236, h: 180 }, scoreCharts(gq.results, gq.run)],
+      [{ kind: 'compare', a: { run: gq.run.id, condition: 0 }, b: { run: enrich2Run.run.id, condition: 0 }, plot: 'agreement', x: 8, y: 196, w: 236, h: 200 }, comparisonCharts(cmp, 'agreement')],
+      [{ kind: 'variant', run: gq.run.id, variant: 'p.Trp36Ala', plot: 'evidence', x: 250, y: 196, w: 236, h: 140 }, variantCharts(gq.results, gq.run, 'p.Trp36Ala')],
+      [{ kind: 'structure', view: 'core', image: { sha256: sha256(imagePng), width: 40, height: 30, drawn: '2026-10-12T00:00:00.000Z' }, x: 8, y: 404, w: 236, h: 200 }, { image: { width: 40, height: 30, rgba, png: imagePng }, title: 'Core' }],
+    ];
+    const resolvedAll = new Map();
+    for (const [panel, data] of kinds) {
+      let placed;
+      ({ figure: all, panel: placed } = addPanel(all, panel));
+      resolvedAll.set(placed.id, data);
+    }
+    checkFigure(all);
+    const allSVG = await figureSVG(all, resolvedAll);
+    const allPDF = await figurePDF(all, resolvedAll, { date });
+    const sv = readSVG(allSVG);
+    const pd = readPDF(allPDF);
+    const allRects = sameRects(sv.rects, pd.rects);
+    const svgT = asPDFText(sv.texts).map((b) => String.fromCharCode(...b));
+    const pdfT = pd.texts.map((b) => String.fromCharCode(...b));
+    const embedded = Buffer.from(allSVG.match(/href="data:image\/png;base64,([^"]+)"/)?.[1] ?? '', 'base64');
+    const pdfImage = Buffer.from(allPDF).toString('latin1').match(/\/Subtype \/Image \/Width (\d+) \/Height (\d+)/);
+    check('figures', 'a figure of every kind of panel (QC, scores, comparison, variant, structure, beside the maps above): the PDF draws the SVG\'s rectangles and text mark for mark; the structure\'s image is its PNG byte for byte in the SVG, at its own pixels in the PDF', `${allRects.why}; ${pdfT.length} strings ${svgT.join('|') === pdfT.join('|') ? 'alike' : 'differ'}; image ${Buffer.compare(embedded, Buffer.from(imagePng)) === 0 ? 'the PNG' : 'not the PNG'}, PDF image ${pdfImage ? `${pdfImage[1]} × ${pdfImage[2]}` : 'none'}`, allRects.ok && svgT.join('|') === pdfT.join('|') && Buffer.compare(embedded, Buffer.from(imagePng)) === 0 && pdfImage?.[1] === '40' && pdfImage?.[2] === '30', 'the same');
   },
 };
 

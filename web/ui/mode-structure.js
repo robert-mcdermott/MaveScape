@@ -33,6 +33,7 @@ import { colorStructure, coloringControls, createPositionStrip, positionWords, s
 import { coloringCSV } from '../lib/structure-scores.js';
 import { computeEvidence, evidenceState, evidenceStatistics, evidenceValues } from './structure-evidence.js';
 import { CLASSES, CLASS_BY_ID, describeClusters, describeEffects, evidenceCSV, SS_WORDS } from '../lib/structure-evidence.js';
+import { figureButton, drawStructureImage } from './figure-data.js';
 import { figurePanel, openView, removeView, saveView } from './structure-views.js';
 import { findProteoscope, handOff } from './proteoscope.js';
 import { structureWords, viewWords } from '../lib/structure-record.js';
@@ -486,6 +487,12 @@ export function mountStructureMode(app, container) {
         { label: 'Image (PNG, twice the view\'s size)', icon: 'download', onSelect: saveImage },
         { label: 'Figure panel (PNG, 4×, with its legend and what it shows)', icon: 'download', onSelect: savePanel },
       ]) }, icon('download'), 'Image'),
+      // Wave 6, slice 2: a saved view's figure panel on a figure, drawn at 4× and kept with it.
+      figureButton(app, async () => {
+        if (!state.view) throw new Error('A structure panel shows a saved view: save this view first (Saved views).');
+        const image = await drawStructureImage(app, state.view);
+        return { kind: 'structure', view: state.view, image, w: 220, h: 220 };
+      }, 'the structure view', { title: 'The saved view open here as a figure panel (4× with its legend), kept with the figure' }),
       // Wave 5, slice 6: only when a Proteoscope is running on this computer.
       state.proteoscope?.found
         ? h('button.btn.small.proteoscope-handoff', { type: 'button', title: `Open this view in Proteoscope ${state.proteoscope.version}, running on this computer: the structure, the scores as its residue data, the residues selected, drawn and labeled, the camera${state.proteoscope.tested ? '' : ` (a version MaveScape was not tested with: the structure alone, the view in a session file)`}`, onclick: openInProteoscope }, icon('structure'), 'Proteoscope')

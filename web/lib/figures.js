@@ -10,6 +10,7 @@
 import { FONT, marksToSVG, pdfPage, textMarks, textWidth } from './draw.js';
 import { writePDF } from './pdf.js';
 import { mapPanel, mapTitle, MIN_TEXT } from './figure-map.js';
+import { chartsPanel, imagePanel } from './figure-plots.js';
 import { newId } from './clock.js';
 
 export const FIGURE_FORMAT = 'mavescape-figure';
@@ -27,7 +28,19 @@ export const FIGURE_SIZES = [
 
 export const PANEL_KINDS = {
   map: 'Variant-effect map',
+  qc: 'Quality control',
+  scores: 'Scores',
+  compare: 'Comparison',
+  variant: 'A variant\'s evidence',
+  structure: 'Structure',
   text: 'Text',
+};
+
+// What each kind of panel can show (its plot).
+export const PANEL_PLOTS = {
+  scores: { distribution: 'Score distributions by class', flow: 'The filter flow', volcano: 'Differences against their p (a contrast)' },
+  compare: { agreement: 'One against the other', 'bland-altman': 'Bland–Altman', positions: 'Disagreement by position', classes: 'A predictor\'s classes', 'map-first': 'The first side\'s map', 'map-second': 'The second side\'s map', 'map-difference': 'The map of the difference' },
+  variant: { evidence: 'The score and each replicate\'s, with their intervals', 'time-course': 'The time course', bins: 'The distribution over the bins' },
 };
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -70,6 +83,12 @@ function checkPanel(p, fig) {
     if (p.tracks !== undefined && (!Array.isArray(p.tracks) || p.tracks.some((t) => typeof t !== 'string'))) throw new Error(`Panel ${p.id}: tracks is a list of track ids.`);
   }
   if (p.kind === 'text' && typeof p.text !== 'string') throw new Error(`Panel ${p.id}: a text panel has its text.`);
+  if (PANEL_PLOTS[p.kind] && !PANEL_PLOTS[p.kind][p.plot]) throw new Error(`Panel ${p.id}: a ${p.kind} panel shows ${Object.keys(PANEL_PLOTS[p.kind]).join(', ')}, not "${p.plot}".`);
+  if (p.kind === 'qc' && (typeof p.finding !== 'string' || (p.subject !== 'counts' && typeof p.subject !== 'string'))) throw new Error(`Panel ${p.id}: a QC panel names its subject (a run, or "counts") and its finding.`);
+  if ((p.kind === 'scores' || p.kind === 'variant') && typeof p.run !== 'string') throw new Error(`Panel ${p.id}: a ${p.kind} panel names its run.`);
+  if (p.kind === 'variant' && typeof p.variant !== 'string') throw new Error(`Panel ${p.id}: a variant panel names its variant.`);
+  if (p.kind === 'compare' && (!p.a || typeof p.a !== 'object' || !p.b || typeof p.b !== 'object')) throw new Error(`Panel ${p.id}: a comparison panel names its two sides.`);
+  if (p.kind === 'structure' && (typeof p.view !== 'string' || !/^[0-9a-f]{64}$/.test(p.image?.sha256 ?? '') || !(p.image.width > 0 && p.image.height > 0))) throw new Error(`Panel ${p.id}: a structure panel names its saved view and its image (SHA-256, width and height).`);
 }
 
 export function checkFigure(fig) {
@@ -102,11 +121,14 @@ export function panelId(fig) {
 export function addPanel(fig, panel) {
   const gap = 8;
   const bottom = fig.panels.reduce((y, p) => Math.max(y, p.y + p.h), 0);
-  const w = Math.min(panel.w ?? fig.width - 2 * gap, fig.width - 2 * gap);
+  const x = panel.x ?? gap;
+  const w = Math.min(panel.w ?? fig.width - 2 * gap, fig.width - x - (panel.x === undefined ? gap : 0));
   const room = fig.height - (bottom ? bottom + gap : gap) - gap;
   const h = Math.min(panel.h ?? Math.max(60, room), fig.height - 2 * gap);
-  const y = room >= Math.min(h, 60) ? (bottom ? bottom + gap : gap) : gap;
-  const placed = { id: panel.id ?? panelId(fig), ...panel, x: round(panel.x ?? gap), y: round(panel.y ?? y), w: round(w), h: round(Math.min(h, fig.height - y - gap) > 20 ? Math.min(h, fig.height - y - gap) : h) };
+  // Where it was placed, or below the panels already there (at the top when there is no room).
+  const y = panel.y ?? (room >= Math.min(h, 60) ? (bottom ? bottom + gap : gap) : gap);
+  const fits = Math.min(h, fig.height - y - (panel.y === undefined ? gap : 0));
+  const placed = { id: panel.id ?? panelId(fig), ...panel, x: round(x), y: round(y), w: round(w), h: round(fits > 20 ? fits : h) };
   return { figure: { ...fig, panels: [...fig.panels, placed] }, panel: placed };
 }
 
@@ -188,6 +210,12 @@ function missingPanel(box, message, fig) {
 // What a panel shows, in a few words (the view's list, the history).
 export function panelSummary(panel, ws = null) {
   if (panel.kind === 'text') return `text "${panel.text.length > 40 ? `${panel.text.slice(0, 39)}…` : panel.text}"`;
+  const runName = (id) => ws?.runs?.find((r) => r.id === id)?.name ?? id;
+  if (panel.kind === 'qc') return `the QC finding "${panel.findingTitle ?? panel.finding}" of ${panel.subject === 'counts' ? 'the counts' : runName(panel.subject)}`;
+  if (panel.kind === 'scores') return `${(PANEL_PLOTS.scores[panel.plot] ?? panel.plot).toLowerCase()} of ${runName(panel.run)}`;
+  if (panel.kind === 'compare') return `the comparison of ${panel.labels?.a ?? 'two sides'} and ${panel.labels?.b ?? ''}: ${(PANEL_PLOTS.compare[panel.plot] ?? panel.plot).toLowerCase()}`.replace(/ and : /, ': ');
+  if (panel.kind === 'variant') return `the evidence of ${panel.variant} in ${runName(panel.run)}${panel.plot === 'evidence' ? '' : ` (${(PANEL_PLOTS.variant[panel.plot] ?? panel.plot).toLowerCase()})`}`;
+  if (panel.kind === 'structure') return `the structure view "${ws?.structureViews?.find((v) => v.id === panel.view)?.name ?? panel.view}"`;
   if (panel.kind === 'map') {
     const run = ws?.runs?.find((r) => r.id === panel.run);
     const what = panel.contrast !== null && panel.contrast !== undefined ? 'the differential map' : 'the map';
@@ -197,8 +225,9 @@ export function panelSummary(panel, ws = null) {
   return panel.kind;
 }
 
-// The page as marks. resolved: Map(panel id → the panel's data: a map's { model, results, tracks },
-// or { missing: message } when it cannot be drawn). Returns { marks, panels: [{ id, letter, kind,
+// The page as marks. resolved: Map(panel id → the panel's data: a map's { model, results, tracks };
+// a plot's { title, charts, description, reason } (lib/figure-plots.js); an image's { image, title,
+// description }; notes to say beside any; or { missing: message } when it cannot be drawn). Returns { marks, panels: [{ id, letter, kind,
 // description, notes }], description, notes, smallest (the smallest text, pt) }.
 export function figureMarks(fig, resolved) {
   const letters = fig.letters ? panelLetters(fig) : new Map();
@@ -213,8 +242,11 @@ export function figureMarks(fig, resolved) {
     let drawn;
     if (panel.kind === 'text') drawn = textPanel(box, panel, fig);
     else if (!data || data.missing) drawn = missingPanel(box, data?.missing ?? 'Not drawn yet', fig);
-    else if (panel.kind === 'map') drawn = mapPanel(box, data, { ...panel, text: fig.text });
+    else if (data.model) drawn = mapPanel(box, data, { ...panel, text: fig.text });
+    else if (data.image) drawn = imagePanel(box, data, { text: fig.text, title: panel.title });
+    else if (data.charts) drawn = chartsPanel(box, data, { text: fig.text, title: panel.title });
     else drawn = missingPanel(box, `MaveScape does not draw "${panel.kind}" panels.`, fig);
+    if (data?.notes?.length) drawn = { ...drawn, notes: [...data.notes, ...(drawn.notes ?? [])] };
     const children = [...drawn.marks];
     if (letter) children.unshift({ type: 'text', x: panel.x, y: panel.y, text: letter, size: letterSize, bold: true, fill: INK, baseline: 'top' });
     marks.push({ type: 'group', clip: { x: panel.x, y: panel.y, w: panel.w, h: panel.h }, label: letter ? `Panel ${letter}` : panel.id, marks: children });

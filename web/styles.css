@@ -877,10 +877,7 @@ ul.advice li { line-height: 1.45; }
 .qc-thresholds table.data { margin-top: 10px; }
 input.qc-threshold { width: 74px; text-align: right; padding: 3px 6px; }
 .warn-text { color: var(--warn-text); }
-.coverage-grid { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 2px 4px; align-items: start; }
-.coverage-rows { display: flex; flex-direction: column; font-size: 7px; line-height: 8px; color: var(--text-3); font-family: var(--mono); }
-.coverage-rows span { height: 8px; }
-.coverage-tip, .coverage-grid .legend { grid-column: 1 / -1; }
+.coverage-grid { display: flex; flex-direction: column; gap: 2px; align-items: stretch; }
 .coverage-tip { font-size: 11.5px; color: var(--text-2); min-height: 16px; }
 
 /* ---------- MaveScape: the Map view (ui/mode-map.js, ui/variant-map.js) ---------- */

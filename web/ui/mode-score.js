@@ -20,7 +20,10 @@ import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE, STAGE_BY_ID } from '..
 import { addRun, describeMethod, describeParameters, isBarcodeRun, makeRun, nextRunName, removeRun, runId, runInputs, unitOf } from '../lib/runs.js';
 import { canonicalJSON } from '../lib/workspace.js';
 import { KIND_NAMES } from '../lib/variants.js';
-import { classHistogram, cssVar, flowBars, legend, scatter, scoreGroups } from './plots.js';
+import { classHistogram, flowBars, legend, scatter, scoreGroups, viewTheme } from './plots.js';
+import { volcanoChart } from '../lib/view-plots.js';
+import { figureButton } from './figure-data.js';
+import { possessive } from '../lib/words.js';
 import { runScore, workerInput } from './score-input.js';
 import { ensureResults, forgetResults } from './run-results.js';
 import { runExportItems } from './record.js';
@@ -488,9 +491,9 @@ export function mountScoreMode(app, container) {
     const lowConfidence = c.flags.reduce((a, x, i) => a + (x && !c.reason[i] ? 1 : 0), 0);
     return [head,
       h('div.score-grid',
-        h('div.pane', h('h3', icon('filter'), 'Filter flow'), tabs, flowView(c),
+        h('div.pane', h('h3', icon('filter'), 'Filter flow', h('span.spacer'), figureButton(app, () => ({ kind: 'scores', run: run.id, condition: view.condition, plot: 'flow', h: 150 }), `${possessive(run.name)} filter flow`)), tabs, flowView(c),
           h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, `${formatCount(c.scored)} scored${lowConfidence ? `, ${formatCount(lowConfidence)} with low confidence` : ''}; NA for the rest, each with its stage.${c.rescale ? ` Rescaled: ${c.rescale.anchors.map((a) => `${a.what} ${fmt(a.from)} → ${a.to}`).join(', ')}.` : ''}`)),
-        h('div.pane', h('h3', icon('histogram'), 'Scores by class'), histogram(c, results))),
+        h('div.pane', h('h3', icon('histogram'), 'Scores by class', h('span.spacer'), figureButton(app, () => ({ kind: 'scores', run: run.id, condition: view.condition, plot: 'distribution', h: 150 }), `${possessive(run.name)} scores by class`)), histogram(c, results))),
       h('div.pane.replicates-pane', h('h3', icon('experiment'), 'Replicates'), replicatesTable(results, c, p)),
       results.differential?.length ? h('div.pane.differential-pane', h('h3', icon('compare'), 'Between conditions'), ...results.differential.flatMap((d) => differentialView(results, d, p, run))) : null,
       h('div.pane', h('h3', icon('table'), 'Variants'), variantsTable(results, c, run))];
@@ -505,15 +508,15 @@ export function mountScoreMode(app, container) {
     const lower = called.filter((i) => d.delta[i] < 0).length;
     const method = d.method === 'limma' ? `limma's moderated t (as mutscan), relative to the ${p.normalization === 'wt' ? 'wild type' : 'synonymous variants'}; prior variance on ${Number.isFinite(d.prior.df) ? d.prior.df.toFixed(1) : '∞'} degrees of freedom`
       : d.method === 'paired' ? `replicates paired by their shared input (${d.pairs.length} pair${d.pairs.length === 1 ? '' : 's'}), combined by ${COMBINATIONS[p.combination]}` : 'the conditions as independent (Enrich2\'s z)';
-    const colorOf = (g) => (g ? cssVar('--danger') : cssVar('--text-3'));
-    const points = rows.map((i) => [d.delta[i], -Math.log10(Math.max(d.p[i], 1e-300)), d.q[i] < 0.05 ? 1 : 0]);
+    const volcano = volcanoChart(d, viewTheme());
     const top = called.slice().sort((a, b) => d.p[a] - d.p[b]).slice(0, 8);
     const q = (x) => (x < 0.001 ? x.toExponential(1) : x.toFixed(3));
+    const contrast = results.differential.indexOf(d);
     return [
-      h('h4', d.name),
+      h('div.row', h('h4', { style: { margin: 0 } }, d.name), h('span.spacer'), figureButton(app, () => ({ kind: 'scores', run: run.id, contrast, plot: 'volcano', h: 180 }), `the volcano of ${d.name}`)),
       h('p.muted', { style: { fontSize: '12px', margin: '0 0 6px' } }, `${formatCount(rows.length)} variants compared, by ${method}. ${formatCount(called.length)} differ at q < 0.05 (Benjamini–Hochberg): ${formatCount(lower)} lower in ${d.name.split(' vs ')[0]}, ${formatCount(called.length - lower)} higher.${d.note ? ` ${d.note}` : ''}`),
-      scatter({ points, colorOf, xLabel: 'difference (natural log)', yLabel: '−log10 p', label: `${d.name}: each variant's difference against −log10 of its p-value; red where q < 0.05`, height: 220 }),
-      legend([{ label: 'q < 0.05', color: cssVar('--danger') }, { label: 'the others', color: cssVar('--text-3') }]),
+      scatter({ ...volcano.spec, height: 220 }),
+      legend(volcano.legend),
       top.length ? h('table.data.compact', { style: { marginTop: '8px' } }, h('thead', h('tr', h('th', 'Largest differences'), h('th.r', 'Difference'), h('th.r', 'q'))),
         h('tbody', ...top.map((i) => h('tr', { style: { cursor: 'pointer' }, onclick: () => app.focusItem({ kind: 'variant', id: results.variants.key[i], run: run.id, condition: results.conditions.findIndex((x) => x.id === d.condition) }) },
           h('td.mono', results.variants.original[i]), h('td.r', `${fmt(d.delta[i], 2)} ± ${fmt(d.se[i], 2)}`), h('td.r', q(d.q[i])))))) : null,

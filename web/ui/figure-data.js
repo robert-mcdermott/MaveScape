@@ -14,6 +14,18 @@ import { saveFigure } from '../lib/workspace.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { runTracks } from './tracks.js';
 import { possessive } from '../lib/words.js';
+import { h, icon } from './dom.js';
+import { showMenu, toast } from './overlays.js';
+import { computeQc, qcInputsOf, qcSubjects } from './mode-qc.js';
+import { findingsFrom, withDefaultThresholds } from '../lib/findings.js';
+import { qcPanelData } from '../lib/qc-plots.js';
+import { comparisonCharts, scoreCharts, variantCharts } from '../lib/view-plots.js';
+import { comparisonMapModels, computeComparison } from './mode-compare.js';
+import { NO_FILTERS } from '../lib/compare.js';
+import { storeBytes } from './import.js';
+import { figurePanel, openView } from './structure-views.js';
+import { structureState } from './mode-structure.js';
+import { PANEL_KEYWORD, pngTexts } from '../lib/structure-record.js';
 
 // A map panel's data: { model, results, tracks, run } or { missing: why it cannot be drawn }.
 async function mapData(app, panel) {
@@ -39,13 +51,128 @@ async function mapData(app, panel) {
   return { run, model, results, tracks };
 }
 
+// A run's results by its id: { run, own (its results), results (a nucleotide run's protein view
+// where it has one) } or { missing }.
+async function runResults(app, id) {
+  const run = app.store.ws.runs.find((r) => r.id === id);
+  if (!run) return { missing: `The run ${id} is no longer in the workspace.` };
+  const entry = runEntry(app, run)?.results ? runEntry(app, run) : await ensureResults(app, run);
+  if (!entry?.results) return { missing: `${possessive(run.name)} scores could not be recomputed${entry?.message ? `: ${entry.message}` : '.'}` };
+  return { run, own: entry.results, results: proteinView(entry.results) ?? entry.results };
+}
+
+// A QC panel's charts: the finding's, as the QC view draws them (lib/qc-plots.js), of a run or of
+// the counts with the current design.
+async function qcData(app, panel) {
+  const ws = app.store.ws;
+  const sub = qcSubjects(ws).find((o) => o.id === (panel.subject === 'counts' ? 'counts' : `run:${panel.subject}`));
+  if (!sub) return { missing: panel.subject === 'counts' ? 'The counts have no design to check now.' : `The run ${panel.subject} is no longer in the workspace.` };
+  const inputs = qcInputsOf(ws, sub);
+  if (inputs.problem) return { missing: inputs.problem };
+  const entry = await computeQc(app, inputs);
+  if (entry.status !== 'done') return { missing: `Quality control could not be computed: ${entry.message ?? 'unknown'}` };
+  const t = withDefaultThresholds(ws.qc?.thresholds);
+  const finding = findingsFrom(entry.qc, t, { acknowledged: ws.qc?.acknowledged }).find((f) => f.id === panel.finding);
+  if (!finding) return { missing: `The finding "${panel.findingTitle ?? panel.finding}" is not raised for ${sub.label} now.` };
+  return qcPanelData(finding, entry.qc, t, { pair: panel.pair ?? 0 });
+}
+
+async function scoresData(app, panel) {
+  const got = await runResults(app, panel.run);
+  if (got.missing) return got;
+  return scoreCharts(got.own, got.run, { condition: panel.condition ?? 0, contrast: panel.contrast ?? 0, plot: panel.plot });
+}
+
+// A comparison panel: its charts (lib/view-plots.js) or one of its maps.
+async function compareData(app, panel) {
+  const map = panel.plot.startsWith('map-');
+  const c = await computeComparison(app, { a: panel.a, b: panel.b }, panel.filters ?? { ...NO_FILTERS }, map ? 'protein' : null, panel.scale ?? 'scored');
+  if (c.error) return { missing: c.error };
+  if (!c.statistics) return { missing: `${c.a.label} and ${c.b.label} cannot be compared: ${c.report.items.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}` };
+  if (map) {
+    const which = panel.plot.slice(4);
+    const m = comparisonMapModels(c)[which];
+    if (!m) return { missing: which === 'difference' ? 'No map of the difference: the two are not on one scale at the protein level.' : `No map of the ${which} side.` };
+    return { ...m, tracks: [] };
+  }
+  return comparisonCharts(c, panel.plot);
+}
+
+async function variantData(app, panel) {
+  const got = await runResults(app, panel.run);
+  if (got.missing) return got;
+  // A protein variant of a nucleotide run is in its protein view.
+  const results = got.own.variants.key.includes(panel.variant) ? got.own : got.results;
+  return variantCharts(results, got.run, panel.variant, { condition: panel.condition ?? 0, plot: panel.plot });
+}
+
+// A structure panel's image (wave 5's figure panel of the saved view, kept in the library by its
+// SHA-256), decoded once, and what it shows.
+const images = new Map();
+async function structureData(app, panel) {
+  const ws = app.store.ws;
+  const sha = panel.image.sha256;
+  if (!images.has(sha)) {
+    images.set(sha, (async () => {
+      const bytes = await app.library.getFile(sha);
+      if (!bytes) return null;
+      const png = bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer());
+      const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }));
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      const rgba = new Uint8Array(ctx.getImageData(0, 0, bitmap.width, bitmap.height).data.buffer);
+      let metadata = null;
+      try {
+        metadata = JSON.parse(pngTexts(png).get(PANEL_KEYWORD) ?? 'null');
+      } catch {
+        metadata = null;
+      }
+      return { image: { width: bitmap.width, height: bitmap.height, rgba, png }, metadata };
+    })());
+    images.get(sha).catch(() => images.delete(sha));
+  }
+  const got = await images.get(sha);
+  if (!got) return { missing: 'The structure image is not in the library: draw it again from its saved view.' };
+  const view = (ws.structureViews ?? []).find((v) => v.id === panel.view);
+  const notes = [];
+  if (!view) notes.push('Its saved view was removed: the image is the one drawn from it then.');
+  else if (view.created !== panel.image.drawn) notes.push(`The view "${view.name}" was saved again since its image was drawn: draw it again.`);
+  const meta = got.metadata;
+  const what = meta?.coloring?.label ? `, colored by ${meta.coloring.label}${meta.coloring.source ? ` (${meta.coloring.source})` : ''}` : '';
+  return { image: got.image, title: view?.name ?? meta?.view?.name ?? null, description: `The structure ${meta?.structure?.name ?? ''}${view ? ` as the view "${view.name}" shows it` : ''}${what}.`.replace(/ {2,}/g, ' '), notes };
+}
+
+const RESOLVERS = { map: mapData, qc: qcData, scores: scoresData, compare: compareData, variant: variantData, structure: structureData };
+
 // Map(panel id → data) for every panel that needs data.
 export async function resolveFigure(app, fig) {
   const out = new Map();
   for (const panel of fig.panels) {
-    if (panel.kind === 'map') out.set(panel.id, await mapData(app, panel));
+    const resolve = RESOLVERS[panel.kind];
+    if (!resolve) continue;
+    try {
+      out.set(panel.id, await resolve(app, panel));
+    } catch (error) {
+      out.set(panel.id, { missing: error.message });
+    }
   }
   return out;
+}
+
+// The image of a saved structure view, drawn for a figure (wave 5's figure panel, 4× the view) and
+// kept in the library: the structure panel's image field. The view is opened in the Structure
+// view first when it is not the one open.
+export async function drawStructureImage(app, viewId, { scale = 4 } = {}) {
+  const view = (app.store.ws.structureViews ?? []).find((v) => v.id === viewId);
+  if (!view) throw new Error(`There is no saved view ${viewId}.`);
+  if (structureState(app).view !== view.id || !structureState(app).viewer?.structure) {
+    const opened = await openView(app, view.id);
+    if (!opened.ok) throw new Error(opened.message);
+  }
+  const panel = await figurePanel(app, { scale, light: true });
+  const stored = await storeBytes(app, panel.bytes);
+  return { sha256: stored.sha256, width: panel.metadata.image.width, height: panel.metadata.image.height, scale, drawn: view.created };
 }
 
 // The figure drawn: figureMarks with the data gathered.
@@ -157,4 +284,31 @@ export function addToFigure(app, figureId, panel, { name = null, size = 'double'
   const detail = made ? `Made the figure "${fig.name}" with ${what}` : `Added to the figure "${fig.name}" ${what}`;
   store.commit(saveFigure(store.ws, fig, detail), made ? 'New figure' : 'Add to figure');
   return { figure: fig, panel: added.panel };
+}
+
+// "Add to figure": a menu of the workspace's figures and a new one; make() gives the panel (it may
+// draw first: a structure's image). what: the panel in words, for the message.
+export function figureMenu(app, anchor, make, what) {
+  const add = async (id) => {
+    try {
+      const panel = await make();
+      const { figure, panel: placed } = addToFigure(app, id, panel);
+      app.log(`Added ${what} to the figure "${figure.name}".`);
+      toast(`Added ${what} to ${figure.name}.`, { kind: 'ok', action: { label: 'Open Figures', onClick: () => { app.figuresView = { figure: figure.id, panel: placed.id }; app.setMode('figures'); } } });
+    } catch (error) {
+      toast(error.message, { kind: 'error' });
+    }
+  };
+  const figures = app.store.ws.figures ?? [];
+  showMenu(anchor, [
+    { section: 'Add to figure' },
+    ...figures.map((f) => ({ label: f.name, hint: `${f.panels.length} panel${f.panels.length === 1 ? '' : 's'}`, icon: 'figure', onSelect: () => add(f.id) })),
+    ...(figures.length ? ['-'] : []),
+    { label: 'A new figure (two columns)', icon: 'plus', onSelect: () => add(null) },
+  ]);
+}
+
+// A small "Add to figure" button for a view's plot.
+export function figureButton(app, make, what, { title = 'Put this plot on a figure (the Figures view), drawn again from the analysis until you export it' } = {}) {
+  return h('button.btn.small.figure-add', { type: 'button', title, onclick: (event) => figureMenu(app, event.currentTarget, make, what) }, icon('figure'), 'Add to figure');
 }
