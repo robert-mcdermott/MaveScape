@@ -386,6 +386,17 @@ try {
     } else {
       check('mavescape export --format figures: the window wrote a figure to export again', 'the window\'s figure was not written', false);
     }
+    // --format report (wave 6, slice 4): the workspace's report, as the window wrote it into the archive.
+    if (windowFigure) {
+      const p1 = await mavescape(['export', '--format', 'report', '--out', out('rep1'), '--time', TIME, windowFigure.archive]);
+      const p2 = await mavescape(['export', '--format', 'report', '--out', out('rep2'), '--time', TIME, windowFigure.archive]);
+      const { report } = await readArchive(readFileSync(windowFigure.archive));
+      const md = existsSync(join(out('rep1'), 'report.md')) ? readFileSync(join(out('rep1'), 'report.md'), 'utf8') : '';
+      const bib = existsSync(join(out('rep1'), 'report.bib')) ? readFileSync(join(out('rep1'), 'report.bib'), 'utf8') : '';
+      const refusedReport = await mavescape(['export', '--format', 'report', '--condition', '1', '--out', out('rep3'), windowFigure.archive]);
+      check('mavescape export --format report: the workspace\'s report (report.md) and its references (report.bib), twice the same bytes, as the window wrote them into its archive; a run or condition given exits 2', `exit ${p1.code}; ${listed(out('rep1')).join(', ')}; ${sameFiles(out('rep1'), out('rep2')) ? 'twice the same' : 'not the same twice'}; ${md === report?.markdown && bib === report?.bibtex ? 'the archive\'s' : 'not the archive\'s'}; ${md.split('\n')[0]}; exit ${refusedReport.code}`,
+        p1.code === 0 && p2.code === 0 && listed(out('rep1')).join() === 'report.bib,report.md' && sameFiles(out('rep1'), out('rep2')) && md === report?.markdown && bib === report?.bibtex && /^# Methods: /.test(md) && /## Figures/.test(md) && refusedReport.code === 2);
+    }
   }
 } catch (error) {
   check('the headless runs ran to the end', error.stack ?? error.message, false);

@@ -12,25 +12,39 @@ import { proteinView } from '../lib/collapse.js';
 import { writeMethods } from '../lib/methods.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../lib/findings.js';
 import { sha256 } from '../lib/sha256.js';
-import { change } from '../lib/workspace.js';
+import { canonicalJSON, change } from '../lib/workspace.js';
 import { newId } from '../lib/clock.js';
 import { ensureResults } from './run-results.js';
 import { workerInput } from './score-input.js';
 import { openDepositDialog } from './mavedb-export.js';
+import { reportOf } from './report.js';
 import { possessive } from '../lib/words.js';
 
 const encoder = new TextEncoder();
 const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'export';
 
-// QC of a run (its recorded inputs), for provenance and methods: { qc, findings, thresholds }.
-async function qcOf(app, run) {
+// QC of a run (its recorded inputs), for provenance, methods and the report: { qc, findings,
+// thresholds }. The measurement is kept for the run and its measures (runs are immutable); the
+// findings are read again from it with the thresholds and acknowledgements of the moment.
+export async function qcOf(app, run) {
   const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
   if (!source) return null;
-  const table = await app.sourceTable(source);
-  const { names, barcodes, columns, transfer } = workerInput(table, run.inputs.design);
   const thresholds = withDefaultThresholds(app.store.ws.qc?.thresholds);
-  const result = await app.worker('score').run('qc', { names, barcodes, columns, design: run.inputs.design, mode: run.inputs.mapping.mode, parameters: run.inputs.parameters, measures: measuresOf(thresholds) }, { transfer }).promise;
-  return { qc: result.qc, findings: findingsFrom(result.qc, thresholds, { acknowledged: app.store.ws.qc?.acknowledged }), thresholds };
+  const measures = measuresOf(thresholds);
+  const key = `${run.id}|${canonicalJSON(measures)}`;
+  app.qcCache ??= new Map();
+  if (!app.qcCache.has(key)) {
+    const pending = (async () => {
+      const table = await app.sourceTable(source);
+      const { names, barcodes, columns, transfer } = workerInput(table, run.inputs.design);
+      return (await app.worker('score').run('qc', { names, barcodes, columns, design: run.inputs.design, mode: run.inputs.mapping.mode, parameters: run.inputs.parameters, measures }, { transfer }).promise).qc;
+    })();
+    app.qcCache.set(key, pending);
+    pending.catch(() => app.qcCache.delete(key));
+    if (app.qcCache.size > 32) app.qcCache.delete(app.qcCache.keys().next().value);
+  }
+  const qc = await app.qcCache.get(key);
+  return { qc, findings: findingsFrom(qc, thresholds, { acknowledged: app.store.ws.qc?.acknowledged }), thresholds };
 }
 
 // The methods of a run, with its QC findings.
@@ -230,7 +244,9 @@ export async function archiveFile(app, { includeTables = true, includeStructures
   }
   const last = ws.runs.at(-1);
   const methods = last ? await methodsOf(app, last) : null;
-  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, annotations, figures, structures, results, methods });
+  // The workspace's report (wave 6, slice 4).
+  const report = await reportOf(app);
+  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, annotations, figures, structures, results, methods, report });
   return { name: `${safe(ws.name)}.msz`, bytes, structures: structureFiles(ws).length ? (includeStructures ? 'included' : 'checksums') : null };
 }
 

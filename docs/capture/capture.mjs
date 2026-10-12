@@ -711,6 +711,17 @@ const scenes = {
     await js(`(() => { window.mavescape.figuresView = { figure: window.mavescape.store.ws.figures[0].id, panel: 'panel-1' }; window.mavescape.store.notify(['ws']); })()`);
     await sleep(1500);
   },
+  // The report (wave 6, slice 4): GRB2's run and its Enrich2 rescoring, their comparison added to
+  // the report; the Report view at the end of its scoring, the parameters of both runs side by side.
+  async report() {
+    await example('grb2-sh3');
+    await act('score', { preset: 'Enrich2' });
+    await act('compare', { a: 'Run 1', b: 'Run 2', report: true });
+    await act('report');
+    await sleep(1500);
+    await js(`document.querySelector('.report-doc .report-table')?.scrollIntoView({ block: 'end' })`);
+    await sleep(500);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

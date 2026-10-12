@@ -2693,6 +2693,37 @@ and the review report are found. The wave ends with its examples, as waves 2 to 
    - Validation: every operation the examples perform has its sentence, and a workspace says
      nothing of what it did not do; every reference's DOI matches its Crossref record (a recorded
      fixture); the same text for the same workspace, in Node and the window.
+   - **Done.** `lib/report.js` writes the report from the workspace and what the window knows of
+     each run (its QC findings and scores): sections only for what was done (data, design,
+     scoring with a parameters table across runs, QC with changed thresholds and
+     acknowledgements, comparisons, robustness, selections, annotations, structures, figures,
+     inputs by SHA-256, software, the decision log, limitations, use), runs whose paragraphs read
+     the same named together, references numbered as the text first cites them. A run's paragraphs
+     are its methods' (`lib/methods.js` split into `runParagraphs`, `citations`). The **Report**
+     view (`ui/mode-report.js`) shows it with its contents, copies it as Markdown and downloads it
+     with its BibTeX; the archive carries it (`report.md`, `report.bib`); `mavescape export
+     --format report`; remote `report`, `export` of `report` and `report-references`.
+     - **Comparisons and robustness in the record.** Both were the session's (wave 4). **Add to
+       report** keeps what one found in the workspace (`ws.analyses`, in the history), so that the
+       report can say it whenever it is written; `compare` and `check_robustness` take `report:
+       true`. Removing a run (or an annotation compared) takes out the analyses that read it.
+     - The methods of a run's selections, the figures' panels and the readiness's gaps say only
+       what the record holds; a decision log beyond the history's own words (why a choice was
+       made) waits for the person to write it.
+     - Found while building it: a sorted-bins run's methods listed Peterman and Levine without
+       citing them (both bin methods' references were cited whichever was used); MaveScape and
+       Proteoscope shared a BibTeX key; the DOI of Lin's 2000 note is right, but Crossref records it
+       as "Corrections" without its author.
+     - Validation: `report` (8 checks): GRB2's workspace built one operation at a time (its run,
+       a UniProt check, an Enrich2 rescoring, a threshold changed, a finding acknowledged, a
+       selection by query, a comparison and a robustness check kept, UniProt's features, a view
+       of 2VWF, a figure), each said and the log the history; the example alone says nothing more
+       and cites what its methods cite; the 14 examples' runs, the report's paragraphs their
+       methods word for word; 43 DOIs against Crossref (`fixtures/crossref.json`); references in
+       citing order, BibTeX keys unique; the same text again and from the archive; a run removed
+       takes its comparison out. The remote session (184): the archive's report and the view's
+       Node's text, the kept analyses what Node computes; `headless-run` (33): `--format report`
+       the archive's, twice the same bytes.
 5. **Checkpoints and semantic diff (R6).** A checkpoint keeps a named state of the analysis (the
    workspace by its history's hash; tables are already kept by checksum), in the library and the
    archive. `lib/diff.js` (CytoWeave's framework) says what changed between two states (two

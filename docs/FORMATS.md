@@ -15,7 +15,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Designs | `*.design.json`; sample sheets (CSV, TSV); DiMSum's experiment design file | `*.design.json` |
 | Import templates | `*.import.json` | `*.import.json` |
 | Workspaces | `*.msz` archives | `*.msz` archives; the workspace document (JSON) |
-| Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3); a comparison's matched variants (CSV) and its report and statistics (JSON, 0.4) |
+| Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3); a comparison's matched variants (CSV) and its report and statistics (JSON, 0.4); the workspace's report (Markdown) and its references (BibTeX, 0.6) |
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
@@ -376,6 +376,8 @@ results/<run-id>.csv     each run's scores (results/<run-id>.<condition>.csv for
                          conditions), as the scores export below
 methods.md               the latest run's methods
 references.bib           and their references
+report.md                the workspace's report (MaveScape 0.6; below, The report)
+report.bib               and its references
 ```
 
 Saved, reopened and saved again, an archive has the same bytes. On opening, MaveScape reads only
@@ -497,6 +499,34 @@ the history.
 A **target** (in `targets`, and as the design's copy in `design.targets`) is as in a design
 file (above). A target made from a GenBank record or fetched for a MaveDB record keeps `origin`,
 where its sequence came from (above, "Targets: GenBank"), in the workspace and not in the design.
+`analyses` (MaveScape 0.6, absent until the first) keeps the **analyses added to the report**: a
+comparison or a run's robustness check, which are the session's until then. Each is recorded as it
+was made, so that the report can say it whenever it is written; the runs it read are immutable, so
+what it records stays true, and removing a run (or a score set kept beside the workspace) takes the
+analyses that read it out too. Adding one and taking one out are in the history (action `report`).
+
+```json
+{ "id": "comparison", "kind": "comparison", "created": "2026-10-12T12:20:00.000Z",
+  "a": { "spec": { "run": "run-…", "condition": 0 }, "label": "Run 1", "source": "run", "run": "run-…",
+         "runName": "Run 1", "output": "<SHA-256>", "condition": "All replicates" },
+  "b": { "spec": { "run": "run-…", "condition": 0 }, "label": "Run 2", … },
+  "level": "protein", "coordinates": null, "bNegated": false, "sameScale": true,
+  "scale": { "mode": "scored", "applied": false, "reason": null },
+  "filters": { "lowConfidence": false, "maxSE": null, "minReads": null },
+  "report": { "status": "qualified", "items": [{ "id": "independence", "status": "qualified", "label": "Independence", "text": "…" }] },
+  "matched": { … }, "statistics": { "n": 1117, "pearson": { "r": 0.991, "low": …, "high": … }, "spearman": { … },
+  "concordance": { … }, "blandAltman": { … } },
+  "discordance": { "valid": false, "reason": "…", "tested": 0, "discordant": 0, "dispersion": null, "q": 0.05 },
+  "classes": null, "withheld": ["discordance"] }
+```
+
+A comparison keeps its two sides (`spec`, as the Compare view names them, with each run's output
+SHA-256), the scale and filters, the compatibility report and the statistics, as the comparison's
+JSON export has them (below, Comparisons). A robustness check: `{ kind: "robustness", run: { id,
+name, output }, total, skipped, max, seed, choices: [{ id, label, options: [{ id, label }] }],
+targets: [{ id, name, kind, n, counts, text }] }`, the choices varied (the declared option first),
+how many analyses and each target's verdicts, as the Robustness export's record has them.
+
 From MaveScape 0.3 the workspace's target can also keep `reference`, the record of
 its last check against its UniProt entry (Experiment, Target: **Check against UniProt**). It is
 provenance, kept with the workspace and not in the design, so a check that changes nothing leaves
@@ -796,6 +826,36 @@ target, the design (and what was not recorded with the counts, with what that me
 with the counts: the cells carried into selection (the bottleneck QC infers was not checked against
 them)", MaveScape 0.2), the scoring with every parameter and filter, the QC findings, the software
 and the run's output hash, with numbered references, and the same references as BibTeX.
+
+### The report (`*_report.md`, `*_report.bib`; `mavescape export --format report`)
+
+The methods of the whole workspace (MaveScape 0.6, the Report view; remote control's `report` and
+`export` of `report` and `report-references`), written from its record whenever it is shown, in
+Markdown: a title (`# Methods: <workspace>`), a sentence of what it holds, then these sections, each
+present only when the workspace did what it says:
+
+| Section | What it says |
+| --- | --- |
+| Data | each run's table (SHA-256, rows, its origin), identifiers and target (where its sequence came from, its check against UniProt), as the run's methods say them; the tables imported and not scored |
+| Design | each run's design |
+| Scoring | each run's scoring, and a table of every run's parameters as `parameters.json` names them |
+| Quality control | each run's findings and acknowledgements; the thresholds changed from MaveScape's defaults |
+| Comparisons | each comparison added to the report: its scale, filters and variants compared, the correlations, Lin's concordance and the limits of agreement with their intervals, the variants that differ beyond their uncertainty, a predictor's classes, and what to read with care |
+| Robustness to analysis choices | each robustness check added: the choices varied, how many analyses, each target's verdicts |
+| Selections | each saved selection: its run, how many variants, the query that made it |
+| Annotations, Structures | as a run's methods say them |
+| Figures | each figure: its size and its panels by letter, with what each shows |
+| Inputs | every file read, by SHA-256: tables, MaveDB's mapped variants, annotations' files, structures' files, figures' images |
+| Software | the MaveScape that wrote the report; each run's MaveScape, scoring version and output SHA-256 |
+| Decision log | the history, entry by entry with its time (UTC), and whether its chain holds |
+| Limitations | what the counts did not record (and what that meant), what each run's model assumes, the QC findings not acknowledged, a predicted structure standing in for one |
+| Use | the research-use statement |
+
+Runs whose paragraphs read the same are named together ("**Run 1 and Run 2.**"). References are
+numbered in the order the text first cites them, and only those it cites are listed; `report.bib`
+holds each once, with its own key. The same workspace gives the same text, in the window, in Node
+and from the archive (which carries it, above). `mavescape export --format report --out DIR W.msz`
+writes `report.md` and `report.bib` without a window.
 
 ### The analysis package (`*_package.zip`)
 
@@ -1373,8 +1433,8 @@ With a fixed time, the same inputs write the same bytes in every file but `run.j
 `mavescape export` (MaveScape 0.3) writes `export.json` beside its files: format
 `mavescape-export`, version 1, the fields of `run.json` (its `inputs` the workspace archive and the
 `--details` file), with `deposit` (`--format mavedb`: what the deposit holds and lacks, as the
-`mavedb_deposit` action gives it) or `run` (`--format tables`); `--format figures` (0.6) lists the
-figures' files in `outputs`.
+`mavedb_deposit` action gives it) or `run` (`--format tables`); `--format figures` and `--format
+report` (0.6) list their files in `outputs`.
 
 ## Remote control: `remote.json`
 

@@ -30,8 +30,8 @@ It covers the path from a count table to a result you can defend, and checks eac
   validators accept;
 - figures for a paper or a talk, drawn from the analysis and exported as SVG, PDF or PNG, each
   carrying what it was drawn from, so it can be checked and rebuilt;
-- a record a reviewer can repeat: methods with references, provenance, and a workspace archive
-  that reopens identically on another computer.
+- a record a reviewer can repeat: the methods of the whole workspace with their references,
+  provenance, and a workspace archive that reopens identically on another computer.
 
 MaveScape reports experimental functional effects for research. It does not classify variants as
 pathogenic or benign. It is free and open source (Apache 2.0).
@@ -153,6 +153,11 @@ guides to every view, with screenshots.
 - **The record.**
   - Scores and counts in MaveDB's upload columns, QC per sample and per variant, provenance with
     every input's checksum, and a methods paragraph with its references in BibTeX.
+  - The Report: the methods of the whole workspace, written again on every change from its
+    record: each run's scoring with a table of its parameters, QC and acknowledgements, the
+    comparisons and robustness checks you add to it, selections, annotations, structures, figures,
+    every input's checksum, the decision log and the limitations, with numbered references whose
+    DOIs are checked against Crossref.
   - A run written as a MaveDB deposit (scores, counts, the experiment and score set, the methods
     and the MAVE minimum information's keywords) that MaveDB's own validators accept, written on
     your computer and never sent.
@@ -319,6 +324,7 @@ every file MaveScape reads and writes, and the start page has blank layouts to f
 | **Compare** | Two replicates, conditions, runs, score sets or a predictor; robustness to analysis choices |
 | **Structure** | The scores on a PDB entry, AlphaFold DB model or file, and the structure as evidence |
 | **Figures** | Pages of panels (any view's plots, maps and text) for a paper or a talk, exported as SVG, PDF or PNG |
+| **Report** | The methods of the whole workspace with their references, written from its record, copied as Markdown or downloaded with its BibTeX |
 
 The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page for each.
 
@@ -341,6 +347,7 @@ The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page 
 | `mavescape validate [--design D] [tables]` | Check tables and a design as scoring would; exit 1 when something blocks scoring |
 | `mavescape export --format mavedb --out DIR W.msz` | Write a saved run as a MaveDB deposit (or `--format tables`); `--details` gives what MaveDB asks for, `--strict` fails while it is missing ([depositing in MaveDB](https://robert-mcdermott.github.io/MaveScape/docs/record.html#mavedb)) |
 | `mavescape export --format figures --out DIR W.msz` | Write a saved workspace's figures as SVG, PDF and PNG, each with its manifest, and `figures.json` ([figures](https://robert-mcdermott.github.io/MaveScape/docs/figures.html#provenance)) |
+| `mavescape export --format report --out DIR W.msz` | Write a saved workspace's report, `report.md` and `report.bib` ([report](https://robert-mcdermott.github.io/MaveScape/docs/report.html)) |
 
 On macOS, Chrome (and Edge, Brave) keeps running after its last window is closed: quit it with ⌘Q
 to stop MaveScape too. If that browser is already running when MaveScape starts, the window opens
@@ -402,6 +409,7 @@ integration on every change.
 | Examples | All fourteen, against MaveDB's files and the published comparisons | Each raises exactly the QC findings it teaches; published counts byte for byte |
 | The record | Archives saved by every release since 0.1.0, reopened | Every run recomputed to its recorded hash |
 | Figures | Nine examples' maps and every view's plots as figure panels (96 QC panels), against the map's own SVG and the results themselves; the PDF's content read back; the window's export against Node's; each file's manifest read back, edited, compared after a rescoring and rebuilt | Every cell the map's own color, every bar and point the results'; the PDF the SVG's rectangles and text, mark for mark; the window's SVG and manifest Node's, byte for byte; an edit caught, exactly the panels a rescoring touches flagged, a rebuilt figure the same bytes |
+| Report | GRB2's workspace built one operation at a time; the 14 examples' runs; every cited DOI against Crossref's record (a recorded fixture); the window's report against Node's | Every operation its sentence, nothing said that was not done; each run's paragraphs its methods word for word; 43 of 43 references agree; the window's text Node's |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |
 | Scale | A million barcodes and their million-line map | Imported in 3.5 s, scored in 1.3 s |
 

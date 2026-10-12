@@ -28,6 +28,7 @@ import { legend, plotCanvas, plotSVG, viewTheme } from './plots.js';
 import * as plots from '../lib/plots.js';
 import { comparisonPoints, positionTitle } from '../lib/view-plots.js';
 import { figureButton } from './figure-data.js';
+import { comparisonForReport, reportButton } from './report.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { addFileTrack, addPublicTrack, annotationText } from './tracks.js';
 import { toast } from './overlays.js';
@@ -478,8 +479,10 @@ export function mountCompareMode(app, container) {
     const overall = c.report.status === 'ok' ? h('div.callout', icon('check'), h('span', 'The two can be compared as they are.'))
       : c.report.status === 'qualified' ? h('div.callout.warn', icon('warning'), h('span', 'The statistics hold, read as the items marked qualified say.'))
         : h('div.callout.danger', icon('warning'), h('span', 'These two cannot be compared: see why below.'));
+    // Kept in the workspace's report (wave 6, slice 4), what it found with it.
+    const keep = c.statistics ? h('div.btn-row', { style: { marginTop: '8px' } }, reportButton(app, () => comparisonForReport(c, currentPair(app)))) : null;
     return h('div.pane', h('h3', icon('qc'), 'Compatibility'), overall,
-      h('ul.compare-report', ...c.report.items.map((item) => h('li', h('div.compare-report-head', h('b', item.label), badge(item.status)), h('div', item.text)))));
+      h('ul.compare-report', ...c.report.items.map((item) => h('li', h('div.compare-report-head', h('b', item.label), badge(item.status)), h('div', item.text)))), keep);
   }
 
   function statisticsTable(c) {

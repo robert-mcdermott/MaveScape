@@ -284,7 +284,10 @@ export function removeAnnotation(ws, id) {
   // Its tracks leave the arrangement too.
   const prefix = `${id}:`;
   const layout = ws.tracks ? { ...ws.tracks, order: (ws.tracks.order ?? []).filter((t) => !t.startsWith(prefix)), hidden: (ws.tracks.hidden ?? []).filter((t) => !t.startsWith(prefix)), filters: Object.fromEntries(Object.entries(ws.tracks.filters ?? {}).filter(([t]) => !t.startsWith(prefix))) } : undefined;
-  return change(ws, { annotations: rest.length ? rest : undefined, ...(layout ? { tracks: layout } : {}) }, 'annotation', `Removed the annotation "${gone.name}"`);
+  // The comparisons kept in the report that read it go with it (wave 6, slice 4).
+  const read = new Set(analysesOf(ws, id).map((a) => a.id));
+  const analyses = (ws.analyses ?? []).filter((a) => !read.has(a.id));
+  return change(ws, { annotations: rest.length ? rest : undefined, ...(layout ? { tracks: layout } : {}), ...(read.size ? { analyses: analyses.length ? analyses : undefined } : {}) }, 'annotation', `Removed the annotation "${gone.name}"${read.size ? `, and from the report the ${read.size === 1 ? 'comparison' : `${read.size} comparisons`} reading it` : ''}`);
 }
 
 // What a higher score of a MaveDB score set kept beside the workspace means, as a person states it
@@ -361,3 +364,28 @@ export function removeFigure(ws, id) {
   const rest = list.filter((f) => f.id !== id);
   return change(ws, { figures: rest.length ? rest : undefined }, 'figure', `Deleted the figure "${gone.name}"`);
 }
+
+// --- The report (wave 6, slice 4) ---------------------------------------------------------------------
+
+// Analyses kept in the report (ws.analyses, absent until one is kept): a comparison or a check of a
+// run's robustness to analysis choices, recorded as it was made (lib/report.js: comparisonRecord,
+// robustnessRecord), so that the report says it whenever it is written. Both are views of
+// immutable runs, so what was recorded stays true. detail: the history's words.
+export function keepAnalysis(ws, analysis, detail, time = clockNow()) {
+  const list = ws.analyses ?? [];
+  const id = uniqueId(analysis.kind, list);
+  return { ws: change(ws, { analyses: [...list, { ...analysis, id, created: analysis.created ?? time }] }, 'report', detail, time), id };
+}
+
+export function removeAnalysis(ws, id, detail) {
+  const list = ws.analyses ?? [];
+  if (!list.some((a) => a.id === id)) return ws;
+  const rest = list.filter((a) => a.id !== id);
+  return change(ws, { analyses: rest.length ? rest : undefined }, 'report', detail);
+}
+
+// The analyses kept in the report that read a run or an annotation (by its id).
+export function analysesOf(ws, id) {
+  return (ws.analyses ?? []).filter((a) => a.run?.id === id || [a.a, a.b].some((side) => side?.spec?.run === id || side?.spec?.annotation === id));
+}
+

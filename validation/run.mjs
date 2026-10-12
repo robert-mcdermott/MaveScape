@@ -43,7 +43,7 @@ import { cachedRecord, EXAMPLE_DATASETS, exampleRecords, MissingExampleData, ope
 import { proteinChange } from '../web/lib/codons.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf, uniparcEntries } from '../web/lib/uniprot.js';
 import { countsDesign, mappedCSV, mappedVariants, readMapped, readoutOf, readScoreSet, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
-import { writeMethods } from '../web/lib/methods.js';
+import { REFERENCES, writeMethods } from '../web/lib/methods.js';
 import { intervalOf } from '../web/lib/exports.js';
 import { readZip } from '../web/lib/zip.js';
 import { readiness } from '../web/lib/readiness.js';
@@ -76,7 +76,7 @@ import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS
 import { scoreDimsumGroup } from '../web/lib/score-dimsum.js';
 import { combineFixed, combineREML, heterogeneity } from '../web/lib/replicates.js';
 import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE, REPLICATE_STATE_NAMES } from '../web/lib/filters.js';
-import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs, reproduction } from '../web/lib/runs.js';
+import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs, removeRun, reproduction } from '../web/lib/runs.js';
 import { median } from '../web/lib/score-ratio.js';
 import { QC_FIXTURES, QC_SEEDS, matches, raised, runFixture } from './qc-cases.mjs';
 import { computeQC } from '../web/lib/qc.js';
@@ -114,6 +114,8 @@ import { asPDFText, readPDF, readSVG, sameRects } from './figure-cases.mjs';
 import { addPanel, checkFigure, createFigure, figureMarks, figurePDF, figureSVG, mm } from '../web/lib/figures.js';
 import { chartsPanel } from '../web/lib/figure-plots.js';
 import { qcCharts, qcPanelData } from '../web/lib/qc-plots.js';
+import { writeReport } from '../web/lib/report.js';
+import { checkReferences, contextOf, CROSSREF_EXCEPTIONS, reportWorkspace } from './report-cases.mjs';
 import { buildManifest, checkManifest, compareDrawings, compareManifest, embedPNG, embedSVG, figureForWorkspace, pdfAttachment, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { comparisonCharts, comparisonPoints, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
 import { encodePNG } from '../web/lib/png.js';
@@ -4623,6 +4625,62 @@ const suites = {
     const rebuiltSVG = embedSVG(await figureSVG(rebuiltFig, resolveFor(null)), buildManifest(both, rebuiltFig, figureMarks(rebuiltFig, resolveFor(null)), ctx));
     const sameDrawings = compareDrawings(manifest, rebuiltFig, figureMarks(rebuiltFig, resolveFor(null)));
     check('figures', 'a figure rebuilt from its manifest (in a copy of its workspace) is drawn the same, panel by panel, and written again is the same bytes', `${sameDrawings.filter((d) => d.same).length} of ${sameDrawings.length} panels the same; ${rebuiltSVG === mfSVG ? 'the same bytes' : 'different bytes'}`, sameDrawings.every((d) => d.same) && rebuiltSVG === mfSVG, 'the same');
+  },
+
+  // Wave 6, slice 4 (R4): the workspace's report, written from its record (lib/report.js).
+  async report() {
+    const { g, bare, ws, scored, steps, run2, files } = await reportWorkspace();
+    const context = contextOf(ws, scored);
+    const r = writeReport(ws, context);
+    const missed = steps.filter((x) => !x.expect(r, r.markdown));
+    const covered = new Set(steps.map((x) => x.action));
+    const actions = [...new Set(ws.history.map((e) => e.action))].filter((a) => !['create', 'import', 'design'].includes(a));
+    check('report', 'every operation the workspace performed has its sentence: GRB2\'s run, its target checked against UniProt, an Enrich2 rescoring, a QC threshold changed, a finding acknowledged, a selection by query, a comparison and a robustness check kept in the report, UniProt\'s features beside the map, a saved view of 2VWF, a figure; every kind of history entry among them', `${steps.length - missed.length} of ${steps.length} said${missed.length ? `; not: ${missed.map((x) => x.what).join(', ')}` : ''}; history actions ${actions.join(', ')}`, !missed.length && actions.every((a) => a === 'score' || covered.has(a)), 'every one');
+    const log = r.sections.find((x) => x.id === 'log')?.blocks.find((b) => b.kind === 'list')?.items ?? [];
+    check('report', 'the decision log is the history, every entry in order with its time and words, the chain said intact', `${log.length} of ${ws.history.length} entries; ${r.sections.find((x) => x.id === 'log')?.blocks[0].text.slice(-40)}`, log.length === ws.history.length && ws.history.every((e, i) => log[i] === `${e.time.slice(0, 10)} ${e.time.slice(11, 16)}: ${e.detail}`) && /intact\./.test(r.sections.find((x) => x.id === 'log').blocks[0].text), 'every entry');
+
+    // A workspace says nothing of what it did not do: the example opened and scored, nothing else.
+    const plain = writeReport(bare, contextOf(bare, scored));
+    const plainIds = plain.sections.map((x) => x.id);
+    const own = writeMethods(bare, g.run, { findings: contextOf(bare, scored).runs.get(g.run.id).findings, results: g.results });
+    const sameRefs = plain.references.map((x) => x.key).join() === own.references.map((x) => x.key).join();
+    const quiet = !/(was|were) acknowledged|thresholds were changed|were compared|alternative analys|selected by|beside the map|PDB entry|Figure 1/.test(plain.markdown);
+    check('report', 'and nothing of what it did not do: the example opened and scored alone has its data, design, scoring, QC, inputs, software, log, limitations and use, no comparison, robustness, selection, annotation, structure or figure, and cites what its run\'s methods cite, in the same order', `sections ${plainIds.join(', ')}; references ${sameRefs ? 'the methods\'' : `${plain.references.map((x) => x.key).join(', ')} against ${own.references.map((x) => x.key).join(', ')}`}`, plainIds.join() === 'summary,data,design,scoring,qc,inputs,software,log,limitations,use' && sameRefs && quiet, 'only those');
+
+    // Each example's run: the report's paragraphs are its run's methods, word for word.
+    const rows = [];
+    for (const e of EXAMPLES) {
+      const x = exampleRun(e.id);
+      const w = addRun(x.ws, x.run).ws;
+      const ctx = contextOf(w, new Map([[x.run.id, { table: x.o.table, results: x.results }]]));
+      const rep = writeReport(w, ctx);
+      const m = writeMethods(w, x.run, { findings: ctx.runs.get(x.run.id).findings, results: x.results });
+      const p = (id) => rep.sections.find((s) => s.id === id)?.blocks.find((b) => b.kind === 'p')?.text;
+      const same = p('data') === m.paragraphs[0] && m.paragraphs[1].startsWith(`Design: ${p('design')}`) && p('scoring') === m.paragraphs[2] && `Quality control: ${p('qc').charAt(0).toLowerCase()}${p('qc').slice(1)}` === m.paragraphs[3];
+      rows.push({ id: e.id, same, refs: rep.references.map((z) => z.key).join() === m.references.map((z) => z.key).join() });
+    }
+    check('report', 'each of the 14 examples opened and scored: the report\'s data, design, scoring and QC are its run\'s methods word for word, its references the same in the same order', rows.filter((x) => !x.same || !x.refs).map((x) => `${x.id}: ${x.same ? '' : 'text differs '}${x.refs ? '' : 'references differ'}`).join('; ') || `${rows.length} the same`, rows.every((x) => x.same && x.refs), 'every one');
+
+    // The references.
+    const refs = checkReferences();
+    const wrong = refs.filter((x) => x.problems.length);
+    check('report', `every reference with a DOI against Crossref's record of it (recorded: fixtures/crossref.json): title, journal, year, volume, issue, first page or article number, first author; ${Object.keys(CROSSREF_EXCEPTIONS).length} fields Crossref records otherwise left out, each said`, `${refs.length - wrong.length} of ${refs.length} agree${wrong.length ? `; ${wrong.map((x) => `${x.key}: ${x.problems.join(', ')}`).join('; ')}` : ''}; ${Object.values(CROSSREF_EXCEPTIONS).map((x) => x.why).join('; ')}`, !wrong.length && refs.length >= 40, 'every one');
+    const firsts = [...r.markdown.slice(0, r.markdown.indexOf('## References')).matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1]));
+    const order = firsts.filter((n, i) => firsts.indexOf(n) === i);
+    const keys = [...r.bibtex.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]);
+    const known = r.references.every((x) => REFERENCES[x.key] || x.key === 'mavescape' || x.key.startsWith('data'));
+    check('report', 'its references numbered in the order the text first cites them, each cited, each MaveScape\'s own list\'s (or the data\'s publication, or MaveScape), one BibTeX entry each with its own key', `${r.references.length} references; first cited ${order.slice(0, 8).join(', ')}…; ${keys.length} BibTeX entries, ${new Set(keys).size} keys`, order.every((n, i) => n === i + 1) && order.length === r.references.length && known && keys.length === r.references.length && new Set(keys).size === keys.length, 'in order');
+
+    // The same text again, through the archive, and in a copy.
+    const again = writeReport(JSON.parse(JSON.stringify(ws)), contextOf(ws, scored));
+    const archived = await readArchive((await writeArchive(ws, { software: SOFTWARE, sources: null, annotations: files.annotations, structures: files.structures, results: new Map(), report: r })).bytes);
+    const fromArchive = writeReport(archived.ws, contextOf(archived.ws, scored));
+    check('report', 'the same workspace, the same report: written again, from a copy of the document, and from the workspace archive, which carries it (report.md, report.bib) as written', `${again.markdown === r.markdown ? 'the same' : 'different'} again; archive ${archived.report?.markdown === r.markdown && archived.report?.bibtex === r.bibtex ? 'carries it' : 'does not carry it'}, ${fromArchive.markdown === r.markdown ? 'the same' : 'different'} from it`, again.markdown === r.markdown && archived.report?.markdown === r.markdown && archived.report?.bibtex === r.bibtex && fromArchive.markdown === r.markdown && !archived.problems.length, 'the same');
+
+    // A run removed takes the analyses that read it out of the report.
+    const removed = removeRun(ws, run2.id);
+    const after = writeReport(removed, contextOf(removed, scored));
+    check('report', 'Run 2 removed: the comparison that read it leaves the report (said in the history), Run 1\'s robustness stays', `${(removed.analyses ?? []).map((a) => a.kind).join(', ')}; ${removed.history.at(-1).detail}`, (removed.analyses ?? []).map((a) => a.kind).join() === 'robustness' && !after.sections.some((x) => x.id === 'comparisons') && after.sections.some((x) => x.id === 'robustness') && /from the report the analysis reading it/.test(removed.history.at(-1).detail), 'gone, said');
   },
 };
 

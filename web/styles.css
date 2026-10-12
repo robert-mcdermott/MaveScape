@@ -1155,5 +1155,31 @@ dl.kv.annotations dd { white-space: normal; }
 .figure-notes .empty { margin-top: 20px; }
 .figure-tracks { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
 @media (max-width: 1100px) { .figure-layout { grid-template-columns: minmax(0, 1fr) 240px; } }
+/* The Report view (wave 6, slice 4). */
+.report-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; padding: 14px; overflow: hidden; }
+.report-main { min-width: 0; min-height: 0; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.report-doc { max-width: 860px; margin: 0 auto; padding: 22px 28px 40px; font-size: 13.5px; line-height: 1.6; }
+.report-doc .report-title { margin: 0 0 12px; font-size: 19px; }
+.report-doc h3 { margin: 22px 0 8px; font-size: 14.5px; scroll-margin-top: 12px; }
+.report-doc p { margin: 0 0 10px; }
+.report-doc ul { margin: 0 0 10px; padding-left: 20px; }
+.report-doc li { margin-bottom: 4px; }
+.report-doc .report-table { margin: 6px 0 14px; }
+.report-doc .report-table p.muted { font-size: 12px; margin-bottom: 6px; }
+.report-doc .table-scroll { overflow-x: auto; }
+.report-doc table.data td { word-break: break-word; }
+.report-doc .report-cite { color: var(--accent); text-decoration: none; }
+.report-references { padding-left: 22px; font-size: 12.5px; }
+.report-references li { margin-bottom: 6px; scroll-margin-top: 12px; }
+.report-side { min-height: 0; overflow: auto; }
+.report-contents { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+.report-contents li { margin-bottom: 3px; }
+.report-contents a { color: var(--text-2); text-decoration: none; }
+.report-contents a:hover { color: var(--accent); }
+.report-kept { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+.report-kept li { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.report-kept li:last-child { border-bottom: 0; }
+@media (max-width: 1100px) { .report-layout { grid-template-columns: minmax(0, 1fr) 240px; } }
+@media (max-width: 800px) { .report-layout { grid-template-columns: minmax(0, 1fr); overflow: auto; } .report-main { overflow: visible; } }
 .figure-list { margin-left: 12px; }
 .figure-list select { max-width: 260px; }

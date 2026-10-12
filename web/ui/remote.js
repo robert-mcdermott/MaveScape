@@ -64,6 +64,8 @@ import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
 import { addPanel, checkFigure, createFigure, FIGURE_SIZES, figureSize, mm, panelLetters, panelSummary, PANEL_KINDS, PANEL_PLOTS, pngSize, removePanel, toMM, updatePanel } from '../lib/figures.js';
 import { drawFigure, drawStructureImage, exportFigure, readFigureFile, rebuildFigure, rebuildWords } from './figure-data.js';
+import { comparisonForReport, keepInReport, removeFromReport, reportOf, robustnessForReport } from './report.js';
+import { analysisName } from '../lib/report.js';
 import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
@@ -76,7 +78,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const ONE_TO_THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter', X: 'Ter' };
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure' };
+const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure', figures: 'figures', figure: 'figures', report: 'report', methods: 'report' };
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -1660,7 +1662,10 @@ export function installRemote(app) {
       await settle();
       const { summary } = state;
       const data = JSON.parse(robustnessJSON(summary, run, state.results.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }))));
-      return { message: `${run.name}, checked against ${summary.total - 1} alternative analyses. ${summary.targets.map((t) => `${t.name}: ${t.text}`).join(' ')}${state.notes?.length ? ` ${state.notes.join(' ')}` : ''}`, data: { ...data, notes: state.notes ?? [] } };
+      // Kept in the workspace's report (wave 6, slice 4).
+      const inReport = args.report === true ? keepInReport(app, robustnessForReport(run, state)) : null;
+      if (inReport) await settle();
+      return { message: `${run.name}, checked against ${summary.total - 1} alternative analyses. ${summary.targets.map((t) => `${t.name}: ${t.text}`).join(' ')}${state.notes?.length ? ` ${state.notes.join(' ')}` : ''}${inReport ? ' Kept in the report.' : ''}`, data: { ...data, notes: state.notes ?? [], ...(inReport ? { report: inReport } : {}) } };
     },
 
     // Compares two sets of scores (wave 4, slices 1–3): each side a run's condition or replicate by
@@ -1733,13 +1738,55 @@ export function installRemote(app) {
         ? `${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared${c.matched.compared !== c.matched.n ? ` of ${c.matched.n} scored on both sides` : ''}${c.scale?.applied ? ` (${c.scale.anchors ? 'rescaled by their anchors' : 'stated to be on one scale'})` : ''}. ${agreement}.${discordance}${classes}${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
         : `${c.a.label} and ${c.b.label} cannot be compared: ${flagged.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`;
       const { software, ...data } = JSON.parse(comparisonJSON(c));
-      return { message, data };
+      // Kept in the workspace's report (wave 6, slice 4).
+      if (args.report === true) {
+        if (!s) throw new ActionError(`${c.a.label} and ${c.b.label} cannot be compared, so there is nothing to keep in the report.`);
+        data.report = keepInReport(app, comparisonForReport(c, pair));
+        await settle();
+      }
+      return { message: `${message}${data.report ? ' Kept in the report.' : ''}`, data };
+    },
+
+    // The workspace's report (wave 6, slice 4): its methods written from the record, as the Report
+    // view shows them (Markdown, BibTeX, and each section). remove: an analysis kept in it, by id
+    // or by its words ("the comparison of Run 1 and Run 2"), taken out first.
+    async report(args) {
+      if (args.remove !== undefined && args.remove !== null) {
+        const kept = ws().analyses ?? [];
+        if (!kept.length) throw new ActionError('Nothing is kept in the report.');
+        const names = kept.map((a) => analysisName(a));
+        const text = String(args.remove).trim().toLowerCase();
+        const at = [(a, i) => a.id === args.remove, (a, i) => names[i].toLowerCase() === text, (a, i) => names[i].toLowerCase().includes(text)].reduce((found, test) => (found >= 0 ? found : kept.findIndex(test)), -1);
+        if (at < 0) throw new ActionError(`No analysis "${args.remove}" is kept in the report. Kept: ${kept.map((a, i) => `${names[i]} (${a.id})`).join('; ')}.`);
+        removeFromReport(app, kept[at].id);
+      }
+      if (args.show !== false) await app.setMode('report');
+      const report = await reportOf(app);
+      await settle();
+      return {
+        message: `${report.title}: ${report.sections.filter((x) => x.title).map((x) => x.title).join(', ')}; ${report.references.length} references. Kept in it: ${(ws().analyses ?? []).map((a) => analysisName(a)).join('; ') || 'nothing'}.`,
+        data: {
+          title: report.title,
+          sections: report.sections.map((x) => ({ id: x.id, title: x.title, blocks: x.blocks })),
+          references: report.references,
+          analyses: (ws().analyses ?? []).map((a) => ({ id: a.id, kind: a.kind, name: analysisName(a), created: a.created })),
+          markdown: report.markdown,
+          bibtex: report.bibtex,
+        },
+      };
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence', 'structure-image', 'proteoscope-session'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence', 'structure-image', 'proteoscope-session', 'report', 'report-references'];
       const what = choose(args.what, kinds, 'export');
       let file;
+      // The workspace's report (wave 6, slice 4): Markdown, or its references as BibTeX.
+      if (what === 'report' || what === 'report-references') {
+        const report = await reportOf(app);
+        return what === 'report'
+          ? { file: report.markdown, message: `The report of "${ws().name}" (Markdown): ${report.sections.filter((x) => x.title).length} sections, ${report.references.length} references.` }
+          : { file: report.bibtex, message: `The report's ${report.references.length} references (BibTeX).` };
+      }
       // The target on the structure shown (wave 5, slice 2), position by position.
       if (what === 'structure-mapping') {
         const state = structureState(app);

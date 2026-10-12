@@ -47,7 +47,9 @@ import { openExampleInNode } from './example-cases.mjs';
 import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
 import { predictorSide, scoreSetSide } from './compare-cases.mjs';
 import { checkTable } from './robustness-cases.mjs';
-import { robustnessCSV, robustnessJSON, robustnessPositionsCSV } from '../web/lib/robustness.js';
+import { contextOf } from './report-cases.mjs';
+import { comparisonRecord, robustnessRecord, writeReport } from '../web/lib/report.js';
+import { robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_SEED } from '../web/lib/robustness.js';
 import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
@@ -361,6 +363,16 @@ try {
   const archive = await readArchive(readFileSync(join(out, 'grb2.msz')));
   check('the exported archive opens', `${archived.message} ${archive.problems.length} problems`, archive.problems.length === 0 && archive.ws.runs.length === 3 && archive.ws.selections.length === 1);
   check('the archive keeps the figure as the workspace has it', `${archive.ws.figures?.map((f) => `${f.name}, ${f.panels.length} panels`).join('; ') ?? 'none'}`, archive.ws.figures?.length === 1 && archive.ws.figures[0].name === 'Figure 2' && archive.ws.figures[0].panels.length === 2);
+  // The workspace's report (wave 6, slice 4), in the archive as Node writes it from the archive: each
+  // run's QC findings and scores recomputed, the window's MaveScape (its version and commit).
+  const info = await (await fetch(`${connection.url}/api/info`)).json();
+  const windowSoftware = { version: info.version, commit: info.commit ?? '' };
+  const recomputedRuns = (w, sources) => new Map(w.runs.map((run, i) => {
+    const x = recompute(w, sources, i);
+    return [run.id, { table: x.table, results: x.scored.results }];
+  }));
+  const archiveReport = writeReport(archive.ws, contextOf(archive.ws, recomputedRuns(archive.ws, archive.sources), windowSoftware));
+  check('the archive carries the workspace\'s report (report.md, report.bib) as Node writes it from the archive, each run\'s QC and scores recomputed', `${archive.report ? `${archive.report.markdown.length} characters, ${archive.report.bibtex.split('@').length - 1} references` : 'none'}; ${archive.report?.markdown === archiveReport.markdown && archive.report?.bibtex === archiveReport.bibtex ? 'Node\'s' : 'not Node\'s'}`, archive.report?.markdown === archiveReport.markdown && archive.report?.bibtex === archiveReport.bibtex);
   const { table, scored } = recompute(archive.ws, archive.sources);
   const expected = allExports(archive.ws, table, scored.results);
   for (const name of ['scores.csv', 'counts.csv', 'qc_samples.csv', 'qc_variants.csv', 'qc_findings.csv', 'methods.md', 'references.bib', 'map.svg', 'selection.csv', 'selection.json']) {
@@ -559,6 +571,35 @@ try {
   check('the inspector shows a checked variant\'s robustness: its class across the analyses and its verdict', String(await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Robustness')`)), focusedRobust.ok && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Robustness')`)));
   const publishedRobust = await send('check_robustness', { run: 'Run 1', max: 1 });
   check('check_robustness with too few analyses: refused, saying how many', publishedRobust.message, !publishedRobust.ok && /from 2 to 256/.test(publishedRobust.message));
+
+  // Kept in the report (wave 6, slice 4): the comparison of Run 1 and Run 2 and Run 1's robustness,
+  // as Node computes them; the window's report as Node writes it from the workspace's archive; its
+  // files; an analysis taken out.
+  {
+    const keptCompare = await act('compare', { a: 'Run 1', b: 'Run 2', scale: 'scored', low_confidence: false, max_se: null, min_reads: null, report: true });
+    const keptRobust = await act('check_robustness', { run: 'Run 1', max: 24, report: true });
+    const shown = await act('report');
+    await act('export', { what: 'archive', path: join(out, 'with-report.msz') });
+    await act('export', { what: 'report', path: join(out, 'report.md') });
+    await act('export', { what: 'report-references', path: join(out, 'report.bib') });
+    const withReport = await readArchive(readFileSync(join(out, 'with-report.msz')));
+    const strip = (a) => JSON.parse(JSON.stringify(a, (k, v) => (k === 'id' || k === 'created' ? undefined : v)));
+    const [comparisonKept, robustnessKept] = withReport.ws.analyses ?? [];
+    const pairNode = { a: { run: nodeRuns[0].run.id, condition: 0 }, b: { run: nodeRuns[1].run.id, condition: 0 } };
+    const comparisonNode = comparisonRecord(nodeCompare([0, pairNode.a], [1, pairNode.b]), pairNode);
+    const robustnessNode = robustnessRecord(r1, nodeCheck.summary, { max: 24, seed: ROBUSTNESS_SEED });
+    check('compare and check_robustness with report: the comparison of Run 1 and Run 2 and Run 1\'s robustness kept in the workspace, in its history, as Node computes them from the archive (sides, scale, report, statistics; choices, analyses, verdicts)', `${keptCompare.data.report} and ${keptRobust.data.report}; ${withReport.ws.history.slice(-2).map((e) => e.detail).join(' | ')}`,
+      JSON.stringify(strip(comparisonKept)) === JSON.stringify(strip(comparisonNode)) && JSON.stringify(strip(robustnessKept)) === JSON.stringify(strip(robustnessNode)) && withReport.ws.history.slice(-2).every((e) => e.action === 'report' && e.detail.startsWith('Added to the report')));
+    const nodeReport = writeReport(withReport.ws, contextOf(withReport.ws, recomputedRuns(withReport.ws, withReport.sources), windowSoftware));
+    const sections = shown.data.sections.filter((x) => x.title).map((x) => x.title);
+    const view = await browser.eval(`(() => { const d = document.querySelector('.report-doc'); return d ? { headings: d.querySelectorAll('h3').length, references: d.querySelectorAll('.report-references li').length, kept: document.querySelectorAll('.report-kept li').length } : null; })()`);
+    check('report: the window\'s report the same text as Node writes from the workspace\'s archive (and the archive\'s report.md and report.bib), shown in the Report view with its references and the two analyses kept; export report and report-references write it', `${sections.join(', ')}; ${shown.data.references.length} references; view ${JSON.stringify(view)}`,
+      shown.data.markdown === nodeReport.markdown && shown.data.bibtex === nodeReport.bibtex && withReport.report?.markdown === nodeReport.markdown && readFileSync(join(out, 'report.md'), 'utf8') === nodeReport.markdown && readFileSync(join(out, 'report.bib'), 'utf8') === nodeReport.bibtex
+      && sections.includes('Comparisons') && sections.includes('Robustness to analysis choices') && view?.headings === sections.length + 1 && view.references === shown.data.references.length && view.kept === 2);
+    const taken = await act('report', { remove: 'the comparison of Run 1 and Run 2', show: false });
+    const unknownAnalysis = await send('report', { remove: 'no such analysis' });
+    check('report with remove: the comparison taken out of the report (in the history), the robustness check kept; an analysis not kept refused, listing those that are', `${taken.data.analyses.map((a) => a.name).join('; ')}; ${unknownAnalysis.message}`, taken.data.analyses.length === 1 && taken.data.analyses[0].kind === 'robustness' && !taken.data.sections.some((x) => x.id === 'comparisons') && !unknownAnalysis.ok && /is kept in the report\. Kept: Run 1's robustness/.test(unknownAnalysis.message));
+  }
 
   // Selections by query (wave 4, slice 5), as Node selects on the run it recomputes from the archive:
   // a query, an operation on the selection, a saved selection used in another query, the robustness

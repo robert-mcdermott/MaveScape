@@ -57,6 +57,26 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   each drawing with the one recorded. Remote control: `check_figure` (with `rebuild`).
 - `mavescape export --format figures` writes every figure of a workspace archive as SVG, PDF and
   PNG at 300 dpi, each with its manifest, and `figures.json`.
+- **The Report** (wave 6, slice 4). The Report view holds the methods of the whole workspace,
+  written again on every change from its record (`web/lib/report.js`): each run's data, design,
+  scoring and QC as its own methods say them (runs that read the same named together), a table of
+  every run's parameters as `parameters.json` names them, the QC thresholds changed and the
+  findings acknowledged; the comparisons and robustness checks added to it; the saved selections
+  with their queries, the annotations, structures and figures (each panel by its letter); every
+  input's SHA-256; the software and each run's output hash; the decision log (the history, entry
+  by entry); the limitations (what the counts did not record, each model's assumptions, findings
+  not acknowledged, a predicted structure); the research-use statement. References are numbered
+  as the text first cites them, only those it cites, with their BibTeX. Copied as Markdown or
+  downloaded; the workspace archive carries it (`report.md`, `report.bib`).
+- **Add to report**, under a comparison's compatibility report and in a run's robustness pane:
+  the workspace keeps what the analysis found (`analyses`, in its history), and the report says it
+  with its methods cited (Lin's concordance, Bland and Altman's limits of agreement, Bonett and
+  Wright's interval, DeLong's, a multiverse analysis). Removing a run takes out the analyses that
+  read it.
+- Remote control: `report` (each section, the Markdown and BibTeX; `remove` an analysis kept),
+  `report: true` on `compare` and `check_robustness`, `export` of `report` and
+  `report-references`, and `set_mode` of `figures` and `report`. `mavescape export --format report`
+  writes `report.md` and `report.bib` without a window.
 
 ### Changed
 
@@ -72,6 +92,12 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   serves it (the path keeps the repository's capitals): the site's canonical links, link
   previews, sitemap and robots.txt, and FORMATS.md's links, named it in lower case, which Pages
   answers with 404.
+- A run of sorted bins' methods listed Peterman and Levine's reference without citing it, the
+  references after it numbered one too far (the weighted average cites VAMP-seq's alone, the
+  maximum likelihood Peterman and Levine's alone). Its MaveDB deposit's methods change with it;
+  MaveDB's validators checked the two such deposits again (`reference/mavedb-export.json`).
+- The methods' BibTeX gave MaveScape and Proteoscope the same key (`mcdermott2026`) when a run's
+  methods cited both; a program's key is now its name and year (`mavescape2026`).
 
 ### Validation
 
@@ -96,6 +122,16 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   `headless-run` checks `mavescape export --format figures` (twice the same bytes, the window's
   drawing); the remote session (180 checks) the window's manifest against Node's, `check_figure`
   and a figure opened in the window.
+- The `report` suite (8 checks; wave 6, slice 4): GRB2's workspace built one operation at a time,
+  every operation said and the decision log the history; the example opened and scored alone says
+  nothing more; each of the 14 examples' runs, the report's paragraphs its methods word for word;
+  every reference with a DOI (43) against Crossref's record of it (`validation/fixtures/
+  crossref.json`, recorded by `fixtures/make-crossref.mjs`), a field Crossref records otherwise
+  (for three references) left out and said; references in the order cited, BibTeX keys unique; the same report
+  again and from the archive; a run removed takes out the comparison that read it. The remote
+  session (184 checks): the archive's report and the Report view's, after a comparison and a
+  robustness check are added, Node's text; what was kept what Node computes. `headless-run` (33):
+  `mavescape export --format report` the archive's report, the same bytes twice.
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
   was lost on CI's runner when the command's exit was seen before its output.
 

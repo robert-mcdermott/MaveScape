@@ -14,6 +14,7 @@
 //                          wave 6, slice 2)
 //   results/<run>.csv      each run's scores (one file per condition beyond the first)
 //   methods.md, references.bib   the latest run's methods and references
+//   report.md, report.bib  the workspace's report and its references (wave 6, slice 4)
 //
 // Written deterministically: the same workspace gives the same bytes in any time zone (the
 // entries are dated with the workspace's modification time, in UTC). Read defensively: only these names, nothing outside the
@@ -32,7 +33,7 @@ export const ARCHIVE_VERSION = 1;
 export const LIMITS = { entry: 2 ** 31, total: 2 ** 33, entries: 10000 };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const NAME = /^(manifest\.json|workspace\.json|methods\.md|references\.bib|sources\/[0-9a-f]{64}(\.[A-Za-z0-9]{1,8}){0,2}|results\/[A-Za-z0-9_.-]{1,120}\.csv)$/;
+const NAME = /^(manifest\.json|workspace\.json|methods\.md|references\.bib|report\.md|report\.bib|sources\/[0-9a-f]{64}(\.[A-Za-z0-9]{1,8}){0,2}|results\/[A-Za-z0-9_.-]{1,120}\.csv)$/;
 
 const extension = (fileName) => {
   const m = /(\.[A-Za-z0-9]{1,8}(\.gz)?)$/i.exec(fileName ?? '');
@@ -44,7 +45,7 @@ const extension = (fileName) => {
 // Map(sha256 → bytes) of the figures' images, structures:
 // Map(sha256 → bytes) of the structures' files or null for checksums only, results:
 // Map(run id → results) (runs without results are left out of results/), methods: { markdown,
-// bibtex } }. Returns { bytes, manifest }.
+// bibtex }, report: { markdown, bibtex } (lib/report.js) }. Returns { bytes, manifest }.
 // The files of a source the library keeps: its tables, and MaveDB's mapped variants beside them
 // (wave 3, slice 3).
 export function sourceFiles(source) {
@@ -128,6 +129,10 @@ export async function writeArchive(ws, options = {}) {
     files.push({ name: 'methods.md', data: encoder.encode(options.methods.markdown) });
     files.push({ name: 'references.bib', data: encoder.encode(options.methods.bibtex) });
   }
+  if (options.report) {
+    files.push({ name: 'report.md', data: encoder.encode(options.report.markdown) });
+    files.push({ name: 'report.bib', data: encoder.encode(options.report.bibtex) });
+  }
   const manifest = {
     format: ARCHIVE_FORMAT,
     version: ARCHIVE_VERSION,
@@ -177,7 +182,7 @@ async function readLimited(archive, entry) {
 }
 
 // Reads an archive: { manifest, ws, sources: Map(sha256 → bytes), results: Map(path → text),
-// methods, problems: [messages] }. Throws when it is not a MaveScape archive or breaks a limit.
+// methods, report, problems: [messages] }. Throws when it is not a MaveScape archive or breaks a limit.
 export async function readArchive(bytes, limits = LIMITS) {
   const entries = listZip(bytes);
   if (entries.length > limits.entries) throw new Error(`The archive holds ${entries.length} files; a MaveScape archive holds at most ${limits.entries}.`);
@@ -233,5 +238,6 @@ export async function readArchive(bytes, limits = LIMITS) {
   if (manifest.structures === 'included') for (const f of structureFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The structure file of ${f.name} (${f.fileName}) is not in the archive: its saved views will fetch it again or ask for it.`);
   const results = new Map([...files].filter(([n]) => n.startsWith('results/')).map(([n, d]) => [n, decoder.decode(d)]));
   const methods = files.has('methods.md') ? { markdown: decoder.decode(files.get('methods.md')), bibtex: files.has('references.bib') ? decoder.decode(files.get('references.bib')) : '' } : null;
-  return { manifest, ws, sources, results, methods, problems };
+  const report = files.has('report.md') ? { markdown: decoder.decode(files.get('report.md')), bibtex: files.has('report.bib') ? decoder.decode(files.get('report.bib')) : '' } : null;
+  return { manifest, ws, sources, results, methods, report, problems };
 }

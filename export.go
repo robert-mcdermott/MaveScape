@@ -106,7 +106,7 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 	var opts exportOptions
 	flags := flag.NewFlagSet("mavescape export", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&opts.format, "format", "mavedb", "mavedb (a MaveDB deposit), tables (MaveScape's tables, as mavescape run writes them) or figures (the workspace's figures, with their manifests)")
+	flags.StringVar(&opts.format, "format", "mavedb", "mavedb (a MaveDB deposit), tables (MaveScape's tables, as mavescape run writes them), figures (the workspace's figures, with their manifests) or report (the workspace's report, Markdown and BibTeX)")
 	flags.StringVar(&opts.out, "out", "", "the folder for the files (made if missing; must be empty unless --overwrite)")
 	flags.StringVar(&opts.run, "run", "", "the run by name or id (default: the latest)")
 	flags.StringVar(&opts.condition, "condition", "", "mavedb: the condition, by name or number (default: each, in a folder of its own)")
@@ -123,9 +123,11 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 		fmt.Fprintln(out, "Usage: mavescape export --format mavedb --out deposit/ [flags] analysis.msz")
 		fmt.Fprintln(out, "       mavescape export --format tables --out tables/ [flags] analysis.msz")
 		fmt.Fprintln(out, "       mavescape export --format figures --out figures/ [flags] analysis.msz")
+		fmt.Fprintln(out, "       mavescape export --format report --out report/ [flags] analysis.msz")
 		fmt.Fprintln(out, "Writes a run of a saved workspace without a window: as a MaveDB deposit (the scores, counts,")
 		fmt.Fprintln(out, "column descriptions, experiment and score set as MaveDB takes them; nothing is sent), or as")
-		fmt.Fprintln(out, "MaveScape's tables; or the workspace's figures (SVG, PDF and PNG, each carrying its manifest, and figures.json).")
+		fmt.Fprintln(out, "MaveScape's tables; or the workspace's figures (SVG, PDF and PNG, each carrying its manifest, and figures.json);")
+		fmt.Fprintln(out, "or its report (report.md, the methods of the whole workspace, and report.bib).")
 		fmt.Fprintln(out, "export.json records what was written. Exit status: 0 written, 1 not written")
 		fmt.Fprintln(out, "(or, with --strict, a deposit lacking what MaveDB requires), 2 a wrong command line, a missing")
 		fmt.Fprintln(out, "input, outputs in the way, or no browser.")
@@ -136,9 +138,9 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 		return opts, err
 	}
 	switch opts.format {
-	case "mavedb", "tables", "figures":
+	case "mavedb", "tables", "figures", "report":
 	default:
-		return opts, fmt.Errorf("--format is mavedb, tables or figures, not %q", opts.format)
+		return opts, fmt.Errorf("--format is mavedb, tables, figures or report, not %q", opts.format)
 	}
 	if len(rest) != 1 {
 		return opts, errors.New("name one workspace archive (.msz)")
@@ -171,6 +173,9 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 	}
 	if opts.format == "figures" && (opts.details != "" || opts.condition != "" || opts.strict || opts.run != "") {
 		return opts, errors.New("--run, --details, --condition and --strict are for --format mavedb or tables (the figures name their own runs)")
+	}
+	if opts.format == "report" && (opts.details != "" || opts.condition != "" || opts.strict || opts.run != "") {
+		return opts, errors.New("--run, --details, --condition and --strict are for --format mavedb or tables (the report is the whole workspace's)")
 	}
 	if opts.details != "" {
 		if opts.details, err = existingFile(opts.details); err != nil {
@@ -219,6 +224,9 @@ func executeExport(ctx context.Context, opts exportOptions, browser string, reco
 	}
 	if opts.format == "figures" {
 		return exportFigures(steps, opts, record)
+	}
+	if opts.format == "report" {
+		return exportReport(steps, opts, record)
 	}
 	if opts.format == "tables" {
 		args := map[string]any{}
@@ -428,6 +436,26 @@ func exportFigures(steps *runStepper, opts exportOptions, record *runRecord) int
 	}
 	if failed {
 		record.Problems = append(record.Problems, "Some figures could not be written (see the steps).")
+		return exitFailed
+	}
+	return 0
+}
+
+// exportReport writes the workspace's report (wave 6, slice 4): report.md, its methods written from
+// the record as the Report view shows them, and report.bib, its references.
+func exportReport(steps *runStepper, opts exportOptions, record *runRecord) int {
+	if err := os.MkdirAll(opts.out, 0o755); err != nil {
+		record.Problems = append(record.Problems, err.Error())
+		return exitFailed
+	}
+	failed := false
+	for _, e := range []struct{ what, file string }{{"report", "report.md"}, {"report-references", "report.bib"}} {
+		if _, ok := steps.do("export", map[string]any{"what": e.what, "path": filepath.Join(opts.out, e.file)}); !ok {
+			failed = true
+		}
+	}
+	if failed {
+		record.Problems = append(record.Problems, "The report could not be written (see the steps).")
 		return exitFailed
 	}
 	return 0
