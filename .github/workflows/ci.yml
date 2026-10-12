@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # A wave's branch too, so each slice meets the runner as it is built, not at the release.
+    branches: [main, 'wave*']
   pull_request:
 
 permissions:

@@ -4,7 +4,11 @@
 // engine, and every export, written to disk by the hub, against the files made in Node from the
 // workspace archive the session exported (the record's round trip, wave 1 slice 8).
 //
-//   node validation/remote-session.mjs [--verbose]
+//   node validation/remote-session.mjs [--verbose] [--like-ci [rate]]
+//
+// --like-ci runs the page as GitHub's runners do (the 0.5.0 release): WebGPU drawn in software
+// (Chrome's SwiftShader adapter, whose graphics process does not last) and the page's processor
+// slowed (rate times, 4 by default), so that what fails there first fails here.
 //
 // Needs Go (to build MaveScape from source) and Chrome, Chromium, Edge or Brave (CHROME=path).
 // Exits with status 1 when a check fails.
@@ -58,6 +62,8 @@ const PORT = 8836;
 const PROTEOSCOPE_PORT = 8856;
 const verbose = process.argv.includes('--verbose');
 const requireData = process.argv.includes('--require-data');
+const likeCI = process.argv.includes('--like-ci');
+const ciRate = likeCI ? Number(process.argv[process.argv.indexOf('--like-ci') + 1]) || 4 : 1;
 // DHFR's MaveDB tables (wave 3, slice 6), as node validation/fetch.mjs mavedb-dhfr keeps them: copied
 // into the fetcher's cache, so that its two score sets open together offline.
 const DHFR = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-dhfr');
@@ -157,7 +163,11 @@ try {
   called.delete('get_state');
   check('without a page, an action is refused with a reason', `${noPage.status}: ${noPage.error}`, noPage.status === 503 && /No MaveScape page/.test(noPage.error));
 
-  browser = await launch({ width: 1440, height: 900, scale: 1 });
+  browser = await launch({ width: 1440, height: 900, scale: 1, args: likeCI ? ['--use-webgpu-adapter=swiftshader'] : [] });
+  if (likeCI) {
+    await browser.send('Emulation.setCPUThrottlingRate', { rate: ciRate });
+    console.log(`Like CI: WebGPU in software, the page's processor ${ciRate} times slower.`);
+  }
   const errors = [];
   browser.on('Runtime.exceptionThrown', (e) => errors.push(e.exceptionDetails?.exception?.description ?? e.exceptionDetails?.text));
   // Every request the page makes in the whole session (wave 3, slice 1: none beyond its origin).

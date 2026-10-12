@@ -32,9 +32,10 @@ export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // where not). Chrome picks a free
 // debugging port (its profile's DevToolsActivePort file names it), so a Chrome left running by
 // an earlier run cannot be connected to by mistake; give `port` only to fix one.
-export async function launch({ width = 1600, height = 1000, scale = 1.25, port = 0 } = {}) {
+// args: more of Chrome's flags (validation/remote-session.mjs --like-ci: its software WebGPU).
+export async function launch({ width = 1600, height = 1000, scale = 1.25, port = 0, args = [] } = {}) {
   const profile = mkdtempSync(join(tmpdir(), 'mavescape-capture-'));
-  const chrome = spawn(findChrome(), ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--force-color-profile=srgb', '--enable-unsafe-webgpu', `--window-size=${width},${height}`, 'about:blank'], { stdio: 'ignore' });
+  const chrome = spawn(findChrome(), ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--force-color-profile=srgb', '--enable-unsafe-webgpu', `--window-size=${width},${height}`, ...args, 'about:blank'], { stdio: 'ignore' });
   let page = null;
   // A Chrome that hangs while starting must not hang its caller: each request has a deadline, and
   // so has the start (a cold start on a CI runner can take tens of seconds).
