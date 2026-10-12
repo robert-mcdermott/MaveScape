@@ -20,6 +20,7 @@ import { createZip, listZip, crc32 } from './zip.js';
 import { sha256 } from './sha256.js';
 import { parseWorkspace, serializeWorkspace, verifyHistory } from './workspace.js';
 import { scoresCSV } from './exports.js';
+import { possessive } from './words.js';
 
 export const ARCHIVE_FORMAT = 'mavescape-archive';
 export const ARCHIVE_VERSION = 1;
@@ -186,7 +187,7 @@ export async function readArchive(bytes, limits = LIMITS) {
   if (manifest.sources === 'included') {
     for (const s of ws.sources) for (const f of sourceFiles(s)) if (!sources.has(f.sha256)) problems.push(`The table ${f.fileName ?? s.name} is not in the archive.`);
   }
-  for (const f of annotationFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The annotation ${f.name}'s file (${f.fileName}) is not in the archive: its tracks will not show.`);
+  for (const f of annotationFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The annotation ${possessive(f.name)} file (${f.fileName}) is not in the archive: its tracks will not show.`);
   const results = new Map([...files].filter(([n]) => n.startsWith('results/')).map(([n, d]) => [n, decoder.decode(d)]));
   const methods = files.has('methods.md') ? { markdown: decoder.decode(files.get('methods.md')), bibtex: files.has('references.bib') ? decoder.decode(files.get('references.bib')) : '' } : null;
   return { manifest, ws, sources, results, methods, problems };

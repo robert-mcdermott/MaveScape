@@ -42,6 +42,7 @@ import { unitOf } from './runs.js';
 import { RESCALINGS } from './score.js';
 import { NORMALIZATIONS } from './score-ratio.js';
 import { KIND, KIND_NAMES } from './variants.js';
+import { possessive } from './words.js';
 
 // Fewer variants in common than this are not compared.
 export const MIN_MATCHED = 10;
@@ -456,8 +457,8 @@ function matchVariants(va, vb, coordinates, offsets) {
 // --- The report and the statistics ----------------------------------------------------------------
 
 const fmtCount = (n) => n.toLocaleString('en-US');
-// A label's possessive: "Published scores'", "Run 1's".
-export const possessive = (label) => (/s$/.test(label) ? `${label}'` : `${label}'s`);
+// A label's possessive: "Published scores'", "Run 1's" (lib/words.js).
+export { possessive };
 const fmt3 = (x) => (Number.isFinite(x) ? Number(x.toFixed(3)).toString() : '—');
 const STATUS_RANK = { ok: 0, qualified: 1, blocked: 2 };
 

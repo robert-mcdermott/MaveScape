@@ -49,6 +49,7 @@ import { normalizeUrn } from '../lib/mavedb.js';
 import { setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
+import { possessive } from '../lib/words.js';
 
 export class ActionError extends Error {}
 
@@ -116,7 +117,7 @@ export function installRemote(app) {
 
   async function resultsOf(run) {
     const entry = await ensureResults(app, run);
-    if (!entry?.results) throw new ActionError(`${run.name}'s scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
+    if (!entry?.results) throw new ActionError(`${possessive(run.name)} scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
     return entry;
   }
 
@@ -675,7 +676,7 @@ export function installRemote(app) {
         if (at) cells.push(...at);
         else unknown.push(`position ${p}`);
       }
-      if (unknown.length) throw new ActionError(`Not on ${run.name}'s map: ${unknown.slice(0, 10).join(', ')}${unknown.length > 10 ? '…' : ''}. Variants are named as MAVE-HGVS single substitutions (p.Trp36Ala) on positions 1–${model.length}.`);
+      if (unknown.length) throw new ActionError(`Not on ${possessive(run.name)} map: ${unknown.slice(0, 10).join(', ')}${unknown.length > 10 ? '…' : ''}. Variants are named as MAVE-HGVS single substitutions (p.Trp36Ala) on positions 1–${model.length}.`);
       // A query; one that needs the run's robustness checks it first (seeded: the same each time).
       let query = null;
       if (args.query) {
@@ -685,7 +686,7 @@ export function installRemote(app) {
           found = await runQuery(app, run, String(args.query), map).catch(async (error) => {
             if (!(error instanceof QueryError) || error.need !== 'robustness') throw error;
             const state = await checkRobustness(app, run);
-            if (state.status !== 'done') throw new ActionError(`The query needs ${run.name}'s robustness checked, and it could not be: ${state.error}`);
+            if (state.status !== 'done') throw new ActionError(`The query needs ${possessive(run.name)} robustness checked, and it could not be: ${state.error}`);
             return runQuery(app, run, String(args.query), map);
           });
         } catch (error) {
@@ -726,8 +727,8 @@ export function installRemote(app) {
       }
       app.focusItem({ kind: 'run', id: run.id });
       await show('map');
-      const where = `on ${run.name}'s ${contrast === null ? '' : `${own.differential[contrast].name} `}map`;
-      const what = operation === 'replace' ? '' : ` (${{ add: 'added', intersect: 'kept those also', subtract: 'removed' }[operation]} ${plural(keys.length, 'variant')} ${operation === 'add' ? 'to' : operation === 'intersect' ? 'in' : 'from'} the selection)`;
+      const where = `on ${possessive(run.name)} ${contrast === null ? '' : `${own.differential[contrast].name} `}map`;
+      const what = operation === 'replace' ? '' : ` (${plural(keys.length, 'variant')} matched: ${{ add: 'added to the selection', intersect: 'the selection kept where they are', subtract: 'taken from the selection' }[operation]})`;
       return { message: next.keys.length ? `Selected ${plural(next.keys.length, 'variant')} ${where}${what}${saved ? `, saved as "${saved}"` : ''}.` : `No variant ${where} matches${args.query ? ` "${args.query}"` : ''}${operation === 'replace' ? '' : ` once ${operation === 'intersect' ? 'intersected with' : 'taken from'} the selection`}; nothing is selected.`, data: { run: run.name, condition: own.conditions[condition].name, ...(contrast === null ? {} : { contrast: own.differential[contrast].name }), operation, matched: keys.length, count: next.keys.length, query: next.query, variants: next.keys, saved } };
     },
 
@@ -746,7 +747,7 @@ export function installRemote(app) {
       const row = v.key.indexOf(name) >= 0 ? v.key.indexOf(name) : v.original.indexOf(String(args.variant));
       app.focusItem({ kind: 'variant', id: row >= 0 ? v.key[row] : name, run: run.id, condition });
       await settle();
-      if (row < 0) return { message: `${name} is not in ${run.name}'s table: it was not measured (missing on the map, not "no effect").`, data: { variant: name, measured: false } };
+      if (row < 0) return { message: `${name} is not in ${possessive(run.name)} table: it was not measured (missing on the map, not "no effect").`, data: { variant: name, measured: false } };
       const reasons = c.reason[row] ? STAGE_BY_CODE.get(c.reason[row]) : null;
       // The replicates of the variant's tile (wave 3, slice 6): another tile's do not measure it.
       const tiles = new Map((run.inputs.design.library?.tiles ?? []).map((t) => [t.id, t]));
@@ -953,7 +954,7 @@ export function installRemote(app) {
       app.focusItem({ kind: 'run', id: run.id });
       await app.setMode('score');
       const state = await checkRobustness(app, run, { max });
-      if (state.status !== 'done') throw new ActionError(`${run.name}'s robustness could not be checked: ${state.error}`);
+      if (state.status !== 'done') throw new ActionError(`${possessive(run.name)} robustness could not be checked: ${state.error}`);
       await settle();
       const { summary } = state;
       const data = JSON.parse(robustnessJSON(summary, run, state.results.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }))));
@@ -1043,11 +1044,11 @@ export function installRemote(app) {
         const run = resolveRun(args.run);
         await resultsOf(run);
         const state = await checkRobustness(app, run);
-        if (state.status !== 'done') throw new ActionError(`${run.name}'s robustness could not be checked: ${state.error}`);
+        if (state.status !== 'done') throw new ActionError(`${possessive(run.name)} robustness could not be checked: ${state.error}`);
         const files = robustnessFiles(app, run, state);
-        if (what === 'robustness-positions') return { file: files.positions.text, message: `${run.name}'s positions across ${state.summary.total} analyses.` };
+        if (what === 'robustness-positions') return { file: files.positions.text, message: `${possessive(run.name)} positions across ${state.summary.total} analyses.` };
         const json = /\.json$/i.test(args.path ?? '');
-        return { file: json ? files.json.text : files.csv.text, message: json ? `${run.name}'s robustness: its record.` : `${run.name}'s variants across ${state.summary.total} analyses.` };
+        return { file: json ? files.json.text : files.csv.text, message: json ? `${possessive(run.name)} robustness: its record.` : `${possessive(run.name)} variants across ${state.summary.total} analyses.` };
       }
       // The comparison shown (wave 4, slices 1–3): its variants compared (CSV), or its report and
       // statistics (a path ending in .json); its disagreement by position (CSV); a map of it (SVG:
@@ -1096,7 +1097,7 @@ export function installRemote(app) {
           throw new ActionError(error.message);
         }
         const r = made.deposit.report;
-        return { file: made.bytes, message: `${run.name}'s MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
+        return { file: made.bytes, message: `${possessive(run.name)} MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
       }
       if (what === 'archive') {
         file = await archiveFile(app, { includeTables: args.include_tables !== false });
@@ -1116,12 +1117,12 @@ export function installRemote(app) {
         const model = modelOf(run, results, condition);
         const shown = (await runTrackState(app, run, { condition })).arranged.filter((t) => t.shown);
         const tracks = shown.length && shown.every((t) => t.length === model.length) ? shown : [];
-        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results: proteinView(results) ?? results, tracks }), message: `${run.name}'s map (SVG)${tracks.length ? `, with ${plural(tracks.length, 'track')}` : ''}.` };
+        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results: proteinView(results) ?? results, tracks }), message: `${possessive(run.name)} map (SVG)${tracks.length ? `, with ${plural(tracks.length, 'track')}` : ''}.` };
       }
       if (what === 'tracks') {
         const state = await runTrackState(app, run, { condition });
         const shown = state.arranged.filter((t) => t.shown);
-        return { file: tracksCSV(shown, state.model), message: `${run.name}'s tracks shown, position by position (CSV): ${shown.map((t) => t.label).join(', ') || 'none'}.` };
+        return { file: tracksCSV(shown, state.model), message: `${possessive(run.name)} tracks shown, position by position (CSV): ${shown.map((t) => t.label).join(', ') || 'none'}.` };
       }
       file = await runFile(app, run, what, condition);
       return { file: file.text, message: `${run.name}: ${what}.` };

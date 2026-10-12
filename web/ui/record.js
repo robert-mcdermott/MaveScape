@@ -17,6 +17,7 @@ import { newId } from '../lib/clock.js';
 import { ensureResults } from './run-results.js';
 import { workerInput } from './score-input.js';
 import { openDepositDialog } from './mavedb-export.js';
+import { possessive } from '../lib/words.js';
 
 const encoder = new TextEncoder();
 const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'export';
@@ -47,7 +48,7 @@ export const RUN_FILES = ['scores', 'protein-scores', 'counts', 'qc-samples', 'q
 // scores cannot be recomputed.
 export async function runFile(app, run, kind, condition = 0) {
   const entry = await ensureResults(app, run);
-  if (!entry?.results) throw new Error(`${run.name}'s scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
+  if (!entry?.results) throw new Error(`${possessive(run.name)} scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
   const results = entry.results;
   if (!results.conditions[condition]) throw new Error(`${run.name} has ${results.conditions.length} condition${results.conditions.length === 1 ? '' : 's'}.`);
   const base = `${safe(app.store.ws.name)}_${safe(run.name)}${results.conditions.length > 1 ? `_${safe(results.conditions[condition].name)}` : ''}`;

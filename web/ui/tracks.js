@@ -18,6 +18,7 @@ import { addAnnotation, removeAnnotation, setTrackLayout } from '../lib/workspac
 import { normalizeUrn } from '../lib/mavedb.js';
 import { scoreSetResults } from '../lib/scoreset.js';
 import { now as clockNow } from '../lib/clock.js';
+import { possessive } from '../lib/words.js';
 
 const decoder = new TextDecoder();
 // An annotation's kept text, by SHA-256; and each annotation's tracks, by what they were read for.
@@ -103,7 +104,7 @@ export async function runTracks(app, run, model) {
 // The tracks of a run outside the Map view (remote control, exports): its first condition's map.
 export async function runTrackState(app, run, { condition = 0 } = {}) {
   const entry = runEntry(app, run) ?? await ensureResults(app, run);
-  if (!entry?.results) throw new Error(entry?.message ?? `${run.name}'s scores could not be recomputed.`);
+  if (!entry?.results) throw new Error(entry?.message ?? `${possessive(run.name)} scores could not be recomputed.`);
   const results = proteinView(entry.results) ?? entry.results;
   const model = buildMapModel(results, run.inputs.design, { condition });
   const state = await runTracks(app, run, model);

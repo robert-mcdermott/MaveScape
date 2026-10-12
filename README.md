@@ -17,7 +17,7 @@ functional effects for research; it does not classify variants as pathogenic or 
 **[Website and user guide](https://robert-mcdermott.github.io/mavescape/)**: getting started,
 opening your data, scoring, quality control, the map, the record and scripting, with screenshots.
 
-> **Status: 0.3.0 released; 0.4.0 in progress.** Count tables import, designs are set in the
+> **Status: 0.4.0 released; 0.5.0 in progress.** Count tables import, designs are set in the
 > Experiment view, two-population experiments (by log ratio or DiMSum's fitness and error model),
 > time series (by weighted regression on every time point), sorted bins (by their weighted average
 > or maximum likelihood) and barcoded libraries (their barcodes summed, or each scored and
@@ -33,7 +33,7 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
 > would add, and writes the analysis package that `mavescape run` reads. Fourteen examples are on the Start page (eight published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md)'s wave 3 is complete. It brought public data in and out,
+> [roadmap](mavescape-spec/roadmap.md)'s waves 3 and 4 are complete. Wave 3 brought public data in and out,
 > through a fixed list of services: a target checked against its UniProt entry, and any published
 > MaveDB score set opened by search or URN, its scores on the map as published and its counts ready
 > to score again; several score sets of one target open together, their counts joined as
@@ -48,7 +48,7 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > UniProt's domains and secondary structure, conservation (PDBe-KB's profile, or your alignment
 > scored as Capra and Singh's tool scores it), AlphaMissense, ClinVar, gnomAD, MaveDB's own
 > annotations and your own files (predictors' scores, GFF3, tables), each with its source and date.
-> Wave 4 brings comparison. Two replicates, conditions or runs of a workspace (a rescoring, or a
+> Wave 4 brought comparison. Two replicates, conditions or runs of a workspace (a rescoring, or a
 > MaveDB record's published scores against its counts scored again), or a run against another
 > MaveDB score set (kept beside the workspace without opening it) or a predictor (AlphaMissense,
 > EVE, ESM1b), are compared in the Compare view: a compatibility report first (targets and
@@ -66,6 +66,8 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > to the other views. The wave's examples teach it on published data: two laboratories' screens of
 > TP53 that correlate at r −0.78 as published and agree on one scale (Lin's concordance 0.78), and
 > Hsp90's rescoring, correlated with its published scores (r 0.95) but not in agreement (0.48).
+> Wave 5 brings protein structure: the variant-effect map seen on the protein, and the structure used
+> as evidence.
 
 ## What is a MAVE?
 

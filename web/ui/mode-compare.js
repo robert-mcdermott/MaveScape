@@ -154,7 +154,7 @@ async function prepare(app, pair) {
     const run = runOf(ws, spec);
     if (!run) return 'A run of the pair is no longer in the workspace.';
     const entry = await ensureResults(app, run);
-    if (!entry?.results) return `${run.name}'s scores could not be recomputed: ${entry?.message ?? 'unknown'}`;
+    if (!entry?.results) return `${possessive(run.name)} scores could not be recomputed: ${entry?.message ?? 'unknown'}`;
   }
   return null;
 }
@@ -183,7 +183,7 @@ function describe(app, spec, other = null) {
   const key = `${a.id}|${a.file.sha256}|${specKey(other.spec)}`;
   if (!cache.has(key)) {
     const map = sideMap(other);
-    if (!map) throw new Error(`${other.label} has no protein changes to place ${a.name}'s substitutions on (nucleotide variants with no coding sequence).`);
+    if (!map) throw new Error(`${other.label} has no protein changes to place ${possessive(a.name)} substitutions on (nucleotide variants with no coding sequence).`);
     const model = buildMapModel(map.results, map.design, { condition: map.condition });
     const read = annotationTracks(a, text, { target: trackTarget(other.target, ws.targets), protein: model.protein, offset: model.target.offset ?? 0, length: model.length });
     if (!read.tracks.length) throw new Error(`${a.name}: ${read.problem ?? `nothing to place on ${other.target?.name ?? 'the target'}`}`);
@@ -562,7 +562,7 @@ export function mountCompareMode(app, container) {
       return file ? addCompared(app, run, { file: { name: file.name, text: await file.text() } }) : null;
     }));
     return h('div.pane', h('h3', icon('plus'), 'Other sources'),
-      h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 6px' } }, `Kept beside the workspace (not opened as one), placed on ${run.name}'s target: a MaveDB score set of the same protein (another assay, or the published scores of these counts), or a predictor.`),
+      h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 6px' } }, `Kept beside the workspace (not opened as one), placed on ${possessive(run.name)} target: a MaveDB score set of the same protein (another assay, or the published scores of these counts), or a predictor.`),
       h('div.compare-urn', urn, add), direction,
       h('div.btn-row', { style: { marginTop: '6px' } }, amButton, fileButton),
       online ? null : h('p.muted', { style: { fontSize: '11.5px', margin: '6px 0 0' } }, 'Public data are off: a predictor\'s file can still be added.'));

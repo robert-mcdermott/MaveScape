@@ -19,6 +19,7 @@ import { intervalOf } from '../lib/exports.js';
 import { runScore, workerInput } from './score-input.js';
 import { runEntry } from './run-results.js';
 import { exampleRecords, importMaveDB } from './mavedb.js';
+import { possessive } from '../lib/words.js';
 
 const fetchBytes = async (path) => {
   const response = await fetch(path);
@@ -191,7 +192,7 @@ function truthLine(run, results, info, example) {
         if (d.q[i] < 0.05) called += 1;
       }
     });
-    return h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s differences (${d.method}) against the simulated true ones: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants; their 95% intervals hold ${percent(held, a.length)} of the true differences; at q < 0.05, ${found} of the site's ${site} variants called, and ${called} of the ${others} others.`));
+    return h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${possessive(run.name)} differences (${d.method}) against the simulated true ones: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants; their 95% intervals hold ${percent(held, a.length)} of the true differences; at q < 0.05, ${found} of the site's ${site} variants called, and ${called} of the ${others} others.`));
   }
   const c = results.conditions[0];
   const a = [];
@@ -207,7 +208,7 @@ function truthLine(run, results, info, example) {
   // Rescaled scores, and sorted bins' (scaled per replicate), are on another scale than the true
   // effects: their intervals are not compared.
   const comparable = !c.rescale && !example.simulation?.sort;
-  return h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${run.name}'s scores against the simulated true effects: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants${comparable ? `; their 95% intervals hold ${percent(held, a.length)} of them` : ''}.`));
+  return h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${possessive(run.name)} scores against the simulated true effects: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants${comparable ? `; their 95% intervals hold ${percent(held, a.length)} of them` : ''}.`));
 }
 
 // The guide of the open example, as an inspector section (null when the workspace is not one).

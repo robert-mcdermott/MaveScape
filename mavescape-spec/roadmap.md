@@ -2064,6 +2064,31 @@ follow, and the wave ends with its examples, as waves 2 and 3 did.
        said "Of the 1 least tolerant positions"; one is now said as one.
      - Wave 4 is complete with slice 6.
 
+**Released 0.4.0 on 2026-10-11.** A comparison is the session's, but what it rests on is the
+workspace's, so 0.4 leaves two archives that keep it (`validation/archives/release-0.4.0-*.msz`,
+0.9 MB together). They were saved by 0.4.0 itself, its window driven through remote control offline
+by `make-0.4.0.mjs`:
+- TP53, two screens on two scales: the published scores, the target checked against UniProt, two
+  MaveDB score sets kept beside it with their directions stated (one with protein variants on
+  several rows), a selection by query and another made from it by a set operation;
+- GRB2's SH3 domain, compared: two runs, its record's published scores kept beside, AlphaMissense
+  and UniProt's features beside the map, and selections by query (a feature's positions, an
+  operation on a saved selection, Run 1's robustness verdicts).
+
+Every later version must reopen them and reproduce their three runs. It must also read their score
+sets again, and run their saved queries again to the same variants (a query of the robustness
+verdicts must keep its variants on the map). At the release, `mavescape run --from-workspace`
+reran all eighteen runs of every release's archives in a window, each to its recorded hash.
+- Found by the release:
+  - **Messages wrote "Published scores's"**: a run, table or annotation whose name ends in "s" took
+    "'s" wherever a message named it (remote control's selections among them). One helper writes
+    every such possessive now (`lib/words.js`).
+  - **Remote control's message for an operation on the selection was garbled** ("kept those also
+    394 variants in the selection"); it says how many matched and what was done.
+  - **The screenshots' accessibility audit has never run**: `capture.mjs --audit` asks for an
+    `axe-core` data set that `sources.json` does not have. The screenshots were recaptured without
+    it, as at 0.3.0; adding the data set is left for later.
+
 ## 0.5.0: variants in 3D (wave 5)
 
 Structure viewing as a full part of MaveScape: a variant-effect map seen on the protein, and the

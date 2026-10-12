@@ -1,9 +1,17 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.4.0 (2026-10-11)
 
-Wave 4 of the [roadmap](mavescape-spec/roadmap.md): compare. Built slice by slice; this section
-grows with each.
+Wave 4 of the [roadmap](mavescape-spec/roadmap.md): compare. Two replicates, conditions or runs of
+a workspace, or a run and a MaveDB score set or a predictor kept beside it, are compared after a
+report that says what their agreement can mean, by statistics checked against R, with their maps,
+their difference and the variants and positions that differ beyond their uncertainty. Two assays go
+on one scale by their anchors, the anchors' uncertainty carried into the tests. A run is scored
+again across other reasonable analysis choices, and each variant's conclusion is said to hold or to
+depend on a choice, which is named. Variants are selected on the map by click, rectangle, freeform
+shape or a query in words, saved with their queries, combined, and carried across the views. There
+are fourteen examples. Workspaces saved by 0.1.0, 0.2.0 and 0.3.0 open and reproduce their runs; two
+saved by 0.4.0 are kept for later versions to do the same.
 
 ### Added
 
@@ -220,6 +228,9 @@ grows with each.
   Bland–Altman plot): each tick is now a whole multiple of the step.
 - A robustness check of a run of fewer than twenty positions said "Of the 1 least tolerant
   positions"; one position is now said as one.
+- Messages that name a run, a table or an annotation whose name ends in "s" wrote "Published
+  scores's"; they write "Published scores'" now (`lib/words.js`). A selection changed by an
+  operation through remote control says how many variants matched and what was done.
 
 ### Validation
 
@@ -338,6 +349,22 @@ grows with each.
   them.
 - Unit tests: `score.test.mjs`: a protein variant on several rows merged (unweighted, or by 1/SE²),
   a copy among them read once, frameshifts alike left out, nucleotide variants still refused.
+- **Archives that keep opening:** two workspaces saved by MaveScape 0.4.0 itself, driven through its
+  remote control offline (`validation/archives/release-0.4.0-*.msz`, written by `make-0.4.0.mjs`),
+  hold what a comparison rests on, which the workspace keeps (a comparison itself is the
+  session's):
+  - the TP53 example, its target checked against UniProt, two MaveDB score sets kept beside it
+    with the directions stated (one of them with protein variants on several rows), a selection by
+    query and another made from it by a set operation;
+  - GRB2's SH3 domain with two runs, its record's published scores kept beside, AlphaMissense and
+    UniProt's features beside the map, and selections by query: a feature's positions, an
+    operation on a saved selection, and Run 1's robustness verdicts.
+
+  The `roundtrip` suite opens them with the archives of 0.1.0 to 0.3.0, recomputes their three runs
+  to their recorded output hashes, and reads their annotations' tracks again. It now also reads each
+  score set kept beside a workspace again from the archive's own file, and runs each saved
+  selection's query again on its run's map: it must select the same variants. A query of the
+  robustness verdicts, which a later version's check may vary, must keep its variants on the map.
 
 ## 0.3.0 (2026-10-11)
 

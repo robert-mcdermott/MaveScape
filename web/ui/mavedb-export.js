@@ -11,6 +11,7 @@ import { DESIGN_KEYWORDS, MAVEDB_KEYWORDS } from '../lib/readout.js';
 import { setDeposit } from '../lib/workspace.js';
 import { ensureResults } from './run-results.js';
 import { methodsOf } from './record.js';
+import { possessive } from '../lib/words.js';
 
 const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'export';
 const exact = (n) => n.toLocaleString('en-US');
@@ -30,7 +31,7 @@ async function publishedTables(app, run) {
 // cannot be made.
 export async function runDeposit(app, run, condition = 0) {
   const entry = await ensureResults(app, run);
-  if (!entry?.results) throw new Error(`${run.name}'s scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
+  if (!entry?.results) throw new Error(`${possessive(run.name)} scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
   const published = run.inputs.design.model === 'scores';
   const methods = published ? null : await methodsOf(app, run);
   const tables = published ? await publishedTables(app, run) : {};

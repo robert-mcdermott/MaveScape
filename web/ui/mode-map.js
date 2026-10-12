@@ -28,6 +28,7 @@ import { mountVariantMap } from './variant-map.js';
 import { exportSelection } from './record.js';
 import { annotationsSignature, exportTracks, runTracks, tracksPanel } from './tracks.js';
 import { arrangeTracks, describeTrack, describeTrackAt, sourceText } from '../lib/tracks.js';
+import { possessive } from '../lib/words.js';
 
 // Named by their colors only: which end is loss of function depends on the assay (the readout).
 const PALETTES = [['rdbu', 'Blue (lower) – red (higher)'], ['puor', 'Purple (lower) – orange (higher)']];
@@ -438,7 +439,7 @@ export function mountMapMode(app, container) {
     if (!entry?.results) {
       if (!entry) ensureResults(app, run);
       const failed = entry && entry.status === 'failed';
-      root.append(h('div.view-body', h('div.pane', failed ? h('div.callout.danger', icon('warning'), h('span', `The run's scores could not be recomputed: ${entry.message}`)) : h('p.muted', { style: { margin: 0 } }, `Recomputing ${run.name}'s scores from its recorded inputs…`))));
+      root.append(h('div.view-body', h('div.pane', failed ? h('div.callout.danger', icon('warning'), h('span', `The run's scores could not be recomputed: ${entry.message}`)) : h('p.muted', { style: { margin: 0 } }, `Recomputing ${possessive(run.name)} scores from its recorded inputs…`))));
       destroyMap();
       return;
     }

@@ -102,7 +102,7 @@ import { countsRun, coverage, exampleRun, movedRun, plantedPair, predictorSide, 
 import { scoreSetResults } from '../web/lib/scoreset.js';
 import { callsOf, CLASS, replicateDispersion, robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_SEED, specificationInputs, specifications, VERDICT } from '../web/lib/robustness.js';
 import { checkPlanted, checkTable } from './robustness-cases.mjs';
-import { combineKeys, evaluateQuery, featuresOf, parseQuery, queryContext, QueryError, selectByQuery } from '../web/lib/query.js';
+import { combineKeys, evaluateQuery, featuresOf, parseQuery, queryContext, QueryError, queryUses, selectByQuery } from '../web/lib/query.js';
 import { cellsInPolygon, geometry, hitTest } from '../web/lib/map-render.js';
 import { readUniProtFeatures, uniprotTracks } from '../web/lib/providers/uniprot-features.js';
 import { selectionCSV, selectionJSON } from '../web/lib/exports.js';
@@ -2156,6 +2156,7 @@ const suites = {
       const chain = verifyHistory(opened.ws);
       check('roundtrip', `${file}, saved by MaveScape ${release}, opens: every file's SHA-256 as its manifest records, the history's chain unbroken`, `${opened.ws.runs.length} runs, ${opened.ws.selections.length} selections, ${chain.entries} history entries; ${opened.problems.length ? opened.problems[0] : 'no problems'}`, !opened.problems.length && chain.ok, 'no problems');
       let last = null;
+      const byRun = new Map();
       for (const [index, run] of opened.ws.runs.entries()) {
         // Its table assembled from the archive's files as the window assembles it (a barcode map
         // applied, codon variants read at the protein level: 0.2's sources).
@@ -2166,6 +2167,7 @@ const suites = {
         }
         // The run its first selection is of (or its first run): the one whose exports are made again.
         if (!last || run.id === opened.ws.selections[0]?.run) last = { run, table: t, results: again.results };
+        byRun.set(run.id, { run, table: t, results: again.results });
         const verdict = reproduction(run, outputDigest(again.results), 'this version');
         // Against the scores the archive holds for the run (results/<run>.csv), when it holds them.
         const held = opened.results.get(`results/${run.id}.csv`);
@@ -2202,6 +2204,38 @@ const suites = {
           const order = opened.ws.tracks?.order ?? [];
           check('roundtrip', `${file}: its annotations' tracks read again from the archive's own files, in the order the workspace keeps`, `${per.map(([n, k]) => `${n} ${k}`).join(', ')}; first ${tracks[0]?.label}`, per.every(([, k]) => k > 0) && (!order.length || tracks[0]?.id === order[0]), 'each a track or more, in order');
         }
+      }
+      // What a comparison rests on (0.4's): each MaveDB score set kept beside the workspace read again
+      // from the archive's own file, as published, with the direction stated.
+      const keptSets = (opened.ws.annotations ?? []).filter((a) => a.provider === 'mavedb-scores');
+      if (keptSets.length) {
+        const read = keptSets.map((a) => {
+          const r = scoreSetResults(new TextDecoder().decode(opened.sources.get(a.file.sha256)), a.record.scoreSet);
+          return { name: a.record.scoreSet.urn, scored: r.error ? null : r.results.conditions[0].scored, error: r.error, direction: a.record.scoreSet.readout?.direction ?? 'not stated' };
+        });
+        check('roundtrip', `${file}: each MaveDB score set kept beside the workspace read again from the archive's own file, as published, with the direction stated`, read.map((x) => `${x.name} ${x.error ?? `${x.scored} scored`} (${x.direction})`).join('; '), read.every((x) => !x.error && x.scored > 0), 'each read');
+      }
+      // Each selection made by a query (0.4's), its query run again on its run's map: the same
+      // variants. A query of the robustness verdicts, which a later version's check may vary, keeps
+      // its variants on the map.
+      const byQuery = opened.ws.selections.filter((x) => x.query);
+      if (byQuery.length) {
+        const again = byQuery.map((x) => {
+          const r = byRun.get(x.run);
+          if (!r) return { name: x.name, ok: false, why: 'its run not recomputed' };
+          const results = proteinView(r.results) ?? r.results;
+          const model = buildMapModel(results, r.run.inputs.design, { condition: x.condition ?? 0 });
+          const ast = parseQuery(x.query);
+          if (queryUses(ast, 'verdict')) {
+            const onMap = new Set(selectByQuery('all', queryContext({ model, results, design: r.run.inputs.design })).keys);
+            return { name: x.name, ok: x.keys.every((k) => onMap.has(k)), why: `${x.keys.length} on the map (a query of the verdicts)` };
+          }
+          const features = queryUses(ast, 'feature') ? featuresOf(nodeTracks(opened.ws, r.run, model, opened.sources, { results: r.results, table: r.table })) : null;
+          const sets = opened.ws.selections.map((y) => ({ name: y.name, keys: y.keys }));
+          const keys = evaluateQuery(ast, queryContext({ model, results, own: r.results, design: r.run.inputs.design, features, sets })).keys;
+          return { name: x.name, ok: JSON.stringify(keys) === JSON.stringify(x.keys), why: `${keys.length} of ${x.keys.length}` };
+        });
+        check('roundtrip', `${file}: each selection made by a query, its query run again on its run's map, selects its variants again (one of the robustness verdicts keeps them on the map)`, again.map((x) => `${x.name}: ${x.why}`).join('; '), again.every((x) => x.ok), 'the same');
       }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');

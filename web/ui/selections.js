@@ -10,6 +10,7 @@ import { evaluateQuery, featuresOf, parseQuery, queryContext, queryUses } from '
 import { targetProtein } from '../lib/target.js';
 import { runTracks } from './tracks.js';
 import { ensureResults, runEntry } from './run-results.js';
+import { possessive } from '../lib/words.js';
 
 // A run's protein, for matching runs of one target (null: none to read).
 export function proteinOfRun(run) {
@@ -35,7 +36,7 @@ export function setsFor(ws, run) {
 // A run's map: { own (its results), results (the map's: a nucleotide run's protein view), model }.
 export async function runMap(app, run, { condition = 0, contrast = null } = {}) {
   const entry = runEntry(app, run) ?? await ensureResults(app, run);
-  if (!entry?.results) throw new Error(entry?.message ?? `${run.name}'s scores could not be recomputed.`);
+  if (!entry?.results) throw new Error(entry?.message ?? `${possessive(run.name)} scores could not be recomputed.`);
   const own = entry.results;
   const results = proteinView(own) ?? own;
   const model = buildMapModel(results, run.inputs.design, contrast === null ? { condition } : { contrast, colorBy: 'differential' });

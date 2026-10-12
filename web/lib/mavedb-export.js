@@ -38,6 +38,7 @@ import { accessionKind, licenseOf } from './mavedb.js';
 import { replicateSamples, summarizeDesign } from './design.js';
 import { createZip } from './zip.js';
 import { sha256 } from './sha256.js';
+import { possessive } from './words.js';
 
 export const DEPOSIT_FORMAT = 'mavescape-mavedb';
 export const DEPOSIT_VERSION = 1;
@@ -475,7 +476,7 @@ export function mavedbDeposit({ ws, run, results, condition = 0, methods = null,
     rows.push(i);
     names.push(name);
   }
-  if (!rows.length) return { problem: `None of ${run.name}'s variants can be named as MaveDB takes them${left.size ? `: ${[...left.keys()].join('; ')}` : ''}.` };
+  if (!rows.length) return { problem: `None of ${possessive(run.name)} variants can be named as MaveDB takes them${left.size ? `: ${[...left.keys()].join('; ')}` : ''}.` };
   const hasPro = names.some((x) => x.pro);
   const hasNt = names.some((x) => x.nt);
   const ids = (i) => [...(hasNt ? [names[i].nt] : []), ...(hasPro ? [names[i].pro ?? 'NA'] : [])];
@@ -487,8 +488,8 @@ export function mavedbDeposit({ ws, run, results, condition = 0, methods = null,
   const columnNotes = [];
   if (isPublished) {
     const table = tables.scores;
-    if (!table) return { problem: `The table of ${run.name}'s published scores is not open: open it again to write its deposit.` };
-    if (table.rows !== results.rows) return { problem: `The table of ${run.name}'s published scores has ${table.rows} rows, not the run's ${results.rows}.` };
+    if (!table) return { problem: `The table of ${possessive(run.name)} published scores is not open: open it again to write its deposit.` };
+    if (table.rows !== results.rows) return { problem: `The table of ${possessive(run.name)} published scores has ${table.rows} rows, not the run's ${results.rows}.` };
     const scoreName = design.scores?.score ?? 'score';
     const scoreColumn = table.columns.find((x) => x.name === scoreName);
     scoreValues = rows.map((i) => passCell(scoreColumn, i));

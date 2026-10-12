@@ -12,6 +12,7 @@ import { workerInput } from './score-input.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { selectOnMap } from './selections.js';
 import { toast } from './overlays.js';
+import { possessive } from '../lib/words.js';
 
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const pct = (x) => (Number.isFinite(x) ? `${Math.round(100 * x)}%` : '—');
@@ -45,7 +46,7 @@ export async function checkRobustness(app, run, { max = null } = {}) {
   max ??= DEFAULT_MAX_SPECIFICATIONS;
   state.pending = (async () => {
     const entry = runEntry(app, run) ?? await ensureResults(app, run);
-    if (!entry?.results) return fail(state, app, entry?.message ?? `${run.name}'s scores could not be recomputed.`);
+    if (!entry?.results) return fail(state, app, entry?.message ?? `${possessive(run.name)} scores could not be recomputed.`);
     const { choices, notes, specs } = plannedChecks(run, entry.results, { max });
     if (!choices.length) return fail(state, app, notes.join(' ') || 'There is nothing to vary in this run\'s analysis.');
     const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
