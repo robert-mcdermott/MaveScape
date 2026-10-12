@@ -248,7 +248,7 @@ guided steps of a few minutes and what to expect in the inspector:
 | Simulated experiment with problems | A bottleneck and a failing replicate planted for QC to find. |
 
 The bundled and simulated examples work anywhere; those opened from MaveDB need the program
-(they are fetched once, then cached). See [Examples](https://robert-mcdermott.github.io/mavescape/docs/examples.html)
+(they are fetched once, then cached). See [Examples](https://robert-mcdermott.github.io/MaveScape/docs/examples.html)
 for what each one teaches.
 
 With your own data:
@@ -305,7 +305,7 @@ every file MaveScape reads and writes, and the start page has blank layouts to f
 | **Compare** | Two replicates, conditions, runs, score sets or a predictor; robustness to analysis choices |
 | **Structure** | The scores on a PDB entry, AlphaFold DB model or file, and the structure as evidence |
 
-The [user guide](https://robert-mcdermott.github.io/mavescape/docs/) has a page for each.
+The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page for each.
 
 ## Command-line options
 
@@ -317,14 +317,14 @@ The [user guide](https://robert-mcdermott.github.io/mavescape/docs/) has a page 
 | `--data-dir DIR` | Where the workspace library is kept |
 | `--no-library` | Keep workspaces in the browser's storage instead |
 | `--keep-running` | Keep serving after the window is closed |
-| `mavescape urn:mavedb:…`, `--mavedb URN` | Open a MaveDB score set: its record, published scores and counts ([public data](https://robert-mcdermott.github.io/mavescape/docs/public-data.html)) |
+| `mavescape urn:mavedb:…`, `--mavedb URN` | Open a MaveDB score set: its record, published scores and counts ([public data](https://robert-mcdermott.github.io/MaveScape/docs/public-data.html)) |
 | `--offline`, `--no-fetch`, `--cache-dir DIR` | Public data from the cache only, or none; where the cache is ([`docs/NETWORK.md`](docs/NETWORK.md)) |
-| `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)) |
-| `--proteoscope off\|PORTS` | Do not look for a running Proteoscope, or look on other ports than its own 8765–8814 ([open in Proteoscope](https://robert-mcdermott.github.io/mavescape/docs/structure.html#proteoscope)) |
+| `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html)) |
+| `--proteoscope off\|PORTS` | Do not look for a running Proteoscope, or look on other ports than its own 8765–8814 ([open in Proteoscope](https://robert-mcdermott.github.io/MaveScape/docs/structure.html#proteoscope)) |
 | `--version` | Print the version |
-| `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/mavescape/docs/scripting.html#headless)) |
+| `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html#headless)) |
 | `mavescape validate [--design D] [tables]` | Check tables and a design as scoring would; exit 1 when something blocks scoring |
-| `mavescape export --format mavedb --out DIR W.msz` | Write a saved run as a MaveDB deposit (or `--format tables`); `--details` gives what MaveDB asks for, `--strict` fails while it is missing ([depositing in MaveDB](https://robert-mcdermott.github.io/mavescape/docs/record.html#mavedb)) |
+| `mavescape export --format mavedb --out DIR W.msz` | Write a saved run as a MaveDB deposit (or `--format tables`); `--details` gives what MaveDB asks for, `--strict` fails while it is missing ([depositing in MaveDB](https://robert-mcdermott.github.io/MaveScape/docs/record.html#mavedb)) |
 
 On macOS, Chrome (and Edge, Brave) keeps running after its last window is closed: quit it with ⌘Q
 to stop MaveScape too. If that browser is already running when MaveScape starts, the window opens
@@ -391,7 +391,7 @@ integration on every change.
 The public data the suite needs are fetched and checked against their SHA-256 checksums. Every
 check, its tolerance and how the reference outputs were made are in
 [validation/README.md](validation/README.md); the
-[science page](https://robert-mcdermott.github.io/mavescape/science.html) has the full table.
+[science page](https://robert-mcdermott.github.io/MaveScape/science.html) has the full table.
 
 ## Privacy and security
 
@@ -533,7 +533,7 @@ text it writes, among them:
 - SIFTS (Dana et al. 2019), DSSP (Kabsch and Sander 1983), StructureMap (Bludau et al. 2022) and
   PLIP (Adasme et al. 2021).
 
-The [science page](https://robert-mcdermott.github.io/mavescape/science.html) lists them all.
+The [science page](https://robert-mcdermott.github.io/MaveScape/science.html) lists them all.
 
 Data and code from others:
 
