@@ -26,6 +26,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `mavedb-export` | MaveDB deposits (wave 3, slice 4; `mavedb-export-cases.mjs`): 19 deposits (`web/lib/mavedb-export.js`) of every kind of run and target, from the examples and published records, checked by MaveDB's own validators: every table accepted by `validate_and_standardize_dataframe_pair` with its column descriptions and targets (mavehgvs against a sequence, biocommons hgvs against a transcript), every name strict MAVE-HGVS, the experiment and score set taken by MaveDB's models where MaveScape says nothing is missing and refused for what it says is; the files written now those the reference checked (each SHA-256); export → import → export the same bytes; MaveScape's keyword vocabulary MaveDB's | `reference/mavedb-export.json`; `fixtures/public-data/` (`mavedb-keywords.json`, the transcripts); MaveDB, external |
 | `compare` | Comparisons within a workspace (wave 4, slice 1; `compare-cases.mjs`, `web/lib/compare.js`, `web/lib/agreement.js`): the agreement statistics of seven pairs equal R's (`reference/compare.json`, by `reference/generate_compare.R`: `cor.test`, Spearman with Bonett and Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰; their 95% intervals' coverage in 2,000 simulated pairs of known agreement of each of five kinds (94–96%; Spearman's near r = 1 and Lin's with 30 variants on two scales reported apart, as they are); slice 2: the discordance and disagreement by position of 600 variants equal R's (`pnorm`, `p.adjust`), and in simulated pairs with planted differences the planted found (96%), the false calls within BH's 5%, none called with nothing planted (dispersion about 1); the compatibility report's rules on GRB2 (replicates, a replicate inside its run, one table scored twice, a run moved along UniProt P62993 and matched on its coordinates, the same blocked without an accession, a direction stated the other way) and the files; then BRCA1's counts against its published scores, DHFR's Run 1 against each record, DHFR's two published score sets matched as R's merge matches them, and BRCA1 RING's replicates sharing their input; DHFR's discordance its Run 1's own differential z, its filters, its difference map; GRB2's dispersion where QC finds variance beyond counting; slice 3: two assays on two scales rescaled by their anchors (both rescalings) equal R's with the anchors' SEs and the tests' share, GRB2's published scores against AlphaMissense by class equal R's (pROC's DeLong interval) and an AUC with ties, the anchors' uncertainty keeping false calls to 3.5–4% of null pairs (10–55% without it), DeLong's interval holding the AUC 94–95% of the time, GRB2's Run 1 against its record kept beside the workspace (rescaled, ρc 0.996) and against AlphaMissense, a score set and a predictor through the archive, DHFR's record kept the same as opened, DHFR's published pair stated on one scale, PTEN's abundance against its phosphatase activity and against AlphaMissense. 36 checks | `reference/compare.json`; `fixtures/public-data/` (GRB2's record, AlphaMissense); MaveDB, external (`mavedb-brca1-sge`, `mavedb-dhfr`, `mavedb-brca1-ring`, `mavedb-pten-vampseq`, `mavedb-pten-phosphatase`) for the last checks |
 | `robustness` | Robustness to analysis choices (wave 4, slice 4; `robustness-cases.mjs`, `web/lib/robustness.js`): GRB2's specifications (the declared first, each alternative alone, seeded combinations, none twice); the declared analysis the run to the last bit; the classes against an independent computation (z against the wild type, t on the moderated degrees of freedom, Benjamini–Hochberg); ten simulated experiments with planted fragile results, declared by fixed effects: the fragile variants exactly the replicate-driven ones and those whose effect's size depends on the pseudocount exactly the zero-count ones, every time, the clearly lost robust; under MaveScape's defaults the replicate-driven effect not called and nothing fragile; GRB2's check (fixed effects not tried, the alternatives' rank correlations, the least tolerant positions) and its files the same bytes twice; DHFR's 377 differences (54 in every analysis). 9 checks | bundled; MaveDB, external (`mavedb-dhfr`) for the last check |
+| `selections` | Selections (wave 4, slice 5; `selections-cases.mjs`, `web/lib/query.js`): the roadmap's phrases parsed as written and mistakes named in place; fourteen queries on GRB2's Run 1 against an independent account of each of its map's 1,176 cells read from the run's own arrays, the same variants in the same order; union, intersection and difference by query against the sets' own, De Morgan's laws, a saved selection on a second run (scored as Enrich2 does); each robustness verdict exactly GRB2's check's, and in three planted experiments (seeds 41–43) `fragile` and `size depends on the pseudocount` exactly the planted ones; factor IX's `feature disulfide` the 22 bonded cysteines of UniProt P00740 and the example's numbers; freeform shapes against the rectangle tool and a circle; the selection's files and the archive keeping its query. 8 checks | bundled |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -87,7 +88,11 @@ without opening it) rescaled by their anchors, and with AlphaMissense by class, 
 them, `comparison` and `comparison-classes` the same bytes as Node's, and a scale not known
 refused; and (slice 4) `check_robustness` on Run 1 (24 analyses), its record, variants and positions
 the same bytes as Node's check of the run it recomputes from the archive, the inspector's block, too
-few analyses refused. 122 checks; in CI as the `remote` job.
+few analyses refused; and (slice 5) `select_variants` by query, its matches subtracted from the
+selection (the queries composed and saved), a saved selection named in a query and the robustness
+verdicts of the run checked, each as Node selects on the run it recomputes from the archive, a
+mistake named in place, the saved selection's file with its query, the Map view showing it. 123
+checks; in CI as the `remote` job.
 
 ## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3 and 6)
 
@@ -482,6 +487,20 @@ A move counts when the alternative's effect is beyond the declared 95% interval 
 robust SDs (1.4826 × the median absolute deviation) from the median of that analysis's moves (in
 declared SEs). Without the second condition, a few of each experiment's thousand variants crossed
 their interval by chance when a replicate was left out (about 0.2% of variant-analyses).
+
+## Selections (`selections-cases.mjs`, wave 4 slice 5)
+
+`mapCells(results, design)` accounts for every substitution of a protein target without the map
+model or the query engine: its MAVE-HGVS name (built from the target's sequence, `p.Ala12Val`,
+`p.Ala12=`, `p.Ala12Ter`), its row in the run (looked up by name), its class (from the residues: the
+wild type's own residue synonymous, a stop nonsense, any substitution of a methionine at position 1
+start lost, the rest missense), its state (no row, or not measured: missing; a filter's reason:
+filtered; a flag: low confidence; else scored), and its score, SE, replicates and mean input count
+from the condition's own arrays, in the order of variants.js's amino acids. Each query's expected
+variants are a predicate over these cells, written apart from the query (`missense at 10-30 with se
+< 0.2` is `kind === 'missense' && 10 ≤ p ≤ 30 && se < 0.2`), and the query must select the same
+names in the same order. `circleCells` gives the cells whose centers lie within a circle on the
+map's geometry, with half a pixel's margin, for a shape of 96 corners drawn on it.
 
 ## Reference outputs (`reference/`)
 

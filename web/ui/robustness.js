@@ -10,6 +10,8 @@ import { CLASS_NAMES, CONTRAST_CLASS_NAMES, DEFAULT_MAX_SPECIFICATIONS, methodsS
 import { recordedInputs } from '../lib/runs.js';
 import { workerInput } from './score-input.js';
 import { ensureResults, runEntry } from './run-results.js';
+import { selectOnMap } from './selections.js';
+import { toast } from './overlays.js';
 
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const pct = (x) => (Number.isFinite(x) ? `${Math.round(100 * x)}%` : '—');
@@ -100,6 +102,9 @@ export function robustnessFiles(app, run, state) {
 }
 
 // What each verdict means.
+// Each verdict as a query's word (lib/query.js), for the selection it makes on the map.
+const VERDICT_QUERY = { [VERDICT.ROBUST]: 'robust', [VERDICT.FRAGILE]: 'fragile', [VERDICT.UNCERTAIN]: 'uncertain', [VERDICT.BORDERLINE]: 'borderline', [VERDICT.SIZE]: 'size-dependent', [VERDICT.INCLUSION]: 'sometimes-scored' };
+
 const VERDICT_HELP = {
   [VERDICT.ROBUST]: 'The same class in every analysis, and scored in every one.',
   [VERDICT.FRAGILE]: 'An analysis moves its effect beyond its 95% interval (and beyond what that choice does to variants in general) and changes its class: its estimate depends on a choice.',
@@ -213,8 +218,16 @@ function variantsTable(app, run, results, t, names, verdict, total) {
   rows.sort((a, b) => t.agree[a] - t.agree[b] || Math.abs(t.effect[b] / t.se[b]) - Math.abs(t.effect[a] / t.se[a]));
   const condition = t.kind === 'condition' ? Math.max(0, results.conditions.findIndex((c) => `condition:${c.id}` === t.id)) : 0;
   if (!rows.length) return h('p.muted', { style: { margin: '4px 0' } }, `No variant is ${VERDICT_NAMES[verdict]}.`);
+  // On the map (wave 4, slice 5): the condition's, or the contrast's differential map, selected by
+  // the verdict's query word.
+  const contrast = t.kind === 'contrast' ? results.differential.findIndex((d) => `contrast:${d.id ?? d.name}` === t.id) : null;
+  const toMap = async () => {
+    const { offMap } = await selectOnMap(app, run, { rows, condition, contrast, query: VERDICT_QUERY[verdict] });
+    if (offMap) toast(`${formatCount(offMap)} of them are not on the map (not single substitutions).`);
+  };
   return h('div',
-    h('h4', { style: { margin: '10px 0 4px' } }, `${VERDICT_NAMES[verdict][0].toUpperCase()}${VERDICT_NAMES[verdict].slice(1)} (${formatCount(rows.length)})`),
+    h('div.btn-row', { style: { margin: '10px 0 4px' } }, h('h4', { style: { margin: 0 } }, `${VERDICT_NAMES[verdict][0].toUpperCase()}${VERDICT_NAMES[verdict].slice(1)} (${formatCount(rows.length)})`), h('span.spacer'),
+      h('button.btn.small', { type: 'button', title: `Select them on the map: the query "${VERDICT_QUERY[verdict]}"`, onclick: toMap }, icon('heatmap'), 'Select on the map')),
     h('div', { style: { maxHeight: '280px', overflow: 'auto' } }, h('table.data.compact', h('thead', h('tr', h('th', 'Variant'), h('th', 'Class'), h('th.r', 'Effect'), h('th.r', 'Across analyses'), h('th.r', 'Class kept'), h('th', verdict === VERDICT.INCLUSION ? 'Left out by' : 'Depends on'))),
       h('tbody', ...rows.slice(0, 100).map((i) => h('tr', { style: { cursor: 'pointer' }, onclick: () => app.focusItem({ kind: 'variant', id: results.variants.key[i], run: run.id, condition }) },
         h('td.mono', results.variants.original[i]),

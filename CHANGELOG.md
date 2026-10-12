@@ -141,6 +141,42 @@ grows with each.
   - The simulator can draw missense effects either the wild type's or clearly lost (`neutralSd`,
     `lossMin`; off by default).
 
+- **Selections (wave 4, slice 5; V3).** Variants are selected on the map by click, rectangle,
+  freeform shape or query, saved by name with their query, combined, and carried to the other views.
+  - **The query language** (`lib/query.js`), typed below the map. Its parser is adapted from
+    Proteoscope's `select.js`. The roadmap's phrases are queries as written: `missense at 40-80
+    with se < 0.2`, `variants whose class depends on the pseudocount`. The words:
+    - the class (`missense`, `nonsense`, `synonymous`, `start-lost`);
+    - the state (`scored`, `low`, `confident`, `filtered`, `missing`, `unscored`);
+    - positions (`at`, `pos`, `refpos`) and residues (`from`, `to`; letters or the map's groups);
+    - `score`, `se`, `q`, `replicates` and `input` compared with a number;
+    - the class against the wild type (`lower`, `higher`, `neutral`);
+    - the robustness verdicts, and `depends on`, `class depends on` and `size depends on` a choice;
+    - `feature` (UniProt's or a GFF3 file's, beside the map);
+    - `in` a saved selection, `selected`, `all`;
+    - `and`, `or`, `not`, parentheses.
+
+    A word not known is named in place. A query that needs the run's robustness, or features
+    beside the map, offers them. A query can replace the selection, add to it, keep its matches in
+    it, or remove them.
+  - **Freeform shapes:** ⌥- or Alt-drag selects the cells a shape encloses. Pan, Rectangle and
+    Freeform set what a plain drag does.
+  - **Saved selections** keep their query. Each one under the map selects, adds to, intersects or
+    subtracts from the selection, or runs its query again. A selection changed by queries keeps
+    them combined. A saved selection applies to every run of the same protein; the inspector shows
+    its query, its variants by class, and the runs it applies to.
+  - **In the other views:**
+    - the Score view's table lists the variants selected on the map, and sends any list it shows to
+      the map;
+    - the Robustness pane sends each verdict's variants;
+    - Compare's maps outline the selection, and its discordant variants go to the map.
+  - **Exports and remote control:** the selection's JSON gains `query`. `select_variants` takes
+    `query`, `operation` and `contrast`; a query that needs the run's robustness checks it first.
+    `get_state` gives each selection's query.
+  - **The factor IX example's fifth step** selects the substitutions of its disulfide bonds'
+    cysteines by query: 345 of the 399 scored are lower than the wild type, against 2,124 of 8,529
+    missense variants. The guide page *Selections*.
+
 ### Changed
 
 - An example opened from MaveDB gives its readout (what a higher score means, from the paper) to its
@@ -150,6 +186,11 @@ grows with each.
 - A score table's standard errors are read from a column named in words, `standard error`, as
   DHFR's MaveDB records name it (wave 4, slice 3): their published scores now carry their SEs.
 - A comparison's report possessive reads "Published scores'", not "Published scores's".
+- A robustness check keeps, by id, the choices that alone account for each variant's verdict
+  (`dependsOnIds`), for selections by query; its files are unchanged.
+- A saved selection is listed under the map of every run of the same protein, not only its own.
+- A rectangle drawn without Shift (the Rectangle drag mode) replaces the selection; with ⌘, Ctrl or
+  Shift held it adds, as Shift-drag always did.
 
 ### Validation
 
@@ -230,6 +271,28 @@ grows with each.
   for the run it recomputes from the archive; the inspector's block; too few analyses refused.
 - Unit tests: `robustness.test.mjs` (5): specifications, choices, a specification's inputs, the
   classes, each verdict from hand-made analyses.
+- `selections` validation suite (slice 5, 8 checks):
+  - **Against an independent account:** fourteen queries on GRB2's Run 1 select the same variants,
+    in the same order, as an account of each of its map's 1,176 cells read from the run's own
+    arrays. The roadmap's phrases parse as written, and mistakes are named in place.
+  - **Set operations:** union, intersection and difference by query equal the sets' own. De
+    Morgan's laws and double negation hold. A saved selection on a second run of GRB2 holds the
+    same variants.
+  - **Robustness:** each verdict selects exactly the variants GRB2's check gives it. In three
+    planted experiments, `fragile` and `size depends on the pseudocount` select exactly the planted
+    ones, and no zero count's class depends on the pseudocount.
+  - **Features:** `feature disulfide` on factor IX is UniProt P00740's 22 bonded cysteines, and
+    `feature Gla` is positions 47–92.
+  - **Shapes:** a rectangle drawn as a shape selects what the rectangle tool does; a circle selects
+    the cells whose centers it holds.
+  - **Files:** the selection's files and the archive keep its query.
+- The remote-control session (123 checks): `select_variants` by query, subtracting a query's
+  matches, a saved selection named in a query, the robustness verdicts, as Node selects on the run
+  it recomputes from the archive; a mistake named in place; the saved selection's file with its
+  query.
+- Unit tests: `query.test.mjs` (5): parsing, mistakes, classes, states, positions and residues on a
+  toy map, sets and their operations, features and verdicts. `map-render.test.mjs`: a freeform
+  shape's cells.
 
 ## 0.3.0 (2026-10-11)
 

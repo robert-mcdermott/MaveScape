@@ -677,7 +677,28 @@ A table of barcodes, one row per barcode: `barcode`, its variant (`hgvs_pro` or 
 ### Selections
 
 CSV (`hgvs_pro`, `score`, `SE`, `status`) or JSON (`format: "mavescape-selection"`, `name`,
-`run`, `condition`, `created`, `keys`).
+`run`, `condition`, `created`, `query`, `keys`). `keys` are the variants' MAVE-HGVS names on the
+run's map (a nucleotide run's: the protein variants it makes), in the order selected; a selection
+by query lists them along the target, then by amino acid (`ARNDCQEGHILKMFPSTWYV*`). From MaveScape
+0.4, `query` is the query that made the selection, in MaveScape's selection language
+([Selections](https://robert-mcdermott.github.io/mavescape/docs/selections.html#query)), or
+`null` when it was made or changed by hand: run on the same run, it selects `keys` again.
+
+```json
+{
+  "format": "mavescape-selection",
+  "version": 1,
+  "name": "Disulfides",
+  "run": "run-d34c038c88c5e0e9",
+  "condition": 0,
+  "created": "2026-10-11T22:40:00.000Z",
+  "query": "missense from C in feature disulfide and lower",
+  "keys": ["p.Cys69Glu", "p.Cys69Trp", "p.Cys97Ala", "…"]
+}
+```
+
+The workspace keeps each saved selection as `{ id, name, run, condition, keys, query?, created }`
+(`workspace.json` in the archive); one saved before 0.4 has no `query`.
 
 ### Provenance (`*_provenance.json`)
 

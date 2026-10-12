@@ -37,6 +37,7 @@ import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, 
 import { predictorSide, scoreSetSide } from './compare-cases.mjs';
 import { checkTable } from './robustness-cases.mjs';
 import { robustnessCSV, robustnessJSON, robustnessPositionsCSV } from '../web/lib/robustness.js';
+import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -421,6 +422,31 @@ try {
   check('the inspector shows a checked variant\'s robustness: its class across the analyses and its verdict', String(await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Robustness')`)), focusedRobust.ok && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Robustness')`)));
   const publishedRobust = await send('check_robustness', { run: 'Run 1', max: 1 });
   check('check_robustness with too few analyses: refused, saying how many', publishedRobust.message, !publishedRobust.ok && /from 2 to 256/.test(publishedRobust.message));
+
+  // Selections by query (wave 4, slice 5), as Node selects on the run it recomputes from the archive:
+  // a query, an operation on the selection, a saved selection used in another query, the robustness
+  // verdicts (Run 1 checked above), a mistake named in place, and the selection's file.
+  const r1Model = buildMapModel(nodeCheck.results, r1Recorded.design);
+  const nodeQuery = (text, extra = {}) => selectByQuery(text, queryContext({ model: r1Model, results: nodeCheck.results, design: r1Recorded.design, ...extra })).keys;
+  const q1 = await act('select_variants', { run: 'Run 1', query: 'missense at 10-30 with se < 0.2' });
+  const q2 = await act('select_variants', { run: 'Run 1', query: 'low', operation: 'subtract', save_as: 'Core 10-30' });
+  const q3 = await act('select_variants', { run: 'Run 1', query: 'in "Core 10-30" and lower' });
+  const q4 = await act('select_variants', { run: 'Run 1', query: 'fragile or uncertain' });
+  const badQuery = await send('select_variants', { run: 'Run 1', query: 'missense bananas' });
+  const savedSets = [{ name: 'Core 10-30', keys: combineKeys(nodeQuery('missense at 10-30 with se < 0.2'), nodeQuery('low'), 'subtract') }];
+  await act('export', { what: 'selection', selection: 'Core 10-30', path: join(out, 'core.json') });
+  const coreFile = JSON.parse(readFileSync(join(out, 'core.json'), 'utf8'));
+  const queryParts = {
+    query: JSON.stringify(q1.data.variants) === JSON.stringify(nodeQuery('missense at 10-30 with se < 0.2')),
+    subtract: JSON.stringify(q2.data.variants) === JSON.stringify(savedSets[0].keys) && q2.data.query === '(missense at 10-30 with se < 0.2) and not (low)',
+    saved: (await act('get_state')).data.selections.some((x) => x.name === 'Core 10-30' && x.query === q2.data.query),
+    set: JSON.stringify(q3.data.variants) === JSON.stringify(nodeQuery('in "Core 10-30" and lower', { sets: savedSets })),
+    verdicts: q4.data.variants.length > 0 && JSON.stringify(q4.data.variants) === JSON.stringify(nodeQuery('fragile or uncertain', { robustness: nodeCheck.summary })),
+    mistake: !badQuery.ok && /Unknown word "bananas"/.test(badQuery.message) && /character 10/.test(badQuery.message),
+    file: coreFile.query === q2.data.query && JSON.stringify(coreFile.keys) === JSON.stringify(savedSets[0].keys),
+    view: await browser.eval(`Boolean(document.querySelector('.map-query-input')) && /by query/.test(document.querySelector('.map-selection')?.textContent ?? '')`),
+  };
+  check('select_variants by query, as Node selects on the run it recomputes from the archive: a query, its matches subtracted from the selection (the query composed and saved with it), a saved selection named in a query, the robustness verdicts of the run checked, a mistake named in place; the saved selection\'s file keeps its query; the Map view shows the query', `${q1.data.count} by query, ${q2.data.count} after subtracting, ${q3.data.count} of the saved lower, ${q4.data.count} fragile or uncertain; ${Object.entries(queryParts).map(([k, v]) => `${k} ${v ? 'ok' : 'different'}`).join(', ')}`, Object.values(queryParts).every(Boolean));
 
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.
   const noTokenOpen = await send('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] }, { withToken: false });

@@ -257,6 +257,47 @@ export function hitTest(model, view, x, y) {
   return { region: 'cell', position, row };
 }
 
+// The designed cells a freeform shape encloses (wave 4, slice 5): those whose centers lie inside
+// the polygon of canvas points [[x, y], …] (closed, by the even-odd rule), among the positions
+// visible. [cell index], positions major.
+export function cellsInPolygon(model, view, points) {
+  if (!points || points.length < 3) return [];
+  const g = geometry(model, view);
+  const R = model.rows.length;
+  let [minX, minY, maxX, maxY] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of points) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const first = Math.max(1, Math.floor(view.x0), Math.floor(view.x0 + (Math.max(minX, g.left) - g.left) / view.cellW));
+  const last = Math.min(model.length, Math.ceil(view.x0 + g.visible), Math.ceil(view.x0 + (Math.min(maxX, g.left + g.gridW) - g.left) / view.cellW));
+  const cells = [];
+  for (let p = first; p <= last; p += 1) {
+    const cx = g.left + (p - view.x0 + 0.5) * view.cellW;
+    if (cx < g.left || cx > g.left + g.gridW || cx < minX || cx > maxX) continue;
+    for (let r = 0; r < R; r += 1) {
+      const cy = g.top + (r + 0.5) * view.cellH;
+      if (cy < minY || cy > maxY) continue;
+      const k = (p - 1) * R + r;
+      if (model.state[k] !== STATE.NOT_DESIGNED && insidePolygon(points, cx, cy)) cells.push(k);
+    }
+  }
+  return cells;
+}
+
+// Even-odd ray casting.
+export function insidePolygon(points, x, y) {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+    const [xi, yi] = points[i];
+    const [xj, yj] = points[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 // The colors of a map: color(t) and paler(t) (for low confidence: halfway to gray), from a
 // diverging palette ('rdbu', 'puor') for scores or viridis for the rest, 256 steps.
 export function mapPalette(model, palette = 'rdbu', gray = [110, 110, 110]) {

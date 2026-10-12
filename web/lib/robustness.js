@@ -382,7 +382,8 @@ const rankOf = (values) => {
 // result of runRobustness; results: the run's (its variants); design: the run's. Returns { total
 // (analyses scored), skipped: [{ label, error }], choices, targets: [{ id, name, kind, reference,
 // classified, n, counts: { robust, fragile, uncertain, borderline, size, inclusion, added }, alone (of each verdict, under one choice alone), attribution, classes: { declared:
-// [per class], every: [per class] }, verdict, dependsOn, droppedBy, scoredIn, agree, effectMin,
+// [per class], every: [per class] }, verdict, dependsOn, droppedBy, dependsOnIds (the ids of the
+// choices that alone account for the verdict: [] when only choices together do), scoredIn, agree, effectMin,
 // effectMax, rank, rankMin, rankMax, byChoice, positions, leastTolerant, text }] }.
 export function summarizeRobustness(specs, choices, results, design) {
   const valid = specs.filter((s) => s.ok);
@@ -401,6 +402,9 @@ export function summarizeRobustness(specs, choices, results, design) {
     const smallest = [...list].sort((a, b) => a.changed - b.changed)[0];
     return smallest ? [`${smallest.label} (together)`] : [];
   };
+  // The choices that alone account for a variant's verdict, by id, for selections by query
+  // (query.js: "depends on the pseudocount"); none when only choices together do.
+  const idsOf = (list) => [...new Set(list.filter((s) => s.kind === 'single').map((s) => choices[s.picks.findIndex((x) => x > 0)].id))];
   const direction = readoutOf(design).direction === 'higher-less' ? -1 : 1;
   const targets = declared.targets.map((dt) => {
     const across = valid.map((s) => s.targets.find((x) => x.id === dt.id) ?? null);
@@ -413,6 +417,7 @@ export function summarizeRobustness(specs, choices, results, design) {
     const rankMax = new Float64Array(n).fill(Number.NaN);
     const dependsOn = new Array(n).fill(null);
     const droppedBy = new Array(n).fill(null);
+    const dependsOnIds = new Array(n).fill(null);
     const ranks = across.map((x) => (x ? rankOf(x.effect) : null));
     const moves = across.map((x) => (x ? movesOf(dt, x) : null));
     const rank = ranks[valid.indexOf(declared)];
@@ -468,6 +473,7 @@ export function summarizeRobustness(specs, choices, results, design) {
       verdict[i] = { robust: VERDICT.ROBUST, fragile: VERDICT.FRAGILE, uncertain: VERDICT.UNCERTAIN, borderline: VERDICT.BORDERLINE, size: VERDICT.SIZE, inclusion: VERDICT.INCLUSION }[kind];
       if (kind === 'inclusion') droppedBy[i] = namesOf(drops);
       else if (kind !== 'robust') dependsOn[i] = namesOf(by[kind]);
+      if (kind !== 'robust') dependsOnIds[i] = idsOf(kind === 'inclusion' ? drops : by[kind]);
       // What each single choice accounts for, verdict by verdict, and how many a single choice does.
       const names = (kind === 'inclusion' ? droppedBy[i] : dependsOn[i]) ?? [];
       if (names.some((label) => !label.endsWith('(together)'))) alone[kind] += 1;
@@ -519,7 +525,7 @@ export function summarizeRobustness(specs, choices, results, design) {
       n: declaredClasses.reduce((s, x) => s + x, 0), counts,
       classes: { declared: declaredClasses, every: everyClasses },
       calls: { declared: declaredClasses[CLASS.LOWER] + declaredClasses[CLASS.HIGHER], every: everyClasses[CLASS.LOWER] + everyClasses[CLASS.HIGHER], most: mostCalls },
-      verdict, dependsOn, droppedBy, scoredIn, agree, effectMin, effectMax, rank, rankMin, rankMax,
+      verdict, dependsOn, droppedBy, dependsOnIds, scoredIn, agree, effectMin, effectMax, rank, rankMin, rankMax,
       effect: dt.effect, se: dt.se, q: dt.q, cls: dt.cls,
       byChoice, positions: positions.list, leastTolerant: positions.leastTolerant,
       alone,

@@ -25,6 +25,7 @@ import { runScore, workerInput } from './score-input.js';
 import { ensureResults, forgetResults } from './run-results.js';
 import { runExportItems } from './record.js';
 import { robustnessPane } from './robustness.js';
+import { selectedRows, selectOnMap } from './selections.js';
 
 const PAGE = 50;
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
@@ -401,8 +402,12 @@ export function mountScoreMode(app, container) {
   function variantsTable(results, c, run) {
     const v = results.variants;
     const search = view.search.trim().toLowerCase();
+    // The map's selection of this run (wave 4, slice 5), as the run's own rows.
+    const picked = selectedRows(app, run, results);
+    if (view.show === 'selected' && !picked) view.show = 'all';
     let rows = [];
     for (let i = 0; i < results.rows; i += 1) {
+      if (view.show === 'selected' && !picked.has(i)) continue;
       if (view.show === 'scored' && c.reason[i]) continue;
       if (view.show === 'filtered' && !c.reason[i]) continue;
       if (view.show === 'low' && (c.reason[i] || !c.flags[i])) continue;
@@ -444,9 +449,13 @@ export function mountScoreMode(app, container) {
     }
     const searchEl = h('input.input', { type: 'search', value: view.search, placeholder: 'Find a variant', 'aria-label': 'Find a variant', oninput: () => { view.search = searchEl.value; view.page = 0; renderSoon(); } });
     const showEl = h('select.input', { 'aria-label': 'Variants shown', onchange: () => { view.show = showEl.value; view.page = 0; render(); } },
-      ...[['all', 'All variants'], ['scored', 'Scored'], ['low', 'Low confidence'], ['filtered', 'Filtered or not measured']].map(([k, label]) => h('option', { value: k, selected: view.show === k }, label)));
+      ...[['all', 'All variants'], ['scored', 'Scored'], ['low', 'Low confidence'], ['filtered', 'Filtered or not measured'], ...(picked ? [['selected', `Selected on the map (${formatCount(picked.size)})`]] : [])].map(([k, label]) => h('option', { value: k, selected: view.show === k }, label)));
+    const toMap = view.show !== 'all' || search ? h('button.btn.small', { type: 'button', title: 'Select the variants listed on the run\'s map', onclick: async () => {
+      const { offMap } = await selectOnMap(app, run, { rows, condition: view.condition });
+      if (offMap) toast(`${formatCount(offMap)} of them are not on the map (not single substitutions).`);
+    } }, icon('heatmap'), 'Select on the map') : null;
     return h('div',
-      h('div.btn-row', { style: { marginBottom: '8px' } }, searchEl, showEl, h('span.spacer'), h('span.muted', { style: { fontSize: '12px' } }, `${formatCount(rows.length)} variant${rows.length === 1 ? '' : 's'}`),
+      h('div.btn-row', { style: { marginBottom: '8px' } }, searchEl, showEl, h('span.spacer'), h('span.muted', { style: { fontSize: '12px' } }, `${formatCount(rows.length)} variant${rows.length === 1 ? '' : 's'}`), toMap,
         h('button.btn.small', { type: 'button', disabled: view.page === 0, onclick: () => { view.page -= 1; render(); }, 'aria-label': 'Previous page' }, '‹'),
         h('span.muted', { style: { fontSize: '12px' } }, `${view.page + 1} / ${pages}`),
         h('button.btn.small', { type: 'button', disabled: view.page >= pages - 1, onclick: () => { view.page += 1; render(); }, 'aria-label': 'Next page' }, '›')),
@@ -550,7 +559,7 @@ export function mountScoreMode(app, container) {
   render();
   return {
     update(topics) {
-      if (topics.has('ws') || topics.has('focus') || topics.has('results') || topics.has('workspace-loaded') || topics.has('colors') || topics.has('theme') || topics.has('robustness')) render();
+      if (topics.has('ws') || topics.has('focus') || topics.has('results') || topics.has('workspace-loaded') || topics.has('colors') || topics.has('theme') || topics.has('robustness') || topics.has('selection')) render();
     },
     destroy() {
       clearTimeout(renderTimer);

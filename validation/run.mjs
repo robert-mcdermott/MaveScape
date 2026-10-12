@@ -9,7 +9,7 @@
 // (external data), import (external data), experiment (external data), scoring, qc, map and
 // roundtrip (their last checks need external data), readiness, examples (its last checks need
 // external data), public-data, mavedb-export, annotations, compare and robustness (their last checks
-// need external data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// need external data), selections; all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -102,6 +102,12 @@ import { countsRun, coverage, exampleRun, movedRun, plantedPair, predictorSide, 
 import { scoreSetResults } from '../web/lib/scoreset.js';
 import { callsOf, CLASS, replicateDispersion, robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_SEED, specificationInputs, specifications, VERDICT } from '../web/lib/robustness.js';
 import { checkPlanted, checkTable } from './robustness-cases.mjs';
+import { combineKeys, evaluateQuery, featuresOf, parseQuery, queryContext, QueryError, selectByQuery } from '../web/lib/query.js';
+import { cellsInPolygon, geometry, hitTest } from '../web/lib/map-render.js';
+import { readUniProtFeatures, uniprotTracks } from '../web/lib/providers/uniprot-features.js';
+import { selectionCSV, selectionJSON } from '../web/lib/exports.js';
+import { addSelection } from '../web/lib/workspace.js';
+import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 
@@ -3415,6 +3421,168 @@ const suites = {
       if (!(error instanceof MissingExampleData)) throw error;
       throw new MissingData(error.message);
     }
+  },
+
+  // Wave 4, slice 5 (V3): selections. The query language against an independent account of each cell
+  // of GRB2's map, from the run's own arrays; set operations and their laws; a saved selection on
+  // another run of the protein; the robustness verdicts as queries (GRB2's check, planted fragile
+  // results); features beside the map (factor IX's disulfide bonds, from UniProt's entry); freeform
+  // shapes; a selection's files and the archive.
+  async selections() {
+    const g = exampleRun('grb2-sh3');
+    const design = g.run.inputs.design;
+    const model = buildMapModel(g.results, design);
+    const context = (extra = {}) => queryContext({ model, results: g.results, design, ...extra });
+    const keysOf = (text, extra) => selectByQuery(text, context(extra)).keys;
+    const offset = design.targets[0].offset ?? 0;
+    // The language.
+    const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+    const plain = same(keysOf('missense at 40–80 with SE < 0.2'), keysOf('missense and pos 40-80 and se < 0.2')) && JSON.stringify(parseQuery('variants whose class depends on the pseudocount').right) === JSON.stringify(parseQuery('class depends on pseudocount'));
+    const mistakes = [['missense bananas', 9], ['se <', -1], ['from Q9', 5], ['in "Core', 3], ['(missense at 1-5', -1]].map(([text, at]) => {
+      try {
+        parseQuery(text);
+        return false;
+      } catch (error) {
+        return error instanceof QueryError && (at < 0 || error.position === at);
+      }
+    });
+    check('selections', 'the query language: the roadmap\'s phrases parse as written ("missense at 40–80 with SE < 0.2" is "missense and pos 40-80 and se < 0.2"); a mistake is named with where it is', `${plain ? 'the same variants' : 'different'}; ${mistakes.filter(Boolean).length} of ${mistakes.length} mistakes named in place`, plain && mistakes.every(Boolean), 'all');
+    // Against an independent account of each cell.
+    const cells = mapCells(g.results, design);
+    const calls = callsOf(g.results, design)[0];
+    const cls = (c) => (c.row >= 0 ? calls.cls[c.row] : 0);
+    const battery = [
+      ['missense at 10-30 with se < 0.2', (c) => c.kind === 'missense' && c.p >= 10 && c.p <= 30 && c.se < 0.2],
+      ['nonsense or synonymous', (c) => c.kind === 'nonsense' || c.kind === 'synonymous'],
+      ['to P and score < -1', (c) => c.aa === 'P' && c.score < -1],
+      ['from aromatic and not missense', (c) => 'FWY'.includes(c.ref) && c.kind !== 'missense'],
+      ['low or filtered', (c) => c.state === 'low' || c.state === 'filtered'],
+      ['missing', (c) => c.state === 'missing'],
+      ['confident', (c) => c.state === 'scored'],
+      ['replicates >= 3 and input > 100', (c) => c.k >= 3 && c.input > 100],
+      [`refpos ${offset + 12}-${offset + 20} and missense`, (c) => c.p >= 12 && c.p <= 20 && c.kind === 'missense'],
+      ['not scored', (c) => !c.scored],
+      ['from G,P to polar', (c) => 'GP'.includes(c.ref) && 'CMNQST'.includes(c.aa)],
+      ['lower and missense', (c) => cls(c) === CLASS.LOWER && c.kind === 'missense'],
+      ['higher or q >= 0.5', (c) => cls(c) === CLASS.HIGHER || (c.row >= 0 && calls.q[c.row] >= 0.5)],
+      ['pos > 50 and stop', (c) => c.p > 50 && c.kind === 'nonsense'],
+    ];
+    const outcomes = battery.map(([text, test]) => {
+      const got = keysOf(text);
+      const want = cells.filter(test).map((c) => c.name);
+      return { text, n: got.length, ok: same(got, want) };
+    });
+    check('selections', `queries on GRB2's Run 1 against an independent account of each cell of its map (${cells.length} substitutions: names, states, scores, SEs, replicates and mean input counts read from the run's own arrays, classes from callsOf): the same variants in the same order, every one`, outcomes.map((x) => `${x.text}: ${x.n}${x.ok ? '' : ' (differs)'}`).join('; '), outcomes.every((x) => x.ok) && outcomes.every((x) => x.n > 0), 'all the same, none empty');
+    // Set operations, and their laws.
+    const A = keysOf('missense at 1-30');
+    const B = keysOf('lower');
+    const sets = [{ name: 'A', keys: A }, { name: 'B', keys: B }];
+    const asSet = (keys) => [...keys].sort().join();
+    const union = asSet(keysOf('in A or in B', { sets }));
+    const inter = asSet(keysOf('in A and in B', { sets }));
+    const diff = asSet(keysOf('in A and not in B', { sets }));
+    const laws = [
+      union === asSet(new Set([...A, ...B])) && union === asSet(combineKeys(A, B, 'add')),
+      inter === asSet(A.filter((k) => B.includes(k))) && inter === asSet(combineKeys(A, B, 'intersect')),
+      diff === asSet(A.filter((k) => !B.includes(k))) && diff === asSet(combineKeys(A, B, 'subtract')),
+      same(keysOf('not (in A or in B)', { sets }), keysOf('not in A and not in B', { sets })),
+      same(keysOf('not not missense'), keysOf('missense')),
+      keysOf('scored or unscored').length === model.length * 21,
+      same(keysOf('lower or higher or neutral'), keysOf('scored')),
+      same(keysOf('selected and lower', { selected: A }), keysOf('in A and lower', { sets })),
+    ];
+    // A saved selection is a list of names: on another run of GRB2 (scored as Enrich2 does), the same.
+    const g2 = exampleRun('grb2-sh3', { name: 'Run 2', parameters: PRESETS.enrich2.parameters });
+    const model2 = buildMapModel(g2.results, g2.run.inputs.design);
+    const across = selectByQuery('in A', queryContext({ model: model2, results: g2.results, design: g2.run.inputs.design, sets })).keys;
+    check('selections', 'set operations: union, intersection and difference of two saved selections ("missense at 1-30", "lower") by query equal the sets\' own, and the operations on a selection; De Morgan\'s laws, double negation, a state and its complement covering the map, the classes covering the scored; a saved selection on another run of the protein (scored as Enrich2 does) holds the same variants', `A ${A.length}, B ${B.length}: union ${union.split(',').length}, intersection ${inter.split(',').length}, difference ${diff.split(',').length}; ${laws.filter(Boolean).length} of ${laws.length} laws hold; on Run 2: ${across.length} of ${A.length}`, laws.every(Boolean) && same(across, A), 'all');
+
+    // The robustness verdicts as queries: GRB2's check.
+    const grb2 = checkTable(g.o.table, design, g.run.inputs.parameters);
+    const t = grb2.summary.targets[0];
+    const robust = context({ robustness: grb2.summary });
+    const onMap = new Set(cells.map((c) => c.name));
+    const verdicts = [['robust', VERDICT.ROBUST, 'robust'], ['fragile', VERDICT.FRAGILE, 'fragile'], ['uncertain', VERDICT.UNCERTAIN, 'uncertain'], ['borderline', VERDICT.BORDERLINE, 'borderline'], ['size-dependent', VERDICT.SIZE, 'size'], ['sometimes-scored', VERDICT.INCLUSION, 'inclusion']].map(([word, v, count]) => {
+      const got = evaluateQuery(parseQuery(word), robust).keys;
+      const want = [];
+      for (let i = 0; i < g.results.rows; i += 1) if (t.verdict[i] === v && onMap.has(g.results.variants.key[i])) want.push(g.results.variants.key[i]);
+      const wt = t.verdict[g.results.controls.wt] === v ? 1 : 0;
+      return { word, n: got.length, ok: asSet(got) === asSet(want) && got.length === t.counts[count] - wt };
+    });
+    let consistent = 0;
+    let inconsistent = 0;
+    for (let i = 0; i < g.results.rows; i += 1) {
+      if (!t.verdict[i]) continue;
+      const ids = t.dependsOnIds[i];
+      const names = t.dependsOn[i] ?? t.droppedBy[i] ?? [];
+      const together = names.length === 1 && / \(together\)$/.test(names[0]);
+      const ok = t.verdict[i] === VERDICT.ROBUST ? ids === null : Array.isArray(ids) && (together ? ids.length === 0 : ids.length >= 1 && ids.length <= names.length) && ids.every((id) => grb2.choices.some((c) => c.id === id));
+      if (ok) consistent += 1;
+      else inconsistent += 1;
+    }
+    const byPseudocount = evaluateQuery(parseQuery('variants whose class depends on the pseudocount'), robust).count;
+    const byCombination = evaluateQuery(parseQuery('class depends on the combination'), robust).count;
+    check('selections', 'the robustness verdicts as queries (GRB2\'s check): each verdict\'s variants on the map are exactly those the check gives it, as many as it counts; every verdict but robust names the choices that alone account for it (none where only choices together do); the roadmap\'s "variants whose class depends on the pseudocount"', `${verdicts.map((x) => `${x.word} ${x.n}${x.ok ? '' : ' (differs)'}`).join(', ')}; ${consistent} named consistently, ${inconsistent} not; class depends on the pseudocount ${byPseudocount}, on the combination ${byCombination}`, verdicts.every((x) => x.ok) && inconsistent === 0, 'all');
+    // Planted fragile results (robustness-cases.mjs), as queries.
+    const planted = [41, 42, 43].map((seed) => {
+      const x = checkPlanted(seed);
+      const m = buildMapModel(x.results, x.design);
+      const ctx = queryContext({ model: m, results: x.results, design: x.design, robustness: x.summary });
+      const of = (text) => asSet(evaluateQuery(parseQuery(text), ctx).keys);
+      const byPseudocount = evaluateQuery(parseQuery('class depends on the pseudocount'), ctx).keys;
+      return {
+        fragile: of('fragile') === asSet(x.planted.replicate),
+        zero: of('size depends on the pseudocount') === asSet(x.planted.zero),
+        classByPseudocount: byPseudocount.length,
+        atThreshold: byPseudocount.every((k) => !x.planted.zero.includes(k)) && of('class depends on the pseudocount') === of('class depends on the pseudocount and (borderline or uncertain)'),
+      };
+    });
+    check('selections', 'planted fragile results selected by query (three of the robustness suite\'s simulated experiments): "fragile" is exactly the replicate-driven variants; "size depends on the pseudocount" exactly the zero counts, and no zero count\'s class depends on it (it moves their size, not their class): the few whose class it alone changes are unplanted variants at the threshold', planted.map((x, i) => `seed ${41 + i}: fragile ${x.fragile ? 'exact' : 'differs'}, zero counts ${x.zero ? 'exact' : 'differ'}, class by the pseudocount ${x.classByPseudocount}${x.atThreshold ? ' (at the threshold)' : ' (not all at the threshold)'}`).join('; '), planted.every((x) => x.fragile && x.zero && x.atThreshold && x.classByPseudocount <= 3), 'exact; at the threshold');
+
+    // Features beside the map: factor IX's disulfide bonds, from UniProt's entry (P00740).
+    const f9 = exampleRun('factor9');
+    const d9 = f9.run.inputs.design;
+    const m9 = buildMapModel(f9.results, d9);
+    const entry = JSON.parse(readFileSync(new URL('./fixtures/public-data/uniprot/P00740.features.json', import.meta.url), 'utf8'));
+    const features = featuresOf(uniprotTracks(readUniProtFeatures(entry), { offset: d9.targets[0].offset ?? 0, length: m9.length }).tracks);
+    const c9 = queryContext({ model: m9, results: f9.results, design: d9, features });
+    const count9 = (text) => evaluateQuery(parseQuery(text), c9).count;
+    const bonded = new Set(entry.features.filter((f) => f.type === 'Disulfide bond').flatMap((f) => [f.location.start.value, f.location.end.value]));
+    const positions = new Set(evaluateQuery(parseQuery('feature disulfide and synonymous'), c9).keys.map((k) => Number(k.match(/\d+/)[0])));
+    const gla = evaluateQuery(parseQuery('feature Gla and synonymous'), c9).keys.map((k) => Number(k.match(/\d+/)[0]));
+    const cysteines = count9('from C in feature disulfide') === 21 * bonded.size;
+    const nums = { scored: count9('missense from C in feature disulfide and scored'), lower: count9('missense from C in feature disulfide and lower'), all: count9('missense and scored'), allLower: count9('missense and lower') };
+    const bullet = exampleById('factor9').expected.join(' ');
+    const stated = bullet.includes(`${nums.lower} of the ${nums.scored}`) && bullet.includes(`${nums.allLower.toLocaleString('en-US')} of the ${nums.all.toLocaleString('en-US')}`);
+    check('selections', 'features beside the map (factor IX, UniProt P00740): "feature disulfide" is the positions of the entry\'s disulfide bonds (each of its two cysteines), "feature Gla" the Gla domain\'s 47–92; the example\'s numbers: the bonded cysteines\' substitutions lower than the wild type, against all missense variants', `${positions.size} positions (the entry's ${bonded.size}), all cysteines ${cysteines ? 'yes' : 'no'}; Gla ${Math.min(...gla)}–${Math.max(...gla)}; bonded cysteines: ${nums.lower} of ${nums.scored} scored lower; all missense: ${nums.allLower} of ${nums.all}; the example ${stated ? 'says so' : 'says otherwise'}`, asSet(positions) === asSet(bonded) && cysteines && Math.min(...gla) === 47 && Math.max(...gla) === 92 && gla.length === 46 && nums.lower / nums.scored > 0.8 && nums.allLower / nums.all < 0.3 && stated, 'the same; > 80% against < 30%; stated');
+
+    // Freeform shapes: a rectangle drawn as a shape selects what the rectangle does; a circle the
+    // cells whose centers it holds.
+    const view = { width: 900, cellW: 12, cellH: 14, x0: 5.5, tracks: [] };
+    const geo = geometry(model, view);
+    const [pa, pb, ra, rb] = [10, 24, 2, 9];
+    const x1 = geo.left + (pa - view.x0 + 0.25) * view.cellW;
+    const x2 = geo.left + (pb - view.x0 + 0.75) * view.cellW;
+    const y1 = geo.top + (ra + 0.25) * view.cellH;
+    const y2 = geo.top + (rb + 0.75) * view.cellH;
+    const a = hitTest(model, view, x1, y1);
+    const b = hitTest(model, view, x2, y2);
+    const band = [];
+    for (let p = a.position; p <= b.position; p += 1) for (let r = a.row; r <= b.row; r += 1) if (model.state[(p - 1) * 21 + r] !== STATE.NOT_DESIGNED) band.push((p - 1) * 21 + r);
+    const shape = cellsInPolygon(model, view, [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]);
+    const round = circleCells(model, view, geo, geo.left + 200.3, geo.top + 140.7, 61);
+    const drawn = new Set(cellsInPolygon(model, view, circle(geo.left + 200.3, geo.top + 140.7, 61)));
+    const inside = round.inside.every((k) => drawn.has(k));
+    const outside = [...drawn].every((k) => !round.outside.has(k));
+    check('selections', 'freeform shapes on the map: a rectangle drawn as a shape selects the cells the rectangle tool does (by its corners\' hit tests); a circle (96 corners), every cell whose center lies inside it and none beyond it', `rectangle: ${shape.length} cells, the tool's ${band.length}, ${same(shape, band) ? 'the same' : 'different'}; circle: ${round.inside.length} inside ${inside ? 'all selected' : 'not all'}, ${outside ? 'none' : 'some'} beyond, ${round.ambiguous} within half a pixel of its edge`, same(shape, band) && band.length === (pb - pa + 1) * (rb - ra + 1) && inside && outside && round.inside.length > 50, 'the same; all, none');
+
+    // A selection's files, and the archive.
+    const query = 'missense at 1-30';
+    const json = JSON.parse(selectionJSON({ name: 'Core', run: g.run.id, condition: 0, created: '2026-10-11T00:00:00.000Z', query, keys: A }, g.run));
+    const csvLines = selectionCSV(A, g.results, g.run, 0).trim().split('\n');
+    const saved = addSelection(g.ws, { name: 'Core', run: g.run.id, condition: 0, keys: A, query }).ws;
+    const back = (await readArchive((await writeArchive(saved)).bytes)).ws.selections.find((x) => x.name === 'Core');
+    check('selections', 'a selection\'s files and the archive: the JSON keeps its query and names (format mavescape-selection), the CSV a row per variant with its score; a selection saved by query comes back from the archive with its query and its variants', `JSON: ${json.format}, query "${json.query}", ${json.keys.length} variants; CSV: ${csvLines.length - 1} rows (${csvLines[0]}); archive: ${back ? `"${back.query}", ${back.keys.length} variants` : 'missing'}`, json.format === 'mavescape-selection' && json.query === query && same(json.keys, A) && csvLines.length - 1 === A.length && csvLines[0] === 'hgvs_pro,score,SE,status' && back?.query === query && same(back.keys, A), 'kept');
   },
 };
 

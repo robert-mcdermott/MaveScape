@@ -60,7 +60,10 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > AUC, with DeLong's interval); filters by confidence and depth. A run's robustness to analysis
 > choices: scored again across pseudocounts, normalizations, models of uncertainty, combinations of
 > replicates, filters and each replicate left out, each variant's conclusion said to hold under every
-> one or to depend on a choice, which is named. Next: selections, and the wave's examples.
+> one or to depend on a choice, which is named. Variants are selected on the map by click, rectangle,
+> freeform shape or query ("missense at 40-80 with se < 0.2", "variants whose class depends on the
+> pseudocount", "from C in feature disulfide"), saved by name with their query, combined, and carried
+> to the other views. Next: the wave's examples.
 
 ## What is a MAVE?
 

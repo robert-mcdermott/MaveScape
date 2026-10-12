@@ -7,6 +7,8 @@ import { variantSection } from './variant-inspector.js';
 import { targetOriginText } from '../lib/genbank.js';
 import { retrievalText } from '../lib/uniprot.js';
 import { recordView } from './mavedb.js';
+import { setsFor } from './selections.js';
+import { exportSelection } from './record.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -85,10 +87,20 @@ export function mountInspector(app) {
 
   function selectionSection(selection) {
     const run = app.store.ws.runs.find((r) => r.id === selection.run);
+    // Its variants by class, read from their names (p.Ala12Val, p.Ala12Ter, p.Ala12=).
+    const kinds = { missense: 0, nonsense: 0, synonymous: 0 };
+    for (const k of selection.keys) kinds[/=$/.test(k) ? 'synonymous' : /(Ter|\*)$/.test(k) ? 'nonsense' : 'missense'] += 1;
+    const others = app.store.ws.runs.filter((r) => r.id !== selection.run && setsFor(app.store.ws, r).some((s) => s.id === selection.id));
     return h('section.inspector-section', h('h3', icon('target'), selection.name),
-      h('dl.kv', h('dt', 'Variants'), h('dd', formatCount(selection.keys.length)), h('dt', 'On the map of'), h('dd', run ? run.name : 'a run no longer here'), h('dt', 'Saved'), h('dd', relativeTime(selection.created))),
+      h('dl.kv', h('dt', 'Variants'), h('dd', `${formatCount(selection.keys.length)} (${Object.entries(kinds).filter(([, n]) => n).map(([k, n]) => `${formatCount(n)} ${k}`).join(', ')})`),
+        h('dt', 'On the map of'), h('dd', run ? run.name : 'a run no longer here'),
+        selection.query ? h('dt', 'By the query') : null, selection.query ? h('dd.mono', { style: { fontSize: '11.5px' } }, selection.query) : null,
+        others.length ? h('dt', 'Also applies to') : null, others.length ? h('dd', `${others.map((r) => r.name).join(', ')} (the same protein)`) : null,
+        h('dt', 'Saved'), h('dd', relativeTime(selection.created))),
       h('p.mono', { style: { fontSize: '11px', margin: '8px 0 0', wordBreak: 'break-word', color: 'var(--text-2)' } }, selection.keys.slice(0, 40).join(', '), selection.keys.length > 40 ? ', …' : ''),
-      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => app.setMode('map') }, icon('heatmap'), 'Show on the map')));
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => app.setMode('map') }, icon('heatmap'), 'Show on the map'),
+        run ? h('button.btn.small', { type: 'button', onclick: () => exportSelection(app, selection, 'csv') }, icon('download'), 'CSV') : null,
+        h('button.btn.small', { type: 'button', onclick: () => exportSelection(app, selection, 'json') }, icon('download'), 'JSON')));
   }
 
   function focusSection() {

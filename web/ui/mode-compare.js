@@ -16,7 +16,7 @@
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
 import { annotationLabel, classesCSV, comparableAnnotations, compareSides, comparisonCSV, comparisonJSON, COMPARABLE_PROVIDERS, describePredictor, describeScoreSet, describeSide, differenceMap, DISCORDANT_Q, filtersApplied, MIN_POSITION_VARIANTS, NO_FILTERS, positionsCSV, possessive, sameSpec, SCALES, sideMap, sideOptions, specKey } from '../lib/compare.js';
 import { categoricalColor } from '../lib/colormaps.js';
-import { buildMapModel, STATE, STATE_NAMES } from '../lib/map-model.js';
+import { buildMapModel, cellAt, cellName, STATE, STATE_NAMES } from '../lib/map-model.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { annotationTracks, providerById } from '../lib/providers/index.js';
 import { scoreSetResults } from '../lib/scoreset.js';
@@ -29,6 +29,7 @@ import { ensureResults, runEntry } from './run-results.js';
 import { addFileTrack, addPublicTrack, annotationText } from './tracks.js';
 import { toast } from './overlays.js';
 import { mountVariantMap } from './variant-map.js';
+import { selectOnMap } from './selections.js';
 
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const interval = (est, low, high, d = 3) => `${fmt(est, d)} (${fmt(low, d)} to ${fmt(high, d)})`;
@@ -782,11 +783,25 @@ export function mountCompareMode(app, container) {
       rowB = cm.values.b.keys.indexOf(f.id);
       rowA = maps.pairOfB.get(rowB) ?? -1;
     }
+    // The map's selection (wave 4, slice 5) outlined on the side of its run, by name.
+    const sel = store.ui.selection;
     for (const e of maps.entries) {
       const row = e.which === 'second' ? rowB : rowA;
       const k = row < 0 ? -1 : e.m.model.cells.indexOf(row);
-      e.map.setSelection(k >= 0 ? [k] : []);
+      const side = e.which === 'second' ? cm.b : cm.a;
+      const cells = new Set(k >= 0 ? [k] : []);
+      if (sel?.keys.length && side.run?.id === sel.run) {
+        e.cellOfKey ??= keyIndex(e.m.model);
+        for (const key of sel.keys) if (e.cellOfKey.has(key)) cells.add(e.cellOfKey.get(key));
+      }
+      e.map.setSelection([...cells]);
     }
+  }
+  function keyIndex(model) {
+    const index = new Map();
+    const R = model.rows.length;
+    for (let k = 0; k < model.cells.length; k += 1) if (model.state[k] !== STATE.NOT_DESIGNED) index.set(cellName(model, cellAt(model, Math.floor(k / R) + 1, k % R)), k);
+    return index;
   }
 
   function destroyMaps() {
@@ -808,6 +823,18 @@ export function mountCompareMode(app, container) {
       out.push(h('p', { style: { margin: '0 0 6px' } }, `${formatCount(order.length)} of ${formatCount(d.tested)} variants differ beyond their uncertainty (q < ${DISCORDANT_Q}, Benjamini–Hochberg; each difference's z from both SEs${c.scale?.applied && c.scale.anchors ? ' and the anchors\'' : ''}): ${formatCount(lower)} lower in ${c.a.label}, ${formatCount(order.length - lower)} higher.`));
       if (d.dispersion > 1.5) out.push(h('div.callout.warn', icon('warning'), h('span', `The differences are ${fmt(d.dispersion, 1)} times as variable as the SEs say (the median z² over its expected value). Either the SEs are too small (QC's variance beyond counting: a bottleneck), or the two differ nearly everywhere (two assays measuring different things); either way, more variants test as discordant than truly differ.`)));
       else out.push(h('p.muted', { style: { fontSize: '11.5px', margin: '0 0 6px' } }, `The differences are ${fmt(d.dispersion, 2)} times as variable as the SEs say: about what they predict.`));
+      const side = runSide(c);
+      if (order.length && side) {
+        const values = side === c.a ? c.values.a : c.values.b;
+        const names = order.map((k) => values.keys[side === c.a ? c.rows[k][0] : c.rows[k][1]]);
+        out.push(h('div.btn-row', { style: { margin: '0 0 6px' } }, h('span.spacer'),
+          h('button.btn.small', { type: 'button', title: `Select the ${formatCount(order.length)} discordant variants on the map of ${side.run.name}`, onclick: async () => {
+            const run = store.ws.runs.find((r) => r.id === side.run.id);
+            if (!run) return;
+            const { offMap } = await selectOnMap(app, run, { names, condition: Math.max(0, side.condition ?? 0) });
+            if (offMap) toast(`${formatCount(offMap)} of them are not on the map (not single substitutions).`);
+          } }, icon('heatmap'), 'Select them on the map')));
+      }
       if (order.length) {
         out.push(h('div', { style: { maxHeight: '260px', overflow: 'auto' } }, h('table.data.compact', h('thead', h('tr', h('th', 'Variant'), h('th.r', 'First'), h('th.r', 'Second'), h('th.r', 'Difference'), h('th.r', 'z'), h('th.r', 'q'))),
           h('tbody', ...order.slice(0, 100).map((k) => h('tr', { style: { cursor: runSide(c) ? 'pointer' : 'default' }, onclick: () => pickA(c, c.rows[k][0]) },
@@ -941,7 +968,7 @@ export function mountCompareMode(app, container) {
   return {
     update(topics) {
       // A variant focused on the maps: selected in each, the maps (their zoom, keyboard focus) kept.
-      if (topics.size === 1 && topics.has('focus') && maps && app.compareTab === 'maps' && root.contains(maps.entries[0]?.map.el)) {
+      if (topics.size === 1 && (topics.has('focus') || topics.has('selection')) && maps && app.compareTab === 'maps' && root.contains(maps.entries[0]?.map.el)) {
         selectFocused();
         return;
       }

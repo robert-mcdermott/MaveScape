@@ -215,8 +215,10 @@ export function selectionCSV(keys, results, run, condition = 0) {
   }));
 }
 
+// A selection: its variants by name, and the query that made it (wave 4, slice 5), null when it
+// was made by hand.
 export function selectionJSON(selection, run) {
-  return `${JSON.stringify({ format: 'mavescape-selection', version: EXPORT_VERSION, name: selection.name, run: run?.id ?? selection.run, condition: selection.condition ?? 0, created: selection.created, keys: selection.keys }, null, 2)}\n`;
+  return `${JSON.stringify({ format: 'mavescape-selection', version: EXPORT_VERSION, name: selection.name, run: run?.id ?? selection.run, condition: selection.condition ?? 0, created: selection.created, query: selection.query ?? null, keys: selection.keys }, null, 2)}\n`;
 }
 
 // The run's provenance: what was scored, how, by which software, what came out, and the QC.

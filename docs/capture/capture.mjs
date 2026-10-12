@@ -549,6 +549,20 @@ const scenes = {
     await clearToasts();
     await sleep(600);
   },
+  // Selections by query (wave 4, slice 5): factor IX's map with UniProt's features beside it, the
+  // lost substitutions of the cysteines in its disulfide bonds selected by query and saved, the
+  // query in its field.
+  async selections() {
+    await example('factor9');
+    await act('add_track', { provider: 'uniprot-features' });
+    await act('select_variants', { query: 'missense from C in feature disulfide and lower', save_as: 'Disulfides' });
+    await js(`(() => { const i = document.querySelector('.map-query-input'); i.value = 'missense from C in feature disulfide and lower'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    await waitFor(`/variants? match/.test(document.querySelector('.map-query-note')?.textContent ?? '')`);
+    await js(`document.querySelector('.map-query-input').blur()`);
+    await clearToasts();
+    await scrollTo('.map-pane .map-legend', 'start');
+    await sleep(800);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

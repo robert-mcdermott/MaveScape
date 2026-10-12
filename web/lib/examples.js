@@ -93,12 +93,14 @@ export const EXAMPLES = [
       'QC fails the variance beyond counting, about 2,300× what counting predicts: some 10,000 reads per variant in each bin far exceed the cells sorted. The moderated combination carries the excess into every SE.',
       'The cells per bin are not assessed, and the bins cannot be scored by maximum likelihood: MaveDB records neither the cells sorted nor the gates. What the analysis can do names both, and the sorter\'s report that has them.',
       'With MaveScape\'s defaults (each replicate scaled to nonsense 0 and wild type 1) the scores follow the published ones with r 0.994; with MultiSTEP\'s own scale (the lowest 5% of missense at 0) and the replicates\' mean, r 0.9995, and the nonsense median is 0.47.',
+      'Selected by query, with UniProt\'s features beside the map, the substitutions of the 22 cysteines in factor IX\'s 11 disulfide bonds ("missense from C in feature disulfide") are mostly lost: 345 of the 399 scored are lower than the wild type beyond their uncertainty, against 2,124 of the 8,529 missense variants scored in all. A secreted protein needs its disulfide bonds.',
     ],
     steps: [
       ['map', 'Look at the map: the protease domain and the second EGF domain hold most of the positions that tolerate nothing, the propeptide and the Gla domain almost none. Click a cell: the inspector shows its distribution over the four bins in each replicate.'],
       ['qc', 'In QC, open "Variance beyond counting": the replicates of each tile differ about 2,300× more than counting predicts, because the cells sorted, not the reads, limit what is known.'],
       ['experiment', 'In Experiment, read "What the analysis can do": the gates and the cells sorted into each bin are missing, and would unlock maximum likelihood and the cells per bin.'],
       ['score', 'In Score, set the bins\' scale to the lowest 5% and the replicates combined by their mean, and score again: MultiSTEP\'s own settings, close to the published scores.'],
+      ['map', 'Back on the map, Tracks, "Add a track": UniProt\'s features. Then type in the query field below the map "missense from C in feature disulfide": the substitutions of the cysteines that make factor IX\'s disulfide bonds. Add "and lower" to keep those lower than the wild type beyond their uncertainty, save the selection as Disulfides, and try "missense and lower and not in Disulfides" for the rest.'],
     ],
   },
   {

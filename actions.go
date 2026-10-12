@@ -109,13 +109,16 @@ var remoteActions = []remoteAction{
 		"reason":  textArg("Why the finding is expected here; empty to withdraw the acknowledgement."),
 		"run":     textArg("A score run by name or id, or \"counts\"; the latest run of the current design if not given."),
 	}, "finding"), long: true},
-	{Name: "select_variants", Description: "Selects variants on the map, by name or by position, and optionally saves the selection by name. Shows the Map view with the selection.", InputSchema: schema(map[string]any{
+	{Name: "select_variants", Description: "Selects variants on the map: by a query (such as \"missense at 40-80 with se < 0.2\", \"lower and not robust\", \"from C in feature disulfide\", \"in Core and not in Surface\"), by name or by position; replaces the selection or adds to, intersects or subtracts from it; optionally saves it by name (with its query). A query that needs the run's robustness checks it first. Shows the Map view with the selection.", InputSchema: schema(map[string]any{
+		"query":     textArg("A query of MaveScape's selection language: kinds (missense, nonsense, synonymous), states (scored, low, filtered, missing), at/pos/refpos with positions, from/to with residues or groups, score/se/q/replicates/input compared with a number, lower/higher/neutral, robustness verdicts (robust, fragile, uncertain, borderline, size-dependent, sometimes-scored, \"class depends on the pseudocount\"), feature with a name, in with a saved selection's name, selected, and, or, not, parentheses."),
 		"variants":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "MAVE-HGVS names, such as p.Trp36Ala."},
 		"positions": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Positions on the target (numbered from 1): every substitution there."},
 		"filter":    textArg("Only these of them: scored, low (low confidence), filtered or missing."),
+		"operation": textArg("What to do with the selection there is: replace (the default), add, intersect or subtract."),
 		"save_as":   textArg("Save the selection under this name."),
 		"run":       runArg,
 		"condition": conditionArg,
+		"contrast":  textArg("A contrast between conditions (its name, or its number from 1): select on its differential map."),
 	})},
 	{Name: "inspect_variant", Description: "A variant's evidence: its score with SE and 95% interval (or why it has none), flags, each replicate's counts and score, every sample's counts, and with conditions compared each difference with its SE, interval and adjusted p. Shows it in the inspector.", InputSchema: schema(map[string]any{
 		"variant":   textArg("Its MAVE-HGVS name, such as p.Trp36Ala."),

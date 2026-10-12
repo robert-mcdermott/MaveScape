@@ -35,6 +35,7 @@ lede: Thirteen examples come with MaveScape. Three are published experiments fro
         <li>Quality control fails the variance beyond counting, about 2,300×: some 10,000 reads per variant in each bin far exceed the cells sorted. The moderated combination carries the excess into every SE.</li>
         <li>The cells per bin are not assessed, and the bins cannot be scored by maximum likelihood: MaveDB records neither the cells sorted nor the gates, which the sorter's report has.</li>
         <li>With MaveScape's defaults (each replicate scaled to nonsense 0 and wild type 1) the scores follow the published ones with r 0.994. With MultiSTEP's own scale (the lowest 5% of missense at 0) and the replicates' mean, set in the Score view, r 0.9995; on that scale the nonsense median is 0.47.</li>
+        <li>With UniProt's features beside the map, the query <code>missense from C in feature disulfide</code> selects the substitutions of the 22 cysteines in factor IX's 11 disulfide bonds: 345 of the 399 scored are lower than the wild type beyond their uncertainty, against 2,124 of the 8,529 missense variants scored in all. Saved as a selection, <code>missense and lower and not in Disulfides</code> selects the rest (<a href="selections.html">Selections</a>).</li>
       </ul>
 
       <h2 id="pten">PTEN abundance, opened from MaveDB (published scores)</h2>

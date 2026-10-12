@@ -1932,9 +1932,72 @@ follow, and the wave ends with its examples, as waves 2 and 3 did.
        why.
      - The determinism guard caught `**` in the new module; the Score view's narrow column could
        not hold the pane's tables (now full width).
-5. **Selections (V3).** Freeform and query selections ("missense at 40–80 with SE < 0.2",
+5. **Selections (V3): done.** Freeform and query selections ("missense at 40–80 with SE < 0.2",
    "variants whose class depends on the pseudocount"; structural classes such as "buried
    positions" with wave 5), named sets, set operations, export.
+
+   What it does:
+   - **The query language** (`lib/query.js`), its tokenizer and parser adapted from Proteoscope's
+     `select.js` (whose residue selections wave 5 copies), so that the roadmap's phrases are
+     queries as written: terms side by side, and "with", "whose" and "that", mean and.
+     - Words for the class, the state, positions (target or reference numbering), the wild-type
+       and substituted residues (letters or the map's groups), the score, SE, q, replicates and mean
+       input count compared with a number, and the class against the wild type (robustness.js's
+       calls).
+     - The robustness verdicts, and "depends on", "class depends on" and "size depends on" a choice:
+       the choices that alone account for a verdict, which the summary now keeps by id
+       (`dependsOnIds`).
+     - "feature": positions under a feature beside the map (UniProt's, a GFF3 file's).
+     - "in": a saved selection by name; "selected": the selection now.
+     - A query that names what the run lacks says so and offers it: the robustness check, or
+       UniProt's features.
+   - **Freeform shapes** on the map: ⌥- or Alt-drag, or a drag mode (Pan, Rectangle, Freeform) for
+     a touch screen; the cells whose centers the shape holds (`cellsInPolygon`, `map-render.js`).
+   - **Named sets and set operations:** a saved selection keeps its query. Under the map, each saved
+     selection selects, adds to, intersects or subtracts from the selection, or runs its query
+     again; a query does the same by name. A selection made by queries keeps them, combined, so
+     that it can be made again. A saved selection applies to every run of the same protein.
+   - **Across the views:** the Score view's table lists the selection and sends any list to the
+     map; the Robustness pane sends each verdict's variants (by its word); Compare's maps outline the
+     selection, and its discordant variants go to the map; the inspector shows a saved selection's
+     query and the runs it applies to.
+   - **Exports and remote control:** the selection's JSON has its `query`; `select_variants` takes
+     a `query`, an `operation` and a `contrast`, and checks the run's robustness when a query needs
+     it.
+   - **Guides:** factor IX's fifth step (its disulfide bonds' cysteines by query); the guide page
+     *Selections*; a screenshot scene (`selections`).
+   - Validation:
+     - `selections` (8 checks):
+       - the roadmap's phrases;
+       - fourteen queries on GRB2's Run 1 against an independent account of each of its 1,176
+         cells, read from the run's own arrays;
+       - set operations and their laws, and a saved selection on a second run;
+       - each robustness verdict exactly the check's;
+       - in three planted experiments, the planted variants exactly;
+       - factor IX's 22 bonded cysteines from UniProt P00740;
+       - freeform shapes against the rectangle tool and a circle;
+       - the files and the archive.
+     - `remote-session.mjs` 123 checks.
+     - Unit tests: `query.test.mjs` (5), and a freeform shape's cells in `map-render.test.mjs`.
+   - Found by slice 5:
+     - **Depending on a choice has to mean depending on it alone.** A verdict that only choices
+       together account for first counted for each of them. "Class depends on the pseudocount" then
+       selected variants at the threshold that four to six changes together moved: 6, 1 and 1 in
+       the three planted experiments the suite checks, none of them planted. The summary now keeps by id only the choices that
+       alone account for a verdict.
+     - **On GRB2, the roadmap's own query selects 4 variants, all at the threshold.** "Variants whose
+       class depends on the pseudocount" are borderline (q 0.031 to 0.047), each moved by leaving
+       out a replicate too. No variant's size depends on the pseudocount there. In the planted
+       experiments, the pseudocount moves the zero counts' size and never their class.
+     - **A secreted protein needs its disulfide bonds.** Of the substitutions of the 22 cysteines in
+       factor IX's 11 bonds, 345 of 399 scored are lower than the wild type, against 2,124 of 8,529
+       missense variants (25%). Its two other cysteines are in the signal peptide (C18, C28): 24 of
+       their 38 are lower, which needs another explanation than a bond.
+     - **A saved selection was shown only on the run it was made on**, though a list of names applies
+       to every run of the protein. It is now listed, and used, on each.
+     - **A rectangle always added to the selection**, because the Shift that drew it also meant add.
+       With the drag modes, a rectangle or a shape replaces the selection unless ⌘, Ctrl or Shift is
+       held.
 6. **Examples.** Published comparisons that teach what the wave built: two assays of one protein
    that only seem to disagree until they are on one scale, a rescoring against the published
    scores, and a conclusion that depends on an analysis choice.

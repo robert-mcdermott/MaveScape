@@ -43,6 +43,8 @@ import { annotationsOf, describeTrack, sourceText, trackFilters, trackTarget, tr
 import { comparableAnnotations, comparisonJSON, SCALES } from '../lib/compare.js';
 import { DEFAULT_MAX_SPECIFICATIONS, robustnessJSON } from '../lib/robustness.js';
 import { checkRobustness, robustnessFiles } from './robustness.js';
+import { combineSelections, OPERATIONS, QueryError } from '../lib/query.js';
+import { runQuery } from './selections.js';
 import { normalizeUrn } from '../lib/mavedb.js';
 import { setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
@@ -262,9 +264,9 @@ export function installRemote(app) {
         targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0, ...(t.sequenceType === 'dna' ? { codingStart: t.codingStart ?? 1 } : {}), ...(t.origin ? { from: t.origin.service ?? t.origin.format, accession: t.origin.accession } : {}) })),
         design: w.design ? designSummary(w.design, source) : null,
         runs: w.runs.map(runSummary),
-        selections: w.selections.map((s) => ({ name: s.name, run: w.runs.find((r) => r.id === s.run)?.name ?? s.run, variants: s.keys.length })),
+        selections: w.selections.map((s) => ({ name: s.name, run: w.runs.find((r) => r.id === s.run)?.name ?? s.run, variants: s.keys.length, query: s.query ?? null })),
         focus: store.ui.focus ?? null,
-        selection: sel ? { run: w.runs.find((r) => r.id === sel.run)?.name ?? sel.run, condition: sel.condition, count: sel.keys.length, variants: sel.keys.slice(0, 100) } : null,
+        selection: sel ? { run: w.runs.find((r) => r.id === sel.run)?.name ?? sel.run, condition: sel.condition, count: sel.keys.length, query: sel.query ?? null, variants: sel.keys.slice(0, 100) } : null,
         steps: steps.map((s) => ({ id: s.id, label: s.label, state: s.state, detail: s.detail })),
         next: next ? { step: next.id, state: next.state, detail: next.detail, action: next.action?.label ?? null } : null,
       };
@@ -637,9 +639,18 @@ export function installRemote(app) {
 
     async select_variants(args) {
       const run = resolveRun(args.run);
-      const { results } = await resultsOf(run);
-      const condition = resolveCondition(results, args.condition);
-      const model = modelOf(run, results, condition);
+      const { results: own } = await resultsOf(run);
+      const results = proteinView(own) ?? own;
+      // A contrast's differential map, or a condition's (wave 4, slice 5).
+      let contrast = null;
+      if (args.contrast !== undefined && args.contrast !== null && args.contrast !== '') {
+        const names = (own.differential ?? []).map((d) => d.name);
+        if (!names.length) throw new ActionError(`${run.name} compares no conditions: score it with two conditions and a contrast first.`);
+        contrast = /^\d+$/.test(String(args.contrast)) ? Number(args.contrast) - 1 : names.indexOf(choose(args.contrast, names, 'contrast'));
+        if (contrast < 0 || contrast >= names.length) throw new ActionError(`There ${names.length === 1 ? 'is 1 contrast' : `are ${names.length} contrasts`}: ${names.join(', ')}.`);
+      }
+      const condition = contrast === null ? resolveCondition(own, args.condition) : own.conditions.findIndex((c) => c.id === own.differential[contrast].condition);
+      const model = buildMapModel(results, run.inputs.design, contrast === null ? { condition } : { contrast, colorBy: 'differential' });
       const byName = new Map();
       const atPosition = new Map();
       for (let p = 1; p <= model.length; p += 1) {
@@ -651,6 +662,7 @@ export function installRemote(app) {
           if (!cell.reference) atPosition.get(p).push(cell);
         }
       }
+      if (!args.query && !args.variants?.length && !args.positions?.length) throw new ActionError('Give "query" (missense at 40-80 with se < 0.2), "variants" or "positions".');
       const cells = [];
       const unknown = [];
       for (const name of args.variants ?? []) {
@@ -664,23 +676,59 @@ export function installRemote(app) {
         else unknown.push(`position ${p}`);
       }
       if (unknown.length) throw new ActionError(`Not on ${run.name}'s map: ${unknown.slice(0, 10).join(', ')}${unknown.length > 10 ? '…' : ''}. Variants are named as MAVE-HGVS single substitutions (p.Trp36Ala) on positions 1–${model.length}.`);
+      // A query; one that needs the run's robustness checks it first (seeded: the same each time).
+      let query = null;
+      if (args.query) {
+        const map = { model, results, own };
+        let found;
+        try {
+          found = await runQuery(app, run, String(args.query), map).catch(async (error) => {
+            if (!(error instanceof QueryError) || error.need !== 'robustness') throw error;
+            const state = await checkRobustness(app, run);
+            if (state.status !== 'done') throw new ActionError(`The query needs ${run.name}'s robustness checked, and it could not be: ${state.error}`);
+            return runQuery(app, run, String(args.query), map);
+          });
+        } catch (error) {
+          if (error instanceof QueryError) throw new ActionError(`${error.message}${error.position >= 0 ? ` (at character ${error.position + 1} of the query)` : ''}`);
+          throw error;
+        }
+        cells.push(...found.keys.map((k) => byName.get(k)));
+        query = found.query;
+      }
       const states = { scored: [STATE.SCORED], low: [STATE.LOW], filtered: [STATE.FILTERED], missing: [STATE.MISSING] };
-      const keep = args.filter ? states[choose(args.filter, Object.keys(states), 'filter')] : null;
+      const filter = args.filter ? choose(args.filter, Object.keys(states), 'filter') : null;
+      const keep = filter ? states[filter] : null;
       const keys = [...new Set(cells.filter((c) => !keep || keep.includes(c.state)).map((c) => cellName(model, c)))];
-      if (!keys.length) throw new ActionError('No variants match: give "variants" or "positions" (and a "filter" that some of them pass).');
-      app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, show: 'all', page: 0 };
+      if (!keys.length && !args.query) throw new ActionError('No variants match: give "variants" or "positions" (and a "filter" that some of them pass).');
+      // The selection's query, when a query alone made it ("scored" as the filter: scored without
+      // low confidence, the query's "confident").
+      const made = query && !args.variants?.length && !args.positions?.length ? (filter ? `(${query}) and ${{ scored: 'confident', low: 'low', filtered: 'filtered', missing: 'missing' }[filter]}` : query) : null;
+      const operation = args.operation ? choose(args.operation, OPERATIONS, 'operation') : 'replace';
+      const sel = store.ui.selection;
+      const current = sel && sel.run === run.id && sel.condition === condition ? sel : null;
+      const next = combineSelections(current, { keys, query: made }, operation);
+      app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, page: 0 };
       app.mapView.run = run.id;
-      app.mapView.condition = condition;
-      store.setUI({ selection: { run: run.id, condition, keys } }, ['selection']);
+      if (contrast === null) {
+        app.mapView.condition = condition;
+        if (app.mapView.colorBy === 'differential') app.mapView.colorBy = 'score';
+      } else {
+        app.mapView.colorBy = 'differential';
+        app.mapView.contrast = contrast;
+      }
+      store.setUI({ selection: next.keys.length ? { run: run.id, condition, keys: next.keys, ...(next.query ? { query: next.query } : {}) } : null }, ['selection']);
       let saved = null;
       if (args.save_as) {
-        const added = addSelection(ws(), { name: String(args.save_as), run: run.id, condition, keys });
+        if (!next.keys.length) throw new ActionError('Nothing is selected to save.');
+        const added = addSelection(ws(), { name: String(args.save_as), run: run.id, condition, keys: next.keys, ...(next.query ? { query: next.query } : {}) });
         store.commit(added.ws, `Save the selection "${args.save_as}" (${author})`);
         saved = String(args.save_as);
       }
       app.focusItem({ kind: 'run', id: run.id });
       await show('map');
-      return { message: `Selected ${plural(keys.length, 'variant')} on ${run.name}'s map${saved ? `, saved as "${saved}"` : ''}.`, data: { run: run.name, condition: results.conditions[condition].name, variants: keys, saved } };
+      const where = `on ${run.name}'s ${contrast === null ? '' : `${own.differential[contrast].name} `}map`;
+      const what = operation === 'replace' ? '' : ` (${{ add: 'added', intersect: 'kept those also', subtract: 'removed' }[operation]} ${plural(keys.length, 'variant')} ${operation === 'add' ? 'to' : operation === 'intersect' ? 'in' : 'from'} the selection)`;
+      return { message: next.keys.length ? `Selected ${plural(next.keys.length, 'variant')} ${where}${what}${saved ? `, saved as "${saved}"` : ''}.` : `No variant ${where} matches${args.query ? ` "${args.query}"` : ''}${operation === 'replace' ? '' : ` once ${operation === 'intersect' ? 'intersected with' : 'taken from'} the selection`}; nothing is selected.`, data: { run: run.name, condition: own.conditions[condition].name, ...(contrast === null ? {} : { contrast: own.differential[contrast].name }), operation, matched: keys.length, count: next.keys.length, query: next.query, variants: next.keys, saved } };
     },
 
     async inspect_variant(args) {
