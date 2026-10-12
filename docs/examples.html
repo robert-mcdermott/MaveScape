@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Examples · MaveScape</title>
-  <meta name="description" content="MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), four opened from MaveDB (PTEN's abundance, scores alone; BRCA1's saturation genome editing; DHFR with and without the Lon protease, two score sets as two conditions; the BRCA1 RING domain from MaveDB and back), and six simulated ones whose true effects are known, one of them with problems planted." />
+  <meta name="description" content="MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), five opened from MaveDB (PTEN's abundance, scores alone; BRCA1's saturation genome editing; DHFR with and without the Lon protease, two score sets as two conditions; the BRCA1 RING domain from MaveDB and back; two screens of TP53 on two scales), and six simulated ones whose true effects are known, one of them with problems planted." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/examples.html" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Examples" />
-  <meta property="og:description" content="MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), four opened from MaveDB (PTEN's abundance, scores alone; BRCA1's saturation genome editing; DHFR with and without the Lon protease, two score sets as two conditions; the BRCA1 RING domain from MaveDB and back), and six simulated ones whose true effects are known, one of them with problems planted." />
+  <meta property="og:description" content="MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), five opened from MaveDB (PTEN's abundance, scores alone; BRCA1's saturation genome editing; DHFR with and without the Lon protease, two score sets as two conditions; the BRCA1 RING domain from MaveDB and back; two screens of TP53 on two scales), and six simulated ones whose true effects are known, one of them with problems planted." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/examples.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -63,6 +63,9 @@
           <li><a href="scoring.html">Scoring</a></li>
           <li><a href="qc.html">Quality control</a></li>
           <li><a href="map.html">The map and the inspector</a></li>
+          <li><a href="selections.html">Selections</a></li>
+          <li><a href="compare.html">Comparisons</a></li>
+          <li><a href="robustness.html">Robustness</a></li>
         </ul>
         <h4>Results</h4>
         <ul>
@@ -81,7 +84,7 @@
 
     <main id="main" class="doc">
       <h1>Examples</h1>
-      <p class="doc-lede">Thirteen examples come with MaveScape. Three are published experiments from MaveDB, their counts unchanged and bundled: two populations, a growth time series and sorted bins. Four are opened from MaveDB when you open them: published scores alone, with their record; a saturation genome editing screen of nucleotide variants on a RefSeq transcript, with its counts; two score sets of one enzyme opened together as two conditions; and a score set rescored from its counts, deposited and opened again. Six are simulated, with every true effect known: two populations, a time series, a sort, a barcoded library, two conditions from shared inputs, and an experiment with two problems planted. Each opens scored, with its question, guided steps of a few minutes and what to expect, in the inspector.</p>
+      <p class="doc-lede">Fourteen examples come with MaveScape. Three are published experiments from MaveDB, their counts unchanged and bundled: two populations, a growth time series and sorted bins. Five are opened from MaveDB when you open them: published scores alone, with their record; a saturation genome editing screen of nucleotide variants on a RefSeq transcript, with its counts; two score sets of one enzyme opened together as two conditions; a score set rescored from its counts, deposited and opened again; and two laboratories' screens of one protein, compared on one scale. Six are simulated, with every true effect known: two populations, a time series, a sort, a barcoded library, two conditions from shared inputs, and an experiment with two problems planted. Each opens scored, with its question, guided steps of a few minutes and what to expect, in the inspector.</p>
 
       <h2 id="grb2">GRB2 SH3 domain (published)</h2>
       <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
@@ -95,6 +98,7 @@
         <li>Nonsense variants score about −4.6 against the wild type's 0: the assay separates loss of function cleanly.</li>
         <li>The least tolerant positions are buried hydrophobic and glycine residues of the fold: A163, G196, G203 and I183 on GRB2's numbering.</li>
         <li>In Experiment, <a href="experiment.html#readiness">What the analysis can do</a>: 19 of 25 analyses are ready. The published counts do not say how the library was made or how many cells were carried into selection; with the cells, QC would check the bottleneck it finds against them. The library is protein-level, so there are no synonymous variants to normalize to.</li>
+        <li>In <a href="compare.html#scale">Compare</a>, against its record's published scores (kept beside the workspace without opening it), Run 1 agrees at r 0.997 on another scale; rescaled by their anchors, Lin's concordance is 0.996 and the bias 0.009. Against AlphaMissense, ρ 0.55 by rank, and an AUC of 0.78 between its classes.</li>
       </ul>
 
       <h2 id="hsp90">Hsp90 over 21 generations (published)</h2>
@@ -109,7 +113,12 @@
         <li>The example scores per generation (the times are generations). Positions 585–587 (W, S, A) tolerate almost nothing, 582 and 590 almost everything; synonymous codons score near 0.</li>
         <li>Where the authors fit every time point, the scores follow the published fitness with r 0.95, a median 0.005 per generation apart. The record says its slopes are of log₂ ratios, but they are of natural logarithms, as MaveScape's are. Stops score about −0.32 against the published −0.77: the authors fit null-like variants on their first three time points, before they reach the floor.</li>
         <li>Quality control fails the fit of the time courses, about 44× what counting predicts, so each slope's SE comes from its own residuals. With one replicate, nothing between replicates is assessed: <a href="experiment.html#readiness">What the analysis can do</a> says so, and that the record gives no MaveDB terms for the assay or the library.</li>
+        <li>A rescoring against the published scores (<a href="compare.html#rescoring">Comparisons</a>): the record's own scores, kept beside the workspace, correlate with Run 1 at r 0.95, but stated to be on one scale their Lin's concordance is only 0.48, with a bias of 0.22. The difference grows with the effect (a Bland–Altman slope of −0.91), most at 585–587: how deleterious the null-like variants are depends on the time points fitted, a choice the authors made otherwise.</li>
       </ul>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/hsp90-rescoring-dark.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of Hsp90's Run 1 against its record's published scores, stated to be on one scale: 187 variants, Pearson's r 0.951, Lin's concordance 0.476, a bias of 0.223, and the Bland–Altman plot whose differences rise as the mean falls" /><img class="shot-light" src="../assets/img/hsp90-rescoring-light.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of Hsp90's Run 1 against its record's published scores, stated to be on one scale: 187 variants, Pearson's r 0.951, Lin's concordance 0.476, a bias of 0.223, and the Bland–Altman plot whose differences rise as the mean falls" /></div>
+        <figcaption>Hsp90's Run 1 against its record's published scores: correlated, but not in agreement. The differences grow with the effect.</figcaption>
+      </figure>
 
       <h2 id="factor9">Coagulation factor IX in sorted bins (published)</h2>
       <p>Every substitution of the 461-residue factor IX, secreted from human cells and displayed on their surface (MultiSTEP), stained at its C-terminal strep II tag and sorted into four bins, in three overlapping tiles of three replicates (MaveDB urn:mavedb:00001200-a-1, CC0 1.0; Popp et al., Nature Structural &amp; Molecular Biology 2025). The counts are MaveDB's file, unchanged.</p>
@@ -123,6 +132,7 @@
         <li>Quality control fails the variance beyond counting, about 2,300×: some 10,000 reads per variant in each bin far exceed the cells sorted. The moderated combination carries the excess into every SE.</li>
         <li>The cells per bin are not assessed, and the bins cannot be scored by maximum likelihood: MaveDB records neither the cells sorted nor the gates, which the sorter's report has.</li>
         <li>With MaveScape's defaults (each replicate scaled to nonsense 0 and wild type 1) the scores follow the published ones with r 0.994. With MultiSTEP's own scale (the lowest 5% of missense at 0) and the replicates' mean, set in the Score view, r 0.9995; on that scale the nonsense median is 0.47.</li>
+        <li>With UniProt's features beside the map, the query <code>missense from C in feature disulfide</code> selects the substitutions of the 22 cysteines in factor IX's 11 disulfide bonds: 345 of the 399 scored are lower than the wild type beyond their uncertainty, against 2,124 of the 8,529 missense variants scored in all. Saved as a selection, <code>missense and lower and not in Disulfides</code> selects the rest (<a href="selections.html">Selections</a>).</li>
       </ul>
 
       <h2 id="pten">PTEN abundance, opened from MaveDB (published scores)</h2>
@@ -137,6 +147,7 @@
         <li>About a quarter of missense variants score below 0.5; the least tolerant positions are spread through both the phosphatase and the C2 domain, as a stability readout expects.</li>
         <li>The record gives the assay in MaveDB's terms (a reporter, loss of function, human cells, a library by oligo-directed mutagenic PCR), which become the design's readout, but not what a higher score means: the example states it from the paper. Its six calibrations are in the inspector, ExCALIBR's for research use only.</li>
         <li>QC passes what it can assess from scores alone but coverage, 53% of all substitutions. Rescoring and QC of the counts need counts, which MaveDB does not hold for this record: the readiness says where they may be (the paper's supplement, the authors' repository, the raw reads PRJNA428380).</li>
+        <li>In <a href="compare.html#sources">Compare</a>, against PTEN's lipid phosphatase activity (urn:mavedb:00000054-a-1, Mighell et al. 2018, kept beside the workspace without opening it), abundance agrees only in part (4,057 variants, r 0.45, ρ 0.37): two assays, and a variant can be stable but inactive. Rescaled by their anchors, the report shows the activity record's wild type is its row, 1 with an SE of 0, though its methods place wild type-like variants from −1.11 to 0.89. Against AlphaMissense, abundance tells its likely benign substitutions from its likely pathogenic ones with an AUC of 0.77.</li>
       </ul>
 
       <h2 id="brca1-sge">BRCA1 saturation genome editing, opened from MaveDB (nucleotide variants)</h2>
@@ -151,7 +162,7 @@
         <li>On the map, the coding variants read at the protein level: 2,251 protein variants, 391 made by more than one nucleotide variant and merged. The 1,090 with no protein change to draw are listed beside the map.</li>
         <li>Nonsense variants score far below synonymous ones (medians −2.12 and −0.01; AUC 0.99). Splice-site variants score like nonsense (median −2.02); intronic ones a few bases further in, like synonymous ones (median −0.18).</li>
         <li>QC fails coverage: 17% of the substitutions one base change makes, on the whole protein. The variants lie in two stretches, positions 1–101 and 1631–1855: the exons the experiment edited. Given as the library's tiles, coverage is judged within them.</li>
-        <li>The counts open with a design drafted from their names: two replicates, day 5 to day 11, the library and RNA counts set aside. Scored, they agree with the published scores at r ≈ 0.76: the authors normalized each exon apart and corrected for position within it, which the counts do not record.</li>
+        <li>The counts open with a design drafted from their names: two replicates, day 5 to day 11, the library and RNA counts set aside. Scored, they agree with the published scores at r ≈ 0.76 in the Compare view, which gives correlations only and says why: the authors normalized each exon apart and corrected for position within it, a scale the counts do not record (<a href="compare.html">Comparisons</a>).</li>
       </ul>
 
       <h2 id="dhfr-lon">DHFR with and without the Lon protease, opened from MaveDB (two conditions)</h2>
@@ -180,6 +191,20 @@
         <li>The RING's eight zinc ligands (C24, C27, C39, H41, C44, C47, C61 and C64 on BRCA1's numbering) are among its twelve least tolerant positions, their median scores about −3 against −0.7 for a typical position.</li>
         <li>From Run 1's Export menu, <a href="record.html#mavedb">Deposit in MaveDB</a> writes the run as MaveDB takes a score set, its experiment described as the record's (give urn:mavedb:00000003-a to add the score set to it). Dropped on the window, the package opens as a record does: its scores, read as published, are Run 1's exactly, and written again it is the same bytes.</li>
         <li>QC fails the variance beyond counting and the fit of the time courses: over five rounds most variants that lose activity fall below detection, as stops do.</li>
+      </ul>
+
+      <h2 id="tp53">TP53, two screens on two scales, opened from MaveDB (published scores)</h2>
+      <p>Every substitution of full-length TP53, with arginine at 72, expressed in p53-null A549 cells under etoposide and scored as Z-scores (Giacomelli et al., Nature Genetics 2018; urn:mavedb:00000068-c-1, CC0 1.0), and an independent screen of its DNA-binding domain by the growth of H1299 cells, scored as log₂ fold changes (Kotler et al., Molecular Cell 2018; urn:mavedb:00000059-a-1, CC0 1.0), with Giacomelli et al.'s nutlin-3 screen of the same library (urn:mavedb:00000068-b-1). The first is opened (its published scores; MaveDB has no counts for it); the others are kept beside the workspace and compared without opening them. It needs the MaveScape program.</p>
+      <p><strong>The question:</strong> do two screens of p53's function, in different cells, on different scales and with opposite signs, agree on which variants lose it?</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/tp53-screens-dark.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of the TP53 example: the etoposide screen's published scores against Kotler et al.'s screen of the DNA-binding domain, both rescaled by their synonymous and nonsense medians: 3,341 variants, Pearson's r 0.783, Lin's concordance 0.777, a bias of −0.041; the scatter plot along the line y = x" /><img class="shot-light" src="../assets/img/tp53-screens-light.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of the TP53 example: the etoposide screen's published scores against Kotler et al.'s screen of the DNA-binding domain, both rescaled by their synonymous and nonsense medians: 3,341 variants, Pearson's r 0.783, Lin's concordance 0.777, a bias of −0.041; the scatter plot along the line y = x" /></div>
+        <figcaption>The etoposide screen against Kotler et al.'s, each rescaled by its own anchors: on one scale they agree.</figcaption>
+      </figure>
+      <ul>
+        <li>The record names no UniProt entry. Checked against P04637, the target is its positions 1–393 with one difference, arginine at 72 (the allele the screen used): recorded, it puts the target on UniProt's coordinates, as Kotler et al.'s record is (its target is the DNA-binding domain alone, numbered from 102).</li>
+        <li>Kotler et al.'s record writes 936 protein variants on several rows with different scores (2,908 rows: several codons, and no nucleotide names to tell them apart). MaveScape reads each as one, averaged, as DiMSum merges codons, and leaves out the 191 frameshifts written alike at a codon; the comparison's report says so.</li>
+        <li>Matched on P04637's numbering, 3,341 variants: r −0.78 as published. MaveDB records no direction; with Kotler et al.'s stated (a higher score is less of p53's function), r 0.78 and Spearman's ρ 0.72, but on two scales Lin's concordance and Bland–Altman are withheld. Rescaled by their anchors (synonymous median 0, nonsense median −1), Lin's concordance is 0.78 and the bias −0.04: on one scale the two screens agree. Neither gives SEs, so no difference is tested; of the positions that differ most, four lie at 180–184, lower under etoposide.</li>
+        <li>Giacomelli et al.'s nutlin-3 screen of the same library, against etoposide: r 0.75 as stated, Lin's concordance 0.72 rescaled. Two selections of one library differ about as much as two laboratories' screens.</li>
       </ul>
 
       <h2 id="simulated">A simulated experiment (known truth)</h2>

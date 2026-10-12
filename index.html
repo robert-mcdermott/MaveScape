@@ -48,7 +48,7 @@
   <main id="main">
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="https://github.com/robert-mcdermott/mavescape/releases/tag/v0.3.0"><span class="pill">v0.3.0</span> Counts to a trustworthy map: scoring, quality control, the map and a record that reopens identically</a>
+        <a class="eyebrow" href="https://github.com/robert-mcdermott/mavescape/releases/tag/v0.4.0"><span class="pill">v0.4.0</span> Counts to a trustworthy map: scoring, quality control, the map and a record that reopens identically</a>
         <h1>Variant-effect scores <span class="accent">you can check</span></h1>
         <p class="lede">MaveScape turns the variant count tables of a deep mutational scan into functional scores with standard errors, quality control that says when not to trust them, and an interactive variant-effect map, and keeps every analysis decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R. Files are analyzed in your browser and never leave your machine.</p>
         <figure class="hero-shot">
@@ -193,6 +193,8 @@
               <li>Checked on simulated experiments with one planted problem each</li>
               <li>Thresholds kept in the workspace, every change recorded</li>
               <li>QC of the counts alone, before scoring</li>
+              <li>Two replicates, conditions or runs compared, the report first saying what their agreement can mean, then their maps side by side, their difference and the variants that differ beyond their uncertainty; another assay or a predictor too, put on one scale by their anchors or compared by class (<a href="docs/compare.html">Comparisons</a>)</li>
+              <li>Each variant's conclusion checked against other reasonable analysis choices, the ones it depends on named (<a href="docs/robustness.html">Robustness</a>)</li>
             </ul>
             <a class="more-link" href="docs/qc.html">Quality control</a>
           </div>
@@ -209,7 +211,7 @@
             <p>Positions across, substitutions down, colored on a scale centered on the wild type. Missing, filtered and low-confidence measurements are drawn their own way, never as "no effect". Click a cell for its evidence: the score with its interval, each replicate, every sample's counts and the sequence around it.</p>
             <ul class="checklist">
               <li>Tracks below it: domains, conservation, AlphaMissense, ClinVar, gnomAD and your own</li>
-              <li>Selections saved by name, exported with their scores</li>
+              <li>Selections by click, rectangle, freeform shape or query ("missense at 40-80 with se &lt; 0.2"), saved by name and combined, exported with their scores (<a href="docs/selections.html">Selections</a>)</li>
               <li>SVG and PNG export; the map described in words</li>
               <li>Keyboard operation, with each cell announced</li>
             </ul>
@@ -285,7 +287,7 @@
               <tr><td><strong>Sorted bins</strong></td><td>Factor IX's published scores (MaveDB); fitdistrplus on a simulated sort</td><td class="agree">within 1.3 × 10⁻¹⁵; 3 × 10⁻⁷</td></tr>
               <tr><td><strong>Barcodes</strong></td><td>dms_variants' <code>func_scores</code> by barcode and by substitution, on a simulated library read three ways</td><td class="agree">within 5 × 10⁻¹³</td></tr>
               <tr><td><strong>Replicates</strong></td><td>metafor 5.2 REML on 2,865 variants</td><td class="agree">within 3.4 × 10⁻¹²</td></tr>
-              <tr><td><strong>Examples</strong></td><td>Thirteen, three of them published experiments from MaveDB and four opened from it, two score sets as two conditions among them</td><td class="agree">exactly the findings each teaches; Hsp90's published fitness, r 0.95; BRCA1 RING's published replicate scores to 2 × 10⁻¹⁴</td></tr>
+              <tr><td><strong>Examples</strong></td><td>Fourteen, three of them published experiments from MaveDB and five opened from it, two score sets as two conditions and two laboratories' screens of TP53 among them</td><td class="agree">exactly the findings each teaches; Hsp90's published fitness, r 0.95; BRCA1 RING's published replicate scores to 2 × 10⁻¹⁴; TP53's two screens on one scale, Lin's concordance 0.78</td></tr>
               <tr><td><strong>Readiness</strong></td><td>Every example and fixture with a part taken away: 74 workspaces</td><td class="agree">names what is missing; agrees with the engine on every analysis</td></tr>
               <tr><td><strong>Intervals</strong></td><td>1,040 simulated experiments of 26 kinds, and dms_variants' simulated libraries</td><td class="agree">hold the truth 94–97% of the time</td></tr>
               <tr><td><strong>Variant names</strong></td><td>mavehgvs 0.8.1 on 16,959 strings and its target-sequence tests</td><td class="agree">every decision and canonical form</td></tr>

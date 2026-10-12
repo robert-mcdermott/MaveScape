@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The map and the inspector · MaveScape</title>
-  <meta name="description" content="MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, nucleotide variants read at the protein level and everything else listed beside the map, sequence tracks below it (domains, conservation, ClinVar, gnomAD, AlphaMissense and your own), selections, SVG and PNG export, and the variant inspector's evidence." />
+  <meta name="description" content="MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, nucleotide variants read at the protein level and everything else listed beside the map, sequence tracks below it (domains, conservation, ClinVar, gnomAD, AlphaMissense and your own), selections (by click, rectangle, freeform shape or query), SVG and PNG export, and the variant inspector's evidence." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/map.html" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="The map and the inspector" />
-  <meta property="og:description" content="MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, nucleotide variants read at the protein level and everything else listed beside the map, sequence tracks below it (domains, conservation, ClinVar, gnomAD, AlphaMissense and your own), selections, SVG and PNG export, and the variant inspector's evidence." />
+  <meta property="og:description" content="MaveScape's variant-effect map (positions across, substitutions down) with missing, filtered and low-confidence cells drawn their own way, nucleotide variants read at the protein level and everything else listed beside the map, sequence tracks below it (domains, conservation, ClinVar, gnomAD, AlphaMissense and your own), selections (by click, rectangle, freeform shape or query), SVG and PNG export, and the variant inspector's evidence." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/map.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -63,6 +63,9 @@
           <li><a href="scoring.html">Scoring</a></li>
           <li><a href="qc.html">Quality control</a></li>
           <li><a href="map.html" aria-current="page">The map and the inspector</a></li>
+          <li><a href="selections.html">Selections</a></li>
+          <li><a href="compare.html">Comparisons</a></li>
+          <li><a href="robustness.html">Robustness</a></li>
         </ul>
         <h4>Results</h4>
         <ul>
@@ -136,7 +139,7 @@
       <p>The run's own tracks are there too, to show when wanted: the reference's residues, coverage (the share of each position's designed substitutions scored), the position effect (the median score, from the wild type's) and its uncertainty (the median SE). In the panel, each track can be shown or hidden, moved, filtered (features by kind; ClinVar by class and review status; gnomAD by frequency), or removed, and names its source: the service, its release and the date it was retrieved, or the file. An annotation numbered on a reference is placed by the target's offset, and only where the target has the residues it names: one that disagrees is refused, saying why, rather than drawn in the wrong place. Annotations are kept with the workspace and its archive, so they reopen offline, and the methods name each with its source and cite it. The inspector shows a variant's annotations: its ClinVar records, gnomAD frequency, predictors' scores, and the features and conservation at its position. <strong>Export</strong> writes the map with its tracks (SVG, PNG) and the tracks shown, position by position (CSV).</p>
 
       <h2 id="selections">Selections</h2>
-      <p>Click a cell to select it and see it in the inspector; <kbd>⌘</kbd>-click adds to the selection; <kbd>⇧</kbd>-drag selects a rectangle. <strong>Save as…</strong> keeps the selection by name in the workspace, listed in the dataset tree and under the map; <strong>Export</strong> writes the selected variants with their scores (CSV) or the selection itself (JSON).</p>
+      <p>Click a cell to select it and see it in the inspector; <kbd>⌘</kbd>-click adds to the selection; <kbd>⇧</kbd>-drag selects a rectangle, <kbd>⌥</kbd>- or <kbd>Alt</kbd>-drag a freeform shape; or type a query below the map, such as <code>missense at 40-80 with se &lt; 0.2</code>. <strong>Save as…</strong> keeps the selection by name in the workspace (with its query), listed in the dataset tree and under the map, where saved selections are combined; <strong>Export</strong> writes the selected variants with their scores (CSV) or the selection itself (JSON). The query language, set operations and the selection in the other views: <a href="selections.html">Selections</a>.</p>
       <figure>
         <div class="shot"><img class="shot-dark" src="../assets/img/map-selection-dark.webp" width="2000" height="1250" loading="lazy" alt="The map zoomed in on positions 35 to 37 of GRB2, selected and saved as WW motif" /><img class="shot-light" src="../assets/img/map-selection-light.webp" width="2000" height="1250" loading="lazy" alt="The map zoomed in on positions 35 to 37 of GRB2, selected and saved as WW motif" /></div>
         <figcaption>Positions 35–37 selected and saved as a named selection.</figcaption>
@@ -158,7 +161,7 @@
 
       <nav class="doc-pager" aria-label="Pages">
         <a class="prev" href="qc.html"><span>Previous</span>Quality control</a>
-        <a class="next" href="record.html"><span>Next</span>Exports and the record</a>
+        <a class="next" href="selections.html"><span>Next</span>Selections</a>
       </nav>
     </main>
 

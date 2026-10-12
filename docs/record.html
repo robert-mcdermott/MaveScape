@@ -63,6 +63,9 @@
           <li><a href="scoring.html">Scoring</a></li>
           <li><a href="qc.html">Quality control</a></li>
           <li><a href="map.html">The map and the inspector</a></li>
+          <li><a href="selections.html">Selections</a></li>
+          <li><a href="compare.html">Comparisons</a></li>
+          <li><a href="robustness.html">Robustness</a></li>
         </ul>
         <h4>Results</h4>
         <ul>
@@ -142,14 +145,14 @@
         <li>A manifest lists every file's SHA-256; an edited run, table or history entry is reported on opening.</li>
         <li>Archives from a newer MaveScape, without a manifest, with paths outside the archive, or inflating beyond their declared size are refused.</li>
         <li>An archive whose workspace is already in the library opens as a copy, so neither overwrites the other.</li>
-        <li>Archives saved by earlier releases keep opening: the validation keeps what each release saved (0.1.0's; 0.2.0's with every kind of source and run it brought; 0.3.0's three, opened from MaveDB with their records, published scores and annotations) and checks that this MaveScape opens them and reproduces their runs.</li>
+        <li>Archives saved by earlier releases keep opening: the validation keeps what each release saved (0.1.0's; 0.2.0's with every kind of source and run it brought; 0.3.0's three, opened from MaveDB with their records, published scores and annotations; 0.4.0's two, with MaveDB score sets kept beside them and selections made by queries) and checks that this MaveScape opens them, reproduces their runs and makes their selections again.</li>
       </ul>
 
       <h2 id="formats">Formats</h2>
       <p><a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md">FORMATS.md</a> describes every column of every export and the archive's layout.</p>
 
       <nav class="doc-pager" aria-label="Pages">
-        <a class="prev" href="map.html"><span>Previous</span>The map and the inspector</a>
+        <a class="prev" href="robustness.html"><span>Previous</span>Robustness</a>
         <a class="next" href="scripting.html"><span>Next</span>Remote control, headless runs and scripting</a>
       </nav>
     </main>

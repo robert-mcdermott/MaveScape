@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Comparisons · MaveScape</title>
+  <meta name="description" content="Comparing two sets of scores, two replicates, two conditions or two runs (a rescoring, or a MaveDB record's published scores against its counts scored again), or a run against another MaveDB score set or a predictor kept beside the workspace: the compatibility report that says what the comparison can mean, the scale (as scored, stated, or each rescaled by its anchors), filters by confidence and depth, the agreement statistics with their 95% intervals (Pearson, Spearman, Lin's concordance, Bland–Altman), the two maps and their difference, the variants that differ beyond their uncertainty and the positions that differ, a predictor by its classes, and the files." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/compare.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Comparisons" />
+  <meta property="og:description" content="Comparing two sets of scores, two replicates, two conditions or two runs (a rescoring, or a MaveDB record's published scores against its counts scored again), or a run against another MaveDB score set or a predictor kept beside the workspace: the compatibility report that says what the comparison can mean, the scale (as scored, stated, or each rescaled by its anchors), filters by confidence and depth, the agreement statistics with their 95% intervals (Pearson, Spearman, Lin's concordance, Bland–Altman), the two maps and their difference, the variants that differ beyond their uncertainty and the positions that differ, a predictor by its classes, and the files." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/compare.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('mavescape-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/mavescape" aria-label="MaveScape on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="opening-data.html">Opening your data</a></li>
+          <li><a href="public-data.html">Public data</a></li>
+        </ul>
+        <h4>Analysis</h4>
+        <ul>
+          <li><a href="experiment.html">The design</a></li>
+          <li><a href="scoring.html">Scoring</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+          <li><a href="map.html">The map and the inspector</a></li>
+          <li><a href="selections.html">Selections</a></li>
+          <li><a href="compare.html" aria-current="page">Comparisons</a></li>
+          <li><a href="robustness.html">Robustness</a></li>
+        </ul>
+        <h4>Results</h4>
+        <ul>
+          <li><a href="record.html">Exports and the record</a></li>
+        </ul>
+        <h4>Automate</h4>
+        <ul>
+          <li><a href="scripting.html">Remote control, headless runs and scripting</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Comparisons</h1>
+      <p class="doc-lede">Do two replicates agree? Does a rescoring reproduce the published scores? Does another assay of the protein, or a predictor, say the same? Compare puts two sets of scores side by side. Before any number, it says whether the two can be compared, and what their agreement can mean.</p>
+
+      <h2 id="what">Two sets of scores, side by side</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/compare-dark.webp" width="2000" height="1250" loading="lazy" alt="The Compare view: GRB2's replicate 1 against replicate 2, the compatibility report with every item ok, the scatter of the 1,109 variants scored in both with the line y = x, the statistics (Pearson's r 0.874, Spearman's ρ 0.823, Lin's concordance 0.874, the bias and limits of agreement) and the Bland–Altman plot" /><img class="shot-light" src="../assets/img/compare-light.webp" width="2000" height="1250" loading="lazy" alt="The Compare view: GRB2's replicate 1 against replicate 2, the compatibility report with every item ok, the scatter of the 1,109 variants scored in both with the line y = x, the statistics (Pearson's r 0.874, Spearman's ρ 0.823, Lin's concordance 0.874, the bias and limits of agreement) and the Bland–Altman plot" /></div>
+        <figcaption>GRB2's replicates 1 and 2: every item of the report ok, so every statistic is given.</figcaption>
+      </figure>
+      <p>The <strong>Compare</strong> view (after Map in the view switcher) shows two sets of scores: each a run's condition (its combined scores) or one of its replicates, of one run or two, or a MaveDB score set or a predictor kept beside the workspace (<a href="#sources">below</a>). Pick them under <strong>Sides</strong>; <strong>Swap</strong> exchanges them. MaveScape starts with the comparison a workspace most likely asks for: a run scored from a MaveDB record's counts against the record's published scores; otherwise the latest run's first two replicates, or its two conditions, or the last two runs.</p>
+      <p>The tabs show the comparison: <strong>Agreement</strong> (a scatter plot and its statistics), <strong>Maps</strong> (the two maps and their difference), <strong>Disagreement</strong> (the variants and the positions that differ) and, against a predictor, <strong>Classes</strong>. In the scatter plot the first side is drawn across, the second up, one point per variant compared, colored by class. Click a point to see the variant in the inspector, as a run scored it; the ring follows it.</p>
+
+      <h2 id="report">The compatibility report</h2>
+      <p>The report comes before the statistics. Each item is <strong>ok</strong>, <strong>qualified</strong> (the statistics hold, read as the item says), or <strong>blocked</strong> (no statistics, and why):</p>
+      <ul>
+        <li><strong>Target.</strong> Variants are matched by name on the same target sequence. Two targets that are different stretches of one UniProt entry, each with its accession and offset (set in Experiment, or by checking the target against UniProt), are matched on the entry's coordinates: their single substitutions, by position in the entry. Two targets with no common reference are not compared, and the report says what to give.</li>
+        <li><strong>Level.</strong> Nucleotide variants of one target are matched as written; against a protein-level side, a nucleotide run is read at the protein level, its variants making one protein change merged as on the map.</li>
+        <li><strong>Variants.</strong> How many are scored on both sides, and how many on one side only (absent from the other's variants, or there but not scored). The wild type, the reference of both, is left out. Fewer than 10 in common are not compared.</li>
+        <li><strong>Direction.</strong> What a higher score means, from each design's readout. When one side says higher means more of the function and the other less, the second is compared negated, so that agreement reads as agreement. A direction not stated is taken as more of the function, and the report says so.</li>
+        <li><strong>Assays.</strong> Two different assays (two readouts or methods) can disagree for reasons of biology, not only of measurement.</li>
+        <li><strong>Scale.</strong> Two sides are on one scale when they are of one run, or when the same model, normalization, time scale and rescaling made them. Published scores are on their record's own scale, which MaveScape does not know. On different or unknown scales, the correlations are given, and Lin's concordance and Bland–Altman, which measure agreement on one scale, are withheld: two assays on different scales are not read as disagreeing. Under <strong>Scale</strong>, two such sides can be put on one (<a href="#scale">below</a>). A predictor is compared by rank and by its classes.</li>
+        <li><strong>Independence.</strong> Two replicates that share a sample (an input library selected twice) carry its counting error in both, so they agree more than independent measurements would. A replicate against the condition it is combined into agrees in part because one contains the other. One table scored twice, or a record's published scores against its own counts scored again (a MaveDB score set kept beside the workspace included), measures the difference between two analyses, not the experiment's reproducibility. A predictor's errors are independent of the measurements', unless it was trained on them.</li>
+      </ul>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/compare-published-dark.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of BRCA1's saturation genome editing: Run 1, its counts scored, against the published scores; 3,893 variants matched at the nucleotide level; the scale and independence items qualified; Pearson's r 0.760 and Spearman's ρ 0.677, Lin's concordance and Bland–Altman withheld" /><img class="shot-light" src="../assets/img/compare-published-light.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of BRCA1's saturation genome editing: Run 1, its counts scored, against the published scores; 3,893 variants matched at the nucleotide level; the scale and independence items qualified; Pearson's r 0.760 and Spearman's ρ 0.677, Lin's concordance and Bland–Altman withheld" /></div>
+        <figcaption>BRCA1's counts scored against the published scores: correlations only, because the published scores are on the record's own scale, and one experiment analysed twice.</figcaption>
+      </figure>
+
+      <h2 id="sources">Other sources</h2>
+      <p>Under <strong>Other sources</strong>, add what to compare a run with, kept beside the workspace rather than opened as one:</p>
+      <ul>
+        <li><strong>A MaveDB score set</strong>, by its URN: another assay of the same protein, or the published scores of the counts a run scored. MaveScape fetches its record and its published scores (through the program's fetcher; only the URN is sent), keeps them with the workspace and its archive, and reads the scores as published, as opening the record would. Its target is the record's (fetched when a transcript names it): matched with the run's on the same sequence, or on UniProt's numbering when both give the entry and their offsets. MaveDB records no direction, so say what a higher score means when adding it, or under Sides. The score set's scores are also a track beside the map.</li>
+        <li><strong>A predictor</strong>: AlphaMissense for a human protein (from AlphaFold DB, by the target's UniProt accession), or a predictor's own file (EVE, ESM1b's matrix, or any table of protein variants and scores; Map view, Tracks, takes them too). Its substitutions are placed on the run's protein as its track is. AlphaMissense's and EVE's scores rise as a substitution is more likely pathogenic, so they are compared negated; ESM1b's log-likelihood ratio falls; another table's direction is not known, and the report says so.</li>
+      </ul>
+      <p>A score set or predictor is removed in Map view, Tracks (Undo brings it back).</p>
+      <p>A score set that writes one protein variant on several rows with different scores (several codons, or several measurements, with no nucleotide names to tell them apart, as Kotler et al.'s TP53 record does) is read as published scores are read: each protein variant as one, its rows merged as DiMSum merges a protein variant's codons (weighted by 1/SE², or averaged without SEs). Frameshifts, which MAVE-HGVS names alike at a codon though they make different proteins, are left out. The report's Variants says how many were merged (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md#designs">FORMATS.md</a>).</p>
+
+      <h2 id="scale">Scale</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/compare-scales-dark.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of GRB2's Run 1 against its record's published scores (urn:mavedb:00000835-a-1), kept beside the workspace: rescaled by their anchors (nonsense median 0, wild type 1), the points on the line y = x, Lin's concordance 0.996 and a bias of 0.009" /><img class="shot-light" src="../assets/img/compare-scales-light.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of GRB2's Run 1 against its record's published scores (urn:mavedb:00000835-a-1), kept beside the workspace: rescaled by their anchors (nonsense median 0, wild type 1), the points on the line y = x, Lin's concordance 0.996 and a bias of 0.009" /></div>
+        <figcaption>GRB2's Run 1 against its record's published scores, not opened: one experiment on two scales, and rescaled by their anchors, one.</figcaption>
+      </figure>
+      <p>Two sets of scores are compared as scored unless <strong>Scale</strong> says otherwise:</p>
+      <ul>
+        <li><strong>Stated to be on one scale.</strong> For two sets that are on one scale though their records do not say so: two score sets of one study and one pipeline (DHFR's without and with Lon). MaveScape does not check it; the report says it was stated, and every statistic is given.</li>
+        <li><strong>Rescaled by their anchors.</strong> Each side's scores are rescaled by its own anchors, as a run's rescaling does: its nonsense median to 0 and its wild type to 1, or its synonymous median to 0 and its nonsense median to −1. The anchors come from each side's own scored variants, and the report names them (each median with how many variants it is of). Rescaling assumes the anchors mean the same in both: a nonsense variant the complete loss of what each assay measures, the wild type (or a synonymous variant) all of it. Two sides whose directions are opposite are aligned by their anchors, not negated. A side without its anchors scored is not rescaled, and the report says which is missing.</li>
+      </ul>
+      <p>The anchors are measured too: the wild type's score has its SE, and a median of n controls is uncertain by about √(π/2 × their mean squared SE / n). Rescaled, every score of a side moves with its anchors, by its place between them, so each difference's test carries both sides' anchors' share of its uncertainty, and a position's test their shared share. In simulated pairs of two assays that differ only in scale, with nothing planted, about 4% of pairs have any variant called discordant; leaving the anchors' uncertainty out, 10% to 55% do, the less certain the anchors the more. The anchors, the rescaled scores, the statistics and the tests are checked against R.</p>
+      <p>Read the anchors before the numbers. GRB2's Run 1 (DiMSum's fitness) and its record's published scores (rescaled by their authors) correlate at r 0.997 on two scales; rescaled by their anchors, Lin's concordance is 0.996 and the bias 0.009. PTEN's lipid phosphatase record writes its wild type as 1 with an SE of 0, though its methods put wild type-like variants from −1.11 to 0.89: rescaled by that row, its activity sits low.</p>
+      <h3 id="two-screens">Two screens that only seem to disagree</h3>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/tp53-screens-dark.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of the TP53 example: the etoposide screen's published scores against Kotler et al.'s screen of the DNA-binding domain, both rescaled by their synonymous and nonsense medians: 3,341 variants, Pearson's r 0.783, Lin's concordance 0.777, a bias of −0.041" /><img class="shot-light" src="../assets/img/tp53-screens-light.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of the TP53 example: the etoposide screen's published scores against Kotler et al.'s screen of the DNA-binding domain, both rescaled by their synonymous and nonsense medians: 3,341 variants, Pearson's r 0.783, Lin's concordance 0.777, a bias of −0.041" /></div>
+        <figcaption>TP53: two laboratories' screens, on one scale.</figcaption>
+      </figure>
+      <p>The <a href="examples.html#tp53">TP53 example</a> compares two laboratories' screens of p53's function: Giacomelli et al.'s, Z-scores of growth under etoposide in which a variant like the wild type scores higher, and Kotler et al.'s, log₂ fold changes of H1299 cells' growth in which it scores lower. Matched on UniProt P04637's numbering, their 3,341 variants in common correlate at r −0.78: as published they seem to disagree completely. Stating Kotler et al.'s direction gives r 0.78, but a Z-score and a log₂ fold change are two scales, and Lin's concordance and Bland–Altman are withheld. Rescaled each by its own synonymous and nonsense medians, Lin's concordance is 0.78 and the bias −0.04: they agree.</p>
+
+      <h3 id="rescoring">A rescoring against the published scores</h3>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/hsp90-rescoring-dark.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of Hsp90's Run 1 against its record's published scores, stated to be on one scale: 187 variants, Pearson's r 0.951, Lin's concordance 0.476, a bias of 0.223, and the Bland–Altman plot whose differences rise as the mean falls" /><img class="shot-light" src="../assets/img/hsp90-rescoring-light.webp" width="2000" height="1250" loading="lazy" alt="The Compare view of Hsp90's Run 1 against its record's published scores, stated to be on one scale: 187 variants, Pearson's r 0.951, Lin's concordance 0.476, a bias of 0.223, and the Bland–Altman plot whose differences rise as the mean falls" /></div>
+        <figcaption>Hsp90: a rescoring correlated with the published scores, but not in agreement.</figcaption>
+      </figure>
+      <p>Correlation is not agreement. The <a href="examples.html#hsp90">Hsp90 example</a>'s Run 1 and its record's own published scores (kept beside) correlate at r 0.95, and both are natural-log change per generation. Stated to be on one scale, Lin's concordance is only 0.48 and the bias 0.22, and the Bland–Altman plot shows why: the difference grows with the effect (slope −0.91), most at positions 585–587, which tolerate nothing. The authors fit null-like variants on their first three time points, before they reach the floor; Run 1 fits all eight. How deleterious those variants are depends on that choice. The report says the two are one experiment analysed twice, so their agreement measures the analyses, and no difference is tested.</p>
+
+      <h2 id="filters">Filters</h2>
+      <p>Under <strong>Filters</strong>, leave out the variants of low confidence on either side (a score resting on a pseudocount, or fitted on fewer replicates or time points than the design has), those whose SE on either side is above a maximum, or those with fewer input reads than a minimum on either side (a condition's: the mean over its replicates). The report says how many each filter left out. A side with no SEs or no counts, as published scores may be, is not filtered on them, and the report says that the filter applies to the other side only. A variant of few reads is mostly noise: DHFR's two conditions agree at r 0.52 over every variant both score, and at 0.77 with low confidence left out.</p>
+
+      <h2 id="statistics">The agreement</h2>
+      <p>Each statistic is given with its 95% interval:</p>
+      <ul>
+        <li><strong>Pearson's r</strong>, how near the points lie to a straight line, with its interval from Fisher's z.</li>
+        <li><strong>Spearman's ρ</strong>, the same for their ranks, with the interval of Bonett and Wright (2000).</li>
+        <li><strong>Lin's concordance correlation ρc</strong> (Lin 1989), how near the points lie to the line y = x: Pearson's r (precision) times the accuracy C<sub>b</sub>, which falls as the two differ in scale (the scale shift, the ratio of their SDs) or in location (the location shift). Its interval is Lin's (2000) on the z scale.</li>
+        <li><strong>Bland–Altman</strong> (1986): the differences (first − second), their mean (the bias) and the limits of agreement, the bias ± 1.96 SDs, between which 95% of the differences lie when they are normal; each with its interval. The trend of the differences with the means says whether the two differ in scale, not only by a bias: a slope beyond 0. The Bland–Altman plot shows each variant's difference against its mean, the bias and the limits.</li>
+      </ul>
+      <p>The statistics equal R's to 13 significant digits (<code>cor.test</code>, DescTools' <code>CCC</code>, BlandAltmanLeh, <code>lm</code>) on seven pairs, among them DHFR's published scores without and with the Lon protease. In simulated pairs of known agreement, from 30 to 1,000 variants, the intervals hold the truth 94–96% of the time. Two are weaker, and the validation reports them as they are: near r = 1, Spearman's interval holds the truth less often (86% with 30 variants, 92% with 200), its ρ biased below the truth there; and with 30 variants on two scales, Lin's holds it 92% of the time.</p>
+      <p>Read the report with the numbers. Replicates that share their input agree for a reason the experiment does not care about. A rescoring that correlates with the published scores at r 0.76 (BRCA1's saturation genome editing) may differ only in what the authors did to their scores (each exon normalized apart), which the counts do not record.</p>
+
+      <h2 id="maps">The maps</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/compare-maps-dark.webp" width="2000" height="1250" loading="lazy" alt="The Maps tab of DHFR's comparison, −Lon against +Lon with low confidence left out: the map of each condition on its own scale, and below them the map of their difference, all three at the same positions, the substitution p.Trp47Arg selected in each" /><img class="shot-light" src="../assets/img/compare-maps-light.webp" width="2000" height="1250" loading="lazy" alt="The Maps tab of DHFR's comparison, −Lon against +Lon with low confidence left out: the map of each condition on its own scale, and below them the map of their difference, all three at the same positions, the substitution p.Trp47Arg selected in each" /></div>
+        <figcaption>DHFR's two conditions on their maps, with their difference below: the maps pan and zoom together, and a variant clicked is selected in each.</figcaption>
+      </figure>
+      <p><strong>Maps</strong> shows the first side's map, the second's, and the map of their difference (first − second), one above the other. They pan and zoom as one: drag, scroll sideways, or zoom with ⌘ or Ctrl and the wheel in any of them, and the others follow. Two stretches of one protein line up on the entry's coordinates. Click a cell to see the variant in the inspector; it is selected in each map. Each side's map is on its own scale, centered on its wild type. The difference is centered on no difference; its hatched cells were scored on one side only, or left out by the filters. Only two sides on one scale have a difference map. Each map exports as SVG.</p>
+
+      <h2 id="disagreement">Disagreement</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/compare-disagreement-dark.webp" width="2000" height="1250" loading="lazy" alt="The Disagreement tab of DHFR's comparison: 201 of 1,715 variants differ beyond their uncertainty, 186 of them higher without Lon; a warning that the differences are 2.8 times as variable as the SEs say; the discordant variants by q; and the mean difference at each position, darker where it differs beyond its uncertainty" /><img class="shot-light" src="../assets/img/compare-disagreement-light.webp" width="2000" height="1250" loading="lazy" alt="The Disagreement tab of DHFR's comparison: 201 of 1,715 variants differ beyond their uncertainty, 186 of them higher without Lon; a warning that the differences are 2.8 times as variable as the SEs say; the discordant variants by q; and the mean difference at each position, darker where it differs beyond its uncertainty" /></div>
+        <figcaption>DHFR: the variants that differ beyond their uncertainty, a warning that the SEs are too small for these differences, and the disagreement by position.</figcaption>
+      </figure>
+      <p>For two independent sides on one scale, each difference is tested against its uncertainty: its z is the difference over the square root of the sum of the two SEs squared, its p two-sided, and its q by Benjamini and Hochberg over the variants tested. A variant is discordant when its q is below 0.05. Replicates that share a sample, or one table scored twice, are not tested: the SE of a difference from both SEs assumes independent errors.</p>
+      <p>The <strong>dispersion</strong> says whether the SEs describe how far the two differ: the median z² over its expected value, about 1 when they do. Above 1.5 the view warns that either the SEs are too small, or the two differ nearly everywhere; either way, more variants test as discordant than truly differ. GRB2's replicates differ 8 times as much as their counting SEs say, which is the input bottleneck QC finds as variance beyond counting.</p>
+      <p><strong>By position</strong>: the mean difference of the variants compared at each position, as bars along the target. Each position with 3 or more variants compared is tested too, its z the sum of its differences over their combined SE, with q over the positions. The ten that differ most are listed, with how many of their variants are discordant: a position can differ because one of its variants does. Click a bar to see one of its variants in the inspector.</p>
+      <p>The tests are checked against R (<code>pnorm</code>, <code>p.adjust</code>). In simulated pairs with planted differences they find 96% of the variants planted, while about 4% of the variants they call differ by chance, within the 5% Benjamini and Hochberg allow. They also find 57 of 60 planted positions. With nothing planted they call none, and the dispersion is about 1.</p>
+
+      <h2 id="classes">A predictor by its classes</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/compare-classes-dark.webp" width="2000" height="1250" loading="lazy" alt="The Classes tab of PTEN's abundance against AlphaMissense: the abundance scores in each of AlphaMissense's classes as boxes, likely pathogenic lowest, with the synonymous and nonsense medians as dashed lines, a table of each class's median and quartiles, and the AUC of 0.771 (0.755 to 0.787)" /><img class="shot-light" src="../assets/img/compare-classes-light.webp" width="2000" height="1250" loading="lazy" alt="The Classes tab of PTEN's abundance against AlphaMissense: the abundance scores in each of AlphaMissense's classes as boxes, likely pathogenic lowest, with the synonymous and nonsense medians as dashed lines, a table of each class's median and quartiles, and the AUC of 0.771 (0.755 to 0.787)" /></div>
+        <figcaption>PTEN's abundance in each of AlphaMissense's classes: its likely benign substitutions nearer the synonymous variants, its likely pathogenic ones lower.</figcaption>
+      </figure>
+      <p>A predictor is compared by rank (Spearman's ρ; Pearson's r, Lin's concordance, Bland–Altman and the tests of disagreement are withheld) and, when it classes its substitutions (AlphaMissense's likely pathogenic, ambiguous and likely benign; EVE's), by its classes. <strong>Classes</strong> shows the measured side's scores, as scored, of the variants compared in each class: the middle half as a box, the median as a line, with the measured side's synonymous and nonsense medians (of every variant it scores) as dashed lines, what full function and its loss look like in the assay. The <strong>AUC</strong> says how well the scores tell the predictor's tolerated substitutions from its damaging ones: the chance that a likely benign one has more of the function than a likely pathogenic one (0.5 no better than chance, 1 always), with DeLong's 95% interval. The AUC and its interval equal R's pROC; in simulated classes of known AUC the interval holds the truth 94–95% of the time.</p>
+      <p>GRB2's abundance tells AlphaMissense's classes apart with an AUC of 0.78; PTEN's abundance with 0.77, and its phosphatase activity with 0.70. A predictor is not a measurement: where they disagree, the measurement says what happened in the assay, and the predictor what is expected of the protein.</p>
+
+      <h2 id="files">The files</h2>
+      <p><strong>Variants compared (CSV)</strong> writes one row per variant compared: the variant (on the entry's coordinates when matched there), as each side names it, its class, each side's score and SE as scored, each score as compared (rescaled, or negated), the difference and mean as compared, and the difference's z, p and q where they were tested. <strong>Report and statistics (JSON)</strong> writes the two sides (a run's id and output hash; a score set's or predictor's URN and file hash), how they were matched, scaled (the anchors) and filtered, the report, the counts, every statistic, the discordant variants, the disagreement by position and a predictor's classes, with what was withheld and why. <strong>Positions (CSV)</strong> writes the disagreement by position, <strong>By class (CSV)</strong> a predictor's classes, and each map exports as SVG. <a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md#comparisons">FORMATS.md</a> describes each. A comparison is a view: the workspace keeps the runs, each with its record, and the comparison is made again from them.</p>
+
+      <h2 id="scripts">From a script</h2>
+      <p>Remote control's <code>compare</code> takes the two sides by name (<code>"Run 1: Replicate 1"</code>, <code>"Published scores"</code>, <code>"Run 1: +Lon"</code>, <code>"AlphaMissense: P62993"</code>) or a MaveDB score set's URN (fetched and kept when it is not yet), the scale (<code>scale</code>: <code>scored</code>, <code>stated</code>, <code>nonsense-wt</code> or <code>synonymous-nonsense</code>), what a higher score of a score set means (<code>direction</code>), the filters (<code>low_confidence</code>, <code>max_se</code>, <code>min_reads</code>) and the tab to show (<code>show</code>); it shows the Compare view and returns the report, the statistics, the discordant variants, the disagreement by position and a predictor's classes. <code>export</code> with <code>what: "comparison"</code> writes the variants compared, or, to a path ending in <code>.json</code>, the report and statistics; <code>comparison-positions</code> writes the disagreement by position, <code>comparison-classes</code> a predictor's classes, and <code>comparison-map</code> a map (<code>map</code>: <code>first</code>, <code>second</code> or <code>difference</code>). <code>add_track</code> with <code>provider: "mavedb-scores"</code> and a <code>urn</code> keeps a score set beside the workspace (<a href="scripting.html">Remote control</a>).</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="selections.html"><span>Previous</span>Selections</a>
+        <a class="next" href="robustness.html"><span>Next</span>Robustness</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+          <p>A workbench for multiplexed assays of variant effect: from variant counts to checked scores, quality control and variant-effect maps. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/scoring.html">Scoring</a></li>
+            <li><a href="../docs/qc.html">Quality control</a></li>
+            <li><a href="../docs/scripting.html">Scripting</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/mavescape">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite MaveScape</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">MaveScape is licensed under the Apache License 2.0. It reports experimental functional effects for research use; it does not classify variants as pathogenic or benign. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>

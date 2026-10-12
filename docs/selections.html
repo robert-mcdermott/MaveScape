@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Selections · MaveScape</title>
+  <meta name="description" content="Variants selected on the map by click, rectangle, freeform shape or query (&quot;missense at 40-80 with se &lt; 0.2&quot;, &quot;variants whose class depends on the pseudocount&quot;, &quot;from C in feature disulfide&quot;), saved by name with their query, combined (union, intersection, difference), carried to the Score, Robustness and Compare views and back, exported, and scripted; how the query language was validated." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/selections.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Selections" />
+  <meta property="og:description" content="Variants selected on the map by click, rectangle, freeform shape or query (&quot;missense at 40-80 with se &lt; 0.2&quot;, &quot;variants whose class depends on the pseudocount&quot;, &quot;from C in feature disulfide&quot;), saved by name with their query, combined (union, intersection, difference), carried to the Score, Robustness and Compare views and back, exported, and scripted; how the query language was validated." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/selections.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('mavescape-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/mavescape" aria-label="MaveScape on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="opening-data.html">Opening your data</a></li>
+          <li><a href="public-data.html">Public data</a></li>
+        </ul>
+        <h4>Analysis</h4>
+        <ul>
+          <li><a href="experiment.html">The design</a></li>
+          <li><a href="scoring.html">Scoring</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+          <li><a href="map.html">The map and the inspector</a></li>
+          <li><a href="selections.html" aria-current="page">Selections</a></li>
+          <li><a href="compare.html">Comparisons</a></li>
+          <li><a href="robustness.html">Robustness</a></li>
+        </ul>
+        <h4>Results</h4>
+        <ul>
+          <li><a href="record.html">Exports and the record</a></li>
+        </ul>
+        <h4>Automate</h4>
+        <ul>
+          <li><a href="scripting.html">Remote control, headless runs and scripting</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Selections</h1>
+      <p class="doc-lede">A selection is a set of variants on a run's map, made by hand or said in words. Saved by name, it is combined with others, used in other runs of the same protein and in the other views, and written out with the query that made it.</p>
+
+      <h2 id="what">Selecting variants</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/selections-dark.webp" width="2000" height="1250" loading="lazy" alt="The map of factor IX with UniProt's features below it; the query field holds missense from C in feature disulfide and lower, 345 variants match, outlined on the map in the columns of the bonded cysteines, and saved as Disulfides" /><img class="shot-light" src="../assets/img/selections-light.webp" width="2000" height="1250" loading="lazy" alt="The map of factor IX with UniProt's features below it; the query field holds missense from C in feature disulfide and lower, 345 variants match, outlined on the map in the columns of the bonded cysteines, and saved as Disulfides" /></div>
+        <figcaption>Factor IX: the substitutions of the cysteines in its disulfide bonds, lower than the wild type beyond their uncertainty, selected by query and saved.</figcaption>
+      </figure>
+      <p>On the map (<a href="map.html">The map and the inspector</a>):</p>
+      <ul>
+        <li><strong>Click</strong> a cell to select it and see it in the inspector; <kbd>⌘</kbd>- or <kbd>Ctrl</kbd>-click adds it or takes it away.</li>
+        <li><strong>A rectangle:</strong> <kbd>⇧</kbd>-drag over the cells.</li>
+        <li><strong>A freeform shape:</strong> <kbd>⌥</kbd>- or <kbd>Alt</kbd>-drag around them; the cells whose centers fall inside are selected. With <kbd>⌘</kbd>, <kbd>Ctrl</kbd> or <kbd>⇧</kbd> held, a shape or a rectangle adds to the selection.</li>
+        <li><strong>Pan, Rectangle, Freeform</strong>, beside the query field, set what a plain drag does (for a touch screen, or a trackpad without the keys).</li>
+        <li><strong>A track:</strong> click a position on a track below the map to select its variants (a domain's: every position it covers).</li>
+        <li><strong>The keyboard:</strong> with the map focused, the arrows move between cells and <kbd>Enter</kbd> selects.</li>
+        <li><strong>A query</strong>, typed in the field below the map, and <kbd>Enter</kbd> or <strong>Select</strong>.</li>
+      </ul>
+      <p>The selection is the window's: the inspector shows its first variant, and the other views read it (below). <strong>Clear</strong> ends it.</p>
+
+      <h2 id="query">The query language</h2>
+      <p>A query says which variants in words. Terms side by side are joined by <em>and</em>, as are <em>with</em>, <em>whose</em> and <em>that</em>, so the roadmap's phrases are queries as written: <code>missense at 40-80 with se &lt; 0.2</code>; <code>variants whose class depends on the pseudocount</code>. <em>or</em>, <em>not</em> and parentheses work as usual. The words (also under <strong>Query words</strong>, below the field, each with an example to try):</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Words</th><th>What they select</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><code>missense</code>, <code>nonsense</code>, <code>synonymous</code>, <code>start-lost</code></td><td>The variant's class</td><td><code>nonsense or synonymous</code></td></tr>
+            <tr><td><code>scored</code>, <code>low</code>, <code>confident</code>, <code>filtered</code>, <code>missing</code>, <code>unscored</code></td><td>Its state: scored (with low confidence or without), scored with low confidence, scored without it, filtered, not measured, either of the last two</td><td><code>missense and low</code></td></tr>
+            <tr><td><code>at</code>, <code>pos</code>, <code>refpos</code></td><td>Positions on the target, a range or a list (<code>refpos</code>: on the reference's numbering, the target's offset added); or compared, <code>pos &gt; 100</code></td><td><code>at 40-80,95</code></td></tr>
+            <tr><td><code>from</code>, <code>to</code></td><td>The wild-type residue and the substituted one: one letter, three (<code>Cys</code>, <code>Ter</code>), or the map's groups: positive, negative, polar, aliphatic, aromatic, special, stop</td><td><code>from C to aromatic</code></td></tr>
+            <tr><td><code>score</code>, <code>se</code>, <code>q</code>, <code>replicates</code>, <code>input</code></td><td>Compared with a number (<code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>=</code>, <code>!=</code>): the score (on a contrast's map, the difference), its SE, the q of its class, the replicates behind it, its mean input count. A variant without a score never passes</td><td><code>se &lt; 0.2</code></td></tr>
+            <tr><td><code>lower</code>, <code>higher</code>, <code>neutral</code></td><td>Its class against the wild type, beyond its uncertainty (q &lt; 0.05 by Benjamini and Hochberg; on a contrast's map, the difference's own q), as <a href="robustness.html#verdicts">Robustness</a> classes it</td><td><code>lower and at 1-30</code></td></tr>
+            <tr><td><code>robust</code>, <code>fragile</code>, <code>uncertain</code>, <code>borderline</code>, <code>size-dependent</code>, <code>sometimes-scored</code></td><td>Its robustness verdict, once the run is checked</td><td><code>lower and not robust</code></td></tr>
+            <tr><td><code>depends on</code>, <code>class depends on</code>, <code>size depends on</code></td><td>A verdict that a choice alone accounts for: <code>pseudocount</code>, <code>normalization</code>, <code>model</code>, <code>regression</code>, <code>combination</code>, <code>filters</code> or <code>leave-out</code></td><td><code>class depends on the pseudocount</code></td></tr>
+            <tr><td><code>feature</code></td><td>Positions under a feature beside the map, by its name or type, in part (<code>*</code> and <code>?</code> as wildcards): UniProt's domains, sites and secondary structure, or a GFF3 file's</td><td><code>in feature "disulfide bond"</code></td></tr>
+            <tr><td><code>in</code>, <code>selected</code>, <code>all</code></td><td>A saved selection, by its name; the selection now; every designed cell</td><td><code>in Core and not in Surface</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>What a query does to the selection is chosen beside it: replace it, add to it, keep only the matches in it, or remove the matches from it. A query that names something the run does not have says so and offers it: the verdicts need the run's robustness checked (<strong>Check robustness, then select</strong> checks it, then selects); a feature needs features beside the map (<strong>Add UniProt's features, then select</strong>, for a target with its accession). A word MaveScape does not know is named, and the query's text from it is selected in the field. The variants selected are listed along the target, then by amino acid, whatever the map's row order.</p>
+      <p><strong>Depending on a choice</strong> means depending on it alone. A variant at the threshold that only several choices changed together does not depend on any one of them; its verdict says so (<code>borderline</code>, its choices listed together in Robustness). On GRB2's Run 1, <code>variants whose class depends on the pseudocount</code> selects 4 variants; in the simulated experiments with a planted dependence on the pseudocount, <code>size depends on the pseudocount</code> selects exactly the planted ones, and their class depends on it in none. A protein variant of a nucleotide run (its map's cells merge several) passes a verdict when one of its nucleotide variants does.</p>
+
+      <h2 id="sets">Saved selections and set operations</h2>
+      <p><strong>Save as…</strong> keeps the selection by name in the workspace, with its query when one made it; saved selections are listed in the dataset tree and under the map. Click one under the map for what to do with it: select its variants; add them to the selection, keep only the selected that are in it, or remove them from it (union, intersection and difference); run its query on the map shown; delete it. A query names saved selections too, so any combination can be said at once: <code>in Core or in Rim</code>, <code>in Core and not in Surface</code>, <code>(lower and in Core) or fragile</code>.</p>
+      <p>A selection made by a query and changed by another keeps both: <code>missense at 10-30 with se &lt; 0.2</code>, then <code>low</code> removed, is saved as <code>(missense at 10-30 with se &lt; 0.2) and not (low)</code>, which can be run again on another run. A selection changed by hand has no query. A saved selection is a list of variant names, so it applies to every run of the same protein: it is listed under each run's map, and selects there the variants that run has. Selected in the dataset tree, the inspector shows a saved selection's variants by class, its query, the runs it applies to, and exports it.</p>
+
+      <h2 id="views">Across the views</h2>
+      <ul>
+        <li><strong>Score:</strong> the variants table lists the run's variants selected on the map (<em>Selected on the map</em>), a nucleotide run's by the protein variants they make. Any list it shows (low confidence, filtered, a search) goes to the map with <strong>Select on the map</strong>.</li>
+        <li><strong>Robustness:</strong> each verdict's variants go to the map with <strong>Select on the map</strong>, selected by the verdict's word (<code>fragile</code>); a difference's, on that contrast's map.</li>
+        <li><strong>Compare:</strong> the maps outline the selection on the side of its run; the variants that differ beyond their uncertainty go to the map with <strong>Select them on the map</strong>.</li>
+        <li><strong>The inspector</strong> shows the selection's first variant, and a saved selection when it is selected in the dataset tree.</li>
+      </ul>
+
+      <h2 id="files">The files and scripts</h2>
+      <p><strong>Export</strong> beside the selection writes its variants with their scores, SEs and states (CSV), or the selection itself (JSON: its name, run, condition, query and variant names; <a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md#selections">FORMATS.md</a>). The archive keeps saved selections with their queries.</p>
+      <p>Remote control's <code>select_variants</code> takes a <code>query</code>, <code>variants</code> or <code>positions</code>, an <code>operation</code> (<code>replace</code>, <code>add</code>, <code>intersect</code> or <code>subtract</code>) on the selection there is, a <code>contrast</code> to select on its differential map, and <code>save_as</code>; a query that needs the run's robustness checks it first. <code>export</code> with <code>what: "selection"</code> writes the selection, or a saved one by name (<a href="scripting.html">Remote control</a>).</p>
+
+      <h2 id="validation">How it was validated</h2>
+      <p>The validation suite <code>selections</code> checks fourteen queries on GRB2's Run 1 (positions, residues, states, scores, SEs, replicates, input counts, classes) against an independent account of each of its map's 1,176 cells, read from the run's own arrays: the same variants in the same order. Union, intersection and difference by query equal the sets' own; De Morgan's laws and double negation hold; a saved selection on a second run of GRB2 holds the same variants. Each robustness verdict selects exactly the variants the check gives it, and in three simulated experiments with planted fragile results, <code>fragile</code> and <code>size depends on the pseudocount</code> select exactly the planted ones. <code>feature disulfide</code> on factor IX selects the 22 cysteines of UniProt P00740's disulfide bonds. A rectangle drawn as a freeform shape selects what the rectangle does, and a circle the cells whose centers it holds. The selection's files and the archive keep its query. Remote control's selections equal Node's on the run recomputed from the archive.</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="map.html"><span>Previous</span>The map and the inspector</a>
+        <a class="next" href="compare.html"><span>Next</span>Comparisons</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+          <p>A workbench for multiplexed assays of variant effect: from variant counts to checked scores, quality control and variant-effect maps. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/scoring.html">Scoring</a></li>
+            <li><a href="../docs/qc.html">Quality control</a></li>
+            <li><a href="../docs/scripting.html">Scripting</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/mavescape">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite MaveScape</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">MaveScape is licensed under the Apache License 2.0. It reports experimental functional effects for research use; it does not classify variants as pathogenic or benign. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>
