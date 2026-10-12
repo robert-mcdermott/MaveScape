@@ -1,6 +1,6 @@
 # The MaveScape website
 
-The website at <https://robert-mcdermott.github.io/mavescape/> is built from
+The website at <https://robert-mcdermott.github.io/MaveScape/> is built from
 this folder. GitHub Pages serves it from the `gh-pages` branch of this
 repository. That branch holds only the built site, with no history from
 `main`.

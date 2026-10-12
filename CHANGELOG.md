@@ -10,6 +10,13 @@
 - CI does not run for a change of documentation alone (Markdown files, the spec, the license or
   the citation); the site's pages and screenshots still run it, and it can be run by hand.
 
+### Fixed
+
+- The website's address is `https://robert-mcdermott.github.io/MaveScape/`, as GitHub Pages
+  serves it (the path keeps the repository's capitals): the site's canonical links, link
+  previews, sitemap and robots.txt, and FORMATS.md's links, named it in lower case, which Pages
+  answers with 404.
+
 ### Validation
 
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr

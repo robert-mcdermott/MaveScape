@@ -40,7 +40,7 @@ if (pagesCheckout && !publish) {
   console.error(`${out} is a checkout of gh-pages, which publishes the website: add --publish to build into it (when a release is out), or give another folder.`);
   process.exit(2);
 }
-const SITE = 'https://robert-mcdermott.github.io/mavescape/';
+const SITE = 'https://robert-mcdermott.github.io/MaveScape/';
 const GITHUB = 'https://github.com/robert-mcdermott/mavescape';
 const VERSION = /var version = "([^"]+)"/.exec(readFileSync(join(repo, 'main.go'), 'utf8'))[1];
 

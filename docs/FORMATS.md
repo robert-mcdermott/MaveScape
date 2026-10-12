@@ -760,7 +760,7 @@ CSV (`hgvs_pro`, `score`, `SE`, `status`) or JSON (`format: "mavescape-selection
 run's map (a nucleotide run's: the protein variants it makes), in the order selected; a selection
 by query lists them along the target, then by amino acid (`ARNDCQEGHILKMFPSTWYV*`). From MaveScape
 0.4, `query` is the query that made the selection, in MaveScape's selection language
-([Selections](https://robert-mcdermott.github.io/mavescape/docs/selections.html#query)), or
+([Selections](https://robert-mcdermott.github.io/MaveScape/docs/selections.html#query)), or
 `null` when it was made or changed by hand: run on the same run, it selects `keys` again.
 
 ```json
@@ -1264,7 +1264,7 @@ Actions are posted to `<url>/api/remote/action` as `{"action": "…", "args": {�
 and answered with `{"ok": true|false, "message": "…", "data": …}`; `open_files` and `export` need
 the header `X-MaveScape-Token: <token>`. `GET <url>/api/remote/tools` lists every action with its
 arguments as JSON Schema. The site's guide describes each action
-([Remote control and scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)).
+([Remote control and scripting](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html)).
 
 MaveScape reports experimental functional effects for research; nothing it writes classifies a
 variant as pathogenic or benign.
