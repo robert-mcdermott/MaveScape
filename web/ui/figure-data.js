@@ -11,6 +11,8 @@ import { paintMarks } from '../lib/draw.js';
 import { crc32 } from '../lib/zip.js';
 import { now as clockNow } from '../lib/clock.js';
 import { saveFigure } from '../lib/workspace.js';
+import { buildManifest, compareDrawings, compareManifest, embedPNG, embedSVG, figureForWorkspace, pdfAttachment, readFigureManifest } from '../lib/figure-manifest.js';
+import { newId } from '../lib/clock.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { runTracks } from './tracks.js';
 import { possessive } from '../lib/words.js';
@@ -224,19 +226,62 @@ async function figurePNG(fig, marks, dpi) {
 
 export const fileNameOf = (fig, extension) => `${(fig.name || 'figure').replace(/[^\w.-]+/g, '_')}.${extension}`;
 
-// The figure written as 'svg', 'pdf' or 'png' (options.dpi, 300 by default). Returns { data
-// (string or bytes), type, fileName, description, notes }.
+// The figure written as 'svg', 'pdf' or 'png' (options.dpi, 300 by default), each carrying its
+// manifest (lib/figure-manifest.js; wave 6, slice 3), or the manifest alone as 'json'. Returns
+// { data (string or bytes), type, fileName, description, notes, manifest }.
 export async function exportFigure(app, fig, format, options = {}) {
   const resolved = await resolveFigure(app, fig);
   const drawn = figureMarks(fig, resolved);
-  if (format === 'svg') return { data: await figureSVG(fig, resolved), type: 'image/svg+xml', fileName: fileNameOf(fig, 'svg'), description: drawn.description, notes: drawn.notes };
-  if (format === 'pdf') return { data: await figurePDF(fig, resolved, { date: new Date(clockNow()) }), type: 'application/pdf', fileName: fileNameOf(fig, 'pdf'), description: drawn.description, notes: drawn.notes };
+  const created = clockNow();
+  const manifest = buildManifest(app.store.ws, fig, drawn, { software: { version: app.version, commit: app.commit }, created });
+  const out = { description: drawn.description, notes: drawn.notes, manifest };
+  if (format === 'svg') return { ...out, data: embedSVG(await figureSVG(fig, resolved), manifest), type: 'image/svg+xml', fileName: fileNameOf(fig, 'svg') };
+  if (format === 'pdf') return { ...out, data: await figurePDF(fig, resolved, { date: new Date(created), attachments: [pdfAttachment(manifest)] }), type: 'application/pdf', fileName: fileNameOf(fig, 'pdf') };
   if (format === 'png') {
     const dpi = options.dpi ?? 300;
     if (!(dpi >= 72 && dpi <= 1200)) throw new Error('A PNG is 72 to 1200 dpi.');
-    return { data: await figurePNG(fig, drawn.marks, dpi), type: 'image/png', fileName: fileNameOf(fig, 'png'), description: drawn.description, notes: drawn.notes, dpi };
+    return { ...out, data: embedPNG(await figurePNG(fig, drawn.marks, dpi), manifest), type: 'image/png', fileName: fileNameOf(fig, 'png'), dpi };
   }
-  throw new Error(`A figure is written as svg, pdf or png, not "${format}".`);
+  if (format === 'json') return { ...out, data: `${JSON.stringify(manifest, null, 2)}\n`, type: 'application/json', fileName: fileNameOf(fig, 'manifest.json') };
+  throw new Error(`A figure is written as svg, pdf, png or json (its manifest), not "${format}".`);
+}
+
+// --- A figure read back (wave 6, slice 3) -------------------------------------------------------------
+
+// A figure's file read: { manifest, comparison } (compared with the workspace open), or null when
+// it carries no MaveScape manifest.
+export function readFigureFile(app, bytes) {
+  const manifest = readFigureManifest(bytes);
+  if (!manifest) return null;
+  return { manifest, comparison: compareManifest(manifest, app.store.ws) };
+}
+
+// The figure rebuilt in the workspace from its manifest: added (its runs found by their outputs,
+// its name made unique), drawn again from its inputs, and each panel's drawing compared with the
+// one recorded. Returns { figure, comparison, drawings: [{ id, letter, shows, same, … }], notes }.
+export async function rebuildFigure(app, manifest) {
+  const { store } = app;
+  const comparison = compareManifest(manifest, store.ws);
+  const names = new Set((store.ws.figures ?? []).map((f) => f.name));
+  let name = manifest.figure.name;
+  for (let n = 2; names.has(name); n += 1) name = `${manifest.figure.name} (${n})`;
+  const fig = figureForWorkspace(manifest, comparison, { id: `figure-${newId()}`, name });
+  const when = manifest.created ? ` on ${manifest.created.slice(0, 10)}` : '';
+  store.commit(saveFigure(store.ws, fig, `Rebuilt the figure "${manifest.figure.name}" from its file (exported by MaveScape ${manifest.software?.version ?? '?'}${when})${name !== manifest.figure.name ? ` as "${name}"` : ''}`), 'Rebuild figure');
+  const drawn = await drawFigure(app, fig);
+  return { figure: fig, comparison, drawings: compareDrawings(manifest, fig, drawn), notes: drawn.notes };
+}
+
+// A rebuilt figure's report in words: each panel the same, drawn differently (and why, as far as
+// the comparison says), or not drawn.
+export function rebuildWords(report) {
+  return report.drawings.map((d) => {
+    const p = report.comparison.panels.find((x) => x.id === d.id);
+    const label = `${d.letter ? `Panel ${d.letter}` : 'A panel'} (${d.shows})`;
+    if (p?.status === 'missing') return `${label}: not drawn: ${p.changes.join('; ')}.`;
+    if (d.same) return `${label}: the same drawing.${p?.changes.length ? ` (${p.changes.join('; ')}.)` : ''}`;
+    return `${label}: drawn differently${p?.changes.length ? `: ${p.changes.join('; ')}` : ', though what it was drawn from is the same (another MaveScape draws it otherwise)'}.`;
+  });
 }
 
 // The figure on the clipboard: a PNG at 300 dpi, and its SVG where the browser takes one.

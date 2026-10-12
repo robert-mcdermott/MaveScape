@@ -67,13 +67,15 @@ export function fileKind(name) {
   if (has('.gff', '.gff3')) return 'annotation';
   if (has('.pdb', '.ent', '.cif', '.mmcif', '.bcif', '.pdb.gz', '.ent.gz', '.cif.gz', '.mmcif.gz', '.bcif.gz')) return 'structure';
   if (has('.zip')) return 'archive';
+  // A figure MaveScape exported, to check and rebuild (wave 6, slice 3).
+  if (has('.svg', '.pdf', '.png')) return 'figure';
   if (has('.json')) return 'json';
   return '';
 }
 
 const KIND_NAMES = {
   workspace: 'workspace archives (.msz)', design: 'designs', template: 'import templates', table: 'tables', sequence: 'sequences',
-  genbank: 'GenBank files', alignment: 'alignments', annotation: 'annotations', structure: 'structures', archive: 'archives', json: 'JSON files',
+  genbank: 'GenBank files', alignment: 'alignments', annotation: 'annotations', structure: 'structures', archive: 'archives', json: 'JSON files', figure: 'figures',
 };
 
 async function start() {
@@ -117,6 +119,7 @@ async function start() {
   app.importers.set('annotation', (items) => importTrackFiles(app, items));
   // Structures: shown in the Structure view, one at a time (wave 5, slice 1).
   app.importers.set('structure', (items) => import('./ui/mode-structure.js').then((m) => m.openStructureFiles(app, items)));
+  app.importers.set('figure', (items) => import('./ui/figure-import.js').then((m) => m.openFigureFiles(app, items)));
   app.inspector.setSection('example', exampleGuide);
 
   // --- Views -------------------------------------------------------------------------------------
@@ -232,7 +235,7 @@ async function start() {
       }
     }
     if (unread.size) messages.push(`This build of MaveScape cannot read ${[...unread.keys()].map((k) => KIND_NAMES[k] ?? k).join(', ')} yet.`);
-    if (unknown.length) messages.push(`${unknown.length === 1 ? unknown[0] : `${unknown.length} files`}: MaveScape opens count and score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif) and workspaces (.msz).`);
+    if (unknown.length) messages.push(`${unknown.length === 1 ? unknown[0] : `${unknown.length} files`}: MaveScape opens count and score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif), workspaces (.msz) and the figures it exported (.svg, .pdf, .png).`);
     for (const message of messages) {
       toast(message, { kind: 'error' });
       app.log(message);

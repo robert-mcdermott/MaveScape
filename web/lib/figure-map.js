@@ -45,7 +45,9 @@ export function legendLabel(model) {
 // items: [{ state, name, dx, dy }] }.
 function legendLayout(model, width, t) {
   const barW = Math.min(110, width * 0.45);
-  const block = Math.max(barW, textWidth(legendLabel(model), t), textWidth(`${fmt(model.domain.center)} (wild type)`, t) + barW / 2);
+  // A diverging scale's center is labeled (the wild type, or no difference); a sequential one has none.
+  const center = model.domain.kind === 'diverging' ? textWidth(`${fmt(model.domain.center)} (${model.contrast ? 'no difference' : 'wild type'})`, t) + barW / 2 : 0;
+  const block = Math.max(barW, textWidth(legendLabel(model), t), center);
   const swatch = Math.max(4, 0.9 * t);
   const states = [STATE.LOW, STATE.FILTERED, STATE.MISSING, STATE.REFERENCE].map((s) => ({ state: s, name: STATE_NAMES[s], need: swatch + 3 + textWidth(STATE_NAMES[s], t) + t }));
   const widest = Math.max(...states.map((s) => s.need));

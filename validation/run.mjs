@@ -113,7 +113,8 @@ import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 import { asPDFText, readPDF, readSVG, sameRects } from './figure-cases.mjs';
 import { addPanel, checkFigure, createFigure, figureMarks, figurePDF, figureSVG, mm } from '../web/lib/figures.js';
 import { chartsPanel } from '../web/lib/figure-plots.js';
-import { qcCharts } from '../web/lib/qc-plots.js';
+import { qcCharts, qcPanelData } from '../web/lib/qc-plots.js';
+import { buildManifest, checkManifest, compareDrawings, compareManifest, embedPNG, embedSVG, figureForWorkspace, pdfAttachment, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { comparisonCharts, comparisonPoints, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
 import { encodePNG } from '../web/lib/png.js';
 import { textMarks } from '../web/lib/draw.js';
@@ -4560,6 +4561,68 @@ const suites = {
     const embedded = Buffer.from(allSVG.match(/href="data:image\/png;base64,([^"]+)"/)?.[1] ?? '', 'base64');
     const pdfImage = Buffer.from(allPDF).toString('latin1').match(/\/Subtype \/Image \/Width (\d+) \/Height (\d+)/);
     check('figures', 'a figure of every kind of panel (QC, scores, comparison, variant, structure, beside the maps above): the PDF draws the SVG\'s rectangles and text mark for mark; the structure\'s image is its PNG byte for byte in the SVG, at its own pixels in the PDF', `${allRects.why}; ${pdfT.length} strings ${svgT.join('|') === pdfT.join('|') ? 'alike' : 'differ'}; image ${Buffer.compare(embedded, Buffer.from(imagePng)) === 0 ? 'the PNG' : 'not the PNG'}, PDF image ${pdfImage ? `${pdfImage[1]} × ${pdfImage[2]}` : 'none'}`, allRects.ok && svgT.join('|') === pdfT.join('|') && Buffer.compare(embedded, Buffer.from(imagePng)) === 0 && pdfImage?.[1] === '40' && pdfImage?.[2] === '30', 'the same');
+
+    // Wave 6, slice 3: what an exported figure carries. A workspace of GRB2's Run 1 and factor IX's,
+    // a figure of their maps, GRB2's scores and two of its QC findings, and text.
+    const f9g = built.get('factor9').g;
+    const both = { ...gq.ws, id: 'ws-figures', name: 'Two proteins', runs: [gq.run, f9g.run], sources: [...gq.ws.sources, ...f9g.ws.sources], qc: null };
+    const t0 = withDefaultThresholds(null);
+    const qcFinding = (id, thresholds) => findingsFrom(qcG, withDefaultThresholds(thresholds)).find((f) => f.id === id);
+    let mf = createFigure('Figure 2', 'double', { height: mm(200) });
+    const placedPanels = [
+      { kind: 'map', run: gq.run.id, x: 8, y: 8, w: 236, h: 180 },
+      { kind: 'map', run: f9g.run.id, from: 1, to: 120, x: 250, y: 8, w: 236, h: 180 },
+      { kind: 'scores', run: gq.run.id, plot: 'distribution', x: 8, y: 196, w: 236, h: 150 },
+      { kind: 'qc', subject: gq.run.id, finding: 'depth', x: 250, y: 196, w: 236, h: 150 },
+      { kind: 'qc', subject: gq.run.id, finding: 'agreement', pair: 0, x: 8, y: 354, w: 236, h: 200 },
+      { kind: 'text', text: 'GRB2 and factor IX.', x: 250, y: 354, w: 236, h: 30 },
+    ];
+    for (const p of placedPanels) ({ figure: mf } = addPanel(mf, p));
+    const gqModel = buildMapModel(gq.results, gq.run.inputs.design);
+    const f9Model = buildMapModel(f9g.results, f9g.run.inputs.design);
+    const resolveFor = (thresholds) => new Map([
+      [mf.panels[0].id, { model: gqModel, results: gq.results, tracks: [] }],
+      [mf.panels[1].id, { model: f9Model, results: f9g.results, tracks: [] }],
+      [mf.panels[2].id, scoreCharts(gq.results, gq.run)],
+      [mf.panels[3].id, qcPanelData(qcFinding('depth', thresholds), qcG, withDefaultThresholds(thresholds))],
+      [mf.panels[4].id, qcPanelData(qcFinding('agreement', thresholds), qcG, withDefaultThresholds(thresholds), { pair: 0 })],
+    ]);
+    const ctx = { software: { version: 'validation', commit: null }, created: '2026-10-12T12:00:00.000Z' };
+    const mfDrawn = figureMarks(mf, resolveFor(null));
+    const manifest = buildManifest(both, mf, mfDrawn, ctx);
+    const mfSVG = embedSVG(await figureSVG(mf, resolveFor(null)), manifest);
+    const mfPDF = await figurePDF(mf, resolveFor(null), { date, attachments: [pdfAttachment(manifest)] });
+    const mfPNG = embedPNG(await encodePNG(new Uint8Array(4 * 4 * 4).fill(255), 4, 4), manifest);
+    const backs = [readFigureManifest(mfSVG), readFigureManifest(new Uint8Array(mfPDF)), readFigureManifest(mfPNG), readFigureManifest(JSON.stringify(manifest))];
+    check('figures', 'an exported figure carries its manifest (each panel with what it shows, each run by its output\'s and its table\'s SHA-256, the QC thresholds, a digest of its drawing; MaveScape\'s version; a fingerprint), read back intact from SVG, PDF, PNG and JSON', `${backs.filter((b) => b && JSON.stringify(b) === JSON.stringify(manifest) && checkManifest(b).ok).length} of 4 intact; ${manifest.panels.length} panels, fingerprint ${manifest.fingerprint.slice(0, 12)}…`, backs.every((b) => b && JSON.stringify(b) === JSON.stringify(manifest) && checkManifest(b).ok) && manifest.panels[0].inputs.run.output === gq.run.output.sha256, 'every one');
+    // Edited after the fact: a panel's words, a panel moved, a run's output changed.
+    const edits = [
+      (m) => ({ ...m, panels: m.panels.map((p, k) => (k ? p : { ...p, shows: 'the map of another run' })) }),
+      (m) => ({ ...m, figure: { ...m.figure, panels: m.figure.panels.map((p, k) => (k ? p : { ...p, x: p.x + 10 })) } }),
+      (m) => ({ ...m, panels: m.panels.map((p, k) => (k ? p : { ...p, inputs: { ...p.inputs, run: { ...p.inputs.run, output: '0'.repeat(64) } } })) }),
+    ];
+    const caught = edits.map((edit) => {
+      const json = JSON.stringify(edit(manifest)).replace(/]]>/g, ']]]]><![CDATA[>');
+      const svg = mfSVG.replace(/<metadata id="mavescape-figure"><!\[CDATA\[[\s\S]*?\]\]><\/metadata>/, `<metadata id="mavescape-figure"><![CDATA[${json}]]></metadata>`);
+      return checkManifest(readFigureManifest(svg)).ok === false;
+    });
+    check('figures', 'a manifest edited after it was written is caught (its fingerprint no longer follows): a panel\'s words changed, a panel moved, a run\'s output changed', `${caught.filter(Boolean).length} of ${caught.length} caught`, caught.every(Boolean), 'all');
+    // A rescoring: GRB2's table scored again flags exactly GRB2's panels, not factor IX's or the text.
+    const rescored = compareManifest(manifest, { ...both, runs: [...both.runs, enrich2Run.run] });
+    const flagged = rescored.panels.filter((p) => p.status !== 'unchanged').map((p) => p.letter);
+    const unchanged = compareManifest(manifest, both).panels.every((p) => p.status === 'unchanged');
+    check('figures', 'compared with the workspace: unchanged in its own; GRB2\'s table scored again (its Enrich2 rescoring) flags exactly the panels drawn from GRB2\'s Run 1 (its map, scores and two QC findings), not factor IX\'s map or the text', `${unchanged ? 'unchanged' : 'changed'} as it was; after the rescoring ${flagged.join(', ')} flagged: ${rescored.panels.find((p) => p.status !== 'unchanged')?.changes[0]}`, unchanged && flagged.join() === 'A,C,D,E', 'A, C, D, E');
+    // Thresholds changed: both QC panels flagged; drawn again, the depth panel (its threshold lines) differs, agreement's not.
+    const stricter = { ...withDefaultThresholds(null), readsPerVariant: { review: 400, fail: 300 } };
+    const thresholdsNow = compareManifest(manifest, { ...both, qc: { thresholds: stricter } });
+    const redrawn = compareDrawings(manifest, mf, figureMarks(mf, resolveFor(stricter)));
+    check('figures', 'the QC thresholds changed: both QC panels flagged; drawn again, exactly the panel whose thresholds it draws (sequencing depth) differs, agreement\'s and the rest the same drawing', `flagged ${thresholdsNow.panels.filter((p) => p.status === 'changed').map((p) => p.letter).join(', ')}; drawn differently ${redrawn.filter((d) => !d.same).map((d) => d.letter).join(', ') || 'none'}`, thresholdsNow.panels.filter((p) => p.status === 'changed').map((p) => p.letter).join() === 'D,E' && redrawn.filter((d) => !d.same).map((d) => d.letter).join() === 'D', 'D, E flagged; D drawn otherwise');
+    // Rebuilt from its manifest in a copy of the workspace (another id; the same runs): the same bytes.
+    const copy = { ...both, id: 'ws-copy' };
+    const rebuiltFig = figureForWorkspace(manifest, compareManifest(manifest, copy));
+    const rebuiltSVG = embedSVG(await figureSVG(rebuiltFig, resolveFor(null)), buildManifest(both, rebuiltFig, figureMarks(rebuiltFig, resolveFor(null)), ctx));
+    const sameDrawings = compareDrawings(manifest, rebuiltFig, figureMarks(rebuiltFig, resolveFor(null)));
+    check('figures', 'a figure rebuilt from its manifest (in a copy of its workspace) is drawn the same, panel by panel, and written again is the same bytes', `${sameDrawings.filter((d) => d.same).length} of ${sameDrawings.length} panels the same; ${rebuiltSVG === mfSVG ? 'the same bytes' : 'different bytes'}`, sameDrawings.every((d) => d.same) && rebuiltSVG === mfSVG, 'the same');
   },
 };
 

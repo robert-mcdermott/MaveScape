@@ -43,6 +43,20 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
 - The views draw their plots with the same module as figures (`web/lib/plots.js`; the QC
   findings' charts in `web/lib/qc-plots.js`, the Score, Compare and inspector plots in
   `web/lib/view-plots.js`), so a panel is the view's plot at the figure's size.
+- **Figures that carry their analysis** (wave 6, slice 3). Every exported figure carries its
+  manifest (`web/lib/figure-manifest.js`): the figure's document and, panel by panel, what it
+  shows, what it was drawn from (each run by its output's SHA-256 and its table's, the QC
+  thresholds and the finding's acknowledgement, a comparison's sides, a track's file, a structure
+  view's image) and a digest of its drawing; the workspace, MaveScape's version and commit; and a
+  fingerprint that catches an edit. It is in the SVG's `<metadata>`, a PNG `iTXt` chunk and a file
+  attached to the PDF; `export_figure`'s `json` format writes it alone.
+- A figure dropped on the window says what it shows, where it came from, whether its manifest is as
+  written, and panel by panel whether what it was drawn from is as then, changed since (saying
+  what) or not in this workspace; it opens the workspace it came from when the library holds it.
+  **Rebuild here** adds it to the workspace, draws each panel again from its inputs and compares
+  each drawing with the one recorded. Remote control: `check_figure` (with `rebuild`).
+- `mavescape export --format figures` writes every figure of a workspace archive as SVG, PDF and
+  PNG at 300 dpi, each with its manifest, and `figures.json`.
 
 ### Changed
 
@@ -75,6 +89,13 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   structure image kept byte for byte. The remote session: the window's SVG of a QC finding, the
   scores by class, a comparison and a variant's evidence the same bytes as Node's; a saved
   structure view's panel the same pixels as the view's own figure panel, and in the archive.
+- The `figures` suite grows to 18 checks (wave 6, slice 3): a figure's manifest read back intact
+  from SVG, PDF, PNG and JSON; an edit caught by its fingerprint; a rescoring flagging exactly the
+  panels drawn from the rescored table; changed QC thresholds drawing only the panel that draws them
+  otherwise; a figure rebuilt from its manifest in a copy of the workspace the same bytes.
+  `headless-run` checks `mavescape export --format figures` (twice the same bytes, the window's
+  drawing); the remote session (180 checks) the window's manifest against Node's, `check_figure`
+  and a figure opened in the window.
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
   was lost on CI's runner when the command's exit was seen before its output.
 

@@ -23,6 +23,7 @@ import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../web/lib/findings.js';
 import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV } from '../web/lib/exports.js';
 import { MAVEDB_FILES, mavedbDeposit } from '../web/lib/mavedb-export.js';
+import { checkManifest, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { proteinView } from '../web/lib/collapse.js';
 import { readScoreSet, scoresDesign } from '../web/lib/mavedb.js';
 import { detectLayout } from '../web/lib/importer.js';
@@ -104,6 +105,8 @@ function nodeFiles(dir) {
   return { files: out, digest: outputDigest(r), recorded: run.output.sha256, ws, sources, run, results: r, methods };
 }
 let archiveReader = null;
+// The window's figure (wave 6, slice 3), for mavescape export --format figures to write again.
+let windowFigure = null;
 function readArchiveSync(path) {
   return archiveReader.get(path);
 }
@@ -179,6 +182,16 @@ try {
       const rerun = await mavescape(['run', '--design', join(packageDir, 'design.json'), '--parameters', join(packageDir, 'parameters.json'), '--out', out('from-package'), ...counts.map((n) => join(packageDir, n))]);
       const rerunHash = rerun.code === 0 ? record(out('from-package')).run?.outputSha256 : null;
       check('the analysis package written by the window: mavescape run with its files alone, as its README says, scores the window\'s run again', `${[...unpacked.keys()].join(', ')}; exit ${rerun.code}; output SHA-256 ${rerunHash === scored.data.outputSha256 ? 'the window run\'s' : `${rerunHash} against ${scored.data.outputSha256}`}`, rerun.code === 0 && rerunHash === scored.data.outputSha256 && readme.includes('mavescape run --design design.json --parameters parameters.json') && unpacked.has('samples.csv') && unpacked.has('readiness.json'));
+      // A figure of the run (its map, a QC finding, its scores, text), written by the window as SVG
+      // with the workspace's archive, for mavescape export --format figures below.
+      await act('create_figure', { name: 'Figure 1', size: 'double', height_mm: 150 });
+      await act('add_figure_panel', { figure: 'Figure 1', kind: 'map', run: 'Run 1', x_mm: 3, y_mm: 3, width_mm: 168, height_mm: 80 });
+      await act('add_figure_panel', { figure: 'Figure 1', kind: 'qc', subject: 'Run 1', finding: 'agreement', x_mm: 3, y_mm: 86, width_mm: 83, height_mm: 60 });
+      await act('add_figure_panel', { figure: 'Figure 1', kind: 'scores', run: 'Run 1', x_mm: 89, y_mm: 86, width_mm: 82, height_mm: 50 });
+      await act('add_figure_panel', { figure: 'Figure 1', kind: 'text', text: 'GRB2\'s SH3 domain.', x_mm: 89, y_mm: 138, width_mm: 82, height_mm: 8 });
+      await act('export_figure', { figure: 'Figure 1', path: join(dir, 'Figure_1.svg') });
+      await act('export', { what: 'archive', path: join(dir, 'figures.msz') });
+      windowFigure = { svg: join(dir, 'Figure_1.svg'), archive: join(dir, 'figures.msz') };
     } finally {
       await browser.close();
       server.kill();
@@ -352,6 +365,27 @@ try {
       mavescape(['export', '--out', out('dep1'), saved]),
     ]);
     check('mavescape export: a wrong command line, a file that is not a workspace archive, a folder in use: exit 2 with the reason', wrong.map((w) => `${w.code}: ${w.stderr.trim().split('\n')[0].slice(0, 60)}`).join(' | '), wrong.every((w) => w.code === 2 && w.stderr.trim()));
+    // --format figures (wave 6, slice 3): the window's figure written again from its archive.
+    if (windowFigure) {
+      const f1 = await mavescape(['export', '--format', 'figures', '--out', out('fig1'), '--time', TIME, windowFigure.archive]);
+      const f2 = await mavescape(['export', '--format', 'figures', '--out', out('fig2'), '--time', TIME, windowFigure.archive]);
+      const recF = JSON.parse(readFileSync(join(out('fig1'), 'export.json'), 'utf8'));
+      const doc = JSON.parse(readFileSync(join(out('fig1'), 'figures.json'), 'utf8'));
+      const svg = readFileSync(join(out('fig1'), 'Figure_1.svg'), 'utf8');
+      const windowSVG = readFileSync(windowFigure.svg, 'utf8');
+      const unmanifested = (text) => text.replace(/<metadata id="mavescape-figure"><!\[CDATA\[[\s\S]*?\]\]><\/metadata>/, '');
+      const embedded = { svg: readFigureManifest(svg), pdf: readFigureManifest(new Uint8Array(readFileSync(join(out('fig1'), 'Figure_1.pdf')))), png: readFigureManifest(new Uint8Array(readFileSync(join(out('fig1'), 'Figure_1.png')))) };
+      const fromWindow = readFigureManifest(windowSVG);
+      const digests = (m) => m?.panels.map((p) => p.drawing).join();
+      const agree = Object.values(embedded).every((m) => m && checkManifest(m).ok && JSON.stringify(m) === JSON.stringify(doc.figures[0]));
+      check('mavescape export --format figures: each figure of a saved workspace as SVG, PDF and PNG with figures.json, twice the same bytes; each file\'s manifest intact and figures.json\'s; the SVG the window wrote, byte for byte but for its manifest\'s time, and each panel the window\'s drawing', `exit ${f1.code}; ${listed(out('fig1')).join(', ')}; ${sameFiles(out('fig1'), out('fig2')) ? 'twice the same' : 'not the same twice'}; manifests ${agree ? 'intact, figures.json\'s' : 'differ'}; SVG ${unmanifested(svg) === unmanifested(windowSVG) ? 'the window\'s' : 'not the window\'s'}; drawings ${digests(embedded.svg) === digests(fromWindow) ? 'the window\'s' : 'differ'}`,
+        f1.code === 0 && f2.code === 0 && listed(out('fig1')).join() === 'Figure_1.pdf,Figure_1.png,Figure_1.svg,figures.json' && sameFiles(out('fig1'), out('fig2')) && agree && doc.format === 'mavescape-figures' && recF.outputs.length === 4 && unmanifested(svg) === unmanifested(windowSVG) && digests(embedded.svg) === digests(fromWindow) && embedded.svg.panels.length === 4);
+      const none = await mavescape(['export', '--format', 'figures', '--out', out('fig3'), saved]);
+      const refused = await mavescape(['export', '--format', 'figures', '--run', 'Run 1', '--out', out('fig4'), windowFigure.archive]);
+      check('--format figures: a workspace without figures exits 1, export.json saying so; a run, condition, details or --strict given exits 2', `exit ${none.code}: ${JSON.parse(readFileSync(join(out('fig3'), 'export.json'), 'utf8')).problems.join(' ').slice(0, 80)}; exit ${refused.code}: ${refused.stderr.trim().split('\n')[0].slice(0, 80)}`, none.code === 1 && /no figures/.test(JSON.parse(readFileSync(join(out('fig3'), 'export.json'), 'utf8')).problems.join(' ')) && refused.code === 2 && refused.stderr.trim());
+    } else {
+      check('mavescape export --format figures: the window wrote a figure to export again', 'the window\'s figure was not written', false);
+    }
   }
 } catch (error) {
   check('the headless runs ran to the end', error.stack ?? error.message, false);

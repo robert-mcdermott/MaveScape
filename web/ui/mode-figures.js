@@ -33,6 +33,7 @@ export function mountFiguresMode(app, container) {
     set figure(id) { app.figuresView = { ...(app.figuresView ?? {}), figure: id }; },
     get panel() { return app.figuresView?.panel ?? null; },
     set panel(id) { app.figuresView = { ...(app.figuresView ?? {}), panel: id }; },
+    get report() { return app.figuresView?.report ?? null; },
   };
   let drawn = null;
   let token = 0;
@@ -181,6 +182,9 @@ export function mountFiguresMode(app, container) {
 
   function renderNotes(fig) {
     clear(notesEl);
+    // A figure just rebuilt from its file (wave 6, slice 3): how each panel compares with the file's.
+    const report = app.figuresView?.figure === fig.id ? app.figuresView.report : null;
+    if (report?.length) notesEl.append(h('div.callout.accent', icon('info'), h('div', h('strong', 'Rebuilt from its file'), h('ul', { style: { margin: '4px 0 0', paddingLeft: '18px' } }, ...report.map((line) => h('li', line))))));
     const lines = [];
     lines.push(h('span', `${toMM(fig.width)} × ${toMM(fig.height)} mm · text ${fig.text} pt${drawn?.smallest ? ` · smallest ${drawn.smallest.toFixed(1)} pt` : ''}`));
     notesEl.append(h('p.muted', { style: { margin: '6px 0 0', fontSize: '11.5px' } }, ...lines));

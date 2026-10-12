@@ -36,7 +36,8 @@ import { nodeTracks } from './annotation-cases.mjs';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { builtinTracks, tracksCSV } from '../web/lib/tracks.js';
-import { figureSVG } from '../web/lib/figures.js';
+import { figureMarks, figureSVG } from '../web/lib/figures.js';
+import { buildManifest, checkManifest, embedSVG, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { asPDFText, decodePNG, readPDF, readSVG, sameRects } from './figure-cases.mjs';
 import { qcPanelData } from '../web/lib/qc-plots.js';
 import { comparisonCharts, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
@@ -294,18 +295,20 @@ try {
   const png = await act('export_figure', { figure: 'Figure 1', dpi: 300, path: join(out, 'figure-1.png') });
   const windowSVG = readFileSync(join(out, 'figure-1.svg'), 'utf8');
   const nodeSVG = await figureSVG(figureDoc.document, nodeResolved);
-  check('export_figure SVG: the same bytes as Node draws the figure from its document and Run 1 scored in Node', `${windowSVG.length} bytes`, windowSVG === nodeSVG, `${nodeSVG.length} bytes`);
+  const windowManifest = readFigureManifest(windowSVG);
+  check('export_figure SVG: the same bytes as Node draws the figure from its document and Run 1 scored in Node, with its manifest (intact) in <metadata>', `${windowSVG.length} bytes; manifest ${windowManifest ? (checkManifest(windowManifest).ok ? 'intact' : checkManifest(windowManifest).problem) : 'none'}`, windowManifest && checkManifest(windowManifest).ok && windowSVG === embedSVG(nodeSVG, windowManifest), `${nodeSVG.length} bytes and the manifest`);
   const windowPDF = readPDF(readFileSync(join(out, 'figure-1.pdf')));
+  const pdfManifest = readFigureManifest(new Uint8Array(readFileSync(join(out, 'figure-1.pdf'))));
   const nodeRects = readSVG(nodeSVG);
   const pdfRects = sameRects(nodeRects.rects, windowPDF.rects);
   const pdfTexts = windowPDF.texts.map((b) => String.fromCharCode(...b));
   const svgTexts = asPDFText(nodeRects.texts).map((b) => String.fromCharCode(...b));
-  check('export_figure PDF: a page of 174 × 120 mm drawing Node\'s rectangles and text', `${windowPDF.width} × ${windowPDF.height} pt; ${pdfRects.why}; ${pdfTexts.length} strings`, windowPDF.width === 493.23 && windowPDF.height === 340.16 && pdfRects.ok && pdfTexts.join('|') === svgTexts.join('|'));
+  check('export_figure PDF: a page of 174 × 120 mm drawing Node\'s rectangles and text, the manifest attached', `${windowPDF.width} × ${windowPDF.height} pt; ${pdfRects.why}; ${pdfTexts.length} strings`, windowPDF.width === 493.23 && windowPDF.height === 340.16 && pdfRects.ok && pdfTexts.join('|') === svgTexts.join('|') && JSON.stringify(pdfManifest?.panels) === JSON.stringify(windowManifest?.panels));
   const pngBytes = readFileSync(join(out, 'figure-1.png'));
   const pngW = pngBytes.readUInt32BE(16);
   const pngH = pngBytes.readUInt32BE(20);
   const phys = pngBytes.indexOf(Buffer.from('pHYs'));
-  check('export_figure PNG at 300 dpi: 2055 × 1417 pixels, its resolution recorded (11811 pixels per meter)', `${png.message} ${pngW} × ${pngH}; pHYs ${phys > 0 ? pngBytes.readUInt32BE(phys + 4) : 'none'}`, pngW === 2055 && pngH === 1417 && phys > 0 && pngBytes.readUInt32BE(phys + 4) === 11811 && pngBytes[phys + 12] === 1);
+  check('export_figure PNG at 300 dpi: 2055 × 1417 pixels, its resolution recorded (11811 pixels per meter), the manifest in it', `${png.message} ${pngW} × ${pngH}; pHYs ${phys > 0 ? pngBytes.readUInt32BE(phys + 4) : 'none'}`, pngW === 2055 && pngH === 1417 && phys > 0 && pngBytes.readUInt32BE(phys + 4) === 11811 && pngBytes[phys + 12] === 1 && JSON.stringify(readFigureManifest(new Uint8Array(pngBytes))?.panels) === JSON.stringify(windowManifest?.panels));
   const changedFigure = await act('set_figure', { figure: 'Figure 1', name: 'Figure 2', panels: [{ panel: 'A', from: 20, to: 40, height_mm: 60 }, { panel: 'B', y_mm: 70 }] });
   const offPage = await send('set_figure', { figure: 'Figure 2', panels: [{ panel: 'B', x_mm: 160 }] });
   const unknownPanel = await send('set_figure', { figure: 'Figure 2', panels: [{ panel: 'Z', remove: true }] });
@@ -406,7 +409,33 @@ try {
       [everyDoc.panels[3].id, variantCharts(r1.results, r1.run, 'p.Trp36Ala')],
     ]);
     const nodeEverySVG = await figureSVG(everyDoc, resolvedNode);
-    check('add_figure_panel of every view\'s plots (a QC finding\'s, the scores by class, a comparison, a variant\'s evidence) and export_figure: the window\'s SVG the same bytes as Node draws the same document from Run 1 and Run 2 recomputed from the archive; an unknown finding and a variant not measured refused, saying why', `${everySVG.length} bytes against ${nodeEverySVG.length}; ${qcPanel.data.panel.shows}; ${noFinding.message.slice(0, 60)}; ${noVariant.message.slice(0, 60)}`, everySVG === nodeEverySVG && !noFinding.ok && /Name the finding|not raised|no-such/.test(noFinding.message) && !noVariant.ok && /is not in Run \d/.test(noVariant.message));
+    const everyManifest = readFigureManifest(everySVG);
+    check('add_figure_panel of every view\'s plots (a QC finding\'s, the scores by class, a comparison, a variant\'s evidence) and export_figure: the window\'s SVG the same bytes as Node draws the same document from Run 1 and Run 2 recomputed from the archive, with its manifest; an unknown finding and a variant not measured refused, saying why', `${everySVG.length} bytes against ${nodeEverySVG.length}; ${qcPanel.data.panel.shows}; ${noFinding.message.slice(0, 60)}; ${noVariant.message.slice(0, 60)}`, everyManifest && everySVG === embedSVG(nodeEverySVG, everyManifest) && !noFinding.ok && /Name the finding|not raised|no-such/.test(noFinding.message) && !noVariant.ok && /is not in Run \d/.test(noVariant.message));
+    // What the figure carries (wave 6, slice 3): its manifest as Node writes it from the archive.
+    const nodeManifest = buildManifest(archive.ws, everyDoc, figureMarks(everyDoc, resolvedNode), { software: everyManifest.software, created: everyManifest.created });
+    check('export_figure\'s manifest: what Node writes from the archive (each panel\'s inputs: Run 1\'s and Run 2\'s outputs and their table by SHA-256, the QC thresholds, the comparison\'s sides; a digest of each panel\'s drawing; MaveScape\'s version; its fingerprint)', `${everyManifest.panels.map((p) => `${p.letter}: ${p.shows}`).join('; ')}; fingerprint ${everyManifest.fingerprint.slice(0, 12)}… against ${nodeManifest.fingerprint.slice(0, 12)}…`, JSON.stringify(nodeManifest) === JSON.stringify(everyManifest) && everyManifest.panels[0].inputs.run.output === r1.run.output.sha256);
+  }
+  {
+    // The manifest alone; the figure read back, edited, rebuilt and opened in the window.
+    const asJSON = await act('export_figure', { figure: 'Every view', format: 'json', path: join(out, 'every-view.json') });
+    const jsonManifest = JSON.parse(readFileSync(join(out, 'every-view.json'), 'utf8'));
+    const svgManifest = readFigureManifest(readFileSync(join(out, 'every-view.svg'), 'utf8'));
+    check('export_figure json: the manifest alone, the SVG\'s but for when it was written', asJSON.message, checkManifest(jsonManifest).ok && JSON.stringify(jsonManifest.panels) === JSON.stringify(svgManifest.panels) && JSON.stringify(jsonManifest.figure) === JSON.stringify(svgManifest.figure) && asJSON.message.includes(jsonManifest.fingerprint.slice(0, 12)));
+    const checked = await act('check_figure', { paths: [join(out, 'every-view.svg')] });
+    check('check_figure of the figure\'s SVG in its own workspace: its manifest intact, every panel as it was drawn from', checked.message, checked.data.intact && checked.data.workspace.same && checked.data.panels.length === 4 && checked.data.panels.every((p) => p.status === 'unchanged'));
+    const edited = readFileSync(join(out, 'every-view.svg'), 'utf8').replace('"shows":"score distributions by class of Run 1"', '"shows":"score distributions by class of Run 2"');
+    writeFileSync(join(out, 'every-view-edited.svg'), edited);
+    const tampered = await act('check_figure', { paths: [join(out, 'every-view-edited.svg')] });
+    const plain = await send('check_figure', { paths: [join(out, 'map.svg')] });
+    check('check_figure: a manifest edited after it was written is caught (its fingerprint); a file without one refused, saying so', `${tampered.data.problem} | ${plain.message}`, edited.includes('of Run 2"') && tampered.data.intact === false && /changed after it was written/.test(tampered.data.problem) && !plain.ok && /no MaveScape figure manifest/.test(plain.message));
+    const rebuilt = await act('check_figure', { paths: [join(out, 'every-view.svg')], rebuild: true });
+    const listedFigures = (await act('figures')).data.figures.map((f) => f.name);
+    check('check_figure with rebuild: the figure added to the workspace from its manifest, each panel drawn again the same drawing the file records', `${rebuilt.data.rebuilt?.figure}: ${rebuilt.data.rebuilt?.panels.map((p) => `${p.letter} ${p.same ? 'the same' : 'different'}`).join(', ')}`, rebuilt.data.rebuilt?.panels.length === 4 && rebuilt.data.rebuilt.panels.every((p) => p.same) && listedFigures.includes(rebuilt.data.rebuilt.figure));
+    await act('open_files', { paths: [join(out, 'every-view.svg')] });
+    await sleep(300);
+    const dialog = await browser.eval(`(() => { const d = document.querySelector('.dialog[aria-label="A figure from MaveScape"]'); return d ? { rows: d.querySelectorAll('tbody tr').length, badges: [...d.querySelectorAll('tbody .badge')].map((b) => b.textContent), buttons: [...d.querySelectorAll('.dialog-foot button')].map((b) => b.textContent) } : null; })()`);
+    await browser.eval(`document.querySelector('.dialog[aria-label="A figure from MaveScape"] .dialog-head button')?.click()`);
+    check('open_files of the figure: the window says what it shows and where it came from, panel by panel as it was, and offers to rebuild it', JSON.stringify(dialog), dialog?.rows === 4 && dialog.badges.every((b) => b === 'as then') && dialog.buttons.includes('Rebuild here'));
   }
   const runsCompare = await act('compare', { a: 'Run 1', b: 'Run 2' });
   check('compare: Run 1 against Run 2 (the Enrich2 preset): one table scored twice, qualified, on one scale', runsCompare.data.report.items.find((i) => i.id === 'independence').text, runsCompare.data.report.status === 'qualified' && runsCompare.data.sameScale === true && runsCompare.data.statistics.concordance !== null);
@@ -570,6 +599,8 @@ try {
   const set = await act('set_design', { design: exampleDesign });
   const rescored = await act('score');
   check('set_design, then score: the example\'s run, from files opened by path', `${set.message} ${rescored.message}`, set.data.valid && rescored.data.outputSha256 === nodeDigest);
+  const inAnother = await act('check_figure', { paths: [join(out, 'every-view.svg')] });
+  check('check_figure in another workspace that scored the same table to the same output: Run 1\'s panels found by its output\'s SHA-256, as they were; the comparison missing Run 2', inAnother.message, !inAnother.data.workspace.same && inAnother.data.panels.map((p) => p.status).join() === 'unchanged,unchanged,missing,unchanged' && /Run 2 \(output [0-9a-f]{12}…\) is not in this workspace/.test(inAnother.data.panels[2].changes.join(' ')));
 
   // The other example.
   const simulated = await act('open_example', { id: 'simulated' });

@@ -79,6 +79,9 @@ func fileKind(name string) string {
 	case has(".zip"):
 		// A MaveDB package (wave 3, slice 4), or another archive the page names.
 		return "archive"
+	case has(".svg", ".pdf", ".png"):
+		// A figure MaveScape exported, to check against the workspace and rebuild (wave 6, slice 3).
+		return "figure"
 	case lower == "score_set.json" || lower == "experiment.json" || lower == "score_columns.json" || lower == "count_columns.json":
 		// A MaveDB package's descriptions, opened with its tables (wave 3, slice 4); other JSON
 		// files are not opened.

@@ -86,6 +86,11 @@ test('the map panel: each cell the color map-svg.js gives it, the states named, 
   assert.deepEqual(part.range, [2, 3]);
   assert.match(part.description, /Positions 2–3 \(102–103 in the reference\) shown\./);
   assert.ok(textMarks(part.marks).every((m) => m.size >= 6));
+  // A sequential coloring (SE, input count, replicates) draws its own legend, with no center.
+  for (const colorBy of ['se', 'input', 'replicates']) {
+    const seq = mapPanel({ x: 0, y: 0, w: 300, h: 200 }, { model: buildMapModel(results, design, { colorBy }), results, tracks: [] }, {});
+    assert.ok(textMarks(seq.marks).every((m) => !/wild type/.test(m.text)), colorBy);
+  }
   const tiny = mapPanel({ x: 0, y: 0, w: 300, h: 60 }, { model, results, tracks: [] }, {});
   assert.match(tiny.notes.join(' '), /make the panel taller|too small/);
 });

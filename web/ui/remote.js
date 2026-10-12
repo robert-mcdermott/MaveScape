@@ -63,7 +63,7 @@ import { structureWords, viewWords } from '../lib/structure-record.js';
 import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
 import { addPanel, checkFigure, createFigure, FIGURE_SIZES, figureSize, mm, panelLetters, panelSummary, PANEL_KINDS, PANEL_PLOTS, pngSize, removePanel, toMM, updatePanel } from '../lib/figures.js';
-import { drawFigure, drawStructureImage, exportFigure } from './figure-data.js';
+import { drawFigure, drawStructureImage, exportFigure, readFigureFile, rebuildFigure, rebuildWords } from './figure-data.js';
 import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
@@ -977,8 +977,8 @@ export function installRemote(app) {
 
     async export_figure(args) {
       const fig = resolveFigure(args.figure);
-      const format = args.format ? choose(args.format, ['svg', 'pdf', 'png'], 'format') : (String(args.path ?? '').match(/\.(svg|pdf|png)$/i)?.[1].toLowerCase() ?? null);
-      if (!format) throw new ActionError('Say the format (svg, pdf or png), or give a path ending in one.');
+      const format = args.format ? choose(args.format, ['svg', 'pdf', 'png', 'json'], 'format') : (String(args.path ?? '').match(/\.(svg|pdf|png|json)$/i)?.[1].toLowerCase() ?? null);
+      if (!format) throw new ActionError('Say the format (svg, pdf, png, or json for its manifest), or give a path ending in one.');
       let out;
       try {
         out = await exportFigure(app, fig, format, args.dpi === undefined ? {} : { dpi: Number(args.dpi) });
@@ -987,7 +987,33 @@ export function installRemote(app) {
       }
       await showFigure(fig.id);
       const size = format === 'png' ? `, ${pngSize(fig, out.dpi).width} × ${pngSize(fig, out.dpi).height} pixels at ${out.dpi} dpi` : '';
-      return { file: out.data, message: `"${fig.name}" as ${format.toUpperCase()} (${toMM(fig.width)} × ${toMM(fig.height)} mm${size}).${out.notes.length ? ` ${out.notes.join(' ')}` : ''}` };
+      return { file: out.data, message: `"${fig.name}" as ${format === 'json' ? 'its manifest (JSON)' : format.toUpperCase()} (${toMM(fig.width)} × ${toMM(fig.height)} mm${size}), its manifest's fingerprint ${out.manifest.fingerprint.slice(0, 12)}….${out.notes.length ? ` ${out.notes.join(' ')}` : ''}` };
+    },
+
+    // A figure MaveScape exported, read back (wave 6, slice 3): what it shows and where it came
+    // from, whether its manifest is as written, what changed here since; rebuilt on request.
+    async check_figure(args, event) {
+      const files = event.files ?? [];
+      if (files.length !== 1) throw new ActionError('Give one figure file (SVG, PDF, PNG or its manifest as JSON) in paths.');
+      const response = await fetch(files[0].url);
+      if (!response.ok) throw new ActionError(`${files[0].name} could not be read (HTTP ${response.status}).`);
+      const read = readFigureFile(app, new Uint8Array(await response.arrayBuffer()));
+      if (!read) throw new ActionError(`${files[0].name} carries no MaveScape figure manifest.`);
+      const { manifest: m, comparison: c } = read;
+      const data = {
+        figure: m.figure.name, created: m.created, software: m.software, workspace: { ...m.workspace, same: c.sameWorkspace }, fingerprint: m.fingerprint, intact: c.intact, problem: c.problem,
+        panels: c.panels.map((p) => ({ letter: p.letter, kind: p.kind, shows: p.shows, status: p.status, changes: p.changes })),
+      };
+      let words = [];
+      if (args.rebuild === true) {
+        const report = await rebuildFigure(app, m);
+        words = rebuildWords(report);
+        data.rebuilt = { figure: report.figure.name, id: report.figure.id, panels: report.drawings.map((d) => ({ letter: d.letter, same: d.same })), words };
+        await showFigure(report.figure.id);
+      }
+      const changed = c.panels.filter((p) => p.status !== 'unchanged');
+      const message = `${files[0].name}: "${m.figure.name}", ${m.panels.length} panels, exported by MaveScape ${m.software?.version ?? '?'}${m.created ? ` on ${m.created.slice(0, 10)}` : ''} from "${m.workspace?.name}"${c.sameWorkspace ? ' (this workspace)' : ''}. ${c.intact ? 'Its manifest is as written.' : c.problem} ${changed.length ? changed.map((p) => `${p.letter ? `Panel ${p.letter}` : 'A panel'}: ${p.changes.join('; ')}.`).join(' ') : 'Nothing it was drawn from changed here.'}${words.length ? ` Rebuilt: ${words.join(' ')}` : ''}`;
+      return { message, data };
     },
 
     // Proteoscope (wave 5, slice 6): the view shown handed to a Proteoscope running on this computer.

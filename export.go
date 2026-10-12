@@ -18,7 +18,8 @@ import (
 // "mavescape export" writes a run of a saved workspace as files, without a window (requirement M2,
 // wave 3 slice 4): as a MaveDB deposit (--format mavedb: the scores, counts, column descriptions,
 // experiment and score set as MaveDB takes them, web/lib/mavedb-export.js) or as MaveScape's
-// tables (--format tables: the files mavescape run writes). Like run, it opens the archive in a
+// tables (--format tables: the files mavescape run writes); or the workspace's figures (--format
+// figures, wave 6 slice 3: each as SVG, PDF and PNG carrying its manifest, and figures.json). Like run, it opens the archive in a
 // headless page and performs the actions scripts use (actions.go); export.json in the folder records
 // what was read, done and written. --details sets the MaveDB details first (set_mavedb_details).
 //
@@ -105,7 +106,7 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 	var opts exportOptions
 	flags := flag.NewFlagSet("mavescape export", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&opts.format, "format", "mavedb", "mavedb (a MaveDB deposit) or tables (MaveScape's tables, as mavescape run writes them)")
+	flags.StringVar(&opts.format, "format", "mavedb", "mavedb (a MaveDB deposit), tables (MaveScape's tables, as mavescape run writes them) or figures (the workspace's figures, with their manifests)")
 	flags.StringVar(&opts.out, "out", "", "the folder for the files (made if missing; must be empty unless --overwrite)")
 	flags.StringVar(&opts.run, "run", "", "the run by name or id (default: the latest)")
 	flags.StringVar(&opts.condition, "condition", "", "mavedb: the condition, by name or number (default: each, in a folder of its own)")
@@ -121,9 +122,11 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 		out := flags.Output()
 		fmt.Fprintln(out, "Usage: mavescape export --format mavedb --out deposit/ [flags] analysis.msz")
 		fmt.Fprintln(out, "       mavescape export --format tables --out tables/ [flags] analysis.msz")
+		fmt.Fprintln(out, "       mavescape export --format figures --out figures/ [flags] analysis.msz")
 		fmt.Fprintln(out, "Writes a run of a saved workspace without a window: as a MaveDB deposit (the scores, counts,")
 		fmt.Fprintln(out, "column descriptions, experiment and score set as MaveDB takes them; nothing is sent), or as")
-		fmt.Fprintln(out, "MaveScape's tables. export.json records what was written. Exit status: 0 written, 1 not written")
+		fmt.Fprintln(out, "MaveScape's tables; or the workspace's figures (SVG, PDF and PNG, each carrying its manifest, and figures.json).")
+		fmt.Fprintln(out, "export.json records what was written. Exit status: 0 written, 1 not written")
 		fmt.Fprintln(out, "(or, with --strict, a deposit lacking what MaveDB requires), 2 a wrong command line, a missing")
 		fmt.Fprintln(out, "input, outputs in the way, or no browser.")
 		flags.PrintDefaults()
@@ -133,9 +136,9 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 		return opts, err
 	}
 	switch opts.format {
-	case "mavedb", "tables":
+	case "mavedb", "tables", "figures":
 	default:
-		return opts, fmt.Errorf("--format is mavedb or tables, not %q", opts.format)
+		return opts, fmt.Errorf("--format is mavedb, tables or figures, not %q", opts.format)
 	}
 	if len(rest) != 1 {
 		return opts, errors.New("name one workspace archive (.msz)")
@@ -165,6 +168,9 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 	}
 	if opts.format == "tables" && (opts.details != "" || opts.condition != "" || opts.strict) {
 		return opts, errors.New("--details, --condition and --strict are for --format mavedb (the tables hold every condition)")
+	}
+	if opts.format == "figures" && (opts.details != "" || opts.condition != "" || opts.strict || opts.run != "") {
+		return opts, errors.New("--run, --details, --condition and --strict are for --format mavedb or tables (the figures name their own runs)")
 	}
 	if opts.details != "" {
 		if opts.details, err = existingFile(opts.details); err != nil {
@@ -210,6 +216,9 @@ func executeExport(ctx context.Context, opts exportOptions, browser string, reco
 
 	if _, ok := steps.do("open_files", map[string]any{"paths": []string{opts.workspace}}); !ok {
 		return exitFailed
+	}
+	if opts.format == "figures" {
+		return exportFigures(steps, opts, record)
 	}
 	if opts.format == "tables" {
 		args := map[string]any{}
@@ -349,4 +358,77 @@ func writeDeposit(steps *runStepper, opts exportOptions, record *runRecord, dir,
 		}
 	}
 	return nil
+}
+
+// exportFigures writes every figure of the workspace (wave 6, slice 3): each as SVG, PDF and PNG
+// (300 dpi), each carrying its manifest, and figures.json, the manifests together (format
+// mavescape-figures). The files are named after the figures.
+func exportFigures(steps *runStepper, opts exportOptions, record *runRecord) int {
+	data, ok := steps.do("figures", map[string]any{})
+	if !ok {
+		return exitFailed
+	}
+	var listed struct {
+		Figures []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"figures"`
+	}
+	if err := json.Unmarshal(data, &listed); err != nil {
+		record.Problems = append(record.Problems, "the figures could not be read: "+err.Error())
+		return exitFailed
+	}
+	if len(listed.Figures) == 0 {
+		record.Problems = append(record.Problems, "The workspace has no figures: make one in the Figures view (or with add_figure_panel).")
+		return exitFailed
+	}
+	if err := os.MkdirAll(opts.out, 0o755); err != nil {
+		record.Problems = append(record.Problems, err.Error())
+		return exitFailed
+	}
+	used := map[string]bool{}
+	manifests := []json.RawMessage{}
+	failed := false
+	for _, f := range listed.Figures {
+		base := safeFileName(f.Name, used)
+		for _, format := range []string{"svg", "pdf", "png"} {
+			args := map[string]any{"figure": f.ID, "format": format, "path": filepath.Join(opts.out, base+"."+format)}
+			if format == "png" {
+				args["dpi"] = 300
+			}
+			if _, ok := steps.do("export_figure", args); !ok {
+				failed = true
+			}
+		}
+		// The manifest alone, on the way to figures.json.
+		temp := filepath.Join(opts.out, "."+base+".manifest.json")
+		before := len(record.Outputs)
+		_, ok := steps.do("export_figure", map[string]any{"figure": f.ID, "format": "json", "path": temp, "overwrite": true})
+		record.Outputs = record.Outputs[:before]
+		manifest, err := os.ReadFile(temp)
+		os.Remove(temp)
+		if !ok || err != nil {
+			failed = true
+			continue
+		}
+		manifests = append(manifests, json.RawMessage(manifest))
+	}
+	doc, err := json.MarshalIndent(map[string]any{"format": "mavescape-figures", "version": 1, "figures": manifests}, "", "  ")
+	if err != nil {
+		record.Problems = append(record.Problems, err.Error())
+		return exitFailed
+	}
+	path := filepath.Join(opts.out, "figures.json")
+	if _, err := writeOutput(path, opts.overwrite, bytes.NewReader(append(doc, '\n'))); err != nil {
+		record.Problems = append(record.Problems, err.Error())
+		return exitFailed
+	}
+	if f, err := describeFile(path, "figures"); err == nil {
+		record.Outputs = append(record.Outputs, f)
+	}
+	if failed {
+		record.Problems = append(record.Problems, "Some figures could not be written (see the steps).")
+		return exitFailed
+	}
+	return 0
 }

@@ -20,7 +20,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
 | Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV); a figure panel (PNG); the view as a Proteoscope session (JSON, or a link to a running Proteoscope) |
-| Figures (0.6) | (kept in the workspace and its archive: `figures`, and the images of structure panels) | a figure as SVG (vector, text as text), PDF (vector, one page at its printed size) or PNG (at a resolution of its printed size) |
+| Figures (0.6) | a figure MaveScape exported (SVG, PDF, PNG or its manifest as JSON): checked against the workspace and rebuilt from its manifest; kept in the workspace and its archive (`figures`, and the images of structure panels) | a figure as SVG (vector, text as text), PDF (vector, one page at its printed size) or PNG (at a resolution of its printed size), each carrying its manifest; the manifest alone (JSON); `figures.json` (`mavescape export --format figures`) |
 
 Coming later: Excel workbooks.
 
@@ -1119,9 +1119,61 @@ The Figures view's **Export**, or the remote action `export_figure`:
 - **PNG**: at 300 dpi of the printed size by default (72 to 1200), its resolution recorded in the
   file (`pHYs`), so that it opens at its printed size.
 
-The same figure is the same bytes when written again (the PDF's creation date is the time, which
-`mavescape run`'s `--time` fixes). The clipboard takes the PNG at 300 dpi, and the SVG where the
-browser accepts it.
+The same figure is the same bytes when written again (the PDF's creation date and the manifest's
+`created` are the time, which `mavescape run`'s and `mavescape export`'s `--time` fix). The
+clipboard takes the PNG at 300 dpi, and the SVG where the browser accepts it.
+
+### What a figure carries: its manifest
+
+Each figure written (MaveScape 0.6, wave 6 slice 3) carries its **manifest**: the figure's document
+and, panel by panel, what it shows, what it was drawn from and a digest of what it drew. It is in
+the SVG as `<metadata id="mavescape-figure">` (the JSON in CDATA), in the PNG as an `iTXt` chunk
+with the keyword `mavescape-figure`, and in the PDF as an attached file, `mavescape-figure.json`;
+`export_figure`'s `json` format writes it alone.
+
+```json
+{
+  "format": "mavescape-figure-manifest", "version": 1, "created": "2026-10-12T12:00:00.000Z",
+  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
+  "workspace": { "id": "ws-…", "name": "GRB2 SH3 domain (published)" },
+  "figure": { "id": "figure-…", "name": "Figure 1", "…": "the figure's document, as above" },
+  "description": "Figure 1. A: …",
+  "panels": [
+    { "id": "panel-1", "letter": "A", "kind": "map", "shows": "the map of Run 1",
+      "drawing": "<SHA-256>",
+      "inputs": { "run": { "id": "run-…", "name": "Run 1", "output": "<SHA-256>", "table": "<SHA-256>",
+                           "tableName": "counts.csv", "others": [] }, "condition": 0 } }
+  ],
+  "drawing": "<SHA-256>",
+  "fingerprint": "<SHA-256>"
+}
+```
+
+- `inputs`, by kind: a run (`map`, `scores`, `variant`, a `qc` finding of a run) by its output's
+  SHA-256 (the run record's) and its table's, with `others`, the ids of the other runs of that table
+  then; a map's `tracks`, an annotation's with its file's SHA-256; a `qc` panel's `finding`, the
+  QC thresholds' digest and the finding's acknowledgement (or, of the counts, the table's SHA-256
+  and the design's digest); a `compare` panel's two sides (a run's condition or replicate, or an
+  annotation), `scale` and `filters`; a `structure` panel's saved view (its id, name and when it was
+  saved), the structure's file by its SHA-256, and its image's SHA-256. Digests are SHA-256 of the
+  canonical JSON (keys sorted, as the workspace's record is).
+- `drawing`: a panel's digest is the SHA-256 of its marks written as SVG, so two drawings of a panel
+  compare whatever the format; the manifest's is the digest of the panels' digests.
+- `fingerprint`: the SHA-256 of the canonical JSON of the manifest without it. A manifest changed
+  after it was written (a panel's words, its place, a run's output) no longer follows from it.
+
+**Reading one back.** A figure file dropped on the window (or `check_figure`) is read for its
+manifest and compared with the workspace open, panel by panel: *as then*; *changed since* (the run's
+table scored again since, the QC thresholds or the finding's acknowledgement changed, the design
+changed, an annotation's file changed, a structure view saved again), saying what; or *not here* (a
+run not in this workspace, found by its id or its output's SHA-256, so that a copy of the workspace
+holds it). **Rebuild here** adds the figure to the workspace, its runs mapped to this workspace's
+by their outputs, and draws each panel again from its inputs: each drawing's digest is compared with
+the one recorded, and the Figures view says which panels are the same drawing.
+
+**`mavescape export --format figures`** writes each figure of a workspace archive as SVG, PDF and
+PNG (300 dpi), named after it, with `figures.json` (format `mavescape-figures`, version 1,
+`figures`: each figure's manifest) and `export.json`. With `--time`, twice the same bytes.
 
 ## Comparisons
 
@@ -1321,7 +1373,8 @@ With a fixed time, the same inputs write the same bytes in every file but `run.j
 `mavescape export` (MaveScape 0.3) writes `export.json` beside its files: format
 `mavescape-export`, version 1, the fields of `run.json` (its `inputs` the workspace archive and the
 `--details` file), with `deposit` (`--format mavedb`: what the deposit holds and lacks, as the
-`mavedb_deposit` action gives it) or `run` (`--format tables`).
+`mavedb_deposit` action gives it) or `run` (`--format tables`); `--format figures` (0.6) lists the
+figures' files in `outputs`.
 
 ## Remote control: `remote.json`
 

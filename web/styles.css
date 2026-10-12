@@ -540,6 +540,7 @@ table.data tr.selected td { background: var(--active); }
   width: min(560px, 100%); max-height: calc(100vh - 60px); display: flex; flex-direction: column; animation: rise 0.16s ease-out;
 }
 .dialog.wide { width: min(980px, 100%); }
+.dialog.medium { width: min(720px, 100%); }
 .dialog.xwide { width: min(1280px, 100%); }
 .dialog-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px 10px; }
 .dialog-head h2 { margin: 0; font-size: 16px; font-weight: 700; flex: 1; letter-spacing: -0.01em; }

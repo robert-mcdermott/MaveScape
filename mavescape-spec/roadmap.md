@@ -2648,6 +2648,40 @@ and the review report are found. The wave ends with its examples, as waves 2 to 
    - Validation: the manifest read back intact from SVG, PNG and PDF; a figure rebuilt is the same
      bytes; a rescoring flags exactly the panels it changes; a manifest edited after the fact is
      caught; `mavescape export` the same bytes twice and as the window writes them.
+   - **Done.** `lib/figure-manifest.js`: the manifest (format `mavescape-figure-manifest`, version
+     1) holds the figure's document and, panel by panel, its letter, what it shows, its inputs and
+     the SHA-256 of its marks written as SVG; the workspace, MaveScape's version and commit, when;
+     and a fingerprint, the SHA-256 of the canonical JSON of the rest. A run is recorded by its
+     output's SHA-256 (which follows from its table, design and parameters) and its table's, with
+     the other runs of that table then; a QC panel by the thresholds' digest and the finding's
+     acknowledgement; a comparison by its sides; a track by its annotation's file; a structure
+     panel by its saved view and image. Panels draw no selection, so none is recorded. Embedded as
+     SVG `<metadata>`, a PNG `iTXt` chunk and a PDF attachment (after CytoWeave 0.8.0's
+     `figure-provenance.js`); `export_figure` writes it alone as `json`.
+     - **Read back:** a figure file dropped on the window (`ui/figure-import.js`) says what it
+       shows, which workspace and version made it, whether its manifest is as written, and per
+       panel *as then*, *changed since* (saying what) or *not here*; a run is found by its id or its
+       output, so a copy of the workspace holds it. **Open** the workspace it came from when the
+       library holds it; **Rebuild here** adds the figure with its runs mapped to this workspace's,
+       draws each panel again and compares its digest with the one recorded, and the Figures view
+       lists which panels are the same drawing. `check_figure` does the same for scripts (with
+       `rebuild`); `mavescape export --format figures` writes every figure of an archive as SVG,
+       PDF and PNG at 300 dpi with `figures.json`.
+     - Found while building it: a map panel colored by SE, the input counts or the replicates (a
+       one-sided scale) crashed its legend's layout, which measured the diverging scale's middle
+       label; a run made since could not be told from one already there by time, since `--time`
+       fixes every run's (each run now records its table's other runs).
+     - Validation: `figures` grows to 18 checks: a figure of GRB2's and factor IX's maps, GRB2's
+       scores and two QC findings and text, its manifest read back intact from SVG, PDF, PNG and
+       JSON; an edit caught three ways (a panel's words, its place, a run's output); GRB2's Enrich2
+       rescoring flagging exactly GRB2's four panels; stricter depth thresholds flagging both QC
+       panels and drawing only the depth panel otherwise; rebuilt in a copy of the workspace, the
+       same drawing panel by panel and the same SVG bytes. `headless-run` (32): `--format figures`
+       of the window's figure twice the same bytes, its SVG the window's but for the manifest's
+       time, every drawing the window's; a workspace without figures exit 1. The remote session
+       (180): the manifest the one Node writes from the archive; `check_figure` in its own
+       workspace, edited, rebuilt (every panel the same drawing) and in another that scored the same
+       table; `open_files` of a figure the window's dialog.
 4. **Methods and citations, complete (R4).** The methods of the workspace, not only of a run: every
    run's model, parameters (as a table) and filters; comparisons and their statistics; robustness;
    selections by query; annotations with their sources and retrieval dates; structure mappings and

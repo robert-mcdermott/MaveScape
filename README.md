@@ -28,7 +28,8 @@ It covers the path from a count table to a result you can defend, and checks eac
 - the scores on the protein's structure, and the structure used as evidence;
 - MaveDB: published score sets opened by search, and runs written as deposits MaveDB's own
   validators accept;
-- figures for a paper or a talk, drawn from the analysis and exported as SVG, PDF or PNG;
+- figures for a paper or a talk, drawn from the analysis and exported as SVG, PDF or PNG, each
+  carrying what it was drawn from, so it can be checked and rebuilt;
 - a record a reviewer can repeat: methods with references, provenance, and a workspace archive
   that reopens identically on another computer.
 
@@ -139,6 +140,11 @@ guides to every view, with screenshots.
   order and laid out by dragging, snapping to each other. A panel says what it shows, so the figure follows the
   analysis until it is exported: SVG and PDF as vectors with the text as text, PNG at 300 or 600 dpi
   of the printed size, or the clipboard. Text under 6 pt at the printed size is flagged.
+  - Each exported file carries its manifest: what each panel shows, each run by its output's
+    SHA-256, the QC thresholds, a digest of each panel's drawing, MaveScape's version, and a
+    fingerprint that catches an edit.
+  - Dropped on the window, a figure says panel by panel what changed in the workspace since it was
+    made, and is rebuilt from its manifest, each panel's drawing compared with the one recorded.
 - **Public data.** Any published MaveDB score set opened by search or URN: its record, its
   scores as published and its counts ready to score again. Several score sets of one target open
   together as conditions to compare. A target is checked against its UniProt entry. Public data
@@ -334,6 +340,7 @@ The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page 
 | `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html#headless)) |
 | `mavescape validate [--design D] [tables]` | Check tables and a design as scoring would; exit 1 when something blocks scoring |
 | `mavescape export --format mavedb --out DIR W.msz` | Write a saved run as a MaveDB deposit (or `--format tables`); `--details` gives what MaveDB asks for, `--strict` fails while it is missing ([depositing in MaveDB](https://robert-mcdermott.github.io/MaveScape/docs/record.html#mavedb)) |
+| `mavescape export --format figures --out DIR W.msz` | Write a saved workspace's figures as SVG, PDF and PNG, each with its manifest, and `figures.json` ([figures](https://robert-mcdermott.github.io/MaveScape/docs/figures.html#provenance)) |
 
 On macOS, Chrome (and Edge, Brave) keeps running after its last window is closed: quit it with ⌘Q
 to stop MaveScape too. If that browser is already running when MaveScape starts, the window opens
@@ -394,7 +401,7 @@ integration on every change.
 | Structures | PDBe's SIFTS; DSSP 4.6.1; SciPy 1.18.1's Mann–Whitney test | Every residue placed where SIFTS places it; every secondary-structure code but five π-helix residues; tests to 10⁻¹² |
 | Examples | All fourteen, against MaveDB's files and the published comparisons | Each raises exactly the QC findings it teaches; published counts byte for byte |
 | The record | Archives saved by every release since 0.1.0, reopened | Every run recomputed to its recorded hash |
-| Figures | Nine examples' maps and every view's plots as figure panels (96 QC panels), against the map's own SVG and the results themselves; the PDF's content read back; the window's export against Node's | Every cell the map's own color, every bar and point the results'; the PDF the SVG's rectangles and text, mark for mark; the window's SVG Node's, byte for byte |
+| Figures | Nine examples' maps and every view's plots as figure panels (96 QC panels), against the map's own SVG and the results themselves; the PDF's content read back; the window's export against Node's; each file's manifest read back, edited, compared after a rescoring and rebuilt | Every cell the map's own color, every bar and point the results'; the PDF the SVG's rectangles and text, mark for mark; the window's SVG and manifest Node's, byte for byte; an edit caught, exactly the panels a rescoring touches flagged, a rebuilt figure the same bytes |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |
 | Scale | A million barcodes and their million-line map | Imported in 3.5 s, scored in 1.3 s |
 
@@ -440,9 +447,9 @@ check, its tolerance and how the reference outputs were made are in
   structure alone, with the scores and the view in a session file to open there.
 - MaveScape is developed and tested in Chrome, Edge and Brave; `mavescape run` needs one of them
   or Chromium.
-- Exported figures do not yet carry the analysis behind them, to be checked or rebuilt (wave 6).
-  A structure panel is an image of its saved view, drawn again on request rather than with every
-  change. A PDF's text is in Helvetica's standard encoding, so a
+- A structure panel is an image of its saved view, drawn again on request rather than with every
+  change; a figure rebuilt from its file needs that image in the library, or the saved view to
+  draw it again. A PDF's text is in Helvetica's standard encoding, so a
   character outside it (− or Δ) is written as its nearest ASCII (- or delta).
 - Calibration and a review report are planned for later releases; see the
   [roadmap](mavescape-spec/roadmap.md).
