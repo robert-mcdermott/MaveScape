@@ -23,6 +23,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch, sleep } from './cdp.mjs';
+import { assignColumn } from '../../web/lib/design-edit.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const IMAGES = join(ROOT, 'docs/images');
@@ -72,7 +73,7 @@ for (const [, file, scene] of SCORE_TABLES) {
   if ((wanted.length === 0 || wanted.includes(scene)) && !existsSync(file)) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'tp53-screens' ? 'mavedb-tp53-screens' : 'mavedb-hsp90'}`);
 }
 for (const [, dir, scene] of MAVEDB_TABLES) {
-  const scenes = scene === 'dhfr-lon' ? ['dhfr-lon', 'compare-maps', 'compare-disagreement', 'robustness'] : [scene];
+  const scenes = scene === 'dhfr-lon' ? ['dhfr-lon', 'compare-maps', 'compare-disagreement', 'robustness'] : [scene, `${scene}-certificate`];
   if ((wanted.length === 0 || wanted.some((w) => scenes.includes(w))) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
 }
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
@@ -763,6 +764,51 @@ const scenes = {
       document.querySelector('#lookup-result button.n').click();
     })()`);
     await sleep(500);
+  },
+  // The wave's lessons on the examples (wave 6, slice 8). GRB2's figure: the variance beyond
+  // counting acknowledged, then Run 1's map, the view Core of 2VWF and the finding on one page.
+  async 'grb2-figure'() {
+    await example('grb2-sh3');
+    await act('acknowledge_finding', { finding: 'excess-variance', run: 'Run 1', reason: 'The input bottleneck the Domainome\'s own analysis found (DiMSum\'s error model puts it at the input)' });
+    await act('open_structure', { pdb: '2VWF' });
+    await act('set_structure', { color: 'median', select: 'byres (chain A and protein and within 4 of (chain B and protein))', show: 'sticks' });
+    await act('set_structure', { select: '' });
+    await sleep(1500);
+    await act('save_structure_view', { name: 'Core' });
+    // The page and panels as validation/example-lessons.mjs lays them out (GRB2_FIGURE).
+    await act('create_figure', { name: 'GRB2 SH3', size: 'double', height_mm: 186 });
+    await act('add_figure_panel', { figure: 'GRB2 SH3', run: 'Run 1', tracks: ['reference', 'effect'], x_mm: 3, y_mm: 3, width_mm: 168, height_mm: 92 });
+    await act('add_figure_panel', { figure: 'GRB2 SH3', kind: 'structure', view: 'Core', x_mm: 3, y_mm: 98, width_mm: 62, height_mm: 85 });
+    await act('add_figure_panel', { figure: 'GRB2 SH3', kind: 'qc', subject: 'Run 1', finding: 'excess-variance', x_mm: 68, y_mm: 98, width_mm: 103, height_mm: 85 });
+    await js(`(() => { window.mavescape.figuresView = { figure: window.mavescape.store.ws.figures[0].id, panel: 'panel-3' }; window.mavescape.store.notify(['ws']); })()`);
+    await sleep(1500);
+  },
+  // Hsp90's checkpoint: Run 2 over the whole time course, a checkpoint, the columns of generations
+  // 9 to 21 "Not used" and scored again; the Report view with what changed and its map.
+  async 'hsp90-checkpoint'() {
+    await example('hsp90');
+    await act('score', { parameters: { timeScale: 'course' } });
+    await act('checkpoint', { name: 'All eight samples' });
+    let design = JSON.parse(await js('JSON.stringify(window.mavescape.store.ws.design)'));
+    for (const column of ['Gen_9', 'Gen_12', 'Gen_15', 'Gen_18', 'Gen_21']) design = assignColumn(design, column, { kind: 'ignored', reason: 'not used: the first three samples fitted, as the authors fit null-like variants' }).design;
+    await act('set_design', { design });
+    await act('score', { parameters: { timeScale: 'course' } });
+    await act('diff');
+    await sleep(1500);
+  },
+  // The BRCA1 RING domain certified without its tables, then verified with MaveDB's two files
+  // beside it, as a reviewer would; the Certificate pane and the verification's details.
+  async 'brca1-ring-certificate'() {
+    await example('brca1-ring');
+    await act('score', { preset: 'enrich2' });
+    const path = join(temp, 'brca1-ring.certificate.msz');
+    await act('certify', { path, tables: false, overwrite: true });
+    const [, dir] = MAVEDB_TABLES.find(([urn]) => urn === 'urn:mavedb:00000003-a-2');
+    await act('verify_certificate', { paths: [path, join(dir, 'scores.csv'), join(dir, 'counts.csv')], library: false });
+    await sleep(1000);
+    await clearToasts();
+    await click('Details');
+    await sleep(600);
   },
   // The record: a run's exports, from the workflow strip.
   async record() {

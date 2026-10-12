@@ -19,6 +19,7 @@ lede: A certificate lets anyone check that the analysis gives the numbers it rep
       <h2 id="make">Making one</h2>
       <p>In the Report view's <strong>Certificate</strong> pane, <strong>Certify…</strong> computes every number again from the files in the library and writes the certificate. It runs in a worker, so the window stays responsive. Scripts use <code>certify</code> (<a href="scripting.html">Remote control</a>).</p>
       <p>The count tables are included unless you uncheck them. For data that cannot be shared, leave them out: each table is then named by its SHA-256 only, and whoever verifies the certificate gives the tables beside it. Annotation files and figure images always go in. Structure files go in when the library holds them all.</p>
+      <p>Leaving them out also suits tables that are public already. BRCA1 RING's example is opened from MaveDB, and its certificate made without its tables names them by the SHA-256 of MaveDB's own files: a reviewer downloads the two from the record and verifies it with them (<a href="examples.html#brca1-ring">Examples</a>).</p>
       <p>If making a certificate finds that a run's scores computed now are not the ones recorded when it was scored, or that an analysis kept in the report no longer computes the same, it records the numbers the files give now and says so in its notes.</p>
 
       <h2 id="verify">Verifying one</h2>

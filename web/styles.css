@@ -1169,7 +1169,7 @@ dl.kv.annotations dd { white-space: normal; }
 .report-doc .table-scroll { overflow-x: auto; }
 .report-doc table.data td { word-break: break-word; }
 .report-doc table.data td.r, .report-doc table.data th.r { white-space: nowrap; word-break: normal; }
-.report-doc .report-cite { color: var(--accent); text-decoration: none; }
+.report-doc .report-cite { color: var(--accent); text-decoration: underline dotted; text-underline-offset: 2px; }
 .report-references { padding-left: 22px; font-size: 12.5px; }
 .report-references li { margin-bottom: 6px; scroll-margin-top: 12px; }
 .report-side { min-height: 0; overflow: auto; }

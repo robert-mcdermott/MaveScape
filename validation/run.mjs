@@ -118,10 +118,11 @@ import { writeReport } from '../web/lib/report.js';
 import { checkReferences, contextOf, CROSSREF_EXCEPTIONS, reportWorkspace } from './report-cases.mjs';
 import { movedApart, pairsFor, plantedChanges } from './diff-cases.mjs';
 import { certifiedWorkspace, checkTraced, externalReferences, repack, tamperings, windowExample } from './certificate-cases.mjs';
+import { GRB2_ACKNOWLEDGED, grb2Figure, hsp90Checkpoint, ringCertified } from './example-lessons.mjs';
 import { certificateFingerprint, countNumbers, encodeAll, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
 import { canonicalJSON } from '../web/lib/workspace.js';
 import { panelDigests } from '../web/lib/figure-manifest.js';
-import { analysisState, changeMap, diffStates, pairWords, stateDigest } from '../web/lib/diff.js';
+import { analysisState, changeMap, diffStates, pairWords, stateDigest, variantChanges } from '../web/lib/diff.js';
 import { buildManifest, checkManifest, compareDrawings, compareManifest, embedPNG, embedSVG, figureForWorkspace, pdfAttachment, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { comparisonCharts, comparisonPoints, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
 import { encodePNG } from '../web/lib/png.js';
@@ -2344,7 +2345,7 @@ const suites = {
   // own lesson, checked: Hsp90's codon variants and its per-generation scores against the
   // published fitness, factor IX against MultiSTEP's scores, and the simulated problems against
   // their truth.
-  examples() {
+  async examples() {
     const pct = (x) => `${(100 * x).toFixed(1)}%`;
     const opened = new Map();
     for (const example of EXAMPLES) {
@@ -2365,7 +2366,7 @@ const suites = {
       const gaps = o.readiness.gaps.map((g) => g.id);
       const missing = (example.teaches ?? []).filter((g) => !gaps.includes(g));
       check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
-      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare', 'structure'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
+      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare', 'structure', 'figures', 'report'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
       if (example.mavedb) {
         // Opened from MaveDB: its tables the ones the example was made with (and the validation
         // pins), each record's license the example's (several records, wave 3 slice 6).
@@ -2672,6 +2673,71 @@ const suites = {
       check('examples', 'TP53, two screens on two scales, as the guide says: matched on P04637\'s numbering, r −0.78 as published; with Kotler et al.\'s direction stated, r 0.78 and ρ 0.72, Lin\'s concordance withheld; rescaled by their anchors, Lin\'s concordance 0.78 and a bias of −0.04; four of the eight positions that differ most at 180–184, lower under etoposide; Giacomelli et al.\'s nutlin-3 screen against etoposide r 0.75 and 0.72 rescaled', `${asPublished.matched.n} matched, r ${fmt(asPublished.statistics.pearson.r, 3)}; stated r ${fmt(negated.statistics.pearson.r, 3)}, ρ ${fmt(negated.statistics.spearman.rho, 3)}, Lin's ${negated.statistics.concordance ? 'given' : 'withheld'}; rescaled Lin's ${fmt(rescaled.statistics.concordance.ccc, 3)}, bias ${fmt(ba.bias, 3)} (${fmt(ba.lower, 2)} to ${fmt(ba.upper, 2)}); largest ${largest.map((x) => `${x.residue}${x.reference} ${fmt(x.mean, 2)}`).join(', ')}; nutlin ${compareSides(a, nutlin.side).matched.n}, r ${fmt(compareSides(a, nutlin.side).statistics.pearson.r, 3)}, rescaled ${fmt(compareSides(a, nutlin.side, { scale: 'synonymous-nonsense' }).statistics.concordance.ccc, 3)}`,
         asPublished.matched.n === 3341 && fmt(asPublished.statistics.pearson.r, 2) === '-0.78' && fmt(negated.statistics.pearson.r, 2) === '0.78' && fmt(negated.statistics.spearman.rho, 2) === '0.72' && !negated.statistics.concordance && fmt(rescaled.statistics.concordance.ccc, 2) === '0.78' && fmt(ba.bias, 2) === '-0.04' && fmt(ba.lower, 2) === '-0.71' && fmt(ba.upper, 2) === '0.63' && helix.length === 4 && helix.every((x) => x.mean < 0) && fmt(compareSides(a, nutlin.side).statistics.pearson.r, 2) === '0.75' && fmt(compareSides(a, nutlin.side, { scale: 'synonymous-nonsense' }).statistics.concordance.ccc, 2) === '0.72' && !rescaled.discordance.valid
         && said('tp53-screens', '3,341 variants', 'r −0.78', 'r 0.78', 'ρ 0.72', 'concordance is 0.78', 'bias −0.04', '−0.71 to 0.63', 'D184, E180, R181, C182', 'r 0.75', '0.72 rescaled'), 'as the guide says');
+    }
+
+    // Wave 6, slice 8: the wave's lessons on the examples (example-lessons.mjs). GRB2's figure: Run
+    // 1's map, the view Core and the QC finding behind its bottleneck, acknowledged; exported as PDF
+    // and read back.
+    {
+      const f = await grb2Figure();
+      const [a, b, c] = f.manifest.panels;
+      const pdb = sha256(cachedBytes('pdb', pdbFile('2VWF')));
+      const status = (cmp) => cmp.panels.map((p) => `${p.letter} ${p.status}${p.changes.length ? ` (${p.changes.join('; ')})` : ''}`).join(', ');
+      const rescoredSays = f.rescored.panels.map((p) => p.status).join() === 'changed,unchanged,changed' && f.rescored.panels.filter((p) => p.status === 'changed').every((p) => p.changes.join() === 'Run 1\'s table was scored again since (Run 3)');
+      check('examples', 'GRB2\'s figure as its guide makes it (its sixth step): Run 1\'s map, the view Core of 2VWF and the variance beyond counting (failing, acknowledged in the first step), exported as PDF with its manifest: Run 1 by its output\'s SHA-256, the QC thresholds and the acknowledgement\'s reason, 2VWF and the view\'s image by theirs; read back, every panel as it was drawn, and once the table is scored again the map and the QC panel say so (the view\'s image stands in for the window\'s; the remote session draws it)', `${f.shows.join('; ')}; ${f.finding.title} ${f.finding.status}, ${f.finding.value}; manifest: Run 1 ${a.inputs.run.output.slice(0, 12)}…, acknowledged "${c.inputs.acknowledged?.slice(0, 40)}…", 2VWF ${b.inputs.structure?.sha256.slice(0, 12)}…, image ${b.inputs.image.slice(0, 12)}…; its smallest text ${f.drawn.smallest.toFixed(1)} pt, ${f.drawn.notes.length} notes; PDF ${f.pdf.length.toLocaleString('en-US')} bytes, its manifest ${f.read?.fingerprint === f.manifest.fingerprint ? 'as written' : 'not read back'}; ${status(f.comparison)}; after Run 3: ${status(f.rescored)}`,
+        f.shows.join('; ') === 'A, the map of Run 1; B, the structure view "Core"; C, the QC finding "Variance beyond counting (bottleneck)" of Run 1' && !f.drawn.notes.length && f.drawn.smallest >= 6 && f.finding.status === 'fail' && /^11\.\d× the counting variance/.test(f.finding.value)
+          && a.inputs.run.output === f.run1.output.sha256 && c.inputs.run.output === f.run1.output.sha256 && c.inputs.acknowledged === GRB2_ACKNOWLEDGED && b.inputs.structure?.sha256 === pdb && f.files.has(b.inputs.image)
+          && f.read?.fingerprint === f.manifest.fingerprint && f.comparison.intact && f.comparison.panels.every((p) => p.status === 'unchanged') && rescoredSays
+          && said('grb2-sh3', 'Acknowledge it with that reason', 'Add to figure', 'Export the figure as PDF', 'Run 1 by its output\'s SHA-256, the QC thresholds and the acknowledgement', 'once the table is scored again, the map and the QC panel say so'), 'A map, B Core, C the finding (fail, acknowledged), text ≥ 6 pt; as written; unchanged; A and C scored again since');
+    }
+
+    // Hsp90: a checkpoint, then the first three samples fitted (generations 9 to 21 not used).
+    {
+      const h = hsp90Checkpoint();
+      const [pair] = h.diff.pairs;
+      const t = pair.targets[0];
+      const perGeneration = variantChanges(h.g.run, h.g.results, h.apart.firstThree.run, h.apart.firstThree.results)[0];
+      const apart = movedApart(h.g.results, h.apart.firstThree.results);
+      const crossings = t.crossings.map((x) => `${x.n} ${x.from} → ${x.to}`);
+      check('examples', 'Hsp90\'s checkpoint as its guide says (its fifth step): from "All eight samples", the columns of generations 9 to 21 set "Not used" and scored again with Run 2\'s parameters (over the time course): the design\'s change in words; 148 of the 188 variants moved beyond their earlier 95% interval, compared in Run 2\'s units (Run 3 spans 6 generations, Run 2 21), and 102 changed class, 93 from lower than the wild type to like it; the same per generation (Run 1 against the first three), and as computed apart', `${h.words[1]} ${h.words.at(-1)} Per generation: ${perGeneration.moved} moved, ${perGeneration.crossed} changed class; apart ${apart.moved.size} and ${apart.crossed.size}`,
+        h.diff.changes.length === 2 && /the columns Gen_9, Gen_12, Gen_15, Gen_18 and Gen_21 set aside/.test(h.words[1]) && t.both === 188 && t.moved === 148 && t.crossed === 102 && crossings[0] === '93 lower than the wild type → like the wild type' && t.units?.factor === 3.5 && t.units.why.join() === 'the time points changed'
+          && perGeneration.moved === 148 && perGeneration.crossed === 102 && !perGeneration.units && apart.moved.size === 148 && apart.crossed.size === 102
+          && said('hsp90', 'keep a checkpoint ("All eight samples")', 'generations 9 to 21 "Not used"', '148 of the 188 variants moved beyond their earlier 95% interval and 102 changed class', '93 from lower than the wild type to like it'), '148 and 102 (93 lower → like), × 3.5; the same per generation and apart');
+      // Why: the time courses bend. Each per generation, less the wild type's.
+      const medians = (results) => {
+        const cnd = results.conditions[0];
+        const wt = cnd.score[results.controls.wt];
+        const off = h.g.run.inputs.design.targets[0].offset;
+        const by = new Map();
+        const stops = [];
+        results.variants.key.forEach((k, i) => {
+          if (cnd.reason[i]) return;
+          if (results.variants.kind[i] === KIND.NONSENSE) stops.push(cnd.score[i] - wt);
+          if (results.variants.kind[i] === KIND.MISSENSE) by.set(results.variants.position[i] + off, [...(by.get(results.variants.position[i] + off) ?? []), cnd.score[i] - wt]);
+        });
+        return { stops: median(stops), at: (p) => median(by.get(p)) };
+      };
+      const all = medians(h.g.results);
+      const first = medians(h.apart.firstThree.results);
+      const late = [584, 588, 589];
+      const pc = variantChanges(h.g.run, h.g.results, h.apart.pseudocount.run, h.apart.pseudocount.results)[0];
+      check('examples', 'Hsp90\'s time courses bend, as its guide says: per generation, the stops\' median falls faster over the first six generations than over 21 (not to the published −0.77), while at 584, 588 and 589 the substitutions\' median has barely begun to fall; the pseudocount alone (0.5 → 0.1) moves no variant and changes no class', `stops ${fmt(first.stops, 3)} over 6 generations, ${fmt(all.stops, 3)} over 21; ${late.map((p) => `${p}: ${fmt(first.at(p), 3)} against ${fmt(all.at(p), 3)}`).join(', ')}; the pseudocount: ${pc.moved} moved, ${pc.crossed} changed class of ${pc.both}`,
+        fmt(first.stops, 2) === '-0.41' && fmt(all.stops, 2) === '-0.32' && late.every((p) => first.at(p) > -0.03 && first.at(p) < 0) && late.every((p) => all.at(p) <= -0.16 && all.at(p) >= -0.26) && pc.moved === 0 && pc.crossed === 0
+          && said('hsp90', '−0.41 per generation over six generations, −0.32 over 21', 'about −0.02 per generation, against −0.16 to −0.26', 'The pseudocount moves none (0.5 → 0.1)'), '−0.41 and −0.32; > −0.03 against −0.16 to −0.26; none');
+    }
+
+    // The BRCA1 RING domain certified, verified and reported (external data: MaveDB's tables).
+    if (opened.has('brca1-ring')) {
+      const r = await ringCertified();
+      const c = r.made.certificate;
+      const traced = checkTraced(r.made.review, c, r.ws);
+      const named = r.bare.certificate.inputs.map((x) => x.sha256).sort();
+      check('examples', 'BRCA1 RING certified as its guide says (its fifth step): the published scores, Run 1 and the Enrich2 rescoring, 110,975 numbers computed again from MaveDB\'s two tables and verified bit for bit; its review report self-contained, every number it shows traced and the certificate\'s, any variant\'s looked up in it', `${r.ws.runs.map((x) => x.name).join(', ')}: ${c.total.toLocaleString('en-US')} numbers; ${r.verified.verdict} (${r.verified.numbers.same.toLocaleString('en-US')} identical); review ${(r.made.review.length / 1e6).toFixed(1)} MB, ${traced.total.toLocaleString('en-US')} traced, ${traced.bad.length} not as recorded, ${externalReferences(r.made.review).length} references outside`,
+        r.ws.runs.map((x) => x.name).join() === 'Published scores,Run 1,Run 2' && c.total === 110975 && r.verified.verdict === 'verified' && r.verified.numbers.same === c.total && traced.total >= 200 && !traced.bad.length && !externalReferences(r.made.review).length
+          && said('brca1-ring', '110,975', 'verified bit for bit', 'every number it shows traced'), '110,975; verified; every number traced, nothing outside');
+      check('examples', 'BRCA1 RING certified without its tables, as its guide says: the two tables named by the SHA-256 of MaveDB\'s files (the example\'s), not checkable alone, verified with the two files downloaded from the record', `named ${named.map((x) => `${x.slice(0, 12)}…`).join(', ')}; alone: ${r.missing.verdict} (exit ${r.missing.exit}, ${r.missing.inputs.filter((x) => x.status !== 'ok').length} missing); with MaveDB's files: ${r.supplied.verdict}`,
+        named.join() === r.tables.map((x) => x.sha256).sort().join() && r.tables.every((x) => x.held) && r.bare.certificate.inputs.every((x) => x.path === null) && r.missing.verdict === 'incomplete' && r.missing.exit === 2 && r.supplied.verdict === 'verified' && r.supplied.numbers.same === c.total
+          && said('brca1-ring', 'it names them by the SHA-256 of MaveDB\'s files', 'with the two files downloaded from the record it is verified'), 'MaveDB\'s; incomplete (exit 2); verified');
     }
   },
 
@@ -4073,7 +4139,7 @@ const suites = {
       const contact = middle(touching.map((r) => r.median));
       const rest = middle(rows.filter((r) => !touching.includes(r)).map((r) => r.median));
       const example = exampleById('grb2-sh3');
-      const bullet = example.expected.at(-1);
+      const bullet = example.expected.find((x) => x.startsWith('On 2VWF')) ?? '';
       const said = bullet.includes(`a median of ${core.toFixed(1)} Cα atoms within 10 Å, the ten highest ${surface.toFixed(1)}`) && bullet.includes(`the ten that touch the Gab2 peptide are tolerant (a median of ${contact.toFixed(2).replace('-', '−')}, against ${rest.toFixed(2).replace('-', '−')} for the rest)`) && touching.length === 10 && example.steps.some(([, text]) => text.includes(`"${words}"`));
       check('structures', 'the GRB2 example\'s guide, on 2VWF colored by the median score: its ten least tolerant residues have more Cα atoms within 10 Å (the core) than its ten most tolerant, and the residues that touch the Gab2 peptide (chain B), selected in the words its guide gives as every distance finds them, score nearer the wild type than the rest; the guide says so, with these numbers', `${rows.length} positions; neighbors within 10 Å: ten least tolerant ${core}, ten most ${surface}; touching the peptide ${touching.length} (${touching.map((r) => `${r.p.code}${r.p.reference}`).join(' ')}), ${sameResidues ? 'as the words select them' : `the words select ${byWords.length}`}: median ${fmt(contact, 2)}, the rest ${fmt(rest, 2)}; the guide ${said ? 'says so' : 'says otherwise'}`, core > surface && contact > rest && sameResidues && said && target.offset === 158, 'core packed; the binding surface tolerant; said');
     }
@@ -4735,6 +4801,17 @@ const suites = {
     const delta = spec.results.differential[0].delta;
     const compared = [...delta].filter(Number.isFinite).length;
     check('diff', 'the map of the change (the pseudocount\'s): a cell for each variant both runs scored, its change the effect after less before, drawn as the map draws a difference', `${compared} variants with a change of ${apart.both} scored in both; ${cells} cells named in the SVG`, compared === apart.both && cells > 0, 'each one');
+    // A change of units is not a change of effect (wave 6, slice 8): Hsp90's Run 1 per generation,
+    // then over the whole time course of 21 generations, every effect 21 times.
+    {
+      const h = hsp90Checkpoint();
+      const { run, results } = h.apart.course;
+      const [t] = variantChanges(h.g.run, h.g.results, run, results);
+      const words = pairWords({ a: h.g.run, b: { ...run, name: 'Run 2' }, parameters: ['the time scale unit → course'], design: [], targets: [t], findings: [], recomputed: true });
+      const spec = changeMap(h.g.run, h.g.results, run, results);
+      const largest = Math.max(...[...spec.results.differential[0].delta].filter(Number.isFinite).map(Math.abs));
+      check('diff', 'a change of units is not a change of effect: Hsp90 scored per generation, then over its whole time course (every effect 21 times): no variant moved, compared in the earlier run\'s units, and none changed class; the map of the change empty', `${words[1]} The map: the largest change ${largest.toExponential(1)}`, t.both === 188 && t.moved === 0 && t.crossed === 0 && t.units?.factor === 1 / 21 && t.units.why.join() === 'the time scale changed' && /0 moved beyond their earlier 95% interval \(Run 2's effects × 0\.0476, in Run 1's units: the time scale changed\)/.test(words[1]) && largest < 1e-12, '0 moved, 0 changed class; × 1/21; < 1e-12');
+    }
     // The report names the checkpoints.
     const rep = writeReport(base, { software: SOFTWARE });
     check('diff', 'the report names each checkpoint with its date and its state\'s SHA-256, and the decision log has its entry', rep.sections.find((x) => x.id === 'log')?.blocks.at(-1).text ?? 'none', /Checkpoints kept with the workspace, each the analysis as it stood: "Before" \(2026-10-12, state SHA-256 [0-9a-f]{12}…\)\./.test(rep.markdown) && rep.markdown.includes('Checkpoint "Before": the analysis as it stood'), 'named');

@@ -98,17 +98,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Cache the MaveDB tables the session compares with Node (DHFR's two score sets, BAP1's, TP53's three) and axe-core (the review report's accessibility)
+      - name: Cache the MaveDB tables the session compares with Node (DHFR's two score sets, BAP1's, TP53's three, BRCA1 RING's certified) and axe-core (the review report's accessibility)
         uses: actions/cache@v4
         with:
           path: |
             validation/cache/mavedb-dhfr
             validation/cache/mavedb-bap1-sge
             validation/cache/mavedb-tp53-screens
+            validation/cache/mavedb-brca1-ring
             validation/cache/axe-core
           key: validation-remote-${{ hashFiles('validation/sources.json') }}
       - name: Fetch those MaveDB tables and axe-core
-        run: node validation/fetch.mjs mavedb-dhfr mavedb-bap1-sge mavedb-tp53-screens axe-core
+        run: node validation/fetch.mjs mavedb-dhfr mavedb-bap1-sge mavedb-tp53-screens mavedb-brca1-ring axe-core
       - name: Every remote action, in the program and headless Chrome, against Node
         run: node validation/remote-session.mjs --verbose --require-data
         env:

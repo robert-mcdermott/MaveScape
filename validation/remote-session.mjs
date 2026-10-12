@@ -37,7 +37,7 @@ import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { builtinTracks, tracksCSV } from '../web/lib/tracks.js';
 import { figureMarks, figureSVG } from '../web/lib/figures.js';
-import { buildManifest, checkManifest, embedSVG, readFigureManifest } from '../web/lib/figure-manifest.js';
+import { buildManifest, checkManifest, embedSVG, panelDigests, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { asPDFText, decodePNG, readPDF, readSVG, sameRects } from './figure-cases.mjs';
 import { qcPanelData } from '../web/lib/qc-plots.js';
 import { comparisonCharts, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
@@ -55,7 +55,9 @@ import { robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_SEED 
 import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
-import { readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
+import { computeNumbers, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
+import { GRB2_ACKNOWLEDGED, GRB2_FIGURE, hsp90Checkpoint } from './example-lessons.mjs';
+import { assignColumn } from '../web/lib/design-edit.js';
 import { checkTraced, externalReferences, repack, tamperings } from './certificate-cases.mjs';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLE_STRUCTURES, cachedBytes, cachedJSON, exampleTarget, modelFile, nodeEvidence, openCached, paeFixture, pdbFile } from './structure-cases.mjs';
@@ -85,6 +87,10 @@ const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:0000
 // them: the example opens the first, and compares the others kept beside.
 const TP53 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-tp53-screens');
 const TP53_TABLES = [['urn:mavedb:00000068-c-1', 'scores.csv'], ['urn:mavedb:00000068-b-1', 'nutlin.csv'], ['urn:mavedb:00000059-a-1', 'kotler.csv']];
+// The BRCA1 RING domain's scores and counts (wave 6, slice 8), as node validation/fetch.mjs
+// mavedb-brca1-ring keeps them: the example opened offline, then certified.
+const RING = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-brca1-ring', 'aa');
+const RING_URN = 'urn:mavedb:00000003-a-2';
 const results = [];
 const fmtShare = (x) => `${(100 * x).toFixed(0)}% drawn`;
 function check(name, value, ok, required = '') {
@@ -115,6 +121,13 @@ async function startMaveScape() {
         cpSync(join(DHFR, dir, `${table}.csv`), join(cache, 'mavedb', name));
         writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
       }
+    }
+  }
+  if (existsSync(join(RING, 'counts.csv'))) {
+    for (const table of ['scores', 'counts']) {
+      const name = `${RING_URN.replaceAll(':', '_')}.${table}.csv`;
+      cpSync(join(RING, `${table}.csv`), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${RING_URN}/${table}`, retrieved: '2026-10-08T22:09:00Z' }, null, 2)}\n`);
     }
   }
   if (existsSync(join(TP53, 'kotler.csv'))) {
@@ -881,6 +894,59 @@ try {
     if (requireData) check('TP53\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
   }
 
+  // Wave 6, slice 8: Hsp90's checkpoint as its guide makes it. Run 2 over the whole time course, a
+  // checkpoint, the columns of generations 9 to 21 "Not used" (as the Experiment view sets them) and
+  // scored again: the runs Node's, and what changed as Node says it.
+  {
+    await act('open_example', { id: 'hsp90' });
+    const two = await act('score', { parameters: { timeScale: 'course' } });
+    await act('checkpoint', { name: 'All eight samples' });
+    let cut = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws.design)'));
+    for (const column of ['Gen_9', 'Gen_12', 'Gen_15', 'Gen_18', 'Gen_21']) cut = assignColumn(cut, column, { kind: 'ignored', reason: 'not used: the first three samples fitted, as the authors fit null-like variants' }).design;
+    await act('set_design', { design: cut });
+    const three = await act('score', { parameters: { timeScale: 'course' } });
+    const changed = await act('diff', {});
+    const node = hsp90Checkpoint();
+    const runs = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws.runs.map((r) => ({ name: r.name, output: r.output.sha256 })))'));
+    const [t] = changed.data.pairs[0]?.targets ?? [];
+    const [n] = node.diff.pairs[0].targets;
+    check('Hsp90\'s checkpoint as its guide makes it: Run 2 over the whole time course, a checkpoint, generations 9 to 21 "Not used" and scored again: Run 2 and Run 3 Node\'s, and what changed as Node says it (148 of 188 moved beyond their earlier 95% interval in Run 2\'s units, 102 changed class); the Report view shows it',
+      `${runs.map((r) => `${r.name} ${r.output.slice(0, 12)}…`).join(', ')} | ${changed.data.words.at(-1)}`,
+      two.ok !== false && three.ok !== false && runs.find((r) => r.name === 'Run 2')?.output === node.runs.run2.output.sha256 && runs.find((r) => r.name === 'Run 3')?.output === node.runs.run3.output.sha256
+        && t?.moved === 148 && t.crossed === 102 && JSON.stringify(t) === JSON.stringify(n) && changed.data.words.at(-1) === node.words.at(-1) && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'report');
+  }
+
+  // The BRCA1 RING domain certified as its guide makes it (wave 6, slice 8): opened offline from
+  // MaveDB's two tables, scored with the Enrich2-compatible preset, certified in the window, the
+  // certificate verified in Node bit for bit; certified without its tables and verified in the
+  // window with MaveDB's two files given beside it, as a reviewer would; its review report Node's.
+  if (existsSync(join(RING, 'counts.csv'))) {
+    const opened = await act('open_example', { id: 'brca1-ring' });
+    const enrich2 = await act('score', { preset: 'enrich2' });
+    const certPath = join(out, 'brca1-ring.certificate.msz');
+    const made = await act('certify', { path: certPath });
+    const read = await readCertificate(new Uint8Array(readFileSync(certPath)));
+    const inNode = await verifyCertificate(read, { software: windowSoftware });
+    const barePath = join(out, 'brca1-ring.bare.certificate.msz');
+    await act('certify', { path: barePath, tables: false });
+    const bare = await readCertificate(new Uint8Array(readFileSync(barePath)));
+    const alone = await act('verify_certificate', { paths: [barePath], library: false, show: false });
+    const given = await act('verify_certificate', { paths: [barePath, join(RING, 'scores.csv'), join(RING, 'counts.csv')], library: false, show: false });
+    const example = exampleById('brca1-ring');
+    const reviewPath = join(out, 'brca1-ring.review.html');
+    await act('review_report', { path: reviewPath });
+    const reviewHTML = readFileSync(reviewPath, 'utf8');
+    const traced = checkTraced(reviewHTML, read.certificate, read.archive.ws);
+    check('open_example "brca1-ring" offline, scored with the Enrich2-compatible preset and certified, as its guide says: the published scores, Run 1 and Run 2, 110,975 numbers, verified in Node bit for bit; without its tables, named by the SHA-256 of MaveDB\'s files, not checkable alone and verified with MaveDB\'s two files beside it; the review report\'s numbers the certificate\'s',
+      `${read.archive.ws.runs.map((r) => r.name).join(', ')}: ${read.certificate.total.toLocaleString('en-US')} numbers; Node ${inNode.verdict}; bare: ${bare.certificate.inputs.map((i) => `${i.sha256.slice(0, 12)}…`).join(', ')}; alone ${alone.data.verdict}, with MaveDB's files ${given.data.verdict}; review ${traced.total} traced, ${traced.bad.length} wrong`,
+      opened.ok !== false && enrich2.ok !== false && made.ok !== false && read.archive.ws.runs.map((r) => r.name).join() === 'Published scores,Run 1,Run 2' && read.certificate.total === 110975 && inNode.verdict === 'verified' && inNode.numbers.same === 110975
+        && bare.certificate.inputs.map((i) => i.sha256).sort().join() === [example.mavedb.scores.sha256, example.mavedb.counts.sha256].sort().join() && alone.data.verdict === 'incomplete' && given.data.verdict === 'verified'
+        && traced.total >= 200 && !traced.bad.length && !externalReferences(reviewHTML).length);
+  } else {
+    console.log('  BRCA1 RING\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-brca1-ring (its certificate\'s checks skipped)');
+    if (requireData) check('BRCA1 RING\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
+  }
+
   // Two conditions (wave 2, slice 6): the example opens on its differential map; scored in the
   // window with Node's hash; the map, a variant and the differential export as Node makes them.
   await act('open_example', { id: 'simulated-conditions' });
@@ -1198,6 +1264,40 @@ try {
   const refetchedView = await act('open_structure_view', { name: 'Core' });
   await browser.eval(`(() => { window.mavescape.library.getFile = window.__getFile; return true; })()`);
   check('an archive with the structures named by checksum only: no structure file in it; a view whose file the library lacks fetches it again by its ID (the fetcher\'s cache) and finds its SHA-256 the one saved', `${lightArchive.manifest.structures}, ${lightArchive.sources.has(vwfSha) ? 'the file in it' : 'no file'} | ${refetchedView.message}`, lightArchive.manifest.structures === 'checksums' && !lightArchive.sources.has(vwfSha) && refetchedView.data.notes.some((n) => /fetched again by its ID, its SHA-256 the one saved/.test(n)));
+  // Wave 6, slice 8: GRB2's figure as its guide makes it. The variance beyond counting acknowledged,
+  // then Run 1's map, the view Core and the finding on one page, exported as PDF and dropped back
+  // (check_figure): every panel as it was drawn, drawn again the same by Node from the workspace's
+  // archive; the acknowledgement withdrawn, the QC panel says so.
+  {
+    await act('acknowledge_finding', { finding: 'excess-variance', run: 'Run 1', reason: GRB2_ACKNOWLEDGED });
+    await act('create_figure', { name: 'GRB2 SH3', size: 'double', height_mm: GRB2_FIGURE.height });
+    const at = (k) => ({ x_mm: GRB2_FIGURE[k][0], y_mm: GRB2_FIGURE[k][1], width_mm: GRB2_FIGURE[k][2], height_mm: GRB2_FIGURE[k][3] });
+    const placed = [
+      await act('add_figure_panel', { figure: 'GRB2 SH3', run: 'Run 1', tracks: ['reference', 'effect'], ...at('map') }),
+      await act('add_figure_panel', { figure: 'GRB2 SH3', kind: 'structure', view: 'Core', ...at('structure') }),
+      await act('add_figure_panel', { figure: 'GRB2 SH3', kind: 'qc', subject: 'Run 1', finding: 'excess-variance', ...at('qc') }),
+    ];
+    const laidOut = (await act('figures', { figure: 'GRB2 SH3' })).data.figures[0];
+    const figurePath = join(out, 'grb2-sh3.pdf');
+    await act('export_figure', { figure: 'GRB2 SH3', path: figurePath });
+    const manifest = readFigureManifest(new Uint8Array(readFileSync(figurePath)));
+    const dropped = await act('check_figure', { paths: [figurePath] });
+    await act('export', { what: 'archive', path: join(out, 'grb2-figure.msz') });
+    const archived = await readArchive(readFileSync(join(out, 'grb2-figure.msz')));
+    const fig = archived.ws.figures.find((f) => f.name === 'GRB2 SH3');
+    const computed = await computeNumbers(archived.ws, async (sha) => archived.sources.get(sha) ?? null, { software: windowSoftware });
+    const digests = panelDigests(fig, computed.detail.figures.get(fig.id).drawn);
+    await act('acknowledge_finding', { finding: 'excess-variance', run: 'Run 1', reason: '' });
+    const withdrawn = await act('check_figure', { paths: [figurePath] });
+    const run1 = archived.ws.runs.find((r) => r.name === 'Run 1');
+    const [a, b, c] = manifest?.panels ?? [];
+    const statuses = (r) => r.data.panels.map((x) => `${x.letter} ${x.status}${x.changes.length ? ` (${x.changes.join('; ')})` : ''}`).join(', ');
+    check('GRB2\'s figure as its guide makes it: the variance beyond counting acknowledged, Run 1\'s map, the view Core and the finding on one page, exported as PDF with its manifest (Run 1 by its output\'s SHA-256, the acknowledgement\'s reason, 2VWF and the view\'s image by theirs); dropped back, every panel as it was drawn, and Node draws each again from the archive the same; the acknowledgement withdrawn, the QC panel says so',
+      `${placed.map((x) => `${x.data.panel.letter}: ${x.data.panel.shows}`).join('; ')} | ${statuses(dropped)}; Node's drawings ${fig?.panels.filter((x) => digests.get(x.id) === manifest?.panels.find((m) => m.id === x.id)?.drawing).length} of 3 the manifest's | withdrawn: ${statuses(withdrawn)}`,
+      placed.map((x) => x.data.panel.letter).join() === 'A,B,C' && laidOut.panels.every((x) => !x.notes.length) && a?.inputs.run.output === run1.output.sha256 && c?.inputs.acknowledged === GRB2_ACKNOWLEDGED && b?.inputs.structure?.sha256 === vwfSha && archived.sources.has(b?.inputs.image)
+        && dropped.data.intact && dropped.data.panels.every((x) => x.status === 'unchanged') && fig.panels.every((x) => digests.get(x.id) === manifest.panels.find((m) => m.id === x.id)?.drawing)
+        && withdrawn.data.panels.map((x) => x.status).join() === 'unchanged,unchanged,changed' && withdrawn.data.panels[2].changes.join() === 'the finding\'s acknowledgement was withdrawn since');
+  }
   const removedView = await act('remove_structure_view', { name: 'Core' });
   const noView = await send('open_structure_view', { name: 'Core' });
   check('remove_structure_view: the view removed, and its structure with it (no other view shows it); opened again, refused', `${removedView.message} | ${noView.message}`, !removedView.data.views.includes('Core') && !removedView.data.structures.length && !noView.ok);

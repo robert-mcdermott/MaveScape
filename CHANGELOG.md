@@ -127,6 +127,16 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
 - The window's figures, comparisons, QC subjects and annotation tracks are resolved by shared
   library code (`web/lib/figure-data.js`, `compare-pair.js`, `qc-subjects.js`, `run-tracks.js`,
   `source-table.js`, `score-input.js`), so the certificate draws and computes exactly as the views do.
+- **The wave's lessons on the examples** (wave 6, slice 8). GRB2's guide acknowledges its variance
+  beyond counting and ends with a figure of Run 1's map, its saved view of 2VWF and that finding,
+  exported as PDF and dropped back on the window. Hsp90's keeps a checkpoint before fitting only
+  the first three samples, as the authors fit their null-like variants: 148 of its 188 variants
+  move beyond their earlier interval and 102 change class, while the pseudocount moves none. BRCA1
+  RING's is certified (110,975 numbers from MaveDB's two tables, verified bit for bit), reported,
+  and certified without its tables, which MaveDB's files then verify. Each guide keeps six steps:
+  GRB2's deposit joins its scoring step, Hsp90's methods its scoring step, BRCA1 RING's round trip
+  one step. The examples page, the Figures, Report and Certificates pages and three screenshot
+  scenes (`grb2-figure`, `hsp90-checkpoint`, `brca1-ring-certificate`) say so.
 
 ### Changed
 
@@ -151,6 +161,17 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
 - A figure's SVG named each panel's group (`aria-label`) without a role, which assistive technology
   may ignore and accessibility checkers flag; it is now a group (`role="group"`). Panel drawings'
   digests change with it.
+- What changed between two runs compared their effects in each run's own units: a time series
+  scored over its whole course rather than per unit of time (every effect 21 times Hsp90's per
+  generation) was said to have moved 187 of 188 variants. The later run's effects are now put in
+  the earlier run's units when the time scale, a time series' time points or the rescaling changed
+  them, and the diff says so; effects that cannot be put in one unit are not said to have moved.
+- A design's columns set aside were said as "its ignoredColumns changed"; the diff names them
+  ("the columns Gen_9, … set aside").
+- Accessibility, found by the screenshots' axe-core audit: the sidebar's empty sections (no
+  selections, no structure views) were declared as lists without items; they are not lists until
+  they hold one. The Report's citations ([1]) were told from their text by color alone; they are
+  underlined (dotted).
 
 ### Validation
 
@@ -212,6 +233,15 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   data (`sources.json`).
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
   was lost on CI's runner when the command's exit was seen before its output.
+- The `examples` suite grows by five checks (wave 6, slice 8; `validation/example-lessons.mjs`):
+  GRB2's figure made as its guide makes it, its manifest naming Run 1, the acknowledgement and the
+  view, read back as drawn, and its map and QC panels saying a later rescoring; Hsp90's checkpoint,
+  the first three samples moving 148 variants in Run 2's units as per generation and as computed
+  apart, its time courses bending as the guide says and the pseudocount moving none; BRCA1 RING
+  certified, verified, its review traced, and verified without its tables from MaveDB's files. The
+  `diff` suite (7): a change of units moves nothing. The remote session (196): the three made in
+  the window, as Node makes them (RING's certificate verified in Node, MaveDB's two tables given
+  beside the one without them).
 
 ## 0.5.0 (2026-10-12)
 

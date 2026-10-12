@@ -27,6 +27,8 @@ const list = (items) => (items.length > 2 ? `${items.slice(0, -1).join(', ')} an
 const count = (n) => n.toLocaleString('en-US');
 const plural = (n, word, many = `${word}s`) => `${count(n)} ${n === 1 ? word : many}`;
 const short = (hash) => (hash ? `${hash.slice(0, 12)}…` : '—');
+// A factor between units, to three significant figures (1/21 as 0.0476).
+const fmtFactor = (x) => Number(x.toPrecision(3)).toString();
 const lower = (text) => `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
 const show = (v) => (v === null || v === undefined ? 'none' : Array.isArray(v) ? (v.length ? v.join(', ') : 'none') : typeof v === 'boolean' ? (v ? 'yes' : 'no') : typeof v === 'object' ? canonicalJSON(v) : String(v));
 // An effect beyond the earlier 95% interval (the robustness check's Z975).
@@ -118,7 +120,14 @@ export function designChanges(a, b) {
   out.push(...listChanges(a.replicates, b.replicates, 'replicate', fieldsChanged));
   out.push(...listChanges(a.conditions, b.conditions, 'condition', fieldsChanged));
   for (const key of ['readout', 'controls', 'time', 'bins', 'source', 'assay', 'scores']) if (!same(a[key], b[key])) out.push(`the ${key} ${a[key] && b[key] ? fieldsChanged(a[key], b[key]) : a[key] ? 'removed' : 'added'}`);
-  const known = new Set(['format', 'version', 'name', 'model', 'targets', 'variants', 'library', 'samples', 'replicates', 'conditions', 'readout', 'controls', 'time', 'bins', 'source', 'assay', 'scores']);
+  // The columns set aside (Experiment's "Not used"), by name.
+  const aside = (d) => (d.ignoredColumns ?? []).map((x) => x.column);
+  const added = aside(b).filter((c) => !aside(a).includes(c));
+  const back = aside(a).filter((c) => !aside(b).includes(c));
+  if (added.length) out.push(`${added.length === 1 ? 'the column' : 'the columns'} ${list(added)} set aside`);
+  if (back.length) out.push(`${back.length === 1 ? 'the column' : 'the columns'} ${list(back)} no longer set aside`);
+  if (!added.length && !back.length && !same(a.ignoredColumns, b.ignoredColumns)) out.push('why columns are set aside changed');
+  const known = new Set(['format', 'version', 'name', 'model', 'targets', 'variants', 'library', 'samples', 'replicates', 'conditions', 'readout', 'controls', 'time', 'bins', 'source', 'assay', 'scores', 'ignoredColumns']);
   for (const key of Object.keys({ ...a, ...b })) if (!known.has(key) && !same(a[key], b[key])) out.push(`its ${key} changed`);
   return out;
 }
@@ -139,18 +148,69 @@ export function runPairs(before, after) {
   return [...lb].filter(([table]) => la.has(table)).map(([table, b]) => ({ table, a: la.get(table), b }));
 }
 
+// The units of each condition's effects (and each difference's), so that two runs' are compared
+// in the same ones (wave 6, slice 8): a time series scored over its course (the default) is a
+// change over its replicates' span of time, the time between their first and last samples; a
+// rescaled score is its rescaling's slope times the score as scored. Map(target id → { course
+// (over the time course), span (1 when per unit of time or not a time series; null when its
+// replicates span different times), rescale (the method), slope }).
+function unitsOf(run, results) {
+  const design = run.inputs.design;
+  const p = results.parameters ?? run.inputs.parameters ?? {};
+  const course = design.model === 'time-series' && p.timeScale !== 'unit';
+  const spanOf = (ids) => {
+    if (!course) return 1;
+    const spans = new Set(design.replicates.filter((r) => ids.includes(r.id)).map((r) => {
+      const times = (r.timepoints ?? []).map((t) => t.time);
+      return Math.max(...times) - Math.min(...times);
+    }));
+    return spans.size === 1 ? [...spans][0] : null;
+  };
+  const out = new Map();
+  for (const c of results.conditions) out.set(`condition:${c.id}`, { course, span: spanOf(c.replicates ?? []), rescale: c.rescale?.method ?? 'none', slope: c.rescale?.slope ?? 1 });
+  for (const d of results.differential ?? []) {
+    // A difference of two conditions' scores, in their units when they share them.
+    const [c, r] = [d.condition, d.reference].map((id) => out.get(`condition:${id}`));
+    const shared = c && r && c.span === r.span && c.rescale === r.rescale && c.slope === r.slope;
+    out.set(`contrast:${d.id ?? d.name}`, shared ? c : { course, span: null, rescale: c?.rescale ?? 'none', slope: Number.NaN });
+  }
+  return out;
+}
+
+// The factor that puts the later run's effects of a target in the earlier run's units: { factor
+// (1 when they share them; null when they cannot be put in one), why (what changed them) }.
+function unitsBetween(ua, ub) {
+  if (!ua || !ub) return { factor: 1, why: [] };
+  const why = [];
+  if (ua.course !== ub.course) why.push('the time scale changed');
+  else if (ua.span !== ub.span) why.push('the time points changed');
+  if (ua.rescale !== ub.rescale) why.push('the rescaling changed');
+  if (!why.length) return { factor: 1, why };
+  const time = ua.span && ub.span ? ua.span / ub.span : null;
+  const scale = ua.rescale === ub.rescale ? 1 : ua.slope / ub.slope;
+  const factor = time !== null && Number.isFinite(scale) && scale !== 0 ? time * scale : null;
+  return { factor, why };
+}
+
 // What a change of a run did to its variants, for each condition (and difference between
 // conditions) of the two: { id, name, kind, both (scored in both), moved (beyond the earlier 95%
-// interval), crossed (another class), crossings: [{ from, to, n }], filtered (scored before, not
-// now), scored (now, not before), variants: the moved and crossed, largest first, up to 25 }.
+// interval; null when the two are in units that cannot be compared), crossed (another class),
+// crossings: [{ from, to, n }], filtered (scored before, not now), scored (now, not before), units
+// (null, or { factor, why }: the later run's effects put in the earlier one's units, as the time
+// scale, the time points or the rescaling changed them), variants: the moved and crossed, largest
+// first, up to 25, the later effect in the earlier run's units }.
 export function variantChanges(runA, resultsA, runB, resultsB) {
   const ta = callsOf(resultsA, runA.inputs.design);
   const tb = callsOf(resultsB, runB.inputs.design);
+  const unitsA = unitsOf(runA, resultsA);
+  const unitsB = unitsOf(runB, resultsB);
   const rowB = new Map(resultsB.variants.key.map((k, i) => [k, i]));
   const out = [];
   for (const x of ta) {
     const y = tb.find((t) => t.id === x.id);
     if (!y) continue;
+    const units = unitsBetween(unitsA.get(x.id), unitsB.get(y.id));
+    const factor = units.factor;
     const names = x.kind === 'contrast' ? CONTRAST_CLASS_NAMES : CLASS_NAMES;
     let both = 0;
     let moved = 0;
@@ -167,7 +227,8 @@ export function variantChanges(runA, resultsA, runB, resultsB) {
       if (!ca && cb) scored += 1;
       if (!ca || !cb) return;
       both += 1;
-      const z = x.se[i] > 0 ? (y.effect[j] - x.effect[i]) / x.se[i] : Number.NaN;
+      const after = factor === null ? Number.NaN : y.effect[j] * factor;
+      const z = x.se[i] > 0 ? (after - x.effect[i]) / x.se[i] : Number.NaN;
       const isMoved = Math.abs(z) > Z975;
       const isCrossed = ca !== cb;
       if (isMoved) moved += 1;
@@ -176,7 +237,7 @@ export function variantChanges(runA, resultsA, runB, resultsB) {
         const k = `${ca}>${cb}`;
         crossings.set(k, (crossings.get(k) ?? 0) + 1);
       }
-      if (isMoved || isCrossed) variants.push({ variant: key, before: x.effect[i], after: y.effect[j], z, from: names[ca], to: names[cb] });
+      if (isMoved || isCrossed) variants.push({ variant: key, before: x.effect[i], after, z, from: names[ca], to: names[cb] });
     });
     // Each variant not in the earlier run but scored now.
     const keysA = new Set(resultsA.variants.key);
@@ -185,7 +246,8 @@ export function variantChanges(runA, resultsA, runB, resultsB) {
     });
     variants.sort((p, q) => Math.abs(q.z || 0) - Math.abs(p.z || 0) || (p.variant < q.variant ? -1 : 1));
     out.push({
-      id: x.id, name: x.name, kind: x.kind, both, moved, crossed, filtered, scored,
+      id: x.id, name: x.name, kind: x.kind, both, moved: factor === null ? null : moved, crossed, filtered, scored,
+      units: units.why.length ? { factor, why: units.why } : null,
       crossings: [...crossings].map(([k, n]) => {
         const [from, to] = k.split('>').map(Number);
         return { from: names[from], to: names[to], n };
@@ -211,12 +273,15 @@ export function findingChanges(a, b) {
 }
 
 // The change of a run as the map reads a contrast (after − before, of the effects callsOf gives:
-// each score less the wild type's), on the later run's variants: { results, design, contrast: 0 }
-// for buildMapModel with colorBy 'differential'; null when the two have no condition in common.
+// each score less the wild type's; the later in the earlier run's units), on the later run's
+// variants: { results, design, contrast: 0 } for buildMapModel with colorBy 'differential'; null
+// when the two have no condition in common, or are in units that cannot be compared.
 export function changeMap(runA, resultsA, runB, resultsB, condition = 0) {
   const x = callsOf(resultsA, runA.inputs.design).filter((t) => t.kind === 'condition')[condition];
   const y = callsOf(resultsB, runB.inputs.design).filter((t) => t.kind === 'condition')[condition];
   if (!x || !y) return null;
+  const { factor } = unitsBetween(unitsOf(runA, resultsA).get(x.id), unitsOf(runB, resultsB).get(y.id));
+  if (factor === null) return null;
   const n = resultsB.rows;
   const rowA = new Map(resultsA.variants.key.map((k, i) => [k, i]));
   const nan = () => new Float64Array(n).fill(Number.NaN);
@@ -227,7 +292,7 @@ export function changeMap(runA, resultsA, runB, resultsB, condition = 0) {
   for (let j = 0; j < n; j += 1) {
     const i = rowA.get(resultsB.variants.key[j]);
     if (i === undefined || !x.cls[i] || !y.cls[j]) continue;
-    delta[j] = y.effect[j] - x.effect[i];
+    delta[j] = y.effect[j] * factor - x.effect[i];
     se[j] = x.se[i];
     reason[j] = 0;
   }
@@ -384,7 +449,10 @@ export function pairWords(p) {
     for (const t of p.targets) {
       const where = p.targets.length > 1 ? `${t.name}: ` : '';
       const crossings = t.crossings.length ? ` (${t.crossings.map((c) => `${count(c.n)} ${c.from} → ${c.to}`).join('; ')})` : '';
-      out.push(`${where}${where ? 'of' : 'Of'} ${plural(t.both, t.kind === 'contrast' ? 'difference' : 'variant')} scored in both, ${count(t.moved)} moved beyond their earlier 95% interval and ${count(t.crossed)} changed class${crossings}; ${count(t.filtered)} no longer scored, ${count(t.scored)} newly scored.`);
+      // In the earlier run's units when the time scale, the time points or the rescaling changed them.
+      const units = !t.units ? '' : t.units.factor === null ? '' : ` (${possessive(p.b.name)} effects × ${fmtFactor(t.units.factor)}, in ${possessive(p.a.name)} units: ${list(t.units.why)})`;
+      const moved = t.moved === null ? `whether they moved is not said (${list(t.units.why)}: their effects are in units that cannot be put in one)` : `${count(t.moved)} moved beyond their earlier 95% interval${units}`;
+      out.push(`${where}${where ? 'of' : 'Of'} ${plural(t.both, t.kind === 'contrast' ? 'difference' : 'variant')} scored in both, ${moved} and ${count(t.crossed)} changed class${crossings}; ${count(t.filtered)} no longer scored, ${count(t.scored)} newly scored.`);
     }
   }
   if (p.findings.length) out.push(`QC of ${p.b.name}: ${p.findings.map((f) => `${f.title} ${f.from} → ${f.to}`).join('; ')}.`);

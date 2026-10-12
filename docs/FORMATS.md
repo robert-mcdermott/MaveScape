@@ -547,7 +547,11 @@ another class (`crossed`: lower than, like or higher than the wild type, q < 0.0
 pair of classes), those no longer scored (`filtered`) and newly scored (`scored`), the most moved by
 name (`variants`, up to 25: `variant`, `before`, `after`, `z`, `from`, `to`); and the QC findings
 whose verdict changed (`findings`: `id`, `title`, `from`, `to`), each read with its state's
-thresholds.
+thresholds. When the time scale, a time series' time points or the rescaling changed the units of
+the effects (from MaveScape 0.6), the later run's are put in the earlier run's units first:
+`units` is `{ "factor", "why" }` (the factor the later effects were multiplied by, and what changed
+them), `after` is in the earlier run's units, and `moved` is `null` (not said) where the factor is
+`null` (replicates whose time courses span different times).
 
 From MaveScape 0.3 the workspace's target can also keep `reference`, the record of
 its last check against its UniProt entry (Experiment, Target: **Check against UniProt**). It is

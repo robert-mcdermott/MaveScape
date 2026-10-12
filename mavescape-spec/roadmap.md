@@ -2866,6 +2866,54 @@ and the review report are found. The wave ends with its examples, as waves 2 to 
 8. **Examples.** The wave's lessons on the examples: GRB2's figure (the map, the structure, the QC
    finding behind its bottleneck), what a choice moves (a checkpoint before and after a change of
    pseudocount on Hsp90), and the BRCA1 RING domain certified, verified and reported.
+   - **Done.** Each lesson is a step of its example's guide, the guides kept to six steps (GRB2's
+     deposit joins its scoring step, Hsp90's methods its scoring step, BRCA1 RING's round trip one
+     step); a bullet of what to expect; the examples page; the Figures, Report and Certificates
+     pages; a screenshot scene each (`grb2-figure`, `hsp90-checkpoint`, `brca1-ring-certificate`).
+     - **GRB2's figure.** The first step acknowledges the variance beyond counting with its reason
+       (the input bottleneck the Domainome's own analysis found); the last puts Run 1's map, the
+       saved view Core of 2VWF and that finding on one page with **Add to figure**, exports it as
+       PDF and drops it back: each panel as drawn, and the map and QC panels say when the table
+       is scored again since.
+     - **What a choice moves, on Hsp90.** A checkpoint ("All eight samples"), then the columns of
+       generations 9 to 21 set "Not used", fitting the first three samples as the authors fit
+       their null-like variants: 148 of the 188 variants move beyond their earlier 95% interval
+       and 102 change class, 93 from lower than the wild type to like it. The time courses bend:
+       the stops fall faster at first (−0.41 per generation over six generations, −0.32 over 21,
+       still not the published −0.77), while at 584, 588 and 589 most substitutions have barely
+       begun to fall.
+     - **BRCA1 RING certified, verified and reported.** With the published scores, Run 1 and the
+       Enrich2 rescoring: 110,975 numbers from MaveDB's two tables, verified bit for bit; the
+       review report holds them. Made without its tables, the certificate names them by the
+       SHA-256 of MaveDB's files: not checkable alone, verified with the two files from the
+       record.
+     - Found by slice 8:
+       - **The pseudocount moves nothing on Hsp90**, the change this slice was to teach: from 0.5 to
+         0.1 or 1, no variant moves by more than 0.14 of its SE and none changes class. Weighted
+         regression gives a time course's few reads at the floor little weight. On GRB2 and BRCA1
+         RING it changes the class of a few borderline variants (14 and 44 to 87) and moves none
+         beyond its interval. The lesson became the choice that does move Hsp90, its time points;
+         the pseudocount is its contrast.
+       - **The diff compared effects in each run's own units** (slice 5): Hsp90 scored over its
+         whole time course rather than per generation, every effect 21 times, was said to have moved
+         187 of its 188 variants. The later run's effects are now put in the earlier run's units
+         when the time scale, a time series' time points or the rescaling changed them, and the diff
+         says so ("Run 3's effects × 3.5, in Run 2's units: the time points changed"); effects that
+         cannot be put in one unit are not said to have moved.
+       - **The diff said "its ignoredColumns changed"** for a column set "Not used"; it names them.
+       - **A review report shows only some of its numbers**: BRCA1 RING's traces 234 on its pages
+         and holds the other 110,000-odd for its lookup. The guide first said it traced each one.
+       - **The screenshots' accessibility audit had not run since axe-core joined the validation
+         data** (slice 7). On this slice's scenes it found the sidebar's empty sections declared as
+         lists (`role="list"` with no items) and the Report's citations told from their text by
+         color alone; both are fixed (an empty section is no list; a citation is underlined,
+         dotted).
+     - Validation: `examples` (+5): GRB2's figure, its manifest and its reading back
+       (`validation/example-lessons.mjs`; a plain image stands in for the view's in Node); Hsp90's
+       checkpoint, as per generation and as computed apart, and its time courses as the guide says;
+       BRCA1 RING certified and verified with and without its tables. `diff` (7): a change of units
+       moves nothing. The remote session (196): the three made in the window as Node makes them.
+     - Wave 6 is complete with slice 8.
 
 ## 0.7.0: agents and scripts (wave 7)
 

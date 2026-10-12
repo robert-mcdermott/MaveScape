@@ -71,3 +71,29 @@ test('what was done, in words: a threshold, a selection, a figure, a rescoring w
   assert.match(pairWords(pair)[0], /^Run 1 → Run 2: the pseudocount 0\.5 → 1\.$/);
   assert.match(pairWords(pair)[1], /^Of \d+ variants scored in both, \d+ moved beyond their earlier 95% interval and \d+ changed class/);
 });
+
+test('a change of units is not a change of effect: the time scale and the time points, in the earlier run\'s units', () => {
+  const series = {
+    ...design, model: 'time-series', time: { unit: 'generation' },
+    samples: ['a', 'b'].flatMap((r) => [0, 2, 4, 6].map((t) => ({ id: `${r}${t}`, name: `${r}${t}`, columns: [`${r}${t}`] }))),
+    replicates: ['a', 'b'].map((r, k) => ({ id: r, name: `Replicate ${k + 1}`, biological: k + 1, timepoints: [0, 2, 4, 6].map((time) => ({ sample: `${r}${time}`, time })) })),
+  };
+  const fall = (base, k, t) => Float64Array.from(names, (_, i) => (i ? Math.round((base + ((i * k) % 37)) * Math.exp(-0.05 * t * (i % 4))) : 2000));
+  const cols = Object.fromEntries(['a', 'b'].flatMap((r, k) => [0, 2, 4, 6].map((t) => [`${r}${t}`, fall(80 + 5 * k, 7 - 2 * k, t)])));
+  const scored = (parameters, d, name) => {
+    const results = scoreExperiment({ names, columns: cols, design: d, parameters }).results;
+    return { results, run: makeRun({ inputs: runInputs({ source, design: d, parameters }), source, results, software: { version: '0.6.0', commit: '' }, name, created: '2026-10-12T10:00:00.000Z' }) };
+  };
+  const unit = scored({ model: 'wls', timeScale: 'unit' }, series, 'Run 1');
+  const course = scored({ model: 'wls' }, series, 'Run 2');
+  const [t] = variantChanges(unit.run, unit.results, course.run, course.results);
+  assert.deepEqual([t.moved, t.crossed, t.units], [0, 0, { factor: 1 / 6, why: ['the time scale changed'] }], 'over the course of 6 units, every effect 6 times');
+  const pair = { a: { id: 'x', name: 'Run 1' }, b: { id: 'y', name: 'Run 2' }, parameters: ['the time scale unit → course'], design: [], targets: [t], findings: [], recomputed: true };
+  assert.match(pairWords(pair)[1], /^Of \d+ variants scored in both, 0 moved beyond their earlier 95% interval \(Run 2's effects × 0\.167, in Run 1's units: the time scale changed\) and 0 changed class/);
+  // One replicate's time points cut short: over its course, the two no longer span one time.
+  const uneven = { ...series, replicates: [series.replicates[0], { ...series.replicates[1], timepoints: series.replicates[1].timepoints.slice(0, 3) }] };
+  const short = scored({ model: 'wls' }, uneven, 'Run 3');
+  const [u] = variantChanges(course.run, course.results, short.run, short.results);
+  assert.deepEqual([u.moved, u.units.factor, u.units.why], [null, null, ['the time points changed']]);
+  assert.match(pairWords({ ...pair, targets: [u] })[1], /whether they moved is not said \(the time points changed: their effects are in units that cannot be put in one\) and \d+ changed class/);
+});

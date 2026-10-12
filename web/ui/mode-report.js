@@ -172,7 +172,7 @@ export function mountReportMode(app, container) {
       const t = p.targets.find((x) => x.variants.length);
       if (t) {
         const f = (x) => (Number.isFinite(x) ? x.toFixed(3) : '—');
-        art.append(h('div.report-table', h('p.muted', `The variants that moved most${p.targets.length > 1 ? ` (${t.name})` : ''}: each effect (its score less the wild type's) before and after, and the move over its earlier SE.`),
+        art.append(h('div.report-table', h('p.muted', `The variants that moved most${p.targets.length > 1 ? ` (${t.name})` : ''}: each effect (its score less the wild type's) before and after${t.units?.factor ? `, after in ${possessive(p.a.name)} units` : ''}, and the move over its earlier SE.`),
           h('div.table-scroll', h('table.data.compact', h('thead', h('tr', h('th', 'Variant'), h('th.r', 'Before'), h('th.r', 'After'), h('th.r', 'z'), h('th', 'Class'))),
             h('tbody', ...t.variants.slice(0, 12).map((v) => h('tr', h('td', v.variant), h('td.r', f(v.before)), h('td.r', f(v.after)), h('td.r', f(v.z)), h('td', v.from === v.to ? v.to : `${v.from} → ${v.to}`))))))));
       }
