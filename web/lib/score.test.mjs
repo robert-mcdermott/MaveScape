@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { checkParameters, controlRows, DEFAULT_PARAMETERS, PRESETS, scoreExperiment } from './score.js';
 import { buildVariants } from './variants.js';
-import { STAGE_BY_ID } from './filters.js';
+import { STAGE_BY_CODE, STAGE_BY_ID } from './filters.js';
 
 const target = { id: 't', name: 'Toy', sequenceType: 'protein', sequence: 'MSKGEELFTG' };
 const design = (extra = {}) => ({
@@ -104,7 +104,7 @@ test('published scores (a design of model "scores"): read as given, each left ou
   assert.equal(bare.warnings[0].code, 'no-se');
 });
 
-test('published scores: a variant written twice with the same scores is read once; with different ones, refused', async () => {
+test('published scores: a variant written twice with the same scores is read once; a protein variant with different ones, merged; a frameshift, not told apart', async () => {
   const { defaultParameters } = await import('./score.js');
   const published = design({ model: 'scores', samples: [], replicates: [], scores: { score: 'score' } });
   const twice = ['p.=', 'p.Ser2Ala', 'p.=', 'p.Lys3Ter'];
@@ -113,8 +113,26 @@ test('published scores: a variant written twice with the same scores is read onc
   assert.equal(c.reason[2], STAGE_BY_ID.get('copy').code);
   assert.equal(c.scored, 3);
   assert.match(results.info.join(' '), /1 row repeats an earlier row's variant and scores \(p\.=\): read once/);
-  const differ = scoreExperiment({ names: twice, design: published, parameters: defaultParameters(published), columns: { score: col(0, -0.4, 0.1, -1) } });
-  assert.match(differ.errors.join(' '), /on more than one row \(p\.=\) with different scores/);
+  // Several codons of one protein variant, as Kotler et al.'s TP53 record writes them (wave 4,
+  // slice 6): merged into the first row, averaged without SEs, weighted by 1/SE² with them; a copy
+  // within them read once; frameshifts at one codon, named alike, left out.
+  const names = ['p.Ser2Ala', 'p.Ser2Ala', 'p.Ser2Ala', 'p.Lys3fs', 'p.Lys3fs', 'p.Lys3Ter'];
+  const merged = scoreExperiment({ names, design: published, parameters: defaultParameters(published), columns: { score: col(-0.4, -0.2, -0.4, 0.5, 1.1, -1) } });
+  const m = merged.results.conditions[0];
+  assert.ok(Math.abs(m.score[0] - -0.3) < 1e-12, 'the mean of -0.4 and -0.2, the copy read once');
+  assert.ok(Number.isNaN(m.se[0]));
+  assert.deepEqual([m.reason[1], m.reason[2], m.reason[3], m.reason[4]].map((r) => STAGE_BY_CODE.get(r).id), ['merged', 'copy', 'alike', 'alike']);
+  assert.equal(m.scored, 2);
+  assert.match(merged.results.info.join(' '), /1 protein variant is written on several rows with different scores \(2 rows/);
+  assert.match(merged.results.warnings.map((w) => w.message).join(' '), /1 frameshift is written alike/);
+  assert.deepEqual(m.flow.filter((x) => x.removed).map((x) => x.stage), ['copy', 'merged', 'alike']);
+  const withSE = design({ model: 'scores', samples: [], replicates: [], scores: { score: 'score', se: 'se' } });
+  const weighted = scoreExperiment({ names: ['p.Ser2Ala', 'p.Ser2Ala'], design: withSE, parameters: defaultParameters(withSE), columns: { score: col(0, 1), se: col(1, 2) } }).results.conditions[0];
+  assert.ok(Math.abs(weighted.score[0] - 0.2) < 1e-12 && Math.abs(weighted.se[0] - Math.sqrt(0.8)) < 1e-12);
+  // Nucleotide variants on several rows with different scores: refused, as counts are.
+  const nt = design({ model: 'scores', samples: [], replicates: [], scores: { score: 'score' }, variants: { column: 'v', level: 'nucleotide' }, targets: [{ id: 't', name: 'T', sequenceType: 'dna', sequence: 'ATGTCAAAGGGCTAA', codingStart: 1 }] });
+  const ntDiffer = scoreExperiment({ names: ['c.4T>G', 'c.4T>G'], design: nt, parameters: defaultParameters(nt), columns: { score: col(0, 0.1) } });
+  assert.match(ntDiffer.errors.join(' '), /on more than one row \(c\.4T>G\) with different scores/);
 });
 
 test('samples holding two tiles: each replicate measures only its own tile, no measurement combined twice', async () => {

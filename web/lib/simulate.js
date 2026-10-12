@@ -83,6 +83,8 @@ export const DEFAULT_SIMULATION = {
   sharedInput: false, // one input sample (time 0) for every replicate
   readDispersion: null, // k: reads gamma-Poisson with variance 1/k beyond Poisson's (null: Poisson)
   timeCourse: 'line', // 'line' or 'saturating'
+  neutralSd: 0.15, // SD of the effects of missense variants near the wild type
+  lossMin: 0.3, // the smallest loss of the other missense variants (to 3)
 };
 
 // A gamma variable of shape k and mean 1 (Marsaglia and Tsang 2000; for k < 1, boosted).
@@ -103,8 +105,14 @@ function gammaMeanOne(random, k) {
 const readsOf = (o, random) => (mean) => (o.readDispersion ? poisson(random, mean * gammaMeanOne(random, o.readDispersion)) : poisson(random, mean));
 
 // The variants of a protein: the wild type, then by position a synonymous variant, a nonsense
-// variant and every missense substitution, with true effects (natural-log fitness, WT = 0).
-export function simulatedVariants(protein, random) {
+// variant and every missense substitution, with true effects (natural-log fitness, WT = 0): 60% of
+// missense near the wild type (SD `neutralSd`), the rest losing from `lossMin` to 3. options: the
+// simulation's (neutralSd 0.15 and lossMin 0.3 by default; the robustness suite's planted
+// experiments set them to 0 and 1 for effects either the wild type's or clearly lost: wave 4,
+// slice 4).
+export function simulatedVariants(protein, random, options = {}) {
+  const neutralSd = options.neutralSd ?? 0.15;
+  const lossMin = options.lossMin ?? 0.3;
   const out = [{ name: 'p.=', kind: 'wild type', effect: 0 }];
   for (let pos = 1; pos <= protein.length; pos += 1) {
     const ref = THREE[protein[pos - 1]];
@@ -114,7 +122,7 @@ export function simulatedVariants(protein, random) {
     }
     for (const aa of AMINO_ACIDS) {
       if (aa === protein[pos - 1]) continue;
-      const effect = random() < 0.6 ? 0.15 * random.gaussian() : -0.3 - 2.7 * random();
+      const effect = random() < 0.6 ? neutralSd * random.gaussian() : -lossMin - (3 - lossMin) * random();
       out.push({ name: `p.${ref}${pos}${THREE[aa]}`, kind: pos === 1 ? 'start lost' : 'missense', effect });
     }
   }
@@ -126,7 +134,7 @@ export function simulatedVariants(protein, random) {
 export function simulateExperiment(options = {}) {
   const o = { ...DEFAULT_SIMULATION, ...options };
   const random = createRandom(o.seed);
-  const variants = simulatedVariants(o.protein, random);
+  const variants = simulatedVariants(o.protein, random, o);
   const V = variants.length;
   const weights = variants.map((v) => (v.kind === 'wild type' ? 20 : exp(o.libraryLogSd * random.gaussian())));
   const total = weights.reduce((a, b) => a + b, 0);

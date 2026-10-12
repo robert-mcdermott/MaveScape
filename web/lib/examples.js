@@ -32,6 +32,7 @@ export const EXAMPLES = [
       'The least tolerant positions are buried hydrophobic and glycine residues of the fold (A163, G196, G203, I183 on GRB2\'s numbering).',
       'Checked against UniProt, the domain is residues 159–214 of P62993, identical: the offset of 158 the design gives.',
       'Beside the map, AlphaMissense calls the eight least tolerant positions likely pathogenic (a mean above 0.9 each), while conservation follows the position effects only in part (Spearman ρ about −0.4): abundance is not all a residue is conserved for.',
+      'In Compare, against its record\'s published scores (urn:mavedb:00000835-a-1, kept beside the workspace without opening it), Run 1 agrees at r 0.997 on another scale (the authors rescaled theirs); rescaled by their anchors (nonsense median 0, wild type 1), Lin\'s concordance is 0.996 and the bias 0.009. Against AlphaMissense, ρ 0.55 by rank, and its classes are told apart with an AUC of 0.78.',
     ],
     steps: [
       ['qc', 'Read the QC findings. Open "Variance beyond counting" and its plot: replicate differences sit above the dashed line of counting noise, in parallel, as a bottleneck does. DiMSum\'s terms below it show where: the inputs.'],
@@ -65,6 +66,7 @@ export const EXAMPLES = [
       'The scores follow the published fitness per generation where the authors fit every time point: r about 0.95, a median 0.005 apart. The record says its slopes are of log₂ ratios, but they are of natural logarithms, as MaveScape\'s are. Stops score about −0.32 against the published −0.77: the authors fit null-like variants on the first three time points only.',
       'QC fails the fit of the time courses: they scatter about 44× more than counting predicts, and stops fall to the floor within a few generations. Each slope\'s SE comes from its own residuals.',
       'One replicate: agreement, the variance beyond counting and outlier replicates are not assessed. What the analysis can do says so, and that the record gives no MaveDB terms for the assay or the library.',
+      'Compared with the record\'s own published scores, kept beside (urn:mavedb:00000011-a-1): 187 variants, r 0.95; stated to be on one scale (both natural-log change per generation), Lin\'s concordance is only 0.48 and the bias 0.22. The difference grows with the effect (a Bland–Altman slope of −0.91), most at 585–587 (0.34 to 0.39 on average). One experiment analysed twice: the agreement measures the analyses.',
     ],
     steps: [
       ['map', 'Look at the map: nine positions by every substitution. Click a dark cell at position 585: the inspector draws its time course over the eight samples.'],
@@ -72,6 +74,7 @@ export const EXAMPLES = [
       ['score', 'In Score, set "A score is the change" to over the whole time course and score again: every score is 21 times the one per generation.'],
       ['experiment', 'In Experiment, read "What the analysis can do": with one replicate nothing between replicates is assessed, and a second replicate would add it.'],
       ['score', 'Export the scores and the methods from the run\'s menu: the methods say the scores are per generation, and what was not recorded.'],
+      ['compare', 'In Compare, Other sources: add urn:mavedb:00000011-a-1, the record\'s own published scores (a higher score is more growth), kept beside without opening it. They correlate at r 0.95, but under Scale, stated to be on one scale, Lin\'s concordance is only 0.48: the Bland–Altman plot shows the difference growing with the effect, most at 585–587. The authors fit null-like variants on their first three time points, before they reach the floor; Run 1 fits all eight. How deleterious those variants are depends on that choice.'],
     ],
   },
   {
@@ -92,12 +95,14 @@ export const EXAMPLES = [
       'QC fails the variance beyond counting, about 2,300× what counting predicts: some 10,000 reads per variant in each bin far exceed the cells sorted. The moderated combination carries the excess into every SE.',
       'The cells per bin are not assessed, and the bins cannot be scored by maximum likelihood: MaveDB records neither the cells sorted nor the gates. What the analysis can do names both, and the sorter\'s report that has them.',
       'With MaveScape\'s defaults (each replicate scaled to nonsense 0 and wild type 1) the scores follow the published ones with r 0.994; with MultiSTEP\'s own scale (the lowest 5% of missense at 0) and the replicates\' mean, r 0.9995, and the nonsense median is 0.47.',
+      'Selected by query, with UniProt\'s features beside the map, the substitutions of the 22 cysteines in factor IX\'s 11 disulfide bonds ("missense from C in feature disulfide") are mostly lost: 345 of the 399 scored are lower than the wild type beyond their uncertainty, against 2,124 of the 8,529 missense variants scored in all. A secreted protein needs its disulfide bonds.',
     ],
     steps: [
       ['map', 'Look at the map: the protease domain and the second EGF domain hold most of the positions that tolerate nothing, the propeptide and the Gla domain almost none. Click a cell: the inspector shows its distribution over the four bins in each replicate.'],
       ['qc', 'In QC, open "Variance beyond counting": the replicates of each tile differ about 2,300× more than counting predicts, because the cells sorted, not the reads, limit what is known.'],
       ['experiment', 'In Experiment, read "What the analysis can do": the gates and the cells sorted into each bin are missing, and would unlock maximum likelihood and the cells per bin.'],
       ['score', 'In Score, set the bins\' scale to the lowest 5% and the replicates combined by their mean, and score again: MultiSTEP\'s own settings, close to the published scores.'],
+      ['map', 'Back on the map, Tracks, "Add a track": UniProt\'s features. Then type in the query field below the map "missense from C in feature disulfide": the substitutions of the cysteines that make factor IX\'s disulfide bonds. Add "and lower" to keep those lower than the wild type beyond their uncertainty, save the selection as Disulfides, and try "missense and lower and not in Disulfides" for the rest.'],
     ],
   },
   {
@@ -123,14 +128,15 @@ export const EXAMPLES = [
       'About a quarter of missense variants (25%) score below 0.5; the least tolerant positions are spread through both the phosphatase and the C2 domain, as a stability readout expects.',
       'QC passes what it can assess from scores alone, but coverage: 53% of all possible substitutions, the library made by oligo-directed mutagenic PCR. Every finding about counts is not assessed.',
       'What the analysis can do: rescoring and QC of the counts need counts, which MaveDB does not hold for this record; the readiness says where they may be found.',
+      'Against PTEN\'s lipid phosphatase activity (urn:mavedb:00000054-a-1, Mighell et al. 2018, kept beside the workspace without opening it), abundance agrees only in part (4,057 variants, r 0.45, ρ 0.37): two assays, and a variant can be stable but inactive. Rescaled by their anchors, the report names each: the activity record\'s wild type is its row, 1 with an SE of 0, though its methods place wild type-like variants from −1.11 to 0.89. Against AlphaMissense, abundance tells its likely benign substitutions from its likely pathogenic ones with an AUC of 0.77 (ρ 0.48).',
     ],
     steps: [
       ['map', 'The map shows PTEN\'s abundance as MaveDB publishes it, the wild type at 1 and nonsense near 0, in the run "Published scores". Click a cell: its score, SE and 95% interval are the record\'s own.'],
-      ['experiment', 'Select the table in the sidebar: the inspector shows the MaveDB record, its license and citation, and the assay in MaveDB\'s terms (a reporter, loss of function, human cells), which became the design\'s readout. The record does not say what a higher score means: the example states it, from the paper.'],
-      ['experiment', 'Below the record, its six calibrations: the investigators\' classes, and ExCALIBR\'s evidence strengths for research use only. MaveScape shows them as published and classifies no variant.'],
+      ['experiment', 'Select the table in the sidebar: the inspector shows the MaveDB record, its license and citation, and the assay in MaveDB\'s terms (a reporter, loss of function, human cells), which became the design\'s readout; the record does not say what a higher score means, so the example states it, from the paper. Below it, its six calibrations: the investigators\' classes, and ExCALIBR\'s evidence strengths for research use only, shown as published (MaveScape classifies no variant).'],
       ['qc', 'In QC, what scores alone show: the controls separate (AUC 0.98) and the scores resolve them; coverage is 53% of all substitutions. The findings about counts are not assessed.'],
       ['experiment', 'In Experiment, read "What the analysis can do": the map and comparison need only the scores; rescoring and QC of the counts need the counts, and the readiness says where they may be (the paper\'s supplement, the authors\' repository, the raw reads PRJNA428380).'],
       ['score', 'In Score, set a maximum SE of 0.15 and read the scores again: the second run leaves the uncertain variants out, each with the stage that left it out.'],
+      ['compare', 'In Compare, under Other sources, add urn:mavedb:00000054-a-1, PTEN\'s lipid phosphatase activity, saying that a higher score means more of the function: it is kept beside the workspace, not opened, and compared with the abundance as another assay of PTEN. Then add AlphaMissense and choose it as the second side: by rank, and in Classes, how well the abundance tells its likely benign substitutions from its likely pathogenic ones.'],
     ],
   },
   {
@@ -156,7 +162,7 @@ export const EXAMPLES = [
       'On the map, the coding variants read at the protein level: 2,251 protein variants, 391 of them made by more than one nucleotide variant and merged as DiMSum merges them. The 1,090 variants with no protein change to draw (intronic, splice-site, UTR) are listed beside the map.',
       'Nonsense variants score far below synonymous ones (medians −2.12 and −0.01; AUC 0.99); splice-site variants score like nonsense (median −2.02, 92% below −1), intronic ones a few bases further in like synonymous ones (median −0.18).',
       'QC fails coverage: 17% of the substitutions one base change makes, on the whole protein. The variants lie in two stretches, positions 1–101 and 1631–1855, the exons the experiment edited.',
-      'The counts open with a design drafted from their names: two replicates, day 5 to day 11. Scored, they agree with the published scores at r ≈ 0.76: the authors normalized each exon apart and corrected for position within it, which the counts do not record.',
+      'The counts open with a design drafted from their names: two replicates, day 5 to day 11. Scored, they agree with the published scores at r ≈ 0.76 (Compare): the authors normalized each exon apart and corrected for position within it, which the counts do not record, so the comparison gives correlations only.',
     ],
     steps: [
       ['map', 'The map shows BRCA1\'s function scores as published, each coding variant read for the protein change it makes. Click the stop at codon 1853 (p.Tyr1853Ter): two nucleotide variants make it, each with its score, merged into the cell.'],
@@ -164,7 +170,7 @@ export const EXAMPLES = [
       ['experiment', 'Select the target in the sidebar: the RefSeq transcript NM_007294.3, fetched from NCBI as GenBank, numbered from its coding sequence (233–5,824), its translation the record\'s protein.'],
       ['qc', 'In QC, the stops separate from the synonymous variants (AUC 0.99), but coverage fails: the whole protein counts as designed. The variants lie in two stretches (1–101, 1631–1855), the exons edited: given as the library\'s tiles in Experiment, coverage is judged within them.'],
       ['experiment', 'Select the counts table: its design was drafted from the column names, two replicates from day 5 to day 11, the library and RNA counts set aside.'],
-      ['score', 'Score the counts and compare with the published scores: they agree at r ≈ 0.76. The published scores were normalized exon by exon and corrected for position within each exon, which the deposited counts do not record.'],
+      ['compare', 'In Score, score the counts; then open Compare: Run 1 against the published scores, all 3,893 variants matched. They agree at r ≈ 0.76, and the report says why only correlations are shown: the published scores were normalized exon by exon and corrected for position within each, a scale the counts do not record, and both come from one experiment.'],
     ],
   },
   {
@@ -198,13 +204,16 @@ export const EXAMPLES = [
       'With MaveScape\'s defaults (weighted regression) the scores follow the published ones at r ≈ 0.90 without Lon and 0.96 with it; with the authors\' unweighted regression (ordinary least squares), r ≈ 0.96 and 0.98, on the same scale (the published scores are Enrich2\'s slopes over the whole 18 hours).',
       'Without Lon about twice as many substitutions grow faster than the wild type (a score above 0.2) as with it, as the paper found (736 and 384 published). The difference +Lon − −Lon is negative almost everywhere it is called, most at native hydrophobic residues (V, I, L, M, F, W, Y), as the paper found for the buried core.',
       'QC fails the variance beyond counting and the fit of the time courses, and reviews the time points used and the dropout: a variant below 2 × 10⁻⁵ of the reads was not reported at a time point, so the most depleted drop out and their slopes rest on the early time points, as the authors\' did.',
+      'Compared, −Lon and +Lon agree at r 0.52 over every variant both score, and 0.77 with low confidence left out: Run 1 scores many variants of few reads, which agree little. Of the 1,715 then compared, 201 differ beyond their uncertainty, 186 lower with Lon; the differences are 2.8 times as variable as their SEs say.',
+      'Checked against 47 other reasonable analyses, 54 of Run 1\'s 377 differences between the conditions are called in every one and 172 in 90% of them or more. Most of the others depend on how uncertain each difference is taken to be (REML or the replicates\' mean in place of the moderated combination), some on the model of the time course (ordinary least squares, or the first and last time points). Fixed effects are not tried: the replicates differ 1.7 times as much as their SEs say.',
     ],
     steps: [
       ['map', 'The map shows the difference +Lon − −Lon (Run 1): blue where Lon penalizes a substitution. Click a dark blue cell: the inspector shows the variant\'s time courses in its sub-library\'s three replicates, its score in each condition, and the difference with its interval and q.'],
       ['experiment', 'In Experiment, the design the paper describes: two conditions, four sub-libraries (tiles) of 40 positions, each grown three times, two in each repeat; the transformation and outgrowth samples set aside. MaveDB keeps the conditions as two score sets; opened together, their counts are joined, each record\'s columns named by its URN.'],
       ['qc', 'In QC, read "Missing after selection" and "Fit of the time courses": counts below the reporting frequency are missing, not zero, so depleted variants are fitted on their early time points.'],
-      ['score', 'In Score, choose ordinary least squares (the authors\' unweighted regression) and score again: compare the runs with the published scores in the inspector.'],
+      ['score', 'In Score, below Run 1, "Check robustness": the run is scored again 47 other reasonable ways (ordinary least squares, the authors\' unweighted regression, among them; each of the 24 replicates left out). Under +Lon vs −Lon, only 54 of the 377 differences are called in every analysis, 172 in 90% of them: the model of the time course and the combination of replicates decide the rest. Scoring with least squares as the run reproduces the published scores more closely.'],
       ['map', 'Color the map by each condition\'s scores, or open the published runs: the substitutions that grow faster than the wild type without Lon (red) mostly lose that advantage with it.'],
+      ['compare', 'In Compare, choose Run 1: −Lon and Run 1: +Lon and leave out low confidence: they agree at r 0.77. Under Disagreement, 201 of 1,715 variants differ beyond their uncertainty, 186 of them lower with Lon, most at W47, W30 and P126; the differences are 2.8 times as variable as their SEs say, so read those counts as an upper bound. Under Maps, the difference beside the two maps.'],
     ],
   },
   {
@@ -238,6 +247,41 @@ export const EXAMPLES = [
       ['score', 'From Run 1\'s Export menu, "Deposit in MaveDB": the scores, counts and methods as MaveDB takes a score set, the experiment described as the record\'s (give its URN, urn:mavedb:00000003-a, to add the score set to it). Download the package as a ZIP.'],
       ['experiment', 'Drop the ZIP on the window: it opens as a record from MaveDB does, and its scores, read as published, are Run 1\'s exactly.'],
       ['qc', 'In QC, the dropout and the fit of the time courses: over five rounds most variants that lose activity fall below detection, as stops do.'],
+    ],
+  },
+  {
+    id: 'tp53-screens',
+    title: 'TP53, two screens on two scales, opened from MaveDB (published scores)',
+    summary: 'Every substitution of TP53 (with arginine at 72) screened in p53-null A549 cells under etoposide, as Z-scores (Giacomelli et al. 2018), compared with an independent screen of its DNA-binding domain by the growth of H1299 cells, as log₂ fold changes (Kotler et al. 2018): two assays, two scales, opposite signs.',
+    question: 'Do two screens of p53\'s function, in different cells, on different scales and with opposite signs, agree on which variants lose it?',
+    source: 'MaveDB urn:mavedb:00000068-c-1 (opened) and urn:mavedb:00000059-a-1 and urn:mavedb:00000068-b-1 (kept beside, not opened): published scores, downloaded when used; SHA-256 checked',
+    license: 'CC0 1.0',
+    citation: 'Giacomelli AO, et al. Mutational processes shape the landscape of TP53 mutations in human cancer. Nature Genetics 2018;50:1381–1387. doi:10.1038/s41588-018-0204-y; Kotler E, et al. A systematic p53 mutation library links differential functional impact to cancer mutation pattern and evolutionary conservation. Molecular Cell 2018;71:178–190. doi:10.1016/j.molcel.2018.06.012',
+    simulated: false,
+    // Published scores only (wave 4, slice 6): the two other screens are compared without opening
+    // them (Compare, Other sources).
+    mavedb: { urn: 'urn:mavedb:00000068-c-1', scores: { sha256: '085237d96f287ce8642d49372b46ef9dc07c08e84240c04cfc17d8fb42977022', size: 553289 } },
+    // Under etoposide a variant like the wild type scores higher (its synonymous variants' median
+    // 0.37, its nonsense variants' −1.52); MaveDB records no direction.
+    readout: { direction: 'higher-more' },
+    findings: { separation: 'review' },
+    teaches: ['target-identifiers', 'score-se'],
+    opens: 'map',
+    expected: [
+      'Opened from MaveDB, the etoposide screen\'s published scores: 8,258 of 8,274 variants, Z-scores without standard errors, on TP53 with arginine at 72. The record names no UniProt entry; checked against P04637, the target is its positions 1–393 with one difference, P72R.',
+      'Kotler et al.\'s record (urn:mavedb:00000059-a-1), kept beside without opening it, writes 936 protein variants on several rows with different scores (2,908 rows: several codons, and no nucleotide names to tell them apart). Each is read as one, averaged, as DiMSum merges codons; its 191 frameshifts written alike at a codon are left out.',
+      'Matched on P04637\'s numbering (Kotler et al.\'s target is the DNA-binding domain alone, numbered from 102), 3,341 variants: r −0.78 as published. With Kotler et al.\'s direction stated (a higher score is less of p53\'s function), r 0.78 and Spearman\'s ρ 0.72; on two scales, Lin\'s concordance and Bland–Altman are withheld.',
+      'Rescaled by their anchors (synonymous median 0, nonsense median −1), Lin\'s concordance is 0.78 and the bias −0.04 (limits of agreement −0.71 to 0.63): on one scale the two screens agree. Of the positions whose differences are largest, four lie at 180–184 (D184, E180, R181, C182), lower under etoposide.',
+      'Giacomelli et al.\'s nutlin-3 screen of the same library (urn:mavedb:00000068-b-1; there a higher score is less function) against etoposide: 8,258 variants, r 0.75 as stated, Lin\'s concordance 0.72 rescaled.',
+      'QC reviews the separation of the controls. Neither record gives standard errors, so the scores\' resolution is not judged and no difference between the screens is tested.',
+    ],
+    steps: [
+      ['map', 'The map shows Giacomelli et al.\'s etoposide screen as published: Z-scores of 8,258 variants over all 393 residues of TP53, with arginine at 72. Here a variant like the wild type scores higher (synonymous variants 0.37, nonsense −1.52); the positions that tolerate nothing lie in the DNA-binding domain, 102–292.'],
+      ['experiment', 'The record names no UniProt entry. In Experiment, Target, "Check against UniProt" with P04637: positions 1–393, one difference, arginine at 72 (the allele the screen used). "Record the check": the target now carries P04637, as Kotler et al.\'s record does.'],
+      ['compare', 'In Compare, Other sources: add urn:mavedb:00000059-a-1, Kotler et al.\'s screen of the DNA-binding domain by the growth of H1299 cells, kept beside the workspace without opening it, and compare it with the published scores. Matched on P04637\'s numbering (its target is the domain alone, numbered from 102): 3,341 variants, r −0.78. The two screens seem to disagree completely.'],
+      ['compare', 'MaveDB records no direction. In Kotler et al.\'s screen cells without p53\'s function outgrow the others, so a higher score is less of it: say so for the score set. Compared negated, r 0.78; but a Z-score and a log₂ fold change are two scales, so Lin\'s concordance and Bland–Altman are withheld, and the report says why.'],
+      ['compare', 'Under Scale, rescale each by its own anchors (synonymous median 0, nonsense median −1): Lin\'s concordance 0.78, a bias of −0.04. On one scale the two screens agree. Neither gives SEs, so no variant is tested as different; under Disagreement, the positions that differ most, four of them at 180–184.'],
+      ['compare', 'Add urn:mavedb:00000068-b-1, Giacomelli et al.\'s nutlin-3 screen of the same library (a higher score is less function there too) and compare it with etoposide: r 0.75, Lin\'s concordance 0.72 rescaled. Two selections of one library differ about as much as two laboratories\' screens.'],
     ],
   },
   {

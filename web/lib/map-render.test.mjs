@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { drawMap, geometry, hitTest, mapPalette } from './map-render.js';
+import { cellsInPolygon, drawMap, geometry, hitTest, insidePolygon, mapPalette } from './map-render.js';
 import { mapSVG, EXPORT_THEME } from './map-svg.js';
 import { STATE } from './map-model.js';
 
@@ -58,4 +58,28 @@ test('the SVG is the same text for the same model, and draws every state', () =>
   assert.ok(a.includes('url(#hatch)'));
   assert.ok(!a.includes('S2E<'), 'no cell where the substitution is not designed');
   assert.ok(a.includes('S2W<'));
+});
+
+test('a freeform shape selects the cells whose centers it encloses (wave 4, slice 5)', () => {
+  const m = model();
+  const view = { width: 300, cellW: 20, cellH: 14, x0: 1 };
+  const g = geometry(m, view);
+  const R = 21;
+  const center = (p, r) => [g.left + (p - 0.5) * 20, g.top + (r + 0.5) * 14];
+  // A rectangle around positions 1–2, rows 0–2: the six cells a rectangle selects, less the one
+  // not designed (position 2, row 4, is outside it anyway).
+  const box = [[g.left + 2, g.top + 2], [g.left + 38, g.top + 2], [g.left + 38, g.top + 40], [g.left + 2, g.top + 40]];
+  assert.deepEqual(cellsInPolygon(m, view, box), [0, 1, 2, R, R + 1, R + 2]);
+  // A triangle with its corners on three cell centers holds only cells on or inside its edges: the
+  // corners themselves lie on its boundary, and the even-odd rule keeps those it crosses into.
+  const tri = [[g.left, g.top], [g.left + 60, g.top], [g.left, g.top + 14 * 6]];
+  const cells = cellsInPolygon(m, view, tri);
+  for (const k of cells) assert.ok(insidePolygon(tri, ...center(Math.floor(k / R) + 1, k % R)));
+  assert.ok(cells.includes(0) && cells.includes(R) && !cells.includes(2 * R + 5));
+  // A concave shape (an L) leaves its notch out; a cell not designed is never selected.
+  const ell = [[g.left, g.top], [g.left + 20, g.top], [g.left + 20, g.top + 28], [g.left + 60, g.top + 28], [g.left + 60, g.top + 84], [g.left, g.top + 84]];
+  const inL = cellsInPolygon(m, view, ell);
+  assert.ok(inL.includes(0) && inL.includes(R + 3) && !inL.includes(R + 0) && !inL.includes(2 * R + 1));
+  assert.ok(!inL.includes(R + 4), 'position 2, row 4, is not designed');
+  assert.deepEqual(cellsInPolygon(m, view, [[0, 0], [1, 1]]), []);
 });

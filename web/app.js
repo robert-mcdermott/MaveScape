@@ -21,11 +21,11 @@ import { findPackages, importMaveDB, importMaveDBPackage, openMaveDBDialog, open
 import { importTrackFiles } from './ui/tracks.js';
 import { fixClock } from './lib/clock.js';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
-// show what they are for (mode-planned.js); Compare, Structure, Calibrate, Figures and Report join
-// the list in the waves that build them (roadmap.md).
+// show what they are for (mode-planned.js); Structure, Calibrate, Figures and Report join the list
+// in the waves that build them (roadmap.md); Compare joined in wave 4.
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
   { id: 'experiment', label: 'Experiment', icon: 'experiment', load: () => import('./ui/mode-experiment.js').then((m) => m.mountExperimentMode) },
@@ -33,6 +33,7 @@ const MODES = [
   { id: 'score', label: 'Score', icon: 'score', load: () => import('./ui/mode-score.js').then((m) => m.mountScoreMode) },
   'sep',
   { id: 'map', label: 'Map', icon: 'heatmap', load: () => import('./ui/mode-map.js').then((m) => m.mountMapMode) },
+  { id: 'compare', label: 'Compare', icon: 'compare', load: () => import('./ui/mode-compare.js').then((m) => m.mountCompareMode) },
 ];
 
 // --- Theme ---------------------------------------------------------------------------------------

@@ -81,6 +81,26 @@ test('AlphaMissense: every substitution of the target, its score and class as Al
   assert.deepEqual(track.byKey.get('p.Trp36Ala').map((e) => e.label), [`${lines.get('W194A')[0]} likely pathogenic`]);
 });
 
+test('a MaveDB score set by its URN (wave 4, slice 3): its record and scores asked, kept as MaveDB sends them, the record\'s target and keywords kept; its scores a track on the run\'s target', async () => {
+  const get = cachedGet();
+  const provider = providerById('mavedb-scores');
+  assert.match(provider.needs(grb2, {}), /URN/);
+  const got = await provider.fetch(grb2, { urn: 'urn:mavedb:00000835-a-1' }, get);
+  assert.deepEqual(get.asked, ['mavedb/score-sets/urn%3Amavedb%3A00000835-a-1', 'mavedb/score-sets/urn%3Amavedb%3A00000835-a-1/scores']);
+  assert.equal(got.text, fixture('public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv'));
+  const set = got.record.scoreSet;
+  assert.equal(set.urn, 'urn:mavedb:00000835-a-1');
+  assert.equal(set.target.offset, 158);
+  assert.equal(set.target.identifiers.uniprot, 'P62993');
+  assert.ok(Array.isArray(set.keywords));
+  const read = provider.read(got.text, { ...context(), record: got.record });
+  const [track] = read.tracks;
+  assert.equal(track.part, 'scores');
+  const lines = new Map(got.text.trim().split(/\r?\n/).slice(1).map((l) => l.split(',')).map((f) => [f[3], Number(f[4])]));
+  assert.equal(track.byKey.get('p.Trp36Ala')[0].value, lines.get('p.Trp36Ala'));
+  await assert.rejects(() => provider.fetch(grb2, { urn: 'urn:mavedb:00000001-a-9' }, cachedGet()), /offline/);
+});
+
 test('ClinVar: the gene\'s records asked page by page, kept as one table, placed on the target', async () => {
   const get = cachedGet();
   const got = await providerById('clinvar').fetch(grb2, context(), get);

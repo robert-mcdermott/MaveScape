@@ -42,12 +42,12 @@ const audit = args.includes('--audit');
 const shots = !args.includes('--no-shots');
 const AXE = join(ROOT, 'validation/cache/axe-core/axe.min.js');
 const PTEN = join(ROOT, 'validation/cache/mavedb-pten-vampseq/scores.csv');
-if (wanted.length === 0 || wanted.includes('pten-mavedb')) {
+if (wanted.length === 0 || wanted.includes('pten-mavedb') || wanted.includes('compare-classes')) {
   if (!existsSync(PTEN)) throw new Error('The PTEN example\'s scene needs MaveDB\'s table: run node validation/fetch.mjs mavedb-pten-vampseq');
 }
 // BRCA1's saturation genome editing (wave 3, slice 3): its scores and counts.
 const BRCA1_SGE = join(ROOT, 'validation/cache/mavedb-brca1-sge');
-if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant'].includes(w))) {
+if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant', 'compare-published'].includes(w))) {
   if (!existsSync(join(BRCA1_SGE, 'counts.csv'))) throw new Error('The BRCA1 example\'s scenes need MaveDB\'s tables: run node validation/fetch.mjs mavedb-brca1-sge');
 }
 // The examples opened from MaveDB with their counts (wave 3, slice 6): DHFR's two score sets, BRCA1
@@ -57,8 +57,20 @@ const MAVEDB_TABLES = [
   ['urn:mavedb:00000063-a-1', join(ROOT, 'validation/cache/mavedb-dhfr/plus-lon'), 'dhfr-lon'],
   ['urn:mavedb:00000003-a-2', join(ROOT, 'validation/cache/mavedb-brca1-ring/aa'), 'brca1-ring'],
 ];
+// Published scores compared without opening them, or opened (wave 4, slice 6): TP53's three screens
+// and Hsp90's record's scores, from the validation's external data.
+const SCORE_TABLES = [
+  ['urn:mavedb:00000068-c-1', join(ROOT, 'validation/cache/mavedb-tp53-screens/scores.csv'), 'tp53-screens'],
+  ['urn:mavedb:00000068-b-1', join(ROOT, 'validation/cache/mavedb-tp53-screens/nutlin.csv'), 'tp53-screens'],
+  ['urn:mavedb:00000059-a-1', join(ROOT, 'validation/cache/mavedb-tp53-screens/kotler.csv'), 'tp53-screens'],
+  ['urn:mavedb:00000011-a-1', join(ROOT, 'validation/cache/mavedb-hsp90/scores.csv'), 'hsp90-rescoring'],
+];
+for (const [, file, scene] of SCORE_TABLES) {
+  if ((wanted.length === 0 || wanted.includes(scene)) && !existsSync(file)) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'tp53-screens' ? 'mavedb-tp53-screens' : 'mavedb-hsp90'}`);
+}
 for (const [, dir, scene] of MAVEDB_TABLES) {
-  if ((wanted.length === 0 || wanted.includes(scene)) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
+  const scenes = scene === 'dhfr-lon' ? ['dhfr-lon', 'compare-maps', 'compare-disagreement', 'robustness'] : [scene];
+  if ((wanted.length === 0 || wanted.some((w) => scenes.includes(w))) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
 }
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
 
@@ -86,6 +98,12 @@ async function startMaveScape() {
     if (!existsSync(join(BRCA1_SGE, `${table}.csv`))) continue;
     cpSync(join(BRCA1_SGE, `${table}.csv`), join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv`));
     writeFileSync(join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/${table}`, retrieved: '2026-10-11T04:13:31Z' }, null, 2)}\n`);
+  }
+  for (const [urn, file] of SCORE_TABLES) {
+    if (!existsSync(file)) continue;
+    const name = `${urn.replaceAll(':', '_')}.scores.csv`;
+    cpSync(file, join(cache, 'mavedb', name));
+    writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/scores`, retrieved: '2026-10-12T01:15:25Z' }, null, 2)}\n`);
   }
   for (const [urn, dir] of MAVEDB_TABLES) {
     for (const table of ['scores', 'counts']) {
@@ -483,6 +501,105 @@ const scenes = {
     await act('set_mode', { mode: 'score' });
     await act('focus', { kind: 'run', name: 'Run 1' });
     await scrollTo('.differential-pane', 'center');
+  },
+  // Comparisons (wave 4, slice 1): GRB2's replicates 1 and 2, every item of the report ok and every
+  // statistic given, a variant in the inspector and ringed in the plots.
+  async compare() {
+    await example('grb2-sh3');
+    await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2' });
+    await act('focus', { kind: 'variant', name: 'p.Trp36Ala', run: 'Run 1' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(600);
+  },
+  // BRCA1's counts scored against its published scores: correlations only, the report saying why.
+  async 'compare-published'() {
+    await example('brca1-sge');
+    await act('score', {});
+    await act('compare', {});
+    await clearToasts();
+    await sleep(600);
+  },
+  // DHFR's conditions compared on the maps (wave 4, slice 2): −Lon, +Lon and their difference, with
+  // low confidence left out, panned and zoomed as one, a variant of W47 selected in each.
+  async 'compare-maps'() {
+    await example('dhfr-lon');
+    await act('compare', { a: 'Run 1: −Lon', b: 'Run 1: +Lon', low_confidence: true, show: 'maps' });
+    await act('focus', { kind: 'variant', name: 'p.Trp47Arg', run: 'Run 1' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(800);
+  },
+  // The same, its disagreement: the discordant variants, the dispersion, and the positions.
+  async 'compare-disagreement'() {
+    await example('dhfr-lon');
+    await act('compare', { a: 'Run 1: −Lon', b: 'Run 1: +Lon', low_confidence: true, show: 'disagreement' });
+    await clearToasts();
+    await sleep(600);
+  },
+  // Other sources and scales (wave 4, slice 3): GRB2's Run 1 against its record's published scores,
+  // kept beside the workspace by URN without opening it (from the cache), rescaled by their anchors.
+  async 'compare-scales'() {
+    await example('grb2-sh3');
+    await act('compare', { a: 'Run 1', b: 'urn:mavedb:00000835-a-1', scale: 'nonsense-wt', show: 'agreement' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(700);
+  },
+  // PTEN's abundance against AlphaMissense (P60484, from the cache): by rank and by its classes.
+  async 'compare-classes'() {
+    await example('pten-mavedb');
+    await act('add_track', { provider: 'alphamissense', run: 'Published scores' });
+    await act('compare', { a: 'Published scores', b: 'AlphaMissense: P60484', show: 'classes' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(700);
+  },
+  // Robustness to analysis choices (wave 4, slice 4): DHFR's Run 1 scored again 47 other ways, its
+  // differences between the conditions: how many hold in every analysis, and on what the others
+  // depend.
+  async robustness() {
+    await example('dhfr-lon');
+    await act('check_robustness', { run: 'Run 1' });
+    await click('+Lon vs −Lon');
+    await scrollTo('.robustness-pane', 'start');
+    await clearToasts();
+    await sleep(600);
+  },
+  // Two screens on two scales (wave 4, slice 6): TP53's etoposide screen, its target checked against
+  // UniProt, against Kotler et al.'s screen of the DNA-binding domain kept beside, both rescaled by
+  // their anchors.
+  async 'tp53-screens'() {
+    await example('tp53-screens');
+    await act('check_target', { accession: 'P04637', apply: true });
+    await act('compare', { a: 'Published scores', b: 'urn:mavedb:00000059-a-1', direction: 'higher-less', scale: 'synonymous-nonsense', show: 'agreement' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(800);
+  },
+  // A rescoring against the published scores (wave 4, slice 6): Hsp90's Run 1 against its record's
+  // own scores kept beside, stated to be on one scale, the Bland–Altman plot's trend in view.
+  async 'hsp90-rescoring'() {
+    await example('hsp90');
+    await act('compare', { a: 'Run 1', b: 'urn:mavedb:00000011-a-1', direction: 'higher-more', scale: 'stated', show: 'agreement' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await scrollTo('.compare-stats', 'start');
+    await sleep(800);
+  },
+  // Selections by query (wave 4, slice 5): factor IX's map with UniProt's features beside it, the
+  // lost substitutions of the cysteines in its disulfide bonds selected by query and saved, the
+  // query in its field.
+  async selections() {
+    await example('factor9');
+    await act('add_track', { provider: 'uniprot-features' });
+    await act('select_variants', { query: 'missense from C in feature disulfide and lower', save_as: 'Disulfides' });
+    await js(`(() => { const i = document.querySelector('.map-query-input'); i.value = 'missense from C in feature disulfide and lower'; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
+    await waitFor(`/variants? match/.test(document.querySelector('.map-query-note')?.textContent ?? '')`);
+    await js(`document.querySelector('.map-query-input').blur()`);
+    await clearToasts();
+    await scrollTo('.map-pane .map-legend', 'start');
+    await sleep(800);
   },
   // The record: a run's exports, from the workflow strip.
   async record() {

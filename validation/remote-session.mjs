@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { launch, sleep } from '../docs/capture/cdp.mjs';
 import { readArchive } from '../web/lib/archive.js';
 import { parseTable } from '../web/lib/csv.js';
-import { outputDigest } from '../web/lib/runs.js';
+import { makeRun, outputDigest, recordedInputs, runInputs } from '../web/lib/runs.js';
 import { DEFAULT_PARAMETERS, PRESETS, defaultParameters } from '../web/lib/score.js';
 import { FINGERPRINT } from '../web/lib/dmath.js';
 import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
@@ -33,6 +33,14 @@ import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { tracksCSV } from '../web/lib/tracks.js';
 import { openExampleInNode } from './example-cases.mjs';
+import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
+import { predictorSide, scoreSetSide } from './compare-cases.mjs';
+import { checkTable } from './robustness-cases.mjs';
+import { robustnessCSV, robustnessJSON, robustnessPositionsCSV } from '../web/lib/robustness.js';
+import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
+import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
+import { recordTargetCheck } from '../web/lib/workspace.js';
+import { sha256 } from '../web/lib/sha256.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -42,6 +50,10 @@ const requireData = process.argv.includes('--require-data');
 // into the fetcher's cache, so that its two score sets open together offline.
 const DHFR = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-dhfr');
 const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:00000063-a-1', 'plus-lon']];
+// TP53's three score sets (wave 4, slice 6), as node validation/fetch.mjs mavedb-tp53-screens keeps
+// them: the example opens the first, and compares the others kept beside.
+const TP53 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-tp53-screens');
+const TP53_TABLES = [['urn:mavedb:00000068-c-1', 'scores.csv'], ['urn:mavedb:00000068-b-1', 'nutlin.csv'], ['urn:mavedb:00000059-a-1', 'kotler.csv']];
 const results = [];
 function check(name, value, ok, required = '') {
   results.push({ name, ok });
@@ -71,6 +83,13 @@ async function startMaveScape() {
         cpSync(join(DHFR, dir, `${table}.csv`), join(cache, 'mavedb', name));
         writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
       }
+    }
+  }
+  if (existsSync(join(TP53, 'kotler.csv'))) {
+    for (const [urn, file] of TP53_TABLES) {
+      const name = `${urn.replaceAll(':', '_')}.scores.csv`;
+      cpSync(join(TP53, file), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/scores`, retrieved: '2026-10-12T01:15:25Z' }, null, 2)}\n`);
     }
   }
   const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -286,6 +305,44 @@ try {
   delete expectedProvenance.files;
   check('export provenance.json: Node\'s, but for the file names', `${Object.keys(provenance).length} fields`, JSON.stringify(provenance) === JSON.stringify(expectedProvenance));
 
+  // Comparisons (wave 4, slice 1): two replicates, one table scored twice, two scales; each as Node
+  // compares the runs it recomputes from the exported archive, and the files the same bytes.
+  const nodeRuns = archive.ws.runs.map((run, i) => ({ run, results: recompute(archive.ws, archive.sources, i).scored.results }));
+  const nodeCompare = (a, b) => compareSides(describeSide(archive.ws, nodeRuns[a[0]].run, nodeRuns[a[0]].results, a[1]), describeSide(archive.ws, nodeRuns[b[0]].run, nodeRuns[b[0]].results, b[1]));
+  const withoutSoftware = (text) => { const { software, ...rest } = JSON.parse(text); return JSON.stringify(rest); };
+  const reps = nodeRuns[0].results.replicates.map((r) => r.id);
+  const repCompare = await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2' });
+  const repNode = nodeCompare([0, { run: nodeRuns[0].run.id, replicate: reps[0] }], [0, { run: nodeRuns[0].run.id, replicate: reps[1] }]);
+  check('compare: GRB2\'s replicates 1 and 2 in the Compare view, the report and every statistic as Node compares them', repCompare.message.slice(0, 200), JSON.stringify(repCompare.data) === withoutSoftware(comparisonJSON(repNode)) && repCompare.data.report.status === 'ok' && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'compare' && (await browser.eval(`Boolean(document.querySelector('.compare-report'))`)));
+  const runsCompare = await act('compare', { a: 'Run 1', b: 'Run 2' });
+  check('compare: Run 1 against Run 2 (the Enrich2 preset): one table scored twice, qualified, on one scale', runsCompare.data.report.items.find((i) => i.id === 'independence').text, runsCompare.data.report.status === 'qualified' && runsCompare.data.sameScale === true && runsCompare.data.statistics.concordance !== null);
+  const scalesCompare = await act('compare', { a: 'Run 1', b: 'Run 3' });
+  const scalesNode = nodeCompare([0, { run: nodeRuns[0].run.id, condition: 0 }], [2, { run: nodeRuns[2].run.id, condition: 0 }]);
+  check('compare: Run 1 against Run 3 (DiMSum\'s fitness): two scales, so Lin\'s concordance, Bland–Altman, discordance and disagreement by position withheld, saying why', scalesCompare.data.report.items.find((i) => i.id === 'scale').text, scalesCompare.data.sameScale === false && scalesCompare.data.withheld.join() === 'concordance,blandAltman,discordance,positions' && JSON.stringify(scalesCompare.data) === withoutSoftware(comparisonJSON(scalesNode)));
+  await act('export', { what: 'comparison', path: join(out, 'comparison.csv') });
+  await act('export', { what: 'comparison', path: join(out, 'comparison.json') });
+  const comparedCSV = readFileSync(join(out, 'comparison.csv'), 'utf8');
+  const comparedJSON = readFileSync(join(out, 'comparison.json'), 'utf8');
+  check('export comparison: the matched variants (CSV) and the report and statistics (JSON) of the comparison shown, as Node writes them', `${comparedCSV.split('\n').length - 2} variants; ${JSON.parse(comparedJSON).a.label} and ${JSON.parse(comparedJSON).b.label}`, comparedCSV === comparisonCSV(scalesNode) && withoutSoftware(comparedJSON) === withoutSoftware(comparisonJSON(scalesNode)) && JSON.parse(comparedJSON).software?.version === connection.version);
+  // Slice 2: a filter, the discordant variants and the disagreement by position, and the maps.
+  const rep1 = describeSide(archive.ws, nodeRuns[0].run, nodeRuns[0].results, { run: nodeRuns[0].run.id, replicate: reps[0] });
+  const rep2 = describeSide(archive.ws, nodeRuns[0].run, nodeRuns[0].results, { run: nodeRuns[0].run.id, replicate: reps[1] });
+  const filteredCompare = await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2', max_se: 0.3 });
+  const filteredNode = compareSides(rep1, rep2, { filters: { lowConfidence: false, maxSE: 0.3, minReads: null } });
+  check('compare with a filter (SE at most 0.3): the variants left out, the discordant variants and the disagreement by position, as Node gives them', filteredCompare.message.slice(0, 220), JSON.stringify(filteredCompare.data) === withoutSoftware(comparisonJSON(filteredNode)) && filteredCompare.data.matched.filtered.se > 0 && filteredCompare.data.discordance.valid && filteredCompare.data.positions.list.length > 40);
+  await act('export', { what: 'comparison-positions', path: join(out, 'comparison_positions.csv') });
+  await act('export', { what: 'comparison-map', path: join(out, 'comparison_difference.svg') });
+  await act('export', { what: 'comparison-map', map: 'second', path: join(out, 'comparison_second.svg') });
+  const palette = (await browser.eval('window.mavescape.mapView?.palette ?? null')) ?? 'rdbu';
+  const diffNode = differenceMap(filteredNode, rep1);
+  const diffSVG = mapSVG(buildMapModel(diffNode.results, diffNode.design, { colorBy: 'differential', contrast: 0 }), { palette, results: diffNode.results });
+  const secondNode = sideMap(rep2);
+  const secondSVG = mapSVG(buildMapModel(secondNode.results, secondNode.design, { condition: secondNode.condition }), { palette, results: secondNode.results });
+  check('export comparison-positions and comparison-map (the difference, and the second side\'s): the same bytes as Node\'s', `${readFileSync(join(out, 'comparison_positions.csv'), 'utf8').split('\n').length - 2} positions; maps ${readFileSync(join(out, 'comparison_difference.svg'), 'utf8').length} and ${readFileSync(join(out, 'comparison_second.svg'), 'utf8').length} bytes`, readFileSync(join(out, 'comparison_positions.csv'), 'utf8') === positionsCSV(filteredNode) && readFileSync(join(out, 'comparison_difference.svg'), 'utf8') === diffSVG && readFileSync(join(out, 'comparison_second.svg'), 'utf8') === secondSVG);
+  await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2', max_se: null });
+  const noSide = await send('compare', { a: 'Run 9' });
+  check('compare with a side that does not exist: refused, listing the sides', noSide.message, !noSide.ok && /No side "Run 9"/.test(noSide.message) && /Run 1: Replicate 2/.test(noSide.message));
+
   // Sequence tracks (wave 3, slice 5), offline, from the cached answers: the run's own, hidden until
   // shown; annotations from public data and from files; shown, moved, filtered; beside a variant;
   // in the exports, the archive and the methods, as Node makes them.
@@ -333,6 +390,77 @@ try {
   const removedTrack = await act('remove_track', { annotation: gffId });
   const afterRemoval = await act('list_tracks');
   check('remove_track: the GFF3\'s annotation and its tracks gone', `${removedTrack.message} ${afterRemoval.data.tracks.length} tracks`, !afterRemoval.data.tracks.some((t) => t.annotation === gffId) && afterRemoval.data.tracks.length === 4 + 3 + 1 + 1 + 1 + 1 + 1);
+
+  // Other sources and scales (wave 4, slice 3), offline from the cache: GRB2's Run 1 against its
+  // record's published scores, kept beside the workspace by URN without opening it, rescaled by
+  // their anchors; against AlphaMissense (added above) by rank and by its classes; each as Node
+  // compares them, and the files the same bytes.
+  const runOne = describeSide(archive.ws, nodeRuns[0].run, nodeRuns[0].results, { run: nodeRuns[0].run.id, condition: 0 });
+  const viaUrn = await act('compare', { a: 'Run 1', b: 'urn:mavedb:00000835-a-1', scale: 'nonsense-wt' });
+  const keptSet = scoreSetSide('urn:mavedb:00000835-a-1', join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00000835-a-1.scores.csv'));
+  const viaUrnNode = compareSides(runOne, keptSet.side, { scale: 'nonsense-wt' });
+  const keptNow = await browser.eval('JSON.stringify((window.mavescape.store.ws.annotations ?? []).filter((a) => a.provider === "mavedb-scores").map((a) => [a.id, a.file.sha256, a.record.scoreSet.urn]))');
+  check('compare with a MaveDB score set by its URN: fetched (from the cache) and kept beside the workspace without opening it, its scores read as published, rescaled with Run 1 by their anchors: the report and statistics as Node gives them', `${viaUrn.message.slice(0, 240)}… kept: ${keptNow}`, JSON.stringify(viaUrn.data) === withoutSoftware(comparisonJSON(viaUrnNode)) && viaUrn.data.scale.applied && viaUrn.data.statistics.concordance.ccc > 0.99 && JSON.parse(keptNow).length === 1 && JSON.parse(keptNow)[0][1] === keptSet.annotation.file.sha256 && (await act('get_state')).data.runs.length === 3);
+  await act('export', { what: 'comparison', path: join(out, 'comparison_scoreset.csv') });
+  const amCompare = await act('compare', { a: 'Run 1', b: 'AlphaMissense: P62993', scale: 'scored', show: 'classes' });
+  const amNode = compareSides(runOne, predictorSide('alphamissense', readFileSync(join(ROOT, 'validation/fixtures/public-data/alphafold/P62993.aa-substitutions.csv'), 'utf8'), runOne, { name: 'AlphaMissense: P62993' }).side);
+  await act('export', { what: 'comparison-classes', path: join(out, 'comparison_classes.csv') });
+  check('compare with AlphaMissense: by rank and by its classes, as Node gives them, the Classes tab shown; the exports (the score set\'s variants compared, AlphaMissense\'s classes) the same bytes as Node\'s', amCompare.message.slice(0, 260), JSON.stringify(amCompare.data) === withoutSoftware(comparisonJSON(amNode)) && amCompare.data.classes.valid && readFileSync(join(out, 'comparison_scoreset.csv'), 'utf8') === comparisonCSV(viaUrnNode) && readFileSync(join(out, 'comparison_classes.csv'), 'utf8') === classesCSV(amNode) && (await browser.eval('Boolean(document.querySelector(".compare-classes"))')));
+  const badScale = await send('compare', { scale: 'twice' });
+  const setTracks = await act('list_tracks', { run: 'Run 1' });
+  check('compare with a scale it does not know: refused, listing the scales; the score set\'s scores a track beside the map', `${badScale.message} ${setTracks.data.tracks.filter((t) => /00000835/.test(t.label)).map((t) => `${t.label}: ${t.summary ?? t.kind}`).join('; ')}`, !badScale.ok && /nonsense-wt/.test(badScale.message) && setTracks.data.tracks.some((t) => /urn:mavedb:00000835-a-1/.test(t.label)));
+
+  // Robustness to analysis choices (wave 4, slice 4): Run 1 checked in the score worker, as Node
+  // checks the run it recomputes from the archive; its files the same bytes.
+  const robust = await act('check_robustness', { run: 'Run 1', max: 24 });
+  const r1 = archive.ws.runs[0];
+  const r1Recorded = recordedInputs(r1);
+  const nodeCheck = checkTable(recompute(archive.ws, archive.sources, 0).table, r1Recorded.design, r1Recorded.parameters, { max: 24 });
+  const nodeSpecs = nodeCheck.out.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }));
+  const { notes: robustNotes, ...robustData } = robust.data;
+  await act('export', { what: 'robustness', run: 'Run 1', path: join(out, 'robustness.csv') });
+  await act('export', { what: 'robustness', run: 'Run 1', path: join(out, 'robustness.json') });
+  await act('export', { what: 'robustness-positions', run: 'Run 1', path: join(out, 'robustness_positions.csv') });
+  const robustJSON = JSON.parse(readFileSync(join(out, 'robustness.json'), 'utf8'));
+  const { software: robustSoftware, ...robustFile } = robustJSON;
+  const robustParts = {
+    data: JSON.stringify(robustData) === JSON.stringify(JSON.parse(robustnessJSON(nodeCheck.summary, r1, nodeSpecs))),
+    csv: readFileSync(join(out, 'robustness.csv'), 'utf8') === robustnessCSV(nodeCheck.summary, nodeCheck.results),
+    positions: readFileSync(join(out, 'robustness_positions.csv'), 'utf8') === robustnessPositionsCSV(nodeCheck.summary),
+    record: JSON.stringify(robustFile) === JSON.stringify(JSON.parse(robustnessJSON(nodeCheck.summary, r1, nodeSpecs))) && robustSoftware?.version === connection.version,
+    notes: robustNotes.length === 1,
+    view: await browser.eval(`Boolean(document.querySelector('.robustness-pane .robustness-verdicts'))`),
+  };
+  check('check_robustness: Run 1 scored again 23 other ways in the score worker, each variant\'s verdict and each alternative\'s effect as Node finds them for the run it recomputes from the archive; its variants, positions and record the same bytes as Node\'s; the Score view shows it', `${robust.message.slice(0, 160)}… ${Object.entries(robustParts).map(([k, v]) => `${k} ${v ? 'as Node' : 'different'}`).join(', ')}`, Object.values(robustParts).every(Boolean));
+  const focusedRobust = await act('inspect_variant', { variant: 'p.Trp36Ala', run: 'Run 1' });
+  check('the inspector shows a checked variant\'s robustness: its class across the analyses and its verdict', String(await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Robustness')`)), focusedRobust.ok && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Robustness')`)));
+  const publishedRobust = await send('check_robustness', { run: 'Run 1', max: 1 });
+  check('check_robustness with too few analyses: refused, saying how many', publishedRobust.message, !publishedRobust.ok && /from 2 to 256/.test(publishedRobust.message));
+
+  // Selections by query (wave 4, slice 5), as Node selects on the run it recomputes from the archive:
+  // a query, an operation on the selection, a saved selection used in another query, the robustness
+  // verdicts (Run 1 checked above), a mistake named in place, and the selection's file.
+  const r1Model = buildMapModel(nodeCheck.results, r1Recorded.design);
+  const nodeQuery = (text, extra = {}) => selectByQuery(text, queryContext({ model: r1Model, results: nodeCheck.results, design: r1Recorded.design, ...extra })).keys;
+  const q1 = await act('select_variants', { run: 'Run 1', query: 'missense at 10-30 with se < 0.2' });
+  const q2 = await act('select_variants', { run: 'Run 1', query: 'low', operation: 'subtract', save_as: 'Core 10-30' });
+  const q3 = await act('select_variants', { run: 'Run 1', query: 'in "Core 10-30" and lower' });
+  const q4 = await act('select_variants', { run: 'Run 1', query: 'fragile or uncertain' });
+  const badQuery = await send('select_variants', { run: 'Run 1', query: 'missense bananas' });
+  const savedSets = [{ name: 'Core 10-30', keys: combineKeys(nodeQuery('missense at 10-30 with se < 0.2'), nodeQuery('low'), 'subtract') }];
+  await act('export', { what: 'selection', selection: 'Core 10-30', path: join(out, 'core.json') });
+  const coreFile = JSON.parse(readFileSync(join(out, 'core.json'), 'utf8'));
+  const queryParts = {
+    query: JSON.stringify(q1.data.variants) === JSON.stringify(nodeQuery('missense at 10-30 with se < 0.2')),
+    subtract: JSON.stringify(q2.data.variants) === JSON.stringify(savedSets[0].keys) && q2.data.query === '(missense at 10-30 with se < 0.2) and not (low)',
+    saved: (await act('get_state')).data.selections.some((x) => x.name === 'Core 10-30' && x.query === q2.data.query),
+    set: JSON.stringify(q3.data.variants) === JSON.stringify(nodeQuery('in "Core 10-30" and lower', { sets: savedSets })),
+    verdicts: q4.data.variants.length > 0 && JSON.stringify(q4.data.variants) === JSON.stringify(nodeQuery('fragile or uncertain', { robustness: nodeCheck.summary })),
+    mistake: !badQuery.ok && /Unknown word "bananas"/.test(badQuery.message) && /character 10/.test(badQuery.message),
+    file: coreFile.query === q2.data.query && JSON.stringify(coreFile.keys) === JSON.stringify(savedSets[0].keys),
+    view: await browser.eval(`Boolean(document.querySelector('.map-query-input')) && /by query/.test(document.querySelector('.map-selection')?.textContent ?? '')`),
+  };
+  check('select_variants by query, as Node selects on the run it recomputes from the archive: a query, its matches subtracted from the selection (the query composed and saved with it), a saved selection named in a query, the robustness verdicts of the run checked, a mistake named in place; the saved selection\'s file keeps its query; the Map view shows the query', `${q1.data.count} by query, ${q2.data.count} after subtracting, ${q3.data.count} of the saved lower, ${q4.data.count} fragile or uncertain; ${Object.entries(queryParts).map(([k, v]) => `${k} ${v ? 'ok' : 'different'}`).join(', ')}`, Object.values(queryParts).every(Boolean));
 
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.
   const noTokenOpen = await send('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] }, { withToken: false });
@@ -413,6 +541,39 @@ try {
   } else {
     console.log('  DHFR\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-dhfr (the checks of score sets opened together skipped)');
     if (requireData) check('DHFR\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
+  }
+
+  // Two screens on two scales (wave 4, slice 6): the TP53 example opened offline, its target checked
+  // against UniProt's entry, and the other two screens compared without opening them, as Node
+  // compares them (the examples suite's way).
+  if (existsSync(join(TP53, 'kotler.csv'))) {
+    const tp53 = await act('open_example', { id: 'tp53-screens' });
+    const checked = await act('check_target', { accession: 'P04637', apply: true });
+    const unstated = await act('compare', { a: 'Published scores', b: 'urn:mavedb:00000059-a-1', scale: 'scored' });
+    const rescaled = await act('compare', { a: 'Published scores', b: 'urn:mavedb:00000059-a-1', direction: 'higher-less', scale: 'synonymous-nonsense' });
+    const nutlin = await act('compare', { a: 'Published scores', b: 'urn:mavedb:00000068-b-1', direction: 'higher-less', scale: 'synonymous-nonsense' });
+    const o = openExampleInNode(exampleById('tp53-screens'));
+    const entry = readUniProtEntry(JSON.parse(readFileSync(join(ROOT, 'validation/fixtures/public-data/uniprot/P04637.json'), 'utf8')));
+    const placement = placeTarget(o.ws.targets[0], entry);
+    const ws = recordTargetCheck(o.ws, o.ws.targets[0].id, placementPatch(o.ws.targets[0], entry, placement), referenceOf(entry, { service: 'UniProt', version: '2026_03' }, placement), 'check');
+    const source = { ...ws.sources[0], sha256: sha256(o.parts[0].bytes) };
+    const run = makeRun({ inputs: runInputs({ source, design: o.design, parameters: o.parameters }), source, results: o.scored.results, software: { version: 'node', commit: '' }, name: 'Published scores' });
+    const sideA = describeSide({ ...ws, sources: [source] }, run, o.scored.results, { run: run.id, condition: 0 });
+    const nodeUnstated = compareSides(sideA, scoreSetSide('urn:mavedb:00000059-a-1', join(TP53, 'kotler.csv')).side);
+    const nodeRescaled = compareSides(sideA, scoreSetSide('urn:mavedb:00000059-a-1', join(TP53, 'kotler.csv'), { direction: 'higher-less' }).side, { scale: 'synonymous-nonsense' });
+    const nodeNutlin = compareSides(sideA, scoreSetSide('urn:mavedb:00000068-b-1', join(TP53, 'nutlin.csv'), { direction: 'higher-less' }).side, { scale: 'synonymous-nonsense' });
+    const sameStats = (window, node) => JSON.stringify(window.data.statistics) === JSON.stringify(JSON.parse(JSON.stringify(node.statistics)));
+    const reportOf = (x) => JSON.stringify(x.items.map((i) => [i.id, i.status, i.text]));
+    const parts = {
+      opened: tp53.ok !== false && checked.data.applied !== false && /P72R/.test(checked.message),
+      unstated: sameStats(unstated, nodeUnstated) && unstated.data.statistics.pearson.r < -0.78,
+      rescaled: sameStats(rescaled, nodeRescaled) && reportOf(rescaled.data.report) === reportOf(nodeRescaled.report) && /936 protein variants on several rows/.test(rescaled.message + JSON.stringify(rescaled.data.report)),
+      nutlin: sameStats(nutlin, nodeNutlin),
+    };
+    check('open_example "tp53-screens" offline, its target checked against UniProt P04637 (P72R), and the two other screens compared by URN without opening them: as published r −0.78; Kotler et al.\'s direction stated and both rescaled by their anchors, its protein variants on several rows merged, the statistics and report as Node gives them', `${rescaled.message.slice(0, 220)}… ${Object.entries(parts).map(([k, v]) => `${k} ${v ? 'as Node' : 'different'}`).join(', ')}`, Object.values(parts).every(Boolean));
+  } else {
+    console.log('  TP53\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-tp53-screens (the TP53 example\'s checks skipped)');
+    if (requireData) check('TP53\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
   }
 
   // Two conditions (wave 2, slice 6): the example opens on its differential map; scored in the

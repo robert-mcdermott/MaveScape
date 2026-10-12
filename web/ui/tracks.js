@@ -5,7 +5,7 @@
 // each with its source); the tracks as CSV; and the inspector's annotations of a variant.
 
 import { h, icon, clear, downloadBlob } from './dom.js';
-import { confirmDialog, progressToast, showMenu, toast } from './overlays.js';
+import { confirmDialog, progressToast, promptDialog, showMenu, toast } from './overlays.js';
 import { fetchPublic, publicDataState } from './public-data.js';
 import { storeBytes } from './import.js';
 import { ensureResults, runEntry } from './run-results.js';
@@ -15,14 +15,18 @@ import { buildMapModel } from '../lib/map-model.js';
 import { proteinView } from '../lib/collapse.js';
 import { cellText } from '../lib/csv.js';
 import { addAnnotation, removeAnnotation, setTrackLayout } from '../lib/workspace.js';
+import { normalizeUrn } from '../lib/mavedb.js';
+import { scoreSetResults } from '../lib/scoreset.js';
 import { now as clockNow } from '../lib/clock.js';
+import { possessive } from '../lib/words.js';
 
 const decoder = new TextDecoder();
 // An annotation's kept text, by SHA-256; and each annotation's tracks, by what they were read for.
 const texts = new Map();
 const reads = new Map();
 
-async function annotationText(app, annotation) {
+// An annotation's kept text (also a MaveDB score set's, or a predictor's, compared: mode-compare.js).
+export async function annotationText(app, annotation) {
   const sha = annotation.file?.sha256;
   if (!sha) throw new Error(`${annotation.name} has no file.`);
   if (!texts.has(sha)) {
@@ -100,7 +104,7 @@ export async function runTracks(app, run, model) {
 // The tracks of a run outside the Map view (remote control, exports): its first condition's map.
 export async function runTrackState(app, run, { condition = 0 } = {}) {
   const entry = runEntry(app, run) ?? await ensureResults(app, run);
-  if (!entry?.results) throw new Error(entry?.message ?? `${run.name}'s scores could not be recomputed.`);
+  if (!entry?.results) throw new Error(entry?.message ?? `${possessive(run.name)} scores could not be recomputed.`);
   const results = proteinView(entry.results) ?? entry.results;
   const model = buildMapModel(results, run.inputs.design, { condition });
   const state = await runTracks(app, run, model);
@@ -111,37 +115,55 @@ export async function runTrackState(app, run, { condition = 0 } = {}) {
 
 const subject = (provider, target, context) => {
   if (provider.id === 'mavedb-annotations') return context.origin?.urn ?? '';
+  if (provider.id === 'mavedb-scores') return context.urn ?? '';
   if (provider.id === 'clinvar' || provider.id === 'gnomad') return target?.identifiers?.gene?.toUpperCase() ?? '';
   return target?.identifiers?.uniprot?.toUpperCase() ?? '';
 };
 
 // Keeps an annotation's text in the library and the annotation in the workspace, once it reads
-// onto the run's target. Returns { ok, id, name, tracks, notes, message }.
+// onto the run's target. A MaveDB score set (wave 4, slice 3) is kept once its scores can be read as
+// published, with a track or none (a score set of nucleotide variants is still compared). Returns
+// { ok, id, name, tracks, notes, message }.
 async function keepAnnotation(app, run, model, { provider, name, text, fileName, record }) {
   const context = await contextOf(app, run, model);
   const trial = annotationTracks({ id: 'new', provider: provider.id, name, record, file: { fileName } }, text, context);
-  if (!trial.tracks.length) return { ok: false, message: trial.problem ?? `${name} gives no track for ${context.target?.name ?? 'the target'}.` };
+  const scoreSet = provider.id === 'mavedb-scores' ? scoreSetResults(text, record.scoreSet) : null;
+  if (scoreSet?.error) return { ok: false, message: `${name}: ${scoreSet.error}` };
+  if (!trial.tracks.length && !scoreSet) return { ok: false, message: trial.problem ?? `${name} gives no track for ${context.target?.name ?? 'the target'}.` };
   const stored = await storeBytes(app, new TextEncoder().encode(text));
   const { ws, id } = addAnnotation(app.store.ws, { provider: provider.id, name, file: { fileName, sha256: stored.sha256, size: stored.size }, record, added: clockNow() });
-  app.store.commit(ws, `Add the track ${name}`);
-  const message = `Added ${name}: ${trial.tracks.map((t) => describeTrack(t).replace(/\.$/, '')).join('; ')}.${trial.notes.length ? ` ${trial.notes.join(' ')}` : ''}`;
+  app.store.commit(ws, `Add the ${scoreSet ? 'score set' : 'track'} ${name}`);
+  const tracks = trial.tracks.map((t) => describeTrack(t).replace(/\.$/, '')).join('; ');
+  const message = scoreSet
+    ? `Added ${name}: "${record.scoreSet.title}" (${record.scoreSet.license?.short ?? 'license not given'}), ${scoreSet.results.conditions[0].scored.toLocaleString('en-US')} of ${scoreSet.results.rows.toLocaleString('en-US')} variants scored as published, kept beside the workspace (not opened): compare it in Compare.${tracks ? ` Beside the map: ${tracks}.` : ''}${trial.notes.length ? ` ${trial.notes.join(' ')}` : ''}`
+    : `Added ${name}: ${tracks}.${trial.notes.length ? ` ${trial.notes.join(' ')}` : ''}`;
   app.log(message);
-  return { ok: true, id, name, tracks: trial.tracks, notes: trial.notes, message };
+  return { ok: true, id, name, tracks: trial.tracks, notes: trial.notes, message, ...(scoreSet ? { scoreSet: { urn: record.scoreSet.urn, title: record.scoreSet.title, scored: scoreSet.results.conditions[0].scored, variants: scoreSet.results.rows } } : {}) };
 }
 
-// Adds a public annotation (a provider of kind 'public') for a run's target.
-export async function addPublicTrack(app, run, providerId, { quiet = false } = {}) {
+// Adds a public annotation (a provider of kind 'public') for a run's target. A MaveDB score set
+// (provider mavedb-scores; wave 4, slice 3) needs its URN (urn), and may be given what a higher
+// score means (direction, which MaveDB does not record) and, of a score set of several targets, the
+// one to compare (scoreSetTarget).
+export async function addPublicTrack(app, run, providerId, { quiet = false, urn = null, direction = null, scoreSetTarget = null } = {}) {
   const provider = providerById(providerId);
   if (!provider || provider.kind !== 'public') return { ok: false, message: `There is no public annotation "${providerId}": ${PROVIDERS.filter((p) => p.kind === 'public').map((p) => p.id).join(', ')}.` };
   const { model } = await runTrackState(app, run);
-  const context = await contextOf(app, run, model);
+  const own = await contextOf(app, run, model);
+  let context = own;
+  if (provider.id === 'mavedb-scores') {
+    const asked = normalizeUrn(urn ?? '');
+    if (!asked) return { ok: false, message: urn ? `"${urn}" is not the URN of a published MaveDB score set (such as urn:mavedb:00000054-a-1).` : 'Give the score set\'s URN (urn:mavedb:…).' };
+    context = { ...own, urn: asked, scoreSetTarget };
+  }
   const why = provider.needs(context.target, context);
   if (why) return { ok: false, message: why };
   const name = `${provider.name}: ${subject(provider, context.target, context)}`;
-  if ((app.store.ws.annotations ?? []).some((a) => a.name === name)) return { ok: false, message: `${name} is already among the tracks.` };
+  if ((app.store.ws.annotations ?? []).some((a) => a.name === name)) return { ok: false, message: `${name} is already ${provider.id === 'mavedb-scores' ? 'kept beside the workspace' : 'among the tracks'}.` };
   const busy = quiet ? null : progressToast(`Asking ${provider.service} for ${name}…`);
   try {
     const got = await provider.fetch(context.target, context, (path, options) => fetchPublic(app, path, options), (fraction, note) => busy?.update(fraction, note));
+    if (direction && got.record?.scoreSet) got.record.scoreSet.readout = { direction };
     const kept = await keepAnnotation(app, run, model, { provider, name, text: got.text, fileName: got.fileName, record: got.record });
     if (busy) {
       if (kept.ok) busy.done(kept.message);
@@ -192,6 +214,16 @@ export function exportTracks(app, run, model, tracks) {
   downloadBlob(new Blob([tracksCSV(tracks, model)], { type: 'text/csv' }), name);
 }
 
+// Asks for a MaveDB score set's URN and keeps it beside the workspace (wave 4, slice 3). Returns
+// addPublicTrack's answer, or null when cancelled.
+export async function addScoreSetDialog(app, run) {
+  const urn = await promptDialog({ title: 'A MaveDB score set', label: 'Its URN', placeholder: 'urn:mavedb:00000054-a-1', confirm: 'Add', hint: 'Its record and published scores are fetched and kept beside the workspace (not opened as one): compared with the runs in Compare, and drawn as a track beside the map. MaveDB does not say what a higher score means: state it in Compare.' });
+  if (!urn) return null;
+  const result = await addPublicTrack(app, run, 'mavedb-scores', { urn });
+  if (!result.ok) toast(result.message, { kind: 'error' });
+  return result;
+}
+
 // --- The panel -------------------------------------------------------------------------------------
 
 function pickFile(accept) {
@@ -214,8 +246,10 @@ export function tracksPanel(app) {
     const off = publicDataState(app);
     const fromMaveDB = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256)?.origin?.database === 'MaveDB';
     const items = PROVIDERS.filter((p) => p.kind === 'public').map((p) => {
-      const why = off !== 'on' && off !== 'offline' ? 'Public data are off.' : p.needs(target, { origin: fromMaveDB ? { urn: 'yes' } : null });
-      return { label: p.name, hint: why ? 'unavailable' : p.service, icon: 'globe', disabled: Boolean(why), title: why ?? `${p.what}.`, onSelect: () => addPublicTrack(app, run, p.id) };
+      // A MaveDB score set is asked for by its URN (wave 4, slice 3).
+      const byUrn = p.id === 'mavedb-scores';
+      const why = off !== 'on' && off !== 'offline' ? 'Public data are off.' : p.needs(target, { origin: fromMaveDB ? { urn: 'yes' } : null, urn: byUrn ? 'asked' : null });
+      return { label: byUrn ? `${p.name} (by URN)…` : p.name, hint: why ? 'unavailable' : p.service, icon: 'globe', disabled: Boolean(why), title: why ?? `${p.what}.`, onSelect: () => (byUrn ? addScoreSetDialog(app, run) : addPublicTrack(app, run, p.id)) };
     });
     const files = [
       { label: 'Alignment, for conservation (A3M, FASTA, Stockholm, Clustal)…', icon: 'table', accept: '.a3m,.a2m,.fasta,.fa,.afa,.sto,.stk,.aln,.clustal,.txt' },

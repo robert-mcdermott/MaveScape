@@ -18,6 +18,7 @@ import { importGenBank, targetsFromGenBank } from './genbank.js';
 import { addSource, addTarget, change, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { IDENTIFIER_COLUMNS, validateDesign, summarizeDesign } from '../lib/design.js';
+import { possessive } from '../lib/words.js';
 
 const LINE_ENDS = { crlf: 'CRLF (Windows) line ends', lf: 'LF line ends', cr: 'CR (old Mac) line ends' };
 const DELIMITER_NAMES = { ',': 'comma-separated', '\t': 'tab-separated', ';': 'semicolon-separated', '|': 'bar-separated' };
@@ -69,7 +70,7 @@ export async function readCodonsFor(app, source, design) {
   const m = source.mapping ?? {};
   const target = app.store.ws.targets.find((t) => t.id === source.target && t.sequenceType === 'dna') ?? design.targets?.find((t) => t.sequenceType === 'dna');
   const assembled = assembleTable(parsed, { absentMeans: m.absentMeans ?? 'missing', level: 'protein', target, codons: { from } });
-  if (!assembled.table) throw new Error(`${source.name}'s codon variants could not be read at the protein level: ${assembled.problems.map((p) => p.message).join(' ')}`);
+  if (!assembled.table) throw new Error(`${possessive(source.name)} codon variants could not be read at the protein level: ${assembled.problems.map((p) => p.message).join(' ')}`);
   const table = assembled.table;
   const countColumns = (m.countColumns ?? []).filter((c) => table.columns.some((x) => x.name === c));
   const review = reviewImport(table, { variantColumn: column, level: 'protein', countColumns, target, mode: m.mode ?? 'lenient' });
@@ -80,7 +81,7 @@ export async function readCodonsFor(app, source, design) {
     problems: { blocking: review.blocking.map((p) => p.message), warnings: [...review.warnings, ...assembled.problems.filter((p) => p.level === 'warning')].map((p) => p.message) },
   };
   const ws = app.store.ws;
-  app.store.commit(change(ws, { sources: ws.sources.map((s) => (s.id === source.id ? next : s)) }, 'import', `Read ${source.name}'s rows as codon variants at the protein level: ${assembled.notes.join(' ')}`), `Read ${source.name} as codon variants`);
+  app.store.commit(change(ws, { sources: ws.sources.map((s) => (s.id === source.id ? next : s)) }, 'import', `Read ${possessive(source.name)} rows as codon variants at the protein level: ${assembled.notes.join(' ')}`), `Read ${source.name} as codon variants`);
   app.tables.set(source.id, { table, review });
   return next;
 }

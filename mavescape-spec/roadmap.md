@@ -1675,18 +1675,190 @@ scales?
 
 ### Wave 4
 
-1. **Comparisons (C1–C3).** A comparison engine that matches variants across replicates,
-   conditions, assays, runs, local and MaveDB data, and predictors.
-   - **A compatibility report** comes first: target, coordinates, matched and unmatched variants,
-     and the readouts (wave 2, slice 8: direction, units, reference state and rescaling). Two
-     assays on different scales are then not read as disagreeing.
-   - **Views:** synchronized and difference maps, scatter plots with Pearson, Spearman, Lin's
-     concordance and Bland–Altman, discordant-variant tables, position-level disagreement, and
-     confidence and depth filters.
-   - Invalid comparisons are blocked or qualified.
-2. **Robustness to analysis choices (C4).** A run is repeated across variations, following
+The roadmap first had three items for this wave. Before the wave began, the first item
+(comparisons, C1–C3) was split into three slices, as large as wave 3's. Robustness and selections
+follow, and the wave ends with its examples, as waves 2 and 3 did.
+
+1. **Comparisons within a workspace (C1, C3, part of C2): done.** A comparison engine (`web/lib/compare.js`)
+   that pairs two sets of scores in one workspace and matches their variants: two replicates of a
+   run, two conditions, a run's condition and another run's (a rescoring, or the published scores
+   of a MaveDB record against its counts scored again). A Compare view and the remote action
+   `compare`.
+   - **The compatibility report comes first** (C3):
+     - the targets: the same sequence, or one UniProt entry at different offsets, matched on its
+       coordinates;
+     - the level: nucleotide variants read at the protein level when the other side is protein;
+     - the variants matched, and those scored on one side only;
+     - the readouts: direction, units, reference state and rescaling;
+     - whether the two sides are independent: replicates that share an input, or one table scored
+       twice, agree for reasons other than the biology.
+
+     Two sets of scores on different or unknown scales are compared by correlation only: Lin's
+     concordance and Bland–Altman, which measure agreement on one scale, are withheld and the
+     report says why. A comparison that cannot be made (different targets with no common
+     reference, too few variants in common) is blocked, saying why.
+   - **A scatter plot with agreement statistics** (C2, in part): Pearson's r and Spearman's ρ, Lin's
+     concordance correlation and Bland–Altman's bias and limits of agreement, each with a 95%
+     interval; the Bland–Altman plot; a variant clicked shown in the inspector.
+   - The matched variants exported (`comparison.csv`), with the report and the statistics
+     (`comparison.json`).
+   - The statistics are in `web/lib/agreement.js`. The BRCA1 saturation genome editing example's
+     last step compares its counts, scored, with the published scores; a screenshot scene for each
+     (`compare`, `compare-published`); the guide page *Comparisons*. An example opened from MaveDB
+     gives its readout to its counts' draft too.
+   - Validation:
+     - `compare` (19 checks):
+       - every statistic of seven pairs equal to R's (`cor.test`, Spearman with Bonett and
+         Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰;
+       - in 2,000 simulated pairs of known agreement of each of five kinds, the 95% intervals
+         holding the truth 94–96% of the time (two weaker, reported apart);
+       - the report's rules on GRB2 and on pairs made from it (moved along UniProt P62993 and
+         matched on its coordinates; blocked without an accession; a direction stated the other
+         way);
+       - the examples compared as their guides say: BRCA1's counts against its published scores
+         (r 0.76, correlations only); DHFR's Run 1 against each record (0.898 and 0.959); DHFR's
+         published pair matched as R's merge matches it; BRCA1 RING's replicates sharing an input.
+     - `remote-session.mjs` 114 checks: `compare` and its export, as Node compares the runs it
+       recomputes from the archive.
+     - Unit tests: `compare.test.mjs` (8).
+   - Found by slice 1:
+     - **DHFR's Run 1 scores 626 variants that the published scores leave out**, at about four
+       times the SE. They agree little between the conditions (r 0.15), so −Lon and +Lon
+       correlate at 0.52 in Run 1, 0.76 on the published scores' variants, and 0.81 in the
+       published scores. The confidence and depth filters of slice 2 are for this.
+     - **Two intervals hold the truth less often than they claim**, and the suite reports them as
+       they are rather than tolerating them unseen:
+       - Spearman's near r = 1 (86% with 30 variants, 92% with 200): the sample ρ is biased below
+         the truth there;
+       - Lin's with 30 variants on two scales (92%).
+     - **An example's readout reached only its published scores**: compared with them, the counts'
+       drafted design said nothing of the direction. The readout is the assay's, and now reaches
+       both.
+     - **DHFR's two published score sets are on one scale in fact** (one study, one pipeline), but
+       nothing in their records says so: they are compared by correlation only until slice 3 lets a
+       person put two sets on one scale.
+2. **Comparison views across the map (C2): done.** Synchronized maps of the two sides, the difference
+   map, the variants that disagree beyond their uncertainty (each difference's z from both SEs,
+   where the two are independent), disagreement by position, and filters by confidence and depth.
+   Exports of each.
+   - The Compare view has three tabs: Agreement, Maps and Disagreement.
+     - **Filters:** low confidence on either side, a maximum SE, a minimum of input reads. A side
+       without SEs or counts is not filtered on them, and the report says so.
+     - **Maps:** the two maps and the difference map (the comparison drawn as the map draws a
+       contrast), panned and zoomed as one. The map component tells others its view and takes
+       theirs, two stretches of one protein lined up on its coordinates. A variant clicked is
+       selected in each.
+     - **Disagreement:** each difference's z, p and q, valid for two independent sides on one
+       scale; the dispersion (median z² over its expected value); and the disagreement by
+       position, a position tested with 3 variants or more.
+   - Exports: `*_comparison.csv` with z, p and q; `*_comparison_positions.csv`; the three maps as
+     SVG; the report with the discordance and positions. Remote control's `compare` takes the
+     filters and the tab; `export` writes `comparison-positions` and `comparison-map`.
+   - The DHFR example's sixth step compares its conditions; two screenshot scenes
+     (`compare-maps`, `compare-disagreement`).
+   - Validation:
+     - `compare` (25 checks):
+       - the discordance and the positions of 600 variants equal R's (`pnorm`, `p.adjust`);
+       - in 20 simulated pairs with planted differences, 96% of planted variants found, 4% of
+         calls false, 57 of 60 planted positions; with nothing planted, dispersion about 1 and
+         none called;
+       - DHFR's discordance equal to Run 1's own differential z;
+       - the filters as this suite counts them;
+       - the difference map drawing every difference;
+       - GRB2's dispersion where QC finds variance beyond counting.
+     - `remote-session.mjs` 116 checks: the comparison with a filter, its positions and maps the
+       same bytes as Node's.
+     - Unit tests: `compare.test.mjs` 11 (the filters, when discordance is tested, a position's
+       three variants, the maps of a comparison).
+   - Found by slice 2:
+     - **Replicates differ far more than their counting SEs say.** GRB2's replicate differences are
+       8.2 times as variable as their SEs (the dispersion), so a test of each difference would call
+       479 of 1,109 discordant. The view reports the dispersion and warns above 1.5; QC's variance
+       beyond counting finds the same bottleneck.
+     - **DHFR's two conditions differ 2.8 times as much as their SEs say**, even with low
+       confidence left out. Run 1's own differential between them (the conditions as
+       independent, wave 3 slice 6) uses the same SEs, so its 377 calls are an upper bound too.
+       Comparing analysis choices is slice 4's work.
+     - **A position's test was one variant's when it had only one compared** (DHFR's V99 ranked
+       second): a position is now tested with 3 variants or more.
+     - **Clicking a map cell moved the keyboard focus away**, because the view was drawn again.
+       The maps now update their selection in place.
+3. **Other sources and scales (C1, C3): done.** A MaveDB score set compared with a local run without
+   opening it into the workspace, another assay of the same protein, and a predictor (AlphaMissense,
+   EVE or ESM1b, from the tracks' providers). Two assays rescaled onto one scale by their anchors
+   (wave 2, slice 8: nonsense and the wild type), which published scores refuse today; a
+   predictor compared by rank and by its classes.
+   - **A MaveDB score set kept beside the workspace**, by its URN: an annotation of a new
+     provider, `mavedb-scores`. Its record and published scores come through the fetcher, the
+     scores file kept as MaveDB sends it, with the record's target (fetched when a transcript names
+     it), keywords, and the direction a person states (MaveDB records none). `lib/scoreset.js`
+     reads its scores as published, as opening the record would. It is a comparison side (matched
+     on one sequence, or on UniProt's numbering) and a track beside the map. Added from Compare's
+     Other sources, the Tracks menu, `compare` with a URN, or `add_track`.
+   - **A predictor as a side:** AlphaMissense, or a predictor's file, placed on the measured side's
+     protein as its track is. AlphaMissense's and EVE's scores are compared negated, ESM1b's as
+     they are, another table's direction is said to be unknown.
+     - By rank: Spearman's ρ with its interval; Pearson's r, Lin's concordance, Bland–Altman and
+       the tests of disagreement withheld.
+     - By its classes (the Classes tab): the measured scores in each class (median, quartiles),
+       the synonymous and nonsense medians for reference, and the AUC of telling the tolerated
+       class from the damaging one with DeLong's interval (`aucAgreement`, `lib/agreement.js`).
+     - EVE's table now gives its classes.
+   - **Scale** (`SCALES`, `lib/compare.js`):
+     - as scored;
+     - stated to be on one scale;
+     - each side rescaled by its own anchors (`anchorsOf`): the nonsense median and the wild type,
+       or the synonymous and nonsense medians, as a run's rescaling does.
+
+     The anchors' SEs (the wild type's; a median's √(π/2 × mean SE²/n), as `anchors.js`) are
+     carried into each difference's test and, shared, into each position's. Rescaled sides are
+     aligned by their anchors rather than negated.
+   - Exports: `compared_a` and `compared_b` in `*_comparison.csv`; `*_comparison_classes.csv`;
+     the report's `scale`, `classes` and each side's source. Remote control's `compare` takes
+     URNs, predictors, `scale`, `direction` and `show: classes`; `export` writes
+     `comparison-classes`; `add_track` takes `mavedb-scores` with a `urn`.
+   - The PTEN example's sixth step compares its abundance with its phosphatase activity (a score
+     set not opened) and with AlphaMissense by class. Two screenshot scenes (`compare-scales`,
+     `compare-classes`).
+   - Validation:
+     - `compare` (36 checks):
+       - two assays on two scales rescaled by their anchors (both rescalings) equal to R's, with
+         the anchors' SEs and the tests' share;
+       - GRB2's published scores against AlphaMissense by class equal to R's (pROC's DeLong
+         interval), and an AUC with ties;
+       - in 600 simulated pairs of two assays differing only in scale, false calls in 3.5–4% of
+         pairs with the anchors' uncertainty, 10–55% without it;
+       - DeLong's interval holding the AUC 94–95% of the time;
+       - DHFR's record kept beside the workspace the same as opened;
+       - a score set and a predictor through the archive;
+       - the examples' numbers (GRB2, DHFR's published pair stated on one scale, PTEN).
+     - `remote-session.mjs` 119 checks: a URN compared, rescaled, and AlphaMissense by class, as
+       Node gives them; their exports the same bytes.
+     - Unit tests: `compare.test.mjs` 15; `providers.test.mjs` a score set from the cache.
+   - Found by slice 3:
+     - **DHFR's published standard errors were never read.** Its records name the column
+       `standard error`, in words, which the importer did not recognize, so DHFR's published runs
+       had no SEs. The importer now reads it. Stated on one scale, DHFR's two published sets get
+       Lin's concordance (0.79) and a test of their differences: 761 of 2,277 differ, but their
+       dispersion is 5.3.
+     - **A deposited wild type can be a placeholder.** PTEN's lipid phosphatase record writes its
+       wild type as 1 with an SE of 0. Its methods put the wild type-like variants from −1.11 to
+       0.89, and the missense median is −0.37. So its map is centered on 1, and rescaled by that
+       row its activity sits low. The report names every anchor, so the row is visible. Stating an
+       anchor's value, where a deposit's is wrong, is left for later (slice 6's examples may need
+       it).
+     - **Leaving the anchors' uncertainty out of the tests calls many differences that are not
+       there**: 10% of null pairs when the anchors are well measured, 55% when the wild type is
+       uncertain and nonsense variants few. With it, 3.5–4%.
+     - **Two assays of one protein differ far beyond their SEs.** PTEN's rescaled abundance and
+       activity have a dispersion of 9.4, and 1,887 of 4,057 variants test as different. Much of
+       that is biology: a variant can be stable but inactive.
+     - **A long side label was cut off** on the plot's axis (a score set's title and URN); labels
+       now shorten to fit.
+4. **Robustness to analysis choices (C4): done.** A run is repeated across variations, following
    CytoWeave's `multiverse.js` pattern:
-   - pseudocounts, normalizations, filters, combination methods and uncertainty models;
+   - pseudocounts, normalizations, filters, combination methods and uncertainty models (scaling
+     each replicate, as DiMSum does, among them: wave 2, slice 9);
    - each replicate left out in turn;
    - low-depth measurements removed.
 
@@ -1697,9 +1869,225 @@ scales?
    - Validation: simulated experiments with a planted fragile result: one replicate driving an
      effect, and an effect that appears at only one pseudocount. The variants reported as fragile
      are exactly the planted ones, and a robust result is reported as robust.
-3. **Selections (V3).** Freeform and query selections ("missense at 40–80 with SE < 0.2",
+
+   What it does:
+   - **The engine:** `lib/robustness.js`.
+     - The choices a run offers, its own first. Fixed effects are left out where the replicates'
+       dispersion (Cochran's Q over its median) is above 1.5.
+     - The specifications: CytoWeave's `specifications`, copied, with a fixed seed; 48 by default.
+     - Each scored in the score worker (job `robustness`).
+     - The calls: each condition's class against the wild type (z from the score less the wild
+       type's, the reference's SE added unless the scores are relative to it; t on the moderated
+       degrees of freedom; BH q < 0.05), and each difference's from its q.
+   - **The summary:**
+     - each variant's verdict: robust, fragile, depends on its uncertainty, borderline, its effect's
+       size depends on a choice, not always scored;
+     - the single choices it depends on, else the smallest combination;
+     - each alternative's effect;
+     - calls held in every analysis and in 90%;
+     - the least tolerant positions.
+
+     A move counts when beyond the declared 95% interval and five robust SDs from that analysis's
+     median move.
+   - **In the window:** the Score view's Robustness pane, full width below the run; the inspector's
+     block.
+   - **Exports and remote control:** `*_robustness.csv`, `*_robustness_positions.csv` and
+     `*_robustness.json`; remote control's `check_robustness`, and `export` of `robustness` and
+     `robustness-positions`.
+   - **Guides:** the DHFR example's fourth step; the guide page *Robustness*; a screenshot scene
+     (`robustness`).
+   - Validation:
+     - `robustness` (9 checks):
+       - the specifications;
+       - the declared analysis is the run;
+       - the classes equal an independent computation;
+       - in ten planted experiments (declared by fixed effects), the fragile variants exactly the
+         replicate-driven ones and the pseudocount-sized ones exactly the zero-count ones, every
+         time;
+       - the clearly lost variants robust;
+       - under the defaults, nothing fragile;
+       - GRB2's and DHFR's checks;
+       - the files the same bytes from a second check.
+     - `remote-session.mjs` 122 checks.
+     - Unit tests: `robustness.test.mjs` (5).
+   - Found by slice 4:
+     - **MaveScape's moderated combination is not misled by one replicate**: an effect that one
+       replicate drives is not called (its SE carries the disagreement), nor is a dropout's. The
+       planted test needed an analysis that can be misled (fixed effects) to plant a fragile
+       conclusion at all.
+     - **With three replicates, the account of uncertainty decides many calls.** GRB2's Run 1 keeps
+       the class of 504 of 1,118 variants in every analysis; 445 change only with REML or the
+       replicates' mean in place of the moderated combination. Its least tolerant positions hold.
+     - **DHFR's differences between the conditions mostly do not survive** (slice 2's question):
+       54 of 377 hold in every analysis, 172 in 90%. Most depend on the account of their
+       uncertainty, some on the model of the time course.
+     - **A pseudocount moves a zero count's size, not its class**: counting SEs grow as the
+       pseudocount shrinks, so a zero count's call holds while its effect moves. The verdict "its
+       effect's size depends on a choice" was added for it.
+     - **A 95% interval alone flags chance moves**: leaving a replicate out moves every estimate,
+       and among a thousand variants a few cross their interval by chance. A move must also be an
+       outlier among the moves that analysis makes (five robust SDs).
+     - **Fixed effects are not a reasonable choice where QC finds variance beyond counting**: tried
+       on GRB2, they changed 373 classes by shrinking every SE. They are left out there, saying
+       why.
+     - The determinism guard caught `**` in the new module; the Score view's narrow column could
+       not hold the pane's tables (now full width).
+5. **Selections (V3): done.** Freeform and query selections ("missense at 40–80 with SE < 0.2",
    "variants whose class depends on the pseudocount"; structural classes such as "buried
    positions" with wave 5), named sets, set operations, export.
+
+   What it does:
+   - **The query language** (`lib/query.js`), its tokenizer and parser adapted from Proteoscope's
+     `select.js` (whose residue selections wave 5 copies), so that the roadmap's phrases are
+     queries as written: terms side by side, and "with", "whose" and "that", mean and.
+     - Words for the class, the state, positions (target or reference numbering), the wild-type
+       and substituted residues (letters or the map's groups), the score, SE, q, replicates and mean
+       input count compared with a number, and the class against the wild type (robustness.js's
+       calls).
+     - The robustness verdicts, and "depends on", "class depends on" and "size depends on" a choice:
+       the choices that alone account for a verdict, which the summary now keeps by id
+       (`dependsOnIds`).
+     - "feature": positions under a feature beside the map (UniProt's, a GFF3 file's).
+     - "in": a saved selection by name; "selected": the selection now.
+     - A query that names what the run lacks says so and offers it: the robustness check, or
+       UniProt's features.
+   - **Freeform shapes** on the map: ⌥- or Alt-drag, or a drag mode (Pan, Rectangle, Freeform) for
+     a touch screen; the cells whose centers the shape holds (`cellsInPolygon`, `map-render.js`).
+   - **Named sets and set operations:** a saved selection keeps its query. Under the map, each saved
+     selection selects, adds to, intersects or subtracts from the selection, or runs its query
+     again; a query does the same by name. A selection made by queries keeps them, combined, so
+     that it can be made again. A saved selection applies to every run of the same protein.
+   - **Across the views:** the Score view's table lists the selection and sends any list to the
+     map; the Robustness pane sends each verdict's variants (by its word); Compare's maps outline the
+     selection, and its discordant variants go to the map; the inspector shows a saved selection's
+     query and the runs it applies to.
+   - **Exports and remote control:** the selection's JSON has its `query`; `select_variants` takes
+     a `query`, an `operation` and a `contrast`, and checks the run's robustness when a query needs
+     it.
+   - **Guides:** factor IX's fifth step (its disulfide bonds' cysteines by query); the guide page
+     *Selections*; a screenshot scene (`selections`).
+   - Validation:
+     - `selections` (8 checks):
+       - the roadmap's phrases;
+       - fourteen queries on GRB2's Run 1 against an independent account of each of its 1,176
+         cells, read from the run's own arrays;
+       - set operations and their laws, and a saved selection on a second run;
+       - each robustness verdict exactly the check's;
+       - in three planted experiments, the planted variants exactly;
+       - factor IX's 22 bonded cysteines from UniProt P00740;
+       - freeform shapes against the rectangle tool and a circle;
+       - the files and the archive.
+     - `remote-session.mjs` 123 checks.
+     - Unit tests: `query.test.mjs` (5), and a freeform shape's cells in `map-render.test.mjs`.
+   - Found by slice 5:
+     - **Depending on a choice has to mean depending on it alone.** A verdict that only choices
+       together account for first counted for each of them. "Class depends on the pseudocount" then
+       selected variants at the threshold that four to six changes together moved: 6, 1 and 1 in
+       the three planted experiments the suite checks, none of them planted. The summary now keeps by id only the choices that
+       alone account for a verdict.
+     - **On GRB2, the roadmap's own query selects 4 variants, all at the threshold.** "Variants whose
+       class depends on the pseudocount" are borderline (q 0.031 to 0.047), each moved by leaving
+       out a replicate too. No variant's size depends on the pseudocount there. In the planted
+       experiments, the pseudocount moves the zero counts' size and never their class.
+     - **A secreted protein needs its disulfide bonds.** Of the substitutions of the 22 cysteines in
+       factor IX's 11 bonds, 345 of 399 scored are lower than the wild type, against 2,124 of 8,529
+       missense variants (25%). Its two other cysteines are in the signal peptide (C18, C28): 24 of
+       their 38 are lower, which needs another explanation than a bond.
+     - **A saved selection was shown only on the run it was made on**, though a list of names applies
+       to every run of the protein. It is now listed, and used, on each.
+     - **A rectangle always added to the selection**, because the Shift that drew it also meant add.
+       With the drag modes, a rectangle or a shape replaces the selection unless ⌘, Ctrl or Shift is
+       held.
+6. **Examples: done.** Published comparisons that teach what the wave built: two assays of one
+   protein that only seem to disagree until they are on one scale, a rescoring against the published
+   scores, and a conclusion that depends on an analysis choice.
+
+   Earlier slices had already given the examples a rescoring each (BRCA1 SGE's counts against its
+   published scores, slice 1; GRB2's record, slice 3) and a conclusion that depends on a choice
+   (DHFR's differences, slice 4). The lesson no example taught was two assays that only seem to
+   disagree; PTEN's two assays (slice 3) disagree for real. This slice adds:
+   - **TP53, two screens on two scales** (`tp53-screens`), the fourteenth example, opened from MaveDB.
+     It opens Giacomelli et al.'s etoposide screen (urn:mavedb:00000068-c-1), published Z-scores of
+     every substitution of TP53 with arginine at 72. It keeps two others beside it, not opened:
+     Kotler et al.'s screen of the DNA-binding domain by the growth of H1299 cells
+     (urn:mavedb:00000059-a-1), log₂ fold changes; and Giacomelli et al.'s nutlin-3 screen
+     (urn:mavedb:00000068-b-1). The guide:
+     - checks the target against UniProt P04637 (the record names none);
+     - compares the screens as published, with the direction stated, and rescaled by their anchors;
+     - reads the positions that differ most;
+     - compares the study's two selections.
+   - **Hsp90's sixth step**, a rescoring against the published scores that is also a conclusion
+     depending on a choice. Run 1 is compared with the record's own scores kept beside; stated on
+     one scale, the Bland–Altman plot shows the authors' choice of time points for null-like variants.
+   - The examples page, the guide *Comparisons* (two screens that only seem to disagree; a rescoring
+     against the published scores), two screenshot scenes (`tp53-screens`, `hsp90-rescoring`).
+   - Validation:
+     - `examples` (52 checks):
+       - the TP53 example opened as the window opens it, its table MaveDB's, pinned as a new data set
+         (`mavedb-tp53-screens`; the three records and UniProt's P04637 in `fixtures/public-data`);
+       - TP53's numbers as its guide states them, and Hsp90's comparison with its record.
+     - `remote-session.mjs` 124 checks: the TP53 example offline, its target checked, both other
+       screens compared by URN as Node compares them.
+     - Unit tests: `score.test.mjs`, repeated published protein variants merged.
+   - Found by slice 6:
+     - **A published score set that writes a protein variant on several rows could not be compared
+       at all.** Kotler et al.'s record writes 936 protein variants on 2,908 rows with different
+       scores (several codons, and no nucleotide names to tell them apart), and MaveScape refused
+       it. Published protein variants on several rows are now merged as DiMSum merges a protein
+       variant's codons (unweighted, without SEs), and the report says so. Its 191 frameshifts,
+       which MAVE-HGVS names alike at a codon, are left out rather than merged.
+     - **Two laboratories' screens of TP53 only seemed to disagree.** As published, the 3,341
+       variants they share correlate at r −0.78: opposite signs, and a Z-score against a log₂ fold
+       change. With the direction stated, r 0.78; rescaled each by its own anchors, Lin's
+       concordance is 0.78 and the bias −0.04. Four of the eight positions that differ most lie at
+       180–184, lower under etoposide.
+     - **Two selections of one library differ about as much as two laboratories' screens.**
+       Giacomelli et al.'s nutlin-3 and etoposide screens agree at Lin's 0.72 rescaled; their
+       records' keywords name two assays.
+     - **Correlation is not agreement in a rescoring.** Hsp90's Run 1 correlates with its record's
+       scores at r 0.95, but on one scale Lin's concordance is 0.48. The difference grows with the
+       effect (Bland–Altman slope −0.91), largest at 585–587, where the authors fit null-like
+       variants on their first three time points. How deleterious those variants are depends on that
+       choice. MaveScape's own robustness check cannot vary it: it is not among the run's choices.
+     - **A record without a UniProt entry is matched once its target is checked.** Giacomelli et
+       al.'s record names none, and its target carries arginine at 72; checked against P04637 (one
+       difference, P72R), it is matched with Kotler et al.'s domain on UniProt's numbering.
+     - **Two data sets were considered and set aside.** UBE2I's TileSeq and BarSeq scores
+       (urn:mavedb:00000001-a-3 and -a-2) are already put on 0 to 1 by their authors, and BarSeq's
+       are mostly multi-mutants. CBS's low-B6 record (urn:mavedb:00000005-a-5) holds eight selections
+       on four inputs (inputs 5–8 copies of 1–4), and the paper's low B6 is two levels (0 and 1
+       ng/ml), but the record does not say which columns are which. Its published scores agree with
+       selections 1–4 and 5–8 alike (r 0.71 and 0.72), and a quarter of them are exactly 0 (2,538
+       of 11,478, floored). The validation's limma check uses selections 1–4 as low B6, as before.
+     - **A plot's axis read −5.55e-17 for 0** (Hsp90's Bland–Altman plot): ticks summed a
+       fractional step; each is now a whole multiple of it. A robustness check of nine positions
+       said "Of the 1 least tolerant positions"; one is now said as one.
+     - Wave 4 is complete with slice 6.
+
+**Released 0.4.0 on 2026-10-11.** A comparison is the session's, but what it rests on is the
+workspace's, so 0.4 leaves two archives that keep it (`validation/archives/release-0.4.0-*.msz`,
+0.9 MB together). They were saved by 0.4.0 itself, its window driven through remote control offline
+by `make-0.4.0.mjs`:
+- TP53, two screens on two scales: the published scores, the target checked against UniProt, two
+  MaveDB score sets kept beside it with their directions stated (one with protein variants on
+  several rows), a selection by query and another made from it by a set operation;
+- GRB2's SH3 domain, compared: two runs, its record's published scores kept beside, AlphaMissense
+  and UniProt's features beside the map, and selections by query (a feature's positions, an
+  operation on a saved selection, Run 1's robustness verdicts).
+
+Every later version must reopen them and reproduce their three runs. It must also read their score
+sets again, and run their saved queries again to the same variants (a query of the robustness
+verdicts must keep its variants on the map). At the release, `mavescape run --from-workspace`
+reran all eighteen runs of every release's archives in a window, each to its recorded hash.
+- Found by the release:
+  - **Messages wrote "Published scores's"**: a run, table or annotation whose name ends in "s" took
+    "'s" wherever a message named it (remote control's selections among them). One helper writes
+    every such possessive now (`lib/words.js`).
+  - **Remote control's message for an operation on the selection was garbled** ("kept those also
+    394 variants in the selection"); it says how many matched and what was done.
+  - **The screenshots' accessibility audit has never run**: `capture.mjs --audit` asks for an
+    `axe-core` data set that `sources.json` does not have. The screenshots were recaptured without
+    it, as at 0.3.0; adding the data set is left for later.
 
 ## 0.5.0: variants in 3D (wave 5)
 

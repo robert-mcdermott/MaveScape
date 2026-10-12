@@ -50,8 +50,8 @@ var remoteActions = []remoteAction{
 		"paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths of files or folders."},
 		"new_workspace": flagArg("Open them in a new workspace rather than the open one."),
 	}, "paths"), long: true, reads: true},
-	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score or map.", InputSchema: schema(map[string]any{
-		"mode": textArg("start, experiment, qc, score or map."),
+	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map or compare.", InputSchema: schema(map[string]any{
+		"mode": textArg("start, experiment, qc, score, map or compare."),
 	}, "mode")},
 	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
 		"kind": textArg("table, target, run, selection or variant; found by name across all of them if not given."),
@@ -109,13 +109,16 @@ var remoteActions = []remoteAction{
 		"reason":  textArg("Why the finding is expected here; empty to withdraw the acknowledgement."),
 		"run":     textArg("A score run by name or id, or \"counts\"; the latest run of the current design if not given."),
 	}, "finding"), long: true},
-	{Name: "select_variants", Description: "Selects variants on the map, by name or by position, and optionally saves the selection by name. Shows the Map view with the selection.", InputSchema: schema(map[string]any{
+	{Name: "select_variants", Description: "Selects variants on the map: by a query (such as \"missense at 40-80 with se < 0.2\", \"lower and not robust\", \"from C in feature disulfide\", \"in Core and not in Surface\"), by name or by position; replaces the selection or adds to, intersects or subtracts from it; optionally saves it by name (with its query). A query that needs the run's robustness checks it first. Shows the Map view with the selection.", InputSchema: schema(map[string]any{
+		"query":     textArg("A query of MaveScape's selection language: kinds (missense, nonsense, synonymous), states (scored, low, filtered, missing), at/pos/refpos with positions, from/to with residues or groups, score/se/q/replicates/input compared with a number, lower/higher/neutral, robustness verdicts (robust, fragile, uncertain, borderline, size-dependent, sometimes-scored, \"class depends on the pseudocount\"), feature with a name, in with a saved selection's name, selected, and, or, not, parentheses."),
 		"variants":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "MAVE-HGVS names, such as p.Trp36Ala."},
 		"positions": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "Positions on the target (numbered from 1): every substitution there."},
 		"filter":    textArg("Only these of them: scored, low (low confidence), filtered or missing."),
+		"operation": textArg("What to do with the selection there is: replace (the default), add, intersect or subtract."),
 		"save_as":   textArg("Save the selection under this name."),
 		"run":       runArg,
 		"condition": conditionArg,
+		"contrast":  textArg("A contrast between conditions (its name, or its number from 1): select on its differential map."),
 	})},
 	{Name: "inspect_variant", Description: "A variant's evidence: its score with SE and 95% interval (or why it has none), flags, each replicate's counts and score, every sample's counts, and with conditions compared each difference with its SE, interval and adjusted p. Shows it in the inspector.", InputSchema: schema(map[string]any{
 		"variant":   textArg("Its MAVE-HGVS name, such as p.Trp36Ala."),
@@ -131,15 +134,31 @@ var remoteActions = []remoteAction{
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
 	})},
+	{Name: "compare", Description: "Compares two sets of scores, as the Compare view does: each side a run's condition (its combined scores) or one of its replicates, of one run or two (a rescoring, or a MaveDB record's published scores against its counts scored again), or a MaveDB score set or a predictor kept beside the workspace (a score set named by its URN is fetched and kept first, without opening it; a predictor is AlphaMissense or a predictor's file added with add_track). Returns the compatibility report first (targets and coordinates, the level, the variants matched and those on one side only, the directions and scales, whether the two are independent; each item ok, qualified or blocked), then the agreement of the variants compared: Pearson's r and Spearman's rho, Lin's concordance and Bland–Altman's bias and limits of agreement (the last two only on one scale), each with its 95% interval; for two independent sides on one scale, the variants that differ beyond their uncertainty (each difference's z from both SEs, q by Benjamini–Hochberg) and the disagreement by position; a predictor by rank (Spearman's rho) and by its classes (the measured scores in each class, and the AUC of telling its benign from its pathogenic substitutions, with DeLong's interval). The scale: as scored, stated to be one, or each side rescaled by its own anchors (nonsense median 0 and wild type 1, or synonymous median 0 and nonsense median -1). Filters leave out variants of low confidence, large SE or few reads. Shows the Compare view; export with what comparison writes the variants compared or (a .json path) the report and statistics, comparison-positions the disagreement by position, comparison-map a map (SVG), comparison-classes a predictor by class.", InputSchema: schema(map[string]any{
+		"a":              textArg("The first side, by name: \"Run 1\", \"Run 1: Replicate 2\", \"Run 1: +Lon\", \"Published scores\", a score set or predictor kept beside the workspace (\"AlphaMissense: P62993\"), or a MaveDB score set's URN (fetched and kept when it is not yet). The pair shown, or a default (a run against the published scores, two replicates, two conditions, the last two runs), if not given."),
+		"b":              textArg("The second side, by name or URN."),
+		"scale":          textArg("The scale they are compared on: scored (as scored, the default), stated (stated to be one scale), nonsense-wt (each rescaled so its nonsense median is 0 and its wild type 1) or synonymous-nonsense (its synonymous median 0 and nonsense median -1). Kept for the comparisons that follow."),
+		"direction":      textArg("What a higher score of the MaveDB score set compared means (MaveDB records none): higher-more, higher-less, unsigned, or not stated."),
+		"low_confidence": flagArg("Leave out the variants of low confidence on either side (true); those given replace the comparison's filters, none given keeps them."),
+		"max_se":         map[string]any{"type": "number", "minimum": 0, "description": "Leave out the variants whose SE on either side is above this."},
+		"min_reads":      map[string]any{"type": "number", "minimum": 0, "description": "Leave out the variants with fewer input reads than this on either side."},
+		"show":           textArg("The tab shown: agreement (the scatter plot and statistics), maps (the two maps and their difference), disagreement (the discordant variants and the positions) or classes (a predictor's classes)."),
+	}), long: true},
+	{Name: "check_robustness", Description: "Checks a run's robustness to other reasonable analysis choices, as the Score view's Robustness pane does: the run scored again with each alternative alone (pseudocount; normalization; the model of uncertainty, DiMSum's error model or a regression's; the combination of replicates; the minimum input count, replicates and time points; each replicate left out), then seeded combinations of them. For each variant (and each difference between conditions) its class (lower than, like or higher than the wild type, q < 0.05), effect, rank, SE and inclusion in every analysis, and its verdict: robust, fragile (a choice moves its effect beyond its 95% interval and changes its class, the choice named), depends on its uncertainty, borderline, its effect's size depends on a choice, or not always scored; each alternative's effect; the least tolerant positions. Export with what robustness (the variants, CSV; or its record, a .json path) or robustness-positions.", InputSchema: schema(map[string]any{
+		"run": runArg,
+		"max": map[string]any{"type": "integer", "minimum": 2, "maximum": 256, "description": "How many analyses in all (48 by default): the declared, each alternative alone, then seeded combinations."},
+	}), long: true},
 	{Name: "list_tracks", Description: "The sequence tracks beside a run's map, in order: the run's own (reference, coverage, position effect, uncertainty) and the workspace's annotations' (UniProt features, conservation, AlphaMissense, ClinVar, gnomAD, MaveDB's annotations, an alignment, a predictor, a custom track), each with its source (service, release, retrieval date), whether it is shown, its filter and the filters it offers, and what it holds; the annotations that could not be read; and what can be added.", InputSchema: schema(map[string]any{
 		"run":       runArg,
 		"condition": conditionArg,
 	}), long: true},
-	{Name: "add_track", Description: "Adds an annotation's tracks beside the map. From public data, through MaveScape's list of services (docs/NETWORK.md; from the cache only with --offline; only an accession, gene symbol or URN is sent): provider uniprot-features, pdbe-conservation, alphamissense, clinvar, gnomad or mavedb-annotations, for the run's target. Or from a file, given as name and text: an alignment (A3M, FASTA, Stockholm, Clustal), a predictor's table (AlphaMissense, EVE, ESM1b, or variants with scores) or a custom track (GFF3, or a table with position, or start and end). The annotation is kept with the workspace (and its archive); in the history.", InputSchema: schema(map[string]any{
-		"provider": textArg("The public source: uniprot-features, pdbe-conservation, alphamissense, clinvar, gnomad or mavedb-annotations."),
-		"name":     textArg("A file's name (grb2-sh3.sto), with its text."),
-		"text":     textArg("A file's text: an alignment, a predictor's table or a custom track."),
-		"run":      runArg,
+	{Name: "add_track", Description: "Adds an annotation's tracks beside the map. From public data, through MaveScape's list of services (docs/NETWORK.md; from the cache only with --offline; only an accession, gene symbol or URN is sent): provider uniprot-features, pdbe-conservation, alphamissense, clinvar, gnomad or mavedb-annotations, for the run's target; or mavedb-scores with a urn, a MaveDB score set kept beside the workspace without opening it (its record and published scores; compared in Compare, its scores a track). Or from a file, given as name and text: an alignment (A3M, FASTA, Stockholm, Clustal), a predictor's table (AlphaMissense, EVE, ESM1b, or variants with scores) or a custom track (GFF3, or a table with position, or start and end). The annotation is kept with the workspace (and its archive); in the history.", InputSchema: schema(map[string]any{
+		"provider":  textArg("The public source: uniprot-features, pdbe-conservation, alphamissense, clinvar, gnomad, mavedb-annotations or mavedb-scores (with urn)."),
+		"urn":       textArg("mavedb-scores: the score set's URN (urn:mavedb:00000054-a-1)."),
+		"direction": textArg("mavedb-scores: what a higher score means (MaveDB records none): higher-more, higher-less or unsigned."),
+		"name":      textArg("A file's name (grb2-sh3.sto), with its text."),
+		"text":      textArg("A file's text: an alignment, a predictor's table or a custom track."),
+		"run":       runArg,
 	}), long: true},
 	{Name: "set_track", Description: "Shows or hides a track, moves it, or filters it: features by kind (types), variants by class (classes) or ClinVar's review status (stars, 0-4), gnomAD's frequency (min). The arrangement is kept with the workspace; it is a view, not in the history.", InputSchema: schema(map[string]any{
 		"track":    textArg("The track by id or label (list_tracks)."),
@@ -151,14 +170,15 @@ var remoteActions = []remoteAction{
 	{Name: "remove_track", Description: "Removes an annotation and its tracks (undoable, in the history).", InputSchema: schema(map[string]any{
 		"annotation": textArg("The annotation by id or name (list_tracks)."),
 	}, "annotation")},
-	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), or a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them). Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package or mavedb."),
+	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), the comparison shown (its matched variants, CSV; its report and statistics, JSON; its positions, maps or a predictor's classes), or a run's robustness to analysis choices. Needs the token.", InputSchema: schema(map[string]any{
+		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions."),
 		"path":           textArg("The absolute path of the file to write."),
 		"overwrite":      flagArg("Replace the file if it exists."),
 		"run":            runArg,
 		"condition":      conditionArg,
 		"include_tables": flagArg("archive: include the count tables (the default), or name each by its SHA-256 only."),
 		"selection":      textArg("selection: a saved selection by name; the current selection if not given."),
+		"map":            textArg("comparison-map: first, second or difference (the default)."),
 	}, "what", "path"), long: true, output: true},
 }
 

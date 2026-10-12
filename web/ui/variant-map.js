@@ -1,7 +1,8 @@
 // The variant-effect map component (requirements V2, V3, T6): the renderer of lib/map-render.js on
 // a canvas, with the overview strip, pan (drag, or the wheel sideways), zoom (⌘ or Ctrl and the
 // wheel, a pinch, + and −), hover, click to select (⌘ or Ctrl to add), Shift-drag to select a
-// rectangle, and the keyboard: arrows move a focus cell, Enter or Space selects it, Escape clears
+// rectangle, Option- or Alt-drag to select a freeform shape (wave 4, slice 5; setDragMode makes a
+// plain drag select a rectangle or a shape, for touch), and the keyboard: arrows move a focus cell, Enter or Space selects it, Escape clears
 // the selection, Home and End jump to the ends, Page Up and Page Down move a screen. Each focused
 // cell is announced in words. The sequence tracks shown below the grid (wave 3, slice 5) pan and
 // zoom with it; hovering one says what it holds there, clicking it selects that position's
@@ -9,7 +10,7 @@
 
 import { h } from './dom.js';
 import { cellAt } from '../lib/map-model.js';
-import { drawMap, geometry, hitTest, mapPalette } from '../lib/map-render.js';
+import { cellsInPolygon, drawMap, geometry, hitTest, mapPalette } from '../lib/map-render.js';
 import { cssVar } from './plots.js';
 
 const MIN_CELL = 2;
@@ -26,7 +27,9 @@ export function themeFromPage() {
 
 // options: { model, palette, selected (Set of cell indices), describe(cell) → text,
 // onHover(cell | null), onSelect(cells: Set, primary cell), cellH, tracks (shown), describeTrack(track,
-// position | null) → text, onTrackClick(track, position, add) }.
+// position | null) → text, onTrackClick(track, position, add), onView({ x0, cellW }) }. onView is
+// told the first position shown and the cell width whenever they change, and setView sets them
+// (maps shown together pan and zoom as one: the Compare view, wave 4 slice 2).
 export function mountVariantMap(options) {
   let model = options.model;
   let palette = options.palette ?? 'rdbu';
@@ -36,11 +39,23 @@ export function mountVariantMap(options) {
   const tip = h('div.map-tip', { hidden: true });
   const live = h('div.sr-only', { 'aria-live': 'polite' });
   const band = h('div.map-band', { hidden: true });
-  const el = h('div.variant-map', { tabindex: 0, role: 'application', 'aria-label': 'Variant-effect map. Arrow keys move between cells, Enter selects, plus and minus zoom.', 'aria-roledescription': 'map' }, canvas, band, tip, live);
+  // The freeform shape being drawn.
+  const lasso = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  lasso.setAttribute('class', 'map-lasso');
+  lasso.setAttribute('aria-hidden', 'true');
+  const lassoPath = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+  lasso.append(lassoPath);
+  lasso.style.display = 'none';
+  const el = h('div.variant-map', { tabindex: 0, role: 'application', 'aria-label': 'Variant-effect map. Arrow keys move between cells, Enter selects, plus and minus zoom.', 'aria-roledescription': 'map' }, canvas, band, lasso, tip, live);
+  // What a plain drag does: 'pan', 'rectangle' or 'freeform'.
+  let dragMode = options.dragMode ?? 'pan';
+  if (dragMode !== 'pan') canvas.style.cursor = 'crosshair';
   const view = { width: 800, cellW: 10, cellH, x0: 1, hover: -1, hoverPosition: -1, focus: -1, selected: new Set(), tracks: options.tracks ?? [] };
   let fitted = false;
   let frame = 0;
   let colors = null;
+  // The view last told to onView, or set by setView (not told back).
+  let reported = { x0: null, cellW: null };
 
   const theme = () => themeFromPage();
   function refreshColors() {
@@ -79,6 +94,10 @@ export function mountVariantMap(options) {
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     cellsOfSelection();
     drawMap(ctx, model, view, colors.theme, colors.color, colors.paler);
+    if (options.onView && (view.x0 !== reported.x0 || view.cellW !== reported.cellW)) {
+      reported = { x0: view.x0, cellW: view.cellW };
+      options.onView({ ...reported });
+    }
   }
   function cellOf(k) {
     if (k < 0) return null;
@@ -129,7 +148,8 @@ export function mountVariantMap(options) {
       draw();
       return;
     }
-    drag = { kind: event.shiftKey ? 'band' : 'pan', x, y, x0: view.x0, moved: false, add: event.metaKey || event.ctrlKey || event.shiftKey };
+    const kind = event.altKey ? 'lasso' : event.shiftKey ? 'band' : { rectangle: 'band', freeform: 'lasso' }[dragMode] ?? 'pan';
+    drag = { kind, x, y, x0: view.x0, moved: false, add: event.metaKey || event.ctrlKey || event.shiftKey, points: [[x, y]] };
   });
   canvas.addEventListener('pointermove', (event) => {
     const rect = canvas.getBoundingClientRect();
@@ -153,6 +173,13 @@ export function mountVariantMap(options) {
       } else if (drag.kind === 'band' && drag.moved) {
         Object.assign(band.style, { left: `${Math.min(x, drag.x)}px`, top: `${Math.min(y, drag.y)}px`, width: `${Math.abs(x - drag.x)}px`, height: `${Math.abs(y - drag.y)}px` });
         band.hidden = false;
+      } else if (drag.kind === 'lasso' && drag.moved) {
+        const [lx, ly] = drag.points.at(-1);
+        if (Math.abs(x - lx) + Math.abs(y - ly) >= 3) drag.points.push([x, y]);
+        lasso.setAttribute('width', canvas.style.width);
+        lasso.setAttribute('height', canvas.style.height);
+        lassoPath.setAttribute('points', drag.points.map(([px, py]) => `${px},${py}`).join(' '));
+        lasso.style.display = '';
       }
       return;
     }
@@ -185,6 +212,13 @@ export function mountVariantMap(options) {
     const d = drag;
     drag = null;
     band.hidden = true;
+    lasso.style.display = 'none';
+    if (d.kind === 'lasso' && d.moved) {
+      d.points.push([x, y]);
+      const cells = cellsInPolygon(model, view, d.points);
+      select(cells, cells.length ? cellOf(cells[0]) : null, d.add);
+      return;
+    }
     if (d.kind === 'band' && d.moved) {
       const a = hitTest(model, view, Math.max(geometry(model, view).left, Math.min(x, d.x)), Math.min(y, d.y)) ?? { position: Math.ceil(view.x0), row: 0 };
       const b = hitTest(model, view, Math.max(x, d.x), Math.max(y, d.y)) ?? { position: Math.floor(view.x0 + geometry(model, view).visible), row: model.rows.length - 1 };
@@ -195,7 +229,7 @@ export function mountVariantMap(options) {
           if (cell && cell.state !== 0) cells.push(cell.k);
         }
       }
-      select(cells, cells.length ? cellOf(cells[0]) : null, true);
+      select(cells, cells.length ? cellOf(cells[0]) : null, d.add);
       return;
     }
     if (d.kind !== 'overview' && !d.moved) {
@@ -215,7 +249,7 @@ export function mountVariantMap(options) {
     }
   };
   canvas.addEventListener('pointerup', finish);
-  canvas.addEventListener('pointercancel', () => { drag = null; band.hidden = true; });
+  canvas.addEventListener('pointercancel', () => { drag = null; band.hidden = true; lasso.style.display = 'none'; });
   canvas.addEventListener('pointerleave', () => {
     tip.hidden = true;
     if (view.hover >= 0 || view.hoverPosition >= 0) {
@@ -318,12 +352,28 @@ export function mountVariantMap(options) {
       selected = new Set(cells);
       draw();
     },
+    // What a plain drag does: 'pan', 'rectangle' or 'freeform' (Shift and Option or Alt still
+    // select a rectangle and a shape).
+    setDragMode(mode) {
+      dragMode = mode;
+      canvas.style.cursor = mode === 'pan' ? '' : 'crosshair';
+    },
     refreshTheme() {
       refreshColors();
       draw();
     },
     zoom(factor) {
       zoomAround(factor, geometry(model, view).left + geometry(model, view).gridW / 2);
+    },
+    // Shows the map from position x0 at cells cellW wide (another map's view), without telling
+    // onView.
+    setView({ x0, cellW }) {
+      fitted = true;
+      view.cellW = cellW;
+      view.x0 = x0;
+      clampView();
+      reported = { x0: view.x0, cellW: view.cellW };
+      draw();
     },
     fit,
     focusCell(k) {

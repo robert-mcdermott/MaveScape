@@ -147,6 +147,46 @@
     }
    ]
   },
+  "mavedb-pten-phosphatase": {
+   "title": "PTEN lipid phosphatase activity (urn:mavedb:00000054-a-1)",
+   "description": "Published scores only (no counts): lipid phosphatase activity of 8,680 PTEN variants in a humanized yeast model, scored with Enrich2 (fitness, the synonymous variants' 95% range -1.11 to 0.89 by the record's methods), with SEs and each replicate's scores. Another assay of the PTEN example's protein, compared with its abundance without opening it (wave 4, slice 3).",
+   "source": "MaveDB; Mighell et al., Am J Hum Genet 2018 (doi:10.1016/j.ajhg.2018.03.018)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000054-a-1/scores",
+     "size": 2438297,
+     "sha256": "16764c9b4afed9f7507bb8e615fdcd703329f3145108a8c28bdf0b1c60f076e7"
+    }
+   ]
+  },
+  "mavedb-tp53-screens": {
+   "title": "TP53, two screens on two scales (urn:mavedb:00000068-c-1, 00000068-b-1 and 00000059-a-1)",
+   "description": "Published scores only (no counts, no SEs). Giacomelli et al.'s screens of every substitution of full-length TP53 (P72R) in p53-null A549 cells, as Z-scores: under etoposide (scores.csv, the example opens it; a variant like the wild type scores higher) and under nutlin-3 (nutlin.csv; a variant like the wild type scores lower). Kotler et al.'s screen of the DNA-binding domain (residues 102–292, numbered from 1 on its target, UniProt P04637 at offset 101) by the growth of H1299 cells, as log2 fold changes (kotler.csv; a variant like the wild type scores lower), which writes 1,127 protein variants on several rows with different scores and no nucleotide names. The TP53 example compares them without opening the last two (wave 4, slice 6).",
+   "source": "MaveDB; Giacomelli et al., Nature Genetics 2018 (doi:10.1038/s41588-018-0204-y); Kotler et al., Molecular Cell 2018 (doi:10.1016/j.molcel.2018.06.012)",
+   "license": "CC0 (MaveDB)",
+   "files": [
+    {
+     "path": "scores.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000068-c-1/scores",
+     "size": 553289,
+     "sha256": "085237d96f287ce8642d49372b46ef9dc07c08e84240c04cfc17d8fb42977022"
+    },
+    {
+     "path": "nutlin.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000068-b-1/scores",
+     "size": 554972,
+     "sha256": "7e78a7e79b3c88262a77dd12159ab1ae22783d2086cfb40c15ac29f65a9b23a2"
+    },
+    {
+     "path": "kotler.csv",
+     "url": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000059-a-1/scores",
+     "size": 588703,
+     "sha256": "a58f9f7d3fa70fe2dbf1ae347fb5fc46280a68f98d9d042d108ee707fe64ff41"
+    }
+   ]
+  },
   "mavedb-brca1-sge": {
    "title": "BRCA1 saturation genome editing (urn:mavedb:00000097-0-2)",
    "description": "3,893 single-nucleotide variants of 13 exons of BRCA1 and their flanking introns, named on the RefSeq transcript NM_007294.3 (coding, splice-site, intronic and 5′ UTR), each scored by its depletion from HAP1 cells between days 5 and 11, with the library, plasmid and RNA counts the authors deposited. The example opened from MaveDB (wave 3, slice 3): a target named by its transcript, nucleotide variants read at the protein level.",

@@ -1,6 +1,6 @@
 # File formats
 
-Every file MaveScape 0.1, 0.2 and 0.3 read and write. Researchers whose counts come from their own pipeline
+Every file MaveScape 0.1 to 0.4 read and write. Researchers whose counts come from their own pipeline
 need only a count table, the target's sequence, and the design: which column is which sample.
 Blank, annotated layouts of each are on the Start page and in
 [`web/examples/layouts/`](../web/examples/layouts/). The Start page also opens two worked examples.
@@ -15,7 +15,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Designs | `*.design.json`; sample sheets (CSV, TSV); DiMSum's experiment design file | `*.design.json` |
 | Import templates | `*.import.json` | `*.import.json` |
 | Workspaces | `*.msz` archives | `*.msz` archives; the workspace document (JSON) |
-| Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3) |
+| Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3); a comparison's matched variants (CSV) and its report and statistics (JSON, 0.4) |
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
@@ -262,7 +262,13 @@ and every other column is in `ignoredColumns`. Its run (the model `published`) t
 SE and interval as given, never rescoring them; a variant is left out when its name is not valid
 against the target, its class or itself is excluded, its SE is above a maximum, the table gives it
 no score (the stage `given`), or it repeats an earlier row's variant with the same scores (`copy`:
-read once; with other scores the table is refused). The scores export writes the given interval.
+read once). From MaveScape 0.4, a protein variant written on several rows with other scores (several
+codons, or measurements, with no nucleotide names to tell them apart) is read as one, as DiMSum
+merges a protein variant's codons: its first row holds the mean of its rows' scores, weighted by
+1/SE² (unweighted, its SE unknown, without SEs), and the others are left out (`merged`); frameshifts
+written alike on several rows (MAVE-HGVS names every frameshift at a codon alike) are left out, not
+told apart (`alike`). Nucleotide variants on several rows with other scores are refused. The scores
+export writes the given interval.
 A design of a MaveDB record (Open from MaveDB) also has the record's `source` (URN, citation,
 license), and its `readout` and `library.method` from the experiment's controlled keywords.
 
@@ -401,14 +407,19 @@ history.
 `annotations` (MaveScape 0.3, absent until the first) lists the **annotations** whose tracks are
 drawn beside the map (below, "Tracks"), each `{ id, provider, name, file: { fileName, sha256,
 size }, record, added }`. `provider` is one of `uniprot-features`, `pdbe-conservation`,
-`alphamissense`, `clinvar`, `gnomad`, `mavedb-annotations` (public data) or `alignment`,
-`predictor`, `custom` (a file). The file is kept in the library and the archive by its SHA-256, so
+`alphamissense`, `clinvar`, `gnomad`, `mavedb-annotations`, `mavedb-scores` (public data) or
+`alignment`, `predictor`, `custom` (a file). The file is kept in the library and the archive by its SHA-256, so
 the tracks are read again from it offline: public data as MaveScape keeps them (below), a person's
 file as it was opened. `record` says where it came from: for public data `{ service, url,
 retrieved, release, requests, license, citation }` and what was asked (`accession`, `gene`, `urn`;
 ClinVar's `records` and `kept`; gnomAD's `transcript` and `mane`), the earliest retrieval of the
-answers it holds; for a file `{ service: "a file", file, bytes }`. Adding and removing one are in
-the history.
+answers it holds; for a file `{ service: "a file", file, bytes }`. A MaveDB score set kept beside
+the workspace (`mavedb-scores`, MaveScape 0.4) keeps its scores file as MaveDB sends it, and in
+`record.scoreSet` what reading them as published needs: `{ urn, title, shortDescription, citation,
+license: { short, open }, keywords, variants, target, targetOrigin, others, readout: { direction }
+}` (the target as a design's, fetched when the record names a transcript; `readout.direction` as a
+person states it, MaveDB recording none). Adding and removing one, and stating a score set's
+direction, are in the history.
 
 `tracks` (MaveScape 0.3, absent until changed) is the arrangement of the tracks: `{ order: [track
 ids], hidden: [track ids], filters: { track id: filter } }`. A track's id is a built-in one
@@ -578,7 +589,7 @@ MaveDB's score layout, one row per variant of the table, in the table's order:
 | `df` | the score's degrees of freedom (moderated combination, MaveScape 0.2); `Inf` for a score whose replicates' variance is known; `NA` with the other combinations |
 | `SE_scale` | for rescaled scores (MaveScape 0.2), the rescaling anchors' uncertainty at this score, shared by every score and not in `SE`: needed to compare a score with another assay's or with the anchors' true values; `NA` without rescaling |
 | `replicates`, `replicates_expected` | biological replicates used, and that could have measured it |
-| `status` | `scored`, `low confidence`, `filtered: <stage>` (`target`, `identifier`, `class`, `excluded`, `input-count`, `total-count`, `barcodes`, `replicates`, `se`; published scores also `given`, `copy`) or `not measured` |
+| `status` | `scored`, `low confidence`, `filtered: <stage>` (`target`, `identifier`, `class`, `excluded`, `input-count`, `total-count`, `barcodes`, `replicates`, `se`; published scores also `given`, `copy`, `merged`, `alike`) or `not measured` |
 | `flags` | why a score has low confidence |
 | `tau2`, `I2`, `leave_one_out` | between-replicate variance (REML and Enrich2's estimator; `NA` with the others), I², and the largest change when one replicate is left out |
 | `variant_as_written`, `variant_class` | the name as in the table, and its class |
@@ -672,7 +683,28 @@ A table of barcodes, one row per barcode: `barcode`, its variant (`hgvs_pro` or 
 ### Selections
 
 CSV (`hgvs_pro`, `score`, `SE`, `status`) or JSON (`format: "mavescape-selection"`, `name`,
-`run`, `condition`, `created`, `keys`).
+`run`, `condition`, `created`, `query`, `keys`). `keys` are the variants' MAVE-HGVS names on the
+run's map (a nucleotide run's: the protein variants it makes), in the order selected; a selection
+by query lists them along the target, then by amino acid (`ARNDCQEGHILKMFPSTWYV*`). From MaveScape
+0.4, `query` is the query that made the selection, in MaveScape's selection language
+([Selections](https://robert-mcdermott.github.io/mavescape/docs/selections.html#query)), or
+`null` when it was made or changed by hand: run on the same run, it selects `keys` again.
+
+```json
+{
+  "format": "mavescape-selection",
+  "version": 1,
+  "name": "Disulfides",
+  "run": "run-d34c038c88c5e0e9",
+  "condition": 0,
+  "created": "2026-10-11T22:40:00.000Z",
+  "query": "missense from C in feature disulfide and lower",
+  "keys": ["p.Cys69Glu", "p.Cys69Trp", "p.Cys97Ala", "…"]
+}
+```
+
+The workspace keeps each saved selection as `{ id, name, run, condition, keys, query?, created }`
+(`workspace.json` in the archive); one saved before 0.4 has no `query`.
 
 ### Provenance (`*_provenance.json`)
 
@@ -809,6 +841,178 @@ the count, largest or mean as the track draws it, and a second column, `<track>:
 variant there with its label; a features track: the features covering the position). Read again,
 it is a custom track (above).
 
+## Comparisons
+
+A comparison (the Compare view, remote control's `compare`; MaveScape 0.4) pairs two sets of scores,
+each a run's condition or one of its replicates, or a MaveDB score set or a predictor kept beside
+the workspace (its `annotations`, above: `mavedb-scores`, `alphamissense`, `predictor`). It is a
+view, not kept in the workspace: the runs and annotations are, each with its record, and the
+comparison is made again from them. Its files, named after the two sides
+(`<first>_vs_<second>_comparison*`):
+
+**The variants compared** (`*_comparison.csv`), one row per variant scored on both sides and kept
+by the filters, in the first side's order (the wild type left out):
+
+| Column | Meaning |
+| --- | --- |
+| `variant` | the variant, as matched: its name on the target, or on the UniProt entry's coordinates (its position plus the target's offset) when the two targets are different stretches of one entry |
+| `variant_a`, `variant_b` | as each side names it (a nucleotide run read at the protein level: its protein variant) |
+| `class` | the first side's class of the variant (missense, nonsense, synonymous, …) |
+| `score_a`, `SE_a`, `score_b`, `SE_b` | each side's score and SE as scored (`NA`: none) |
+| `compared_a`, `compared_b` | each score as compared: rescaled by its side's anchors (`scale` below), or the second negated when the two directions are opposite (`bNegated` below); as scored otherwise |
+| `difference`, `mean` | first − second and their mean, as compared |
+| `z`, `p`, `q` | the difference over √(SE_a² + SE_b²) (rescaled, with the anchors' share of each score's variance added), its two-sided normal p, and q by Benjamini and Hochberg over the variants tested (`NA` where not tested: not on one scale, not independent, a predictor, or an SE missing); discordant where q < 0.05 |
+
+**The disagreement by position** (`*_comparison_positions.csv`; two sides on one scale), one row per
+position of the first side's target with variants compared (a nucleotide run's, by the protein
+position each changes):
+
+| Column | Meaning |
+| --- | --- |
+| `position`, `reference_position`, `residue` | the position on the target, on the reference (with the target's offset, or the entry's when matched on its coordinates), and the target's residue there |
+| `variants` | the variants compared there |
+| `mean_difference`, `rms_difference` | their mean difference (first − second) and its root mean square |
+| `discordant` | how many of them are discordant |
+| `z`, `p`, `q` | the position's z, the sum of its differences over √Σ(SE_a² + SE_b²) (rescaled, with the anchors' shared variance added), with 3 variants compared or more; its p; q by Benjamini and Hochberg over the positions tested (`NA` otherwise) |
+
+**A predictor by its classes** (`*_comparison_classes.csv`; a predictor that classes its
+substitutions, AlphaMissense or EVE), one row per class:
+
+| Column | Meaning |
+| --- | --- |
+| `class` | the predictor's class (AlphaMissense: likely pathogenic, ambiguous, likely benign) |
+| `variants` | the variants compared in it |
+| `median`, `lower_quartile`, `upper_quartile` | the measured side's scores of them, as scored: median and quartiles (R's type 7) |
+
+**The maps** (`*_first_map.svg`, `*_second_map.svg`, `*_difference_map.svg`): each side's map, as
+the map's SVG export (above), and the difference's, colored by first − second centered on 0, its
+legend saying so; a variant scored on one side only, or left out by the filters, is drawn filtered.
+
+**The report and statistics** (`*_comparison.json`):
+
+```json
+{
+  "format": "mavescape-comparison",
+  "version": 1,
+  "software": { "name": "MaveScape", "version": "0.4.0", "commit": "…" },
+  "a": { "label": "Run 1: Replicate 1", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep1" },
+  "b": { "label": "Run 1: Replicate 2", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep2" },
+  "level": "protein",
+  "coordinates": "target",
+  "bNegated": false,
+  "sameScale": true,
+  "scale": { "mode": "scored", "applied": false, "anchors": null, "slope": null, "reason": null },
+  "filters": { "lowConfidence": false, "maxSE": null, "minReads": null },
+  "report": { "status": "ok", "items": [{ "id": "target", "status": "ok", "label": "Target", "text": "…" }] },
+  "matched": { "n": 1109, "onlyA": 0, "onlyB": 0, "notScoredA": 1, "notScoredB": 2, "compared": 1109, "filtered": { "lowConfidence": 0, "se": 0, "reads": 0 } },
+  "statistics": {
+    "n": 1109,
+    "pearson": { "n": 1109, "r": 0.874, "low": 0.860, "high": 0.888 },
+    "spearman": { "n": 1109, "rho": 0.823, "low": 0.800, "high": 0.844 },
+    "concordance": { "n": 1109, "ccc": 0.874, "low": 0.860, "high": 0.887, "r": 0.874, "accuracy": 1.0, "scaleShift": 0.98, "locationShift": 0.01 },
+    "blandAltman": { "n": 1109, "bias": -0.019, "sd": 0.97, "lower": -1.909, "upper": 1.870, "biasLow": -0.076, "biasHigh": 0.037, "lowerLow": -2.007, "lowerHigh": -1.811, "upperLow": 1.772, "upperHigh": 1.969, "trend": { "slope": 0.018, "low": -0.012, "high": 0.049, "intercept": 0.06, "p": 0.24 } }
+  },
+  "discordance": { "valid": true, "reason": null, "tested": 1109, "discordant": 479, "dispersion": 8.15, "q": 0.05, "variants": [{ "variant": "p.Trp36Ala", "difference": 1.2, "z": 9.1, "q": 1e-17 }] },
+  "positions": { "valid": true, "reason": null, "list": [{ "position": 36, "reference": 194, "residue": "W", "n": 20, "mean": 0.4, "rms": 0.9, "discordant": 9, "z": 7.2, "p": 6e-13, "q": 1e-11 }] },
+  "classes": null,
+  "withheld": []
+}
+```
+
+Each side names its run's id and output hash, so the comparison can be traced to the two runs and
+made again. A side is a condition (`condition`: its name) or a replicate (`replicate`: its id); a
+score set or predictor kept beside the workspace is `{ label, source: "scoreset" | "predictor",
+annotation, name, urn, file }` (its annotation's id and name, a score set's URN, the SHA-256 of the
+file kept). `scale` says how the two were put on one scale: `mode` `scored` (as scored), `stated`
+(stated by the person comparing them), `nonsense-wt` or `synonymous-nonsense` (each side rescaled by
+its own anchors: `anchors.a` and `anchors.b`, each `[{ what, to, from, se, n }]`, the score each
+anchor had, the value it is rescaled to, its SE and how many variants it is the median of; `slope`,
+each side's), with `applied` and, when a side could not be rescaled, `reason`. A predictor is
+compared by rank: `pearson`, `concordance`, `blandAltman`, `discordance` and `positions` are
+withheld, and `classes` gives `{ valid, reason, predictor, measured, list: [{ id, label, n, median,
+low, high }], auc: { m, n, auc, low, high, se, tolerated, damaging, measuredNegated, directionStated },
+references: { synonymous: { n, median }, nonsense: { n, median } } }`: the measured side's scores in
+each class, the AUC of telling the tolerated class from the damaging one (DeLong's 95% interval, as
+pROC's `ci.auc`), and the measured side's synonymous and nonsense medians.
+`coordinates` is `target` (variants matched by name on one target) or `reference` (two stretches
+of one UniProt entry, matched on its coordinates). Each report item is `ok`, `qualified` or
+`blocked`, with its words; the report's `status` is the worst of them. A blocked comparison has
+`statistics: null`. On different or unknown scales (`sameScale: false`), `concordance` and
+`blandAltman` are `null` and named in `withheld`. `matched.n` counts the variants scored on both
+sides, `matched.compared` those the filters kept, and `matched.filtered` those each filter left out
+(in that order: low confidence, SE, reads). `discordance` (`valid: false` with its `reason` when the
+two are not independent or not on one scale, also named in `withheld`) gives the variants tested,
+those discordant (q < 0.05) with their difference, z and q, and the dispersion, the median z² over
+its expected value (about 1 when the SEs describe how far the two differ). `positions` is the
+disagreement by position, as its CSV. Every interval is 95%: Pearson's from Fisher's
+z; Spearman's from Fisher's z with Bonett and Wright's SE; Lin's from its z-transform (Lin 2000);
+Bland–Altman's with t on n − 1 degrees of freedom, the limits' SE √(3 SD²/n); the trend's
+(the least-squares slope of the differences on the means) with t on n − 2. A number that is not
+defined (too few variants, no spread) is `null`.
+
+## Robustness
+
+A run's robustness to analysis choices (the Score view's Robustness pane, remote control's
+`check_robustness`; MaveScape 0.4) scores the run again across other reasonable choices: each
+alternative alone, then combinations drawn with a fixed seed (48 analyses by default). It is a view,
+not kept in the workspace: the same seed makes it again. Its files, named after the run
+(`<run>_robustness*`):
+
+**The variants** (`*_robustness.csv`), one row per variant of each target (each condition, and each
+difference between conditions) scored in some analysis:
+
+| Column | Meaning |
+| --- | --- |
+| `target` | the condition, or the difference (`+Lon vs −Lon`) |
+| `variant` | the variant (its key) |
+| `class` | its class in the declared analysis: lower than the wild type, like it, higher, or not scored (a difference: lower, no difference, higher, not compared); q < 0.05 by Benjamini and Hochberg |
+| `effect`, `SE`, `q` | in the declared analysis: its score less the wild type's (else the synonymous variants' median), its SE and q; a difference's own |
+| `analyses`, `scored_in`, `class_kept_in` | the analyses scored, how many score it, how many give it its declared class |
+| `verdict` | robust, fragile, depends on its uncertainty, borderline, its effect's size depends on a choice, not always scored |
+| `depends_on` | the single choices its verdict comes from (`pseudocount 1; Replicate 2 left out`), else the smallest combination (`… (together)`); or, not always scored, those that leave it out |
+| `effect_min`, `effect_max` | its effect's range across the analyses |
+| `rank`, `rank_min`, `rank_max` | its place among the variants scored (0 the lowest effect, 1 the highest), declared and across the analyses |
+
+**The positions** (`*_robustness_positions.csv`), one row per position of each condition: its
+`position`, `reference_position` and `residue`, its `variants`, its `median_effect` (the median of its
+substitutions', as the map's position effect) with `effect_min` and `effect_max`, its `rank` among the
+positions (0: least function, the readout's direction taken) with `rank_min` and `rank_max`, and in how
+many `analyses` it is among the least tolerant tenth (`least_tolerant_in`).
+
+**The record** (`*_robustness.json`):
+
+```json
+{
+  "format": "mavescape-robustness",
+  "version": 1,
+  "software": { "name": "MaveScape", "version": "0.4.0", "commit": "…" },
+  "run": { "id": "run-…", "name": "Run 1", "output": "<SHA-256>" },
+  "q": 0.05,
+  "choices": [{ "id": "pseudocount", "label": "Pseudocount", "options": [{ "id": "declared", "label": "0.5" }, { "id": "pc-0.1", "label": "0.1", "parameters": { "pseudocount": 0.1 } }] }],
+  "specifications": [{ "kind": "declared", "picks": [0, 0], "label": "the declared analysis", "scored": true, "error": null }],
+  "analyses": 48,
+  "targets": [{
+    "id": "condition:all", "name": "All replicates", "kind": "condition", "reference": "the wild type", "classified": true, "variants": 1118,
+    "counts": { "robust": 504, "fragile": 6, "uncertain": 445, "borderline": 133, "size": 11, "inclusion": 19, "added": 0 },
+    "classes": { "declared": { "like the wild type": 488, "lower than the wild type": 623, "higher than the wild type": 7 }, "every": { "…": 0 } },
+    "byChoice": [{ "choice": "pseudocount", "option": "pc-0.1", "phrase": "pseudocount 0.1", "changed": 14, "fragile": 0, "uncertain": 0, "borderline": 14, "size": 0, "lowered": 0, "raised": 0, "dropped": 0, "added": 0, "moved": 0, "typicalMove": 0.01, "rho": 0.999, "compared": 1118 }],
+    "leastTolerant": { "size": 6, "every": 2, "wide": 6, "positions": [5, 25, 27, 38, 45, 47] },
+    "text": "Of 1,118 variants …"
+  }],
+  "methods": "The scores were checked against 47 alternative analyses …"
+}
+```
+
+Each choice lists its options, the first the run's own, each alternative with the parameters, filters
+or replicate left out (`leaveOut`) it changes; each specification its option per choice (`picks`), its
+kind (`declared`, `single`, `combined`) and whether it could be scored (`error`, when not). A target's
+`counts` are its variants by verdict; `byChoice` each alternative alone: the classes it changes
+(`changed`, by what changed: `fragile`, `uncertain`, `borderline`), the effects it moves while their
+class holds (`size`), the variants it drops and adds, how far it moves the effects (`typicalMove`, the
+median |z| of the moves in declared SEs) and their Spearman ρ with the declared. A move counts when
+it is beyond the variant's declared 95% interval and more than five robust SDs (by the median
+absolute deviation) from the median of that analysis's moves.
+
 ## Headless runs: `run.json`
 
 `mavescape run` (MaveScape 0.2) writes the run's files to its `--out` folder (the scores, counts,
@@ -848,7 +1052,7 @@ it stops:
 {
   "url": "http://127.0.0.1:8820",
   "token": "…",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "pid": 41237
 }
 ```

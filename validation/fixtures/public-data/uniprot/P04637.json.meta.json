@@ -1,0 +1,7 @@
+{
+  "contentType": "application/json",
+  "service": "UniProt",
+  "source": "https://rest.uniprot.org/uniprotkb/P04637.json?fields=accession,id,protein_name,gene_names,organism_name,length,sequence",
+  "retrieved": "2026-10-12T01:15:31Z",
+  "version": "2026_03"
+}

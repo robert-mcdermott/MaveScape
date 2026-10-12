@@ -1,9 +1,9 @@
 // The Map view (wave 1, slice 7): a score run's variant-effect map (requirements V2, V3, R3, T6).
 // Positions across, substitutions down, colored by score (or SE, replicates, input count), each
 // state drawn its own way and named in the legend; the median of each position above and of each
-// substitution at the right; target and reference numbering. Select by click or rectangle (the
-// selection is shared, the inspector shows its first variant), save selections by name, export SVG
-// and PNG. The map is described in words, and every cell is in the table below it. A nucleotide
+// substitution at the right; target and reference numbering. Select by click, rectangle,
+// freeform shape or query (wave 4, slice 5: lib/query.js; the selection is shared, the inspector
+// shows its first variant), save selections by name and combine them, export SVG and PNG. The map is described in words, and every cell is in the table below it. A nucleotide
 // run is drawn from its protein view (collapse.js); every variant not on the map (frameshifts,
 // splice-site, intronic and UTR variants, insertions, deletions, multi-variants) is in a table
 // beside it (wave 3, slice 3). Sequence tracks below the grid (ui/tracks.js; wave 3, slice 5): the
@@ -19,11 +19,16 @@ import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, STAGE_BY_CODE } from '../lib/filters.js';
 import { addSelection, removeSelection } from '../lib/workspace.js';
+import { combineSelections, QUERY_HELP, QueryError } from '../lib/query.js';
+import { runQuery, setsFor } from './selections.js';
+import { checkRobustness, robustnessOf } from './robustness.js';
+import { addPublicTrack } from './tracks.js';
 import { ensureResults, runEntry } from './run-results.js';
 import { mountVariantMap } from './variant-map.js';
 import { exportSelection } from './record.js';
 import { annotationsSignature, exportTracks, runTracks, tracksPanel } from './tracks.js';
 import { arrangeTracks, describeTrack, describeTrackAt, sourceText } from '../lib/tracks.js';
+import { possessive } from '../lib/words.js';
 
 // Named by their colors only: which end is loss of function depends on the assay (the readout).
 const PALETTES = [['rdbu', 'Blue (lower) – red (higher)'], ['puor', 'Purple (lower) – orange (higher)']];
@@ -36,6 +41,9 @@ export function mountMapMode(app, container) {
   container.append(root);
   app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0, offKind: 'all', offPage: 0 };
   const view = app.mapView;
+  view.dragMode ??= 'pan';
+  view.query ??= '';
+  view.queryOp ??= 'replace';
   let map = null;
   let mapKey = '';
   let model = null;
@@ -94,6 +102,7 @@ export function mountMapMode(app, container) {
     return sel.keys.map((k) => cellOfKey.get(k)).filter((k) => k !== undefined);
   }
 
+  // A selection made by hand has no query.
   function onSelect(cells, primary) {
     const keys = [...cells].map((k) => cellName(model, cellAt(model, Math.floor(k / model.rows.length) + 1, k % model.rows.length)));
     store.setUI({ selection: keys.length ? { run: run.id, condition: conditionIndex(), keys } : null }, ['selection']);
@@ -214,48 +223,145 @@ export function mountMapMode(app, container) {
   }
 
   const selectionEl = h('div.map-selection');
+  // The selection shown (of this run and condition), or null.
+  const currentSelection = () => {
+    const sel = store.ui.selection;
+    return sel && sel.run === run?.id && sel.condition === conditionIndex() && sel.keys.length ? sel : null;
+  };
+  function setSelection(next) {
+    store.setUI({ selection: next.keys.length ? { run: run.id, condition: conditionIndex(), keys: next.keys, ...(next.query ? { query: next.query } : {}) } : null }, ['selection']);
+    map?.setSelection(selectionCells());
+    renderSelectionBar();
+    if (view.show === 'selected') renderTable();
+  }
+  // A saved selection used on this map: its variants here (a set saved on another run of the
+  // protein keeps the names this map has), combined with the selection by an operation.
+  function useSet(saved, operation) {
+    if (operation === 'replace' && saved.run === run.id && !model.contrast && (saved.condition ?? 0) !== view.condition) {
+      view.condition = saved.condition ?? 0;
+      store.setUI({ selection: { run: run.id, condition: view.condition, keys: saved.keys, ...(saved.query ? { query: saved.query } : {}) } }, ['selection']);
+      render();
+      return;
+    }
+    const keys = saved.keys.filter((k) => cellOfKey.has(k) && model.state[cellOfKey.get(k)] !== STATE.NOT_DESIGNED);
+    const own = saved.run === run.id && (saved.condition ?? 0) === conditionIndex();
+    const query = operation === 'replace' && own && saved.query ? saved.query : `in "${saved.name}"`;
+    setSelection(combineSelections(currentSelection(), { keys, query }, operation));
+  }
+  function setMenu(saved) {
+    const any = Boolean(currentSelection());
+    return [
+      { label: `Select its variants${saved.run === run.id ? '' : ' on this map'}`, icon: 'pointer', onSelect: () => useSet(saved, 'replace') },
+      { label: 'Add them to the selection', icon: 'plus', disabled: !any, onSelect: () => useSet(saved, 'add') },
+      { label: 'Keep only the selected that are in it', icon: 'filter', disabled: !any, onSelect: () => useSet(saved, 'intersect') },
+      { label: 'Remove them from the selection', icon: 'minus', disabled: !any, onSelect: () => useSet(saved, 'subtract') },
+      ...(saved.query ? [{ label: `Run its query here: ${saved.query}`, icon: 'search', onSelect: () => { view.query = saved.query; view.queryOp = 'replace'; applyQuery(); } }] : []),
+      { label: 'Delete it', icon: 'trash', onSelect: () => store.commit(removeSelection(store.ws, saved.id), `Remove the selection "${saved.name}"`) },
+    ];
+  }
   function renderSelectionBar() {
     clear(selectionEl);
-    const sel = store.ui.selection;
-    const keys = sel && sel.run === run?.id && sel.condition === conditionIndex() ? sel.keys : [];
-    const saved = store.ws.selections.filter((s) => s.run === run?.id);
+    const sel = currentSelection();
+    const keys = sel ? sel.keys : [];
+    const saved = setsFor(store.ws, run);
+    const runName = (id) => store.ws.runs.find((r) => r.id === id)?.name ?? 'a run no longer here';
     selectionEl.append(
       keys.length
-        ? h('div.btn-row', h('b', `${formatCount(keys.length)} selected`), h('span.muted.map-selection-keys', keys.slice(0, 6).join(', '), keys.length > 6 ? ', …' : ''), h('span.spacer'),
+        ? h('div.btn-row', h('b', `${formatCount(keys.length)} selected`), sel.query ? h('span.muted.map-selection-keys', { title: sel.query }, `by query: ${sel.query}`) : h('span.muted.map-selection-keys', keys.slice(0, 6).join(', '), keys.length > 6 ? ', …' : ''), h('span.spacer'),
           h('button.btn.small', { type: 'button', onclick: async () => {
             const name = await promptDialog({ title: 'Save the selection', label: 'Name', value: `Selection ${store.ws.selections.length + 1}` });
             if (!name) return;
-            const added = addSelection(store.ws, { name, run: run.id, condition: conditionIndex(), keys });
+            const added = addSelection(store.ws, { name, run: run.id, condition: conditionIndex(), keys, ...(sel.query ? { query: sel.query } : {}) });
             store.commit(added.ws, `Save the selection "${name}"`);
           } }, icon('save'), 'Save as…'),
           h('button.btn.small', { type: 'button', onclick: (event) => showMenu(event.currentTarget, [
             { label: 'Selected variants with scores (CSV)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: conditionIndex(), keys }, 'csv') },
-            { label: 'Selected variants (JSON)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: conditionIndex(), keys, created: new Date().toISOString() }, 'json') },
+            { label: 'Selected variants (JSON)', icon: 'download', onSelect: () => exportSelection(app, { name: 'selection', run: run.id, condition: conditionIndex(), keys, query: sel.query ?? null, created: new Date().toISOString() }, 'json') },
           ]) }, icon('download'), 'Export'),
           h('button.btn.small', { type: 'button', onclick: () => { store.setUI({ selection: null }, ['selection']); map?.setSelection([]); renderSelectionBar(); } }, 'Clear'))
-        : h('p.muted', { style: { margin: 0, fontSize: '12px' } }, 'Click a cell to inspect it; ⌘- or Ctrl-click adds to the selection, Shift-drag selects a rectangle. Drag to pan; ⌘ or Ctrl and the wheel (or a pinch) zooms. With the map focused, arrow keys move and Enter selects.'),
+        : h('p.muted', { style: { margin: 0, fontSize: '12px' } }, 'Click a cell to inspect it; ⌘- or Ctrl-click adds to the selection, Shift-drag selects a rectangle, Option- or Alt-drag a freeform shape (or choose what a drag does, above). Drag to pan; ⌘ or Ctrl and the wheel (or a pinch) zooms. With the map focused, arrow keys move and Enter selects.'),
       saved.length ? h('div.btn-row', { style: { marginTop: '6px' } }, h('span.muted', { style: { fontSize: '12px' } }, 'Saved:'),
-        ...saved.map((s) => h('span.chip', h('button.chip-button', { type: 'button', title: `Select the ${s.keys.length} variants of "${s.name}"`, onclick: () => { view.condition = s.condition ?? 0; store.setUI({ selection: { run: s.run, condition: s.condition ?? 0, keys: s.keys } }, ['selection']); render(); } }, `${s.name} (${s.keys.length})`),
+        ...saved.map((s) => h('span.chip', { title: `${s.keys.length} variants saved on ${runName(s.run)}${s.query ? ` by the query ${s.query}` : ''}. Click to select them, or to combine them with the selection.` },
+          h('button.chip-button', { type: 'button', 'aria-haspopup': 'menu', onclick: (event) => showMenu(event.currentTarget, setMenu(s)) }, `${s.name} (${s.keys.length})`, s.run === run.id ? null : h('span.muted', ` · ${runName(s.run)}`)),
           h('button.chip-x', { type: 'button', 'aria-label': `Remove the selection ${s.name}`, onclick: () => store.commit(removeSelection(store.ws, s.id), `Remove the selection "${s.name}"`) }, '×')))) : null);
+  }
+
+  // --- Selection by query ----------------------------------------------------------------------
+  const queryEl = h('div.map-query');
+  let queryNote = null;
+  // A query waiting for the run's robustness check.
+  let pendingQuery = false;
+  async function applyQuery() {
+    const text = (view.query ?? '').trim();
+    if (!text || !run) return;
+    queryNote = null;
+    try {
+      const found = await runQuery(app, run, text, { model, results, own });
+      setSelection(combineSelections(currentSelection(), found, view.queryOp));
+      queryNote = { kind: 'ok', message: `${formatCount(found.count)} variant${found.count === 1 ? '' : 's'} match${found.count === 1 ? 'es' : ''}${view.queryOp === 'replace' ? '' : `; ${formatCount(currentSelection()?.keys.length ?? 0)} selected`}.` };
+    } catch (error) {
+      if (!(error instanceof QueryError)) throw error;
+      queryNote = { kind: 'error', message: error.message, need: error.need, position: error.position, focus: true };
+    }
+    renderQueryBar();
+  }
+  function renderQueryBar() {
+    clear(queryEl);
+    const input = h('input.input.mono.map-query-input', {
+      type: 'text', value: view.query ?? '', spellcheck: false, autocomplete: 'off',
+      placeholder: 'Select by query: missense at 40-80 with se < 0.2',
+      'aria-label': 'Select variants by query', 'aria-describedby': 'map-query-note',
+      oninput: () => { view.query = input.value; },
+      onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); view.query = input.value; applyQuery(); } },
+    });
+    const op = h('select.input.small', { 'aria-label': 'What the query does to the selection', onchange: () => { view.queryOp = op.value; } },
+      ...[['replace', 'Replace the selection'], ['add', 'Add to it'], ['intersect', 'Keep the matches in it'], ['subtract', 'Remove the matches from it']].map(([k, label]) => h('option', { value: k, selected: view.queryOp === k }, label)));
+    const drag = h('div.segmented', { role: 'group', 'aria-label': 'What a drag on the map does' },
+      ...[['pan', 'pointer', 'Pan', 'A drag pans the map (Shift-drag still selects a rectangle, Option- or Alt-drag a freeform shape)'], ['rectangle', 'rectangle', 'Rectangle', 'A drag selects a rectangle of cells'], ['freeform', 'lasso', 'Freeform', 'A drag draws a freeform shape and selects the cells inside it']].map(([k, glyph, label, title]) => h(`button${view.dragMode === k ? '.active' : ''}`, { type: 'button', title, 'aria-pressed': view.dragMode === k ? 'true' : 'false', onclick: () => { view.dragMode = k; map?.setDragMode(k); renderQueryBar(); } }, icon(glyph), label)));
+    const robustness = run ? robustnessOf(app, run) : null;
+    let note = null;
+    if (queryNote?.kind === 'error') {
+      const fix = queryNote.need === 'robustness'
+        ? (robustness?.status === 'running' ? h('span.muted', ` Checking robustness… ${robustness.progress?.[1] ?? ''}`) : h('button.btn.small', { type: 'button', onclick: () => { pendingQuery = true; checkRobustness(app, run); renderQueryBar(); } }, icon('play'), 'Check robustness, then select'))
+        : queryNote.need === 'features' && run.inputs.design.targets?.[0]?.identifiers?.uniprot
+          ? h('button.btn.small', { type: 'button', onclick: async () => { const added = await addPublicTrack(app, run, 'uniprot-features'); if (added.ok) applyQuery(); else toast(added.message, { kind: 'error' }); } }, icon('plus'), 'Add UniProt\'s features, then select')
+          : null;
+      note = h('div.map-query-note.error', { id: 'map-query-note', role: 'alert' }, icon('warning'), h('span', queryNote.message), fix);
+      // The input focused with the words from the error's place selected.
+      if (queryNote.focus) {
+        queryNote.focus = false;
+        queueMicrotask(() => {
+          input.focus();
+          if (queryNote?.position >= 0) input.setSelectionRange(queryNote.position, input.value.length);
+        });
+      }
+    } else if (queryNote?.kind === 'ok') note = h('div.map-query-note', { id: 'map-query-note' }, queryNote.message);
+    queryEl.append(
+      h('div.btn-row.map-query-row', drag, input, op, h('button.btn.small', { type: 'button', onclick: () => { view.query = input.value; applyQuery(); } }, icon('search'), 'Select')),
+      note,
+      h('details.map-query-help', h('summary', 'Query words'),
+        h('table.data.compact', h('tbody', ...QUERY_HELP.map(([words, means, example]) => h('tr', h('td.mono', words), h('td', means), h('td', h('button.chip-button.mono', { type: 'button', title: 'Use this example', onclick: () => { view.query = example; renderQueryBar(); } }, example))))))));
   }
 
   // The table alternative: every designed cell, with its state.
   function tableOf() {
     const c = model.source;
     const rows = [];
+    const selected = new Set(selectionCells());
     for (let p = 1; p <= model.length; p += 1) {
       for (let r = 0; r < model.rows.length; r += 1) {
         const cell = cellAt(model, p, r);
         if (cell.state === STATE.NOT_DESIGNED) continue;
         if (view.show === 'scored' && cell.state !== STATE.SCORED && cell.state !== STATE.LOW) continue;
         if (view.show === 'other' && (cell.state === STATE.SCORED || cell.state === STATE.LOW)) continue;
+        if (view.show === 'selected' && !selected.has(cell.k)) continue;
         rows.push(cell);
       }
     }
     const pages = Math.max(1, Math.ceil(rows.length / PAGE));
     view.page = Math.min(view.page, pages - 1);
     const show = h('select.input.small', { 'aria-label': 'Cells shown', onchange: () => { view.show = show.value; view.page = 0; renderTable(); } },
-      ...[['all', 'Every designed cell'], ['scored', 'Scored'], ['other', 'Not scored']].map(([k, label]) => h('option', { value: k, selected: view.show === k }, label)));
+      ...[['all', 'Every designed cell'], ['scored', 'Scored'], ['other', 'Not scored'], ['selected', 'Selected']].map(([k, label]) => h('option', { value: k, selected: view.show === k }, label)));
     return h('div',
       h('div.btn-row', { style: { margin: '8px 0' } }, show, h('span.spacer'), h('span.muted', { style: { fontSize: '12px' } }, `${formatCount(rows.length)} cells`),
         h('button.btn.small', { type: 'button', disabled: view.page === 0, 'aria-label': 'Previous page', onclick: () => { view.page -= 1; renderTable(); } }, '‹'),
@@ -333,7 +439,7 @@ export function mountMapMode(app, container) {
     if (!entry?.results) {
       if (!entry) ensureResults(app, run);
       const failed = entry && entry.status === 'failed';
-      root.append(h('div.view-body', h('div.pane', failed ? h('div.callout.danger', icon('warning'), h('span', `The run's scores could not be recomputed: ${entry.message}`)) : h('p.muted', { style: { margin: 0 } }, `Recomputing ${run.name}'s scores from its recorded inputs…`))));
+      root.append(h('div.view-body', h('div.pane', failed ? h('div.callout.danger', icon('warning'), h('span', `The run's scores could not be recomputed: ${entry.message}`)) : h('p.muted', { style: { margin: 0 } }, `Recomputing ${possessive(run.name)} scores from its recorded inputs…`))));
       destroyMap();
       return;
     }
@@ -360,7 +466,7 @@ export function mountMapMode(app, container) {
     if (!map || mapKey !== key) {
       destroyMap();
       map = mountVariantMap({
-        model, palette: view.palette, selected: [], describe: describeCell, onSelect, onTrackClick,
+        model, palette: view.palette, selected: [], describe: describeCell, onSelect, onTrackClick, dragMode: view.dragMode,
         describeTrack: (t, p) => (p ? describeTrackAt(t, p, model.target.offset) : `${t.label}${t.source ? `: ${sourceText(t.source)}` : ''}`),
       });
       mapKey = key;
@@ -372,12 +478,13 @@ export function mountMapMode(app, container) {
     map.setSelection(selectionCells());
     const description = describeMap(model, results);
     root.append(h('div.view-body.map-body',
-      h('div.pane.map-pane', controls(), legendEl, map.el, selectionEl, panel.el),
+      h('div.pane.map-pane', controls(), legendEl, map.el, queryEl, selectionEl, panel.el),
       h('div.pane', h('h3', icon('info'), 'In words'), ...description.map((line) => h('p.map-description', line)), trackWordsEl,
         offMapEl,
         h('details', h('summary', 'Every cell as a table'), tableEl))));
     map.el.setAttribute('aria-description', description.join(' '));
     renderLegend();
+    renderQueryBar();
     renderSelectionBar();
     renderTable();
     renderOffMap();
@@ -414,6 +521,18 @@ export function mountMapMode(app, container) {
       else if (topics.has('selection') && map) {
         map.setSelection(selectionCells());
         renderSelectionBar();
+        if (view.show === 'selected') renderTable();
+      }
+      if (topics.has('robustness') && run) {
+        const state = robustnessOf(app, run);
+        if (pendingQuery && state.status === 'done') {
+          pendingQuery = false;
+          applyQuery();
+        } else if (pendingQuery && state.status === 'failed') {
+          pendingQuery = false;
+          queryNote = { kind: 'error', message: `The robustness check failed: ${state.error}` };
+          renderQueryBar();
+        } else if (queryNote?.need === 'robustness') renderQueryBar();
       }
       if (topics.has('theme') || topics.has('colors')) renderLegend();
     },

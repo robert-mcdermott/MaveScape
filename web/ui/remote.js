@@ -40,7 +40,16 @@ import { searchHits } from '../lib/mavedb.js';
 import { retrievalText } from '../lib/uniprot.js';
 import { addFileTrack, addPublicTrack, arrangeTrack, removeTrack, runTrackState } from './tracks.js';
 import { annotationsOf, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
+import { comparableAnnotations, comparisonJSON, SCALES } from '../lib/compare.js';
+import { DEFAULT_MAX_SPECIFICATIONS, robustnessJSON } from '../lib/robustness.js';
+import { checkRobustness, robustnessFiles } from './robustness.js';
+import { combineSelections, OPERATIONS, QueryError } from '../lib/query.js';
+import { runQuery } from './selections.js';
+import { normalizeUrn } from '../lib/mavedb.js';
+import { setScoreSetDirection } from '../lib/workspace.js';
+import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
+import { possessive } from '../lib/words.js';
 
 export class ActionError extends Error {}
 
@@ -49,7 +58,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const ONE_TO_THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter', X: 'Ter' };
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map' };
+const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare' };
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -108,7 +117,7 @@ export function installRemote(app) {
 
   async function resultsOf(run) {
     const entry = await ensureResults(app, run);
-    if (!entry?.results) throw new ActionError(`${run.name}'s scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
+    if (!entry?.results) throw new ActionError(`${possessive(run.name)} scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
     return entry;
   }
 
@@ -256,9 +265,9 @@ export function installRemote(app) {
         targets: w.targets.map((t) => ({ name: t.name, sequenceType: t.sequenceType, length: t.sequence.length, offset: t.offset ?? 0, ...(t.sequenceType === 'dna' ? { codingStart: t.codingStart ?? 1 } : {}), ...(t.origin ? { from: t.origin.service ?? t.origin.format, accession: t.origin.accession } : {}) })),
         design: w.design ? designSummary(w.design, source) : null,
         runs: w.runs.map(runSummary),
-        selections: w.selections.map((s) => ({ name: s.name, run: w.runs.find((r) => r.id === s.run)?.name ?? s.run, variants: s.keys.length })),
+        selections: w.selections.map((s) => ({ name: s.name, run: w.runs.find((r) => r.id === s.run)?.name ?? s.run, variants: s.keys.length, query: s.query ?? null })),
         focus: store.ui.focus ?? null,
-        selection: sel ? { run: w.runs.find((r) => r.id === sel.run)?.name ?? sel.run, condition: sel.condition, count: sel.keys.length, variants: sel.keys.slice(0, 100) } : null,
+        selection: sel ? { run: w.runs.find((r) => r.id === sel.run)?.name ?? sel.run, condition: sel.condition, count: sel.keys.length, query: sel.query ?? null, variants: sel.keys.slice(0, 100) } : null,
         steps: steps.map((s) => ({ id: s.id, label: s.label, state: s.state, detail: s.detail })),
         next: next ? { step: next.id, state: next.state, detail: next.detail, action: next.action?.label ?? null } : null,
       };
@@ -631,9 +640,18 @@ export function installRemote(app) {
 
     async select_variants(args) {
       const run = resolveRun(args.run);
-      const { results } = await resultsOf(run);
-      const condition = resolveCondition(results, args.condition);
-      const model = modelOf(run, results, condition);
+      const { results: own } = await resultsOf(run);
+      const results = proteinView(own) ?? own;
+      // A contrast's differential map, or a condition's (wave 4, slice 5).
+      let contrast = null;
+      if (args.contrast !== undefined && args.contrast !== null && args.contrast !== '') {
+        const names = (own.differential ?? []).map((d) => d.name);
+        if (!names.length) throw new ActionError(`${run.name} compares no conditions: score it with two conditions and a contrast first.`);
+        contrast = /^\d+$/.test(String(args.contrast)) ? Number(args.contrast) - 1 : names.indexOf(choose(args.contrast, names, 'contrast'));
+        if (contrast < 0 || contrast >= names.length) throw new ActionError(`There ${names.length === 1 ? 'is 1 contrast' : `are ${names.length} contrasts`}: ${names.join(', ')}.`);
+      }
+      const condition = contrast === null ? resolveCondition(own, args.condition) : own.conditions.findIndex((c) => c.id === own.differential[contrast].condition);
+      const model = buildMapModel(results, run.inputs.design, contrast === null ? { condition } : { contrast, colorBy: 'differential' });
       const byName = new Map();
       const atPosition = new Map();
       for (let p = 1; p <= model.length; p += 1) {
@@ -645,6 +663,7 @@ export function installRemote(app) {
           if (!cell.reference) atPosition.get(p).push(cell);
         }
       }
+      if (!args.query && !args.variants?.length && !args.positions?.length) throw new ActionError('Give "query" (missense at 40-80 with se < 0.2), "variants" or "positions".');
       const cells = [];
       const unknown = [];
       for (const name of args.variants ?? []) {
@@ -657,24 +676,60 @@ export function installRemote(app) {
         if (at) cells.push(...at);
         else unknown.push(`position ${p}`);
       }
-      if (unknown.length) throw new ActionError(`Not on ${run.name}'s map: ${unknown.slice(0, 10).join(', ')}${unknown.length > 10 ? '…' : ''}. Variants are named as MAVE-HGVS single substitutions (p.Trp36Ala) on positions 1–${model.length}.`);
+      if (unknown.length) throw new ActionError(`Not on ${possessive(run.name)} map: ${unknown.slice(0, 10).join(', ')}${unknown.length > 10 ? '…' : ''}. Variants are named as MAVE-HGVS single substitutions (p.Trp36Ala) on positions 1–${model.length}.`);
+      // A query; one that needs the run's robustness checks it first (seeded: the same each time).
+      let query = null;
+      if (args.query) {
+        const map = { model, results, own };
+        let found;
+        try {
+          found = await runQuery(app, run, String(args.query), map).catch(async (error) => {
+            if (!(error instanceof QueryError) || error.need !== 'robustness') throw error;
+            const state = await checkRobustness(app, run);
+            if (state.status !== 'done') throw new ActionError(`The query needs ${possessive(run.name)} robustness checked, and it could not be: ${state.error}`);
+            return runQuery(app, run, String(args.query), map);
+          });
+        } catch (error) {
+          if (error instanceof QueryError) throw new ActionError(`${error.message}${error.position >= 0 ? ` (at character ${error.position + 1} of the query)` : ''}`);
+          throw error;
+        }
+        cells.push(...found.keys.map((k) => byName.get(k)));
+        query = found.query;
+      }
       const states = { scored: [STATE.SCORED], low: [STATE.LOW], filtered: [STATE.FILTERED], missing: [STATE.MISSING] };
-      const keep = args.filter ? states[choose(args.filter, Object.keys(states), 'filter')] : null;
+      const filter = args.filter ? choose(args.filter, Object.keys(states), 'filter') : null;
+      const keep = filter ? states[filter] : null;
       const keys = [...new Set(cells.filter((c) => !keep || keep.includes(c.state)).map((c) => cellName(model, c)))];
-      if (!keys.length) throw new ActionError('No variants match: give "variants" or "positions" (and a "filter" that some of them pass).');
-      app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, show: 'all', page: 0 };
+      if (!keys.length && !args.query) throw new ActionError('No variants match: give "variants" or "positions" (and a "filter" that some of them pass).');
+      // The selection's query, when a query alone made it ("scored" as the filter: scored without
+      // low confidence, the query's "confident").
+      const made = query && !args.variants?.length && !args.positions?.length ? (filter ? `(${query}) and ${{ scored: 'confident', low: 'low', filtered: 'filtered', missing: 'missing' }[filter]}` : query) : null;
+      const operation = args.operation ? choose(args.operation, OPERATIONS, 'operation') : 'replace';
+      const sel = store.ui.selection;
+      const current = sel && sel.run === run.id && sel.condition === condition ? sel : null;
+      const next = combineSelections(current, { keys, query: made }, operation);
+      app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, page: 0 };
       app.mapView.run = run.id;
-      app.mapView.condition = condition;
-      store.setUI({ selection: { run: run.id, condition, keys } }, ['selection']);
+      if (contrast === null) {
+        app.mapView.condition = condition;
+        if (app.mapView.colorBy === 'differential') app.mapView.colorBy = 'score';
+      } else {
+        app.mapView.colorBy = 'differential';
+        app.mapView.contrast = contrast;
+      }
+      store.setUI({ selection: next.keys.length ? { run: run.id, condition, keys: next.keys, ...(next.query ? { query: next.query } : {}) } : null }, ['selection']);
       let saved = null;
       if (args.save_as) {
-        const added = addSelection(ws(), { name: String(args.save_as), run: run.id, condition, keys });
+        if (!next.keys.length) throw new ActionError('Nothing is selected to save.');
+        const added = addSelection(ws(), { name: String(args.save_as), run: run.id, condition, keys: next.keys, ...(next.query ? { query: next.query } : {}) });
         store.commit(added.ws, `Save the selection "${args.save_as}" (${author})`);
         saved = String(args.save_as);
       }
       app.focusItem({ kind: 'run', id: run.id });
       await show('map');
-      return { message: `Selected ${plural(keys.length, 'variant')} on ${run.name}'s map${saved ? `, saved as "${saved}"` : ''}.`, data: { run: run.name, condition: results.conditions[condition].name, variants: keys, saved } };
+      const where = `on ${possessive(run.name)} ${contrast === null ? '' : `${own.differential[contrast].name} `}map`;
+      const what = operation === 'replace' ? '' : ` (${plural(keys.length, 'variant')} matched: ${{ add: 'added to the selection', intersect: 'the selection kept where they are', subtract: 'taken from the selection' }[operation]})`;
+      return { message: next.keys.length ? `Selected ${plural(next.keys.length, 'variant')} ${where}${what}${saved ? `, saved as "${saved}"` : ''}.` : `No variant ${where} matches${args.query ? ` "${args.query}"` : ''}${operation === 'replace' ? '' : ` once ${operation === 'intersect' ? 'intersected with' : 'taken from'} the selection`}; nothing is selected.`, data: { run: run.name, condition: own.conditions[condition].name, ...(contrast === null ? {} : { contrast: own.differential[contrast].name }), operation, matched: keys.length, count: next.keys.length, query: next.query, variants: next.keys, saved } };
     },
 
     async inspect_variant(args) {
@@ -692,7 +747,7 @@ export function installRemote(app) {
       const row = v.key.indexOf(name) >= 0 ? v.key.indexOf(name) : v.original.indexOf(String(args.variant));
       app.focusItem({ kind: 'variant', id: row >= 0 ? v.key[row] : name, run: run.id, condition });
       await settle();
-      if (row < 0) return { message: `${name} is not in ${run.name}'s table: it was not measured (missing on the map, not "no effect").`, data: { variant: name, measured: false } };
+      if (row < 0) return { message: `${name} is not in ${possessive(run.name)} table: it was not measured (missing on the map, not "no effect").`, data: { variant: name, measured: false } };
       const reasons = c.reason[row] ? STAGE_BY_CODE.get(c.reason[row]) : null;
       // The replicates of the variant's tile (wave 3, slice 6): another tile's do not measure it.
       const tiles = new Map((run.inputs.design.library?.tiles ?? []).map((t) => [t.id, t]));
@@ -802,7 +857,7 @@ export function installRemote(app) {
       const target = trackTarget(run.inputs.design.targets?.[0], ws().targets);
       const source = ws().sources.find((x) => x.sha256 === run.inputs.source.sha256);
       const origin = source?.origin?.database === 'MaveDB' ? { urn: source.origin.urn } : null;
-      const available = PROVIDERS.map((p) => ({ provider: p.id, name: p.name, kind: p.kind, what: p.what, ...(p.kind === 'public' ? { unavailable: p.needs(target, { origin }) } : {}) }));
+      const available = PROVIDERS.map((p) => ({ provider: p.id, name: p.name, kind: p.kind, what: p.what, ...(p.kind === 'public' ? { unavailable: p.needs(target, { origin, urn: p.id === 'mavedb-scores' ? 'given' : null }) } : {}), ...(p.id === 'mavedb-scores' ? { needs: 'urn' } : {}) }));
       const tracks = state.arranged.map((t) => trackData(t, state.notes));
       const shown = tracks.filter((t) => t.shown).length;
       return { message: `${run.name}: ${plural(tracks.length, 'track')}, ${shown} shown (${tracks.filter((t) => t.shown).map((t) => t.label).join(', ') || 'none'}).${state.problems.length ? ` Not read: ${state.problems.map((p) => `${p.annotation.name}: ${p.message}`).join(' ')}` : ''}`, data: { run: run.name, tracks, problems: state.problems.map((p) => ({ annotation: p.annotation.id, name: p.annotation.name, problem: p.message })), available } };
@@ -820,11 +875,13 @@ export function installRemote(app) {
         result = await addFileTrack(app, run, { name: String(args.name), text: String(args.text) });
       } else {
         const id = choose(args.provider, PROVIDERS.filter((p) => p.kind === 'public').map((p) => p.id), 'provider');
-        result = await addPublicTrack(app, run, id, { quiet: true });
+        // A MaveDB score set by its URN (wave 4, slice 3), with what a higher score means.
+        const direction = args.direction ? choose(args.direction, ['higher-more', 'higher-less', 'unsigned'], 'direction') : null;
+        result = await addPublicTrack(app, run, id, { quiet: true, urn: args.urn ?? null, direction });
       }
       if (!result.ok) throw new ActionError(result.message);
       await settle();
-      return { message: result.message, data: { annotation: result.id, name: result.name, tracks: result.tracks.map((t) => ({ label: t.label, kind: t.kind, summary: describeTrack(t) })), notes: result.notes } };
+      return { message: result.message, data: { annotation: result.id, name: result.name, tracks: result.tracks.map((t) => ({ label: t.label, kind: t.kind, summary: describeTrack(t) })), notes: result.notes, ...(result.scoreSet ? { scoreSet: result.scoreSet } : {}) } };
     },
 
     // Shows or hides a track, moves it (position from 1), or filters it: { types }, { classes,
@@ -882,10 +939,145 @@ export function installRemote(app) {
       return { message: `Removed ${a.name} and its tracks.`, data: { removed: a.id } };
     },
 
+    // Checks a run's robustness to other analysis choices (wave 4, slice 4): scored again across
+    // the alternatives (each alone, then seeded combinations; max: how many analyses in all), and
+    // what each variant's class, effect and inclusion do. Shows the run in Score.
+    async check_robustness(args) {
+      const run = resolveRun(args.run);
+      if (run.inputs.parameters?.model === 'published') throw new ActionError('Published scores are read as published: there is no analysis of theirs to vary.');
+      await resultsOf(run);
+      const max = args.max === undefined ? DEFAULT_MAX_SPECIFICATIONS : Number(args.max);
+      if (!Number.isInteger(max) || max < 2 || max > 256) throw new ActionError('max is a whole number of analyses from 2 to 256.');
+      // A check of another size is made again.
+      const kept = app.robustness?.get(run.id);
+      if (kept && kept.status !== 'running' && kept.max !== max) app.robustness.delete(run.id);
+      app.focusItem({ kind: 'run', id: run.id });
+      await app.setMode('score');
+      const state = await checkRobustness(app, run, { max });
+      if (state.status !== 'done') throw new ActionError(`${possessive(run.name)} robustness could not be checked: ${state.error}`);
+      await settle();
+      const { summary } = state;
+      const data = JSON.parse(robustnessJSON(summary, run, state.results.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }))));
+      return { message: `${run.name}, checked against ${summary.total - 1} alternative analyses. ${summary.targets.map((t) => `${t.name}: ${t.text}`).join(' ')}${state.notes?.length ? ` ${state.notes.join(' ')}` : ''}`, data: { ...data, notes: state.notes ?? [] } };
+    },
+
+    // Compares two sets of scores (wave 4, slices 1–3): each side a run's condition or replicate by
+    // name ("Run 1", "Run 1: Replicate 2", "Published scores"), or a score set or predictor kept
+    // beside the workspace (its name, "AlphaMissense: P62993", or a score set's URN; a URN not yet
+    // kept is fetched and kept first, placed by the first side's run); the pair shown (or the
+    // default) when not given. scale: scored, stated, nonsense-wt or synonymous-nonsense. direction:
+    // what a higher score of the score set compared means. Shows the Compare view.
+    async compare(args) {
+      const w = ws();
+      if (!w.runs.length) throw new ActionError('There is no score run to compare: score a run first.');
+      const kept = currentPair(app);
+      // A score set named by its URN, kept first when it is not yet.
+      const placeBy = () => (kept?.a?.run ? w.runs.find((r) => r.id === kept.a.run) : null) ?? w.runs.at(-1);
+      for (const key of ['a', 'b']) {
+        const urn = args[key] ? normalizeUrn(String(args[key])) : null;
+        if (!urn || comparableAnnotations(ws()).some((a) => a.record?.scoreSet?.urn === urn)) continue;
+        const added = await addCompared(app, placeBy(), { urn, direction: args.direction ?? null, quiet: true });
+        if (!added.ok) throw new ActionError(added.message);
+      }
+      const options = compareOptions(ws());
+      const labels = options.map((o) => o.label);
+      const side = (text) => {
+        const urn = normalizeUrn(String(text));
+        const byUrn = urn ? comparableAnnotations(ws()).find((a) => a.record?.scoreSet?.urn === urn) : null;
+        if (byUrn) return { annotation: byUrn.id };
+        const byName = comparableAnnotations(ws()).find((a) => a.name === text || a.id === text);
+        if (byName) return { annotation: byName.id };
+        return options.find((o) => o.label === choose(text, labels, 'side')).spec;
+      };
+      const now = currentPair(app);
+      const pair = { a: args.a ? side(args.a) : now?.a, b: args.b ? side(args.b) : now?.b };
+      if (!pair.a || !pair.b) throw new ActionError(`Give the two sides, a and b: ${labels.join(', ')}.`);
+      // What a higher score of a score set compared means (MaveDB records none).
+      if (args.direction !== undefined) {
+        const direction = args.direction === null || args.direction === '' || args.direction === 'not stated' ? null : choose(args.direction, ['higher-more', 'higher-less', 'unsigned'], 'direction');
+        const set = [pair.b, pair.a].map((spec) => (spec.annotation ? comparableAnnotations(ws()).find((a) => a.id === spec.annotation && a.record?.scoreSet) : null)).find(Boolean);
+        if (!set) throw new ActionError('direction is what a higher score of a MaveDB score set means: neither side is one.');
+        app.store.commit(setScoreSetDirection(ws(), set.id, direction), `${set.name}: what a higher score means`);
+      }
+      if (args.scale !== undefined) setScale(app, choose(args.scale, Object.keys(SCALES), 'scale'));
+      // Filters by confidence and depth (wave 4, slice 2): those given replace the comparison's; none
+      // given keeps them.
+      const given = ['low_confidence', 'max_se', 'min_reads'].some((k) => args[k] !== undefined);
+      const number = (x, what) => {
+        if (x === null || x === undefined || x === '') return null;
+        if (!Number.isFinite(Number(x)) || Number(x) < 0) throw new ActionError(`${what} is a number of 0 or more.`);
+        return Number(x);
+      };
+      const filters = given ? { lowConfidence: args.low_confidence === true, maxSE: number(args.max_se, 'max_se'), minReads: number(args.min_reads, 'min_reads') } : currentFilters(app);
+      if (given) setFilters(app, filters);
+      if (args.show !== undefined) app.compareTab = choose(args.show, ['agreement', 'maps', 'disagreement', 'classes'], 'tab');
+      setPair(app, pair);
+      await app.setMode('compare');
+      const c = await computeComparison(app, pair, filters, null, currentScale(app));
+      if (c.error) throw new ActionError(c.error);
+      await settle();
+      const s = c.statistics;
+      const f = (x) => (Number.isFinite(x) ? x.toFixed(3) : '—');
+      const iv = (e, lo, hi) => `${f(e)} (${f(lo)} to ${f(hi)})`;
+      const flagged = c.report.items.filter((i) => i.status !== 'ok');
+      const d = c.discordance;
+      const discordance = d?.valid ? ` ${d.discordant} of ${d.tested} differ beyond their uncertainty (q < 0.05); the differences are ${f(d.dispersion)} times as variable as the SEs say.` : '';
+      const k = c.classes;
+      const classes = k?.valid ? ` By ${k.predictor}'s classes: ${k.list.map((x) => `${x.label} ${x.n} (median ${f(x.median)})`).join(', ')}${Number.isFinite(k.auc?.auc) ? `; AUC ${iv(k.auc.auc, k.auc.low, k.auc.high)}` : ''}.` : '';
+      const agreement = s
+        ? `${s.pearson ? `Pearson's r ${iv(s.pearson.r, s.pearson.low, s.pearson.high)}, ` : ''}Spearman's ρ ${iv(s.spearman.rho, s.spearman.low, s.spearman.high)}${s.concordance ? `, Lin's concordance ${iv(s.concordance.ccc, s.concordance.low, s.concordance.high)}, bias ${f(s.blandAltman.bias)} with limits of agreement ${f(s.blandAltman.lower)} to ${f(s.blandAltman.upper)}` : k ? ' (a prediction, compared by rank)' : '; Lin\'s concordance and Bland–Altman withheld (not on one scale)'}`
+        : '';
+      const message = s
+        ? `${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared${c.matched.compared !== c.matched.n ? ` of ${c.matched.n} scored on both sides` : ''}${c.scale?.applied ? ` (${c.scale.anchors ? 'rescaled by their anchors' : 'stated to be on one scale'})` : ''}. ${agreement}.${discordance}${classes}${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
+        : `${c.a.label} and ${c.b.label} cannot be compared: ${flagged.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`;
+      const { software, ...data } = JSON.parse(comparisonJSON(c));
+      return { message, data };
+    },
+
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions'];
       const what = choose(args.what, kinds, 'export');
       let file;
+      // A run's robustness to analysis choices (wave 4, slice 4): its variants (CSV, or its record to
+      // a path ending in .json) and its positions, checked first when it has not been.
+      if (what.startsWith('robustness')) {
+        const run = resolveRun(args.run);
+        await resultsOf(run);
+        const state = await checkRobustness(app, run);
+        if (state.status !== 'done') throw new ActionError(`${possessive(run.name)} robustness could not be checked: ${state.error}`);
+        const files = robustnessFiles(app, run, state);
+        if (what === 'robustness-positions') return { file: files.positions.text, message: `${possessive(run.name)} positions across ${state.summary.total} analyses.` };
+        const json = /\.json$/i.test(args.path ?? '');
+        return { file: json ? files.json.text : files.csv.text, message: json ? `${possessive(run.name)} robustness: its record.` : `${possessive(run.name)} variants across ${state.summary.total} analyses.` };
+      }
+      // The comparison shown (wave 4, slices 1–3): its variants compared (CSV), or its report and
+      // statistics (a path ending in .json); its disagreement by position (CSV); a map of it (SVG:
+      // map first, second or difference, the default); a predictor by its classes (CSV).
+      if (what.startsWith('comparison')) {
+        const pair = currentPair(app);
+        if (!pair) throw new ActionError('There is nothing to compare: score a run first, then compare (the action compare).');
+        const c = await computeComparison(app, pair, currentFilters(app), null, currentScale(app));
+        if (c.error) throw new ActionError(c.error);
+        if (!c.statistics) throw new ActionError(`${c.a.label} and ${c.b.label} cannot be compared: ${c.report.items.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`);
+        const files = comparisonFiles(app, c);
+        if (what === 'comparison-positions') {
+          if (!c.positions?.valid) throw new ActionError(`No disagreement by position: ${c.positions?.reason}`);
+          return { file: files.positions.text, message: `The disagreement by position of ${c.a.label} and ${c.b.label}: ${c.positions.list.length} positions.` };
+        }
+        if (what === 'comparison-classes') {
+          if (!c.classes?.valid) throw new ActionError(`No classes: ${c.classes?.reason ?? 'neither side is a predictor that classes its substitutions (AlphaMissense, EVE).'}`);
+          return { file: files.classes.text, message: `${c.classes.measured}'s scores by ${c.classes.predictor}'s classes: ${c.classes.list.map((x) => `${x.label} ${x.n}`).join(', ')}.` };
+        }
+        if (what === 'comparison-map') {
+          const which = choose(args.map ?? 'difference', ['first', 'second', 'difference'], 'map');
+          const cm = c.level === 'protein' ? c : await computeComparison(app, pair, currentFilters(app), 'protein', currentScale(app));
+          const svg = cm.statistics ? comparisonMapSVG(app, cm, which) : null;
+          if (!svg) throw new ActionError(which === 'difference' ? `No difference map: ${c.sameScale ? 'the two cannot be drawn at the protein level' : 'the two are not on one scale'}.` : `No map of the ${which} side (nucleotide variants with no protein change to draw).`);
+          return { file: svg, message: `The ${which} map of the comparison of ${c.a.label} and ${c.b.label} (SVG).` };
+        }
+        const json = /\.json$/i.test(args.path ?? '');
+        return { file: json ? files.json.text : files.csv.text, message: json ? `The comparison of ${c.a.label} and ${c.b.label}: its report and statistics.` : `The comparison of ${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared.` };
+      }
       // The analysis package (wave 2, slice 10): of a run when named, else of the current run, else
       // of the design with the default parameters.
       if (what === 'package') {
@@ -905,7 +1097,7 @@ export function installRemote(app) {
           throw new ActionError(error.message);
         }
         const r = made.deposit.report;
-        return { file: made.bytes, message: `${run.name}'s MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
+        return { file: made.bytes, message: `${possessive(run.name)} MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
       }
       if (what === 'archive') {
         file = await archiveFile(app, { includeTables: args.include_tables !== false });
@@ -925,12 +1117,12 @@ export function installRemote(app) {
         const model = modelOf(run, results, condition);
         const shown = (await runTrackState(app, run, { condition })).arranged.filter((t) => t.shown);
         const tracks = shown.length && shown.every((t) => t.length === model.length) ? shown : [];
-        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results: proteinView(results) ?? results, tracks }), message: `${run.name}'s map (SVG)${tracks.length ? `, with ${plural(tracks.length, 'track')}` : ''}.` };
+        return { file: mapSVG(model, { palette: app.mapView?.palette ?? 'rdbu', results: proteinView(results) ?? results, tracks }), message: `${possessive(run.name)} map (SVG)${tracks.length ? `, with ${plural(tracks.length, 'track')}` : ''}.` };
       }
       if (what === 'tracks') {
         const state = await runTrackState(app, run, { condition });
         const shown = state.arranged.filter((t) => t.shown);
-        return { file: tracksCSV(shown, state.model), message: `${run.name}'s tracks shown, position by position (CSV): ${shown.map((t) => t.label).join(', ') || 'none'}.` };
+        return { file: tracksCSV(shown, state.model), message: `${possessive(run.name)} tracks shown, position by position (CSV): ${shown.map((t) => t.label).join(', ') || 'none'}.` };
       }
       file = await runFile(app, run, what, condition);
       return { file: file.text, message: `${run.name}: ${what}.` };

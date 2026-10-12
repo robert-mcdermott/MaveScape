@@ -18,6 +18,14 @@ const SCORE_COLUMNS = ['am_pathogenicity', 'eve_scores_asm', 'score', 'predictio
 const AA = 'ACDEFGHIKLMNPQRSTVWY';
 const lower = (s) => String(s).trim().toLowerCase();
 
+// EVE's classes (EVE_classes_75_pct_retained_ASM: the 75% of substitutions it classes most surely),
+// as the comparisons by class read them (wave 4, slice 3).
+export const EVE_CLASSES = [
+  { id: 'pathogenic', label: 'pathogenic (EVE)', token: 'pathogenic', code: 'pathogenic' },
+  { id: 'ambiguous', label: 'uncertain', token: 'other', code: 'uncertain' },
+  { id: 'benign', label: 'benign (EVE)', token: 'benign', code: 'benign' },
+];
+
 // The table's layout and its substitutions: { layout, name, column (the score's), entries:
 // [{ ref, refPosition, alt, value, cls }], problem }. accession: keeps the rows of that UniProt
 // entry where the table holds several.
@@ -50,9 +58,11 @@ export function readPredictorTable(text, { fileName = '', accession = null } = {
     const entries = [];
     for (let r = 0; r < table.rows; r += 1) {
       if (!Number.isFinite(xs[r]) || !Number.isInteger(pos[r])) continue;
-      entries.push({ ref: wt[r].trim().toUpperCase(), refPosition: pos[r], alt: mt[r].trim().toUpperCase(), value: xs[r], cls: null, detail: classes?.[r] || null });
+      const cls = classes ? EVE_CLASSES.find((k) => k.code === lower(classes[r]))?.id ?? null : null;
+      entries.push({ ref: wt[r].trim().toUpperCase(), refPosition: pos[r], alt: mt[r].trim().toUpperCase(), value: xs[r], cls, detail: classes?.[r] || null });
     }
-    return { layout: lower(score.name) === 'eve_scores_asm' ? 'eve' : 'positions', name: lower(score.name) === 'eve_scores_asm' ? 'EVE' : score.name, column: score.name, entries };
+    const eve = lower(score.name) === 'eve_scores_asm';
+    return { layout: eve ? 'eve' : 'positions', name: eve ? 'EVE' : score.name, column: score.name, entries, classes: classes ? EVE_CLASSES : null };
   }
   const variant = VARIANT_COLUMNS.map(col).find(Boolean);
   if (!variant) return { problem: 'The table has no column of protein variants (protein_variant, variant, hgvs_pro, mutant…).' };
@@ -98,7 +108,10 @@ export function predictorTrack(read, context, { part = 'scores', label } = {}) {
   if (place.numbering === 'target' && context.offset) notes.push('Numbered as the target is (its residues agree there, not at the reference\'s numbering).');
   const xs = entries.map((e) => e.value);
   const domain = read.layout === 'alphamissense' ? { kind: 'sequential', min: 0, max: 1 } : { kind: 'sequential', min: Math.min(...xs, 0), max: Math.max(...xs, 1e-9) };
-  const track = variantsTrack({ part, label: label ?? read.name, length: context.length, domain, unit: read.layout === 'alphamissense' ? 'mean pathogenicity' : `mean ${read.column}`, format: (x) => x.toFixed(3) }, entries, { summary: 'mean', classes: read.classes ?? null });
+  // What the comparisons read (wave 4, slice 3): the table's layout (what a higher score means) and
+  // its score's name.
+  const predictor = { layout: read.layout, name: read.name, column: read.column };
+  const track = variantsTrack({ part, label: label ?? read.name, length: context.length, domain, unit: read.layout === 'alphamissense' ? 'mean pathogenicity' : `mean ${read.column}`, format: (x) => x.toFixed(3), predictor }, entries, { summary: 'mean', classes: read.classes ?? null });
   return { tracks: [track], notes };
 }
 
