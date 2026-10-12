@@ -1,5 +1,6 @@
 // Sequence tracks in the window (wave 3, slice 5; requirements V5, I3, I4): a run's tracks, its own
-// (reference, coverage, position effect, uncertainty) and the workspace's annotations' (lib/
+// (reference, coverage, position effect, uncertainty), the structure's shown (wave 5, slice 4) and
+// the workspace's annotations' (lib/
 // providers), read from the files the library keeps; adding an annotation from public data (through
 // the fetcher) or a file; the Tracks panel of the Map view (show, hide, reorder, filter, remove,
 // each with its source); the tracks as CSV; and the inspector's annotations of a variant.
@@ -19,6 +20,7 @@ import { normalizeUrn } from '../lib/mavedb.js';
 import { scoreSetResults } from '../lib/scoreset.js';
 import { now as clockNow } from '../lib/clock.js';
 import { possessive } from '../lib/words.js';
+import { evidenceTracks } from './structure-evidence.js';
 
 const decoder = new TextDecoder();
 // An annotation's kept text, by SHA-256; and each annotation's tracks, by what they were read for.
@@ -77,9 +79,10 @@ async function contextOf(app, run, model) {
 }
 
 // A run's tracks for a map model: { tracks (every one, unarranged), problems: [{ annotation,
-// message }], notes: Map(annotation id → [notes]) }.
+// message }], notes: Map(annotation id → [notes]) }. The structure shown gives its own (wave 5,
+// slice 4: ui/structure-evidence.js) when the target is mapped onto it.
 export async function runTracks(app, run, model) {
-  const tracks = builtinTracks(model);
+  const tracks = [...builtinTracks(model), ...evidenceTracks(app, model)];
   const problems = [];
   const notes = new Map();
   const annotations = app.store.ws.annotations ?? [];

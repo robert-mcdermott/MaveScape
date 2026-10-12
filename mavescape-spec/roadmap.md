@@ -2111,6 +2111,55 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    sticks for selected residues, labels, focus on a neighborhood.
    - Validation: Proteoscope's own tests for the copied modules pass here; every example's
      structure opens in both renderers.
+   - **Done.** Seventeen modules copied into `web/lib/structure/`, each with an origin comment,
+     fifteen unchanged; `chemistry.js` without ligands given as SMILES, `coloring.js` without the
+     color schemes of data MaveScape does not read. The surface worker answers surfaces and areas
+     (`web/workers/surface-worker.js`).
+     - **The program:** `structures.go` asks RCSB for an entry (`/api/fetch/pdb/{id}`) and AlphaFold
+       DB for a protein's entries and a model by its version (`…/prediction`, `…/model/{version}`),
+       sending an ID or an accession only. A structure is kept compressed, as the service sent it,
+       once read to its end and found whole.
+     - **The page:** `ui/structure-viewer.js` drives the renderers for one structure (Proteoscope's
+       scene, colors, selection flags, labels and camera); `ui/mode-structure.js` is the view:
+       opening, styles, colors, surfaces, assemblies, residues selected in words, drawn, labeled
+       and focused on, the structure in words, an image. `lib/structures.js` reads a file however
+       it comes and describes it. Remote control's `open_structure` and `set_structure`.
+     - The factor IX example's sixth step opens 1RFN and draws its cysteines as sticks; two
+       screenshot scenes (`structure`, `structure-alphafold`); the guide page *Structures*.
+     - Validation:
+       - Proteoscope's tests of the copied modules (66) pass, reading the structures the
+         validation keeps as the fetcher's cached answers (`validation/fixtures/public-data/pdb/`,
+         `…/alphafold/`: the examples' proteins, and the entries Proteoscope's tests name).
+       - `structures` (6 checks): each example protein's entry holds its target on the UniProt
+         residues it gives, and draws; each AlphaFold DB model's pLDDT agrees with the entry's own
+         mean (0.05) and bands (0.01); 2VWF as gzipped mmCIF, PDB-format file and BinaryCIF, and
+         GRB2's model as mmCIF and BinaryCIF, give the same atoms; assemblies built with the atoms
+         estimated, hemoglobin's by symmetry; 1RFN's disulfide bonds drawn as its records say;
+         1TUP's residues within 4 Å of DNA selected in words as every distance finds them.
+       - `remote-session.mjs` (133 checks): every example protein's entry and model drawn with
+         WebGPU and with the Canvas renderer, with the atoms Node reads and an image that is not
+         empty; the structure actions, refusals included.
+       - Unit tests: `structures.test.mjs` (6). Go: the structure requests.
+   - Found by slice 1:
+     - **AlphaFold DB names a model's file by its version** (v6 since 2025), which only its entry
+       list gives, and refuses clients that announce themselves as curl (HTTP 403). The program
+       asks for the list, then the model by its version; its User-Agent is answered.
+     - **An entry's own numbering is not UniProt's everywhere.** 1RFN numbers factor IX's protease
+       domain as chymotrypsin is numbered: 16–245, with eight insertions (60A, 95A, 95B, 129A, 129B,
+       184A, 188A, 221A) and three numbers skipped, for UniProt's 227–461. Read linearly, as its
+       record of the UniProt residues it covers gives them, positions drift by up to five. Positions
+       on the structure wait for slice 2's alignment; the selection language's `uniprot` keyword is
+       not offered until then.
+     - **RCSB has revised entries Proteoscope bundles** (7LYB and 3OG7 are larger than its copies).
+       Proteoscope's tests pass on the current files.
+     - **A structure opened by a script was drawn small**: the camera was fitted before the view
+       had its size. The view now fits once it has its size, and again whenever the size changes,
+       until the camera is moved by hand.
+     - **Headless Chrome offers WebGPU when asked** (`--enable-unsafe-webgpu`, on macOS). Where it
+       does not (a Linux runner without a GPU may not), the session checks the Canvas renderer and
+       says so.
+     - Two of Proteoscope's chemistry tests (2HYY, 4HHB) need its `interactions.js`, which comes
+       with slice 4; they are left out until then.
 2. **Target-to-structure mapping (X2).** Structures that cover the target ranked by PDBe SIFTS
    (`best_structures`) and the AlphaFold model; the target aligned to each chain's observed
    residues (`align.js`, BLOSUM62) with the UniProt offset; a mapping report (coverage,
@@ -2118,6 +2167,58 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    experimental structures and the AlphaFold model keeps the mapping.
    - Validation: mappings equal SIFTS for every example protein (GRB2 SH3 2VWF, BRCA1 1JM7,
      Hsp90 2CG9, DHFR 1RX2, Factor IX 1RFN) and their AlphaFold models.
+   - **Done.** `lib/mapping.js` aligns the workspace's target to every protein chain (Proteoscope's
+     `align.js`, copied with its tests, against the entry's SEQRES with its residues observed
+     marked) and gives each target position its state: on a residue (identical, or another with
+     the entry's reason from `struct_ref_seq_dif`/`SEQADV`), not observed, missing from the
+     structure's sequence, or outside; ambiguous where an alignment scoring the same places it
+     otherwise. The entry's own record of the UniProt residues (`struct_ref_seq`/`DBREF`) is
+     compared residue by residue. The chain holding the most of the target is chosen.
+     - **Structures of the target:** PDBe's `best_structures` (a new request, the accession only),
+       ranked by the target positions each entry covers, then resolution, the AlphaFold DB model
+       first.
+     - **Interchangeable structures:** `pos` and `uniprot` select by the target's and the
+       reference's positions, placed by the mapping; a selection is kept, position by position,
+       when another structure, experimental or predicted, is opened.
+     - The Structure view's pane *The target on the structure*; the mapping's file (FORMATS.md);
+       remote control's `find_structures` and `map_structure`, `open_structure`'s `chain`,
+       `export` of `structure-mapping`. Factor IX's sixth step reads 1RFN's mapping; a screenshot
+       scene (`structure-mapping`); the guide page *Structures*, its section on the mapping.
+     - Validation:
+       - `structures` (10 checks, 4 new): every example's target on its entry as residue-level
+         SIFTS places it (`reference/sifts.json`: PDBe's updated mmCIF read with gemmi by
+         `generate_sifts.py`), not observed where SIFTS says so, the one parting ambiguous; on each
+         AlphaFold DB model, the model's numbering, with the targets' own differences; the entries'
+         records (2VWF's engineered mutation, 1RFN's light chain, PTEN's removed loop); each
+         target's structures ranked.
+       - `remote-session.mjs` (138 checks): the list, the mappings and the mapping's file as Node
+         makes them, a selection kept from 2VWF to GRB2's model, a chain refused.
+       - Unit tests: `mapping.test.mjs` (8), `align.test.mjs` (8, Proteoscope's). Go: a file
+         stored again is read to its end.
+   - Found by slice 2:
+     - **1RFN's own record of its light chain is five off.** Its `struct_ref_seq` numbers chain B
+       (the second EGF domain) as UniProt 128–183; SIFTS and the alignment place it at 132–188,
+       its first residue an initiator methionine where factor IX has V132. The mapping reports the
+       record's shift rather than trusting it.
+     - **Two alignments can score the same, and SIFTS takes one.** Where PTEN's loop (287–308) was
+       removed from 1D5R's construct, the valine at the join scores as well against T286 as
+       against A309; SIFTS places it at 286, the entry's own record and MaveScape's alignment at
+       309. Ambiguity was first defined by identical residues; it is now by equal scores, and
+       both positions are called ambiguous.
+     - **2VWF engineers GRB2's P212 to alanine** (target position 54 of the SH3 example): the only
+       difference between the example's target and its structure.
+     - **SIFTS's ranking is not observation.** `best_structures` gives the span of each entry's
+       sequence: TP53's first-ranked entries are cryo-EM structures whose sequence is the whole
+       protein (p53 on a nucleosome, 9R2Q), how much of it observed only the entry says. The list
+       says that its positions are the sequence's, observed or not; opened, the mapping says which
+       are observed.
+     - **Opening the factor IX example a second time in one library failed** ("Failed to fetch"):
+       the program answered that it already had the 2 MB table before reading the upload, and its
+       connection was closed under the browser. The program now reads the upload first.
+     - **A PDB-format file without residue numbers in its SEQRES** places observed residues by
+       name, and a run of repeated residues next to unobserved ones can be placed either way
+       (Proteoscope's `alignResidueNames`). The mmCIF files the program fetches number every
+       residue; RCSB's PDB-format 2VWF maps as its mmCIF does.
 3. **Scores on the structure (X3).** Residues colored by a position summary (median, mean,
    minimum, fraction abnormal-like, number of scored substitutions), one substitution, the
    uncertainty, a comparison's disagreement (wave 4's difference coloring) or the QC state, with the map's visual grammar:
@@ -2125,6 +2226,59 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    shown beside. Selections are shared both ways: a map selection highlights residues, a picked
    residue selects its map column and fills the inspector. The view follows the active run and
    condition.
+   - **Done.** `lib/structure-scores.js` gives each target position its value for a coloring of
+     the run's map (median, mean, lowest and highest score of its missense substitutions, the
+     fraction abnormal-like, the count scored, one substitution, the median SE, Compare's
+     disagreement, the QC state) and its state in the map's grammar, places it on the mapped
+     target by reference numbering, and colors every chain that holds the target: the map's
+     palette and scale, filtered and missing in grays no palette holds, low confidence paler.
+     - **The view** (`ui/structure-coloring.js`): *Scores on the structure* beside it, the scores'
+       colorings first under Color by, a legend with each state's positions, and a strip of the
+       target's positions below it (their colors, which are on the structure, an AlphaFold DB
+       model's pLDDT beside them). The run and condition (or contrast) are the map's; the target
+       mapped is the run's.
+     - **Abnormal-like** by a threshold set by hand (research use), or, for a MaveDB record's scores
+       as published, by one of its calibrations' abnormal ranges.
+     - **One selection:** a residue picked selects its position's variants on the map ("at …") and
+       fills the inspector's new position section (`ui/position-inspector.js`); a map selection is
+       drawn on the structure; residues selected in words, or by remote control, select their
+       positions on the map.
+     - The coloring's file (FORMATS.md); remote control's `set_structure` colorings and `pick`,
+       `export` of `structure-scores`. The GRB2 example's sixth step (2VWF by the median score, the
+       Gab2 peptide's neighbors); a screenshot scene (`structure-scores`); the guide page
+       *Structures*, its section on the scores.
+     - Validation:
+       - `structures` (14 checks, 4 new): every example's run on its entry by every coloring,
+         each residue's value and color against the run's results read without the map's model,
+         nothing scored gray; the ten least tolerant positions shared both ways, on the residues
+         SIFTS places them on; the GRB2 guide's account from the atoms; PTEN's fraction
+         abnormal-like by its published calibrations' ranges as its JSON gives them.
+       - `remote-session.mjs` (144 checks): 2VWF colored in the page as Node colors it, a pick, a
+         map query drawn on the structure, the coloring's file, the other colorings, the strip.
+       - Unit tests: `structure-scores.test.mjs` (7).
+   - Found by slice 3:
+     - **The selection's tint hid the scores.** Proteoscope marks selected residues by mixing
+       their color half way to green; on residues colored by scores that changed what the colors
+       say (the peptide's tolerant neighbors read green). Colored by scores, a selection is drawn by
+       its side chains, in their own colors, with a faint tint. The renderers are unchanged.
+     - **Waters carry their chain.** On 2VWF, "within 4 of chain B" also reaches Pro206 through the
+       waters the entry gives chain B, and selects chain A's own waters; the guide's words add
+       `protein` on both sides.
+     - **The first methionine's column is start-lost.** Its substitutions are start-lost variants,
+       not missense; they are its column on the map, and are counted as its substitutions. The
+       validation's own reading first left them out, and found BRCA1's (SGE) and DHFR's Met1
+       colored where it expected missing.
+     - **Half of PTEN's calibrations classify variants, not ranges.** Three of its six (the
+       investigators' and IGVF's two) give each variant's class in a column of the scores, with no
+       range; fraction abnormal-like reads a calibration by its ranges, so those are not offered.
+     - **The map's scale leaves medians pale.** It spans the cells (GRB2: ±5.10 about the wild
+       type), and a position's median runs only from −4.60 to 0.08. It is kept, so that a residue
+       is the color of a cell with its score.
+     - **An abundance assay does not see binding.** On 2VWF, the ten residues within 4 Å of the Gab2
+       peptide (W193 and Y209 among them) score a median of −0.39,
+       against −0.81 for the rest; the ten least tolerant pack the core.
+     - TP53's published Z-scores and BRCA1's saturation genome editing scores at the protein level
+       have no standard errors: the uncertainty coloring is refused for them, saying so.
 4. **Structure as evidence (X4).** Structure-derived position tracks beside the map: secondary
    structure (DSSP), relative solvent accessibility (`surface.js`), exposure and disorder (pPSE,
    Bludau et al. 2022, Proteoscope's `exposure.js`), AlphaFold pLDDT, distance to a partner
@@ -2135,10 +2289,119 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    - Validation: DSSP and solvent accessibility equal to the reference values Proteoscope's
      validation uses; the cluster test calibrated on simulated maps (false positives at the stated
      rate).
+   - **Done.** `lib/structure-evidence.js` reads each target position on the chain mapped: DSSP's
+     secondary structure (Proteoscope's `dssp.js`), the accessible area by Shrake–Rupley with DSSP's
+     radii (1,000 points) in the chain alone and in the structure, relative to Tien et al.'s maxima,
+     StructureMap's pPSE and disorder (Proteoscope's `exposure.js`, copied with its tests; an
+     AlphaFold DB model read with its aligned error, the program's new request), pLDDT, and the
+     nearest partner, its contacts typed by Proteoscope's `interactions.js` (copied with its tests;
+     the two chemistry tests that waited for it restored). Each position's structural class:
+     disordered, interface, buried or exposed.
+     - **Beside the map:** the classes and secondary structure as features (shown; `in feature
+       buried` in queries), the accessibility, pPSE, distance and pLDDT as values (to show).
+     - **The scores by class** (Mann–Whitney against the rest, BH-adjusted) and **the cluster
+       test**: the least tolerant positions' pairs within 8 Å (Cβ) against seeded draws of as many
+       positions within strata of relative accessibility (about twelve positions each, 4 to 16),
+       with the same burial ignored beside it; compact groups (complete linkage within 12 Å).
+     - The Structure view's pane *Structure as evidence* (partners, the classes' table, the test),
+       a class coloring and a strip row, the words of a residue and the inspector's; the evidence's
+       file (FORMATS.md); remote control's `structure_evidence`, `color: "class"`, `export` of
+       `structure-evidence`. PTEN's sixth step (1D5R); a screenshot scene
+       (`structure-evidence`); the guide page *Structures*, its section on evidence.
+     - Validation:
+       - `structures` (21 checks, 7 new): DSSP 4.6.1's own output for each entry (the DSSP
+         databank, read with gemmi: `reference/dssp.json`); partners against every pair of atoms;
+         Mann–Whitney and BH against SciPy (`reference/mannwhitney.json`); disorder on two models
+         with their aligned error; the tracks queried; the cluster test on simulated maps of 1D5R
+         and 1TUP (burial alone: 3–6% at p ≤ 0.05; burial ignored: 100%; a planted patch: 62–71%);
+         the PTEN guide's account.
+       - `remote-session.mjs` (150 checks): the evidence in the page as Node reads it, its choices
+         and refusals, the tracks, the file, the class coloring, a model's aligned error.
+       - Unit tests: `structure-evidence.test.mjs` (9); Proteoscope's `exposure.test.mjs` (3) and
+         `interactions.test.mjs` (21), two more of `chemistry.test.mjs`.
+   - Found by slice 4:
+     - **Proteoscope's validation has no reference for DSSP or accessibility.** Its tests check
+       DSSP against entries' helix and sheet records (80% and 75%) and accessibility for
+       plausibility. The reference is DSSP's own output: the DSSP databank's file of each entry,
+       read with gemmi. Against it, Proteoscope's DSSP gives every residue of six entries DSSP's
+       code.
+     - **DSSP 4 calls π-helices where Proteoscope's DSSP calls α.** In 1D5R, W111–D115 are a π-helix
+       to DSSP 4.6.1 (which gives π-helices priority) and α-helix or turn to Proteoscope's. DSSP 4
+       also assigns polyproline helices (47 residues in the seven entries), which Proteoscope's does
+       not. For Proteoscope to carry across; MaveScape's copy is unchanged.
+     - **Accessibility depends on the radii.** With the viewer's van der Waals radii, residues
+       differ from DSSP's by 2.7–3.7 Å² on average and up to 18.6 Å²; with DSSP's radii and 1,000
+       points a sphere, by 0.64–0.89 Å², without bias.
+     - **Burial explains most clustering.** Buried positions lie together, and the least tolerant
+       are mostly buried: drawn from every position, simulated maps whose scores depend on burial
+       alone look clustered every time. Matched on burial in 4 strata, 10–12% of them still did;
+       about twelve positions a stratum brings it to 3–6%. In GRB2's SH3 domain the least
+       tolerant make 26 pairs, 8.7 expected from any positions but 21.5 from positions as buried
+       (p 0.11): they are its core. PTEN's cluster beyond burial (117 against 88.0, p 0.001).
+     - **Clusters chain.** Connected within 8 Å, 49 of PTEN's 55 least tolerant positions were one
+       cluster; the groups shown are compact (complete linkage, every two within 12 Å).
+     - **A crystallization additive in PTEN's active site.** 1D5R holds a tartrate within 3 Å of
+       C124, R130, K125, H93 and D92; as a partner it was the chain's only interface. Common
+       additives (Proteoscope's list, with tartrate) are partners only when chosen.
+     - **`Math.hypot` is not the same in every engine.** The determinism test found it in the new
+       module; distances there use a square root, which is.
 5. **Structures in the record (X5).** Structures stored in the library by SHA-256 and in the
    `.msz` archive (or referenced by ID with checksums); saved views (structure, chain, mapping,
    camera, style, coloring) reopen identically; high-resolution images with their legend as
    figure panels for wave 6; the mapping and structural tracks in the methods.
+   - **Done.** `lib/structure-record.js` (pure) and `ui/structure-views.js`. A view saved in the
+     Structure view's *Saved views* keeps the structure, assembly, chain, the mapping in brief
+     (`mappingSummary`), the camera and the view's size, style, coloring (with the run,
+     condition or contrast and palette it shows), surface, selection, labels, residue styles,
+     focus and the evidence's choices (`ws.structureViews`); its structure (`ws.structures`) keeps
+     the file as it came (RCSB's gzipped mmCIF, AlphaFold DB's model and its aligned error, a
+     file of the person's) by SHA-256 in the library, with where and when it was retrieved, and
+     stays while a view shows it.
+     - **Reopened** from the list, the sidebar's *Structure views* or the inspector: everything
+       restored, the camera last; the target mapped again and any difference from the mapping
+       saved said (`mappingChanges`).
+     - **The archive** carries each structure's file under `sources/` (`structures: "included"`),
+       or names it by checksum (`"checksums"`): a PDB entry or AlphaFold DB model is then fetched
+       again by its ID when its view opens, its SHA-256 compared with the one saved.
+     - **Figure panels:** *Image*, *Figure panel*: 4× the view's size in CSS pixels (a saved view:
+       the size it was saved at), the legend of its colors drawn below, and what it shows as JSON
+       in the PNG (`iTXt`, `mavescape-figure-panel`) for wave 6's figure builder (FORMATS.md).
+     - **The methods:** each structure (its source, retrieval date and file's SHA-256, read with
+       MaveScape's copy of Proteoscope's readers), the target's alignment and chain, the saved
+       views, and the structural measures and tests with their settings; ten new references.
+     - Remote control's `save_structure_view`, `open_structure_view`, `remove_structure_view`,
+       `export` of `structure-image` and of an archive without the structures
+       (`include_structures`), `focus` on a structure view. GRB2's sixth step saves its view; a
+       screenshot scene (`structure-views`); the guide page *Structures*, its section on saved
+       views and figure panels.
+     - Validation:
+       - `structures` (23 checks, 2 new): a saved view of each example protein's PDB entry and
+         AlphaFold DB model (14) through the archive, every file the same bytes and every view the
+         same, the mapping made again from each file the one saved, named by checksum only and
+         each fetched again by its ID; the methods of GRB2's run with a view of 2VWF.
+       - `remote-session.mjs` (155 checks): a view of 2VWF saved, changed and opened again gives
+         the same figure panel pixel for pixel, as does the view opened from the workspace's
+         archive in a copy and from an archive naming the structure by checksum (fetched again);
+         the panel's metadata; a view removed with its structure.
+       - Unit tests: `structure-record.test.mjs` (6).
+   - Found by slice 5:
+     - **Reopening identically needs the view's size.** The same camera draws a different image in
+       a canvas of another shape, and the canvas's shape follows the window and the panes beside
+       it. A view keeps its size in CSS pixels, and its panel is drawn at that size, scaled from
+       CSS pixels rather than by the screen's density: the panel of a view saved, changed and
+       opened again, or opened from its archive in another workspace, is the same image pixel for
+       pixel.
+     - **0.4 reads 0.5's archives.** The structures' files go under `sources/`, which 0.4's reader
+       accepts by name, and the workspace's new fields pass through it: 0.4.0's `readArchive`
+       reads an archive with them, included or named by checksum, with no problems and its
+       history whole.
+     - **A structure fetched again may not be the one saved.** RCSB revises entries (slice 1), so
+       a structure named by checksum is compared, after it is fetched again, with the SHA-256
+       saved, and the view says when it differs; its mapping is checked as well.
+     - **A legend is not Latin-1.** The legend's minus sign and Ångström do not fit a PNG `tEXt`
+       chunk; the panel's metadata goes in `iTXt` (UTF-8).
+     - **Every example structure maps again as saved** from its archived file: all 14 entries
+       and models, the same chain, positions and differences.
 6. **Optional: open in Proteoscope (X6).** For Proteoscope's deeper analyses (interfaces,
    ligands, validation reports, superposition, maps), when it is installed: `handoff.go` finds a
    running Proteoscope and sends what it already accepts (a link with the structure and a
@@ -2146,6 +2409,102 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    command otherwise; files as the last resort). Nothing else in MaveScape depends on it.
    - Validation: Go tests against a fake Proteoscope (tested version, unknown version, no remote
      control, absent).
+   - **Done.** `handoff.go` finds a running Proteoscope: its ports (8765–8814; `--proteoscope`
+     names others, or `off`) asked for `/api/startup`, whose answer (version, offline, remote
+     control, files) tells it from any other program; only a page on this computer is answered, and
+     nothing leaves the computer (NETWORK.md). `lib/proteoscope.js` writes the view as Proteoscope
+     0.10's own session (`proteoscope-session`, version 1; FORMATS.md): the structure by its ID (a
+     file of the person's embedded), the scores as its custom residue data with the legend's title,
+     `bwr` (or `viridis`) over the map's range centered on the wild type, categories as residue
+     colors, the style, residues drawn, hidden, selected, labeled and focused on, the camera once
+     still. `ui/proteoscope.js`: the Structure view's **Proteoscope** button, only while one runs.
+     - **Delivered:** for Proteoscope 0.10, a `#session=` link (deflated, URL-safe base64) opened in
+       a new tab; another version, `#fetch=<ID>` and the session as a file; a file of the person's,
+       the session file. Not built, as proposed before the slice: remote commands with binned
+       colors (they need `--remote-control`, which lets any program command Proteoscope, and carry
+       no values or legend), a B-factor file (the session file carries the values), a separate
+       handoff document (design.md says why).
+     - Remote control's `proteoscope_link`, `export` of `proteoscope-session`. The guide page
+       *Structures*, its section *Open in Proteoscope* with GRB2's three steps; a screenshot scene
+       of Proteoscope's window (`structure-proteoscope`, the real Proteoscope started for it).
+     - Validation:
+       - Go tests (`handoff_test.go`): found by its startup answer (0.10.0 tested, 0.11.2 not,
+         without remote control, the first in order); not found where nothing, another program,
+         MaveScape itself or a port that never answers is; the flag; the endpoint.
+       - `structures` (24 checks, 1 new): each example's session on its entry and model (16), each
+         median on the residue Proteoscope's reader keys, the link read back with zlib.
+       - `remote-session.mjs` (162 checks): a fake Proteoscope where `--proteoscope` says; absent,
+         0.10.0 (the session, the residues, the camera handed over during a focus, the button's new
+         tab), 0.11.0, a file of the person's, stopped.
+       - `proteoscope-handoff.mjs` (4 checks, where Proteoscope is installed; not in CI):
+         Proteoscope 0.10.0 itself opens the links of 2VWF and GRB2's model and the session file
+         of a PDB-format file, every value on a residue its reader reads, the residues and camera
+         as sent.
+       - Unit tests: `proteoscope.test.mjs` (4).
+   - Found by slice 6:
+     - **Proteoscope's ports are not only Proteoscope's.** On the computer this was built on, two
+       other programs answer JSON on 8767 and 8768, inside Proteoscope's range (one asks for a
+       bearer token, one says "route not found"). Proteoscope is told by its startup answer's
+       fields, not by a port or an answer.
+     - **A Proteoscope may already be running.** Two were, for an AI agent's use (`proteoscope
+       mcp`), on 8765 and 8766. The screenshots and the remote session look on ports of their own
+       (`--proteoscope`), or every Structure view picture would show the button there and not
+       elsewhere.
+     - **The camera on its way.** Handed over just after a focus, the session had the camera in
+       mid-flight (the remote session caught it); the handoff now waits for the view to come to
+       rest.
+     - **Saved views did not keep hidden residues.** Writing the session's `hiddenResidues` showed
+       slice 5's views kept residues drawn their own way but not those hidden: a view with hidden
+       residues did not reopen as it was. They are kept now (`hidden`).
+     - **The residue keys agree by construction.** Every value MaveScape sent landed on a residue
+       Proteoscope's own reader reads, including on the copy of 2VWF Proteoscope fetched for
+       itself: MaveScape's reader is a copy of Proteoscope's.
+     - **The links are short.** The largest of the examples' sessions is 4,818 characters (factor
+       IX on its model, 452 values); the part after `#` never leaves the browser.
+     - Wave 5 is complete with slice 6.
+
+**Released 0.5.0 on 2026-10-12.** A view of a structure is kept with the workspace, so 0.5 leaves two
+archives that keep views (`validation/archives/release-0.5.0-*.msz`, 1.2 MB together), saved by
+0.5.0 itself, its window driven through remote control offline by `make-0.5.0.mjs`:
+- GRB2's SH3 domain and its structures: Run 1 and three saved views, their structures' files in
+  the archive (2VWF by the median score with residues drawn and labeled; 2VWF by structural class
+  with residues hidden; GRB2's AlphaFold DB model with its aligned error);
+- PTEN on 1D5R: its published scores and two views (the fraction abnormal-like of its record's
+  ExCALIBR calibration; structural class), the structure named by its ID and SHA-256 only.
+
+Every later version must reopen them and reproduce their two runs. It must also read each view's
+structure again (from the archive, or fetched again by its ID, the file recorded) and map its
+target onto the view's chain as it was saved. At the release, `mavescape run --from-workspace`
+reran all twenty runs of every release's archives in a window, each to its recorded hash.
+- Found by the release:
+  - **The README said count tables could be Excel workbooks**, as did the guide's *Opening your
+    data*; MaveScape reads CSV and TSV, gzipped or not, and FORMATS.md lists Excel as to come. Both
+    now say so.
+  - **The archives' replay assumed a selection**: every earlier release's archive had one, 0.5.0's
+    have none, and the replay's exports failed on them. A workspace without a selection is replayed
+    now.
+  - **The site's home page and science page said nothing of structure**: the home page's release
+    line still described 0.1.0, and neither validation table had a row for wave 5's checks. Both
+    describe wave 5 now, with its validation and methods.
+  - **A workspace whose structures were named by checksum could not be archived again**:
+    `mavescape run --from-workspace` on 0.5.0's PTEN archive reproduced its run and then failed
+    writing its archive, which asked for the structure's file the library did not hold; so would
+    the window's export, until a view was opened. Not asked otherwise, an archive names such
+    structures by ID and SHA-256 again, and says so; the export dialog says which files are missing.
+  - **CI's runner lost WebGPU under the Structure view.** The pull request's CI ran wave 5's
+    structure checks on GitHub's runner for the first time (CI runs on pull requests and on main):
+    its Chrome draws WebGPU in software (SwiftShader), and its graphics process died at the first
+    image ("A valid external Instance reference no longer exists"). The viewer only noted the loss
+    and could draw no more. It now goes on with the Canvas renderer on a fresh canvas, saying why,
+    and an image whose drawing loses WebGPU is drawn again; the remote session crashes the GPU
+    process on purpose to check it (`Browser.crashGpuProcess`), and with Chrome's software adapter
+    (`--use-webgpu-adapter=swiftshader`) the runner's failure was reproduced here and passes now.
+    Two more came with it: an image taken before a frame had drawn a change showed the scene as it
+    was, and the legend, wrapped onto two lines in a narrower window, was drawn over the strip.
+  - **One Chrome that did not start ended the recapture**: the light screenshots were done when a
+    headless Chrome did not open its debugging connection, and the script stopped there, leaving that
+    scene's MaveScape running. A Chrome is now started again once, and a scene that still cannot
+    start fails alone.
 
 ## 0.6.0: figures and a provable record (wave 6)
 

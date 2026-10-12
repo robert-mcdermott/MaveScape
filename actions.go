@@ -46,15 +46,15 @@ var remoteActions = []remoteAction{
 	{Name: "open_example", Description: "Opens a bundled example as a new workspace, scored with MaveScape's defaults, in the view it opens in. Without an id, the error lists the examples.", InputSchema: schema(map[string]any{
 		"id": textArg("The example's id or part of its title: \"grb2-sh3\" (GRB2 SH3, MaveDB counts), \"simulated\" (a simulated experiment with known effects) \"simulated-time-series\" (a simulated time series) or \"simulated-sort-seq\" (simulated sorted bins)."),
 	}, "id"), long: true},
-	{Name: "open_files", Description: "Opens files on this computer, as dropping them on the window does: count or score tables (.csv, .tsv), the target's sequence (.fasta), designs (.design.json) and workspace archives (.msz), or folders of them. Needs the token.", InputSchema: schema(map[string]any{
+	{Name: "open_files", Description: "Opens files on this computer, as dropping them on the window does: count or score tables (.csv, .tsv), the target's sequence (.fasta), designs (.design.json), workspace archives (.msz) and structures (.pdb, .cif, .bcif, gzipped or not: shown in the Structure view), or folders of them. Needs the token.", InputSchema: schema(map[string]any{
 		"paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths of files or folders."},
 		"new_workspace": flagArg("Open them in a new workspace rather than the open one."),
 	}, "paths"), long: true, reads: true},
-	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map or compare.", InputSchema: schema(map[string]any{
-		"mode": textArg("start, experiment, qc, score, map or compare."),
+	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map, compare or structure.", InputSchema: schema(map[string]any{
+		"mode": textArg("start, experiment, qc, score, map, compare or structure."),
 	}, "mode")},
-	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
-		"kind": textArg("table, target, run, selection or variant; found by name across all of them if not given."),
+	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
+		"kind": textArg("table, target, run, selection, structure view or variant; found by name across all of them if not given."),
 		"name": textArg("Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala)."),
 		"run":  runArg,
 	})},
@@ -170,15 +170,60 @@ var remoteActions = []remoteAction{
 	{Name: "remove_track", Description: "Removes an annotation and its tracks (undoable, in the history).", InputSchema: schema(map[string]any{
 		"annotation": textArg("The annotation by id or name (list_tracks)."),
 	}, "annotation")},
+	{Name: "open_structure", Description: "Opens a structure in the Structure view: a PDB entry by its ID, or the AlphaFold DB model of a UniProt accession (\"target\": the target's), fetched through the program (cached, then available offline). A file of your own opens with open_files. Returns the structure in words: its chains, the residues observed, its assemblies and what else it holds.", InputSchema: schema(map[string]any{
+		"pdb":       textArg("A PDB ID, such as 2VWF."),
+		"alphafold": textArg("A UniProt accession, such as P62993, for its AlphaFold DB model; \"target\" for the target's."),
+		"assembly":  textArg("A biological assembly by its id (\"1\"), or \"asym\" for the asymmetric unit; the coordinates as deposited if not given."),
+		"chain":     textArg("The chain to map the workspace's target on; the chain that holds the most of it if not given."),
+	}), long: true},
+	{Name: "find_structures", Description: "The PDB entries that cover the workspace's target (its UniProt accession), from PDBe's SIFTS through the program: ranked by the target positions each covers, then resolution, each with its method, chains and positions; and that its AlphaFold DB model covers it all.", InputSchema: schema(map[string]any{}), long: true},
+	{Name: "map_structure", Description: "Maps the workspace's target onto the structure shown: the target aligned to each chain (BLOSUM62, free end gaps), and on the chain chosen each position on a residue (identical or another), in the structure's sequence but not observed, missing from it, or outside it; ambiguous positions; the entry's own record of the UniProt residues compared. Returns the mapping in words and by position.", InputSchema: schema(map[string]any{
+		"chain": textArg("The chain to map the target on; the one that holds the most of it if not given."),
+	})},
+	{Name: "set_structure", Description: "Draws the structure shown another way (style, color, surface, assembly), colors its residues by their target positions' scores (the run and condition the map shows, in the map's colors: filtered and missing positions gray, never the wild type's color), and selects residues in Proteoscope's selection language, draws them in a style of their own, labels them and focuses on their neighborhood; or picks a residue as a click does (its substitutions selected on the map, its position in the inspector). Returns the structure's state: what is selected, labeled and focused on, the scores colored by, and the renderer (WebGPU, or the Canvas renderer, which draws no surfaces).", InputSchema: schema(map[string]any{
+		"style":        textArg("cartoon, ball-stick, sticks, spacefill or trace."),
+		"color":        textArg("By the scores: median, mean, minimum, maximum, fraction (abnormal-like, with threshold or calibration), count (substitutions scored), substitution (with substitution), uncertainty (median SE), disagreement (the comparison Compare shows) or qc. Or the structure's own: class (each position's structural class: buried, exposed, interface, disordered), chain, entity, rainbow, secondary, moltype, element, residue, hydrophobicity, nucleotide, bfactor, plddt (a predicted model) or uniform."),
+		"substitution": textArg("color substitution: the amino acid each residue's substitution to is shown (A or Ala; * or Ter for a stop)."),
+		"threshold":    map[string]any{"type": "number", "description": "color fraction: the score beyond which a substitution is abnormal-like (research use)."},
+		"side":         textArg("color fraction: below or above the threshold is abnormal-like (the readout's loss side if not given)."),
+		"calibration":  textArg("color fraction: a published calibration of the record whose scores the run is, by title or number (from 1), instead of a threshold."),
+		"pick":         textArg("A residue picked as a click picks it: \"A 183\" (chain and number, with an insertion code if any); its position's substitutions selected on the map, the position in the inspector."),
+		"add":          flagArg("pick: add the residue to the selection (or take it away), as a ⌘-click does."),
+		"surface":      textArg("off, ses (molecular), sas (solvent-accessible), vdw or gaussian; WebGPU only."),
+		"assembly":     textArg("A biological assembly by its id (\"1\"), or \"asym\" for the asymmetric unit; clears the selection."),
+		"select":       textArg("Residues to select: \"resn CYS\", \"chain A and resi 40-80\", \"within 5 of ligand\", \"helix and chain B\", \"pos 30-40\" (target positions, on the chain mapped), \"uniprot 188-198\" (the reference's); empty to clear the selection."),
+		"show":         textArg("How the selected residues are drawn: sticks, ball-stick, spacefill, hide or none (as the rest)."),
+		"label":        flagArg("Label the selected residues (false: remove their labels)."),
+		"focus":        flagArg("Focus on the selected residues and their neighbors within 5 Å, side chains drawn (false: the whole structure again)."),
+		"fit":          flagArg("Fit the whole structure in the view."),
+	}), long: true},
+	{Name: "structure_evidence", Description: "What the structure shown says of the target's positions: each one's structural class (buried, exposed, interface with the partners chosen, or a predicted model's disordered region), from DSSP's secondary structure, the solvent accessibility (DSSP's radii), StructureMap's exposure and the partners within 4 Å; the median scores of each class against the rest (Mann–Whitney, BH-adjusted); and whether the least tolerant positions lie closer together than positions of the same burial (pairs within 8 Å against seeded draws within strata of relative accessibility). The same are tracks beside the map (list_tracks).", InputSchema: schema(map[string]any{
+		"partner":  textArg("The partner the interface is read with: \"all\" (every other chain, ligand and ion but common additives, the default), or one by its id or label (\"chain:B\", \"ligand:A:1352:TLA\")."),
+		"fraction": map[string]any{"type": "number", "minimum": 0.05, "maximum": 0.5, "description": "The share of positions called least tolerant for the cluster test (0.2 if not given)."},
+		"seed":     map[string]any{"type": "integer", "minimum": 1, "description": "The seed of the cluster test's draws (1 if not given)."},
+	}), long: true},
+	{Name: "save_structure_view", Description: "Saves the view of the structure shown with the workspace, under a name (one already used is saved again): the structure's file kept in the library by its SHA-256 (and a model's aligned error), the assembly, the chain and the mapping, the camera, style, colors and the run and condition they are of, the surface, the residues selected, drawn, labeled and focused on, and the evidence's settings. It reopens as it was, goes into the workspace's archive and is described in its methods.", InputSchema: schema(map[string]any{
+		"name": textArg("The view's name."),
+	}, "name"), long: true},
+	{Name: "open_structure_view", Description: "Opens a saved view as it was saved: its structure from the library (or fetched again by its ID, its SHA-256 checked), and everything the view records. Says whether the mapping is the one the view was saved with.", InputSchema: schema(map[string]any{
+		"name": textArg("The saved view's name."),
+	}, "name"), long: true},
+	{Name: "remove_structure_view", Description: "Removes a saved view, and its structure when no other view shows it (undoable, in the history).", InputSchema: schema(map[string]any{
+		"name": textArg("The saved view's name."),
+	}, "name")},
+	{Name: "proteoscope_link", Description: "Hands the structure shown to a Proteoscope running on this computer (found on its ports, 8765-8814, or those --proteoscope names), in what it accepts: for a PDB entry or AlphaFold DB model and a Proteoscope MaveScape was tested with (0.10), the link that opens it there with the scores as its custom residue data, the residues drawn, hidden, selected, labeled and focused on, and the camera (open the link in a browser); for another version, a link to the structure alone; for a file of the person's, the session to open there as a file (export proteoscope-session writes it). Refused, saying why, when Proteoscope is not running.", InputSchema: schema(map[string]any{})},
 	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), the comparison shown (its matched variants, CSV; its report and statistics, JSON; its positions, maps or a predictor's classes), or a run's robustness to analysis choices. Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions."),
-		"path":           textArg("The absolute path of the file to write."),
-		"overwrite":      flagArg("Replace the file if it exists."),
-		"run":            runArg,
-		"condition":      conditionArg,
-		"include_tables": flagArg("archive: include the count tables (the default), or name each by its SHA-256 only."),
-		"selection":      textArg("selection: a saved selection by name; the current selection if not given."),
-		"map":            textArg("comparison-map: first, second or difference (the default)."),
+		"what":               textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb, comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions, structure-mapping (the target on the structure shown, position by position, CSV), structure-scores (the scores the structure is colored by, position by position, with each residue's color, CSV), structure-evidence (what the structure says of each position: secondary structure, accessibility, exposure, partner, class, with its median score, CSV) structure-image (a figure panel of the view shown: PNG, its legend below it, what it shows written into it) or proteoscope-session (the view shown as a Proteoscope session, .proteoscope.json: the structure, by its ID or embedded, its scores as residue data, the residues drawn, selected and labeled, the camera; Proteoscope need not be running)."),
+		"path":               textArg("The absolute path of the file to write."),
+		"overwrite":          flagArg("Replace the file if it exists."),
+		"run":                runArg,
+		"condition":          conditionArg,
+		"include_tables":     flagArg("archive: include the count tables (the default), or name each by its SHA-256 only."),
+		"include_structures": flagArg("archive: include the files of the structures the saved views show, or name each by its ID and SHA-256 only (false). Not given: included when the library holds every file, named by ID and SHA-256 when it does not (a workspace opened from an archive that named them so), which the message says."),
+		"scale":              map[string]any{"type": "number", "minimum": 1, "maximum": 8, "description": "structure-image: the image's size against the view's (4 if not given)."},
+		"legend":             flagArg("structure-image: draw the legend below the image (the default)."),
+		"selection":          textArg("selection: a saved selection by name; the current selection if not given."),
+		"map":                textArg("comparison-map: first, second or difference (the default)."),
 	}, "what", "path"), long: true, output: true},
 }
 

@@ -71,14 +71,14 @@ func TestServesTheAppWithSecurityHeaders(t *testing.T) {
 }
 
 // Everything the page loads must be embedded: a module missing from the go:embed list works with
-// --dev and fails in the released program.
+// --dev and fails in the released program. Node's files (tests and their helpers, .mjs) are not.
 func TestEveryWebModuleIsEmbedded(t *testing.T) {
 	err := filepath.WalkDir("web", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}
 		name := filepath.ToSlash(path)
-		if strings.HasSuffix(name, ".test.mjs") || strings.HasSuffix(name, "package.json") {
+		if strings.HasSuffix(name, ".mjs") || strings.HasSuffix(name, "package.json") {
 			if _, err := fs.Stat(content, name); err == nil {
 				t.Errorf("%s is embedded but is not part of the app", name)
 			}
@@ -448,4 +448,35 @@ func TestFileKinds(t *testing.T) {
 			t.Errorf("%s: %q, want %q", name, got, want)
 		}
 	}
+}
+
+// A file stored again (an example opened a second time in one library) is answered as stored once
+// its upload is read to its end. Answered before, a large upload's connection was closed under it
+// (Go's server does so past 256 KB unread), and the browser's request failed (wave 5, slice 2).
+func TestAFileStoredAgainIsReadToItsEnd(t *testing.T) {
+	_, handler := testApp(t)
+	content := bytes.Repeat([]byte("hgvs_pro,input_rep1,output_rep1\np.Ala2Val,120,35\n"), 40000)
+	sum := sha256.Sum256(content)
+	sha := hex.EncodeToString(sum[:])
+	for attempt := 1; attempt <= 2; attempt++ {
+		body := &countingReader{r: bytes.NewReader(content)}
+		rec := request(t, handler, http.MethodPut, "/api/library/files/"+sha, body, nil)
+		if rec.Code != http.StatusOK || (attempt == 2 && !strings.Contains(rec.Body.String(), `"existing":true`)) {
+			t.Fatalf("upload %d: %d %s", attempt, rec.Code, rec.Body)
+		}
+		if body.n != len(content) {
+			t.Fatalf("upload %d: %d of %d bytes read before the answer", attempt, body.n, len(content))
+		}
+	}
+}
+
+type countingReader struct {
+	r io.Reader
+	n int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += n
+	return n, err
 }

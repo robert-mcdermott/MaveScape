@@ -17,7 +17,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `scoring` | The scoring engine (`web/lib/score.js`) against Enrich2 2.0.2 (replicate and combined scores, all three normalizations), dms_variants 1.6.0 (`func_scores`) and metafor 5.2-1 (REML and fixed effects); the PRD's two-population edge cases on a synthetic fixture (`fixtures/two-population.csv`); rescaling; determinism, row- and column-order invariance and symmetry; runs that reproduce from a saved workspace; BRCA1's two assays drafted into two conditions; time series (wave 2): weighted and ordinary regression against Enrich2 2.0.2 (BRCA1 E2 and Y2H, the time-series fixture) and statsmodels 0.15 (the fixture), the time-series edge cases, the simulated truth and the 95% intervals' coverage, "Missing = 0"; sorted bins (wave 2): factor IX's published MultiSTEP scores reproduced from its counts, the maximum-likelihood fit against fitdistrplus, the simulated sort's truth, the bootstrap against the analytic SE, the scales; barcodes (wave 2): every barcode and every variant's summed counts against dms_variants 1.6.0 by barcode and by substitution, the counts read with MaveScape's map, in dms_variants' `variant_counts` and in Enrich2's layout, the barcode fixture's truth and planted outliers, row order, refusals; DiMSum's model (wave 2): the threshold, the variants fitted, the scales and shifts, the error model, every fitness and σ and the merge against DiMSum 1.4's own functions on the fixture, GRB2 and DiMSum's demo, GRB2's published scores, the 95% intervals' coverage under a simulated bottleneck, refusals; differential scores (wave 2): limma against mutscan 1.2.0 on the two-condition fixture and CBS, Enrich2's z between conditions, the paired differential from first principles, the edge cases, the truth; scores per unit of time against the whole-course scores, DiMSum's model on a table of barcodes, the bins' defaults without the wild type (wave 2 slice 10) | `reference/enrich2.json`, `dms_variants.json`, `dms_variants-barcodes.json`, `metafor.json`, `statsmodels.json`, `fitdistcens.json`, `dimsum.json`, `mutscan.json`, `fixtures/`; MaveDB and DiMSum, external |
 | `qc` | Quality control: simulated experiments with one problem each (`qc-cases.mjs`, `web/lib/simulate.js`: two populations, time series, sorts and barcoded libraries) raise exactly their findings, clean ones none, on three seeds; the variance check against simulated bottlenecks, and DiMSum's terms placing them before or after selection; invariance to row order and to a run; thresholds; the feasibility data's findings, locked as found; findings in context (wave 2 slice 8): every raised finding says what could cause it and what to do, the readout's direction, coverage of a single-base library, where BRCA1 Y2H's stops stop losing the function; the cells recorded against simulated bottlenecks (wave 2 slice 10) | simulated; MaveDB, external |
 | `map` | The variant-effect map: the fixture's SVG against `golden/two-population.map.svg` (`UPDATE_GOLDEN=1` rewrites it), each state where planted, state colors apart from the neutral color (CIEDE2000) in every theme, the scale, row orders; GRB2's numbering and BRCA1's least tolerant positions | `fixtures/`; MaveDB, external |
-| `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked; an acknowledged finding through the archive; the archive each release saved (`archives/`; 0.3.0's three, from MaveDB; 0.4.0's two, with score sets kept beside and selections by query) opened, its runs reproduced, its annotations' tracks read again, its kept score sets read again and its saved queries run again; the analysis package (wave 2 slice 10) scored from its own files to the run's output hash, its sample sheet read as its design, the same bytes twice | `fixtures/`, `web/examples/`, `archives/` |
+| `roundtrip` | The record: the fixture and the GRB2 example as workspaces saved as `.msz`, reopened and saved again (the same bytes), every export again byte for byte, exported scores and counts imported again without loss, tampered, hostile and foreign archives caught, the examples and the blank layouts checked; an acknowledged finding through the archive; the archive each release saved (`archives/`; 0.3.0's three, from MaveDB; 0.4.0's two, with score sets kept beside and selections by query; 0.5.0's two, with saved views of structures) opened, its runs reproduced, its annotations' tracks read again, its kept score sets read again, its saved queries run again and its saved views' structures read again and mapped as saved; the analysis package (wave 2 slice 10) scored from its own files to the run's output hash, its sample sheet read as its design, the same bytes twice | `fixtures/`, `web/examples/`, `archives/` |
 | `import` | The importer on the feasibility tables (every name valid against its target, missing never 0, designs drafted from column names with the hand-written designs' shape), on shuffled, split and part-read copies, on DiMSum's demo, and on a table with one problem of each kind (`fixtures/malformed-counts.csv`) | MaveDB and DiMSum, external; `fixtures/` |
 | `readiness` | What each analysis can do with what a workspace holds (wave 2, slice 10; `readiness-cases.mjs`): the six examples, the five fixtures and a simulated bottleneck with its cells recorded, whole and with one part taken away (the wild-type row, a replicate, the gates, the cells, the times in generations, the middle time points, the readout, the nonsense or synonymous controls), 74 workspaces. The readiness model must name exactly what was taken away, and its verdict on every analysis must agree with the engine: each scoring analysis scored or refused with the parameters that use it, each QC finding assessed or not, and an analysis it leaves out for a design one the engine cannot do there either. An empty workspace and a broken design | `web/examples/`, `fixtures/`, simulated |
 | `examples` | Every bundled example opened as the window opens it (wave 2, slice 11; `example-cases.mjs`): assembled (Hsp90's codon variants read at the protein level), scored with its parameters, raising exactly the QC findings it teaches, its readout stated and its readiness naming what its guide points to, at most six guided steps; the published examples' counts MaveDB's, byte for byte. Hsp90's codons (568 rows, 188 protein variants, the wild type's nine copies read once) and its per-generation scores against the published fitness; a single replicate's own SEs; factor IX against MultiSTEP's scores; the simulated problems against their truth, with and without replicate 3. Wave 3, slice 6: DHFR's two score sets opened together (each replicate measuring only its own sub-library, none combined twice; the scores against the published ones with the defaults and with the authors' unweighted regression; Lon's effect as the paper found it: the published 736 and 384 advantageous substitutions, about twice as many without Lon here, the differences called negative, most at native hydrophobic residues) and BRCA1 RING from MaveDB and back (every published replicate score with the defaults, within 2 × 10⁻¹⁴; the combined ones with the Enrich2-compatible preset; its zinc ligands among its least tolerant positions; Run 1 deposited and read back exactly, written again the same bytes). Wave 4, slice 6: TP53's two screens (the target checked against UniProt's P04637, P72R; Kotler et al.'s 936 protein variants merged from 2,908 rows and its 191 frameshifts left out, the report saying so; as published r −0.78, as stated 0.78, rescaled Lin's concordance 0.78 and a bias of −0.04; the positions that differ most; nutlin-3 against etoposide) and Hsp90 against its record's own scores kept beside (r 0.95; stated on one scale, Lin's concordance 0.48, a bias of 0.22, a Bland–Altman slope of −0.91, the differences largest at 585–587), each number as the guide states it. 52 checks | `web/examples/`; MaveDB, external (`mavedb-hsp90`, `mavedb-factor9`, and `mavedb-pten-vampseq` for the PTEN example opened from MaveDB, wave 3 slice 2; `mavedb-dhfr` and `mavedb-brca1-ring` for slice 6; `mavedb-tp53-screens` for wave 4, slice 6) |
@@ -27,6 +27,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `compare` | Comparisons within a workspace (wave 4, slice 1; `compare-cases.mjs`, `web/lib/compare.js`, `web/lib/agreement.js`): the agreement statistics of seven pairs equal R's (`reference/compare.json`, by `reference/generate_compare.R`: `cor.test`, Spearman with Bonett and Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰; their 95% intervals' coverage in 2,000 simulated pairs of known agreement of each of five kinds (94–96%; Spearman's near r = 1 and Lin's with 30 variants on two scales reported apart, as they are); slice 2: the discordance and disagreement by position of 600 variants equal R's (`pnorm`, `p.adjust`), and in simulated pairs with planted differences the planted found (96%), the false calls within BH's 5%, none called with nothing planted (dispersion about 1); the compatibility report's rules on GRB2 (replicates, a replicate inside its run, one table scored twice, a run moved along UniProt P62993 and matched on its coordinates, the same blocked without an accession, a direction stated the other way) and the files; then BRCA1's counts against its published scores, DHFR's Run 1 against each record, DHFR's two published score sets matched as R's merge matches them, and BRCA1 RING's replicates sharing their input; DHFR's discordance its Run 1's own differential z, its filters, its difference map; GRB2's dispersion where QC finds variance beyond counting; slice 3: two assays on two scales rescaled by their anchors (both rescalings) equal R's with the anchors' SEs and the tests' share, GRB2's published scores against AlphaMissense by class equal R's (pROC's DeLong interval) and an AUC with ties, the anchors' uncertainty keeping false calls to 3.5–4% of null pairs (10–55% without it), DeLong's interval holding the AUC 94–95% of the time, GRB2's Run 1 against its record kept beside the workspace (rescaled, ρc 0.996) and against AlphaMissense, a score set and a predictor through the archive, DHFR's record kept the same as opened, DHFR's published pair stated on one scale, PTEN's abundance against its phosphatase activity and against AlphaMissense. 36 checks | `reference/compare.json`; `fixtures/public-data/` (GRB2's record, AlphaMissense); MaveDB, external (`mavedb-brca1-sge`, `mavedb-dhfr`, `mavedb-brca1-ring`, `mavedb-pten-vampseq`, `mavedb-pten-phosphatase`) for the last checks |
 | `robustness` | Robustness to analysis choices (wave 4, slice 4; `robustness-cases.mjs`, `web/lib/robustness.js`): GRB2's specifications (the declared first, each alternative alone, seeded combinations, none twice); the declared analysis the run to the last bit; the classes against an independent computation (z against the wild type, t on the moderated degrees of freedom, Benjamini–Hochberg); ten simulated experiments with planted fragile results, declared by fixed effects: the fragile variants exactly the replicate-driven ones and those whose effect's size depends on the pseudocount exactly the zero-count ones, every time, the clearly lost robust; under MaveScape's defaults the replicate-driven effect not called and nothing fragile; GRB2's check (fixed effects not tried, the alternatives' rank correlations, the least tolerant positions) and its files the same bytes twice; DHFR's 377 differences (54 in every analysis). 9 checks | bundled; MaveDB, external (`mavedb-dhfr`) for the last check |
 | `selections` | Selections (wave 4, slice 5; `selections-cases.mjs`, `web/lib/query.js`): the roadmap's phrases parsed as written and mistakes named in place; fourteen queries on GRB2's Run 1 against an independent account of each of its map's 1,176 cells read from the run's own arrays, the same variants in the same order; union, intersection and difference by query against the sets' own, De Morgan's laws, a saved selection on a second run (scored as Enrich2 does); each robustness verdict exactly GRB2's check's, and in three planted experiments (seeds 41–43) `fragile` and `size depends on the pseudocount` exactly the planted ones; factor IX's `feature disulfide` the 22 bonded cysteines of UniProt P00740 and the example's numbers; freeform shapes against the rectangle tool and a circle; the selection's files and the archive keeping its query. 8 checks | bundled |
+| `structures` | Structures (wave 5, slices 1–6; `structure-cases.mjs`, `web/lib/structures.js`, `web/lib/mapping.js`, `web/lib/structure-scores.js`, Proteoscope's `web/lib/structure/`): each example protein's PDB entry (2VWF, 1JM7, 2CG9, 1RX2, 1RFN, 1TUP, 1D5R), read as the page reads it from the fetcher's cached answer, holds its target in the chain its guide names on the UniProt residues the entry gives, its cartoon drawing at least 95% of the chain's residues and ball and stick every atom but water and hydrogens; each protein's AlphaFold DB model a predicted model, its mean pLDDT within 0.05 of AlphaFold DB's own and its share in each confidence band within 0.01; 2VWF as gzipped mmCIF, RCSB's PDB-format file and BinaryCIF, and GRB2's model as mmCIF and BinaryCIF, the same atoms (to 0.001 Å); assemblies built with the atoms estimated, 3OG7's two its two chains, hemoglobin's (1HHO) the dimer moved whole by symmetry; on 1RFN the bonds drawn between cysteines' sulfur atoms the entry's own disulfide records, as factor IX's guide says; on 1TUP the residues within 4 Å of the DNA by the selection language those every distance finds, R248 and R273 among them. Slice 2: each example's target aligned to its entry places every residue where residue-level SIFTS does (`reference/sifts.json`, PDBe's updated mmCIF read with gemmi by `generate_sifts.py`) and calls not observed those SIFTS does, the one parting (PTEN's join in 1D5R) ambiguous; on each AlphaFold DB model, every position on the residue numbered as its reference, another residue exactly where the target differs; 2VWF's engineered mutation (also from its PDB-format file), 1RFN's light chain at 132–188 with its record five earlier, PTEN's removed loop, as the guide says; each target's structures ranked from PDBe's answers. Slice 3: each example's run, scored in Node, colored on its entry by every coloring, every residue of every chain that holds the target given the value its position's missense substitutions have in the run's results (read without the map's model: `positionScores`) and the map's color for it, every position with nothing scored gray, at least 100 (RGB) from the wild type's color; each example's ten least tolerant positions, selected on the map as `at` selects them, drawn on the residues SIFTS places them on and picked back; the GRB2 guide's account from the atoms (the least tolerant packed, the Gab2 peptide's neighbors, selected in its words, tolerant), its numbers in the guide; PTEN's fraction abnormal-like by two of its published calibrations, as the record's own JSON gives their ranges. Slice 4 (`web/lib/structure-evidence.js`, Proteoscope's `exposure.js` and `interactions.js`): each entry's secondary structure and accessibility as DSSP 4.6.1 gives them (`reference/dssp.json`, the DSSP databank's output read with gemmi by `generate_dssp.py`: every code but 1D5R's five π-helix residues, the area within 1 Å² on average); each chain's partners as every pair of atoms gives them; Mann–Whitney's test and BH's adjustment as SciPy's (`reference/mannwhitney.json`, `generate_mannwhitney.py`); disorder on the models read with their aligned error (PTEN's tail, p53's ends); the structure's tracks beside GRB2's map, queried by class; the cluster test calibrated on simulated maps of 1D5R and 1TUP (burial alone: 3–6% at p ≤ 0.05; burial ignored: every map; a planted patch: 62–71%); the PTEN guide's account, its domains UniProt's. Slice 5 (`web/lib/structure-record.js`): a saved view of each example protein's PDB entry and AlphaFold DB model (14) through the workspace archive, every structure's file the same bytes and every view the same, the mapping made again from each file the one its view was saved with; named by checksum only, no file in the archive and none said missing, each fetched again by its ID the file recorded; the methods of GRB2's run with a view of 2VWF (the entry, its retrieval and SHA-256, the mapping, the engineered difference, the view, each method cited). Slice 6 (`web/lib/proteoscope.js`): the Proteoscope session of each example's run on its entry and its AlphaFold DB model (16), each position's median, as the run's results give it, on the residue Proteoscope's reader keys it on, every scored position on a residue with one, the range centered on the wild type, the link read back with zlib as sent. 24 checks | `fixtures/public-data/` (`pdb/`, `alphafold/`, `pdbe/`, `uniprot/`), `fixtures/structures/`, `reference/sifts.json`, `reference/dssp.json`, `reference/mannwhitney.json` |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -94,8 +95,57 @@ other screens compared by URN, as published and rescaled by their anchors, the s
 as Node gives them; and (slice 5) `select_variants` by query, its matches subtracted from the
 selection (the queries composed and saved), a saved selection named in a query and the robustness
 verdicts of the run checked, each as Node selects on the run it recomputes from the archive, a
-mistake named in place, the saved selection's file with its query, the Map view showing it. 124
-checks; in CI as the `remote` job.
+mistake named in place, the saved selection's file with its query, the Map view showing it; and
+(wave 5, slice 1) `open_structure` with every example protein's PDB entry and AlphaFold DB model from
+the cache, each drawn with WebGPU (headless Chrome is started with `--enable-unsafe-webgpu`; where
+it offers none, the session says so and checks the Canvas renderer) with the atoms Node reads and an
+image of the view that is not empty, then `set_structure` (factor IX's cysteines selected, drawn as
+sticks, labeled, two focused on; the molecular surface; hemoglobin's assembly built by symmetry),
+refusals saying why, a structure file opened with `open_files`, and, the page opened again with
+`?renderer=canvas`, every entry and model drawn by the Canvas renderer, a surface refused; and
+(slice 2) `find_structures` ranked as Node ranks PDBe's cached answer, `open_structure` mapping
+GRB2's SH3 domain onto 2VWF as Node does, a selection by target position kept on GRB2's AlphaFold
+DB model, the mapping's file the same bytes as Node's, and `map_structure` on 1RFN's light chain,
+a chain that does not hold the target refused; and (slice 3) 2VWF colored by GRB2's median scores in
+the page, every residue as Node colors it, a residue picked (its position's variants selected on the
+map, the position in the inspector), a map query's selection drawn on the structure, the
+coloring's file the same bytes as Node's, the other colorings and their refusals, and the strip
+with GRB2's AlphaFold DB model's pLDDT; and (slice 4) `structure_evidence` on 2VWF as Node reads it
+(classes, the scores by class, the cluster test), its choices and refusals, the structure's tracks
+in `list_tracks`, the evidence's file the same bytes as Node's, the class coloring, and GRB2's
+model read with its aligned error; and (slice 5) a view of 2VWF colored by GRB2's median scores
+saved, changed and opened again by `open_structure_view`, its figure panel (`export` of
+`structure-image`) the same image pixel for pixel, the panel's metadata (the file's SHA-256, the
+view, Run 1 by its output's SHA-256, the legend), the view opened from the workspace's archive in a
+copy the same image, an archive naming the structure by checksum only (the file then fetched again
+by its ID, its SHA-256 the one saved), and `remove_structure_view` taking the structure with it.
+(slice 6) a fake Proteoscope (its startup answer) where `--proteoscope` says: with none running,
+`proteoscope_link` refused and no button; with 0.10.0, the link's session (read with zlib) the one
+returned, GRB2's medians on the residues Node places them on, the residues drawn, hidden, focused on,
+selected and labeled, and the camera where it comes to rest though handed over during a focus, the
+fake asked nothing but its startup answer, the button shown and its click opening the link in a new
+tab; with 0.11.0 the structure alone; a file of the person's embedded in a session file; the fake
+stopped, the button gone and the session file still written; and (the 0.5.0 release) Chrome's GPU
+process crashed under the Structure view (`Browser.crashGpuProcess`), the view going on with the
+Canvas renderer, saying why, and drawing; where the browser loses WebGPU by itself (GitHub's runners
+draw it in software, and lose it at the first image), the session finds the view on the Canvas
+renderer and checks it so. 163 checks; in CI as the `remote` job.
+
+## Proteoscope itself (`proteoscope-handoff.mjs`, wave 5 slice 6)
+
+`node validation/proteoscope-handoff.mjs [--verbose] [--require]` checks that Proteoscope opens what
+MaveScape hands it. Proteoscope is another program, which MaveScape does not need, so this is not
+in CI: where it is not installed it says so and stops (`--require` makes that a failure).
+`PROTEOSCOPE` names its program, else `proteoscope` on the PATH. It starts Proteoscope on a port of
+its own (its downloads cached in `cache/proteoscope/`: 2VWF and GRB2's AlphaFold DB model are
+fetched the first time) and MaveScape with remote control, offline, looking for it there. GRB2's
+example: 2VWF colored by the median score, residues drawn, hidden, focused on, selected and labeled,
+handed over by `proteoscope_link` and the link opened in a browser; Proteoscope's own session of
+what it opened read back (`proteoscope.session()`): every value on a residue its own reader reads,
+the values, legend's title, colormap and range sent, the residues and the camera as MaveScape had
+them. The same for GRB2's AlphaFold DB model; and RCSB's PDB-format 2VWF as a file of the person's,
+its session file given to a second Proteoscope, offline, as a file. 4 checks, with Proteoscope
+0.10.0.
 
 ## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3 and 6)
 
@@ -160,7 +210,11 @@ pipeline would (headless Chrome: `CHROME`, else one installed):
   fixture's run a folder per condition; `--format tables` the same bytes as `mavescape run` wrote;
   wrong command lines (exit 2).
 
-29 checks, in CI's `remote` job; about 30 s.
+- `--from-workspace` on 0.5.0's PTEN archive (the 0.5.0 release), whose saved views name their
+  structure by checksum: the run reproduced, and `workspace.msz` written again names the structure
+  the same way, its two views kept.
+
+30 checks, in CI's `remote` job; about 30 s.
 
 ## Coverage of intervals (`coverage.mjs`, wave 2 slice 9)
 
@@ -233,11 +287,71 @@ retrieval record:
 | `clinvar/GRB2.search.1.json`, `F9.search.1.json`, `<sha256>.summary.json` | ClinVar's search for GRB2's and F9's missense, nonsense and synonymous records (10 and 553), and their summaries (one page for GRB2, two for F9; named by the SHA-256 of the record numbers asked) |
 | `gnomad/GRB2.gene.json`, `F9`, `BRCA1`; `ENST00000316804.variants.json`, `ENST00000218099`, `ENST00000357654` | gnomAD's answers for the three genes (their MANE Select transcripts) and the transcripts' variants in gnomAD v4 (each with its GraphQL query in its record) |
 | `mavedb/urn_mavedb_00000097-0-2.namespaces.json`, `.annotations.clinvar_2026_01.csv` | the annotations MaveDB keeps for BRCA1's saturation genome editing score set, and its ClinVar 2026_01 and gnomAD annotations of its variants |
+| `pdb/2VWF.cif.gz`, `1JM7`, `2CG9`, `1RX2`, `1RFN`, `1TUP`, `1D5R` | the examples' proteins' PDB entries as RCSB sends them (gzipped mmCIF), retrieved 2026-10-12 (wave 5, slice 1): GRB2's SH3 domain, BRCA1's RING domain with BARD1's, Hsp90 (Hsp82) with Sba1, DHFR, factor IXa, p53 on DNA, PTEN |
+| `pdb/1M17.cif.gz`, `1YCR`, `3OG7`, `4HHB`, `6VXX`, `7LYB`, `1HHO` | the entries Proteoscope's tests of its structure modules read (copied with them into `web/lib/structure/`), and hemoglobin's 1HHO, whose tetramer is built by symmetry |
+| `alphafold/P62993.prediction.json`, `P38398`, `P02829`, `P0ABQ4`, `P00740`, `P04637`, `P60484`; `AF-<accession>-F1-model_v6.cif` | AlphaFold DB's entries for the seven proteins and their models (version 6, gzipped as AlphaFold DB stores them) |
+| `pdbe/P62993.best-structures.json`, `P38398`, `P02829`, `P0ABQ4`, `P00740`, `P04637`, `P60484` | PDBe's PDB entries that cover each of the seven proteins, by SIFTS (wave 5, slice 2), retrieved 2026-10-12 |
+| `pdb/2HYY.cif.gz`, `6OIM`, `4ZQK` | the entries Proteoscope's tests of `interactions.js` read (imatinib at Abl's hinge, magnesium's coordination, PD-1 with PD-L1), retrieved 2026-10-12 (wave 5, slice 4) |
+| `alphafold/AF-P62993-F1-predicted_aligned_error_v6.json`, `P0ABQ4`, `P00740`, `P04637`, `P60484` | the predicted aligned error of five of the models, by which their exposure and disorder are read (wave 5, slice 4); BRCA1's (10 MB) and Hsp82's are not kept, and their models are read without it |
+| `uniprot/P60484.features.json` | PTEN's features, for its domains in the PTEN example's account (wave 5, slice 4) |
 
 UniProt's data are under CC BY 4.0; MaveDB's records are CC0 but for BAP1's (CC BY 4.0, its
 authors cited in its record); NCBI's and Ensembl's records, and ClinVar's, have no restriction on
-use; PDBe-KB's and AlphaFold DB's data (AlphaMissense's predictions) are CC BY 4.0; gnomAD's are
-CC0.
+use; PDBe-KB's and AlphaFold DB's data (AlphaMissense's predictions, the models) are CC BY 4.0;
+gnomAD's are CC0, as are the PDB's entries.
+
+## Structures in other formats (`fixtures/structures/`, wave 5 slice 1)
+
+| File | What |
+| --- | --- |
+| `2VWF.pdb.gz` | RCSB's PDB-format file of 2VWF (files.rcsb.org, retrieved 2026-10-12, CC0) |
+| `2VWF.bcif.gz` | RCSB's BinaryCIF of 2VWF (models.rcsb.org, retrieved 2026-10-12, CC0) |
+| `AF-P62993-F1-model_v6.bcif` | AlphaFold DB's BinaryCIF of GRB2's model (retrieved 2026-10-12, CC BY 4.0) |
+
+The suite `structures` reads each as the page does and compares it, atom by atom, with the mmCIF
+of the same entry or model.
+
+## SIFTS (`reference/sifts.json`, wave 5 slice 2)
+
+SIFTS's residue-level mapping of the seven example entries, the reference for the target's
+mapping onto structures (suite `structures`). `generate_sifts.py` downloads each entry's updated
+mmCIF from PDBe (`https://www.ebi.ac.uk/pdbe/entry-files/download/<id>_updated.cif.gz`, its SHA-256
+recorded) and reads its `_pdbx_sifts_xref_db` category with gemmi 0.7.5 (MPL-2.0), an mmCIF reader
+independent of MaveScape's: for every residue of each chain's sequence (by `label_asym_id` and
+`label_seq_id`), the UniProt accession, number and residue, and whether it is observed. Retrieved
+2026-10-11:
+
+```sh
+python -m venv env && env/bin/pip install gemmi
+env/bin/python -I validation/reference/generate_sifts.py
+```
+
+## DSSP (`reference/dssp.json`, wave 5 slice 4)
+
+DSSP's own secondary structure and accessibility of the seven example entries, the reference for
+structure as evidence (suite `structures`). `generate_dssp.py` downloads each entry's file from the
+DSSP databank (`https://pdb-redo.eu/dssp/db/<id>/mmcif`: mkdssp's output, DSSP 4.6.1, its SHA-256
+recorded) and reads its `_dssp_struct_summary` category with gemmi 0.7.5: each residue's
+secondary structure code and accessibility (Å², DSSP's radii), by `label_asym_id` and
+`label_seq_id`. Retrieved 2026-10-12. Kabsch W, Sander C. Dictionary of protein secondary
+structure: pattern recognition of hydrogen-bonded and geometrical features. Biopolymers
+1983;22:2577-2637. doi:10.1002/bip.360221211
+
+```sh
+python -m venv env && env/bin/pip install gemmi
+env/bin/python -I validation/reference/generate_dssp.py
+```
+
+## Mann–Whitney (`reference/mannwhitney.json`, wave 5 slice 4)
+
+SciPy 1.18.1's `mannwhitneyu` (two-sided, asymptotic, with the continuity correction) and
+`false_discovery_control` (BH) on eight seeded data sets, the reference for the scores by
+structural class:
+
+```sh
+python -m venv env && env/bin/pip install scipy
+env/bin/python -I validation/reference/generate_mannwhitney.py
+```
 
 ## The tracks' own fixtures (`fixtures/annotations/`, wave 3 slice 5)
 
@@ -1072,4 +1186,30 @@ It runs each saved selection's query again on its run's map: it must select the 
 query of the robustness verdicts must keep its variants on the map, since a later version's check
 may vary them. `mavescape run --from-workspace` reruns the three in a window to the same hashes, and,
 at 0.4.0, every earlier archive's fifteen runs too.
+
+0.5.0 saved two archives that keep its saved views of structures:
+`archives/release-0.5.0-grb2-structures.msz` (0.3 MB) and `release-0.5.0-pten-structures.msz`
+(0.9 MB). `archives/make-0.5.0.mjs` (`node validation/archives/make-0.5.0.mjs <v0.5.0 checkout> <out
+folder> [commit]`) drives the window as 0.4.0's script does, offline, on the fetcher's cached
+answers (the PDB entries and AlphaFold DB models among them) and PTEN's table
+(`mavedb-pten-vampseq`), not looking for Proteoscope. Their runs name the commit they were built
+from: 695f27d (wave 5's last slice), marked `-dirty` because the release's changes were not yet
+committed. They hold:
+- **GRB2's SH3 domain and its structures** (the `grb2-sh3` example): Run 1, and three saved views
+  whose structures' files are in the archive: 2VWF colored by the median score, residues 20–26 drawn
+  as sticks and two labeled ("Core"); 2VWF by structural class, the Gab2 peptide's first residues
+  hidden ("Classes"); GRB2's AlphaFold DB model by the median, its aligned error kept with it
+  ("Model").
+- **PTEN on 1D5R, named by checksum** (the `pten-mavedb` example): its published scores as a run;
+  two views of 1D5R, by the fraction abnormal-like of its record's ExCALIBR calibration
+  ("Abnormal-like") and by structural class ("Burial"); the archive names the structure by its ID
+  and SHA-256 only (`structures: "checksums"`).
+
+The suite recomputes their two runs to their recorded output hashes. It reads each saved view's
+structure again: from the archive's own file, or, for PTEN's, as the fetcher's answer for its ID
+(here, the cache), and checks its SHA-256 is the one recorded. It maps each view's target onto its
+chain again and compares the mapping with the one the view was saved with, which must not differ.
+They hold no selection: the suite replays a workspace without one. `mavescape run --from-workspace`
+reruns the two in a window to the same hashes (PTEN's archive written again naming its structure
+by checksum, as it came), and, at 0.5.0, every earlier archive's eighteen runs too.
 

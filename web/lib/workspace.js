@@ -134,7 +134,7 @@ export function rename(ws, name) {
 
 // Whether a workspace holds anything worth saving (an empty, untitled one is not saved).
 export function isEmptyWorkspace(ws) {
-  return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length;
+  return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length && !(ws.structureViews ?? []).length;
 }
 
 // An id not yet used in a list: the base, or the base with a number.
@@ -310,3 +310,34 @@ export function setTrackLayout(ws, layout) {
   return change(ws, { tracks: layout ?? undefined });
 }
 
+// --- Structures and their saved views (wave 5, slice 5) ----------------------------------------------
+
+// Saves a view of a structure (ws.structureViews), keeping the structure it shows (ws.structures,
+// by its file's SHA-256; lib/structure-record.js describes both). A view saved under a name already
+// used replaces that one. In the history. Returns { ws, id, structure }.
+export function saveStructureView(ws, structure, view, time = clockNow()) {
+  const structures = ws.structures ?? [];
+  let entry = structures.find((s) => s.file.sha256 === structure.file.sha256);
+  const nextStructures = entry ? structures : [...structures, (entry = { ...structure, id: uniqueId(structure.id ?? structure.name, structures), added: time })];
+  const views = ws.structureViews ?? [];
+  const old = views.find((v) => v.name === view.name);
+  const id = old?.id ?? uniqueId(view.id ?? view.name, views);
+  const record = { ...view, id, structure: entry.id, created: time };
+  const nextViews = old ? views.map((v) => (v.id === id ? record : v)) : [...views, record];
+  // A structure no view shows any longer (the view replaced showed another) is not kept.
+  const shown = new Set(nextViews.map((v) => v.structure));
+  const kept = nextStructures.filter((s) => shown.has(s.id));
+  const detail = `${old ? 'Saved again' : 'Saved'} the view "${view.name}" of ${entry.name} (SHA-256 ${entry.file.sha256.slice(0, 12)}…${view.chain ? `; the target on chain ${view.chain}` : ''})`;
+  return { ws: change(ws, { structures: kept, structureViews: nextViews }, 'structure-view', detail, time), id, structure: entry.id };
+}
+
+// Removes a saved view, and its structure when no other view shows it. In the history.
+export function removeStructureView(ws, id) {
+  const views = ws.structureViews ?? [];
+  const gone = views.find((v) => v.id === id);
+  if (!gone) return ws;
+  const rest = views.filter((v) => v.id !== id);
+  const shown = new Set(rest.map((v) => v.structure));
+  const structures = (ws.structures ?? []).filter((s) => shown.has(s.id));
+  return change(ws, { structureViews: rest.length ? rest : undefined, structures: structures.length ? structures : undefined }, 'structure-view', `Removed the view "${gone.name}"`);
+}

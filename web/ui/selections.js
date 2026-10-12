@@ -23,6 +23,24 @@ export function proteinOfRun(run) {
   }
 }
 
+// The run the map shows, and the Structure view colors by (wave 5, slice 3): the one in focus (a
+// run, or a variant's, position's or saved selection's run), else the one last shown, else the
+// latest.
+export function activeRun(app) {
+  const ws = app.store.ws;
+  const focus = app.store.ui.focus;
+  const byId = (id) => ws.runs.find((r) => r.id === id) ?? null;
+  if (focus?.kind === 'run') return byId(focus.id);
+  if ((focus?.kind === 'variant' || focus?.kind === 'position') && focus.run) return byId(focus.run) ?? ws.runs.at(-1) ?? null;
+  if (focus?.kind === 'selection') {
+    const saved = ws.selections.find((s) => s.id === focus.id);
+    if (saved) return byId(saved.run) ?? ws.runs.at(-1) ?? null;
+  }
+  const shown = app.mapView?.run;
+  if (shown && byId(shown)) return byId(shown);
+  return ws.runs.at(-1) ?? null;
+}
+
 // The saved selections that apply to a run: its own, and those of other runs of the same protein.
 export function setsFor(ws, run) {
   const protein = proteinOfRun(run);

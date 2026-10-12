@@ -35,8 +35,9 @@ const ONE = { Ala: 'A', Arg: 'R', Asn: 'N', Asp: 'D', Cys: 'C', Gln: 'Q', Glu: '
 
 const proteinOf = targetProtein;
 
-// The scores of every substitution at a position, as dots on a line, this one ringed.
-function positionStrip(results, c, row, position, key) {
+// The scores of every substitution at a position, as dots on a line, this one ringed (none: row −1;
+// the inspector's position section, wave 5, slice 3).
+export function positionStrip(results, c, row, position, key) {
   const v = results.variants;
   const points = [];
   for (let i = 0; i < results.rows; i += 1) {

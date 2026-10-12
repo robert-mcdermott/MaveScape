@@ -11,6 +11,7 @@ import { describeFilters } from './filters.js';
 import { barcodeSentence, binSentence, differentialSentence, dimsumSentence, regressionSentence, unitOf } from './runs.js';
 import { notRecorded, readiness } from './readiness.js';
 import { anchorUncertainty } from './anchors.js';
+import { viewWords } from './structure-record.js';
 
 export const REFERENCES = {
   enrich2: { type: 'article', authors: ['Rubin, Alan F', 'Gelman, Hannah', 'Lucas, Nathan', 'Bajjalieh, Sandra M', 'Papenfuss, Anthony T', 'Speed, Terence P', 'Fowler, Douglas M'], title: 'A statistical framework for analyzing deep mutational scanning data', journal: 'Genome Biology', year: 2017, volume: 18, pages: '150', doi: '10.1186/s13059-017-1272-5' },
@@ -42,6 +43,17 @@ export const REFERENCES = {
   threedpatch: { type: 'article', authors: ['Jakubec, David', 'Vondrášek, Jiří', 'Finn, Robert D'], title: '3DPatch: fast 3D structure visualization with residue conservation', journal: 'Bioinformatics', year: 2019, volume: 35, number: 2, pages: '332--334', doi: '10.1093/bioinformatics/bty464' },
   capra2007: { type: 'article', authors: ['Capra, John A', 'Singh, Mona'], title: 'Predicting functionally important residues from sequence conservation', journal: 'Bioinformatics', year: 2007, volume: 23, number: 15, pages: '1875--1882', doi: '10.1093/bioinformatics/btm270' },
   henikoff1994: { type: 'article', authors: ['Henikoff, Steven', 'Henikoff, Jorja G'], title: 'Position-based sequence weights', journal: 'Journal of Molecular Biology', year: 1994, volume: 243, number: 4, pages: '574--578', doi: '10.1016/0022-2836(94)90032-9' },
+  // Wave 5, slice 5: structures, their mapping and what they say of each position.
+  pdb: { type: 'article', authors: ['Berman, Helen M', 'Westbrook, John', 'Feng, Zukang', 'Gilliland, Gary', 'Bhat, T N', 'Weissig, Helge', 'Shindyalov, Ilya N', 'Bourne, Philip E'], title: 'The Protein Data Bank', journal: 'Nucleic Acids Research', year: 2000, volume: 28, number: 1, pages: '235--242', doi: '10.1093/nar/28.1.235' },
+  alphafold: { type: 'article', authors: ['Jumper, John', 'Evans, Richard', 'Pritzel, Alexander', 'Green, Tim', 'Figurnov, Michael', 'Ronneberger, Olaf', 'Tunyasuvunakool, Kathryn', 'others'], title: 'Highly accurate protein structure prediction with AlphaFold', journal: 'Nature', year: 2021, volume: 596, pages: '583--589', doi: '10.1038/s41586-021-03819-2' },
+  blosum62: { type: 'article', authors: ['Henikoff, Steven', 'Henikoff, Jorja G'], title: 'Amino acid substitution matrices from protein blocks', journal: 'Proceedings of the National Academy of Sciences of the USA', year: 1992, volume: 89, number: 22, pages: '10915--10919', doi: '10.1073/pnas.89.22.10915' },
+  dssp: { type: 'article', authors: ['Kabsch, Wolfgang', 'Sander, Christian'], title: 'Dictionary of protein secondary structure: pattern recognition of hydrogen-bonded and geometrical features', journal: 'Biopolymers', year: 1983, volume: 22, number: 12, pages: '2577--2637', doi: '10.1002/bip.360221211' },
+  shrake: { type: 'article', authors: ['Shrake, A', 'Rupley, J A'], title: 'Environment and exposure to solvent of protein atoms. Lysozyme and insulin', journal: 'Journal of Molecular Biology', year: 1973, volume: 79, number: 2, pages: '351--371', doi: '10.1016/0022-2836(73)90011-9' },
+  tien: { type: 'article', authors: ['Tien, Matthew Z', 'Meyer, Austin G', 'Sydykova, Dariya K', 'Spielman, Stephanie J', 'Wilke, Claus O'], title: 'Maximum allowed solvent accessibilites of residues in proteins', journal: 'PLoS ONE', year: 2013, volume: 8, number: 11, pages: 'e80635', doi: '10.1371/journal.pone.0080635' },
+  structuremap: { type: 'article', authors: ['Bludau, Isabell', 'Willems, Sander', 'Zeng, Wen-Feng', 'Strauss, Maximilian T', 'Hansen, Fynn M', 'Tanzer, Maria C', 'Karayel, Ozge', 'others'], title: 'The structural context of posttranslational modifications at a proteome-wide scale', journal: 'PLoS Biology', year: 2022, volume: 20, number: 5, pages: 'e3001636', doi: '10.1371/journal.pbio.3001636' },
+  plip: { type: 'article', authors: ['Adasme, Melissa F', 'Linnemann, Katja L', 'Bolz, Sarah Naomi', 'Kaiser, Florian', 'Salentin, Sebastian', 'Haupt, V Joachim', 'Schroeder, Michael'], title: 'PLIP 2021: expanding the scope of the protein-ligand interaction profiler to DNA and RNA', journal: 'Nucleic Acids Research', year: 2021, volume: 49, number: 'W1', pages: 'W530--W534', doi: '10.1093/nar/gkab294' },
+  mannwhitney: { type: 'article', authors: ['Mann, Henry B', 'Whitney, Donald R'], title: 'On a test of whether one of two random variables is stochastically larger than the other', journal: 'The Annals of Mathematical Statistics', year: 1947, volume: 18, number: 1, pages: '50--60', doi: '10.1214/aoms/1177730491' },
+  proteoscope: { type: 'software', authors: ['McDermott, Robert'], title: 'Proteoscope', version: '0.10.0', year: 2026, url: 'https://github.com/robert-mcdermott/proteoscope' },
   mavedb: { type: 'article', authors: ['Esposito, Daniel', 'Weile, Jochen', 'Shendure, Jay', 'Starita, Lea M', 'Papenfuss, Anthony T', 'Roth, Frederick P', 'Fowler, Douglas M', 'Rubin, Alan F'], title: 'MaveDB: an open-source platform to distribute and interpret data from multiplexed assays of variant effect', journal: 'Genome Biology', year: 2019, volume: 20, pages: '223', doi: '10.1186/s13059-019-1845-6' },
 };
 
@@ -217,6 +229,11 @@ export function writeMethods(ws, run, options = {}) {
     if (lines.length) paragraphs.push(`Annotations shown beside the map: ${lines.join(' ')}`);
   }
 
+  // The structures saved views show (wave 5, slice 5): each with its file's SHA-256, the target's
+  // mapping onto it as the views were saved, and how what it says of each position was read.
+  const structures = ws.structures ?? [];
+  if (structures.length) paragraphs.push(...structureParagraphs(ws, cite));
+
   // Software.
   const sw = run.software;
   const mavescape = { type: 'software', authors: ['McDermott, Robert'], title: 'MaveScape', version: sw.version, year: Number((run.created ?? '').slice(0, 4)) || null, url: 'https://github.com/robert-mcdermott/mavescape' };
@@ -255,3 +272,30 @@ function annotationSentence(a, cite) {
   }
 }
 
+const pct = (x) => `${Math.round(100 * x)}%`;
+
+// The structures paragraphs: one for the structures and their mappings, one for what they say of
+// each position.
+function structureParagraphs(ws, cite) {
+  const views = ws.structureViews ?? [];
+  const lines = [];
+  for (const entry of ws.structures ?? []) {
+    const own = views.filter((v) => v.structure === entry.id);
+    const o = entry.origin ?? {};
+    const when = String(o.retrieval?.retrieved ?? '').slice(0, 10);
+    const named = o.kind === 'pdb' ? `PDB entry ${o.id} ${cite('pdb')}` : o.kind === 'alphafold' ? `the AlphaFold DB model of ${o.id}, version ${o.version} ${cite('alphafold')} ${cite('alphafolddb')}` : `the structure file ${o.name ?? entry.file.fileName}`;
+    const from = o.kind === 'pdb' ? `retrieved from RCSB PDB${when ? ` ${when}` : ''}` : o.kind === 'alphafold' ? `retrieved from AlphaFold DB${when ? ` ${when}` : ''}${entry.pae ? ' with its predicted aligned error' : ''}` : 'given by the analyst';
+    const about = [entry.title, entry.method].filter(Boolean).join('; ');
+    // One clause per chain the views map the target on.
+    const chains = new Map();
+    for (const v of own) if (v.mapping && !chains.has(v.mapping.chain)) chains.set(v.mapping.chain, v.mapping);
+    const mapped = [...chains.values()].map((m) => `on chain ${m.chain}: ${m.onStructure} of its ${m.target.length} positions on residues (target positions ${m.positions.join(', ')}${m.target.offset && m.reference ? `; ${m.reference.join(', ')} in the reference` : ''}), ${m.identical} identical (${pct(m.identity)} identity over ${m.aligned} aligned)${m.differences.length ? `, ${m.differences.length === 1 ? 'one residue' : `${m.differences.length} residues`} different (${m.differences.join(', ')})` : ''}`);
+    lines.push(`${named.replace(/^./, (c) => c.toUpperCase())}${about ? ` (${about})` : ''}, ${from} (its file's SHA-256 ${entry.file.sha256}), was read with MaveScape's copy of Proteoscope's readers and viewer ${cite('proteoscope', REFERENCES.proteoscope)}.${mapped.length ? ` The target was aligned to each of its chains by Proteoscope's overlap alignment (BLOSUM62 ${cite('blosum62')}, gap opening 12 and extension 1, free end gaps) and placed ${mapped.join('; ')}.` : ''} Saved views: ${own.map((v) => `"${v.name}" (${viewWords(v, ws)})`).join('; ')}.`);
+  }
+  const out = [`Structures: ${lines.join(' ')}`];
+  // What the structures say of each position, as the tracks beside the map and the views read it.
+  const tested = views.filter((v) => v.evidence);
+  const settings = [...new Set(tested.map((v) => `${pct(v.evidence.fraction ?? 0.2)} least tolerant, seed ${v.evidence.seed ?? 1}`))];
+  out.push(`What each structure says of each target position was read on the chain mapped: secondary structure by DSSP's rules ${cite('dssp')}; each residue's water-accessible area by Shrake and Rupley's method ${cite('shrake')} with DSSP's atom radii and a 1.4 Å probe (1,000 points a sphere), in its chain alone and in the structure, relative to the largest areas of Tien et al. ${cite('tien')}; exposure by StructureMap's part-sphere exposure (Cα atoms within 12 Å in a 70° cone of the side chain) and, for a predicted model, disorder by its smoothed full sphere with the model's aligned error ${cite('structuremap')}; and the nearest heavy atom of another chain, a ligand or an ion (common crystallization additives left out), within 4 Å an interface, its contacts typed by PLIP's rules ${cite('plip')}. Each position was classed disordered, interface, buried (relative accessibility in its chain below 0.25) or exposed. The median scores of each class's positions were compared with the rest by Mann–Whitney's test ${cite('mannwhitney')}, adjusted by Benjamini and Hochberg's method ${cite('bh')}; the least tolerant positions were tested for clustering by their pairs within 8 Å (Cβ, Cα for glycine) against 1,000 draws of as many positions within strata of relative accessibility (about twelve positions each, 4 to 16${settings.length ? `; in the saved views, the ${settings.join('; ')}` : ''}).`);
+  return out;
+}

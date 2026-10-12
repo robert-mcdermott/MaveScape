@@ -41,9 +41,21 @@ import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
 import { sha256 } from '../web/lib/sha256.js';
+import { EXAMPLE_STRUCTURES, cachedBytes, cachedJSON, exampleTarget, modelFile, nodeEvidence, openCached, paeFixture, pdbFile } from './structure-cases.mjs';
+import { clusterTest, effectsByClass, evidenceCSV } from '../web/lib/structure-evidence.js';
+import { PANEL_KEYWORD, pngTexts } from '../web/lib/structure-record.js';
+import { dataRange, residueData } from '../web/lib/proteoscope.js';
+import { createServer } from 'node:http';
+import { gunzipSync, inflateRawSync } from 'node:zlib';
+import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/lib/mapping.js';
+import { cellsAtPositions, coloringCSV, coloringLegend, coloringPalette, placeOnTarget, POSITION, positionValues, residueColors, thresholdClasses } from '../web/lib/structure-scores.js';
+import { cellAt, cellName } from '../web/lib/map-model.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
+// Where MaveScape looks for Proteoscope (--proteoscope): a fake one runs there for slice 6's checks,
+// and nothing before them, whatever runs on Proteoscope's own ports on this computer.
+const PROTEOSCOPE_PORT = 8856;
 const verbose = process.argv.includes('--verbose');
 const requireData = process.argv.includes('--require-data');
 // DHFR's MaveDB tables (wave 3, slice 6), as node validation/fetch.mjs mavedb-dhfr keeps them: copied
@@ -55,6 +67,7 @@ const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:0000
 const TP53 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-tp53-screens');
 const TP53_TABLES = [['urn:mavedb:00000068-c-1', 'scores.csv'], ['urn:mavedb:00000068-b-1', 'nutlin.csv'], ['urn:mavedb:00000059-a-1', 'kotler.csv']];
 const results = [];
+const fmtShare = (x) => `${(100 * x).toFixed(0)}% drawn`;
 function check(name, value, ok, required = '') {
   results.push({ name, ok });
   if (verbose || !ok) console.log(`${ok ? 'ok  ' : 'FAIL'} ${name} — ${value}${required ? ` (required ${required})` : ''}`);
@@ -92,7 +105,7 @@ async function startMaveScape() {
       writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/scores`, retrieved: '2026-10-12T01:15:25Z' }, null, 2)}\n`);
     }
   }
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache, '--proteoscope', String(PROTEOSCOPE_PORT)], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   for (let i = 0; i < 300; i += 1) {
@@ -682,6 +695,338 @@ try {
   const gSetJSON = JSON.parse(new TextDecoder().decode(gFiles.get('score_set.json')));
   const gScores = parseTable(gFiles.get('scores.csv'), { fileName: 'scores.csv' });
   check('the deposit of a run rescored from counts: its scores, SEs, intervals and replicates, its counts by sample, the methods as MaveDB\'s method text, the details given', `${gScores.rows} rows; ${gScores.columns.map((c) => c.name).join(', ')}; license ${gSetJSON.licenseId}`, gScores.rows === 1121 && gScores.columns[0].name === 'hgvs_pro' && gScores.columns.some((c) => c.name === 'SE') && gFiles.has('counts.csv') && /^Variant counts were read from/.test(gSetJSON.methodText) && gSetJSON.licenseId === 3 && gSetJSON.abstractText.startsWith('Abundance'));
+
+  // Wave 5, slice 1: the Structure view. Every example protein's PDB entry and AlphaFold DB model
+  // opened by remote control, from the cache, and drawn: with WebGPU where the browser offers it,
+  // then, the page opened again with ?renderer=canvas, with the Canvas renderer; each with the
+  // atoms Node reads, and an image of the view that is not empty.
+  const drawnShare = `(async () => { const m = await import('/ui/mode-structure.js'); const v = m.structureState(window.mavescape).viewer; const blob = await v.capturePNG(0.5); const bitmap = await createImageBitmap(blob); const c = new OffscreenCanvas(bitmap.width, bitmap.height); const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bitmap, 0, 0); const d = g.getImageData(0, 0, bitmap.width, bitmap.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - d[0]) + Math.abs(d[i + 1] - d[1]) + Math.abs(d[i + 2] - d[2]) > 30) n += 1; return n / (d.length / 4); })()`;
+  async function openEveryStructure() {
+    const opened = [];
+    for (const e of EXAMPLE_STRUCTURES) {
+      for (const [args, kind, file] of [[{ pdb: e.pdb }, 'pdb', pdbFile(e.pdb)], [{ alphafold: e.accession }, 'alphafold', modelFile(e.accession, e.model)]]) {
+        const r = await send('open_structure', args);
+        const node = await openCached(kind, file);
+        await sleep(300);
+        const share = r.ok ? await browser.eval(drawnShare) : 0;
+        opened.push({ name: r.data?.name ?? Object.values(args)[0], ok: r.ok && r.data.atoms === node.models[0].atoms.length && r.data.residues === node.models[0].residues.length && r.data.origin?.cache === 'hit' && share > 0.03, renderer: r.data?.renderer, share, message: r.ok ? '' : r.message });
+      }
+    }
+    return opened;
+  }
+  const first = await act('open_structure', { pdb: '2VWF' });
+  // WebGPU where the browser gives the viewer a device that keeps working (headless Chrome on macOS
+  // does); otherwise the viewer's own reason for the Canvas renderer is reported. A device the
+  // browser loses (on GitHub's runners, which draw in software, the GPU process does not last)
+  // leaves the view on the Canvas renderer, saying why: an image drawn first finds out, and a
+  // device lost later is said where it happens.
+  const viewerNow = () => browser.eval(`import('/ui/mode-structure.js').then((m) => { const v = m.structureState(window.mavescape).viewer; return { kind: v.kind, failure: v.failure }; })`);
+  await browser.eval(drawnShare);
+  let webgpu = (await viewerNow()).kind === 'webgpu';
+  const noGPU = webgpu ? '' : (await viewerNow()).failure;
+  check('open_structure: a PDB entry by its ID, from the cache, in the Structure view, described in words (its chains and the UniProt residues each covers)', first.message.slice(0, 220), first.data.name === '2VWF' && first.data.origin.kind === 'pdb' && first.data.chains.find((c) => c.id === 'A')?.uniprot[0]?.from === 159 && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'structure' && /Chain A: Growth Factor Receptor-Bound Protein 2/.test(first.message));
+  const everyGPU = await openEveryStructure();
+  const afterEvery = await viewerNow();
+  const lostDuring = webgpu && afterEvery.kind === 'canvas';
+  check(`every example protein's PDB entry and AlphaFold DB model opened and drawn ${webgpu ? 'with WebGPU' : `by the Canvas renderer (${noGPU})`}, with the atoms and residues Node reads, from the cache; an image of each view not empty`, `${everyGPU.map((x) => `${x.name} ${x.renderer} ${fmtShare(x.share)}${x.message ? ` ${x.message}` : ''}`).join('; ')}${lostDuring ? `; WebGPU lost on the way (${afterEvery.failure}), the rest drawn by the Canvas renderer` : ''}`, everyGPU.length === 2 * EXAMPLE_STRUCTURES.length && everyGPU.every((x) => x.ok && (x.renderer === (webgpu ? 'webgpu' : 'canvas') || (lostDuring && x.renderer === 'canvas'))));
+  if (lostDuring) webgpu = false;
+  if (!webgpu) console.log(`  No WebGPU for the viewer (${noGPU}): the Structure view was checked with the Canvas renderer only.`);
+  const target = await act('open_structure', { alphafold: 'target' });
+  check('open_structure with alphafold "target": the AlphaFold DB model of the open workspace\'s target (the last example opened), its confidence the color', target.message.slice(0, 160), target.data.origin.kind === 'alphafold' && target.data.predicted && target.data.color === 'plddt');
+  await act('open_structure', { pdb: '1RFN' });
+  const cys = await act('set_structure', { select: 'resn CYS', show: 'sticks', label: true });
+  const focused = await act('set_structure', { select: 'chain A and resi 191+220', focus: true });
+  check('set_structure: factor IX\'s cysteines (1RFN) selected in words, drawn as sticks and labeled; two focused on, their neighborhood drawn', `${cys.message} | ${focused.message}`, cys.data.selected.count === 14 && Object.values(cys.data.styled).filter((x) => x === 'sticks').length === 14 && cys.data.labels === 14 && focused.data.focused === 2 && focused.data.selected.residues.join() === 'Cys 191 · A,Cys 220 · A');
+  const surface = await act('set_structure', { surface: 'ses', focus: false, select: '' });
+  if ((await viewerNow()).kind !== 'webgpu') webgpu = false;
+  check(`set_structure surface: the molecular surface ${webgpu ? 'computed in its worker and drawn' : 'refused by the Canvas renderer, saying why'}`, surface.message, webgpu ? surface.data.surface.ready && /triangles/.test(surface.data.surface.status) : /need WebGPU/.test(surface.data.surface.status));
+  await act('set_structure', { surface: 'off' });
+  await act('open_structure', { pdb: '1HHO' });
+  const tetramer = await act('set_structure', { assembly: '1' });
+  check('set_structure assembly: hemoglobin (1HHO), its αβ dimer as deposited, built into its tetramer by symmetry', `${tetramer.message} ${tetramer.data.atoms} atoms`, tetramer.data.assembly === '1' && tetramer.data.atoms === 2 * (await openCached('pdb', pdbFile('1HHO'))).models[0].atoms.length);
+  const wrong = await send('set_structure', { select: 'resn FOO' });
+  const badSyntax = await send('set_structure', { select: 'chain A and (resi 40' });
+  const noSuch = await send('open_structure', { pdb: '9ZZZ' });
+  const neither = await send('open_structure', {});
+  check('what cannot be done is refused, saying why: a selection of nothing, a selection that does not parse, an entry not in the cache (offline), no structure named', [wrong.message, badSyntax.message, noSuch.message, neither.message].join(' | ').slice(0, 400), !wrong.ok && /selects no residue/.test(wrong.message) && !badSyntax.ok && !noSuch.ok && /offline/.test(noSuch.message) && !neither.ok);
+  const fromFile = await act('open_files', { paths: [join(ROOT, 'validation/fixtures/structures/2VWF.pdb.gz')] });
+  const withStructure = await act('get_state');
+  check('open_files with a structure file (RCSB\'s PDB-format 2VWF, gzipped): shown in the Structure view, in get_state', `${fromFile.message} get_state: ${withStructure.data.structure?.name}, ${withStructure.data.structure?.atoms} atoms`, /the structure 2VWF\.pdb/.test(fromFile.message) && withStructure.data.structure?.name === '2VWF' && withStructure.data.structure.origin.kind === 'file' && withStructure.data.structure.atoms === first.data.atoms);
+  // Wave 5, slice 2: the target mapped onto structures, as Node maps it. The workspace is GRB2's.
+  const grb2Target = exampleTarget('grb2-sh3');
+  const listed = await act('find_structures', {});
+  const listedNode = rankStructures(cachedJSON('pdbe', 'P62993.best-structures.json'), grb2Target);
+  check('find_structures: the PDB entries that cover GRB2\'s SH3 domain, from PDBe\'s SIFTS in the cache, ranked as Node ranks them', listed.message.slice(0, 200), listed.data.total === listedNode.length && listed.data.structures.slice(0, 20).map((r) => `${r.id}:${r.from}-${r.to}`).join() === listedNode.slice(0, 20).map((r) => `${r.id}:${r.from}-${r.to}`).join() && listed.data.structures[0].id === '2VWF');
+  const onVWF = await act('open_structure', { pdb: '2VWF' });
+  const [vwfNode] = mapTarget(await openCached('pdb', pdbFile('2VWF')), grb2Target);
+  check('open_structure maps the workspace\'s target: GRB2\'s SH3 domain on chain A of 2VWF, 56 positions, P54A an engineered mutation, as Node maps it', JSON.stringify(onVWF.data.mapping?.positions.different), onVWF.data.mapping?.chain === 'A' && onVWF.data.mapping.onStructure === vwfNode.onStructure && onVWF.data.mapping.counts.identical === vwfNode.counts.identical && onVWF.data.mapping.positions.different[0]?.reason === 'engineered mutation' && onVWF.data.mapping.positions.different[0].reference === 212);
+  const byPosition = await act('set_structure', { select: 'pos 30-40' });
+  const keptOnModel = await act('open_structure', { alphafold: 'target' });
+  const byReference = await act('set_structure', { select: 'uniprot 188-198' });
+  check('a selection by target position ("pos 30-40") on 2VWF, kept when GRB2\'s AlphaFold DB model is opened: the same positions, at UniProt 188–198 on the model, as "uniprot 188-198" selects them', `${byPosition.data.selected.runs.join(', ')} → ${keptOnModel.data.selected.runs.join(', ')} (${keptOnModel.data.selected.count}); by reference ${byReference.data.selected.runs.join(', ')}`, byPosition.data.selected.count === 11 && keptOnModel.data.selected.runs.join() === 'Asn 188–Cys 198 · A' && byReference.data.selected.runs.join() === 'Asn 188–Cys 198 · A');
+  await act('export', { what: 'structure-mapping', path: join(out, 'mapping.csv') });
+  const [modelNode] = mapTarget(await openCached('alphafold', modelFile('P62993', 6)), grb2Target);
+  check('export structure-mapping: the target on the structure shown, position by position, the same bytes as Node\'s', `${readFileSync(join(out, 'mapping.csv'), 'utf8').split('\n').length - 2} positions`, readFileSync(join(out, 'mapping.csv'), 'utf8') === mappingCSV(modelNode, 'AF-P62993-F1'));
+  // Wave 5, slice 3: scores on the structure, as Node colors them. GRB2's Run 1 on 2VWF; the
+  // selection shared with the map both ways; the coloring's file; the other colorings; a model's
+  // confidence beside the scores.
+  const grb2Node = openExampleInNode(exampleById('grb2-sh3'));
+  const grb2Results = proteinView(grb2Node.scored.results) ?? grb2Node.scored.results;
+  const grb2Model = buildMapModel(grb2Results, grb2Node.design, {});
+  const vwfMaps = mapTarget(await openCached('pdb', pdbFile('2VWF')), grb2Target);
+  const medianNode = placeOnTarget(positionValues(grb2Model, 'median'), grb2Target);
+  const medianPalette = coloringPalette(medianNode, 'rdbu');
+  const hexOf = (rgb) => `#${rgb.map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('')}`;
+  const nodeColors = new Map([...residueColors(medianNode, vwfMaps, medianPalette)].map(([k, rgb]) => [k, hexOf(rgb)]));
+  await act('open_structure', { pdb: '2VWF' });
+  const byMedian = await act('set_structure', { color: 'median' });
+  const drawn = await browser.eval(`import('/ui/mode-structure.js').then((m) => { const s = m.structureState(window.mavescape); return s.mapping.positions.filter((p) => p.residue).map((p) => [p.residue, s.viewer.residueColor(p.residue)]); })`);
+  const legendNode = coloringLegend(medianNode, vwfMaps[0], medianPalette, 'Run 1');
+  check('set_structure color median: GRB2\'s Run 1 on 2VWF, every residue of the target drawn in the color Node gives its position (the map\'s scale and palette), the legend and words as Node\'s', `${byMedian.message.slice(0, 260)} | ${drawn.length} residues, ${drawn.filter(([k, c]) => nodeColors.get(k) === c).length} as Node's`, byMedian.data.scores?.coloring === 'median' && byMedian.data.scores.source === 'Run 1' && drawn.length === 56 && drawn.every(([k, c]) => nodeColors.get(k) === c) && byMedian.data.scores.legend.low === legendNode.gradient.low && byMedian.data.scores.legend.center === legendNode.gradient.center && byMedian.data.scores.positions.scored === 56 && /less function/.test(byMedian.data.scores.legend.meaning));
+  const pickedResidue = await act('set_structure', { pick: 'A 25' });
+  const afterPick = await act('get_state');
+  const inspectorText = await browser.eval(`document.getElementById('inspector').innerText`);
+  const column = cellsAtPositions(grb2Model, [25], cellName, cellAt);
+  check('set_structure pick: Ile 183 (2VWF A 25) picked as a click picks it: its position\'s 21 variants selected on the map ("at 25"), the position in the inspector', `${pickedResidue.message.slice(-160)} | selection ${afterPick.data.selection?.count} by "${afterPick.data.selection?.query}"; focus ${JSON.stringify(afterPick.data.focus)}`, pickedResidue.data.picked?.position === 25 && afterPick.data.selection?.count === column.length && afterPick.data.selection.query === 'at 25' && afterPick.data.selection.variants.every((k) => column.includes(k)) && afterPick.data.focus?.kind === 'position' && afterPick.data.focus.position === 25 && /Position 25 · Ile/i.test(inspectorText) && /2VWF Ile 25 · A/.test(inspectorText));
+  await act('select_variants', { query: 'missense at 1-10 and score < -3' });
+  await act('set_mode', { mode: 'structure' });
+  const fromMap = await act('get_state');
+  const mapPositions = [...new Set(fromMap.data.selection.variants.map((k) => Number(/\d+/.exec(k)[0])))].sort((a, b) => a - b);
+  check('a selection made on the map (select_variants, a query) drawn on the structure when the Structure view is shown again: the residues of its positions', `${fromMap.data.selection.count} variants at ${mapPositions.join(', ')} → ${fromMap.data.structure.selected.runs.join(', ')}`, fromMap.data.structure.selected.count === mapPositions.length && fromMap.data.structure.selected.residues.length === mapPositions.length && mapPositions.length >= 5);
+  await act('export', { what: 'structure-scores', path: join(out, 'scores-on-2vwf.csv') });
+  check('export structure-scores: the scores the structure is colored by, position by position with each residue\'s color, the same bytes as Node\'s', `${readFileSync(join(out, 'scores-on-2vwf.csv'), 'utf8').split('\n').length - 2} positions`, readFileSync(join(out, 'scores-on-2vwf.csv'), 'utf8') === coloringCSV(medianNode, vwfMaps[0], '2VWF', medianPalette));
+  const noThreshold = await send('set_structure', { color: 'fraction' });
+  const fraction = await act('set_structure', { color: 'fraction', threshold: -2 });
+  const fractionNode = placeOnTarget(positionValues(grb2Model, 'fraction', { abnormal: thresholdClasses(-2, 'below') }), grb2Target);
+  const byQC = await act('set_structure', { color: 'qc' });
+  const qcNode = coloringLegend(placeOnTarget(positionValues(grb2Model, 'qc'), grb2Target), vwfMaps[0], medianPalette);
+  const toPro = await act('set_structure', { color: 'substitution', substitution: 'Pro' });
+  const badAmino = await send('set_structure', { substitution: 'Xyz' });
+  const disagreement = await act('set_structure', { color: 'disagreement' });
+  check('the other colorings: fraction abnormal-like refused without a threshold, saying so, then below −2 as Node computes it; the QC state\'s classes as Node counts them; the substitution to proline; the disagreement of the comparison Compare shows (Run 1\'s two replicates); an amino acid that is none refused', `${noThreshold.message.slice(0, 120)} | ${fraction.data.scores.words[0].slice(0, 80)} | QC ${byQC.data.scores.legend.items.slice(0, 4).map((i) => i.count).join('/')} | ${toPro.data.scores.label} | ${disagreement.data.scores?.source} | ${badAmino.message}`, !noThreshold.ok && /needs a threshold/.test(noThreshold.message) && fraction.data.scores.abnormal === fractionNode.abnormal && fraction.data.scores.positions.scored === 56 && JSON.stringify(byQC.data.scores.legend.items.slice(0, 4).map((i) => i.count)) === JSON.stringify(qcNode.items.slice(0, 4).map((i) => i.count)) && toPro.data.scores.label === 'Substitution to Pro' && toPro.data.scores.positions.residueItself === 4 && /Replicate 1 − Run 1: Replicate 2/.test(disagreement.data.scores?.source ?? '') && !badAmino.ok && /not an amino acid/.test(badAmino.message));
+  await act('open_structure', { alphafold: 'target' });
+  const onModel = await act('set_structure', { color: 'median' });
+  const strip = await browser.eval(`(() => [...document.querySelectorAll('.structure-strip-label')].map((x) => x.textContent))()`);
+  check('on GRB2\'s AlphaFold DB model, colored by the median score: every position of the target on the model; the strip below the view shows the scores, the positions on the structure and the model\'s confidence (pLDDT) beside them', `${onModel.data.scores.positions.onStructure} positions; strip rows: ${strip.filter(Boolean).join(', ')}`, onModel.data.scores.positions.onStructure === 56 && onModel.data.scores.positions.scored === 56 && strip.includes('pLDDT') && strip.includes('Median score'));
+  await act('set_structure', { color: 'plddt' });
+  // Wave 5, slice 4: structure as evidence, as Node reads it: GRB2 on 2VWF and on its model.
+  await act('open_structure', { pdb: '2VWF' });
+  const evEvidence = await act('structure_evidence', {});
+  const evVwfNode = nodeEvidence(await openCached('pdb', pdbFile('2VWF')), vwfMaps[0]);
+  const evValueAtNode = (q) => (medianNode.state[q - 1] === POSITION.VALUE || medianNode.state[q - 1] === POSITION.LOW ? medianNode.value[q - 1] : Number.NaN);
+  const evEffectsNode = effectsByClass(evVwfNode.evidence, evValueAtNode);
+  const evClustersNode = clusterTest(evVwfNode.evidence, evValueAtNode, { fraction: 0.2, seed: 1 });
+  const evClassesNode = Object.fromEntries(['buried', 'exposed', 'interface', 'disordered'].map((c) => [c, evVwfNode.evidence.positions.filter((p) => p.class === c).length]));
+  // Remote control gives six significant digits.
+  const near6 = (x, y) => Math.abs(x - y) <= 1e-5 * Math.max(1e-300, Math.abs(y));
+  const evSameEffects = evEvidence.data.effects?.length === evEffectsNode.classes.length && evEvidence.data.effects.every((x, k) => x.class === evEffectsNode.classes[k].id && x.positions === evEffectsNode.classes[k].n && near6(x.median, evEffectsNode.classes[k].median) && near6(x.q, evEffectsNode.classes[k].test.q));
+  const evSameClusters = evEvidence.data.clusters?.pairs === evClustersNode.observed && near6(evEvidence.data.clusters.expected, evClustersNode.expected) && near6(evEvidence.data.clusters.p, evClustersNode.p) && JSON.stringify(evEvidence.data.clusters.sensitive) === JSON.stringify(evClustersNode.sensitive);
+  check('structure_evidence: GRB2\'s SH3 domain on 2VWF in the page as Node reads it (the accessibility in the surface worker): its structural classes, the Gab2 peptide the one partner; the median scores of each class against the rest; the cluster test with seed 1, the same pairs, expectation and p', `${evEvidence.message.slice(0, 300)}`, JSON.stringify(evEvidence.data.classes) === JSON.stringify(evClassesNode) && evEvidence.data.partners.length === 1 && evEvidence.data.partners[0].chosen && evSameEffects && evSameClusters);
+  const evPeptideOnly = await act('structure_evidence', { partner: 'chain:B', fraction: 0.3, seed: 2 });
+  const evNoPartner = await send('structure_evidence', { partner: 'chain:Z' });
+  const evTooMany = await send('structure_evidence', { fraction: 0.9 });
+  check('structure_evidence\'s choices: the partner by its id, the share called least tolerant and the seed (the test drawn again); a partner the structure has not, and a share beyond a half, refused', `${evPeptideOnly.data.clusters?.leastTolerant} of ${evPeptideOnly.data.clusters?.positions}, seed ${evPeptideOnly.data.clusters?.seed} | ${evNoPartner.message} | ${evTooMany.message}`, evPeptideOnly.data.clusters?.fraction === 0.3 && evPeptideOnly.data.clusters.seed === 2 && evPeptideOnly.data.clusters.leastTolerant === Math.round(0.3 * evPeptideOnly.data.clusters.positions) && !evNoPartner.ok && !evTooMany.ok && /from 0\.05 to 0\.5/.test(evTooMany.message));
+  await act('structure_evidence', { partner: 'all', fraction: 0.2, seed: 1 });
+  const evBesideMap = await act('list_tracks', {});
+  const evStructureTrackIds = evBesideMap.data.tracks.filter((t) => t.id.startsWith('structure:')).map((t) => `${t.id}${t.shown ? '' : ' (hidden)'}`);
+  const evClassTrack = evBesideMap.data.tracks.find((t) => t.id === 'structure:class');
+  check('list_tracks: the structure\'s tracks beside GRB2\'s map, its classes and secondary structure shown, the classes\' stretches as Node gives them', evStructureTrackIds.join(', '), evStructureTrackIds.length === 5 && evBesideMap.data.tracks.find((t) => t.id === 'structure:class')?.shown && evBesideMap.data.tracks.find((t) => t.id === 'structure:ss')?.shown && evClassTrack.features.filter((f) => f.label === 'buried').reduce((a, f) => a + f.end - f.start + 1, 0) === evClassesNode.buried);
+  await act('set_mode', { mode: 'structure' });
+  await act('export', { what: 'structure-evidence', path: join(out, 'evidence-2vwf.csv') });
+  check('export structure-evidence: what 2VWF says of each position, with its median score, the same bytes as Node\'s', `${readFileSync(join(out, 'evidence-2vwf.csv'), 'utf8').split('\n').length - 2} positions`, readFileSync(join(out, 'evidence-2vwf.csv'), 'utf8') === evidenceCSV(evVwfNode.evidence, '2VWF', evValueAtNode, 'median_score'));
+  const evByClass = await act('set_structure', { color: 'class' });
+  check('set_structure color class: the residues colored by their structural class, the legend\'s counts Node\'s', JSON.stringify(evByClass.data.scores?.legend.items.map((i) => [i.label, i.count])), evByClass.data.scores?.coloring === 'class' && evByClass.data.scores.legend.items.filter((i) => i.count !== null).every((i) => i.count === evClassesNode[i.label]));
+  await act('open_structure', { alphafold: 'target' });
+  const evOnModelEvidence = await act('structure_evidence', {});
+  const evModelNode = nodeEvidence(await openCached('alphafold', modelFile('P62993', 6)), mapTarget(await openCached('alphafold', modelFile('P62993', 6)), grb2Target)[0], { pae: paeFixture('P62993') });
+  const evDisorderedNode = evModelNode.evidence.positions.filter((p) => p.class === 'disordered').length;
+  check('structure_evidence on GRB2\'s AlphaFold DB model: its aligned error fetched (from the cache) and used, the classes as Node reads them with it', `aligned error ${evOnModelEvidence.data.alignedError}; ${JSON.stringify(evOnModelEvidence.data.classes)}`, evOnModelEvidence.data.alignedError === true && evModelNode.pae && evOnModelEvidence.data.classes.disordered === evDisorderedNode && evOnModelEvidence.data.classes.buried === evModelNode.evidence.positions.filter((p) => p.class === 'buried').length);
+  await act('set_structure', { color: 'plddt' });
+  // Wave 5, slice 5: structures in the record. A view of 2VWF saved, changed, opened again: its
+  // figure panels the same image; through the archive; its structure fetched again by its ID.
+  // A PNG without its text chunks: the image alone, to compare.
+  const imageOnly = (bytes) => {
+    const out = [bytes.subarray(0, 8)];
+    let at = 8;
+    while (at + 12 <= bytes.length) {
+      const length = bytes.readUInt32BE(at);
+      const type = bytes.subarray(at + 4, at + 8).toString('latin1');
+      if (type !== 'tEXt' && type !== 'iTXt') out.push(bytes.subarray(at, at + 12 + length));
+      at += 12 + length;
+    }
+    return Buffer.concat(out);
+  };
+  const turn = (q) => browser.eval(`import('/ui/mode-structure.js').then((m) => { const v = m.structureState(window.mavescape).viewer; const c = v.camera; c.rotation = ${JSON.stringify(q)}; v.setCamera(c); return true; })`);
+  await act('open_structure', { pdb: '2VWF' });
+  await act('set_structure', { color: 'median', select: 'pos 20-26', show: 'sticks', label: true });
+  await turn([0.2, 0.3, 0.1, Math.sqrt(1 - 0.14)]);
+  const savedCore = await act('save_structure_view', { name: 'Core' });
+  await act('export', { what: 'structure-image', path: join(out, 'core-1.png'), scale: 2 });
+  await act('set_structure', { show: 'none' });
+  await act('set_structure', { color: 'secondary', select: '' });
+  await turn([0.5, 0.1, 0.3, Math.sqrt(1 - 0.35)]);
+  await act('export', { what: 'structure-image', path: join(out, 'core-changed.png'), scale: 2 });
+  const reopenedCore = await act('open_structure_view', { name: 'Core' });
+  await act('export', { what: 'structure-image', path: join(out, 'core-2.png'), scale: 2 });
+  const core1 = readFileSync(join(out, 'core-1.png'));
+  const core2 = readFileSync(join(out, 'core-2.png'));
+  const coreChanged = readFileSync(join(out, 'core-changed.png'));
+  const vwfSha = sha256(cachedBytes('pdb', pdbFile('2VWF')));
+  check('save_structure_view and open_structure_view: 2VWF colored by GRB2\'s median scores, residues selected, drawn and labeled, turned; saved with its file (the fetcher\'s, by its SHA-256) and the mapping; changed (colors, selection, camera), then opened: the same image as when saved (a figure panel, pixel for pixel), the changed one another', `${savedCore.message.slice(0, 160)} | ${reopenedCore.message.slice(0, 120)}; images ${imageOnly(core1).equals(imageOnly(core2)) ? 'the same' : 'different'}, changed ${imageOnly(core1).equals(imageOnly(coreChanged)) ? 'the same' : 'different'}`, savedCore.data.structure.file.sha256 === vwfSha && savedCore.data.view.chain === 'A' && savedCore.data.view.selection.length === 7 && savedCore.data.view.color.scores.how === 'median' && !reopenedCore.data.mappingChanges.length && reopenedCore.data.state.selected.count === 7 && reopenedCore.data.state.labels === 7 && imageOnly(core1).equals(imageOnly(core2)) && !imageOnly(core1).equals(imageOnly(coreChanged)));
+  const panel = JSON.parse(pngTexts(new Uint8Array(core2)).get(PANEL_KEYWORD));
+  const grb2RunState = await act('get_state');
+  const run1 = grb2RunState.data.runs.find((r) => r.name === 'Run 1');
+  check('export structure-image: a figure panel, twice the view saved, its legend below it, what it shows written into it (PNG text): the structure\'s file by its SHA-256, the view, the coloring of Run 1 by its output\'s SHA-256, the legend', JSON.stringify({ structure: panel.structure.sha256.slice(0, 12), view: panel.view.saved, coloring: panel.coloring.how, run: panel.coloring.run?.name, legend: panel.legend?.title, image: panel.image }), panel.format === 'mavescape-figure-panel' && panel.structure.sha256 === vwfSha && panel.view.saved === 'Core' && panel.coloring.how === 'median' && panel.coloring.run?.output === run1?.outputSha256 && panel.legend?.title === 'Median score, Run 1' && panel.image.legend && panel.image.width === 2 * panel.image.view.width && panel.image.height > 2 * panel.image.view.height);
+  // Through the archive, opened again in the page (a copy: the workspace is in the library).
+  await act('export', { what: 'archive', path: join(out, 'grb2-views.msz') });
+  const viewsArchive = await readArchive(readFileSync(join(out, 'grb2-views.msz')));
+  const methodsText = viewsArchive.methods?.markdown ?? '';
+  await act('open_files', { paths: [join(out, 'grb2-views.msz')] });
+  const fromArchive = await act('open_structure_view', { name: 'Core' });
+  await act('export', { what: 'structure-image', path: join(out, 'core-3.png'), scale: 2 });
+  const core3 = readFileSync(join(out, 'core-3.png'));
+  const copyState = await act('get_state');
+  check('the workspace archive with the saved view: the structure\'s file in it (by its SHA-256), the methods naming it and its mapping; opened as a copy, the view opens from it as it was saved, the same image', `${viewsArchive.manifest.structures}; ${viewsArchive.sources.has(vwfSha) ? 'the file in it' : 'no file'}; methods ${/its file's SHA-256 [0-9a-f]{64}/.test(methodsText) ? 'name it' : 'do not name it'}; opened in "${copyState.data.workspace.name}": ${fromArchive.message.slice(0, 100)}; images ${imageOnly(core1).equals(imageOnly(core3)) ? 'the same' : 'different'}`, viewsArchive.manifest.structures === 'included' && viewsArchive.sources.has(vwfSha) && !viewsArchive.problems.length && methodsText.includes(`its file's SHA-256 ${vwfSha}`) && /placed on chain A: 56 of its 56 positions on residues/.test(methodsText) && copyState.data.structureViews.some((v) => v.name === 'Core') && imageOnly(core1).equals(imageOnly(core3)));
+  // Named by checksum only (the file not in the library): fetched again by its ID, its SHA-256 the one saved.
+  await act('export', { what: 'archive', path: join(out, 'grb2-views-light.msz'), include_structures: false });
+  const lightArchive = await readArchive(readFileSync(join(out, 'grb2-views-light.msz')));
+  await browser.eval(`(() => { const lib = window.mavescape.library; const get = lib.getFile.bind(lib); window.__getFile = get; lib.getFile = async (sha) => (sha === ${JSON.stringify(vwfSha)} ? null : get(sha)); return true; })()`);
+  const refetchedView = await act('open_structure_view', { name: 'Core' });
+  await browser.eval(`(() => { window.mavescape.library.getFile = window.__getFile; return true; })()`);
+  check('an archive with the structures named by checksum only: no structure file in it; a view whose file the library lacks fetches it again by its ID (the fetcher\'s cache) and finds its SHA-256 the one saved', `${lightArchive.manifest.structures}, ${lightArchive.sources.has(vwfSha) ? 'the file in it' : 'no file'} | ${refetchedView.message}`, lightArchive.manifest.structures === 'checksums' && !lightArchive.sources.has(vwfSha) && refetchedView.data.notes.some((n) => /fetched again by its ID, its SHA-256 the one saved/.test(n)));
+  const removedView = await act('remove_structure_view', { name: 'Core' });
+  const noView = await send('open_structure_view', { name: 'Core' });
+  check('remove_structure_view: the view removed, and its structure with it (no other view shows it); opened again, refused', `${removedView.message} | ${noView.message}`, !removedView.data.views.includes('Core') && !removedView.data.structures.length && !noView.ok);
+
+  // Wave 5, slice 6: open in Proteoscope. A fake Proteoscope (its startup answer, as 0.10.0's
+  // local.go writes it) where --proteoscope says; nothing there at first.
+  const psSeen = [];
+  let psVersion = '0.10.0';
+  const fakeProteoscope = createServer((request, response) => {
+    psSeen.push(`${request.method} ${request.url}`);
+    if (request.url === '/api/startup') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({ version: psVersion, offline: false, remoteControl: false, files: null }));
+    } else {
+      response.writeHead(200, { 'Content-Type': 'text/html' });
+      response.end('<!doctype html><title>Proteoscope (a fake)</title>');
+    }
+  });
+  const psListen = () => new Promise((done) => fakeProteoscope.listen(PROTEOSCOPE_PORT, '127.0.0.1', done));
+  const psClose = () => new Promise((done) => { fakeProteoscope.close(() => done()); fakeProteoscope.closeAllConnections?.(); });
+  const psButton = () => browser.eval(`Boolean(document.querySelector('.proteoscope-handoff'))`);
+  const payloadOf = (link) => JSON.parse(inflateRawSync(Buffer.from(link.split('#session=')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64')).toString('utf8'));
+  await act('open_structure', { pdb: '2VWF' });
+  await act('set_structure', { color: 'median', select: 'pos 20-26', show: 'sticks' });
+  await act('set_structure', { select: 'chain B and resi 1-3', show: 'hide' });
+  await act('set_structure', { select: 'pos 21+25', label: true });
+  const noProteoscope = await send('proteoscope_link');
+  const noButton = !(await psButton());
+  check('proteoscope_link with no Proteoscope running: refused, saying where it was looked for; the Structure view offers no Proteoscope button', noProteoscope.message, !noProteoscope.ok && new RegExp(`not running on this computer \\(looked at 127\\.0\\.0\\.1:${PROTEOSCOPE_PORT}\\)`).test(noProteoscope.message) && noButton);
+
+  await psListen();
+  // Handed over at once after a focus, while the camera moves to it: the session has the camera
+  // where it comes to rest.
+  await act('set_structure', { select: 'pos 25', focus: true });
+  await act('set_structure', { select: 'pos 21+25' });
+  const handed = await act('proteoscope_link');
+  const cameraNow = () => browser.eval(`import('/ui/mode-structure.js').then((m) => JSON.stringify(m.structureState(window.mavescape).viewer.camera))`);
+  for (let i = 0, last = ''; i < 50; i += 1) {
+    const c = await cameraNow();
+    if (c === last) break;
+    last = c;
+    await sleep(200);
+  }
+  const link = handed.data.link ?? '';
+  const sent = link.includes('#session=') ? payloadOf(link) : null;
+  const one = sent?.structures?.[0];
+  const viewNow = await browser.eval(`import('/ui/mode-structure.js').then((m) => { const v = m.structureState(window.mavescape).viewer; return { camera: v.camera, styled: [...v.styled], hidden: v.hidden, focus: v.focused, selection: [...v.selection], labels: [...v.labels] }; })`);
+  const dataNode = residueData(medianNode, vwfMaps);
+  const sameData = one?.proteomics?.data?.length === dataNode.length && dataNode.every(([k, v], i) => one.proteomics.data[i][0] === k && Math.abs(one.proteomics.data[i][1] - v) <= 1e-5 * Math.max(1, Math.abs(v)));
+  const range = dataRange(medianNode.domain);
+  const unlike = Object.entries({
+    how: handed.data.how === 'session', link: link.startsWith(`http://127.0.0.1:${PROTEOSCOPE_PORT}/#session=`), returned: JSON.stringify(sent) === JSON.stringify(handed.data.session),
+    format: sent?.format === 'proteoscope-session' && sent?.version === 1, source: one?.source?.type === 'fetch' && one?.source?.id === '2VWF',
+    data: sameData && dataNode.length === 56 && one.proteomics.dataLabel === 'Median score, Run 1',
+    colors: one?.color?.scheme === 'data' && one.color.colormap === 'bwr' && Math.abs(one.color.range.min - range.min) < 1e-9 && Math.abs(one.color.range.max - range.max) < 1e-9 && Math.abs((range.min + range.max) / 2 - medianNode.domain.center) < 1e-9,
+    styles: JSON.stringify(one?.display?.residueStyles) === JSON.stringify(viewNow.styled) && viewNow.styled.length === 7,
+    hidden: JSON.stringify(one?.display?.hiddenResidues) === JSON.stringify(viewNow.hidden) && viewNow.hidden.length === 3,
+    focus: JSON.stringify(one?.focus) === JSON.stringify(viewNow.focus) && viewNow.focus.length === 1,
+    selection: one?.selection?.join() === 'A:21:ARG,A:25:ILE' && one?.labels?.join() === 'A:21:ARG,A:25:ILE',
+    camera: sent?.view?.camera?.distance === viewNow.camera.distance && sent.view.camera.rotation.join() === viewNow.camera.rotation.join() && sent.view.camera.target.join() === viewNow.camera.target.join(),
+  }).filter(([, ok]) => !ok).map(([k]) => k);
+  check('proteoscope_link with Proteoscope 0.10.0 running: a link to it carrying the session (deflated, URL-safe base64), the session the action returns; 2VWF fetched by its ID; GRB2\'s median scores on the 56 residues Node places them on, as its custom residue data, on Proteoscope\'s blue–white–red over the map\'s range centered on the wild type; the residues drawn as sticks, hidden, focused on, selected and labeled, and the camera, as the view has them', `${handed.message} | ${link.length} characters; ${one?.proteomics?.data?.length} values, ${sameData ? 'as Node\'s' : 'not Node\'s'}; range ${one?.color?.range?.min?.toFixed(3)} to ${one?.color?.range?.max?.toFixed(3)}${unlike.length ? `; not as the view: ${unlike.join(', ')}` : ''}`, !unlike.length);
+  check('the handoff sends Proteoscope nothing: MaveScape only asked its startup answer, the session travels in the link', psSeen.join(', '), psSeen.length >= 1 && psSeen.every((r) => r === 'GET /api/startup'));
+
+  // The button, as a click opens the link: a new tab at the fake Proteoscope's address.
+  for (let i = 0; i < 50 && !(await psButton()); i += 1) await sleep(100);
+  const buttonShown = await psButton();
+  await browser.send('Runtime.evaluate', { expression: `document.querySelector('.proteoscope-handoff').click()`, userGesture: true });
+  let psTab = null;
+  for (let i = 0; i < 50 && !psTab; i += 1) {
+    await sleep(100);
+    psTab = (await browser.send('Target.getTargets')).targetInfos.find((t) => t.type === 'page' && t.url.startsWith(`http://127.0.0.1:${PROTEOSCOPE_PORT}/`));
+  }
+  const toastText = await browser.eval(`[...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | ')`);
+  if (psTab) await browser.send('Target.closeTarget', { targetId: psTab.targetId });
+  check('the Structure view\'s Proteoscope button, shown while Proteoscope runs: a click opens the link in a new tab, the same session, and says what it sent', `${buttonShown ? 'shown' : 'not shown'}; ${psTab ? `a tab at ${psTab.url.slice(0, 60)}…` : 'no tab'}; ${toastText.slice(0, 200)}`, buttonShown && Boolean(psTab) && JSON.stringify(payloadOf(psTab.url).structures[0].proteomics) === JSON.stringify(one.proteomics) && /Opened 2VWF in Proteoscope 0\.10\.0/.test(toastText));
+
+  // A version not tested: the structure alone in the link, the session as a file.
+  psVersion = '0.11.0';
+  const untested = await act('proteoscope_link');
+  check('proteoscope_link with Proteoscope 0.11.0 (a version not tested): a link to the structure alone (#fetch=2VWF), the scores and view in a session file, saying why', untested.message, untested.data.how === 'structure' && untested.data.link === `http://127.0.0.1:${PROTEOSCOPE_PORT}/#fetch=2VWF` && untested.data.file === '2VWF.proteoscope.json' && untested.data.session.structures[0].proteomics.data.length === 56 && /tested with Proteoscope 0\.10/.test(untested.message));
+
+  // A file of the person's: the session as a file, the file embedded (its text, as MaveScape read it).
+  psVersion = '0.10.0';
+  const pdbPath = join(ROOT, 'validation/fixtures/structures/2VWF.pdb.gz');
+  await act('open_files', { paths: [pdbPath] });
+  await act('set_structure', { color: 'median' });
+  const psFromFile = await act('proteoscope_link');
+  const embedded = psFromFile.data.session.structures[0].source;
+  const embeddedText = embedded.type === 'file' ? gunzipSync(Buffer.from(embedded.data, 'base64')).toString('utf8') : '';
+  const fileData = psFromFile.data.session.structures[0].proteomics.data ?? [];
+  check('proteoscope_link on a file of the person\'s (RCSB\'s PDB-format 2VWF): no link; the session to open as a file, the file\'s text embedded as Proteoscope embeds one (gzip, base64), the same scores on the same residues as the entry\'s', `${psFromFile.message.slice(0, 220)} | ${embedded.name}: ${embeddedText.length} characters, the file's ${gunzipSync(readFileSync(pdbPath)).length}; ${fileData.length} values`, psFromFile.data.how === 'file' && psFromFile.data.link === null && embedded.name === '2VWF.pdb' && embeddedText === gunzipSync(readFileSync(pdbPath)).toString('utf8') && JSON.stringify(fileData) === JSON.stringify(one.proteomics.data));
+
+  // Proteoscope gone: the button goes, the action is refused; the session file is still written.
+  await psClose();
+  const gone = await send('proteoscope_link');
+  for (let i = 0; i < 50 && (await psButton()); i += 1) await sleep(100);
+  const sessionPath = join(out, '2VWF.proteoscope.json');
+  const exported = await act('export', { what: 'proteoscope-session', path: sessionPath });
+  const written = JSON.parse(readFileSync(sessionPath, 'utf8'));
+  check('Proteoscope stopped: proteoscope_link refused, the button gone; export proteoscope-session writes the session file all the same (Proteoscope need not run)', `${gone.message} | ${exported.message.slice(0, 160)}`, !gone.ok && /not running/.test(gone.message) && !(await psButton()) && written.format === 'proteoscope-session' && written.structures[0].source.type === 'file' && written.structures[0].proteomics.data.length === 56);
+  await act('open_example', { id: 'factor9' });
+  await act('open_structure', { pdb: '1RFN' });
+  const lightChain = await act('map_structure', { chain: 'B' });
+  const lightNode = mapTargetOnChain(await openCached('pdb', pdbFile('1RFN')), 'B', exampleTarget('factor9'));
+  const noChain = await send('map_structure', { chain: 'X' });
+  check('map_structure: factor IX on 1RFN\'s light chain (chain B), at 132–188, the entry\'s own record five earlier, as Node maps it; a chain that does not hold it refused, naming those that do', `${lightChain.message.slice(0, 260)} | ${noChain.message}`, lightChain.data.chain === 'B' && lightChain.data.onStructure === lightNode.onStructure && lightChain.data.positions.onStructure.join() === '132–188' && lightChain.data.record.differ.length === 56 && /5 earlier/.test(lightChain.message) && !noChain.ok && /Chains that hold it: A, B/.test(noChain.message));
+
+  // WebGPU lost under the view (the 0.5.0 release; GitHub's runner lost it on its own): the GPU
+  // process crashed (Browser.crashGpuProcess) while factor IX's 1RFN is drawn with WebGPU, the view goes on with
+  // the Canvas renderer on a fresh canvas, its badge and words saying why, the structure drawn again
+  // with its colors. Where WebGPU was lost already, the view is found so.
+  await act('open_structure', { pdb: '1RFN' });
+  await act('set_structure', { color: 'median', select: 'resn CYS', label: true });
+  const beforeCrash = await viewerNow();
+  if (beforeCrash.kind === 'webgpu') await browser.send('Browser.crashGpuProcess').catch(() => { /* not offered: found below */ });
+  let afterCrash = await viewerNow();
+  for (let i = 0; i < 50 && afterCrash.kind === 'webgpu'; i += 1) {
+    await sleep(100);
+    afterCrash = await viewerNow();
+  }
+  const lostShare = await browser.eval(drawnShare).catch(() => 0);
+  const badge = await browser.eval(`document.querySelector('.renderer-badge')?.textContent ?? ''`);
+  const afterLoss = await send('set_structure', { select: 'chain B', show: 'sticks' });
+  check('WebGPU lost under the view (the GPU process crashed): the view goes on with the Canvas renderer, its badge and words saying why, the structure drawn again, still answering', `${beforeCrash.kind === 'webgpu' ? 'crashed under WebGPU' : `already ${beforeCrash.kind}`}; now ${afterCrash.kind} (${afterCrash.failure.slice(0, 120)}); badge ${badge}; ${fmtShare(lostShare)}; then ${afterLoss.ok ? afterLoss.data.renderer : afterLoss.message}`, afterCrash.kind === 'canvas' && /graphics device was lost|WebGPU failed|does not offer WebGPU|No WebGPU|WebGPU did not start/.test(afterCrash.failure) && badge === 'Canvas' && lostShare > 0.03 && afterLoss.ok && afterLoss.data.renderer === 'canvas');
+
+  // The Canvas renderer, the page opened again.
+  await browser.goto(`${URL}?renderer=canvas`, 1500);
+  for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);
+  await sleep(500);
+  const everyCanvas = await openEveryStructure();
+  const canvasSurface = await act('set_structure', { surface: 'ses' });
+  check('the page opened with ?renderer=canvas: every example protein\'s entry and model drawn by the Canvas renderer, with the atoms Node reads; an image of each view not empty; a surface refused, saying it needs WebGPU', `${everyCanvas.map((x) => `${x.name} ${x.renderer} ${fmtShare(x.share)}${x.message ? ` ${x.message}` : ''}`).join('; ')}; surface: ${canvasSurface.data.surface.status}`, everyCanvas.length === 2 * EXAMPLE_STRUCTURES.length && everyCanvas.every((x) => x.ok && x.renderer === 'canvas') && /need WebGPU: the Canvas renderer was asked for/.test(canvasSurface.data.surface.status));
 
   const foreign = requested.filter((u) => !u.startsWith(URL) && !/^(data|blob):/.test(u));
   check('the page asked nothing of any origin but its own, public data through the program\'s /api/fetch/ only', `${requested.length} requests, ${requested.filter((u) => u.includes('/api/fetch/')).length} for public data; beyond the origin: ${foreign.slice(0, 3).join(', ') || 'none'}`, requested.length > 50 && !foreign.length && requested.some((u) => u.includes('/api/fetch/uniprot/P62993')));

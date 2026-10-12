@@ -1,0 +1,6 @@
+{
+  "contentType": "application/json",
+  "service": "AlphaFold DB",
+  "source": "https://alphafold.ebi.ac.uk/api/prediction/P02829",
+  "retrieved": "2026-10-12T02:39:40Z"
+}

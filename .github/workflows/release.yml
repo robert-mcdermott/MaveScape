@@ -42,10 +42,12 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Tests
+        env:
+          MAVESCAPE_TIME_SCALE: 5
         run: |
           go vet ./...
           go test ./...
-          node --test "web/lib/*.test.mjs"
+          node --test "web/lib/**/*.test.mjs"
           node validation/fetch.mjs
           node validation/run.mjs --require-data
       - name: Build

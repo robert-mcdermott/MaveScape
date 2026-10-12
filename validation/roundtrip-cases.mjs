@@ -85,8 +85,8 @@ export function allExports(ws, table, results) {
     'provenance.json': provenanceText(provenanceJSON(run, ws, { qc, findings, thresholds, files: [{ path: 'scores.csv', sha256: sha256(new TextEncoder().encode(scores)) }] })),
     'methods.md': methods.markdown,
     'references.bib': methods.bibtex,
-    'selection.csv': selectionCSV(selection.keys, results, run, selection.condition),
-    'selection.json': selectionJSON(selection, run),
+    // A workspace without a selection (0.5.0's GRB2 archive) has no selection to write.
+    ...(selection ? { 'selection.csv': selectionCSV(selection.keys, results, run, selection.condition), 'selection.json': selectionJSON(selection, run) } : {}),
     // A run of nucleotide variants is drawn at the protein level (ui/remote.js, export map).
     'map.svg': mapSVG(buildMapModel(proteinView(results) ?? results, run.inputs.design), { results: proteinView(results) ?? results }),
     ...(results.barcodes ? { 'barcodes.csv': barcodesCSV(results, run) } : {}),

@@ -198,6 +198,16 @@ try {
     const recT = record(out('t'));
     check('--from-workspace with a run that does not reproduce: exit 1, nothing exported, run.json says why', `exit ${t.code}; ${recT.problems.join(' ').slice(0, 160)}`, t.code === 1 && /did not reproduce/.test(recT.problems.join(' ')) && !existsSync(join(out('t'), 'scores.csv')));
   }
+  {
+    // A workspace whose saved views name their structure by checksum only (0.5.0's PTEN archive):
+    // rerun, its archive written again names the structure the same way, its views kept.
+    const pten = join(ROOT, 'validation/archives/release-0.5.0-pten-structures.msz');
+    const p = await mavescape(['run', '--from-workspace', pten, '--out', out('pten'), '--time', TIME]);
+    const recP = record(out('pten'));
+    const again = existsSync(join(out('pten'), 'workspace.msz')) ? await readArchive(readFileSync(join(out('pten'), 'workspace.msz'))) : null;
+    const archiveStep = recP.steps.find((x) => x.action === 'export' && /workspace\.msz/.test(x.message ?? ''));
+    check('--from-workspace on an archive naming its structures by checksum (0.5.0\'s PTEN): the run reproduced, and the workspace archive written again names the structure by ID and checksum, its saved views kept', `exit ${p.code}; ${recP.steps.find((x) => x.action === 'reproduce_run')?.message?.slice(0, 80)}; ${archiveStep?.message?.slice(0, 160) ?? recP.problems.join(' ').slice(0, 160)}; structures ${again?.manifest.structures}, views ${(again?.ws.structureViews ?? []).map((v) => v.name).join(', ')}`, p.code === 0 && recP.run?.status === 'reproduced' && again?.manifest.structures === 'checksums' && !again.problems.length && again.ws.structureViews?.length === 2);
+  }
 
   // --- Two conditions, and a table of barcodes ------------------------------------------------
   const two = await mavescape(['run', '--design', 'validation/fixtures/two-condition.design.json', '--out', out('two'), '--time', TIME, 'validation/fixtures/two-condition.csv']);

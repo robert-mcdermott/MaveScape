@@ -49,9 +49,12 @@ jobs:
       - name: Syntax check
         run: |
           shopt -s nullglob
-          for file in web/app.js web/ui/*.js web/lib/*.js web/lib/providers/*.js web/workers/*.js validation/*.mjs validation/fixtures/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js; do node --check "$file"; done
+          for file in web/app.js web/ui/*.js web/lib/*.js web/lib/providers/*.js web/lib/structure/*.js web/workers/*.js validation/*.mjs validation/fixtures/*.mjs docs/capture/*.mjs docs/site/*.mjs docs/site/assets/*.js; do node --check "$file"; done
       - name: node --test
-        run: node --test "web/lib/*.test.mjs"
+        # The structure viewer's performance tests allow shared runners five times as long.
+        env:
+          MAVESCAPE_TIME_SCALE: 5
+        run: node --test "web/lib/**/*.test.mjs"
       - name: Cache external validation data
         uses: actions/cache@v4
         with:

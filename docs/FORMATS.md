@@ -1,6 +1,6 @@
 # File formats
 
-Every file MaveScape 0.1 to 0.4 read and write. Researchers whose counts come from their own pipeline
+Every file MaveScape 0.1 to 0.5 read and write. Researchers whose counts come from their own pipeline
 need only a count table, the target's sequence, and the design: which column is which sample.
 Blank, annotated layouts of each are on the Start page and in
 [`web/examples/layouts/`](../web/examples/layouts/). The Start page also opens two worked examples.
@@ -19,8 +19,34 @@ Blank, annotated layouts of each are on the Start page and in
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
+| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV); a figure panel (PNG); the view as a Proteoscope session (JSON, or a link to a running Proteoscope) |
 
-Coming later: Excel workbooks (0.3), structures (0.5).
+Coming later: Excel workbooks.
+
+## Structures
+
+The Structure view (MaveScape 0.5) reads a structure from a file or through the program's fetcher
+(a PDB entry by its ID; an AlphaFold DB model by a UniProt accession). The readers are
+Proteoscope's (`web/lib/structure/`):
+
+- **PDB** (`.pdb`, `.ent`): `ATOM` and `HETATM` records, `MODEL`s, `HELIX` and `SHEET`, `SEQRES`,
+  `DBREF` (which UniProt residues a chain covers), `CONECT`, `REMARK 350` (biological
+  assemblies).
+- **mmCIF** (`.cif`, `.mmcif`), as the wwPDB writes it: `atom_site`, `struct_conf` and
+  `struct_sheet_range`, `struct_conn` (disulfide bonds and other links), `struct_ref_seq`
+  (UniProt residues), `pdbx_struct_assembly` and `pdbx_struct_oper_list` (assemblies), the
+  components' `chem_comp_atom` and `chem_comp_bond` (bond orders), and ModelCIF's local pLDDT for
+  predicted models (AlphaFold DB's). A file named `.cif` that holds PDB records is read as PDB.
+- **BinaryCIF** (`.bcif`): MessagePack-encoded mmCIF, every column encoding, read as mmCIF.
+- **Compressed:** any of these gzipped (`.gz`).
+
+The first model of a file is drawn; an assembly is built from the deposited coordinates by its
+operators. The entry's record of the UniProt residues each chain covers (`DBREF`, `struct_ref_seq`)
+and of where its sequence differs from UniProt's (`SEQADV`, `struct_ref_seq_dif`) are read, and
+reported beside the mapping of the target (below, "Structure mappings"). The view's image is a PNG
+at twice the view's size, or a figure panel (below, "Figure panels"). A structure is shown for the
+session; a view of it saved (MaveScape 0.5) keeps it with the workspace (below, "Workspace
+archives": `structures`, `structureViews`).
 
 ## Count tables
 
@@ -338,11 +364,13 @@ A ZIP archive holding everything needed to reopen an analysis elsewhere:
 
 ```
 manifest.json            format "mavescape-archive", version 1, created, software (version, commit),
-                         sources ("included" or "checksums"), and every other file with its
-                         SHA-256 and size
+                         sources ("included" or "checksums"), structures (the same, when the
+                         workspace keeps any), and every other file with its SHA-256 and size
 workspace.json           the workspace document (below)
-sources/<sha256>.<ext>   each imported table, byte for byte (left out with "checksums only"), and
-                         each annotation's file (always; MaveScape 0.3)
+sources/<sha256>.<ext>   each imported table, byte for byte (left out with "checksums only"),
+                         each annotation's file (always; MaveScape 0.3), and the file of each
+                         structure a saved view shows, as it came, with a model's aligned error
+                         (MaveScape 0.5; left out when the structures are named by checksum)
 results/<run-id>.csv     each run's scores (results/<run-id>.<condition>.csv for further
                          conditions), as the scores export below
 methods.md               the latest run's methods
@@ -421,6 +449,42 @@ license: { short, open }, keywords, variants, target, targetOrigin, others, read
 person states it, MaveDB recording none). Adding and removing one, and stating a score set's
 direction, are in the history.
 
+`structures` and `structureViews` (MaveScape 0.5, absent until a view is saved) keep the
+**structures** the Structure view's saved views show, and the views. A structure: `{ id, name,
+title, method, origin, file: { fileName, sha256, size }, pae, added }`, where `origin` is `{ kind:
+"pdb", id, retrieval: { retrieved, source } }`, `{ kind: "alphafold", id (the accession), version,
+entry (AlphaFold DB's words of it), retrieval }` or `{ kind: "file", name }`; `file` is the structure's
+file as it came (RCSB's gzipped mmCIF, AlphaFold DB's file, the person's), kept in the library and
+the archive by its SHA-256, and `pae` a model's aligned error, kept the same way. A structure stays
+while a view shows it. A view:
+
+```json
+{
+  "id": "Core", "name": "Core", "structure": "pdb-2VWF", "created": "2026-10-12T05:42:02.543Z",
+  "assembly": "asym", "chain": "A",
+  "mapping": { "target": { "name": "GRB2 SH3 domain", "length": 56, "offset": 158, "accession": "P62993" },
+    "chain": "A", "onStructure": 56, "identical": 55, "aligned": 56, "identity": 0.982143,
+    "positions": ["1–56"], "reference": ["159–214"], "differences": ["P54A"] },
+  "camera": { "target": [x, y, z], "distance": 61.2, "rotation": [x, y, z, w], "fov": 0.748, "orthographic": false, … },
+  "size": { "width": 859, "height": 848 },
+  "style": "cartoon",
+  "color": { "scheme": "scores", "scores": { "how": "median", "substitution": "P", "abnormal": { … } },
+    "palette": "rdbu", "run": "run-b981d1a1b2d769de", "condition": 0, "contrast": null },
+  "surface": "off", "selection": ["A:21:ARG", …], "labels": [ … ], "styles": { "A:21:ARG": "sticks" }, "hidden": [], "focus": [],
+  "evidence": { "choice": "all", "fraction": 0.2, "seed": 1 }
+}
+```
+
+`mapping` is the target's mapping when the view was saved (lib/structure-record.js,
+`mappingSummary`); opened, the view maps the target again and says what differs. `size` is the
+view's in CSS pixels: a figure panel of the view is drawn at it, so the same view gives the same
+image anywhere. Residues are keyed `chain:number[insertion code]:name`; `hidden` (from 0.5's sixth
+slice; absent before) the residues hidden. Saving and removing a view
+are in the history; a view saved under a name already used replaces it. Exported with the
+structures named by checksum only, a PDB entry or AlphaFold DB model is fetched again by its ID when
+its view opens, and its SHA-256 compared with the one saved; a file of the person's must be opened
+again.
+
 `tracks` (MaveScape 0.3, absent until changed) is the arrangement of the tracks: `{ order: [track
 ids], hidden: [track ids], filters: { track id: filter } }`. A track's id is a built-in one
 (`reference`, `coverage`, `effect`, `uncertainty`) or its annotation's id and part
@@ -489,7 +553,16 @@ mavedb-search/<sha256>.json      a search, named by the SHA-256 of its words and
 ncbi/NM_007294.3.gb              a nucleotide record, as GenBank text (named by its accession)
 ensembl/ENST00000460680.json     an Ensembl transcript's sequence (named without its version; the
                                  answer names the version Ensembl serves)
+pdb/2VWF.cif.gz                  a PDB entry's coordinates, gzipped mmCIF as RCSB sends it (0.5)
+pdbe/P62993.best-structures.json the PDB entries that cover a protein, by SIFTS, as PDBe gives them (0.5)
+alphafold/P62993.prediction.json AlphaFold DB's entries for an accession: each model's version (0.5)
+alphafold/AF-P62993-F1-model_v6.cif
+                                 a predicted model, mmCIF gzipped as AlphaFold DB stores it (0.5)
 ```
+
+A structure is kept as it came, compressed (its record's `contentType` is `application/gzip`), and
+the page decompresses it; the program first reads a compressed answer to its end, which checks its
+length and checksum, and keeps it only if it begins as mmCIF or PDB does.
 
 The **retrieval record** (`*.meta.json`):
 
@@ -841,6 +914,136 @@ the count, largest or mean as the track draws it, and a second column, `<track>:
 variant there with its label; a features track: the features covering the position). Read again,
 it is a custom track (above).
 
+### Figure panels of a structure (`*_panel.png`)
+
+The Structure view's **Image**, *Figure panel* (`export` with `what: "structure-image"`; MaveScape
+0.5): a PNG of the view, `scale` times its size in CSS pixels (4 by default; a saved view opened:
+the size it was saved at), the legend of its colors drawn below it, and an `iTXt` chunk (UTF-8,
+uncompressed), keyword `mavescape-figure-panel`, holding what it shows as JSON: `format`
+(`mavescape-figure-panel`), `version` 1, `kind` (`structure`), `created`, `software`, `workspace`
+(`id`, `name`), `structure` (`name`, `title`, `origin`, `sha256` of its file, `kept`: the kept
+structure's id), `view` (the view as a saved view records it, and `saved`: the saved view's id when
+one was opened), `coloring` (`kind`, `how`, `label`, `source`, `run` with its output's SHA-256,
+`condition`, `palette`, `domain`; or the structure's own `scheme`), `legend` (`title`, `low`,
+`center`, `high`, `meaning`, `items`) and `image` (`width`, `height`, `scale`, `view`, `legend`,
+`renderer`). Wave 6's figure builder reads it; any PNG reader that lists text chunks shows it.
+
+### Proteoscope sessions (`*.proteoscope.json`, and the link)
+
+The Structure view's **Proteoscope** (shown while Proteoscope runs on this computer;
+`proteoscope_link`), or `export` with `what: "proteoscope-session"` (MaveScape 0.5): the view
+shown as Proteoscope 0.10's own session, format `proteoscope-session`, version 1, which
+Proteoscope opens as it opens its own (lib/proteoscope.js). Only what Proteoscope already reads:
+
+- `application` `MaveScape` and its version; `view.camera` (`target`, `distance`, `rotation`, `fov`,
+  `orthographic`): the view's.
+- One structure. Its `source`: `{ "type": "fetch", "id": "2VWF" }` for a PDB entry, or the UniProt
+  accession for an AlphaFold DB model (Proteoscope fetches its current model); for a file of yours,
+  `{ "type": "file", "name", "encoding": "gzip-base64", "data" }`, the file's text (BinaryCIF read
+  to mmCIF), as Proteoscope embeds a local file. `assembly`, `display` (`polymer`, `ligand`: the
+  style; `residueStyles`, `hiddenResidues`), `surface.kind`, `selection`, `labels`, `focus`.
+- The colors. Colored by the scores: `color` `{ "scheme": "data", "colormap", "range" }` and
+  `proteomics.data` `[[residue key, value], …]` with its `dataLabel` (the legend's title, "Median
+  score, Run 1"): Proteoscope's *Custom residue data*. Each target position with a value, on every
+  chain mapped (filtered, missing and other residues have none: Proteoscope draws them gray); the
+  range the map's, a diverging one centered on the wild type; the colormap Proteoscope's nearest,
+  `bwr` (blue–white–red, low blue as MaveScape's) for a diverging scale, `viridis` for the rest.
+  Colored by categories (QC state, structural class): `colorOverrides` `[[key, "#rrggbb"], …]`,
+  MaveScape's colors, over `{ "scheme": "uniform" }`. Otherwise the structure's own scheme, named
+  as Proteoscope names it.
+
+Residues are keyed `chain:number[insertion code]:name`, as Proteoscope's reader keys them
+(MaveScape's is a copy of it). The link, for a PDB entry or a model and a Proteoscope MaveScape was
+tested with (0.10), is `http://127.0.0.1:<port>/#session=` and the session deflated (raw DEFLATE)
+in URL-safe base64 without padding, as Proteoscope's own links are; for another version,
+`#fetch=<ID>`, the structure alone. A file of yours goes in the file, not a link.
+
+### Structure mappings
+
+`<entry>_chain-<chain>_mapping.csv` (the Structure view's **Mapping**; `export` with `what:
+"structure-mapping"`; MaveScape 0.5): the workspace's target on one chain of the structure shown,
+one row per target position:
+
+```csv
+target_position,reference_position,target_residue,structure,chain,residue_number,insertion_code,structure_residue,state,ambiguous,entry_record_position,difference
+54,212,Pro,2VWF,A,54,,Ala,different,,212,engineered mutation
+```
+
+- `target_position`, `reference_position` (the target's offset added: UniProt's numbering when the
+  target is placed in its entry), `target_residue` (three letters);
+- `structure` (the PDB ID, or the file's name), `chain`, `residue_number` and `insertion_code` (the
+  entry's own numbering), `structure_residue`, empty for a position on no residue of the entry's
+  sequence;
+- `state`: `identical`, `different`, `unobserved` (in the entry's sequence, without coordinates),
+  `deleted` (missing from the entry's sequence within the stretch it holds) or `outside`;
+- `ambiguous`: `yes` where an alignment that scores the same places the position otherwise;
+- `entry_record_position`: the UniProt position the entry's own record (`DBREF`,
+  `struct_ref_seq`) gives the residue, to set beside `reference_position`;
+- `difference`: the entry's reason for another residue (`engineered mutation`, `conflict`…), as it
+  records it (`SEQADV`, `struct_ref_seq_dif`).
+
+### Scores on a structure
+
+`<entry>_chain-<chain>_<coloring>.csv` (the Structure view's **Colors**, under *Scores on the
+structure*; `export` with `what: "structure-scores"`; MaveScape 0.5): the values the residues are
+colored by, one row per target position, on the chain the target is mapped onto:
+
+```csv
+target_position,reference_position,target_residue,structure,chain,residue_number,insertion_code,structure_residue,coloring,value,state,substitutions_scored,substitutions_designed,color
+25,183,Ile,2VWF,A,25,,Ile,median,-4.39105,scored,19,19,#195696
+54,212,Pro,2VWF,A,54,,Ala,median,-0.299877,scored,19,19,#ecf2f5
+```
+
+- `target_position` to `structure_residue`: as in the mapping's file (above), the residue empty for
+  a position on no residue of the structure;
+- `coloring`: `median`, `mean`, `minimum`, `maximum` (of the position's missense substitutions
+  scored, low confidence or not; at the first methionine, its start-lost substitutions), `fraction`
+  (the share abnormal-like, by a threshold or a published calibration's abnormal classes), `count`
+  (substitutions scored), `substitution:<letter>` (the score of one substitution; `*` a stop),
+  `uncertainty` (the median SE), `disagreement` (the median difference between the two sides
+  Compare shows) or `qc`;
+- `value`: the position's value (6 significant digits); for `qc`, its class (`complete`, `low`,
+  `partial`, `sparse`); `NA` where there is none;
+- `state`: `scored`, `low confidence` (a value from scores of low confidence only), `filtered`
+  (measured, nothing scored), `missing` (nothing measured), `not designed`, or `the residue itself`
+  (one substitution: the wild type's own residue);
+- `substitutions_scored`, `substitutions_designed`: of its missense substitutions (1 or 0 for one
+  substitution);
+- `color`: the residue's color as drawn (hex): the map's palette at the map's scale for scores,
+  viridis for the rest; `#4f5357` filtered, `#8c8c8c` missing, `#cfcfcf` not designed; empty for a
+  position on no residue.
+
+### What a structure says of each position
+
+`<entry>_chain-<chain>_evidence.csv` (the Structure view's **Evidence**, under *Structure as
+evidence*; `export` with `what: "structure-evidence"`; MaveScape 0.5): one row per target
+position, on the chain the target is mapped onto, with the median score of its missense
+substitutions when there is a score run:
+
+```csv
+target_position,reference_position,target_residue,structure,chain,residue_number,insertion_code,secondary_structure,accessible_area,relative_accessibility,relative_accessibility_in_structure,ppse,disordered,plddt,partner_distance,partner,interface,interactions,structural_class,median_score
+25,183,Ile,2VWF,A,25,,E,0,0,0,19,,,12.71,chain:B,,,buried,-4.39105
+51,209,Tyr,2VWF,A,51,,G,80.7,0.307,0.06,13,,,2.88,chain:B,yes,Hydrogen bond PRO 4 · B,interface,-0.447693
+```
+
+- `target_position` to `insertion_code`: as in the mapping's file (above); the rest is empty for a
+  position on no residue;
+- `secondary_structure`: DSSP's code (`H` α-helix, `G` 3₁₀-helix, `I` π-helix, `E` strand, `B`
+  bridge, `T` turn, `S` bend, `-` none);
+- `accessible_area`: the residue's water-accessible area in its chain alone (Å², Shrake–Rupley with
+  DSSP's radii and a 1.4 Å probe); `relative_accessibility`, relative to its largest (Tien et al.
+  2013), and `relative_accessibility_in_structure`, among every protein chain of the structure (as
+  DSSP computes it);
+- `ppse`: the Cα atoms within 12 Å in a 70° cone of its side chain (StructureMap's part-sphere
+  exposure); `disordered`: `yes` in a predicted model's disordered region; `plddt`: a predicted
+  model's confidence;
+- `partner_distance` (Å) and `partner` (`chain:<id>`, or `ligand:<chain>:<number>:<name>`): the
+  nearest heavy atom of the partners chosen; `interface`: `yes` within 4 Å; `interactions`: those
+  interactions.js finds there (PLIP's types), with what;
+- `structural_class`: `disordered`, `interface`, `buried` (relative accessibility in its chain below
+  0.25) or `exposed`;
+- `median_score`: the position's median score (the map's run and condition), when there is one.
+
 ## Comparisons
 
 A comparison (the Compare view, remote control's `compare`; MaveScape 0.4) pairs two sets of scores,
@@ -894,7 +1097,7 @@ legend saying so; a variant scored on one side only, or left out by the filters,
 {
   "format": "mavescape-comparison",
   "version": 1,
-  "software": { "name": "MaveScape", "version": "0.4.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.5.0", "commit": "…" },
   "a": { "label": "Run 1: Replicate 1", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep1" },
   "b": { "label": "Run 1: Replicate 2", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep2" },
   "level": "protein",
@@ -985,7 +1188,7 @@ many `analyses` it is among the least tolerant tenth (`least_tolerant_in`).
 {
   "format": "mavescape-robustness",
   "version": 1,
-  "software": { "name": "MaveScape", "version": "0.4.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.5.0", "commit": "…" },
   "run": { "id": "run-…", "name": "Run 1", "output": "<SHA-256>" },
   "q": 0.05,
   "choices": [{ "id": "pseudocount", "label": "Pseudocount", "options": [{ "id": "declared", "label": "0.5" }, { "id": "pc-0.1", "label": "0.1", "parameters": { "pseudocount": 0.1 } }] }],
@@ -1052,7 +1255,7 @@ it stops:
 {
   "url": "http://127.0.0.1:8820",
   "token": "…",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "pid": 41237
 }
 ```

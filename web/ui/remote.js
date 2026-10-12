@@ -50,6 +50,21 @@ import { setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 import { possessive } from '../lib/words.js';
+import { findStructures, mapStructure, openStructure, originText, pickResidue, RESIDUE_STYLES, selectResidues, shareSelection, structureState, targetAccession, workspaceTarget } from './mode-structure.js';
+import { calibrationsFor, colorStructure, scoresSettings } from './structure-coloring.js';
+import { coloringCSV, POSITION, SCORE_COLORINGS, substitutionCode } from '../lib/structure-scores.js';
+import { activeRun } from './selections.js';
+import { computeEvidence, evidenceState, evidenceStatistics, evidenceValues } from './structure-evidence.js';
+import { scoreSource } from './structure-coloring.js';
+import { CLASSES, describeClusters, describeEffects, evidenceCSV } from '../lib/structure-evidence.js';
+import { figurePanel, openView, removeView, saveView } from './structure-views.js';
+import { handOff, sessionFile } from './proteoscope.js';
+import { structureWords, viewWords } from '../lib/structure-record.js';
+import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
+import { STYLES, SURFACES } from './structure-viewer.js';
+import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
+import { SelectionError } from '../lib/structure/select.js';
+import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
 
 export class ActionError extends Error {}
 
@@ -58,7 +73,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const ONE_TO_THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter', X: 'Ter' };
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare' };
+const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure' };
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -251,6 +266,96 @@ export function installRemote(app) {
 
   // --- Actions --------------------------------------------------------------------------------
 
+  // The structure shown, for get_state and the structure actions (wave 5, slice 1).
+  function structureSummary(full = true) {
+    const state = structureState(app);
+    const viewer = state.viewer;
+    const structure = viewer?.structure;
+    if (!structure) return null;
+    const model = viewer.model;
+    const selected = [...viewer.selection].map((key) => model.residueMap.get(key)).filter(Boolean);
+    const origin = state.origin ? { kind: state.origin.kind, id: state.origin.id ?? null, version: state.origin.version ?? null, file: state.origin.name ?? null, retrieved: state.origin.retrieval?.retrieved ?? null, cache: state.origin.retrieval?.cache ?? null } : null;
+    const summary = {
+      name: structure.meta.code || structure.label,
+      title: structure.meta.title,
+      origin,
+      predicted: Boolean(structure.meta.isPredicted),
+      assembly: structure.activeAssemblyId ?? ASYMMETRIC_UNIT_ID,
+      atoms: model.atoms.length,
+      residues: model.residues.length,
+      renderer: viewer.kind,
+      style: viewer.style,
+      color: viewer.colorScheme,
+      surface: viewer.surface,
+      selected: { count: selected.length, query: state.query || null, residues: selected.slice(0, 100).map(residueLabel), runs: residueRuns(selected).slice(0, 50) },
+      styled: Object.fromEntries([...viewer.styled].map(([key, how]) => [key, how])),
+      labels: viewer.labels.size,
+      focused: viewer.focused.length,
+    };
+    if (state.mapping) summary.mapping = mappingSummary(state);
+    // The scores the residues are colored by (wave 5, slice 3).
+    if (viewer.colorScheme === 'scores' && state.colored) summary.scores = scoresSummary(state.colored);
+    if (!full) return summary;
+    return { ...summary, chains: chainSummaries(structure), assemblies: assemblyChoices(structure), words: describeStructure(structure) };
+  }
+
+  // The scores on the structure (wave 5, slice 3): the coloring, of which run and condition (or
+  // comparison), the legend, the target positions on the structure by state, the words.
+  function scoresSummary(colored) {
+    if (!colored.ok) return { error: colored.message };
+    // The structural classes (wave 5, slice 4).
+    if (colored.classes) return { coloring: 'class', label: 'Structural class', source: colored.source, legend: { title: colored.legend.title, items: colored.legend.items.map((i) => ({ label: i.label, color: i.color, count: i.count })) }, words: colored.words };
+    const v = colored.values;
+    const { legend } = colored;
+    const n = legend.counts.byState;
+    return {
+      coloring: v.how,
+      label: v.label,
+      source: colored.source,
+      ...(v.substitution ? { substitution: v.substitution } : {}),
+      ...(v.abnormal ? { abnormal: v.abnormal } : {}),
+      legend: { title: legend.title, ...(legend.gradient ? { low: legend.gradient.low, center: legend.gradient.center, high: legend.gradient.high, meaning: legend.gradient.meaning ?? null } : {}), items: legend.items.map((i) => ({ label: i.label, color: i.color, count: i.count })) },
+      positions: { onStructure: legend.counts.onStructure, scored: n[POSITION.VALUE], lowConfidence: n[POSITION.LOW], filtered: n[POSITION.FILTERED], missing: n[POSITION.MISSING], notDesigned: n[POSITION.NOT_DESIGNED], residueItself: n[POSITION.REFERENCE], valuedOffStructure: legend.counts.offStructure },
+      words: colored.words,
+    };
+  }
+
+  // The target on the structure (wave 5, slice 2): the chain, the counts by state, the stretches,
+  // the entry's own record compared, and every chain that holds it.
+  function mappingSummary(state) {
+    const m = state.mapping;
+    const of = (test) => m.positions.filter(test).map((p) => p.position);
+    return {
+      target: m.target.name,
+      chain: m.chain,
+      onStructure: m.onStructure,
+      identity: +m.identity.toFixed(4),
+      counts: m.counts,
+      positions: { onStructure: stretches(of((p) => p.residue)), different: m.positions.filter((p) => p.state === 'different').map((p) => ({ position: p.position, reference: p.reference, target: p.code, structure: p.structureCode, residue: p.residue, reason: p.reason ?? null })), unobserved: stretches(of((p) => p.state === 'unobserved')), deleted: stretches(of((p) => p.state === 'deleted')), outside: stretches(of((p) => p.state === 'outside')), ambiguous: stretches(of((p) => p.ambiguous)) },
+      record: m.record,
+      chains: state.maps.map((x) => ({ chain: x.chain, onStructure: x.onStructure, identical: x.counts.identical })),
+      words: describeMapping(m, state.viewer.structure.meta.code || state.viewer.structure.label),
+    };
+  }
+
+  function setAssembly(id) {
+    const state = structureState(app);
+    const viewer = state.viewer;
+    const choices = assemblyChoices(viewer.structure);
+    if (!choices.length) throw new ActionError(`${viewer.structure.meta.code || 'The structure'} defines no assembly other than its coordinates as deposited.`);
+    const chosen = choose(String(id) === 'au' ? ASYMMETRIC_UNIT_ID : String(id), choices.map((c) => c.id), 'assembly');
+    const choice = choices.find((c) => c.id === chosen);
+    if (choice.tooLarge) throw new ActionError(`${choice.label} would have ${choice.atoms.toLocaleString('en-US')} atoms, more than MaveScape draws.`);
+    viewer.setAssembly(chosen);
+    mapStructure(app, state.mapping?.chain);
+    state.query = '';
+  }
+
+  // Waits for the surface asked for (WebGPU), at most 30 seconds.
+  async function surfaceReady(viewer) {
+    for (let i = 0; i < 300 && viewer.surface.kind !== 'off' && viewer.kind === 'webgpu' && !viewer.surface.ready && !/could not/.test(viewer.surface.status); i += 1) await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
   const actions = {
     async get_state() {
       const w = ws();
@@ -270,6 +375,10 @@ export function installRemote(app) {
         selection: sel ? { run: w.runs.find((r) => r.id === sel.run)?.name ?? sel.run, condition: sel.condition, count: sel.keys.length, query: sel.query ?? null, variants: sel.keys.slice(0, 100) } : null,
         steps: steps.map((s) => ({ id: s.id, label: s.label, state: s.state, detail: s.detail })),
         next: next ? { step: next.id, state: next.state, detail: next.detail, action: next.action?.label ?? null } : null,
+        structure: structureSummary(false),
+        // The structures kept and their saved views (wave 5, slice 5).
+        structures: (w.structures ?? []).map((x) => ({ id: x.id, name: x.name, origin: x.origin?.kind ?? null, file: x.file.fileName, sha256: x.file.sha256, ...(x.pae ? { alignedError: x.pae.sha256 } : {}) })),
+        structureViews: (w.structureViews ?? []).map((v) => ({ id: v.id, name: v.name, structure: v.structure, chain: v.chain, shows: viewWords(v, w), created: v.created })),
       };
       const message = `${w.name}: ${plural(w.sources.length, 'table')}, ${plural(w.runs.length, 'score run')}${w.design ? `, a ${w.design.model} design` : ', no design'}; showing ${data.mode}.${next ? ` ${next.state === 'optional' ? 'All done' : 'Next'}: ${next.detail}` : ''}`;
       return { message, data };
@@ -308,19 +417,288 @@ export function installRemote(app) {
         if (!response.ok) throw new ActionError(`${file.name} could not be read (HTTP ${response.status}).`);
         items.push(Object.assign(new File([await response.arrayBuffer()], file.name), { folder: file.folder ?? null }));
       }
-      const before = { id: ws().id, sources: ws().sources.length, targets: ws().targets.length };
+      const before = { id: ws().id, sources: ws().sources.length, targets: ws().targets.length, structure: structureState(app).origin };
       const { problems } = await app.importFiles(items, { accept: !args.review });
       await settle();
       const w = ws();
       // A MaveDB package opens as a workspace of its own (wave 3, slice 4).
       const fresh = w.id !== before.id;
       const added = { tables: w.sources.slice(fresh ? 0 : before.sources).map((s) => s.name), targets: w.targets.slice(fresh ? 0 : before.targets).map((t) => t.name) };
-      if (problems.length && !added.tables.length && !added.targets.length && !args.review) throw new ActionError(problems.join(' '));
+      // A structure is shown in the Structure view (wave 5, slice 1).
+      const structure = structureState(app).origin !== before.structure ? structureSummary(false) : null;
+      if (structure) added.structure = structure.name;
+      if (problems.length && !added.tables.length && !added.targets.length && !structure && !args.review) throw new ActionError(problems.join(' '));
       const parts = [];
       if (added.tables.length) parts.push(`the table${added.tables.length > 1 ? 's' : ''} ${added.tables.join(', ')}`);
       if (added.targets.length) parts.push(`the target${added.targets.length > 1 ? 's' : ''} ${added.targets.join(', ')}`);
+      if (structure) parts.push(`the structure ${originText(structureState(app).origin, structureState(app).viewer.structure)}, in the Structure view`);
       const message = `${parts.length ? `Opened ${parts.join(' and ')}` : `Read ${plural(files.length, 'file')}`}${args.review ? '; the import wizard is open for review' : ''}.${problems.length ? ` Problems: ${problems.join(' ')}` : ''}`;
       return { message, data: { ...added, problems } };
+    },
+
+    async open_structure(args) {
+      const given = [args.pdb, args.alphafold].filter((x) => x !== undefined && x !== null && String(x).trim() !== '');
+      if (given.length !== 1) throw new ActionError('Give a PDB ID (pdb: "2VWF") or a UniProt accession for its AlphaFold DB model (alphafold: "P62993", or "target" for the target\'s), one of the two.');
+      let what = args.pdb ? { pdb: String(args.pdb) } : { alphafold: String(args.alphafold) };
+      if (what.alphafold?.toLowerCase() === 'target') {
+        const accession = targetAccession(ws());
+        if (!accession) throw new ActionError('The target has no UniProt accession: give it in Experiment, Target, or name the accession.');
+        what = { alphafold: accession };
+      }
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      if (args.chain) what.chain = String(args.chain);
+      const result = await openStructure(app, what);
+      if (!result.ok) throw new ActionError(result.message);
+      if (args.assembly) setAssembly(args.assembly);
+      await surfaceReady(structureState(app).viewer);
+      await settle();
+      return { message: result.message, data: structureSummary() };
+    },
+
+    async find_structures() {
+      const found = await findStructures(app);
+      if (!found.ok) throw new ActionError(found.message);
+      const { target, rows } = found;
+      const range = (r) => (r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`);
+      const top = rows.slice(0, 5).map((r) => `${r.id} (${r.method}${r.resolution ? ` ${r.resolution} Å` : ''}, chain ${r.chains[0].id}, positions ${range(r)})`).join('; ');
+      return {
+        message: `${rows.length.toLocaleString('en-US')} PDB ${rows.length === 1 ? 'entry covers' : 'entries cover'} ${target.name} (${target.accession}), by SIFTS, the most of it first: ${top}${rows.length > 5 ? '; …' : ''}. Its AlphaFold DB model covers all ${target.length} positions.`,
+        data: { target: { name: target.name, accession: target.accession, offset: target.offset, length: target.length }, retrieval: found.retrieval ?? null, structures: rows.slice(0, 100).map((r) => ({ id: r.id, method: r.method, resolution: r.resolution, from: r.from, to: r.to, covered: r.covered, coverage: +r.coverage.toFixed(4), chains: r.chains.map((c) => ({ id: c.id, from: c.from, to: c.to })) })), total: rows.length },
+      };
+    },
+
+    async map_structure(args) {
+      const state = structureState(app);
+      if (!state.viewer?.structure) throw new ActionError('No structure is open: open one with open_structure (a PDB ID or an AlphaFold DB model), or a file with open_files.');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      if (!workspaceTarget(ws())) throw new ActionError('This workspace has no target to map onto the structure: open a table and its target, or an example.');
+      const mapping = mapStructure(app, args.chain ? String(args.chain) : state.mapping?.chain);
+      if (!mapping) throw new ActionError(`${state.mapTarget.name} is on no chain of ${state.viewer.structure.meta.code || 'the structure'}: no chain holds five of its residues aligned identical, and half of those aligned.`);
+      if (args.chain && mapping.chain !== String(args.chain)) throw new ActionError(`${state.mapTarget.name} is not on chain ${args.chain}. Chains that hold it: ${state.maps.map((m) => m.chain).join(', ')}.`);
+      store.notify(['structure']);
+      await settle();
+      const summary = mappingSummary(state);
+      return { message: summary.words.join(' '), data: summary };
+    },
+
+    async set_structure(args) {
+      const state = structureState(app);
+      const viewer = state.viewer;
+      if (!viewer?.structure) throw new ActionError('No structure is open: open one with open_structure (a PDB ID or an AlphaFold DB model), or a file with open_files.');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      if (args.assembly) setAssembly(args.assembly);
+      if (args.style) viewer.setStyle(choose(args.style, Object.keys(STYLES), 'style'));
+      // Colored by the scores (wave 5, slice 3) or by the structure's own colors.
+      const settings = scoresSettings(state);
+      const scoring = ['substitution', 'threshold', 'side', 'calibration'].some((k) => args[k] !== undefined && args[k] !== null);
+      if (args.color || (scoring && settings.how)) {
+        const schemes = COLOR_SCHEMES.map((c) => c.id).filter((id) => id !== 'plddt' || viewer.structure.meta.isPredicted);
+        const chosen = args.color ? choose(args.color, [...Object.keys(SCORE_COLORINGS), 'class', ...schemes], 'color scheme') : settings.how;
+        // The structural classes are read first (wave 5, slice 4).
+        if (chosen === 'class') await computeEvidence(app, state);
+        if (Object.hasOwn(SCORE_COLORINGS, chosen) || chosen === 'class') {
+          const before = { how: settings.how, substitution: settings.substitution, abnormal: { ...settings.abnormal }, scheme: viewer.colorScheme };
+          settings.how = chosen;
+          if (args.substitution !== undefined && args.substitution !== null) {
+            const code = substitutionCode(args.substitution);
+            if (!code) throw new ActionError(`"${args.substitution}" is not an amino acid (A or Ala) or a stop (* or Ter).`);
+            settings.substitution = code;
+          }
+          if (args.calibration !== undefined && args.calibration !== null) {
+            const list = calibrationsFor(app, activeRun(app));
+            if (!list.length) throw new ActionError('The run the map shows has no published calibration to read abnormal-like by: only a MaveDB record\'s scores, as published, have them. Give a threshold.');
+            const titles = list.map((c) => c.calibration.title);
+            const at = /^\d+$/.test(String(args.calibration)) ? Number(args.calibration) - 1 : titles.indexOf(choose(args.calibration, titles, 'calibration'));
+            if (!list[at]) throw new ActionError(`There ${list.length === 1 ? 'is 1 calibration' : `are ${list.length} calibrations`}: ${titles.join('; ')}.`);
+            settings.abnormal = { ...settings.abnormal, kind: 'calibration', calibration: list[at].index };
+          } else if (args.threshold !== undefined && args.threshold !== null) {
+            const value = Number(args.threshold);
+            if (!Number.isFinite(value)) throw new ActionError('threshold is a number: the score beyond which a substitution is abnormal-like.');
+            settings.abnormal = { ...settings.abnormal, kind: 'threshold', value, side: args.side ? choose(args.side, ['below', 'above'], 'side') : settings.abnormal.side };
+          } else if (args.side) settings.abnormal = { ...settings.abnormal, side: choose(args.side, ['below', 'above'], 'side') };
+          let colored = await colorStructure(app, state);
+          // A run's scores recomputed first, when they are not yet.
+          for (let i = 0; i < 600 && colored?.pending; i += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            colored = await colorStructure(app, state);
+          }
+          if (!colored?.ok) {
+            Object.assign(settings, { how: before.how, substitution: before.substitution, abnormal: before.abnormal });
+            if (before.how) await colorStructure(app, state);
+            else {
+              state.colored = null;
+              viewer.setColor(before.scheme === 'scores' ? (viewer.structure.meta.isPredicted ? 'plddt' : 'chain') : before.scheme);
+            }
+            store.notify(['structure']);
+            throw new ActionError(colored?.message ?? 'The structure could not be colored by the scores.');
+          }
+        } else {
+          settings.how = null;
+          state.colored = null;
+          viewer.setColor(chosen);
+        }
+        store.notify(['structure']);
+      }
+      if (args.surface) viewer.setSurface(choose(args.surface, Object.keys(SURFACES), 'surface'));
+      if (args.select !== undefined && args.select !== null) {
+        const text = String(args.select).trim();
+        state.query = text;
+        if (!text) viewer.select([]);
+        else {
+          let found;
+          try {
+            found = selectResidues(app, text);
+          } catch (error) {
+            throw new ActionError(error instanceof SelectionError ? `"${text}": ${error.message}` : error.message);
+          }
+          if (!found.keys.length) throw new ActionError(`"${text}" selects no residue of ${viewer.structure.meta.code || 'the structure'}.`);
+          viewer.select(found.keys);
+        }
+        // Shared with the map, as a selection made in the view is (wave 5, slice 3).
+        shareSelection(app);
+      }
+      const keys = [...viewer.selection];
+      const needs = (what) => {
+        if (!keys.length) throw new ActionError(`Select residues first (select: "resn CYS") to ${what} them.`);
+      };
+      if (args.show) {
+        needs('draw');
+        viewer.styleResidues(keys, choose(args.show, Object.keys(RESIDUE_STYLES), 'residue style'));
+      }
+      if (args.label !== undefined && args.label !== null) {
+        needs('label');
+        viewer.label(keys, Boolean(args.label));
+      }
+      if (args.focus === true) {
+        needs('focus on');
+        viewer.focus(keys);
+      } else if (args.focus === false) {
+        viewer.clearFocus();
+        viewer.fit();
+      }
+      if (args.fit) viewer.fit();
+      // A residue picked, as a click picks it (wave 5, slice 3).
+      let picked = null;
+      if (args.pick !== undefined && args.pick !== null) {
+        const m = /^\s*([A-Za-z0-9]{1,4})[\s:]+(-?\d+)([A-Za-z]?)\s*$/.exec(String(args.pick));
+        if (!m) throw new ActionError(`"${args.pick}" is not a residue: give its chain and number, "A 183".`);
+        const prefix = `${m[1]}:${m[2]}${m[3]}:`;
+        const key = [...viewer.model.residueMap.keys()].find((k) => k.startsWith(prefix));
+        if (!key) throw new ActionError(`${viewer.structure.meta.code || 'The structure'} has no residue ${m[2]}${m[3]} in chain ${m[1]}.`);
+        picked = { key, shared: pickResidue(app, key, { additive: Boolean(args.add) }) };
+        store.notify(['structure']);
+      }
+      await surfaceReady(viewer);
+      await settle();
+      const summary = structureSummary();
+      const parts = [`${summary.name}: ${STYLES[summary.style].label.toLowerCase()}, colored by ${COLOR_SCHEMES.find((c) => c.id === summary.color)?.label.toLowerCase() ?? summary.color}`];
+      if (summary.surface.kind !== 'off') parts.push(summary.surface.ready ? `the ${SURFACES[summary.surface.kind].words}` : summary.surface.status);
+      if (summary.selected.count) parts.push(`${plural(summary.selected.count, 'residue')} selected (${summary.selected.runs.slice(0, 8).join(', ')}${summary.selected.runs.length > 8 ? ', …' : ''})`);
+      if (summary.labels) parts.push(`${plural(summary.labels, 'label')}`);
+      if (summary.focused) parts.push(`focused on ${plural(summary.focused, 'residue')}`);
+      if (summary.scores && !summary.scores.error) parts[0] = `${summary.name}: ${STYLES[summary.style].label.toLowerCase()}, colored by ${summary.scores.label.toLowerCase()} (${summary.scores.source})`;
+      if (picked) {
+        const sel = store.ui.selection;
+        const run = sel ? ws().runs.find((r) => r.id === sel.run) : null;
+        parts.push(picked.shared?.position ? `${residueLabel(viewer.model.residueMap.get(picked.key))} picked: target position ${picked.shared.position}, its ${plural(picked.shared.keys.length, 'variant')} selected on ${run ? possessive(run.name) : 'the'} map and the position in the inspector` : `${residueLabel(viewer.model.residueMap.get(picked.key))} picked${picked.shared ? ', on no target position' : ''}`);
+        summary.picked = { residue: picked.key, position: picked.shared?.position ?? null, selected: picked.shared?.keys.length ?? 0 };
+      }
+      const words = summary.scores?.words ? ` ${summary.scores.words.join(' ')}` : summary.scores?.error ? ` ${summary.scores.error}` : '';
+      return { message: `${parts.join('; ')}. Drawn with ${viewer.kind === 'webgpu' ? 'WebGPU' : 'the Canvas renderer'}.${words}`, data: summary };
+    },
+
+    // What the structure says of the target's positions (wave 5, slice 4): their structural classes,
+    // read with the partners chosen; the scores by class; the cluster test.
+    async structure_evidence(args) {
+      const state = structureState(app);
+      const viewer = state.viewer;
+      if (!viewer?.structure) throw new ActionError('No structure is open: open one with open_structure (a PDB ID or an AlphaFold DB model), or a file with open_files.');
+      if (!state.mapping) throw new ActionError(state.mapTarget ? `${state.mapTarget.name} is on no chain of ${viewer.structure.meta.code || 'the structure'}: map_structure says which chains hold it.` : 'This workspace has no target to map onto the structure.');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      const ev = evidenceState(state);
+      await computeEvidence(app, state);
+      if (args.partner !== undefined && args.partner !== null && args.partner !== '') {
+        const options = ['all', ...ev.partners.map((p) => p.id), ...ev.partners.map((p) => p.label)];
+        const named = choose(String(args.partner), options, 'partner');
+        ev.choice = named === 'all' ? 'all' : (ev.partners.find((p) => p.id === named || p.label === named)?.id ?? 'all');
+        await computeEvidence(app, state);
+      }
+      if (args.fraction !== undefined && args.fraction !== null) {
+        const f = Number(args.fraction);
+        if (!(f >= 0.05 && f <= 0.5)) throw new ActionError('fraction is the share of positions called least tolerant, from 0.05 to 0.5.');
+        ev.fraction = f;
+      }
+      if (args.seed !== undefined && args.seed !== null) {
+        const seed = Number(args.seed);
+        if (!Number.isInteger(seed) || seed < 1) throw new ActionError('seed is a whole number from 1.');
+        ev.seed = seed;
+      }
+      if (ev.status !== 'ready') throw new ActionError(ev.message || 'What the structure says could not be read.');
+      store.notify(['structure']);
+      await settle();
+      const r = ev.result;
+      const code = viewer.structure.meta.code || viewer.structure.label;
+      const offset = state.mapTarget.offset ?? 0;
+      const nameOf = (q) => `${state.mapTarget.sequence[q - 1]}${q + offset}`;
+      const values = evidenceValues(state, scoreSource(app));
+      const stats = evidenceStatistics(ev, values);
+      const counts = Object.fromEntries(CLASSES.map((c) => [c.id, r.positions.filter((p) => p.class === c.id).length]));
+      const round = (x, d = 6) => (Number.isFinite(x) ? +x.toPrecision(d) : null);
+      const data = {
+        structure: code, chain: r.chain, predicted: r.predicted, alignedError: r.predicted ? ev.pae : null,
+        partners: ev.partners.map((p) => ({ id: p.id, label: p.label, kind: p.kind, additive: p.additive, chosen: ev.chosen.includes(p.id) })),
+        classes: counts,
+        positions: Object.fromEntries(CLASSES.map((c) => [c.id, stretches(r.positions.filter((p) => p.class === c.id).map((p) => p.position))])),
+        tracks: ['structure:class', 'structure:ss', 'structure:rsa', 'structure:ppse', 'structure:distance', ...(r.predicted ? ['structure:plddt'] : [])],
+      };
+      const lines = [`${code} chain ${r.chain}: ${CLASSES.filter((c) => counts[c.id]).map((c) => `${counts[c.id]} ${c.label}`).join(', ')}.`];
+      if (stats) {
+        data.scores = values.words;
+        data.effects = stats.effects.classes.map((c) => ({ class: c.id, positions: c.n, median: round(c.median), q1: round(c.q1), q3: round(c.q3), ...(c.test ? { below: round(c.test.below), u: c.test.u, p: round(c.test.p), q: round(c.test.q) } : {}) }));
+        const t = stats.clusters;
+        if (t) data.clusters = { positions: t.n, leastTolerant: t.k, fraction: t.fraction, distance: t.distance, pairs: t.observed, expected: round(t.expected), ratio: round(t.ratio), p: round(t.p), permutations: t.permutations, seed: t.seed, strata: t.strata, burialIgnored: { expected: round(t.any.expected), p: round(t.any.p) }, sensitive: t.sensitive, groups: t.clusters.map((g) => g.map(nameOf)) };
+        lines.push(...describeEffects(stats.effects, code), ...describeClusters(t, nameOf));
+      } else lines.push('No score run to read the classes by.');
+      return { message: lines.join(' '), data };
+    },
+
+    // Saved views of structures (wave 5, slice 5).
+    async save_structure_view(args) {
+      if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure, then save the view of it.');
+      if (!args.name || !String(args.name).trim()) throw new ActionError('Give the view a name.');
+      const saved = await saveView(app, String(args.name));
+      if (!saved.ok) throw new ActionError(saved.message);
+      await settle();
+      return { message: saved.message, data: { id: saved.id, name: saved.view.name, structure: { id: saved.structure.id, name: saved.structure.name, file: saved.structure.file, origin: saved.structure.origin?.kind ?? null, ...(saved.structure.pae ? { alignedError: saved.structure.pae } : {}) }, view: saved.view } };
+    },
+
+    async open_structure_view(args) {
+      const views = ws().structureViews ?? [];
+      if (!views.length) throw new ActionError('This workspace has no saved view: save one with save_structure_view.');
+      const name = choose(String(args.name ?? ''), views.map((v) => v.name), 'saved view');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      const opened = await openView(app, views.find((v) => v.name === name).id);
+      if (!opened.ok) throw new ActionError(opened.message);
+      await surfaceReady(structureState(app).viewer);
+      await settle();
+      return { message: opened.message, data: { view: name, structure: structureWords(opened.structure), mappingChanges: opened.changes, notes: opened.notes, state: structureSummary() } };
+    },
+
+    async remove_structure_view(args) {
+      const views = ws().structureViews ?? [];
+      const name = choose(String(args.name ?? ''), views.map((v) => v.name), 'saved view');
+      const removed = removeView(app, views.find((v) => v.name === name).id);
+      await settle();
+      return { message: removed.message, data: { removed: name, views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
+    },
+
+    // Proteoscope (wave 5, slice 6): the view shown handed to a Proteoscope running on this computer.
+    async proteoscope_link() {
+      if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure.');
+      const handed = await handOff(app, { open: false });
+      if (!handed.ok) throw new ActionError(handed.message);
+      const f = handed.found;
+      return { message: handed.message, data: { how: handed.how, link: handed.link, file: handed.file?.name ?? null, proteoscope: { url: f.url, version: f.version, tested: f.tested, remoteControl: f.remoteControl, offline: f.offline }, session: handed.session } };
     },
 
     async set_mode(args) {
@@ -336,9 +714,9 @@ export function installRemote(app) {
         app.focusItem(null);
         return { message: 'Cleared the focus.' };
       }
-      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant' };
+      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant', 'structure view': 'structureView' };
       const kind = args.kind ? kinds[choose(args.kind, Object.keys(kinds), 'kind')] : null;
-      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections };
+      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections, structureView: w.structureViews ?? [] };
       const candidates = Object.entries(lists).filter(([k]) => !kind || k === kind).flatMap(([k, items]) => items.map((item) => ({ kind: k, id: item.id, name: item.name })));
       // A variant by its name, when nothing else is called that.
       const looksLikeVariant = /^p\.[A-Z][a-z]{2}\d+/.test(variantName(args.name)) && !candidates.some((c) => c.name === args.name);
@@ -347,7 +725,7 @@ export function installRemote(app) {
       const item = candidates.find((c) => c.name === name);
       app.focusItem({ kind: item.kind, id: item.id });
       await settle();
-      return { message: `Showing ${name} in the inspector.`, data: { kind: item.kind === 'source' ? 'table' : item.kind, name } };
+      return { message: `Showing ${name} in the inspector.`, data: { kind: item.kind === 'source' ? 'table' : item.kind === 'structureView' ? 'structure view' : item.kind, name } };
     },
 
     async draft_design(args) {
@@ -1035,9 +1413,49 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence', 'structure-image', 'proteoscope-session'];
       const what = choose(args.what, kinds, 'export');
       let file;
+      // The target on the structure shown (wave 5, slice 2), position by position.
+      if (what === 'structure-mapping') {
+        const state = structureState(app);
+        if (!state.mapping) throw new ActionError(state.viewer?.structure ? 'The target is not mapped onto the structure shown (map_structure says why).' : 'No structure is open: open one with open_structure.');
+        const name = state.viewer.structure.meta.code || state.viewer.structure.label;
+        return { file: mappingCSV(state.mapping, name), message: `The mapping of ${state.mapping.target.name} onto chain ${state.mapping.chain} of ${name}: ${state.mapping.target.length} positions.` };
+      }
+      // A figure panel of the view shown (wave 5, slice 5): a PNG, its legend below it, what it
+      // shows written into it.
+      if (what === 'structure-image') {
+        if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure.');
+        const scale = args.scale === undefined || args.scale === null ? 4 : Number(args.scale);
+        if (!(scale >= 1 && scale <= 8)) throw new ActionError('scale is from 1 to 8: the image\'s size against the view\'s.');
+        const panel = await figurePanel(app, { scale, legend: args.legend !== false });
+        return { file: panel.bytes, message: `A figure panel of ${panel.metadata.structure.name}: ${panel.metadata.image.width} × ${panel.metadata.image.height} pixels (${scale}× the view${panel.metadata.image.legend ? ', its legend below it' : ''}), what it shows written into it (PNG text "mavescape-figure-panel").` };
+      }
+      // The view shown as a Proteoscope session (wave 5, slice 6), whether Proteoscope runs or not.
+      if (what === 'proteoscope-session') {
+        if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure.');
+        const f = await sessionFile(app);
+        return { file: f.bytes, message: `${f.name}: ${f.session.name} as a Proteoscope session (${f.session.fetchable ? 'fetched by its ID' : 'its file embedded'}): ${f.session.words}. Open it in Proteoscope.` };
+      }
+      // What the structure says of each position (wave 5, slice 4), with its median score.
+      if (what === 'structure-evidence') {
+        const state = structureState(app);
+        if (!state.mapping) throw new ActionError(state.viewer?.structure ? 'The target is not mapped onto the structure shown (map_structure says why).' : 'No structure is open: open one with open_structure.');
+        const ev = await computeEvidence(app, state);
+        if (ev.status !== 'ready') throw new ActionError(ev.message || 'What the structure says could not be read.');
+        const values = evidenceValues(state, scoreSource(app));
+        const name = state.viewer.structure.meta.code || state.viewer.structure.label;
+        return { file: evidenceCSV(ev.result, name, values?.valueAt ?? null, 'median_score'), message: `What ${name} says of each position of ${state.mapping.target.name}, on chain ${ev.result.chain}: ${state.mapping.target.length} positions.` };
+      }
+      // The scores the structure shown is colored by (wave 5, slice 3), position by position.
+      if (what === 'structure-scores') {
+        const state = structureState(app);
+        const colored = state.viewer?.colorScheme === 'scores' ? state.colored : null;
+        if (!colored?.ok) throw new ActionError(colored ? colored.message : 'The structure shown is not colored by the scores: set_structure with color median (or another of the scores\' colorings).');
+        const name = state.viewer.structure.meta.code || state.viewer.structure.label;
+        return { file: coloringCSV(colored.values, state.mapping, name, colored.palette), message: `${colored.values.label} (${colored.source}) on chain ${state.mapping.chain} of ${name}: ${state.mapping.target.length} positions.` };
+      }
       // A run's robustness to analysis choices (wave 4, slice 4): its variants (CSV, or its record to
       // a path ending in .json) and its positions, checked first when it has not been.
       if (what.startsWith('robustness')) {
@@ -1100,8 +1518,10 @@ export function installRemote(app) {
         return { file: made.bytes, message: `${possessive(run.name)} MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
       }
       if (what === 'archive') {
-        file = await archiveFile(app, { includeTables: args.include_tables !== false });
-        return { file: file.bytes, message: `The workspace archive of "${ws().name}" (${plural(ws().runs.length, 'run')}${args.include_tables === false ? ', tables by checksum only' : ', with its tables'}).` };
+        // Not asked: the structures' files when the library holds them all, else their IDs and SHA-256s.
+        file = await archiveFile(app, { includeTables: args.include_tables !== false, includeStructures: args.include_structures === undefined || args.include_structures === null ? 'available' : args.include_structures !== false });
+        const kept = (ws().structures ?? []).length;
+        return { file: file.bytes, message: `The workspace archive of "${ws().name}" (${plural(ws().runs.length, 'run')}${args.include_tables === false ? ', tables by checksum only' : ', with its tables'}${kept ? `; ${plural(kept, 'structure')}${file.structures === 'checksums' ? ` by ID and checksum only${args.include_structures === false ? '' : `: ${kept === 1 ? 'its file is' : 'their files are'} not in this library (the archive it was opened from named ${kept === 1 ? 'it' : 'them'} so)`}` : ''}` : ''}).` };
       }
       if (what === 'selection') {
         const saved = args.selection ? ws().selections.find((s) => s.name === choose(args.selection, ws().selections.map((x) => x.name), 'saved selection')) : null;

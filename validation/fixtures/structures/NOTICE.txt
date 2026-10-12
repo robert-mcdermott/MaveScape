@@ -1,0 +1,13 @@
+Structures in other formats than the fetcher's, for the validation suite `structures` (wave 5,
+slice 1), retrieved 2026-10-12, unchanged:
+
+- 2VWF.pdb.gz: RCSB's PDB-format file of 2VWF (https://files.rcsb.org/download/2VWF.pdb.gz);
+- 2VWF.bcif.gz: RCSB's BinaryCIF of 2VWF (https://models.rcsb.org/2VWF.bcif.gz);
+- AF-P62993-F1-model_v6.bcif: AlphaFold DB's BinaryCIF of GRB2's model
+  (https://alphafold.ebi.ac.uk/files/AF-P62993-F1-model_v6.bcif).
+
+The PDB's data are in the public domain (CC0 1.0): Berman HM, et al. The Protein Data Bank. Nucleic
+Acids Research 2000;28:235-242. doi:10.1093/nar/28.1.235. AlphaFold DB's data are licensed under
+CC BY 4.0: Jumper J, et al. Highly accurate protein structure prediction with AlphaFold. Nature
+2021;596:583-589. doi:10.1038/s41586-021-03819-2. Varadi M, et al. AlphaFold Protein Structure
+Database in 2024. Nucleic Acids Research 2024;52(D1):D368-D375. doi:10.1093/nar/gkad1011

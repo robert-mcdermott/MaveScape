@@ -20,13 +20,16 @@
 import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch, sleep } from './cdp.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const IMAGES = join(ROOT, 'docs/images');
 const PORT = 8830;
+// Where MaveScape looks for Proteoscope (--proteoscope): only the structure-proteoscope scene starts
+// one there, so no other picture shows a Proteoscope running on this computer.
+const PROTEOSCOPE_PORT = 8840;
 // What the status bar and start page show as the library's place (not this run's temporary one).
 const LIBRARY_SHOWN = '~/Library/Application Support/MaveScape';
 
@@ -73,6 +76,12 @@ for (const [, dir, scene] of MAVEDB_TABLES) {
   if ((wanted.length === 0 || wanted.some((w) => scenes.includes(w))) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
 }
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
+// Proteoscope, for the scene of a view handed to it (wave 5, slice 6): PROTEOSCOPE names its
+// program, else "proteoscope" on the PATH.
+const PROTEOSCOPE = process.env.PROTEOSCOPE ?? (process.env.PATH ?? '').split(delimiter).map((dir) => join(dir, process.platform === 'win32' ? 'proteoscope.exe' : 'proteoscope')).find((file) => existsSync(file));
+if ((wanted.length === 0 || wanted.includes('structure-proteoscope')) && !(PROTEOSCOPE && existsSync(PROTEOSCOPE))) throw new Error('The structure-proteoscope scene needs Proteoscope 0.10: install it, or set PROTEOSCOPE to its program');
+// Run after the scene's picture is taken (a program the scene started).
+const afterScene = [];
 
 // --- MaveScape ------------------------------------------------------------------------------------
 
@@ -113,7 +122,7 @@ async function startMaveScape() {
       writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
     }
   }
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache, '--proteoscope', `${PROTEOSCOPE_PORT}-${PROTEOSCOPE_PORT + 4}`], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   const stop = async () => {
@@ -601,6 +610,94 @@ const scenes = {
     await scrollTo('.map-pane .map-legend', 'start');
     await sleep(800);
   },
+  // The Structure view (wave 5, slice 1): factor IX's structure (PDB 1RFN) from the cache, its
+  // cysteines selected in words and drawn as sticks, the pair that joins its two chains labeled.
+  async structure() {
+    await example('factor9');
+    await act('open_structure', { pdb: '1RFN' });
+    await act('set_structure', { select: 'resn CYS', show: 'sticks' });
+    await act('set_structure', { select: '(chain A and resi 122) or (chain B and resi 132)', label: true });
+    await act('set_structure', { select: 'resn CYS' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'resn CYS'; })()`);
+    await sleep(1200);
+  },
+  // An AlphaFold DB model: GRB2's, colored by its confidence, the SH3 domain the example measures
+  // (UniProt 159–214) selected.
+  async 'structure-alphafold'() {
+    await example('grb2-sh3');
+    await act('open_structure', { alphafold: 'target' });
+    await act('set_structure', { select: 'resi 159-214' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'resi 159-214'; })()`);
+    await sleep(1200);
+  },
+  // The target on the structure (wave 5, slice 2): factor IX mapped onto 1RFN's light chain, where
+  // the entry's own record numbers it five earlier than SIFTS and the alignment; the target's
+  // residues selected.
+  async 'structure-mapping'() {
+    await example('factor9');
+    await act('open_structure', { pdb: '1RFN', chain: 'B' });
+    await act('set_structure', { select: 'pos 132-188' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'pos 132-188'; })()`);
+    await sleep(1200);
+  },
+  // Scores on the structure (wave 5, slice 3): GRB2's SH3 domain on 2VWF colored by the median
+  // score, the residues that touch the Gab2 peptide selected in the words of the example's guide and
+  // drawn as sticks (their substitutions selected on the map), the strip of positions below.
+  async 'structure-scores'() {
+    await example('grb2-sh3');
+    await act('open_structure', { pdb: '2VWF' });
+    await act('set_structure', { color: 'median', select: 'byres (chain A and protein and within 4 of (chain B and protein))', show: 'sticks' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'byres (chain A and protein and within 4 of (chain B and protein))'; })()`);
+    await scrollTo('.structure-scores', 'start');
+    await sleep(1200);
+  },
+  // Structure as evidence (wave 5, slice 4): PTEN's phosphatase and C2 domains (1D5R) colored by
+  // structural class, the compact group of least tolerant positions that joins the two domains
+  // selected, the pane with the scores by class and the cluster test.
+  async 'structure-evidence'() {
+    await example('pten-mavedb');
+    await act('open_structure', { pdb: '1D5R' });
+    await act('structure_evidence', {});
+    await act('set_structure', { color: 'class', select: 'pos 98,170,174,177,274,276' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'pos 98,170,174,177,274,276'; })()`);
+    await scrollTo('.structure-evidence', 'start');
+    await sleep(1200);
+  },
+  // Structures in the record (wave 5, slice 5): a view of 2VWF colored by GRB2's median scores,
+  // residues drawn and labeled, saved as Core: in the pane, the dataset tree and the inspector.
+  async 'structure-views'() {
+    await example('grb2-sh3');
+    await act('open_structure', { pdb: '2VWF' });
+    await act('set_structure', { color: 'median', select: 'pos 20-26', show: 'sticks' });
+    await act('set_structure', { select: 'pos 21+25', label: true });
+    await act('save_structure_view', { name: 'Core' });
+    await act('focus', { kind: 'structure view', name: 'Core' });
+    await scrollTo('.structure-views', 'start');
+    await sleep(1200);
+  },
+  // Open in Proteoscope (wave 5, slice 6): 2VWF colored by GRB2's median scores, residues drawn and
+  // labeled, handed to Proteoscope (started for the scene, its downloads cached in
+  // validation/cache/proteoscope): its window, as it opened the link.
+  async 'structure-proteoscope'() {
+    const proteoscope = spawn(PROTEOSCOPE, ['--no-open', '--port', String(PROTEOSCOPE_PORT), '--cache-dir', join(ROOT, 'validation/cache/proteoscope')], { stdio: ['ignore', 'pipe', 'inherit'] });
+    afterScene.push(async () => {
+      const exited = new Promise((done) => proteoscope.once('exit', done));
+      proteoscope.kill();
+      await Promise.race([exited, sleep(3000)]);
+    });
+    let banner = '';
+    proteoscope.stdout.on('data', (chunk) => { banner += chunk; });
+    for (let i = 0; i < 100 && !/running at/.test(banner); i += 1) await sleep(100);
+    await example('grb2-sh3');
+    await act('open_structure', { pdb: '2VWF' });
+    await act('set_structure', { color: 'median', select: 'pos 20-26', show: 'sticks' });
+    await act('set_structure', { select: 'pos 21+25', label: true });
+    await sleep(1500);
+    const handed = await act('proteoscope_link');
+    await b.goto(handed.data.link, 1000);
+    await waitFor('Boolean(globalThis.proteoscope?.state?.active?.proteomics?.data)', 90000);
+    await sleep(3000);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');
@@ -641,9 +738,16 @@ await new Promise((done, fail) => spawn('go', ['build', '-o', binary, '.'], { cw
 try {
   for (const theme of themes) {
     for (const name of names) {
-      const maveScape = await startMaveScape();
-      b = await launch();
+      let maveScape = null;
+      b = null;
       try {
+        maveScape = await startMaveScape();
+        // A Chrome that does not start (its debugging connection not opened) is started again
+        // once; a scene that cannot start fails alone, not the scenes after it.
+        b = await launch().catch(async () => {
+          await sleep(2000);
+          return launch();
+        });
         await b.theme(theme === 'dark');
         await b.goto(URL, 800);
         await waitFor('Boolean(window.mavescape?.remote)', 30000);
@@ -653,7 +757,8 @@ try {
         await clearToasts();
         await sleep(600);
         if (shots) await b.capture(join(IMAGES, `${name}-${theme}.webp`), { format: 'webp', quality: 86 });
-        if (audit) {
+        if (audit && !(await js('Boolean(window.mavescape)'))) console.log(`${name} (${theme}): not MaveScape's page, not audited`);
+        else if (audit) {
           const found = await runAxe();
           audits.push({ scene: name, theme, violations: found });
           console.log(`${name} (${theme}): ${found.length ? found.map((v) => `${v.id} ×${v.count} (${v.impact})`).join(', ') : 'no violations'}`);
@@ -662,8 +767,9 @@ try {
         console.error(`${name} (${theme}) failed: ${error.message}`);
         process.exitCode = 1;
       } finally {
-        await b.close();
-        await maveScape.stop();
+        await b?.close();
+        await maveScape?.stop();
+        for (const after of afterScene.splice(0)) await after();
       }
     }
   }

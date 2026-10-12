@@ -32,7 +32,7 @@ web/workers/*.js      module workers wrapping heavy lib functions
 web/examples/         compact bundled example data (published, with license and citation)
 validation/           comparisons against reference tools and fixtures (numbers only)
 clients/              Python and R clients generated from the tool list
-docs/                 installation, file formats, MCP, network requests, the handoff
+docs/                 installation, file formats (the Proteoscope session too), MCP, network requests
 docs/capture/         screenshots: scenes driven through remote control in headless Chrome
 docs/site/            the website (GitHub Pages, gh-pages branch), built by build.mjs
 mavescape-spec/       requirements, design, roadmap, research, these conventions
@@ -76,7 +76,7 @@ mavescape-spec/       requirements, design, roadmap, research, these conventions
 - Errors that a user can fix throw an `Error` with a plain-language message naming the file, row,
   column, sample or variant.
 - No `console.log` in library code.
-- Tests: `node --test "web/lib/*.test.mjs"` must pass; tests are deterministic, run in well under a
+- Tests: `node --test "web/lib/**/*.test.mjs"` must pass; tests are deterministic, run in well under a
   few seconds per file, and check numbers against independently known values (hand-computed,
   published, or reference-tool output), not just "runs".
 
