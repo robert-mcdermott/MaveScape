@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { launch, sleep } from '../docs/capture/cdp.mjs';
 import { readArchive } from '../web/lib/archive.js';
 import { parseTable } from '../web/lib/csv.js';
-import { outputDigest } from '../web/lib/runs.js';
+import { outputDigest, recordedInputs } from '../web/lib/runs.js';
 import { DEFAULT_PARAMETERS, PRESETS, defaultParameters } from '../web/lib/score.js';
 import { FINGERPRINT } from '../web/lib/dmath.js';
 import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
@@ -35,6 +35,8 @@ import { tracksCSV } from '../web/lib/tracks.js';
 import { openExampleInNode } from './example-cases.mjs';
 import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
 import { predictorSide, scoreSetSide } from './compare-cases.mjs';
+import { checkTable } from './robustness-cases.mjs';
+import { robustnessCSV, robustnessJSON, robustnessPositionsCSV } from '../web/lib/robustness.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -392,6 +394,33 @@ try {
   const badScale = await send('compare', { scale: 'twice' });
   const setTracks = await act('list_tracks', { run: 'Run 1' });
   check('compare with a scale it does not know: refused, listing the scales; the score set\'s scores a track beside the map', `${badScale.message} ${setTracks.data.tracks.filter((t) => /00000835/.test(t.label)).map((t) => `${t.label}: ${t.summary ?? t.kind}`).join('; ')}`, !badScale.ok && /nonsense-wt/.test(badScale.message) && setTracks.data.tracks.some((t) => /urn:mavedb:00000835-a-1/.test(t.label)));
+
+  // Robustness to analysis choices (wave 4, slice 4): Run 1 checked in the score worker, as Node
+  // checks the run it recomputes from the archive; its files the same bytes.
+  const robust = await act('check_robustness', { run: 'Run 1', max: 24 });
+  const r1 = archive.ws.runs[0];
+  const r1Recorded = recordedInputs(r1);
+  const nodeCheck = checkTable(recompute(archive.ws, archive.sources, 0).table, r1Recorded.design, r1Recorded.parameters, { max: 24 });
+  const nodeSpecs = nodeCheck.out.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }));
+  const { notes: robustNotes, ...robustData } = robust.data;
+  await act('export', { what: 'robustness', run: 'Run 1', path: join(out, 'robustness.csv') });
+  await act('export', { what: 'robustness', run: 'Run 1', path: join(out, 'robustness.json') });
+  await act('export', { what: 'robustness-positions', run: 'Run 1', path: join(out, 'robustness_positions.csv') });
+  const robustJSON = JSON.parse(readFileSync(join(out, 'robustness.json'), 'utf8'));
+  const { software: robustSoftware, ...robustFile } = robustJSON;
+  const robustParts = {
+    data: JSON.stringify(robustData) === JSON.stringify(JSON.parse(robustnessJSON(nodeCheck.summary, r1, nodeSpecs))),
+    csv: readFileSync(join(out, 'robustness.csv'), 'utf8') === robustnessCSV(nodeCheck.summary, nodeCheck.results),
+    positions: readFileSync(join(out, 'robustness_positions.csv'), 'utf8') === robustnessPositionsCSV(nodeCheck.summary),
+    record: JSON.stringify(robustFile) === JSON.stringify(JSON.parse(robustnessJSON(nodeCheck.summary, r1, nodeSpecs))) && robustSoftware?.version === connection.version,
+    notes: robustNotes.length === 1,
+    view: await browser.eval(`Boolean(document.querySelector('.robustness-pane .robustness-verdicts'))`),
+  };
+  check('check_robustness: Run 1 scored again 23 other ways in the score worker, each variant\'s verdict and each alternative\'s effect as Node finds them for the run it recomputes from the archive; its variants, positions and record the same bytes as Node\'s; the Score view shows it', `${robust.message.slice(0, 160)}… ${Object.entries(robustParts).map(([k, v]) => `${k} ${v ? 'as Node' : 'different'}`).join(', ')}`, Object.values(robustParts).every(Boolean));
+  const focusedRobust = await act('inspect_variant', { variant: 'p.Trp36Ala', run: 'Run 1' });
+  check('the inspector shows a checked variant\'s robustness: its class across the analyses and its verdict', String(await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Robustness')`)), focusedRobust.ok && (await browser.eval(`[...document.querySelectorAll('#inspector h4')].some((e) => e.textContent === 'Robustness')`)));
+  const publishedRobust = await send('check_robustness', { run: 'Run 1', max: 1 });
+  check('check_robustness with too few analyses: refused, saying how many', publishedRobust.message, !publishedRobust.ok && /from 2 to 256/.test(publishedRobust.message));
 
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.
   const noTokenOpen = await send('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] }, { withToken: false });

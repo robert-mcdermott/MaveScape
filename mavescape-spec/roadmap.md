@@ -1855,7 +1855,7 @@ follow, and the wave ends with its examples, as waves 2 and 3 did.
        that is biology: a variant can be stable but inactive.
      - **A long side label was cut off** on the plot's axis (a score set's title and URN); labels
        now shorten to fit.
-4. **Robustness to analysis choices (C4).** A run is repeated across variations, following
+4. **Robustness to analysis choices (C4): done.** A run is repeated across variations, following
    CytoWeave's `multiverse.js` pattern:
    - pseudocounts, normalizations, filters, combination methods and uncertainty models (scaling
      each replicate, as DiMSum does, among them: wave 2, slice 9);
@@ -1869,6 +1869,69 @@ follow, and the wave ends with its examples, as waves 2 and 3 did.
    - Validation: simulated experiments with a planted fragile result: one replicate driving an
      effect, and an effect that appears at only one pseudocount. The variants reported as fragile
      are exactly the planted ones, and a robust result is reported as robust.
+
+   What it does:
+   - **The engine:** `lib/robustness.js`.
+     - The choices a run offers, its own first. Fixed effects are left out where the replicates'
+       dispersion (Cochran's Q over its median) is above 1.5.
+     - The specifications: CytoWeave's `specifications`, copied, with a fixed seed; 48 by default.
+     - Each scored in the score worker (job `robustness`).
+     - The calls: each condition's class against the wild type (z from the score less the wild
+       type's, the reference's SE added unless the scores are relative to it; t on the moderated
+       degrees of freedom; BH q < 0.05), and each difference's from its q.
+   - **The summary:**
+     - each variant's verdict: robust, fragile, depends on its uncertainty, borderline, its effect's
+       size depends on a choice, not always scored;
+     - the single choices it depends on, else the smallest combination;
+     - each alternative's effect;
+     - calls held in every analysis and in 90%;
+     - the least tolerant positions.
+
+     A move counts when beyond the declared 95% interval and five robust SDs from that analysis's
+     median move.
+   - **In the window:** the Score view's Robustness pane, full width below the run; the inspector's
+     block.
+   - **Exports and remote control:** `*_robustness.csv`, `*_robustness_positions.csv` and
+     `*_robustness.json`; remote control's `check_robustness`, and `export` of `robustness` and
+     `robustness-positions`.
+   - **Guides:** the DHFR example's fourth step; the guide page *Robustness*; a screenshot scene
+     (`robustness`).
+   - Validation:
+     - `robustness` (9 checks):
+       - the specifications;
+       - the declared analysis is the run;
+       - the classes equal an independent computation;
+       - in ten planted experiments (declared by fixed effects), the fragile variants exactly the
+         replicate-driven ones and the pseudocount-sized ones exactly the zero-count ones, every
+         time;
+       - the clearly lost variants robust;
+       - under the defaults, nothing fragile;
+       - GRB2's and DHFR's checks;
+       - the files the same bytes from a second check.
+     - `remote-session.mjs` 122 checks.
+     - Unit tests: `robustness.test.mjs` (5).
+   - Found by slice 4:
+     - **MaveScape's moderated combination is not misled by one replicate**: an effect that one
+       replicate drives is not called (its SE carries the disagreement), nor is a dropout's. The
+       planted test needed an analysis that can be misled (fixed effects) to plant a fragile
+       conclusion at all.
+     - **With three replicates, the account of uncertainty decides many calls.** GRB2's Run 1 keeps
+       the class of 504 of 1,118 variants in every analysis; 445 change only with REML or the
+       replicates' mean in place of the moderated combination. Its least tolerant positions hold.
+     - **DHFR's differences between the conditions mostly do not survive** (slice 2's question):
+       54 of 377 hold in every analysis, 172 in 90%. Most depend on the account of their
+       uncertainty, some on the model of the time course.
+     - **A pseudocount moves a zero count's size, not its class**: counting SEs grow as the
+       pseudocount shrinks, so a zero count's call holds while its effect moves. The verdict "its
+       effect's size depends on a choice" was added for it.
+     - **A 95% interval alone flags chance moves**: leaving a replicate out moves every estimate,
+       and among a thousand variants a few cross their interval by chance. A move must also be an
+       outlier among the moves that analysis makes (five robust SDs).
+     - **Fixed effects are not a reasonable choice where QC finds variance beyond counting**: tried
+       on GRB2, they changed 373 classes by shrinking every SE. They are left out there, saying
+       why.
+     - The determinism guard caught `**` in the new module; the Score view's narrow column could
+       not hold the pane's tables (now full width).
 5. **Selections (V3).** Freeform and query selections ("missense at 40–80 with SE < 0.2",
    "variants whose class depends on the pseudocount"; structural classes such as "buried
    positions" with wave 5), named sets, set operations, export.

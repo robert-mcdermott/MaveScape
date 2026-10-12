@@ -25,6 +25,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `annotations` | Sequence tracks and annotations (wave 3, slice 5; `annotation-cases.mjs`, the fetcher's cached answers served by `cached-fetch.mjs`): conservation from an alignment as Capra & Singh's `score_conservation.py` scores it, and PDBe-KB's profiles as its divergence gives them; UniProt's features the same from its JSON and its GFF3; AlphaMissense as AlphaFold DB's tables give it; ClinVar's records of GRB2 and F9 with ClinVar's own classifications; gnomAD's frequencies of BRCA1's variants against MaveDB's own join of gnomAD to its saturation genome editing score set; MaveDB's annotations joined to the BRCA1 example's run; annotations kept through an archive; the tracks' table read back; what each provider asks; the GRB2 example as its guide says | `reference/annotations.json`; `fixtures/public-data/`, `fixtures/annotations/`; the BRCA1 example's table, external |
 | `mavedb-export` | MaveDB deposits (wave 3, slice 4; `mavedb-export-cases.mjs`): 19 deposits (`web/lib/mavedb-export.js`) of every kind of run and target, from the examples and published records, checked by MaveDB's own validators: every table accepted by `validate_and_standardize_dataframe_pair` with its column descriptions and targets (mavehgvs against a sequence, biocommons hgvs against a transcript), every name strict MAVE-HGVS, the experiment and score set taken by MaveDB's models where MaveScape says nothing is missing and refused for what it says is; the files written now those the reference checked (each SHA-256); export → import → export the same bytes; MaveScape's keyword vocabulary MaveDB's | `reference/mavedb-export.json`; `fixtures/public-data/` (`mavedb-keywords.json`, the transcripts); MaveDB, external |
 | `compare` | Comparisons within a workspace (wave 4, slice 1; `compare-cases.mjs`, `web/lib/compare.js`, `web/lib/agreement.js`): the agreement statistics of seven pairs equal R's (`reference/compare.json`, by `reference/generate_compare.R`: `cor.test`, Spearman with Bonett and Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰; their 95% intervals' coverage in 2,000 simulated pairs of known agreement of each of five kinds (94–96%; Spearman's near r = 1 and Lin's with 30 variants on two scales reported apart, as they are); slice 2: the discordance and disagreement by position of 600 variants equal R's (`pnorm`, `p.adjust`), and in simulated pairs with planted differences the planted found (96%), the false calls within BH's 5%, none called with nothing planted (dispersion about 1); the compatibility report's rules on GRB2 (replicates, a replicate inside its run, one table scored twice, a run moved along UniProt P62993 and matched on its coordinates, the same blocked without an accession, a direction stated the other way) and the files; then BRCA1's counts against its published scores, DHFR's Run 1 against each record, DHFR's two published score sets matched as R's merge matches them, and BRCA1 RING's replicates sharing their input; DHFR's discordance its Run 1's own differential z, its filters, its difference map; GRB2's dispersion where QC finds variance beyond counting; slice 3: two assays on two scales rescaled by their anchors (both rescalings) equal R's with the anchors' SEs and the tests' share, GRB2's published scores against AlphaMissense by class equal R's (pROC's DeLong interval) and an AUC with ties, the anchors' uncertainty keeping false calls to 3.5–4% of null pairs (10–55% without it), DeLong's interval holding the AUC 94–95% of the time, GRB2's Run 1 against its record kept beside the workspace (rescaled, ρc 0.996) and against AlphaMissense, a score set and a predictor through the archive, DHFR's record kept the same as opened, DHFR's published pair stated on one scale, PTEN's abundance against its phosphatase activity and against AlphaMissense. 36 checks | `reference/compare.json`; `fixtures/public-data/` (GRB2's record, AlphaMissense); MaveDB, external (`mavedb-brca1-sge`, `mavedb-dhfr`, `mavedb-brca1-ring`, `mavedb-pten-vampseq`, `mavedb-pten-phosphatase`) for the last checks |
+| `robustness` | Robustness to analysis choices (wave 4, slice 4; `robustness-cases.mjs`, `web/lib/robustness.js`): GRB2's specifications (the declared first, each alternative alone, seeded combinations, none twice); the declared analysis the run to the last bit; the classes against an independent computation (z against the wild type, t on the moderated degrees of freedom, Benjamini–Hochberg); ten simulated experiments with planted fragile results, declared by fixed effects: the fragile variants exactly the replicate-driven ones and those whose effect's size depends on the pseudocount exactly the zero-count ones, every time, the clearly lost robust; under MaveScape's defaults the replicate-driven effect not called and nothing fragile; GRB2's check (fixed effects not tried, the alternatives' rank correlations, the least tolerant positions) and its files the same bytes twice; DHFR's 377 differences (54 in every analysis). 9 checks | bundled; MaveDB, external (`mavedb-dhfr`) for the last check |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -84,7 +85,9 @@ disagreement by position as Node gives them, `export` of `comparison-positions` 
 `compare` with GRB2's record by its URN (fetched from the cache and kept beside the workspace
 without opening it) rescaled by their anchors, and with AlphaMissense by class, each as Node gives
 them, `comparison` and `comparison-classes` the same bytes as Node's, and a scale not known
-refused. 119 checks; in CI as the `remote` job.
+refused; and (slice 4) `check_robustness` on Run 1 (24 analyses), its record, variants and positions
+the same bytes as Node's check of the run it recomputes from the archive, the inspector's block, too
+few analyses refused. 122 checks; in CI as the `remote` job.
 
 ## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3 and 6)
 
@@ -451,6 +454,34 @@ The suite also simulates:
   variants fewer.
 - 6,000 pairs of classes of known AUC (two normal groups). DeLong's interval holds the AUC 94–95%
   of the time.
+
+## Robustness to analysis choices (`robustness-cases.mjs`, wave 4 slice 4)
+
+The planted experiments (`plantedExperiment(seed)`, seeds 41–50) are simulated two-population
+experiments of a 50-residue protein in four replicates, 400 reads per variant, the missense effects
+either the wild type's (60%) or lost by 1 to 3 (natural log; the simulator's `neutralSd: 0`,
+`lossMin: 1`), with no noise between replicates beyond counting, so that fixed effects, which assume
+none, are a reasonable choice. Among the wild type-like missense variants with ordinary counts in
+every sample (0.7 to 1.5 times each sample's median), two sets of up to ten are planted in the count
+table:
+- one replicate driving an effect: replicate 1's output cut to a quarter (a score near −1.4 there,
+  the wild type's elsewhere);
+- an effect whose size appears at one pseudocount: no reads after selection in any replicate.
+
+Each experiment is scored with the defaults but fixed effects (the declared analysis) and checked
+against 47 other analyses. Every time, the variants reported fragile are exactly the replicate-driven
+ones (92 of 93 naming replicate 1 left out, the other the combinations that weigh it as the others),
+and the variants whose effect's size depends on the pseudocount are exactly the zero-count ones,
+each on pseudocount 0.1 alone. The clearly lost variants (effect below −2) keep their class in every
+analysis. Two unplanted variants over the ten experiments have their effect's size moved: a strongly
+lost variant with a replicate left out, another whose unequal replicates the mean weighs equally;
+none by the pseudocount. Under MaveScape's defaults (the moderated combination), the replicate-driven
+effect is not called at all, its SE carrying the replicates' disagreement, and nothing is fragile.
+
+A move counts when the alternative's effect is beyond the declared 95% interval and more than five
+robust SDs (1.4826 × the median absolute deviation) from the median of that analysis's moves (in
+declared SEs). Without the second condition, a few of each experiment's thousand variants crossed
+their interval by chance when a replicate was left out (about 0.2% of variant-analyses).
 
 ## Reference outputs (`reference/`)
 

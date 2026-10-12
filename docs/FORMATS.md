@@ -923,6 +923,69 @@ Bland–Altman's with t on n − 1 degrees of freedom, the limits' SE √(3 SD²
 (the least-squares slope of the differences on the means) with t on n − 2. A number that is not
 defined (too few variants, no spread) is `null`.
 
+## Robustness
+
+A run's robustness to analysis choices (the Score view's Robustness pane, remote control's
+`check_robustness`; MaveScape 0.4) scores the run again across other reasonable choices: each
+alternative alone, then combinations drawn with a fixed seed (48 analyses by default). It is a view,
+not kept in the workspace: the same seed makes it again. Its files, named after the run
+(`<run>_robustness*`):
+
+**The variants** (`*_robustness.csv`), one row per variant of each target (each condition, and each
+difference between conditions) scored in some analysis:
+
+| Column | Meaning |
+| --- | --- |
+| `target` | the condition, or the difference (`+Lon vs −Lon`) |
+| `variant` | the variant (its key) |
+| `class` | its class in the declared analysis: lower than the wild type, like it, higher, or not scored (a difference: lower, no difference, higher, not compared); q < 0.05 by Benjamini and Hochberg |
+| `effect`, `SE`, `q` | in the declared analysis: its score less the wild type's (else the synonymous variants' median), its SE and q; a difference's own |
+| `analyses`, `scored_in`, `class_kept_in` | the analyses scored, how many score it, how many give it its declared class |
+| `verdict` | robust, fragile, depends on its uncertainty, borderline, its effect's size depends on a choice, not always scored |
+| `depends_on` | the single choices its verdict comes from (`pseudocount 1; Replicate 2 left out`), else the smallest combination (`… (together)`); or, not always scored, those that leave it out |
+| `effect_min`, `effect_max` | its effect's range across the analyses |
+| `rank`, `rank_min`, `rank_max` | its place among the variants scored (0 the lowest effect, 1 the highest), declared and across the analyses |
+
+**The positions** (`*_robustness_positions.csv`), one row per position of each condition: its
+`position`, `reference_position` and `residue`, its `variants`, its `median_effect` (the median of its
+substitutions', as the map's position effect) with `effect_min` and `effect_max`, its `rank` among the
+positions (0: least function, the readout's direction taken) with `rank_min` and `rank_max`, and in how
+many `analyses` it is among the least tolerant tenth (`least_tolerant_in`).
+
+**The record** (`*_robustness.json`):
+
+```json
+{
+  "format": "mavescape-robustness",
+  "version": 1,
+  "software": { "name": "MaveScape", "version": "0.4.0", "commit": "…" },
+  "run": { "id": "run-…", "name": "Run 1", "output": "<SHA-256>" },
+  "q": 0.05,
+  "choices": [{ "id": "pseudocount", "label": "Pseudocount", "options": [{ "id": "declared", "label": "0.5" }, { "id": "pc-0.1", "label": "0.1", "parameters": { "pseudocount": 0.1 } }] }],
+  "specifications": [{ "kind": "declared", "picks": [0, 0], "label": "the declared analysis", "scored": true, "error": null }],
+  "analyses": 48,
+  "targets": [{
+    "id": "condition:all", "name": "All replicates", "kind": "condition", "reference": "the wild type", "classified": true, "variants": 1118,
+    "counts": { "robust": 504, "fragile": 6, "uncertain": 445, "borderline": 133, "size": 11, "inclusion": 19, "added": 0 },
+    "classes": { "declared": { "like the wild type": 488, "lower than the wild type": 623, "higher than the wild type": 7 }, "every": { "…": 0 } },
+    "byChoice": [{ "choice": "pseudocount", "option": "pc-0.1", "phrase": "pseudocount 0.1", "changed": 14, "fragile": 0, "uncertain": 0, "borderline": 14, "size": 0, "lowered": 0, "raised": 0, "dropped": 0, "added": 0, "moved": 0, "typicalMove": 0.01, "rho": 0.999, "compared": 1118 }],
+    "leastTolerant": { "size": 6, "every": 2, "wide": 6, "positions": [5, 25, 27, 38, 45, 47] },
+    "text": "Of 1,118 variants …"
+  }],
+  "methods": "The scores were checked against 47 alternative analyses …"
+}
+```
+
+Each choice lists its options, the first the run's own, each alternative with the parameters, filters
+or replicate left out (`leaveOut`) it changes; each specification its option per choice (`picks`), its
+kind (`declared`, `single`, `combined`) and whether it could be scored (`error`, when not). A target's
+`counts` are its variants by verdict; `byChoice` each alternative alone: the classes it changes
+(`changed`, by what changed: `fragile`, `uncertain`, `borderline`), the effects it moves while their
+class holds (`size`), the variants it drops and adds, how far it moves the effects (`typicalMove`, the
+median |z| of the moves in declared SEs) and their Spearman ρ with the declared. A move counts when
+it is beyond the variant's declared 95% interval and more than five robust SDs (by the median
+absolute deviation) from the median of that analysis's moves.
+
 ## Headless runs: `run.json`
 
 `mavescape run` (MaveScape 0.2) writes the run's files to its `--out` folder (the scores, counts,

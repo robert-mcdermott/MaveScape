@@ -8,8 +8,8 @@
 // Suites: accessibility, designs (external data), enrich2 (external data), hgvs, consequences
 // (external data), import (external data), experiment (external data), scoring, qc, map and
 // roundtrip (their last checks need external data), readiness, examples (its last checks need
-// external data), public-data, mavedb-export, annotations, compare (its last checks need external
-// data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// external data), public-data, mavedb-export, annotations, compare and robustness (their last checks
+// need external data); all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -69,7 +69,7 @@ import { addAnnotation } from '../web/lib/workspace.js';
 import { createHash } from 'node:crypto';
 import { proteinView } from '../web/lib/collapse.js';
 import { spearman } from '../web/lib/stats.js';
-import { adjustBH, tQuantile } from '../web/lib/distributions.js';
+import { adjustBH, tQuantile, tTwoSided } from '../web/lib/distributions.js';
 import { binAverages, binMLE, binTotals, scaleAnchors } from '../web/lib/score-bins.js';
 import { combineMean } from '../web/lib/replicates.js';
 import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS, SCORING_VERSION, withDefaults } from '../web/lib/score.js';
@@ -100,6 +100,8 @@ import { agreementOf, aucAgreement } from '../web/lib/agreement.js';
 import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeScoreSet, describeSide, differenceMap } from '../web/lib/compare.js';
 import { countsRun, coverage, exampleRun, movedRun, plantedPair, predictorSide, publishedRun, scoreSetSide, syntheticPair, together, twoAssays } from './compare-cases.mjs';
 import { scoreSetResults } from '../web/lib/scoreset.js';
+import { callsOf, CLASS, replicateDispersion, robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_SEED, specificationInputs, specifications, VERDICT } from '../web/lib/robustness.js';
+import { checkPlanted, checkTable } from './robustness-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 
@@ -3298,6 +3300,117 @@ const suites = {
       const ptenAM = compareSides(abundanceSide, amPten.side);
       const activityAM = compareSides(activity.side, predictorSide('alphamissense', readFileSync(new URL('./fixtures/public-data/alphafold/P60484.aa-substitutions.csv', import.meta.url), 'utf8'), activity.side, { name: 'AlphaMissense: P60484' }).side);
       check('compare', 'PTEN against AlphaMissense (P60484), by rank and by its classes: its abundance and its phosphatase activity each tell AlphaMissense\'s likely benign substitutions from its likely pathogenic ones', `abundance: ${ptenAM.matched.n} matched, ρ ${fmt(ptenAM.statistics.spearman.rho, 3)}, AUC ${fmt(ptenAM.classes.auc.auc, 3)} (${fmt(ptenAM.classes.auc.low, 3)} to ${fmt(ptenAM.classes.auc.high, 3)}); activity: ${activityAM.matched.n} matched, ρ ${fmt(activityAM.statistics.spearman.rho, 3)}, AUC ${fmt(activityAM.classes.auc.auc, 3)} (${fmt(activityAM.classes.auc.low, 3)} to ${fmt(activityAM.classes.auc.high, 3)})`, ptenAM.classes.auc.low > 0.7 && activityAM.classes.auc.low > 0.65, 'both above chance');
+    } catch (error) {
+      if (!(error instanceof MissingExampleData)) throw error;
+      throw new MissingData(error.message);
+    }
+  },
+
+  // Wave 4, slice 4 (C4): robustness to analysis choices. The specifications; the declared analysis
+  // the run itself; the calls against an independent computation; simulated experiments with planted
+  // fragile results (one replicate driving an effect, an effect whose size appears at one
+  // pseudocount); then the examples (GRB2 bundled; DHFR, external data).
+  async robustness() {
+    const g = exampleRun('grb2-sh3');
+    const design = g.run.inputs.design;
+    const parameters = g.run.inputs.parameters;
+    const grb2 = checkTable(g.o.table, design, parameters);
+    const { choices, specs } = grb2;
+    // The specifications.
+    const singles = specs.filter((s) => s.kind === 'single');
+    const combined = specs.filter((s) => s.kind === 'combined');
+    const alternatives = choices.reduce((a, c) => a + c.options.length - 1, 0);
+    const unique = new Set(specs.map((s) => s.picks.join(','))).size === specs.length;
+    const again = specifications(choices, { max: 48, seed: ROBUSTNESS_SEED });
+    const leftOut = specificationInputs(design, parameters, choices, choices.map((c) => (c.id === 'leaveOut' ? 1 : 0)));
+    check('robustness', 'the specifications of a run (GRB2\'s): the declared analysis first, each alternative alone once, then combinations of two or more changes, none twice, the same for the same seed; a replicate left out leaves the design without it', `${choices.length} choices (${choices.map((c) => c.label).join(', ')}); ${specs.length} specifications: 1 declared, ${singles.length} alone (${alternatives} alternatives), ${combined.length} combined (${Math.min(...combined.map((s) => s.changed))}–${Math.max(...combined.map((s) => s.changed))} changes each); ${unique ? 'none twice' : 'repeated'}; the seed's ${JSON.stringify(again) === JSON.stringify(specs) ? 'the same' : 'different'}; left out: ${leftOut.design.replicates.length} of ${design.replicates.length} replicates`, specs[0].kind === 'declared' && singles.length === alternatives && combined.every((s) => s.changed >= 2) && unique && JSON.stringify(again) === JSON.stringify(specs) && leftOut.design.replicates.length === design.replicates.length - 1 && specs.length === 48, 'all');
+    // The declared analysis is the run.
+    const declared = grb2.out[0];
+    const own = callsOf(g.results, design)[0];
+    const same = ['effect', 'se', 'q', 'cls'].every((k) => own[k].length === declared.targets[0][k].length && own[k].every((x, i) => Object.is(x, declared.targets[0][k][i])));
+    check('robustness', 'the declared analysis is the run itself: scored again in the check, its calls (effect, SE, q, class) equal the run\'s to the last bit', `${g.results.rows} variants; ${same ? 'the same' : 'different'}`, same, 'the same');
+    // The calls, computed apart: z = (score − the wild type's) / SE, p from t on the moderated
+    // degrees of freedom, q by Benjamini–Hochberg; lower or higher where q < 0.05.
+    const c0 = g.results.conditions[0];
+    const wt = g.results.controls.wt;
+    const pApart = Float64Array.from(c0.score, (x, i) => (i === wt || c0.reason[i] || !Number.isFinite(x) || !(c0.se[i] > 0) ? Number.NaN : tTwoSided((x - c0.score[wt]) / c0.se[i], c0.df[i])));
+    const qApart = adjustBH(pApart);
+    let callsDiffer = 0;
+    let called = 0;
+    for (let i = 0; i < g.results.rows; i += 1) {
+      const expected = c0.reason[i] || !Number.isFinite(c0.score[i]) ? CLASS.UNSCORED : qApart[i] < 0.05 ? (c0.score[i] < c0.score[wt] ? CLASS.LOWER : CLASS.HIGHER) : CLASS.NEUTRAL;
+      if (expected !== own.cls[i]) callsDiffer += 1;
+      if (expected === CLASS.LOWER || expected === CLASS.HIGHER) called += 1;
+    }
+    const complete = callsOf(scoreTable(g.o.table, design, { ...parameters, normalization: 'complete' }).results, design)[0];
+    check('robustness', 'the classes against an independent computation: each variant\'s z against the wild type (its score less the wild type\'s, over its SE), p from t on its moderated degrees of freedom, q by Benjamini–Hochberg, lower or higher where q < 0.05; normalized otherwise than to the wild type, the effect is still against the wild type\'s score, with its SE added', `${called} called, ${callsDiffer} differ; complete cases: effects against the wild type (${complete.reference})`, callsDiffer === 0 && called > 500 && complete.reference === 'the wild type', '0 differ');
+
+    // Planted fragile results: ten simulated experiments, declared by fixed effects.
+    const planted = [];
+    for (const seed of [41, 42, 43, 44, 45, 46, 47, 48, 49, 50]) {
+      const c = checkPlanted(seed, 'fixed');
+      const t = c.summary.targets[0];
+      const key = c.results.variants.key;
+      const named = (verdict) => key.filter((_, i) => t.verdict[i] === verdict);
+      const fragile = named(VERDICT.FRAGILE);
+      const pcSize = named(VERDICT.SIZE).filter((k) => (t.dependsOn[key.indexOf(k)] ?? []).some((d) => /^pseudocount/.test(d)));
+      const otherSize = named(VERDICT.SIZE).filter((k) => !c.planted.zero.includes(k));
+      const replicateLeft = `${c.replicateName} left out`;
+      planted.push({
+        seed,
+        replicate: c.planted.replicate.length,
+        zero: c.planted.zero.length,
+        fragileExact: fragile.length === c.planted.replicate.length && fragile.every((k) => c.planted.replicate.includes(k)),
+        byReplicate: c.planted.replicate.filter((k) => (t.dependsOn[key.indexOf(k)] ?? []).includes(replicateLeft)).length,
+        byReplicateOrCombination: c.planted.replicate.every((k) => (t.dependsOn[key.indexOf(k)] ?? []).some((d) => d === replicateLeft || ['REML random effects', 'the mean (SD/√k)', 'moderated (MaveScape\'s)'].includes(d))),
+        zeroExact: pcSize.length === c.planted.zero.length && pcSize.every((k) => c.planted.zero.includes(k)) && c.planted.zero.every((k) => (t.dependsOn[key.indexOf(k)] ?? []).join() === 'pseudocount 0.1'),
+        otherSize: otherSize.length,
+        otherSizeNotPseudocount: otherSize.every((k) => (t.dependsOn[key.indexOf(k)] ?? []).every((d) => !/^pseudocount/.test(d))),
+        robustLosses: (() => {
+          const lost = [];
+          c.design && c.results.variants.key.forEach((k, i) => { if (/^p\.[A-Z][a-z]{2}\d+[A-Z][a-z]{2}$/.test(k) && !k.endsWith('Ter') && t.cls[i] === CLASS.LOWER && t.effect[i] < -2) lost.push(i); });
+          return [lost.filter((i) => t.verdict[i] === VERDICT.ROBUST || t.verdict[i] === VERDICT.SIZE).length, lost.length];
+        })(),
+        ms: c.ms,
+      });
+    }
+    const all = (f) => planted.every(f);
+    const sum = (f) => planted.reduce((a, x) => a + f(x), 0);
+    check('robustness', `simulated experiments with planted fragile results (${planted.length} seeds, 4 replicates, declared by fixed effects): the variants reported fragile are exactly the ones one replicate drives (replicate 1's output cut to a quarter), each depending on that replicate left out or on a combination that weighs it as the others; the variants whose effect's size depends on the pseudocount are exactly the ones with no reads after selection, each on pseudocount 0.1 alone`, `${sum((x) => x.replicate)} replicate-driven planted: fragile exactly ${sum((x) => (x.fragileExact ? 1 : 0))} of ${planted.length} times, ${sum((x) => x.byReplicate)} naming the replicate left out; ${sum((x) => x.zero)} zero-count planted: exactly ${sum((x) => (x.zeroExact ? 1 : 0))} of ${planted.length} times`, all((x) => x.fragileExact && x.byReplicateOrCombination && x.zeroExact) && sum((x) => x.byReplicate) >= 0.9 * sum((x) => x.replicate), `exactly, every time; ≥ 90% naming the replicate`);
+    check('robustness', 'and a robust result reported as robust: the clearly lost variants (lower than the wild type, effect below −2) keep their class in every analysis; besides the planted, a few strongly lost variants\' effects move beyond their interval (a replicate left out, or their unequal replicates averaged unweighted), none by the pseudocount', `${sum((x) => x.robustLosses[0])} of ${sum((x) => x.robustLosses[1])} clearly lost robust (or only their size depends); ${sum((x) => x.otherSize)} unplanted size flags over ${planted.length} experiments, ${all((x) => x.otherSizeNotPseudocount) ? 'none' : 'some'} by the pseudocount; ${Math.round(sum((x) => x.ms) / planted.length)} ms each`, sum((x) => x.robustLosses[0]) === sum((x) => x.robustLosses[1]) && sum((x) => x.otherSize) <= 3 && all((x) => x.otherSizeNotPseudocount), 'all; ≤ 3, none by the pseudocount');
+    // The same, under MaveScape's defaults (moderated): the replicate-driven effect is not called at
+    // all, so no conclusion rests on it.
+    const defaults = [41, 42, 43].map((seed) => {
+      const c = checkPlanted(seed, 'moderated');
+      const t = c.summary.targets[0];
+      const at = (k) => c.results.variants.key.indexOf(k);
+      return { notCalled: c.planted.replicate.filter((k) => t.cls[at(k)] === CLASS.NEUTRAL).length, n: c.planted.replicate.length, fragile: t.counts.fragile, zero: c.planted.zero.every((k) => (t.dependsOn[at(k)] ?? []).join() === 'pseudocount 0.1') };
+    });
+    check('robustness', 'under MaveScape\'s defaults (the moderated combination) the replicate-driven effect is not called (its SE carries the replicates\' disagreement), so nothing is fragile; the zero counts\' effects still depend on pseudocount 0.1', defaults.map((x) => `${x.notCalled} of ${x.n} not called, ${x.fragile} fragile`).join('; '), defaults.every((x) => x.notCalled === x.n && x.fragile === 0 && x.zero), 'none called; 0 fragile');
+
+    // GRB2: fixed effects left out (its replicates differ far more than counting says), and what its
+    // check finds.
+    const t = grb2.summary.targets[0];
+    const spread = replicateDispersion(g.results);
+    const excess = g.o.findings.find((f) => f.id === 'excess-variance');
+    const rhoMin = Math.min(...t.byChoice.map((x) => x.rho));
+    const declaredLeast = t.positions.filter((x) => t.leastTolerant.positions.includes(x.position)).map((x) => `${x.residue}${x.reference}`);
+    check('robustness', 'the GRB2 example: fixed effects not tried, its replicates differing many times what their SEs say (QC\'s variance beyond counting fails), and its check: the classes held, the calls held in every analysis, each alternative\'s rank correlation, the least tolerant positions', `dispersion ${fmt(spread, 1)} (QC: ${excess?.status}); ${grb2.notes.join(' ').slice(0, 60)}…; ${t.counts.robust} of ${t.n} robust, ${t.counts.fragile} fragile, ${t.counts.uncertain} by their uncertainty, ${t.counts.borderline} borderline; ${t.calls.every} of ${t.calls.declared} calls in every analysis, ${t.calls.most} in 90%; ρ at least ${fmt(rhoMin, 3)}; least tolerant ${declaredLeast.join(', ')} (${t.leastTolerant.every} in every analysis, ${t.leastTolerant.wide} in the fifth); ${Math.round(grb2.ms)} ms`, spread > 5 && excess?.status === 'fail' && !grb2.choices.find((c) => c.id === 'combination').options.some((o) => o.id === 'fixed') && rhoMin > 0.95 && t.leastTolerant.wide === t.leastTolerant.size, 'fixed effects not tried; ρ > 0.95; every least tolerant in the fifth');
+    // The files: the same bytes from the same check.
+    const json = robustnessJSON(grb2.summary, g.run, grb2.out.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error })));
+    const twice = checkTable(g.o.table, design, parameters);
+    const csv = robustnessCSV(grb2.summary, g.results).trim().split('\n');
+    const positionsFile = robustnessPositionsCSV(grb2.summary).trim().split('\n');
+    const record = JSON.parse(json);
+    check('robustness', 'the files: robustness.csv a row per variant scored (its class, effect, SE, q, analyses scoring and keeping it, verdict and what it depends on, effect and rank ranges), robustness_positions.csv a row per position, robustness.json the run\'s output hash, every specification and each target\'s counts; a second check, the same bytes', `${csv.length - 1} variants, ${positionsFile.length - 1} positions; ${record.specifications.length} specifications, ${record.run.output.slice(0, 12)}…; ${json === robustnessJSON(twice.summary, g.run, twice.out.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }))) ? 'the same bytes' : 'different'}`, csv[0] === 'target,variant,class,effect,SE,q,analyses,scored_in,class_kept_in,verdict,depends_on,effect_min,effect_max,rank,rank_min,rank_max' && csv.length - 1 >= t.n && positionsFile.length - 1 === 56 && record.format === 'mavescape-robustness' && record.run.output === g.run.output.sha256 && record.specifications.length === 48 && json === robustnessJSON(twice.summary, g.run, twice.out.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }))), 'the same');
+
+    // DHFR (external data): how many of Run 1's differences between the conditions hold.
+    try {
+      const d = exampleRun('dhfr-lon');
+      const dhfr = checkTable(d.o.table, d.run.inputs.design, d.run.inputs.parameters);
+      const contrast = dhfr.summary.targets.find((x) => x.kind === 'contrast');
+      const top = (kind) => contrast.attribution[kind].slice(0, 2).map(([label, n]) => `${label} ${n}`).join(', ');
+      check('robustness', 'the DHFR example\'s Run 1, its 377 differences between −Lon and +Lon (wave 3, slice 6): how many are called in every analysis and in 90% of them, and what the others depend on (the model of the time course and the combination of replicates most)', `${contrast.calls.every} of ${contrast.calls.declared} in every analysis, ${contrast.calls.most} in 90% or more; fragile ${contrast.counts.fragile} (${top('fragile')}), by their uncertainty ${contrast.counts.uncertain} (${top('uncertain')}); ${dhfr.notes.join(' ').slice(0, 70)}…; ${Math.round(dhfr.ms)} ms`, contrast.calls.declared === 377 && contrast.calls.every < 100 && contrast.calls.most > contrast.calls.every && /ordinary least squares|first and last/.test(top('fragile')), '377; fewer than 100 in every one');
     } catch (error) {
       if (!(error instanceof MissingExampleData)) throw error;
       throw new MissingData(error.message);

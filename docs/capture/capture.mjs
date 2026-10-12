@@ -58,7 +58,7 @@ const MAVEDB_TABLES = [
   ['urn:mavedb:00000003-a-2', join(ROOT, 'validation/cache/mavedb-brca1-ring/aa'), 'brca1-ring'],
 ];
 for (const [, dir, scene] of MAVEDB_TABLES) {
-  const scenes = scene === 'dhfr-lon' ? ['dhfr-lon', 'compare-maps', 'compare-disagreement'] : [scene];
+  const scenes = scene === 'dhfr-lon' ? ['dhfr-lon', 'compare-maps', 'compare-disagreement', 'robustness'] : [scene];
   if ((wanted.length === 0 || wanted.some((w) => scenes.includes(w))) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
 }
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
@@ -537,6 +537,17 @@ const scenes = {
     await act('set_mode', { mode: 'compare' });
     await clearToasts();
     await sleep(700);
+  },
+  // Robustness to analysis choices (wave 4, slice 4): DHFR's Run 1 scored again 47 other ways, its
+  // differences between the conditions: how many hold in every analysis, and on what the others
+  // depend.
+  async robustness() {
+    await example('dhfr-lon');
+    await act('check_robustness', { run: 'Run 1' });
+    await click('+Lon vs −Lon');
+    await scrollTo('.robustness-pane', 'start');
+    await clearToasts();
+    await sleep(600);
   },
   // The record: a run's exports, from the workflow strip.
   async record() {

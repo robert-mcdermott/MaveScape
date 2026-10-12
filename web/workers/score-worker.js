@@ -6,9 +6,13 @@
 // Quality control (requirements Q1–Q7): { type: 'qc', payload: { names, columns, design, mode,
 // parameters (a run's, or null for the counts alone), measures } } → { id, result: { qc,
 // scoring: { ok, errors? } } } (web/lib/qc.js).
+// Robustness to analysis choices (wave 4, slice 4; requirement C4): { type: 'robustness', payload:
+// { names, barcodes, columns, design, mode, parameters, choices, specs } } → progress … → { id,
+// result: [each specification's calls] } (web/lib/robustness.js), their arrays transferred.
 
 import { scoreExperiment } from '../lib/score.js';
 import { computeQC } from '../lib/qc.js';
+import { runRobustness } from '../lib/robustness.js';
 
 function buffers(results) {
   const out = [];
@@ -39,6 +43,17 @@ self.onmessage = (event) => {
       onProgress(0.6, 'Quality control');
       const qc = computeQC({ ...payload, results: scoring.ok ? scoring.results : null });
       self.postMessage({ id, result: { qc, scoring: scoring.ok ? { ok: true } : { ok: false, errors: scoring.errors } } }, qc.coverage.grid ? [qc.coverage.grid.buffer] : []);
+    } catch (error) {
+      self.postMessage({ id, error: error.message });
+    }
+    return;
+  }
+  if (type === 'robustness') {
+    try {
+      const result = runRobustness({ ...payload, onProgress });
+      const transfer = [];
+      for (const spec of result) for (const t of spec.targets ?? []) transfer.push(t.effect.buffer, t.se.buffer, t.q.buffer, t.cls.buffer);
+      self.postMessage({ id, result }, transfer);
     } catch (error) {
       self.postMessage({ id, error: error.message });
     }

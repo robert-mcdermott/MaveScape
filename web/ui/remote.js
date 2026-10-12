@@ -41,6 +41,8 @@ import { retrievalText } from '../lib/uniprot.js';
 import { addFileTrack, addPublicTrack, arrangeTrack, removeTrack, runTrackState } from './tracks.js';
 import { annotationsOf, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
 import { comparableAnnotations, comparisonJSON, SCALES } from '../lib/compare.js';
+import { DEFAULT_MAX_SPECIFICATIONS, robustnessJSON } from '../lib/robustness.js';
+import { checkRobustness, robustnessFiles } from './robustness.js';
 import { normalizeUrn } from '../lib/mavedb.js';
 import { setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
@@ -888,6 +890,28 @@ export function installRemote(app) {
       return { message: `Removed ${a.name} and its tracks.`, data: { removed: a.id } };
     },
 
+    // Checks a run's robustness to other analysis choices (wave 4, slice 4): scored again across
+    // the alternatives (each alone, then seeded combinations; max: how many analyses in all), and
+    // what each variant's class, effect and inclusion do. Shows the run in Score.
+    async check_robustness(args) {
+      const run = resolveRun(args.run);
+      if (run.inputs.parameters?.model === 'published') throw new ActionError('Published scores are read as published: there is no analysis of theirs to vary.');
+      await resultsOf(run);
+      const max = args.max === undefined ? DEFAULT_MAX_SPECIFICATIONS : Number(args.max);
+      if (!Number.isInteger(max) || max < 2 || max > 256) throw new ActionError('max is a whole number of analyses from 2 to 256.');
+      // A check of another size is made again.
+      const kept = app.robustness?.get(run.id);
+      if (kept && kept.status !== 'running' && kept.max !== max) app.robustness.delete(run.id);
+      app.focusItem({ kind: 'run', id: run.id });
+      await app.setMode('score');
+      const state = await checkRobustness(app, run, { max });
+      if (state.status !== 'done') throw new ActionError(`${run.name}'s robustness could not be checked: ${state.error}`);
+      await settle();
+      const { summary } = state;
+      const data = JSON.parse(robustnessJSON(summary, run, state.results.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }))));
+      return { message: `${run.name}, checked against ${summary.total - 1} alternative analyses. ${summary.targets.map((t) => `${t.name}: ${t.text}`).join(' ')}${state.notes?.length ? ` ${state.notes.join(' ')}` : ''}`, data: { ...data, notes: state.notes ?? [] } };
+    },
+
     // Compares two sets of scores (wave 4, slices 1–3): each side a run's condition or replicate by
     // name ("Run 1", "Run 1: Replicate 2", "Published scores"), or a score set or predictor kept
     // beside the workspace (its name, "AlphaMissense: P62993", or a score set's URN; a URN not yet
@@ -962,9 +986,21 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions'];
       const what = choose(args.what, kinds, 'export');
       let file;
+      // A run's robustness to analysis choices (wave 4, slice 4): its variants (CSV, or its record to
+      // a path ending in .json) and its positions, checked first when it has not been.
+      if (what.startsWith('robustness')) {
+        const run = resolveRun(args.run);
+        await resultsOf(run);
+        const state = await checkRobustness(app, run);
+        if (state.status !== 'done') throw new ActionError(`${run.name}'s robustness could not be checked: ${state.error}`);
+        const files = robustnessFiles(app, run, state);
+        if (what === 'robustness-positions') return { file: files.positions.text, message: `${run.name}'s positions across ${state.summary.total} analyses.` };
+        const json = /\.json$/i.test(args.path ?? '');
+        return { file: json ? files.json.text : files.csv.text, message: json ? `${run.name}'s robustness: its record.` : `${run.name}'s variants across ${state.summary.total} analyses.` };
+      }
       // The comparison shown (wave 4, slices 1–3): its variants compared (CSV), or its report and
       // statistics (a path ending in .json); its disagreement by position (CSV); a map of it (SVG:
       // map first, second or difference, the default); a predictor by its classes (CSV).

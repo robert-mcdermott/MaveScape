@@ -57,8 +57,10 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > assays put on one scale by their anchors (nonsense and the wild type), the anchors' uncertainty
 > carried into the tests; the two maps and their difference, panned and zoomed as one; the variants
 > and positions that differ beyond their uncertainty; a predictor by rank and by its classes (the
-> AUC, with DeLong's interval); filters by confidence and depth. Next: which conclusions survive
-> other reasonable analysis choices.
+> AUC, with DeLong's interval); filters by confidence and depth. A run's robustness to analysis
+> choices: scored again across pseudocounts, normalizations, models of uncertainty, combinations of
+> replicates, filters and each replicate left out, each variant's conclusion said to hold under every
+> one or to depend on a choice, which is named. Next: selections, and the wave's examples.
 
 ## What is a MAVE?
 

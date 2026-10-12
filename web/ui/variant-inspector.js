@@ -18,6 +18,7 @@ import { coversPosition } from '../lib/design.js';
 import { proteinView } from '../lib/collapse.js';
 import { mappedBlock } from './mapped.js';
 import { annotationBlock } from './tracks.js';
+import { robustnessBlock } from './robustness.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { describeParameters, isBarcodeRun, unitOf } from '../lib/runs.js';
 import { DIFFERENTIAL_REASON_NAMES, pairDifference, transformOf } from '../lib/differential.js';
@@ -273,6 +274,9 @@ export function variantSection(app, focus) {
         h('p.muted', { style: { fontSize: '11px', margin: '4px 0 0' } }, `Points: ln(count + pseudocount) − ln(normalizer) at each time; dashed: the fitted line, whose slope ${p.timeScale === 'unit' ? `per ${unitOf(run.inputs.design)}` : 'on time scaled to 0–1'} is the replicate's score. Departure: scatter about the line over what counting predicts (1 is typical).`));
     }
     if (results.differential?.length && !inView) parts.push(...differentialBlock(results, row, run));
+    // Its robustness to other analysis choices, when the run has been checked (wave 4, slice 4).
+    const robust = inView ? null : robustnessBlock(app, run, row, focus.condition ?? 0);
+    if (robust) parts.push(...robust);
     // Every sample's counts.
     if (results.samples?.length) {
       parts.push(h('details.inspector-details', h('summary', `Counts in all ${results.samples.length} samples`),

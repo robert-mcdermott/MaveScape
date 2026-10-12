@@ -102,6 +102,45 @@ grows with each.
     opened, and with AlphaMissense by class (its record and calibrations now one step). The GRB2
     example says what its comparison with its record shows.
 
+- **Robustness to analysis choices (wave 4, slice 4; C4).** Below a run in Score, Check robustness
+  scores it again across other reasonable choices, in the score worker (DHFR's 48 analyses in about
+  3 s): each alternative alone, then combinations drawn with a fixed seed. CytoWeave's
+  specification-curve pattern, `lib/robustness.js`.
+  - **What is varied**, where the design allows it:
+    - the pseudocount (0.1, 0.5, 1);
+    - the normalization;
+    - the model of uncertainty (DiMSum's error model with replicates scaled and shifted;
+      ordinary least squares, or the first and last time points, and a regression's SE);
+    - the combination of replicates (moderated, REML, fixed effects, their mean);
+    - low-depth measurements removed, two replicates at least, every time point;
+    - each replicate left out.
+
+    Fixed effects are not tried where the replicates differ more than their SEs say, and the pane
+    says why.
+  - **For each variant and each difference between conditions:** its effect (against the wild
+    type's), rank, SE, inclusion and class (lower than, like or higher than the wild type, q < 0.05)
+    in every analysis. Its verdict:
+    - robust;
+    - fragile: a choice moves its effect beyond its 95% interval and changes its class, the choice
+      named;
+    - depends on its uncertainty;
+    - borderline;
+    - its effect's size depends on a choice;
+    - not always scored.
+  - **Also reported:**
+    - how many calls hold in every analysis and in 90% of them;
+    - each alternative's effect (the classes it changes, effects moved, variants dropped, the
+      typical move, rank correlation);
+    - the least tolerant positions;
+    - a variant's robustness in the inspector.
+  - **Exports and remote control:** `*_robustness.csv`, `*_robustness_positions.csv` and
+    `*_robustness.json`; remote control's `check_robustness`, and `export` of `robustness` and
+    `robustness-positions`.
+  - **The DHFR example's guide** checks Run 1: of its 377 differences between the conditions, 54
+    hold in every analysis. The guide page *Robustness*.
+  - The simulator can draw missense effects either the wild type's or clearly lost (`neutralSd`,
+    `lossMin`; off by default).
+
 ### Changed
 
 - An example opened from MaveDB gives its readout (what a higher score means, from the paper) to its
@@ -174,6 +213,23 @@ grows with each.
 - Unit tests: `compare.test.mjs` (15): the AUC by hand; two runs rescaled by their anchors, stated
   on one scale, or not rescaled for want of an anchor; a predictor by rank and class; a score set as
   a side and its direction stated. `providers.test.mjs`: a score set by its URN, from the cache.
+- `robustness` validation suite (slice 4, 9 checks):
+  - **The specifications:** the declared first, each alternative alone once, combinations of two or
+    more, none twice, the same for the same seed. The declared analysis is the run to the last bit,
+    and the classes equal an independent computation.
+  - **Planted fragile results:** ten simulated experiments of four replicates, declared by fixed
+    effects. The variants reported fragile are exactly the replicate-driven ones every time (92 of
+    93 naming that replicate left out). The variants whose effect's size depends on the pseudocount
+    are exactly the zero-count ones, on pseudocount 0.1 alone. The clearly lost variants are robust.
+    Under MaveScape's defaults the replicate-driven effect is not called, and nothing is fragile.
+  - **GRB2:** fixed effects not tried (dispersion 11.6); every alternative's ρ above 0.95; the least
+    tolerant positions held within the least tolerant fifth. The files are the same bytes from a
+    second check.
+  - **DHFR:** 54 of its 377 differences between the conditions hold in every analysis, 172 in 90%.
+- The remote-control session (122 checks): `check_robustness` and its three files as Node finds them
+  for the run it recomputes from the archive; the inspector's block; too few analyses refused.
+- Unit tests: `robustness.test.mjs` (5): specifications, choices, a specification's inputs, the
+  classes, each verdict from hand-made analyses.
 
 ## 0.3.0 (2026-10-11)
 
