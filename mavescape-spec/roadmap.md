@@ -78,7 +78,11 @@ The PRD lists decisions to make before implementation. Proposed answers, to conf
   its guided steps, checked by the validation suites as GRB2's and the simulated one are.
 - **Documentation.** A feature's guide page on the site, its tutorial on an example, and the
   capture scenes that make its screenshots are part of the slice that builds it; `docs/FORMATS.md`
-  grows with every file read or written.
+  grows with every file read or written. The README is the project's front page, laid out as
+  CytoWeave's and Proteoscope's are (what MaveScape is, highlights, install, getting started, the
+  views, options, validation, limitations, development): a slice adds or amends a Highlights
+  bullet or a table row there, never a status paragraph; what each release brought goes in
+  `CHANGELOG.md`.
 - **Release.** Screenshots re-captured, the site built (no broken link, anchor or image) and
   published with the release.
 - **Archives that keep opening.** Researchers keep workspaces from the first release, so every
