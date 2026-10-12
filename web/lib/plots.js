@@ -410,7 +410,9 @@ export function classBoxes(spec, frame) {
   const k = t / 10;
   const theme = f.theme;
   const W = f.width ?? 420;
-  const pad = { l: Math.min(W * 0.35, Math.max(...list.map((x) => textWidth(x.label.replace(/ \(.*\)$/, ''), t * 1.1)), 0) + 1.2 * t), r: 1.2 * t, t: 1.8 * t, b: 3.4 * t };
+  // The classes' names in a column of their own, as the bar chart's: at most 45% of the width, a
+  // name longer than that cut short with an ellipsis (it was clipped by the panel's edge).
+  const pad = { l: Math.min(W * 0.45, Math.max(...list.map((x) => textWidth(x.label.replace(/ \(.*\)$/, ''), t * 1.1)), 0) + 1.2 * t), r: 1.2 * t, t: 1.8 * t, b: 3.4 * t };
   const H = f.height ?? pad.t + pad.b + 3.4 * t * list.length;
   const rowH = (H - pad.t - pad.b) / Math.max(1, list.length);
   const marks = [];
@@ -436,8 +438,8 @@ export function classBoxes(spec, frame) {
   list.forEach((x, i) => {
     const y = f.y + pad.t + 0.4 * t + i * rowH;
     const size = Math.min(t * 1.1, rowH * 0.4);
-    marks.push({ type: 'text', x: left - 0.8 * t, y: y + rowH / 2 - 0.4 * size, text: x.label.replace(/ \(.*\)$/, ''), size, fill: theme.text, anchor: 'end' });
-    marks.push({ type: 'text', x: left - 0.8 * t, y: y + rowH / 2 + 0.9 * size, text: `${x.n.toLocaleString('en-US')} variants`, size: size * 0.9, fill: theme.muted, anchor: 'end' });
+    marks.push({ type: 'text', x: left - 0.8 * t, y: y + rowH / 2 - 0.4 * size, text: ellipsizeText(x.label.replace(/ \(.*\)$/, ''), pad.l - 0.8 * t, size), size, fill: theme.text, anchor: 'end' });
+    marks.push({ type: 'text', x: left - 0.8 * t, y: y + rowH / 2 + 0.9 * size, text: ellipsizeText(`${x.n.toLocaleString('en-US')} variants`, pad.l - 0.8 * t, size * 0.9), size: size * 0.9, fill: theme.muted, anchor: 'end' });
     if (!x.n) return;
     const color = x.id === 'pathogenic' ? theme.danger : x.id === 'benign' ? theme.ok : theme.muted;
     marks.push({ type: 'rect', x: sx(x.low), y: y + 0.4 * t, w: Math.max(k, sx(x.high) - sx(x.low)), h: rowH - 1.4 * t, fill: color, opacity: 0.35, title: `${x.label}: ${x.n} variants, median ${fmt(x.median)}, quartiles ${fmt(x.low)} to ${fmt(x.high)}` });

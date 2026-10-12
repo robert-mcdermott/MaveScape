@@ -1,8 +1,20 @@
 # Changelog
 
-## 0.6.0 (unreleased)
+## 0.6.0 (2026-10-12)
 
-Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable record.
+Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable record. A figure is a
+page of panels at a journal's column width, each panel a view's own plot (the map with its tracks,
+a structure view, a QC finding's charts, the scores, a comparison, a variant's evidence), drawn
+again from the analysis until it is exported; exported as SVG, PDF or PNG, it carries what each
+panel was drawn from, and dropped on the window it says what has changed since. The Report view
+writes the methods of the whole workspace, with every reference checked against Crossref and the
+comparisons and robustness checks you keep in it; checkpoints keep the analysis as it stood, and
+what changed since is said variant by variant. A certificate computes every number the workspace
+reports again from its files, and `mavescape verify` checks it bit for bit; its review report is
+one file a reviewer opens in any browser, every number traced to where it comes from. Three
+examples end with these: GRB2's figure, Hsp90's checkpoint and BRCA1 RING's certificate. Workspaces
+saved by 0.1.0 to 0.5.0 open, reproduce their runs and certify; two saved by 0.6.0 and its
+certificate of one are kept for later versions to reopen and verify.
 
 ### Added
 
@@ -168,10 +180,18 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   them, and the diff says so; effects that cannot be put in one unit are not said to have moved.
 - A design's columns set aside were said as "its ignoredColumns changed"; the diff names them
   ("the columns Gen_9, … set aside").
+- A plot panel's title wider than the panel, and a predictor's class names in a narrow comparison
+  panel ("likely pathogenic"), were cut off by the panel's edge; they end in an ellipsis now, and
+  the class names take up to 45% of the chart, as a bar chart's do. Found making the release's
+  figure; panels whose text fit draw as before.
 - Accessibility, found by the screenshots' axe-core audit: the sidebar's empty sections (no
   selections, no structure views) were declared as lists without items; they are not lists until
   they hold one. The Report's citations ([1]) were told from their text by color alone; they are
   underlined (dotted).
+- The outlier barcodes' counts in QC and the coding-sequence list's warnings were drawn in the
+  lighter warning color (3.0:1 on white), a second style rule from wave 3's coding-sequence list
+  overriding the accessible one; they take the accessible color now. Found by the screenshots'
+  first full axe-core audit (136 captures of 70 scenes, no violation now).
 
 ### Validation
 

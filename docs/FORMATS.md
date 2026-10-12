@@ -1422,7 +1422,7 @@ legend saying so; a variant scored on one side only, or left out by the filters,
 {
   "format": "mavescape-comparison",
   "version": 1,
-  "software": { "name": "MaveScape", "version": "0.5.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
   "a": { "label": "Run 1: Replicate 1", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep1" },
   "b": { "label": "Run 1: Replicate 2", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep2" },
   "level": "protein",
@@ -1513,7 +1513,7 @@ many `analyses` it is among the least tolerant tenth (`least_tolerant_in`).
 {
   "format": "mavescape-robustness",
   "version": 1,
-  "software": { "name": "MaveScape", "version": "0.5.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
   "run": { "id": "run-…", "name": "Run 1", "output": "<SHA-256>" },
   "q": 0.05,
   "choices": [{ "id": "pseudocount", "label": "Pseudocount", "options": [{ "id": "declared", "label": "0.5" }, { "id": "pc-0.1", "label": "0.1", "parameters": { "pseudocount": 0.1 } }] }],
@@ -1581,7 +1581,7 @@ it stops:
 {
   "url": "http://127.0.0.1:8820",
   "token": "…",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "pid": 41237
 }
 ```

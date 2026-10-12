@@ -5,7 +5,7 @@
 // lib/plots.js's, the same the views draw. Pure.
 
 import { barChart, classBoxes, classHistogram, coverageGrid, evidencePlot, flowBars, legendMarks, lineChart, PLOT_LIGHT, positionBars, scatter } from './plots.js';
-import { textMarks } from './draw.js';
+import { ellipsizeText, textMarks } from './draw.js';
 
 export const CHARTS = { bar: barChart, line: lineChart, scatter, histogram: classHistogram, flow: flowBars, coverage: coverageGrid, positions: positionBars, classes: classBoxes, evidence: evidencePlot };
 
@@ -38,7 +38,8 @@ export function chartsPanel(box, data, options = {}) {
   const title = options.title === undefined || options.title === null ? data.title : options.title;
   let y = box.y;
   if (title) {
-    marks.push({ type: 'text', x: box.x, y, text: title, size: t + 1, bold: true, fill: theme.text, baseline: 'top' });
+    // A title wider than the panel is cut short with an ellipsis, not clipped by the panel's edge.
+    marks.push({ type: 'text', x: box.x, y, text: ellipsizeText(title, box.w, t + 1, true), size: t + 1, bold: true, fill: theme.text, baseline: 'top' });
     y += t + 4;
   }
   const charts = data.charts ?? [];
@@ -95,7 +96,7 @@ export function imagePanel(box, data, options = {}) {
   let y = box.y;
   const title = options.title === undefined || options.title === null ? data.title : options.title;
   if (title) {
-    marks.push({ type: 'text', x: box.x, y, text: title, size: t + 1, bold: true, fill: PLOT_LIGHT.text, baseline: 'top' });
+    marks.push({ type: 'text', x: box.x, y, text: ellipsizeText(title, box.w, t + 1, true), size: t + 1, bold: true, fill: PLOT_LIGHT.text, baseline: 'top' });
     y += t + 4;
   }
   const { image } = data;

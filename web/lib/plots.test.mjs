@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { barChart, classHistogram, coverageGrid, evidencePlot, flowBars, legendMarks, lineChart, logTicks, PLOT_LIGHT, scatter, ticks } from './plots.js';
-import { textMarks } from './draw.js';
+import { barChart, classBoxes, classHistogram, coverageGrid, evidencePlot, flowBars, legendMarks, lineChart, logTicks, PLOT_LIGHT, scatter, ticks } from './plots.js';
+import { textMarks, textWidth } from './draw.js';
 
 const rects = (marks) => marks.flatMap((m) => (m.type === 'group' ? rects(m.marks) : m.type === 'rect' ? [m] : []));
 
@@ -61,4 +61,18 @@ test('flow, coverage, evidence and legends', () => {
   assert.ok(textMarks(ev.marks).some((m) => m.text === 'Combined' && m.bold));
   const legend = legendMarks([{ label: 'one', color: '#000' }, { label: 'two', color: '#111', dash: true }], { width: 40, text: 10 });
   assert.equal(legend.height, 30, 'two rows when they do not fit across');
+});
+
+test('a predictor\'s classes in a narrow panel: each name and count inside the chart, cut short where it must be', () => {
+  const list = [
+    { id: 'pathogenic', label: 'likely pathogenic', n: 719, low: -4, high: -2, median: -3 },
+    { id: 'ambiguous', label: 'ambiguous', n: 111, low: -1, high: 0, median: -0.5 },
+    { id: 'benign', label: 'likely benign', n: 231, low: -0.4, high: 0.1, median: -0.1 },
+  ];
+  for (const width of [120, 160, 300]) {
+    const out = classBoxes({ list, references: { nonsense: { median: -4.5 } } }, { x: 10, y: 0, width, height: 150, text: 7 });
+    for (const m of out.marks.filter((x) => x.type === 'text' && x.anchor === 'end')) assert.ok(m.x - textWidth(m.text, m.size) >= 10 - 1e-9, `${m.text} at ${width} pt`);
+  }
+  const wide = classBoxes({ list, references: {} }, { x: 0, y: 0, width: 300, height: 150, text: 7 });
+  assert.ok(wide.marks.some((m) => m.text === 'likely pathogenic'), 'whole where it fits');
 });

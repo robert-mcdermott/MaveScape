@@ -226,6 +226,21 @@ try {
     check('--from-workspace on an archive naming its structures by checksum (0.5.0\'s PTEN): the run reproduced, and the workspace archive written again names the structure by ID and checksum, its saved views kept', `exit ${p.code}; ${recP.steps.find((x) => x.action === 'reproduce_run')?.message?.slice(0, 80)}; ${archiveStep?.message?.slice(0, 160) ?? recP.problems.join(' ').slice(0, 160)}; structures ${again?.manifest.structures}, views ${(again?.ws.structureViews ?? []).map((v) => v.name).join(', ')}`, p.code === 0 && recP.run?.status === 'reproduced' && again?.manifest.structures === 'checksums' && !again.problems.length && again.ws.structureViews?.length === 2);
   }
 
+  {
+    // 0.6.0's own record (validation/archives/make-0.6.0.mjs): its certificate verified by this
+    // MaveScape, and its GRB2 workspace rerun, the archive written again keeping its figure, the
+    // analyses kept in its report and its checkpoint.
+    const cert = join(ROOT, 'validation/archives/release-0.6.0-grb2-figure.certificate.msz');
+    const v = await mavescape(['verify', cert]);
+    check('mavescape verify on 0.6.0\'s certificate: verified (exit 0), every number computed again identical', `exit ${v.code}; ${v.stdout.split('\n').find((l) => /^Verified|^Not verified|^Not checkable/.test(l))?.slice(0, 160) ?? v.stderr.slice(0, 160)}`, v.code === 0 && /^Verified: all [\d,]+ numbers/m.test(v.stdout));
+    const grb2 = join(ROOT, 'validation/archives/release-0.6.0-grb2-figure.msz');
+    const g = await mavescape(['run', '--from-workspace', grb2, '--out', out('grb2-0.6'), '--time', TIME]);
+    const recG = record(out('grb2-0.6'));
+    const kept = existsSync(join(out('grb2-0.6'), 'workspace.msz')) ? await readArchive(readFileSync(join(out('grb2-0.6'), 'workspace.msz'))) : null;
+    const original = await readArchive(readFileSync(grb2));
+    check('--from-workspace on 0.6.0\'s GRB2 archive: its runs reproduced, and the archive written again keeping its figure, the analyses kept in its report and its checkpoint', `exit ${g.code}; ${recG.run?.status}; figures ${(kept?.ws.figures ?? []).map((f) => `${f.name} (${f.panels.length})`).join(', ')}, ${(kept?.ws.analyses ?? []).length} analyses, checkpoints ${(kept?.ws.checkpoints ?? []).map((c) => c.name).join(', ')}`, g.code === 0 && recG.run?.status === 'reproduced' && JSON.stringify(kept?.ws.figures) === JSON.stringify(original.ws.figures) && JSON.stringify(kept?.ws.analyses) === JSON.stringify(original.ws.analyses) && JSON.stringify(kept?.ws.checkpoints) === JSON.stringify(original.ws.checkpoints));
+  }
+
   // --- Two conditions, and a table of barcodes ------------------------------------------------
   const two = await mavescape(['run', '--design', 'validation/fixtures/two-condition.design.json', '--out', out('two'), '--time', TIME, 'validation/fixtures/two-condition.csv']);
   archiveReader.set(join(out('two'), 'workspace.msz'), await readArchive(readFileSync(join(out('two'), 'workspace.msz'))));

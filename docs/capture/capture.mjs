@@ -699,17 +699,30 @@ const scenes = {
     await waitFor('Boolean(globalThis.proteoscope?.state?.active?.proteomics?.data)', 90000);
     await sleep(3000);
   },
-  // Figures (wave 6, slices 1–2): GRB2's map with its sequence and its position effect below it,
-  // its replicates' agreement, its scores by class and a variant's evidence, on a page two columns
-  // wide; panel A selected, its properties beside the page.
+  // Figures (wave 6): a figure as a paper's would be, on a page two columns wide: GRB2's map with
+  // its sequence, UniProt's features, AlphaMissense and each position's effect below it; the
+  // domain on 2VWF colored by the median score; the measured scores in each of AlphaMissense's
+  // classes; and two replicates' agreement. Nothing selected, so the page is seen as printed.
   async figures() {
     await example('grb2-sh3');
-    await act('create_figure', { name: 'Figure 1', height_mm: 160 });
-    await act('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', tracks: ['reference', 'effect'], x_mm: 3, y_mm: 3, width_mm: 168, height_mm: 92 });
-    await act('add_figure_panel', { figure: 'Figure 1', kind: 'qc', subject: 'Run 1', finding: 'agreement', x_mm: 3, y_mm: 98, width_mm: 56, height_mm: 58 });
-    await act('add_figure_panel', { figure: 'Figure 1', kind: 'scores', run: 'Run 1', x_mm: 62, y_mm: 98, width_mm: 58, height_mm: 58 });
-    await act('add_figure_panel', { figure: 'Figure 1', kind: 'variant', run: 'Run 1', variant: 'p.Trp36Ala', x_mm: 123, y_mm: 98, width_mm: 48, height_mm: 58 });
-    await js(`(() => { window.mavescape.figuresView = { figure: window.mavescape.store.ws.figures[0].id, panel: 'panel-1' }; window.mavescape.store.notify(['ws']); })()`);
+    for (const provider of ['uniprot-features', 'alphamissense']) await act('add_track', { provider });
+    // 2VWF colored by the median score, the residues that touch the Gab2 peptide drawn as sticks,
+    // the camera closer, saved as the view a panel shows.
+    await act('open_structure', { pdb: '2VWF' });
+    await act('set_structure', { color: 'median', select: 'byres (chain A and protein and within 4 of (chain B and protein))', show: 'sticks' });
+    await act('set_structure', { select: '' });
+    await js(`import('/ui/mode-structure.js').then((m) => { const v = m.structureState(window.mavescape).viewer; const c = v.camera; c.distance *= 0.72; v.setCamera(c); return true; })`);
+    await sleep(1500);
+    await act('save_structure_view', { name: 'Core' });
+    await act('create_figure', { name: 'Figure 1', height_mm: 178 });
+    await act('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', tracks: ['reference', 'uniprot-features:structure', 'alphamissense:alphamissense', 'effect'], x_mm: 3, y_mm: 3, width_mm: 168, height_mm: 100 });
+    await act('add_figure_panel', { figure: 'Figure 1', kind: 'structure', view: 'Core', x_mm: 3, y_mm: 106, width_mm: 56, height_mm: 69 });
+    await act('add_figure_panel', { figure: 'Figure 1', kind: 'compare', a: 'Run 1', b: 'AlphaMissense', plot: 'classes', x_mm: 62, y_mm: 106, width_mm: 60, height_mm: 69 });
+    await act('add_figure_panel', { figure: 'Figure 1', kind: 'qc', subject: 'Run 1', finding: 'agreement', x_mm: 125, y_mm: 106, width_mm: 46, height_mm: 69 });
+    await act('set_figure', { figure: 'Figure 1', panels: [{ panel: 'C', title: 'Scores by AlphaMissense class' }, { panel: 'D', title: 'Replicates 1 and 2' }] });
+    console.log(JSON.stringify((await act('figures', { figure: 'Figure 1' })).data.figures[0].panels.map((p) => [p.letter, p.notes])));
+    await js(`(() => { window.mavescape.figuresView = { figure: window.mavescape.store.ws.figures[0].id, panel: null }; window.mavescape.store.notify(['ws']); })()`);
+    await act('set_mode', { mode: 'figures' });
     await sleep(1500);
   },
   // The report (wave 6, slice 4): GRB2's run and its Enrich2 rescoring, their comparison added to

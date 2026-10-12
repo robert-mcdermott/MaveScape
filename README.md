@@ -474,10 +474,10 @@ check, its tolerance and how the reference outputs were made are in
   or Chromium.
 - A structure panel is an image of its saved view, drawn again on request rather than with every
   change; a figure rebuilt from its file needs that image in the library, or the saved view to
-  draw it again. A PDF's text is in Helvetica's standard encoding, so a
+  draw it again. Its legend is part of the image, so it shrinks with the panel and is not counted
+  when the figure says its smallest text. A PDF's text is in Helvetica's standard encoding, so a
   character outside it (− or Δ) is written as its nearest ASCII (- or delta).
-- Calibration and a review report are planned for later releases; see the
-  [roadmap](mavescape-spec/roadmap.md).
+- Calibration is planned for a later release; see the [roadmap](mavescape-spec/roadmap.md).
 
 ## Development
 

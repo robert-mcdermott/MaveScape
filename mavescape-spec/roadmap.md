@@ -2915,6 +2915,49 @@ and the review report are found. The wave ends with its examples, as waves 2 to 
        moves nothing. The remote session (196): the three made in the window as Node makes them.
      - Wave 6 is complete with slice 8.
 
+**Released 0.6.0 on 2026-10-12.** Figures, the analyses kept in the report and checkpoints are kept
+with the workspace, and a certificate is the record of its numbers, so 0.6 leaves two archives and a
+certificate (`validation/archives/release-0.6.0-*.msz`, 1.6 MB together), saved by 0.6.0 itself, its
+window driven through remote control offline by `make-0.6.0.mjs`:
+- GRB2's SH3 domain, its record whole: a QC threshold changed and the variance beyond counting
+  acknowledged; Run 2 with the Enrich2-compatible preset; their comparison and Run 1's robustness
+  check kept in the report; a selection by query; UniProt's features and AlphaMissense beside the
+  map; a saved view of 2VWF; a checkpoint; and a figure of six panels (the map with its tracks, the
+  structure view, the scores by AlphaMissense class, the replicates' agreement, a variant's evidence
+  and a caption);
+- that workspace's certificate, 6,872 numbers, made in 0.6.0's worker;
+- Hsp90 with a checkpoint before its first three samples are fitted: three runs, a design with
+  columns set aside.
+
+Every later version must reopen them and reproduce their runs. It must also find each checkpoint's
+state its own, compute every number the workspaces report again (each figure drawn, each kept
+analysis what was kept), and verify 0.6.0's certificate. A later version that writes the report or
+draws a panel otherwise will find those numbers differ, and say which: whether it may is for that
+version to decide. At the release, `mavescape run --from-workspace` reran all twenty-seven runs of
+every release's archives in a window (the certificate's two are its workspace's), each to its
+recorded hash.
+- Found by the release:
+  - **The figure to show the release off had its words cut off.** A plot panel's title wider than
+    its panel ("Run 1 by AlphaMissense: P62993's classes") and a predictor's class names in a narrow
+    comparison panel ("likely pathogenic") ran past the panel's edge and were clipped. Titles and
+    class names end in an ellipsis now, and the class names take up to 45% of the chart as a bar
+    chart's labels do; panels whose text fit draw as before.
+  - **The screenshots' first full accessibility audit** (axe-core, WCAG 2.1 A and AA; 136 captures
+    of 70 scenes) found one problem besides slice 8's: a second `.warn-text` rule, added with
+    wave 3's GenBank coding-sequence list, drew the outlier barcodes' counts in QC at 3.0:1 on
+    white. It is gone, and both take the accessible color. The audit is kept
+    (`docs/capture/audit.json`: no violations).
+  - **A structure panel's legend is part of its image**, so it shrinks with the panel and is not
+    counted when a figure says its smallest text. The README's limitations and the Figures page say
+    so.
+  - **The README still called the review report planned**, the home page's release line described
+    0.5 and its examples card five examples; nothing on it showed figures or the record of wave 6.
+    The home page has a Figures article with a figure of GRB2 (its map and tracks, its structure,
+    AlphaMissense's classes, its replicates), the record's article describes the report,
+    checkpoints and certificates, and its validation table has their rows.
+  - **main had two commits wave 6 lacked**: the README's links to the site, with the capitals of
+    its address, which wave 6's rewritten README already had; merged, its version kept.
+
 ## 0.7.0: agents and scripts (wave 7)
 
 ### Wave 7

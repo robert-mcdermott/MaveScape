@@ -119,7 +119,7 @@ import { checkReferences, contextOf, CROSSREF_EXCEPTIONS, reportWorkspace } from
 import { movedApart, pairsFor, plantedChanges } from './diff-cases.mjs';
 import { certifiedWorkspace, checkTraced, externalReferences, repack, tamperings, windowExample } from './certificate-cases.mjs';
 import { GRB2_ACKNOWLEDGED, grb2Figure, hsp90Checkpoint, ringCertified } from './example-lessons.mjs';
-import { certificateFingerprint, countNumbers, encodeAll, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
+import { certificateFingerprint, computeNumbers, countNumbers, encodeAll, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
 import { canonicalJSON } from '../web/lib/workspace.js';
 import { panelDigests } from '../web/lib/figure-manifest.js';
 import { analysisState, changeMap, diffStates, pairWords, stateDigest, variantChanges } from '../web/lib/diff.js';
@@ -2275,6 +2275,14 @@ const suites = {
       if (opened.ws.structureViews?.length) {
         const views = await replayStructureViews(opened.ws, opened.sources);
         check('roundtrip', `${file}: each saved view's structure read again (from the archive's own file, or, named by checksum only, fetched again by its ID), the file recorded, and the target mapped again onto the view's chain as it was saved`, views.map((x) => `${x.view}: ${x.structure} ${x.from}${x.ok ? '' : ` (${x.why})`}`).join('; '), views.every((x) => x.ok), 'the same');
+      }
+      // What 0.6 keeps (figures, analyses kept in the report, checkpoints): each checkpoint's state its
+      // own SHA-256, and every number the workspace reports computed again from the archive's own
+      // files (each figure drawn, each analysis kept in the report what it computes now).
+      if (opened.ws.figures?.length || opened.ws.checkpoints?.length || opened.ws.analyses?.length) {
+        const computed = await computeNumbers(opened.ws, async (sha) => opened.sources.get(sha) ?? null, { software: SOFTWARE });
+        const kept = (opened.ws.checkpoints ?? []).map((c) => ({ name: c.name, ok: stateDigest(c.state) === c.sha256 }));
+        check('roundtrip', `${file}: each checkpoint's state its own SHA-256, and every number the workspace reports computed again from the archive's own files (each figure drawn, each analysis kept in the report what it computes now)`, `checkpoints ${kept.map((c) => `${c.name} ${c.ok ? 'as kept' : 'changed'}`).join(', ') || 'none'}; ${(opened.ws.figures ?? []).map((f) => `${f.name}, ${f.panels.length} panels`).join('; ') || 'no figures'}; ${(opened.ws.analyses ?? []).length} analyses kept; ${computed.notes.length ? computed.notes.join(' ') : 'no notes'}; ${computed.blocked.size ? [...computed.blocked].map(([g, why]) => `${g}: ${why}`).join('; ') : 'nothing left out'}`, kept.every((c) => c.ok) && !computed.notes.length && !computed.blocked.size, 'as kept; computed, as kept');
       }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
@@ -4925,7 +4933,17 @@ const suites = {
       const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
       releases.push({ name, release: opened.manifest.software?.version, n: m.certificate.total, verdict: v.verdict, notes: m.notes });
     }
-    check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.5), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output', releases.map((x) => `${x.name} (${x.release}): ${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 9 && releases.every((x) => x.verdict === 'verified' && !x.notes.length), 'every one');
+    check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.6), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output', releases.map((x) => `${x.name} (${x.release}): ${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 9 && releases.every((x) => x.verdict === 'verified' && !x.notes.length), 'every one');
+    // Each release's own certificate (from 0.6.0: validation/archives/*.certificate.msz), verified by
+    // this MaveScape: its fingerprint, files, history and checkpoints as certified, and every number
+    // computed again and compared bit for bit with the one that release computed.
+    const certified = [];
+    for (const name of readdirSync(new URL('./archives/', import.meta.url)).filter((f) => f.endsWith('.certificate.msz')).sort()) {
+      const read = await readCertificate(new Uint8Array(readFileSync(new URL(`./archives/${name}`, import.meta.url))));
+      const v = await verifyCertificate(read, { software: SW });
+      certified.push({ name, by: read.certificate.software?.version, total: read.certificate.total, verdict: v.verdict, differ: v.numbers.differ.slice(0, 3).map((d) => d.label) });
+    }
+    check('certificate', 'each release\'s own certificate (validation/archives/, from 0.6.0), verified by this MaveScape: its fingerprint, files, history and checkpoints as certified, every number computed again and identical, bit for bit, to the one that release computed', certified.map((x) => `${x.name} (certified by ${x.by}): ${x.total.toLocaleString('en-US')} numbers, ${x.verdict}${x.differ.length ? ` (${x.differ.join('; ')})` : ''}`).join('; ') || 'none', certified.length >= 1 && certified.every((x) => x.verdict === 'verified'), 'verified');
   },
 
   // Wave 6, slice 7 (R7, part 2): the review report (lib/review.js): the certificate's numbers, each

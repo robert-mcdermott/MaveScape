@@ -5,7 +5,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
 ---
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Variants in 3D: the map on the protein, and the structure as evidence</a>
+        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Figures and a provable record: figures that carry their analysis, and certificates that recompute every number</a>
         <h1>Variant-effect scores <span class="accent">you can check</span></h1>
         <p class="lede">MaveScape turns the variant count tables of a deep mutational scan into functional scores with standard errors, quality control that says when not to trust them, and an interactive variant-effect map, and keeps every analysis decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R. Files are analyzed in your browser and never leave your machine.</p>
         <shot name="map" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from less abundant (blue) to more (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" window eager>The GRB2 SH3 domain from the Human Domainome (MaveDB, CC0), one of the bundled examples, with one variant's evidence in the inspector.</shot>
@@ -53,7 +53,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
           </div>
           <div class="pillar">
             <h3><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2Z"/><path d="M4 21V5M8 7h6M8 11h6"/></svg>On the record</h3>
-            <p>Scores in MaveDB's columns, a methods paragraph with references, provenance, and the whole workspace as one archive that reopens identically on another computer.</p>
+            <p>Scores in MaveDB's columns, the methods of the whole analysis with their references, and a certificate that computes every number again on another computer, bit for bit.</p>
           </div>
         </div>
       </div>
@@ -181,18 +181,34 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
 
         <article class="feature">
           <div class="feature-text">
-            <span class="kicker">The record</span>
-            <h3>Files a reviewer can repeat</h3>
-            <p>Scores and counts in MaveDB's upload columns, QC per sample and per variant, provenance with every input's checksum, and a methods paragraph with its references in BibTeX. A run becomes a MaveDB deposit that MaveDB's own validators accept, the methods as its analysis and the readout as its keywords. The workspace archive holds the tables, the design, the runs and the history, and reopens identically.</p>
+            <span class="kicker">Figures</span>
+            <h3>Figures that carry their analysis</h3>
+            <p>A page at a journal's column width, its panels drawn by the views themselves: the map with its tracks, a structure view, the QC findings' plots, the scores, a comparison, a variant's evidence. Each panel says what it shows, so the figure follows a rescoring until it is exported. Exported as SVG, PDF or PNG, it carries what each panel was drawn from; dropped on the window, it says what has changed since.</p>
             <ul class="checklist">
-              <li>MaveDB deposits checked by MaveDB's own validators, never sent</li>
-              <li>Archives written the same bytes in every time zone</li>
-              <li>Edited runs, tables and histories caught on reopening</li>
-              <li>Every file described in FORMATS.md</li>
+              <li>Text set in points at the printed size; text under 6 pt and images under 300 dpi said</li>
+              <li>The same figure the same bytes, in the window and from <code>mavescape export</code></li>
+              <li>Each panel's runs by their SHA-256, the QC thresholds and acknowledgements, the structure view's image</li>
+              <li>Rebuilt from its file, each panel compared with the drawing it records</li>
             </ul>
-            <a class="more-link" href="docs/record.html">Exports and the record</a>
+            <a class="more-link" href="docs/figures.html">Figures</a>
           </div>
-          <shot name="record" alt="The Score view's export menu: scores and counts in MaveDB columns, QC per sample and per variant, provenance, methods and references">A run's exports, from the Score view.</shot>
+          <shot name="figures" alt="The Figures view with a figure two columns wide: A, GRB2's variant-effect map with the target's sequence, its secondary structure, AlphaMissense and each position's effect below it; B, the SH3 domain on 2VWF colored by the median score; C, the measured scores in each of AlphaMissense's classes; D, two replicates' log ratios against each other">A figure of GRB2's SH3 domain: the map with its tracks, the structure, a predictor's classes and the replicates' agreement.</shot>
+        </article>
+
+        <article class="feature reverse">
+          <div class="feature-text">
+            <span class="kicker">The record</span>
+            <h3>An analysis a reviewer can check</h3>
+            <p>The methods of the whole workspace, written from the record with their references; checkpoints, and what changed since, variant by variant. A certificate computes every number the workspace reports again from its files, and anyone can verify it bit for bit; its review report is one file a reviewer opens in any browser, every number traced to where it comes from. Scores and counts go out in MaveDB's columns, and a run becomes a MaveDB deposit its own validators accept.</p>
+            <ul class="checklist">
+              <li>Every reference with a DOI checked against Crossref's record of it</li>
+              <li><code>mavescape verify</code>: exit 0 verified, 1 differs (each number listed), 2 not checkable</li>
+              <li>The review report loads nothing, and checks its numbers against the certificate's fingerprint</li>
+              <li>Archives written the same bytes in every time zone; every file described in FORMATS.md</li>
+            </ul>
+            <a class="more-link" href="docs/certificate.html">Certificates and review reports</a>
+          </div>
+          <shot name="certificate" alt="The Report view with a certificate's verification: GRB2's two runs, every one of their numbers computed again from its table and identical, bit for bit, its history's chain unbroken; the Certificate pane beside the report">GRB2's runs certified, then verified: every number computed again from the table, and identical.</shot>
         </article>
       </div>
     </section>
@@ -207,7 +223,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
           <a class="card" href="docs/examples.html">
             <span class="icon-badge mint"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 19l-6-10V3"/></svg></span>
             <h3>Examples with known answers</h3>
-            <p>Three published experiments from MaveDB (two populations, a growth time series, sorted bins), two score sets opened from it (published scores; a saturation genome editing screen of nucleotide variants) and six simulated ones whose true effects are known, one with problems to find; each with its question, guided steps and what to expect.</p>
+            <p>Fourteen: three published experiments from MaveDB (two populations, a growth time series, sorted bins), five opened from it (published scores; a saturation genome editing screen; two conditions; a round trip; two laboratories' screens of one protein) and six simulated ones whose true effects are known, one with problems to find; each with its question, guided steps and what to expect, from a figure to a certificate.</p>
           </a>
           <a class="card" href="docs/scripting.html">
             <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
@@ -253,6 +269,9 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
               <tr><td><strong>MaveDB deposits</strong></td><td>MaveDB's own validators (its <code>mavedb</code> package, mavehgvs, biocommons hgvs) on 19 deposits of every kind of run and target; each read back and written again</td><td class="agree">all accepted; the same bytes</td></tr>
               <tr><td><strong>Structures</strong></td><td>PDBe's residue-level SIFTS mapping of each example's entry, read with gemmi</td><td class="agree">every residue where SIFTS places it</td></tr>
               <tr><td><strong>Structure as evidence</strong></td><td>DSSP 4.6.1's own output; SciPy 1.18.1's Mann–Whitney test and Benjamini–Hochberg</td><td class="agree">every code but five π-helix residues; area within 1 Å²; tests within 10⁻¹²</td></tr>
+              <tr><td><strong>Figures</strong></td><td>Every example's map and every view's plots as panels, read back from the SVG and the PDF; the window's against Node's</td><td class="agree">every cell and mark; the same bytes</td></tr>
+              <tr><td><strong>Methods</strong></td><td>Every reference with a DOI (43) against Crossref's record; the 14 examples' runs</td><td class="agree">every field; the report the methods word for word</td></tr>
+              <tr><td><strong>Certificates</strong></td><td>Every number of a workspace of every operation computed apart; six kinds of tampering; the 14 examples and every release's archives</td><td class="agree">identical, bit for bit; every tampering caught</td></tr>
               <tr><td><strong>Remote control</strong></td><td>Every action in the browser against the same analysis in Node</td><td class="agree">identical scores and exports</td></tr>
             </tbody>
           </table>
