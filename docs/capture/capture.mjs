@@ -642,6 +642,18 @@ const scenes = {
     await scrollTo('.structure-scores', 'start');
     await sleep(1200);
   },
+  // Structure as evidence (wave 5, slice 4): PTEN's phosphatase and C2 domains (1D5R) colored by
+  // structural class, the compact group of least tolerant positions that joins the two domains
+  // selected, the pane with the scores by class and the cluster test.
+  async 'structure-evidence'() {
+    await example('pten-mavedb');
+    await act('open_structure', { pdb: '1D5R' });
+    await act('structure_evidence', {});
+    await act('set_structure', { color: 'class', select: 'pos 98,170,174,177,274,276' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'pos 98,170,174,177,274,276'; })()`);
+    await scrollTo('.structure-evidence', 'start');
+    await sleep(1200);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

@@ -15,6 +15,8 @@ import { lossSide } from '../lib/readout.js';
 import { possessive } from '../lib/words.js';
 import { calibrationClasses, coloringLegend, coloringPalette, describeColoring, placeOnTarget, POSITION, POSITION_NAMES, positionColor, positionValues, QC_CLASSES, residueColors, SCORE_COLORINGS, STATE_COLORS, thresholdClasses } from '../lib/structure-scores.js';
 import { PLDDT_BANDS, colorToHex } from '../lib/structure/colors.js';
+import { CLASSES, CLASS_BY_ID } from '../lib/structure-evidence.js';
+import { hexToRgb, displayColor } from '../lib/colormaps.js';
 
 const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 
@@ -97,6 +99,8 @@ export async function colorStructure(app, state) {
     return colored;
   };
   if (!state.mapping) return finish({ ok: false, message: state.mapTarget ? `${state.mapTarget.name} is on no chain of this structure: its positions' scores have no residues to color.` : 'This workspace has no target: the scores are its positions\', placed on the structure by mapping it.' });
+  // The structural classes (wave 5, slice 4), read from the structure itself.
+  if (settings.how === 'class') return finish(classColoring(state));
   let model;
   let source;
   let run = null;
@@ -134,9 +138,35 @@ export async function colorStructure(app, state) {
   });
 }
 
+// The residues colored by their structural class (lib/structure-evidence.js), on the chain the
+// evidence was read for: { ok, classes: true, colors, legend, words } or { ok: false, pending }.
+function classColoring(state) {
+  const ev = state.evidence;
+  if (ev?.status !== 'ready' || !ev.result) return { ok: false, pending: ev?.status === 'computing', message: ev?.status === 'failed' ? ev.message : 'Reading the structural classes…' };
+  const colors = new Map();
+  const counts = new Map(CLASSES.map((c) => [c.id, 0]));
+  for (const p of ev.result.positions) {
+    if (!p.residue || !p.class) continue;
+    colors.set(p.residue, hexToRgb(displayColor(CLASS_BY_ID.get(p.class).color)).map((v) => v / 255));
+    counts.set(p.class, counts.get(p.class) + 1);
+  }
+  const items = CLASSES.filter((c) => counts.get(c.id)).map((c) => ({ label: c.label, color: displayColor(c.color), count: counts.get(c.id) }));
+  items.push({ label: 'not the target', color: STATE_COLORS.context, count: null });
+  return {
+    ok: true, classes: true, values: null, colors, evidence: ev.result,
+    legend: { title: `Structural class, chain ${ev.result.chain}`, gradient: null, items, counts: { onStructure: [...counts.values()].reduce((a, b) => a + b, 0) } },
+    words: [`Each residue of the target on chain ${ev.result.chain} is colored by its structural class: ${CLASSES.filter((c) => counts.get(c.id)).map((c) => `${c.label} ${counts.get(c.id)} (${c.words})`).join('; ')}.`],
+    source: 'the structure',
+  };
+}
+
 // A position's value in words, for the tooltip, the strip and the inspector: "median −2.31 from 19
 // substitutions" (null when the coloring has nothing to say).
 export function positionWords(colored, position) {
+  if (colored?.classes) {
+    const p = colored.evidence.positions[position - 1];
+    return p?.class ? CLASS_BY_ID.get(p.class).label : '';
+  }
   if (!colored?.ok) return '';
   const v = colored.values;
   const i = position - 1;
@@ -267,12 +297,14 @@ export function createPositionStrip({ onSelect, describe }) {
 }
 
 // The strip's rows for a coloring on a mapping: the coloring, the positions on the structure (on a
-// residue, or in its sequence but not observed), and a predicted model's confidence.
-export function stripRows(colored, mapping, model, code) {
+// residue, or in its sequence but not observed), their structural classes (wave 5, slice 4), and a
+// predicted model's confidence.
+export function stripRows(colored, mapping, model, code, evidence = null) {
   const rows = [];
   const L = mapping.positions.length;
-  if (colored?.ok) rows.push({ label: colored.values.label.replace(/ \(.*\)$/, ''), colors: Array.from({ length: L }, (_, i) => positionColor(colored.values, i + 1, colored.palette)) });
+  if (colored?.ok && colored.values) rows.push({ label: colored.values.label.replace(/ \(.*\)$/, ''), colors: Array.from({ length: L }, (_, i) => positionColor(colored.values, i + 1, colored.palette)) });
   rows.push({ label: `On ${code} ${mapping.chain}`, colors: mapping.positions.map((p) => (p.residue ? 'var(--text-2)' : p.state === 'unobserved' ? 'var(--line-strong)' : null)) });
+  if (evidence?.chain === mapping.chain && evidence.positions.length === L) rows.push({ label: 'Class', colors: evidence.positions.map((p) => (p.class ? displayColor(CLASS_BY_ID.get(p.class).color) : null)) });
   if (model?.residueMap && mapping.positions.some((p) => p.residue && Number.isFinite(model.residueMap.get(p.residue)?.confidence))) {
     rows.push({ label: 'pLDDT', colors: mapping.positions.map((p) => {
       const c = p.residue ? model.residueMap.get(p.residue)?.confidence : Number.NaN;

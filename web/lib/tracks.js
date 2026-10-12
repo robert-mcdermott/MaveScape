@@ -275,7 +275,9 @@ export function applyFilter(track, filter) {
 // changed): which are shown, in which order, filtered how. Built-in tracks first, hidden until
 // shown (a map without tracks is drawn and exported as before them); an annotation's tracks shown
 // once it is added.
-export const DEFAULT_HIDDEN = BUILTIN_TRACKS.map((t) => t.id);
+// Hidden until shown: the run's own tracks, and the structure's numbers (wave 5, slice 4: its
+// structural classes and secondary structure are shown).
+export const DEFAULT_HIDDEN = [...BUILTIN_TRACKS.map((t) => t.id), 'structure:rsa', 'structure:ppse', 'structure:distance', 'structure:plddt'];
 
 export function arrangeTracks(tracks, layout = null) {
   const order = layout?.order ?? [];

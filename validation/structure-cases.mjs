@@ -12,6 +12,8 @@ import { targetProtein } from '../web/lib/target.js';
 import { cachedRecord, recordTarget } from './example-cases.mjs';
 import { KIND, STATUS } from '../web/lib/variants.js';
 import { STAGE_BY_ID } from '../web/lib/filters.js';
+import { computeGroupedSASA } from '../web/lib/structure/surface.js';
+import { accessibilityInput, chosenPartners, exposureOf, paeOf, partnerDistances, partnerInteractions, partnersOf, residueAccessibility, SASA_POINTS, structureEvidence } from '../web/lib/structure-evidence.js';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
 
@@ -109,3 +111,31 @@ export function middle(values) {
   if (!n) return Number.NaN;
   return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }
+
+// What a structure says of a mapping's positions (wave 5, slice 4), computed in Node as the page
+// computes it (ui/structure-evidence.js), the accessibility in one pass rather than in the worker.
+// options: { pae (AlphaFold DB's JSON, parsed), choice ('all' or a partner's id) }.
+export function nodeEvidence(structure, mapping, { pae = null, choice = 'all' } = {}) {
+  const model = structure.models[0];
+  const input = accessibilityInput(model);
+  const accessibility = residueAccessibility(input, computeGroupedSASA(input.positions, input.radii, input.groups, { points: SASA_POINTS }));
+  const matrix = pae ? paeOf(pae, model) : null;
+  const exposure = exposureOf(model, matrix);
+  const partners = partnersOf(model, structure, mapping.chain);
+  const chosen = chosenPartners(partners, choice);
+  const distances = partnerDistances(model, mapping.chain, chosen);
+  const interactions = new Map();
+  for (const p of chosen) {
+    if (![...distances.values()].some((d) => d.partner === p.id && d.distance <= 4)) continue;
+    for (const [k, list] of partnerInteractions(model, mapping.chain, p)) interactions.set(k, [...(interactions.get(k) ?? []), ...list]);
+  }
+  return { evidence: structureEvidence({ model, mapping, accessibility, exposure, distances, interactions, predicted: Boolean(structure.meta.isPredicted) }), accessibility, partners, chosen, pae: Boolean(matrix) };
+}
+
+export const paeFixture = (accession, version = 6) => {
+  try {
+    return JSON.parse(readFileSync(new URL(`public-data/alphafold/AF-${accession}-F1-predicted_aligned_error_v${version}.json`, FIXTURES), 'utf8'));
+  } catch {
+    return null;
+  }
+};

@@ -14,6 +14,7 @@ import { median } from '../lib/stats.js';
 import { residueLabel } from '../lib/structures.js';
 import { STATE_WORDS } from '../lib/mapping.js';
 import { possessive } from '../lib/words.js';
+import { CLASS_BY_ID, SS_WORDS } from '../lib/structure-evidence.js';
 
 const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter' };
@@ -83,6 +84,13 @@ export function positionSection(app, focus) {
         const r = at?.residue ? structure.viewer.model.residueMap.get(at.residue) : null;
         const confidence = r && structure.viewer.structure.meta.isPredicted && Number.isFinite(r.confidence) ? `, pLDDT ${r.confidence.toFixed(1)}` : '';
         onStructure.push(r ? `${code} ${residueLabel(r)}${at.state === 'different' ? ` (another residue${at.reason ? `: ${at.reason}` : ''})` : ''}${confidence}` : `${code} chain ${m.chain}: ${STATE_WORDS[at?.state] ?? 'not on it'}`);
+      }
+      // What the structure says of it (wave 5, slice 4).
+      const ev = structure.evidence?.status === 'ready' ? structure.evidence.result : null;
+      const at = ev?.positions[q - 1];
+      if (at?.class) {
+        const partner = at.partner ? structure.evidence.partners.find((x) => x.id === at.partner)?.label ?? at.partner : '';
+        onStructure.push(`${CLASS_BY_ID.get(at.class).label}: relative accessibility ${at.rsa.toFixed(2)} in chain ${ev.chain} alone (${at.rsaComplex.toFixed(2)} in the structure), ${SS_WORDS[at.ss] ?? 'coil'}, pPSE ${Math.round(at.ppse)}${Number.isFinite(at.distance) ? `; ${at.distance.toFixed(1)} Å from ${partner}` : ''}${at.interactions.length ? `: ${at.interactions.slice(0, 4).map((x) => `${x.label.toLowerCase()} with ${x.with}`).join(', ')}` : ''}`);
       }
     } else onStructure.push(`${code}: not this position (the structure maps another target)`);
   }

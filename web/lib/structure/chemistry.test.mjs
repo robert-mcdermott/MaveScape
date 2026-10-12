@@ -1,6 +1,6 @@
 // Copied from Proteoscope 0.10.0 (web/lib/chemistry.test.mjs, Apache-2.0, the same author), reading the structures
-// MaveScape's validation keeps (test-data.mjs), without the tests of what MaveScape does not copy:
-// ligands given as SMILES, and the ligand chemistry of interactions.js.
+// MaveScape's validation keeps (test-data.mjs), without the test of what MaveScape does not copy:
+// ligands given as SMILES. The ligand chemistry of interactions.js came with wave 5, slice 4.
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -8,6 +8,7 @@ import { applyChemistry, bondDecorations, componentFor, implicitHydrogens } from
 import { parseCIFDocument, parseStructure, readChemComp } from './parse.js';
 import { deriveStructure } from './structure.js';
 import { examplePDB, exampleText } from './test-data.mjs';
+import { ligandChemistry } from './interactions.js';
 
 const derive = (text, name) => deriveStructure(parseStructure(text, name));
 const residueBonds = (model, residue) => {
@@ -199,4 +200,26 @@ test('ring double bonds are offset toward the ring center, others in the substit
   assert.ok(Math.abs(Math.hypot(...ring.direction) - 1) < 1e-9);
   assert.ok(decorations.some((item) => !item.ring), 'the ethynyl triple bond is not in a ring');
   assert.equal(bondDecorations(model), bondDecorations(model), 'cached');
+});
+
+test('2HYY: only the N-methyl nitrogen of imatinib’s piperazine is protonated', () => {
+  const model = derive(exampleText('2hyy'), '2hyy.cif').models[0];
+  const imatinib = model.residues.find((residue) => residue.resName === 'STI');
+  const chemistry = ligandChemistry(model, imatinib.atoms.map((atom) => atom.id));
+  const cations = chemistry.charges.filter((group) => group.sign > 0);
+  assert.equal(cations.length, 1);
+  assert.equal(model.atoms[cations[0].atoms[0]].name, 'N51');
+  // The amide nitrogen donates and does not accept; the pyridine and pyrimidine nitrogens accept.
+  const amide = byName(imatinib, 'N13').id;
+  assert.ok(chemistry.donors.includes(amide) && !chemistry.acceptors.includes(amide));
+  assert.ok(chemistry.acceptors.includes(byName(imatinib, 'N3').id));
+  assert.equal(chemistry.aromaticRings.length, 4);
+});
+
+test('4HHB: both heme propionates are carboxylates; the porphyrin keeps its aromatic pyrroles', () => {
+  const model = derive(exampleText('4hhb'), '4hhb.cif').models[0];
+  const heme = model.residues.find((residue) => residue.resName === 'HEM');
+  const chemistry = ligandChemistry(model, heme.atoms.map((atom) => atom.id));
+  assert.equal(chemistry.charges.filter((group) => group.label === 'carboxylate').length, 2);
+  assert.ok(chemistry.aromaticRings.length >= 4);
 });

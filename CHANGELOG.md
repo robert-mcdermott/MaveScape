@@ -94,6 +94,33 @@ section grows with each.
     tolerant, and the residues that touch the Gab2 peptide score near the wild type, an abundance
     assay not seeing binding. Its fourth step now points to what the analysis can do.
 
+- **Structure as evidence (wave 5, slice 4; X4).** What the structure shown says of each target
+  position (`lib/structure-evidence.js`, `ui/structure-evidence.js`), on the chain mapped:
+  - **Measures:** DSSP's secondary structure; the accessible area by Shrake–Rupley with DSSP's
+    radii, in the chain alone and in the structure, relative to Tien et al.'s maxima;
+    StructureMap's exposure (pPSE) and disorder, with an AlphaFold DB model's aligned error;
+    pLDDT; the nearest partner (another chain, a ligand, an ion; common crystallization additives
+    only when chosen), within 4 Å an interface, its contacts typed by PLIP's rules. Proteoscope's
+    `exposure.js` and `interactions.js` copied with their tests.
+  - **Structural classes:** disordered, interface, buried or exposed; a coloring of the structure,
+    a row of the strip, words when a residue is pointed at or picked (the inspector).
+  - **Tracks beside the map:** the classes and secondary structure, shown; the accessibility,
+    exposure, distance and pLDDT, to show. The query language reads them as features (`in feature
+    buried`).
+  - **The scores by class:** each class's positions and median score, against the rest by
+    Mann–Whitney's test, BH-adjusted; a class's residues selected.
+  - **Clusters:** whether the least tolerant positions (10–30%) make more pairs within 8 Å than
+    positions of the same burial (seeded draws within strata of relative accessibility), with the
+    same burial ignored beside it; compact groups of them selected.
+  - **The program's new request:** a predicted model's aligned error
+    (`/api/fetch/alphafold/{accession}/pae/{version}`; the accession and version only).
+  - The evidence written out (`<entry>_chain-<chain>_evidence.csv`; FORMATS.md). Remote control's
+    `structure_evidence`, `set_structure`'s `color: "class"`, `export` of `structure-evidence`;
+    the tracks in `list_tracks`.
+  - **The PTEN example's sixth step** reads 1D5R as evidence: buried positions less tolerant, the
+    least tolerant clustered beyond burial, one group joining the two domains. Its second step now
+    points to what the analysis can do.
+
 ### Changed
 
 - The Structure view's words give a chain's UniProt residues as the entry gives them ("the entry
@@ -166,17 +193,34 @@ section grows with each.
   and the position in the inspector; a map query's selection drawn on the structure; the
   coloring's file as Node makes it; the other colorings, refusals included; the strip with an
   AlphaFold DB model's pLDDT.
-- Unit tests: Proteoscope's tests of the copied modules (74: parsers, structure, chemistry, DSSP,
-  surfaces, selection language, formats, alignment), `structures.test.mjs` (6),
-  `mapping.test.mjs` (8) and `structure-scores.test.mjs` (7).
+- `structures`, slice 4 (7 more checks, 21 in all):
+  - **Against DSSP:** each entry's secondary structure and accessibility as DSSP 4.6.1 gives them
+    (the DSSP databank's output, read with gemmi: `reference/dssp.json`, `generate_dssp.py`):
+    every code but five residues of 1D5R where DSSP 4 calls a π-helix; the area within 1 Å² on
+    average (0.64–0.89), with no bias.
+  - **Partners** as every pair of atoms gives them; **Mann–Whitney and BH** as SciPy's
+    (`reference/mannwhitney.json`, `generate_mannwhitney.py`); **disorder** on the models read with
+    their aligned error; the **tracks** beside GRB2's map, queried by class.
+  - **The cluster test calibrated** on simulated maps of 1D5R and 1TUP: with scores that depend on
+    burial alone, p ≤ 0.05 in 3–6% of maps (every map with burial ignored); a planted patch found
+    in 62–71%.
+  - **The PTEN guide's account**, its domains UniProt's.
+- The remote-control session (150 checks), slice 4: `structure_evidence` in the page as Node reads
+  it, its choices and refusals, the structure's tracks, the evidence's file, the class coloring,
+  a model's aligned error.
+- Unit tests: Proteoscope's tests of the copied modules (100: parsers, structure, chemistry, DSSP,
+  surfaces, selection language, formats, alignment, exposure, interactions; the two chemistry
+  tests that waited for `interactions.js` among them), `structures.test.mjs` (6),
+  `mapping.test.mjs` (8), `structure-scores.test.mjs` (7) and `structure-evidence.test.mjs` (9).
 - Go tests: a file stored again is read to its end before the answer
   (`TestAFileStoredAgainIsReadToItsEnd`).
-- Go tests: the structure requests (and PDBe's best structures) ask what NETWORK.md says, keep what
+- Go tests: the structure requests (and PDBe's best structures, and a model's aligned error) ask what NETWORK.md says, keep what
   the service sent, refuse a cut-off file or a page that is not a structure, and refuse anything
   but a PDB ID or an accession before it is sent.
 - The fixtures (`validation/fixtures/public-data/pdb/`, `…/alphafold/`, `…/pdbe/*.best-structures.json`)
   are the program's cached answers for the examples' proteins and the structures Proteoscope's
-  tests read, retrieved 2026-10-12; `validation/fixtures/structures/` holds 2VWF's PDB-format file and BinaryCIF and GRB2's
+  tests read, retrieved 2026-10-12 (slice 4: 2HYY, 6OIM, 4ZQK, five models' aligned error, PTEN's
+  UniProt features); `validation/fixtures/structures/` holds 2VWF's PDB-format file and BinaryCIF and GRB2's
   model's BinaryCIF.
 
 ## 0.4.0 (2026-10-11)

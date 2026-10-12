@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// The requests behind the Structure view (wave 5, slices 1 and 2): each asks its service what
+// The requests behind the Structure view (wave 5, slices 1, 2 and 4): each asks its service what
 // NETWORK.md says, with a PDB ID or an accession only; a structure is kept as it came, compressed, once it is
 // known to be a whole structure file; and anything else is refused before a byte is sent.
 func TestStructureRequestsKeepWhatTheServiceSent(t *testing.T) {
@@ -35,6 +35,9 @@ func TestStructureRequestsKeepWhatTheServiceSent(t *testing.T) {
 		case "/api/prediction/P62993":
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`[{"entryId":"AF-P62993-F1","latestVersion":6,"uniprotAccession":"P62993"}]`))
+		case "/files/AF-P62993-F1-predicted_aligned_error_v6.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[{"predicted_aligned_error":[[0,1.5],[1.25,0]],"max_predicted_aligned_error":31.75}]`))
 		case "/files/AF-P62993-F1-model_v6.cif":
 			// As AlphaFold DB's storage answers: compressed when the client takes it so.
 			encodings = append(encodings, r.Header.Get("Accept-Encoding"))
@@ -58,6 +61,7 @@ func TestStructureRequestsKeepWhatTheServiceSent(t *testing.T) {
 		{"/api/fetch/alphafold/p62993/prediction", "alphafold/P62993.prediction.json", jsonContentType, nil},
 		{"/api/fetch/pdbe/best-structures/P62993", "pdbe/P62993.best-structures.json", jsonContentType, nil},
 		{"/api/fetch/alphafold/P62993/model/v6", "alphafold/AF-P62993-F1-model_v6.cif", gzipContentType, model},
+		{"/api/fetch/alphafold/P62993/pae/6", "alphafold/AF-P62993-F1-predicted_aligned_error_v6.json", jsonContentType, nil},
 	} {
 		rec := get(handler, c.path, nil)
 		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != c.content {
@@ -86,6 +90,7 @@ func TestStructureRequestsKeepWhatTheServiceSent(t *testing.T) {
 		{"/api/fetch/pdb/2ABC", "pdb/2ABC.cif.gz", "not a whole structure file"},
 		{"/api/fetch/pdb/9ZZZ", "pdb/9ZZZ.cif.gz", "RCSB has no PDB entry 9ZZZ"},
 		{"/api/fetch/alphafold/P62993/model/5", "alphafold/AF-P62993-F1-model_v5.cif", "AlphaFold DB has no model 5 of P62993"},
+		{"/api/fetch/alphafold/P62993/pae/5", "alphafold/AF-P62993-F1-predicted_aligned_error_v5.json", "AlphaFold DB has no aligned error for model 5 of P62993"},
 		{"/api/fetch/pdbe/best-structures/Q00000", "pdbe/Q00000.best-structures.json", "PDBe knows no structure of Q00000"},
 	} {
 		rec := get(handler, c.path, nil)
@@ -106,6 +111,8 @@ func TestStructureRequestsKeepWhatTheServiceSent(t *testing.T) {
 		"/api/fetch/alphafold/P62993/model/latest",
 		"/api/fetch/alphafold/P62993/model/0",
 		"/api/fetch/alphafold/MEAIAKYDFK/model/6",
+		"/api/fetch/alphafold/GRB2/pae/6",
+		"/api/fetch/alphafold/P62993/pae/latest",
 		"/api/fetch/pdbe/best-structures/GRB2",
 	} {
 		if rec := get(handler, path, nil); rec.Code != http.StatusBadRequest {

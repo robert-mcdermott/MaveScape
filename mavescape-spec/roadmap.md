@@ -2289,6 +2289,62 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    - Validation: DSSP and solvent accessibility equal to the reference values Proteoscope's
      validation uses; the cluster test calibrated on simulated maps (false positives at the stated
      rate).
+   - **Done.** `lib/structure-evidence.js` reads each target position on the chain mapped: DSSP's
+     secondary structure (Proteoscope's `dssp.js`), the accessible area by Shrake–Rupley with DSSP's
+     radii (1,000 points) in the chain alone and in the structure, relative to Tien et al.'s maxima,
+     StructureMap's pPSE and disorder (Proteoscope's `exposure.js`, copied with its tests; an
+     AlphaFold DB model read with its aligned error, the program's new request), pLDDT, and the
+     nearest partner, its contacts typed by Proteoscope's `interactions.js` (copied with its tests;
+     the two chemistry tests that waited for it restored). Each position's structural class:
+     disordered, interface, buried or exposed.
+     - **Beside the map:** the classes and secondary structure as features (shown; `in feature
+       buried` in queries), the accessibility, pPSE, distance and pLDDT as values (to show).
+     - **The scores by class** (Mann–Whitney against the rest, BH-adjusted) and **the cluster
+       test**: the least tolerant positions' pairs within 8 Å (Cβ) against seeded draws of as many
+       positions within strata of relative accessibility (about twelve positions each, 4 to 16),
+       with the same burial ignored beside it; compact groups (complete linkage within 12 Å).
+     - The Structure view's pane *Structure as evidence* (partners, the classes' table, the test),
+       a class coloring and a strip row, the words of a residue and the inspector's; the evidence's
+       file (FORMATS.md); remote control's `structure_evidence`, `color: "class"`, `export` of
+       `structure-evidence`. PTEN's sixth step (1D5R); a screenshot scene
+       (`structure-evidence`); the guide page *Structures*, its section on evidence.
+     - Validation:
+       - `structures` (21 checks, 7 new): DSSP 4.6.1's own output for each entry (the DSSP
+         databank, read with gemmi: `reference/dssp.json`); partners against every pair of atoms;
+         Mann–Whitney and BH against SciPy (`reference/mannwhitney.json`); disorder on two models
+         with their aligned error; the tracks queried; the cluster test on simulated maps of 1D5R
+         and 1TUP (burial alone: 3–6% at p ≤ 0.05; burial ignored: 100%; a planted patch: 62–71%);
+         the PTEN guide's account.
+       - `remote-session.mjs` (150 checks): the evidence in the page as Node reads it, its choices
+         and refusals, the tracks, the file, the class coloring, a model's aligned error.
+       - Unit tests: `structure-evidence.test.mjs` (9); Proteoscope's `exposure.test.mjs` (3) and
+         `interactions.test.mjs` (21), two more of `chemistry.test.mjs`.
+   - Found by slice 4:
+     - **Proteoscope's validation has no reference for DSSP or accessibility.** Its tests check
+       DSSP against entries' helix and sheet records (80% and 75%) and accessibility for
+       plausibility. The reference is DSSP's own output: the DSSP databank's file of each entry,
+       read with gemmi. Against it, Proteoscope's DSSP gives every residue of six entries DSSP's
+       code.
+     - **DSSP 4 calls π-helices where Proteoscope's DSSP calls α.** In 1D5R, W111–D115 are a π-helix
+       to DSSP 4.6.1 (which gives π-helices priority) and α-helix or turn to Proteoscope's. DSSP 4
+       also assigns polyproline helices (47 residues in the seven entries), which Proteoscope's does
+       not. For Proteoscope to carry across; MaveScape's copy is unchanged.
+     - **Accessibility depends on the radii.** With the viewer's van der Waals radii, residues
+       differ from DSSP's by 2.7–3.7 Å² on average and up to 18.6 Å²; with DSSP's radii and 1,000
+       points a sphere, by 0.64–0.89 Å², without bias.
+     - **Burial explains most clustering.** Buried positions lie together, and the least tolerant
+       are mostly buried: drawn from every position, simulated maps whose scores depend on burial
+       alone look clustered every time. Matched on burial in 4 strata, 10–12% of them still did;
+       about twelve positions a stratum brings it to 3–6%. In GRB2's SH3 domain the least
+       tolerant make 26 pairs, 8.7 expected from any positions but 21.5 from positions as buried
+       (p 0.11): they are its core. PTEN's cluster beyond burial (117 against 88.0, p 0.001).
+     - **Clusters chain.** Connected within 8 Å, 49 of PTEN's 55 least tolerant positions were one
+       cluster; the groups shown are compact (complete linkage, every two within 12 Å).
+     - **A crystallization additive in PTEN's active site.** 1D5R holds a tartrate within 3 Å of
+       C124, R130, K125, H93 and D92; as a partner it was the chain's only interface. Common
+       additives (Proteoscope's list, with tartrate) are partners only when chosen.
+     - **`Math.hypot` is not the same in every engine.** The determinism test found it in the new
+       module; distances there use a square root, which is.
 5. **Structures in the record (X5).** Structures stored in the library by SHA-256 and in the
    `.msz` archive (or referenced by ID with checksums); saved views (structure, chain, mapping,
    camera, style, coloring) reopen identically; high-resolution images with their legend as

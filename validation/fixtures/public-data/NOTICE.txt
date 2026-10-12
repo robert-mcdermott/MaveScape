@@ -44,7 +44,8 @@ Biology 2024;25:100. doi:10.1186/s13059-024-03223-9; the vocabulary ave-dcd/mave
 The tracks' answers (wave 3, slice 5), retrieved 2026-10-11, unchanged, in the cache's layout:
 
 - uniprot/*.features.json: UniProt's features of P62993, P00740 and P02829 (release 2026_03),
-  CC BY 4.0, as above.
+  CC BY 4.0, as above; and of P60484 (PTEN), retrieved 2026-10-12, for its domains (wave 5,
+  slice 4).
 - pdbe/: PDBe-KB's conservation profiles of the same entries, from
   www.ebi.ac.uk/pdbe/graph-api, under EMBL-EBI's terms of use (CC BY 4.0). PDBe-KB consortium.
   PDBe-KB: collaboratively defining the biological context of structural data. Nucleic Acids
@@ -77,14 +78,17 @@ Research 2025;53(D1):D523-D534. doi:10.1093/nar/gkae997
 
 RCSB PDB's answers (pdb/), retrieved 2026-10-12 from files.rcsb.org, unchanged (gzipped mmCIF, as
 RCSB sends them): the entries 2VWF, 1JM7, 2CG9, 1RX2, 1RFN, 1TUP and 1D5R (the examples' proteins),
-1M17, 1YCR, 3OG7, 4HHB, 6VXX and 7LYB (the entries Proteoscope's tests read) and 1HHO. The PDB's
+1M17, 1YCR, 3OG7, 4HHB, 6VXX and 7LYB (the entries Proteoscope's tests read) and 1HHO; 2HYY, 6OIM
+and 4ZQK (the entries Proteoscope's tests of its interactions read, wave 5 slice 4). The PDB's
 data are in the public domain (CC0 1.0). Berman HM, et al. The Protein Data Bank. Nucleic Acids
 Research 2000;28:235-242. doi:10.1093/nar/28.1.235. Burley SK, et al. RCSB Protein Data Bank.
 Nucleic Acids Research 2023;51(D1):D488-D508. doi:10.1093/nar/gkac1077
 
 AlphaFold DB's answers (alphafold/*.prediction.json, alphafold/AF-*-model_v6.cif), retrieved
 2026-10-12 from alphafold.ebi.ac.uk, unchanged (the models gzipped, as AlphaFold DB stores them): the
-entries and version 6 models of P62993, P38398, P02829, P0ABQ4, P00740, P04637 and P60484. AlphaFold
+entries and version 6 models of P62993, P38398, P02829, P0ABQ4, P00740, P04637 and P60484, and
+(alphafold/AF-*-predicted_aligned_error_v6.json, wave 5 slice 4) the predicted aligned error of
+P62993, P0ABQ4, P00740, P04637 and P60484's models (BRCA1's, 10 MB, and Hsp82's are not kept). AlphaFold
 DB's data are licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
 Jumper J, et al. Highly accurate protein structure prediction with AlphaFold. Nature
 2021;596:583-589. doi:10.1038/s41586-021-03819-2. Varadi M, et al. AlphaFold Protein Structure

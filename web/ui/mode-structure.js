@@ -11,7 +11,9 @@
 // (`uniprot`), and a selection is kept, position by position, from one structure to the next. Wave 5,
 // slice 3 (X3): residues colored by their positions' scores (ui/structure-coloring.js,
 // lib/structure-scores.js) in the map's grammar, the run and condition the map shows; the selection
-// shared with the map both ways, a picked residue's position shown in the inspector.
+// shared with the map both ways, a picked residue's position shown in the inspector. Wave 5, slice 4
+// (X4): what the structure says of each position (ui/structure-evidence.js): tracks beside the map,
+// the scores by structural class, and the cluster test.
 
 import { h, icon, clear, downloadBlob } from './dom.js';
 import { toast } from './overlays.js';
@@ -20,7 +22,7 @@ import { createStructureViewer, STYLES, SURFACES } from './structure-viewer.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { colorToHex, colormapGradientCSS } from '../lib/structure/colors.js';
 import { countMask, residueKeysFromMask, SelectionError, selectAtoms } from '../lib/structure/select.js';
-import { alphafoldEntry, applyAlphafoldEntry, ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, openStructureText, readStructureBytes, residueLabel, residueRuns, structureRequest } from '../lib/structures.js';
+import { alphafoldEntry, applyAlphafoldEntry, ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, openStructureText, originText, readStructureBytes, residueLabel, residueRuns, structureRequest } from '../lib/structures.js';
 import { describeMapping, mapTarget, mappedLabel, mappingCSV, rankStructures, stretches } from '../lib/mapping.js';
 import { targetProtein } from '../lib/target.js';
 import { now } from '../lib/clock.js';
@@ -29,6 +31,8 @@ import { cellsAtPositions, positionRanges, positionsOfKeys, SCORE_COLORINGS } fr
 import { activeRun } from './selections.js';
 import { colorStructure, coloringControls, createPositionStrip, positionWords, scoresLegend, scoresSettings, scoreSource, sourceControls, stripRows } from './structure-coloring.js';
 import { coloringCSV } from '../lib/structure-scores.js';
+import { computeEvidence, evidenceState, evidenceStatistics, evidenceValues } from './structure-evidence.js';
+import { CLASSES, CLASS_BY_ID, describeClusters, describeEffects, evidenceCSV, SS_WORDS } from '../lib/structure-evidence.js';
 
 // Residue styles for a selection, as the selection pane offers them.
 export const RESIDUE_STYLES = { sticks: 'Sticks', 'ball-stick': 'Ball and stick', spacefill: 'Spacefill', hide: 'Hide', none: 'As the rest' };
@@ -52,10 +56,19 @@ function viewerOf(app) {
       const at = positionOfResidue(state, residue.key);
       if (!at) return '';
       const words = positionWords(state.colored, at.position);
-      return `${mappedLabel(at.map, residue.key)}${words ? ` · ${words}` : ''}`;
+      return `${mappedLabel(at.map, residue.key)}${words ? ` · ${words}` : ''}${evidenceWords(state, residue.key)}`;
     },
   });
   return state.viewer;
+}
+
+// What the structure says of a residue of the chain the evidence was read for (wave 5, slice 4):
+// " · buried, RSA 0.03, α-helix".
+function evidenceWords(state, key) {
+  const r = state.evidence?.status === 'ready' ? state.evidence.result : null;
+  const p = r?.positions.find((x) => x.residue === key);
+  if (!p?.class) return '';
+  return ` · ${p.class}, RSA ${p.rsa.toFixed(2)}, ${SS_WORDS[p.ss] ?? 'coil'}${p.interface && p.distance ? `, ${p.distance.toFixed(1)} Å from a partner` : ''}`;
 }
 
 // A residue's target position on any chain the target is mapped onto: { map, position } or null.
@@ -95,6 +108,8 @@ export function mapStructure(app, chain = null) {
   state.mapKey = `${state.serial}|${structure?.activeAssemblyId ?? ''}|${targetKey(target)}`;
   state.maps = structure && target ? mapTarget(structure, target) : [];
   state.mapping = state.maps.find((m) => m.chain === chain) ?? state.maps[0] ?? null;
+  // What the structure says of the positions, read again for the new mapping (in the background).
+  computeEvidence(app, state, { notify: () => state.handlers?.onChange?.() });
   return state.mapping;
 }
 
@@ -276,15 +291,8 @@ export async function openStructure(app, what) {
   }
 }
 
-// Where the structure shown came from, in words.
-export function originText(origin, structure) {
-  if (!origin) return '';
-  const day = /^\d{4}-\d{2}-\d{2}/.exec(origin.retrieval?.retrieved ?? '')?.[0];
-  const when = day ? `, retrieved ${day}` : '';
-  if (origin.kind === 'pdb') return `PDB ${origin.id} (RCSB PDB${when})`;
-  if (origin.kind === 'alphafold') return `AlphaFold DB model of ${origin.id}, version ${origin.version}${when}`;
-  return `${origin.name}${structure?.meta.code ? ` (${structure.meta.code})` : ''}, a file`;
-}
+// Where the structure shown came from, in words (lib/structures.js).
+export { originText };
 
 // Residues chosen in Proteoscope's selection language → { keys, atoms } (residue keys of the
 // structure shown). Throws SelectionError with where the text is wrong.
@@ -410,7 +418,7 @@ export function mountStructureMode(app, container) {
       const where = residue ? residueLabel(residue) : p.state === 'unobserved' ? 'not observed in the structure' : p.state === 'deleted' ? 'missing from the structure\'s sequence' : 'outside the structure';
       const confidence = residue && viewer.structure.meta.isPredicted && Number.isFinite(residue.confidence) ? ` · pLDDT ${residue.confidence.toFixed(1)}` : '';
       const words = positionWords(state.colored, q);
-      return `Position ${q} · ${three}${m.target.offset ? ` (${p.reference})` : ''}: ${where}${confidence}${words ? ` · ${words}` : ''}`;
+      return `Position ${q} · ${three}${m.target.offset ? ` (${p.reference})` : ''}: ${where}${confidence}${words ? ` · ${words}` : ''}${p.residue ? evidenceWords(state, p.residue) : ''}`;
     },
   });
 
@@ -425,7 +433,8 @@ export function mountStructureMode(app, container) {
       const at = positionOfResidue(state, key);
       if (at) selected.add(at.position);
     }
-    strip.update({ length: m.positions.length, offset: m.target.offset, rows: stripRows(viewer.colorScheme === 'scores' ? state.colored : null, m, viewer.model, viewer.structure.meta.code || 'the structure'), selected });
+    const ev = evidenceState(state);
+    strip.update({ length: m.positions.length, offset: m.target.offset, rows: stripRows(viewer.colorScheme === 'scores' ? state.colored : null, m, viewer.model, viewer.structure.meta.code || 'the structure', ev.status === 'ready' ? ev.result : null), selected });
   }
 
   async function open(what) {
@@ -453,7 +462,7 @@ export function mountStructureMode(app, container) {
     // The scores' colorings first (wave 5, slice 3), when the target is on the structure.
     const colorSelect = h('select.input.small', { 'aria-label': 'Color by', title: 'Color by', onchange: () => chooseColoring(colorSelect.value) },
       state.mapping ? h('optgroup', { label: 'Scores' }, ...Object.entries(SCORE_COLORINGS).map(([k, v]) => h('option', { value: `scores:${k}`, selected: viewer.colorScheme === 'scores' && settings.how === k }, v.label))) : null,
-      h('optgroup', { label: 'The structure' }, ...schemes.map((s) => h('option', { value: s.id, selected: viewer.colorScheme === s.id }, s.label))));
+      h('optgroup', { label: 'The structure' }, state.mapping ? h('option', { value: 'scores:class', selected: viewer.colorScheme === 'scores' && settings.how === 'class' }, 'Structural class') : null, ...schemes.map((s) => h('option', { value: s.id, selected: viewer.colorScheme === s.id }, s.label))));
     toolbarEl.append(
       select('Style', viewer.style, Object.entries(STYLES).map(([k, v]) => [k, v.label]), (v) => viewer.setStyle(v)),
       colorSelect,
@@ -629,9 +638,9 @@ export function mountStructureMode(app, container) {
     const head = h('h3', icon('heatmap'), 'Scores on the structure');
     const from = settings.how === 'disagreement' ? null : scoreSource(app);
     const choose = h('select.input.small', { 'aria-label': 'Color the residues by', onchange: () => chooseColoring(choose.value ? `scores:${choose.value}` : (viewer.structure.meta.isPredicted ? 'plddt' : 'chain')) },
-      h('option', { value: '', selected: !settings.how }, 'The structure\'s own colors'),
+      h('option', { value: '', selected: !settings.how || settings.how === 'class' }, 'The structure\'s own colors'),
       ...Object.entries(SCORE_COLORINGS).map(([k, v]) => h('option', { value: k, selected: settings.how === k }, v.label)));
-    const colored = viewer.colorScheme === 'scores' ? state.colored : null;
+    const colored = viewer.colorScheme === 'scores' && settings.how !== 'class' ? state.colored : null;
     const code = viewer.structure.meta.code || viewer.structure.label;
     const exportCSV = () => downloadBlob(new Blob([coloringCSV(colored.values, state.mapping, code, colored.palette)], { type: 'text/csv' }), `${code.toLowerCase()}_chain-${state.mapping.chain}_${colored.values.how === 'substitution' ? `to-${colored.values.substitution === '*' ? 'stop' : colored.values.substitution}` : colored.values.how}.csv`);
     const palette = colored?.ok && colored.values.domain.kind === 'diverging'
@@ -648,6 +657,65 @@ export function mountStructureMode(app, container) {
         colored?.ok ? h('button.btn.small', { type: 'button', title: 'Each target position\'s value, state and color, with its residue (CSV)', onclick: exportCSV }, icon('download'), 'Colors') : null,
         app.store.ui.selection?.keys.length ? h('button.btn.small', { type: 'button', title: 'The Map view, with the selection', onclick: () => app.setMode('map') }, icon('heatmap'), `${fmtCount(app.store.ui.selection.keys.length)} selected on the map`) : null),
       h('p.muted.small', 'A click on a residue (or a position in the strip below the view) selects its substitutions on the map and shows the position in the inspector; a selection made on the map is drawn here. The view follows the run and condition the map shows.'));
+  }
+
+  // Structure as evidence (wave 5, slice 4): the structural classes and the partners they are read
+  // with, the scores by class, the cluster test, the file; the tracks beside the map.
+  function evidencePane() {
+    if (!state.mapping) return null;
+    const ev = evidenceState(state);
+    const head = h('h3', icon('layers'), 'Structure as evidence');
+    if (ev.status !== 'ready' || !ev.result) {
+      return h('div.pane.structure-evidence', head, ev.status === 'failed' ? h('div.callout.warn', icon('warning'), h('span', ev.message)) : h('p.muted', ev.message || 'Reading what the structure says of each position…'));
+    }
+    const r = ev.result;
+    const code = viewer.structure.meta.code || viewer.structure.label;
+    const offset = state.mapTarget?.offset ?? 0;
+    const nameOf = (q) => `${state.mapTarget.sequence[q - 1]}${q + offset}`;
+    const counts = CLASSES.map((c) => [c, r.positions.filter((p) => p.class === c.id).length]).filter(([, n]) => n);
+    const chosen = ev.partners.filter((p) => ev.chosen?.includes(p.id));
+    const additives = ev.partners.filter((p) => p.additive);
+    const partnerSelect = select('Partners the interface is read with', ev.choice, [['all', `Every partner${additives.length ? ', no additive' : ''} (${ev.partners.filter((p) => !p.additive).length})`], ...ev.partners.map((p) => [p.id, p.label])], (v) => { ev.choice = v; computeEvidence(app, state, { notify: () => state.handlers?.onChange?.() }); });
+    const selectClass = (id) => {
+      viewer.select(r.positions.filter((p) => p.class === id).map((p) => p.residue));
+      state.query = '';
+      shared();
+      renderSide();
+    };
+    const from = scoreSource(app);
+    const values = evidenceValues(state, from);
+    const stats = evidenceStatistics(ev, values);
+    const exportCSV = () => downloadBlob(new Blob([evidenceCSV(r, code, values?.valueAt ?? null, 'median_score')], { type: 'text/csv' }), `${code.toLowerCase()}_chain-${r.chain}_evidence.csv`);
+    const lowWord = values?.lossBelow === false ? 'Higher' : 'Lower';
+    const body = [
+      h('p', `On ${code} chain ${r.chain}: ${counts.map(([c, n]) => `${fmtCount(n)} ${c.label}`).join(', ')} of the target's positions on residues. Interface: within 4 Å of ${chosen.length ? chosen.map((p) => p.label).join(', ') : 'no partner'}${additives.length && ev.choice === 'all' ? ` (additives left out: ${additives.map((p) => p.label.replace(/ \(an additive\)$/, '')).join(', ')})` : ''}.${r.predicted ? (ev.pae ? ' Exposure and disorder are read with the model\'s aligned error (PAE).' : ` Exposure and disorder are read without the model's aligned error (${ev.paeNote || 'none'}).`) : ''}`),
+      h('div.structure-chain', h('label', 'Partners'), partnerSelect),
+    ];
+    if (!stats) body.push(h('p.muted', from?.ok ? 'The scores could not be read by class.' : 'With a score run, each class\'s scores are compared with the rest, and the least tolerant positions tested for clusters.'));
+    else {
+      const { effects, clusters } = stats;
+      body.push(h('table.data.compact.structure-classes',
+        h('thead', h('tr', h('th', 'Class'), h('th.r', 'Positions'), h('th.r', 'Median'), h('th.r', { title: `How often a position of the class scores ${lowWord.toLowerCase()} than one of the rest (Mann–Whitney)` }, lowWord), h('th.r', { title: 'Benjamini–Hochberg\'s adjusted p' }, 'q'), h('th', ''))),
+        h('tbody', ...effects.classes.map((c) => h('tr',
+          h('td', h('i.score-swatch', { style: { background: CLASS_BY_ID.get(c.id).color } }), ` ${c.label}`),
+          h('td.r', fmtCount(c.n)), h('td.r', Number.isFinite(c.median) ? c.median.toFixed(2) : '—'),
+          h('td.r', c.test ? `${Math.round(100 * (values.lossBelow ? c.test.below : 1 - c.test.below))}%` : '—'),
+          h('td.r', c.test ? (c.test.q < 0.001 ? c.test.q.toExponential(1) : c.test.q.toFixed(3)) : '—'),
+          h('td', h('button.btn.small', { type: 'button', onclick: () => selectClass(c.id) }, 'Select')))))));
+      body.push(h('p.muted.small', `Each position's median score (${values.words}); the positions are the units. ${lowWord}: how often a position of the class scores ${lowWord.toLowerCase()} than one of the rest (Mann–Whitney); q, its BH-adjusted p.`));
+      const fraction = select('The share of positions called least tolerant', String(ev.fraction), [['0.1', '10%'], ['0.2', '20%'], ['0.3', '30%']], (v) => { ev.fraction = Number(v); renderSide(); });
+      const seed = h('input.input.small', { type: 'number', min: '1', step: '1', value: String(ev.seed), 'aria-label': 'Seed of the draws', style: { width: '70px' }, onchange: () => { ev.seed = Math.max(1, Math.round(Number(seed.value) || 1)); renderSide(); } });
+      body.push(h('h4.structure-sub', 'Are the least tolerant clustered?'), h('div.structure-chain', h('label', 'Least tolerant'), fraction, h('label', 'Seed'), seed));
+      body.push(...describeClusters(clusters, nameOf).map((line) => h('p', line)));
+      if (clusters?.clusters.length) {
+        body.push(h('div.btn-row', ...clusters.clusters.slice(0, 4).map((c, i) => h('button.btn.small', { type: 'button', title: c.map(nameOf).join(', '), onclick: () => { selectPositions(app, c); state.query = ''; shared(); renderSide(); } }, `Select group ${i + 1} (${c.length})`)),
+          h('button.btn.small', { type: 'button', onclick: () => { selectPositions(app, clusters.sensitive); state.query = ''; shared(); renderSide(); } }, `Select the ${fmtCount(clusters.k)} least tolerant`)));
+      }
+      body.push(h('p.muted.small', describeEffects(effects, code)[0]));
+    }
+    body.push(h('div.btn-row', h('button.btn.small', { type: 'button', title: 'Each target position: its secondary structure, accessibility, exposure, partner and class (CSV)', onclick: exportCSV }, icon('download'), 'Evidence')),
+      h('p.muted.small', 'Beside the map (Tracks): the structural class and the secondary structure, shown; the relative accessibility, the exposure (pPSE), the distance to a partner and a model\'s pLDDT, to show. In the map\'s query field, "in feature buried" selects the variants of buried positions.'));
+    return h('div.pane.structure-evidence', head, ...body);
   }
 
   const METHOD_WORDS = { 'X-ray diffraction': 'X-ray', 'Electron Microscopy': 'cryo-EM', 'Solution NMR': 'NMR', 'Solid-state NMR': 'solid-state NMR', 'Electron Crystallography': 'electron crystallography', 'Neutron Diffraction': 'neutron' };
@@ -705,6 +773,8 @@ export function mountStructureMode(app, container) {
       mappingPane());
     const scores = scoresPane();
     if (scores) sideEl.append(scores);
+    const evidence = evidencePane();
+    if (evidence) sideEl.append(evidence);
     sideEl.append(selectionPane());
     const list = structuresPane(true);
     if (list) sideEl.append(list);

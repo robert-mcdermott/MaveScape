@@ -1,0 +1,7 @@
+{
+  "contentType": "application/json",
+  "service": "UniProt",
+  "source": "https://rest.uniprot.org/uniprotkb/P60484.json?fields=accession,sequence,ft_domain,ft_region,ft_repeat,ft_zn_fing,ft_dna_bind,ft_compbias,ft_coiled,ft_motif,ft_topo_dom,ft_transmem,ft_intramem,ft_signal,ft_transit,ft_propep,ft_act_site,ft_binding,ft_site,ft_mod_res,ft_lipid,ft_carbohyd,ft_disulfid,ft_crosslnk,ft_helix,ft_strand,ft_turn",
+  "retrieved": "2026-10-12T05:13:53Z",
+  "version": "2026_03"
+}

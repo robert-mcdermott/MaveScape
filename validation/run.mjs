@@ -110,7 +110,8 @@ import { addSelection } from '../web/lib/workspace.js';
 import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
-import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, openCached, openFixture, pdbFile, positionScores, siftsOf, siftsRetrieved } from './structure-cases.mjs';
+import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, nodeEvidence, openCached, openFixture, paeFixture, pdbFile, positionScores, siftsOf, siftsRetrieved } from './structure-cases.mjs';
+import { bhAdjust, clusterTest, CONTACT_DISTANCE, effectsByClass, mannWhitney, MAX_ASA, structureTracks } from '../web/lib/structure-evidence.js';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
 import { describeMapping, mapTarget, mapTargetOnChain, rankStructures } from '../web/lib/mapping.js';
 import { assemblyChoices, chainSummaries, readStructureBytes } from '../web/lib/structures.js';
@@ -2662,7 +2663,7 @@ const suites = {
       'NCBI E-utilities': /^https:\/\/eutils\.ncbi\.nlm\.nih\.gov\/entrez\/eutils\/(efetch\.fcgi\?db=nuccore&id=(?:[A-Z]{2}_\d+|[A-Z]{1,2}\d{5,8})\.\d+&rettype=gb|esearch\.fcgi\?db=clinvar&term=[^&]+&retmax=10000&retstart=\d+&retmode=json|esummary\.fcgi\?db=clinvar&id=\d+(,\d+)*&retmode=json)/,
       Ensembl: /^https:\/\/rest\.ensembl\.org\/sequence\/id\/ENST\d{11}\?type=cdna&mask_feature=1$/,
       'PDBe-KB': /^https:\/\/www\.ebi\.ac\.uk\/pdbe\/graph-api\/uniprot\/sequence_conservation\/[A-Z0-9]+$/,
-      'AlphaFold DB': /^https:\/\/alphafold\.ebi\.ac\.uk\/(files\/AF-[A-Z0-9]+-F1-(aa-substitutions\.csv|model_v\d+\.cif)|api\/prediction\/[A-Z0-9]+)$/,
+      'AlphaFold DB': /^https:\/\/alphafold\.ebi\.ac\.uk\/(files\/AF-[A-Z0-9]+-F1-(aa-substitutions\.csv|model_v\d+\.cif|predicted_aligned_error_v\d+\.json)|api\/prediction\/[A-Z0-9]+)$/,
       gnomAD: /^https:\/\/gnomad\.broadinstitute\.org\/api$/,
       // Structures (wave 5, slice 1), kept compressed as they came.
       'RCSB PDB': /^https:\/\/files\.rcsb\.org\/download\/[0-9][A-Z0-9]{3}\.cif\.gz$/,
@@ -4075,6 +4076,185 @@ const suites = {
       const list = [...own.get(p.position).scored.values()].map((x) => x.score);
       const thresholdOk = Math.abs(below.value[p.position - 1] - list.filter((x) => x < 0.5).length / list.length) < 1e-12;
       check('structures', 'fraction abnormal-like by PTEN\'s published calibrations on 1D5R: the share of each position\'s scored missense substitutions in the calibration\'s abnormal ranges as the record\'s own JSON gives them (bounds included or not as published; ExCALIBR\'s five abnormal ranges, the Gaussian mixture\'s one), and by a threshold set by hand', `${results.map((x) => `${x.title}: ${x.ranges} abnormal ${x.ranges === 1 ? 'range' : 'ranges'}, ${x.compared} positions, ${x.differ} differ`).join('; ')}; threshold 0.5 at position ${p.position}: ${thresholdOk ? 'the same' : 'different'}`, results.every((x) => x.compared > 0 && !x.differ) && thresholdOk, 'the same');
+    }
+
+    // Wave 5, slice 4 (X4): structure as evidence. DSSP's own output for each example's entry (the
+    // DSSP databank, read with gemmi: reference/dssp.json) against Proteoscope's DSSP and MaveScape's
+    // accessibility; the partners' distances against every pair of atoms; Mann–Whitney's test and BH
+    // against SciPy's (reference/mannwhitney.json); the cluster test on simulated maps; what the
+    // guide says.
+    const dssp = JSON.parse(readFileSync(new URL('./reference/dssp.json', import.meta.url), 'utf8'));
+    const toDssp = [];
+    const evidenceOf = new Map();
+    for (const e of EXAMPLE_STRUCTURES) {
+      const structure = await openCached('pdb', pdbFile(e.pdb));
+      const model = structure.models[0];
+      const ref = dssp.entries[e.pdb];
+      const mapping = mapTarget(structure, exampleTarget(e.examples[0]))[0];
+      const node = nodeEvidence(structure, mapping);
+      evidenceOf.set(e.pdb, { structure, mapping, ...node });
+      let residues = 0;
+      let same = 0;
+      const differ = [];
+      let ppii = 0;
+      const deltas = [];
+      let classes = 0;
+      let sameClass = 0;
+      for (const [asym, chain] of Object.entries(ref.chains)) {
+        const byLabel = new Map(model.residues.filter((r) => r.kind === 'protein' && r.labelChain === asym).map((r) => [Number(r.labelSeq), r]));
+        for (const [seq, , code, acc] of chain.residues) {
+          const r = byLabel.get(seq);
+          if (!r) continue;
+          residues += 1;
+          if (code === 'P') ppii += 1;
+          const theirs = code === 'P' ? '' : code;
+          if ((r.dssp || '') === theirs) same += 1;
+          else differ.push(`${r.resName} ${r.resSeq} · ${r.chain} ${theirs || '-'}→${r.dssp || '-'}`);
+          const area = node.accessibility.get(r.key)?.complex;
+          if (acc !== null && Number.isFinite(area)) {
+            deltas.push(area - acc);
+            if (MAX_ASA[r.resName]) {
+              classes += 1;
+              if ((area / MAX_ASA[r.resName] < 0.25) === (acc / MAX_ASA[r.resName] < 0.25)) sameClass += 1;
+            }
+          }
+        }
+      }
+      const abs = deltas.map(Math.abs).sort((a, b) => a - b);
+      const mean = abs.reduce((a, b) => a + b, 0) / abs.length;
+      const p95 = abs[Math.floor(abs.length * 0.95)];
+      const bias = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+      const onlyPi = differ.every((d) => /\bI→/.test(d));
+      toDssp.push({ entry: e.pdb, residues, same, differ, ppii, mean, p95, bias, classes, sameClass, ok: residues > 0 && onlyPi && same / residues >= 0.98 && mean <= 1 && p95 <= 2.5 && Math.abs(bias) <= 0.2 && sameClass / classes >= 0.98 });
+    }
+    check('structures', `secondary structure and accessibility as DSSP gives them (the DSSP databank's output for each entry, DSSP ${dssp.entries['2VWF'].dssp}, read with gemmi): Proteoscope's DSSP assigns every residue DSSP's eight-state code but where DSSP 4 calls a π-helix (its polyproline II taken as no code, which Proteoscope's does not assign); the accessible area with DSSP's radii (1,000 points a sphere) within 1 Å² of DSSP's on average, 2.5 Å² for 95% of residues, no bias above 0.2 Å², and the same buried or exposed (relative accessibility 0.25) for 98% of residues (those that part lie at the threshold)`, toDssp.map((x) => `${x.entry}: ${x.same}/${x.residues} codes${x.differ.length ? ` (π-helix: ${x.differ.join(', ')})` : ''}${x.ppii ? `, ${x.ppii} PPII` : ''}; area |Δ| ${x.mean.toFixed(2)} mean, ${x.p95.toFixed(1)} 95th, bias ${x.bias.toFixed(2)}; class ${x.sameClass}/${x.classes}`).join('; '), toDssp.every((x) => x.ok), 'as DSSP, but its π-helices; |Δ| ≤ 1 Å²');
+
+    // The partners: each residue's nearest partner atom, against every pair of heavy atoms.
+    const partnerChecks = [];
+    for (const [entry, x] of evidenceOf) {
+      const model = x.structure.models[0];
+      const partnerAtoms = x.chosen.flatMap((p) => p.atoms.map((i) => model.atoms[i]));
+      let worst = 0;
+      let interfaceSame = 0;
+      let counted = 0;
+      for (const p of x.evidence.positions) {
+        if (!p.residue) continue;
+        const r = model.residueMap.get(p.residue);
+        let best = Infinity;
+        for (const a of r.atoms) if (!a.isHydrogen) for (const b of partnerAtoms) best = Math.min(best, Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z));
+        counted += 1;
+        if (!partnerAtoms.length) {
+          if (!Number.isFinite(p.distance)) interfaceSame += 1;
+          continue;
+        }
+        worst = Math.max(worst, Math.abs(best - p.distance));
+        if ((best <= CONTACT_DISTANCE) === p.interface) interfaceSame += 1;
+      }
+      partnerChecks.push({ entry, chain: x.mapping.chain, partners: x.chosen.map((p) => p.label.split(' · ')[0]), interfaces: x.evidence.positions.filter((p) => p.interface).length, worst, ok: worst < 1e-9 && interfaceSame === counted, additives: x.partners.filter((p) => p.additive).map((p) => p.label.split(' (')[0]) });
+    }
+    check('structures', 'each example\'s chain\'s partners (other chains, ligands and ions, common additives left out): every residue\'s distance to the nearest partner heavy atom as every pair of atoms gives it, and at the interface (4 Å) exactly where that distance says', partnerChecks.map((x) => `${x.entry} ${x.chain}: ${x.partners.length ? `${x.partners.join(', ')}, ${x.interfaces} at the interface` : 'no partner'}${x.additives.length ? ` (additives left out: ${x.additives.join(', ')})` : ''}`).join('; '), partnerChecks.every((x) => x.ok), 'as every pair of atoms');
+
+    // Mann–Whitney's test and BH's adjustment against SciPy's.
+    const mw = JSON.parse(readFileSync(new URL('./reference/mannwhitney.json', import.meta.url), 'utf8'));
+    let mwWorst = 0;
+    for (const c of mw.cases) {
+      const r = mannWhitney(c.a, c.b);
+      mwWorst = Math.max(mwWorst, Math.abs(r.u - c.u) / Math.max(1, c.u), Math.abs(r.p - c.p) / c.p);
+    }
+    const bh = bhAdjust(mw.cases.map((c) => c.p));
+    const bhWorst = Math.max(...bh.map((q, k) => Math.abs(q - mw.bh[k]) / mw.bh[k]));
+    check('structures', `the scores by structural class are tested as SciPy ${mw.tool.version} tests them: Mann–Whitney's U and two-sided p (normal approximation, corrected for ties and continuity) on ${mw.cases.length} seeded data sets (groups of 3 to 299, with ties), and Benjamini–Hochberg's adjusted p, to 10⁻¹²`, `largest relative difference: U and p ${mwWorst.toExponential(1)}, q ${bhWorst.toExponential(1)}`, mwWorst < 1e-12 && bhWorst < 1e-12, '10⁻¹²');
+
+    // Disorder on predicted models read with their aligned error: PTEN's C-terminal tail and p53's
+    // N-terminal and C-terminal regions, not their folded domains.
+    {
+      const read = async (accession, id) => {
+        const structure = await openCached('alphafold', modelFile(accession, 6));
+        const mapping = mapTarget(structure, exampleTarget(id))[0];
+        return nodeEvidence(structure, mapping, { pae: paeFixture(accession) });
+      };
+      const pten = await read('P60484', 'pten-mavedb');
+      const p53 = await read('P04637', 'tp53-screens');
+      const share = (ev, a, b) => {
+        const at = ev.positions.filter((p) => p.position >= a && p.position <= b && p.residue);
+        return at.filter((p) => p.class === 'disordered').length / at.length;
+      };
+      const ptenTail = share(pten.evidence, 354, 403);
+      // The domains without the loop 286–309, which 1D5R's construct leaves out (disordered).
+      const ptenDomains = (share(pten.evidence, 14, 285) * 272 + share(pten.evidence, 310, 350) * 41) / 313;
+      const ptenLoop = share(pten.evidence, 286, 309);
+      const p53Ends = (share(p53.evidence, 1, 60) * 60 + share(p53.evidence, 365, 393) * 29) / 89;
+      const p53Core = share(p53.evidence, 100, 290);
+      check('structures', 'disorder on AlphaFold DB models read with their aligned error (pPSE\'s smoothed sphere): PTEN\'s C-terminal tail (354–403) disordered, its phosphatase and C2 domains (14–350, but the loop 286–309 its crystal structure leaves out) not; p53\'s N-terminal (1–60) and C-terminal (365–393) regions disordered, its DNA-binding domain (100–290) not', `PTEN: tail ${(100 * ptenTail).toFixed(0)}% disordered, domains ${(100 * ptenDomains).toFixed(0)}%, the loop ${(100 * ptenLoop).toFixed(0)}%; p53: ends ${(100 * p53Ends).toFixed(0)}%, DNA-binding domain ${(100 * p53Core).toFixed(0)}%; aligned error used: ${pten.pae && p53.pae ? 'both' : 'not both'}`, pten.pae && p53.pae && ptenTail >= 0.9 && ptenDomains <= 0.05 && p53Ends >= 0.9 && p53Core <= 0.05, '≥ 90% and ≤ 5%');
+    }
+
+    // The tracks beside GRB2's map: the classes as features the query language selects by.
+    {
+      const { model, results, o } = scoredRuns.get('grb2-sh3');
+      const x = evidenceOf.get('2VWF');
+      const tracks = structureTracks(x.evidence, { length: model.length, offset: model.target.offset, protein: model.protein }, { structure: '2VWF', source: { service: 'PDB 2VWF' } });
+      const features = featuresOf(tracks);
+      const ctx = queryContext({ model, results, design: o.design, features });
+      const buried = new Set(x.evidence.positions.filter((p) => p.class === 'buried').map((p) => p.position));
+      const byQuery = evaluateQuery(parseQuery('in feature buried'), ctx).keys;
+      const expected = cellsAtPositions(model, [...buried], cellName, cellAt);
+      const helices = evaluateQuery(parseQuery('in feature strand'), ctx).count;
+      const strandPositions = x.evidence.positions.filter((p) => p.ss === 'E' || p.ss === 'B').length;
+      check('structures', 'the structure\'s tracks beside GRB2\'s map: the structural classes and DSSP\'s secondary structure as features, the accessibility, exposure and distance as values; "in feature buried" selects the variants of the positions classed buried, "in feature strand" those of DSSP\'s strands', `${tracks.map((t) => t.id).join(', ')}; buried ${buried.size} positions, ${byQuery.length} variants by the query (${expected.length} at them); strands ${strandPositions} positions, ${helices} variants`, tracks.length === 5 && byQuery.length === expected.length && expected.every((k) => byQuery.includes(k)) && helices === strandPositions * 21, 'the same');
+    }
+
+    // The cluster test on simulated maps (seeded): with no spatial effect beyond burial, p ≤ 0.05 at
+    // most at the stated rate; drawn from every position, burial ignored, nearly always; a planted
+    // patch found.
+    {
+      const simulate = (x, maps, make, options) => {
+        const rows = x.evidence.positions.filter((p) => p.cb && Number.isFinite(p.rsa));
+        const random = createRandom(options.seed);
+        let hits = 0;
+        for (let s = 0; s < maps; s += 1) {
+          const values = make(rows, random);
+          const t = clusterTest(x.evidence, (q) => values.get(q) ?? Number.NaN, { permutations: 500, seed: 9000 + s, ...(options.strata ? { strata: options.strata } : {}) });
+          if (t.p <= 0.05) hits += 1;
+        }
+        return hits / maps;
+      };
+      const noise = (rows, random) => new Map(rows.map((p) => [p.position, random.gaussian()]));
+      const burial = (rows, random) => new Map(rows.map((p) => [p.position, -4 * (1 - Math.min(1, p.rsa)) ** 2 + random.gaussian()]));
+      const planted = (rows, random) => {
+        const center = rows[random.int(rows.length)].cb;
+        return new Map(rows.map((p) => [p.position, -2 * (1 - Math.min(1, p.rsa)) ** 2 + random.gaussian() - (Math.hypot(p.cb[0] - center[0], p.cb[1] - center[1], p.cb[2] - center[2]) <= 10 ? 2 : 0)]));
+      };
+      const calibration = ['1D5R', '1TUP'].map((entry) => {
+        const x = evidenceOf.get(entry);
+        return { entry, none: simulate(x, 400, noise, { seed: 11 }), burial: simulate(x, 400, burial, { seed: 12 }), ignored: simulate(x, 200, burial, { seed: 13, strata: 1 }), planted: simulate(x, 200, planted, { seed: 14 }) };
+      });
+      const pct = (x) => `${(100 * x).toFixed(1)}%`;
+      check('structures', 'the cluster test calibrated on simulated maps (seeded; 500 draws each): with no effect, and with scores that depend on burial alone (most of their variance), p ≤ 0.05 in at most 7.5% of 400 maps (the stated 5%, binomial error allowed); the same drawn from every position, burial ignored, in nearly every map (why the draws are matched); a patch within 10 Å planted 2 standard deviations lower found in at least 40% of 200 maps', calibration.map((c) => `${c.entry}: no effect ${pct(c.none)}, burial alone ${pct(c.burial)}, burial ignored ${pct(c.ignored)}, a planted patch ${pct(c.planted)}`).join('; '), calibration.every((c) => c.none <= 0.075 && c.burial <= 0.075 && c.ignored >= 0.9 && c.planted >= 0.4), '≤ 7.5%; ≥ 90%; ≥ 40%');
+    }
+
+    // The PTEN example's guide: on 1D5R, buried positions less tolerant, and the least tolerant
+    // clustered beyond burial, one compact group joining its two domains (UniProt's).
+    {
+      const { results, model } = scoredRuns.get('pten-mavedb');
+      const x = evidenceOf.get('1D5R');
+      const own = positionScores(results);
+      const valueAt = (q) => {
+        const list = [...(own.get(q)?.scored.values() ?? [])].map((v) => v.score);
+        return list.length ? middle(list) : Number.NaN;
+      };
+      const effects = effectsByClass(x.evidence, valueAt);
+      const buried = effects.classes.find((c) => c.id === 'buried');
+      const exposed = effects.classes.find((c) => c.id === 'exposed');
+      const t = clusterTest(x.evidence, valueAt, { fraction: 0.2, seed: 1 });
+      const features = cachedJSON('uniprot', 'P60484.features.json').features.filter((f) => f.type === 'Domain');
+      const domainOf = (q) => features.find((f) => q >= f.location.start.value && q <= f.location.end.value)?.description ?? null;
+      const joining = t.clusters.find((g) => new Set(g.map(domainOf).filter(Boolean)).size === 2);
+      const name = (q) => `${model.protein[q - 1]}${q}`;
+      const example = exampleById('pten-mavedb');
+      const bullet = example.expected.at(-1);
+      const step = example.steps.at(-1)[1];
+      const said = bullet.includes(`buried positions (${buried.n}) score a median of ${buried.median.toFixed(2)}, exposed ones (${exposed.n}) ${exposed.median.toFixed(2)}`) && bullet.includes(`${Math.round(100 * buried.test.below)}% of the time`) && bullet.includes(`make ${t.observed} pairs within 8 Å, against ${t.expected.toFixed(1)} among positions as buried`) && bullet.includes(`${t.any.expected.toFixed(1)} among any`) && joining && step.includes(joining.slice(0, 4).map(name).join(', '));
+      check('structures', 'the PTEN example\'s guide, on 1D5R (its median scores read without the map\'s model): buried positions score lower than exposed ones; the 20% least tolerant make more pairs within 8 Å than positions as buried do (seed 1), and more still than any positions; a compact group of them joins the phosphatase and C2 domains (UniProt\'s); the guide says so, with these numbers', `buried ${buried.n}, median ${buried.median.toFixed(2)}; exposed ${exposed.n}, median ${exposed.median.toFixed(2)}; lower ${(100 * buried.test.below).toFixed(0)}% of the time, q ${buried.test.q.toExponential(1)}; ${t.observed} pairs, ${t.expected.toFixed(1)} as buried (p ${t.p.toFixed(3)}), ${t.any.expected.toFixed(1)} any; joining the domains: ${joining ? joining.map((q) => `${name(q)} (${domainOf(q)?.split(' ')[0] ?? 'between'})`).join(', ') : 'none'}; the guide ${said ? 'says so' : 'says otherwise'}`, buried.median < exposed.median && buried.test.q < 0.001 && t.observed > t.expected && t.p <= 0.01 && t.any.expected < t.expected && Boolean(joining) && said, 'as the guide says');
     }
   },
 };

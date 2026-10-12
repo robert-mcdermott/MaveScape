@@ -1,0 +1,8 @@
+{
+  "contentType": "application/json",
+  "service": "AlphaFold DB",
+  "source": "https://alphafold.ebi.ac.uk/files/AF-P0ABQ4-F1-predicted_aligned_error_v6.json",
+  "retrieved": "2026-10-12T04:54:36Z",
+  "etag": "\"1ec43f54b076a301a7e8b75b1784a587\"",
+  "lastModified": "Thu, 18 Sep 2025 15:51:06 GMT"
+}

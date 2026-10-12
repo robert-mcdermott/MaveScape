@@ -1125,3 +1125,12 @@ dl.kv.annotations dd { white-space: normal; }
 .structure-scores .structure-chain label { white-space: nowrap; }
 .structure-scores .structure-chain .input { min-width: 0; }
 .structure-source { margin-bottom: 8px; }
+.structure-evidence p { margin: 0 0 6px; font-size: 12.5px; color: var(--text-2); }
+.structure-evidence .structure-chain label { white-space: nowrap; }
+.structure-evidence .structure-chain .input { min-width: 0; }
+.structure-sub { margin: 12px 0 6px; font-size: 12px; font-weight: 600; color: var(--text); }
+.structure-classes { margin: 6px 0; width: 100%; }
+.structure-classes td .score-swatch { vertical-align: -1px; }
+.structure-classes { font-size: 12px; }
+.structure-classes th, .structure-classes td { padding: 4px 5px; }
+.structure-classes td.r, .structure-classes th.r, .structure-classes td:first-child { white-space: nowrap; }

@@ -249,3 +249,14 @@ export function applyAlphafoldEntry(structure, entry) {
   if (entry.modelCreatedDate) meta.depositionDate = String(entry.modelCreatedDate).slice(0, 10);
   return structure;
 }
+
+// Where a structure shown came from, in words: { kind: 'pdb' | 'alphafold' | 'file', id, version,
+// name, retrieval } (the Structure view's origin).
+export function originText(origin, structure) {
+  if (!origin) return '';
+  const day = /^\d{4}-\d{2}-\d{2}/.exec(origin.retrieval?.retrieved ?? '')?.[0];
+  const when = day ? `, retrieved ${day}` : '';
+  if (origin.kind === 'pdb') return `PDB ${origin.id} (RCSB PDB${when})`;
+  if (origin.kind === 'alphafold') return `AlphaFold DB model of ${origin.id}, version ${origin.version}${when}`;
+  return `${origin.name}${structure?.meta.code ? ` (${structure.meta.code})` : ''}, a file`;
+}

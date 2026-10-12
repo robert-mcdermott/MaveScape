@@ -1,8 +1,8 @@
 package main
 
-// The requests behind the Structure view (wave 5, slices 1 and 2; requirements X1, X2): a PDB
-// entry's coordinates from RCSB, a protein's AlphaFold DB entries and predicted model, and the
-// structures that cover a protein, ranked by PDBe's SIFTS. Each carries a public identifier only: a
+// The requests behind the Structure view (wave 5, slices 1, 2 and 4; requirements X1, X2, X4): a PDB
+// entry's coordinates from RCSB, a protein's AlphaFold DB entries, predicted model and its
+// predicted aligned error, and the structures that cover a protein, ranked by PDBe's SIFTS. Each carries a public identifier only: a
 // PDB ID or a UniProt accession. A structure is kept in the cache as the
 // service sent it, compressed (RCSB's .cif.gz file; AlphaFold DB's file as it stores it, gzip), and
 // the page decompresses it; the program checks that it is a whole structure file first.
@@ -109,6 +109,30 @@ var structureRequests = []publicRequest{
 		},
 		notFound: func(r *http.Request) string {
 			return fmt.Sprintf("AlphaFold DB has no model %s of %s.", r.PathValue("version"), strings.ToUpper(r.PathValue("accession")))
+		},
+	},
+	{
+		Route:    "GET /api/fetch/alphafold/{accession}/pae/{version}",
+		Service:  "AlphaFold DB",
+		Upstream: alphafoldFiles + "AF-{accession}-F1-predicted_aligned_error_v{version}.json",
+		Sends:    "a UniProt accession and a model version (6)",
+		Why:      "the predicted model's aligned error (PAE), by which a predicted model's exposure and disorder are read (Structure: **Structure as evidence**; `structure_evidence`)",
+		Format:   formatJSON,
+		Kind:     "alphafold", MaxAge: defaultCacheMaxAge, Limit: 256 << 20,
+		resolve: func(r *http.Request) (call, error) {
+			accession, ok := normalizeAccession(r.PathValue("accession"))
+			if !ok {
+				return call{}, errors.New("Not a UniProt accession: give one such as P62993.")
+			}
+			version := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(r.PathValue("version"))), "v")
+			if !modelVersionPattern.MatchString(version) {
+				return call{}, errors.New("Not an AlphaFold DB model version: give one such as 6.")
+			}
+			name := "AF-" + accession + "-F1-predicted_aligned_error_v" + version + ".json"
+			return call{name: name, source: alphafoldFiles + name}, nil
+		},
+		notFound: func(r *http.Request) string {
+			return fmt.Sprintf("AlphaFold DB has no aligned error for model %s of %s.", r.PathValue("version"), strings.ToUpper(r.PathValue("accession")))
 		},
 	},
 	{

@@ -54,6 +54,9 @@ import { findStructures, mapStructure, openStructure, originText, pickResidue, R
 import { calibrationsFor, colorStructure, scoresSettings } from './structure-coloring.js';
 import { coloringCSV, POSITION, SCORE_COLORINGS, substitutionCode } from '../lib/structure-scores.js';
 import { activeRun } from './selections.js';
+import { computeEvidence, evidenceState, evidenceStatistics, evidenceValues } from './structure-evidence.js';
+import { scoreSource } from './structure-coloring.js';
+import { CLASSES, describeClusters, describeEffects, evidenceCSV } from '../lib/structure-evidence.js';
 import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
@@ -297,6 +300,8 @@ export function installRemote(app) {
   // comparison), the legend, the target positions on the structure by state, the words.
   function scoresSummary(colored) {
     if (!colored.ok) return { error: colored.message };
+    // The structural classes (wave 5, slice 4).
+    if (colored.classes) return { coloring: 'class', label: 'Structural class', source: colored.source, legend: { title: colored.legend.title, items: colored.legend.items.map((i) => ({ label: i.label, color: i.color, count: i.count })) }, words: colored.words };
     const v = colored.values;
     const { legend } = colored;
     const n = legend.counts.byState;
@@ -482,8 +487,10 @@ export function installRemote(app) {
       const scoring = ['substitution', 'threshold', 'side', 'calibration'].some((k) => args[k] !== undefined && args[k] !== null);
       if (args.color || (scoring && settings.how)) {
         const schemes = COLOR_SCHEMES.map((c) => c.id).filter((id) => id !== 'plddt' || viewer.structure.meta.isPredicted);
-        const chosen = args.color ? choose(args.color, [...Object.keys(SCORE_COLORINGS), ...schemes], 'color scheme') : settings.how;
-        if (Object.hasOwn(SCORE_COLORINGS, chosen)) {
+        const chosen = args.color ? choose(args.color, [...Object.keys(SCORE_COLORINGS), 'class', ...schemes], 'color scheme') : settings.how;
+        // The structural classes are read first (wave 5, slice 4).
+        if (chosen === 'class') await computeEvidence(app, state);
+        if (Object.hasOwn(SCORE_COLORINGS, chosen) || chosen === 'class') {
           const before = { how: settings.how, substitution: settings.substitution, abnormal: { ...settings.abnormal }, scheme: viewer.colorScheme };
           settings.how = chosen;
           if (args.substitution !== undefined && args.substitution !== null) {
@@ -592,6 +599,61 @@ export function installRemote(app) {
       }
       const words = summary.scores?.words ? ` ${summary.scores.words.join(' ')}` : summary.scores?.error ? ` ${summary.scores.error}` : '';
       return { message: `${parts.join('; ')}. Drawn with ${viewer.kind === 'webgpu' ? 'WebGPU' : 'the Canvas renderer'}.${words}`, data: summary };
+    },
+
+    // What the structure says of the target's positions (wave 5, slice 4): their structural classes,
+    // read with the partners chosen; the scores by class; the cluster test.
+    async structure_evidence(args) {
+      const state = structureState(app);
+      const viewer = state.viewer;
+      if (!viewer?.structure) throw new ActionError('No structure is open: open one with open_structure (a PDB ID or an AlphaFold DB model), or a file with open_files.');
+      if (!state.mapping) throw new ActionError(state.mapTarget ? `${state.mapTarget.name} is on no chain of ${viewer.structure.meta.code || 'the structure'}: map_structure says which chains hold it.` : 'This workspace has no target to map onto the structure.');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      const ev = evidenceState(state);
+      await computeEvidence(app, state);
+      if (args.partner !== undefined && args.partner !== null && args.partner !== '') {
+        const options = ['all', ...ev.partners.map((p) => p.id), ...ev.partners.map((p) => p.label)];
+        const named = choose(String(args.partner), options, 'partner');
+        ev.choice = named === 'all' ? 'all' : (ev.partners.find((p) => p.id === named || p.label === named)?.id ?? 'all');
+        await computeEvidence(app, state);
+      }
+      if (args.fraction !== undefined && args.fraction !== null) {
+        const f = Number(args.fraction);
+        if (!(f >= 0.05 && f <= 0.5)) throw new ActionError('fraction is the share of positions called least tolerant, from 0.05 to 0.5.');
+        ev.fraction = f;
+      }
+      if (args.seed !== undefined && args.seed !== null) {
+        const seed = Number(args.seed);
+        if (!Number.isInteger(seed) || seed < 1) throw new ActionError('seed is a whole number from 1.');
+        ev.seed = seed;
+      }
+      if (ev.status !== 'ready') throw new ActionError(ev.message || 'What the structure says could not be read.');
+      store.notify(['structure']);
+      await settle();
+      const r = ev.result;
+      const code = viewer.structure.meta.code || viewer.structure.label;
+      const offset = state.mapTarget.offset ?? 0;
+      const nameOf = (q) => `${state.mapTarget.sequence[q - 1]}${q + offset}`;
+      const values = evidenceValues(state, scoreSource(app));
+      const stats = evidenceStatistics(ev, values);
+      const counts = Object.fromEntries(CLASSES.map((c) => [c.id, r.positions.filter((p) => p.class === c.id).length]));
+      const round = (x, d = 6) => (Number.isFinite(x) ? +x.toPrecision(d) : null);
+      const data = {
+        structure: code, chain: r.chain, predicted: r.predicted, alignedError: r.predicted ? ev.pae : null,
+        partners: ev.partners.map((p) => ({ id: p.id, label: p.label, kind: p.kind, additive: p.additive, chosen: ev.chosen.includes(p.id) })),
+        classes: counts,
+        positions: Object.fromEntries(CLASSES.map((c) => [c.id, stretches(r.positions.filter((p) => p.class === c.id).map((p) => p.position))])),
+        tracks: ['structure:class', 'structure:ss', 'structure:rsa', 'structure:ppse', 'structure:distance', ...(r.predicted ? ['structure:plddt'] : [])],
+      };
+      const lines = [`${code} chain ${r.chain}: ${CLASSES.filter((c) => counts[c.id]).map((c) => `${counts[c.id]} ${c.label}`).join(', ')}.`];
+      if (stats) {
+        data.scores = values.words;
+        data.effects = stats.effects.classes.map((c) => ({ class: c.id, positions: c.n, median: round(c.median), q1: round(c.q1), q3: round(c.q3), ...(c.test ? { below: round(c.test.below), u: c.test.u, p: round(c.test.p), q: round(c.test.q) } : {}) }));
+        const t = stats.clusters;
+        if (t) data.clusters = { positions: t.n, leastTolerant: t.k, fraction: t.fraction, distance: t.distance, pairs: t.observed, expected: round(t.expected), ratio: round(t.ratio), p: round(t.p), permutations: t.permutations, seed: t.seed, strata: t.strata, burialIgnored: { expected: round(t.any.expected), p: round(t.any.p) }, sensitive: t.sensitive, groups: t.clusters.map((g) => g.map(nameOf)) };
+        lines.push(...describeEffects(stats.effects, code), ...describeClusters(t, nameOf));
+      } else lines.push('No score run to read the classes by.');
+      return { message: lines.join(' '), data };
     },
 
     async set_mode(args) {
@@ -1306,7 +1368,7 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence'];
       const what = choose(args.what, kinds, 'export');
       let file;
       // The target on the structure shown (wave 5, slice 2), position by position.
@@ -1315,6 +1377,16 @@ export function installRemote(app) {
         if (!state.mapping) throw new ActionError(state.viewer?.structure ? 'The target is not mapped onto the structure shown (map_structure says why).' : 'No structure is open: open one with open_structure.');
         const name = state.viewer.structure.meta.code || state.viewer.structure.label;
         return { file: mappingCSV(state.mapping, name), message: `The mapping of ${state.mapping.target.name} onto chain ${state.mapping.chain} of ${name}: ${state.mapping.target.length} positions.` };
+      }
+      // What the structure says of each position (wave 5, slice 4), with its median score.
+      if (what === 'structure-evidence') {
+        const state = structureState(app);
+        if (!state.mapping) throw new ActionError(state.viewer?.structure ? 'The target is not mapped onto the structure shown (map_structure says why).' : 'No structure is open: open one with open_structure.');
+        const ev = await computeEvidence(app, state);
+        if (ev.status !== 'ready') throw new ActionError(ev.message || 'What the structure says could not be read.');
+        const values = evidenceValues(state, scoreSource(app));
+        const name = state.viewer.structure.meta.code || state.viewer.structure.label;
+        return { file: evidenceCSV(ev.result, name, values?.valueAt ?? null, 'median_score'), message: `What ${name} says of each position of ${state.mapping.target.name}, on chain ${ev.result.chain}: ${state.mapping.target.length} positions.` };
       }
       // The scores the structure shown is colored by (wave 5, slice 3), position by position.
       if (what === 'structure-scores') {

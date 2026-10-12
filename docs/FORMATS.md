@@ -19,7 +19,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
-| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV) |
+| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV) |
 
 Coming later: Excel workbooks, structures kept with the workspace (0.5).
 
@@ -929,6 +929,37 @@ target_position,reference_position,target_residue,structure,chain,residue_number
 - `color`: the residue's color as drawn (hex): the map's palette at the map's scale for scores,
   viridis for the rest; `#4f5357` filtered, `#8c8c8c` missing, `#cfcfcf` not designed; empty for a
   position on no residue.
+
+### What a structure says of each position
+
+`<entry>_chain-<chain>_evidence.csv` (the Structure view's **Evidence**, under *Structure as
+evidence*; `export` with `what: "structure-evidence"`; MaveScape 0.5): one row per target
+position, on the chain the target is mapped onto, with the median score of its missense
+substitutions when there is a score run:
+
+```csv
+target_position,reference_position,target_residue,structure,chain,residue_number,insertion_code,secondary_structure,accessible_area,relative_accessibility,relative_accessibility_in_structure,ppse,disordered,plddt,partner_distance,partner,interface,interactions,structural_class,median_score
+25,183,Ile,2VWF,A,25,,E,0,0,0,19,,,12.71,chain:B,,,buried,-4.39105
+51,209,Tyr,2VWF,A,51,,G,80.7,0.307,0.06,13,,,2.88,chain:B,yes,Hydrogen bond PRO 4 · B,interface,-0.447693
+```
+
+- `target_position` to `insertion_code`: as in the mapping's file (above); the rest is empty for a
+  position on no residue;
+- `secondary_structure`: DSSP's code (`H` α-helix, `G` 3₁₀-helix, `I` π-helix, `E` strand, `B`
+  bridge, `T` turn, `S` bend, `-` none);
+- `accessible_area`: the residue's water-accessible area in its chain alone (Å², Shrake–Rupley with
+  DSSP's radii and a 1.4 Å probe); `relative_accessibility`, relative to its largest (Tien et al.
+  2013), and `relative_accessibility_in_structure`, among every protein chain of the structure (as
+  DSSP computes it);
+- `ppse`: the Cα atoms within 12 Å in a 70° cone of its side chain (StructureMap's part-sphere
+  exposure); `disordered`: `yes` in a predicted model's disordered region; `plddt`: a predicted
+  model's confidence;
+- `partner_distance` (Å) and `partner` (`chain:<id>`, or `ligand:<chain>:<number>:<name>`): the
+  nearest heavy atom of the partners chosen; `interface`: `yes` within 4 Å; `interactions`: those
+  interactions.js finds there (PLIP's types), with what;
+- `structural_class`: `disordered`, `interface`, `buried` (relative accessibility in its chain below
+  0.25) or `exposed`;
+- `median_score`: the position's median score (the map's run and condition), when there is one.
 
 ## Comparisons
 

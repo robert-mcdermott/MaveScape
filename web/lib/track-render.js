@@ -129,7 +129,8 @@ export function trackShapes(tracks, frame, theme, color) {
         } else if (kind === 'turn') {
           shapes.push({ type: 'rect', x, y: top + laneH * 0.35, w: Math.max(1, width), h: laneH * 0.3, fill: T.turn, clip: true, title: `${f.label} ${f.start}–${f.end}` });
         } else {
-          const fill = kind ? T[kind] : T.feature;
+          // A feature may carry its own color (a structural class: wave 5, slice 4).
+          const fill = f.fill ?? (kind ? T[kind] : T.feature);
           shapes.push({ type: 'rect', x, y: top + 0.5, w: Math.max(1, width), h: Math.max(1, laneH - 1), fill, radius: kind === 'helix' ? Math.min(3, laneH / 2) : 1.5, clip: true, title: `${f.label}${f.label === f.type ? '' : ` (${f.type})`} ${f.start}–${f.end}` });
           const room = Math.floor((Math.min(xOf(f.end + 1), left + frame.gridW) - Math.max(x, left) - 4) / 5.6);
           if (!kind && room >= 3 && laneH >= 9) {
