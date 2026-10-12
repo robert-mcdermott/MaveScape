@@ -389,3 +389,22 @@ export function analysesOf(ws, id) {
   return (ws.analyses ?? []).filter((a) => a.run?.id === id || [a.a, a.b].some((side) => side?.spec?.run === id || side?.spec?.annotation === id));
 }
 
+
+// --- Checkpoints (wave 6, slice 5) ------------------------------------------------------------------------
+
+// Keeps a checkpoint (lib/diff.js, makeCheckpoint: a named state of the analysis and the history's
+// hash then) in ws.checkpoints, absent until the first, in the history.
+export function addCheckpoint(ws, checkpoint, time = clockNow()) {
+  const list = ws.checkpoints ?? [];
+  const id = uniqueId(checkpoint.name ?? 'checkpoint', list);
+  const entry = { ...checkpoint, id, created: checkpoint.created ?? time };
+  return { ws: change(ws, { checkpoints: [...list, entry] }, 'checkpoint', `Checkpoint "${entry.name}": the analysis as it stood (state SHA-256 ${entry.sha256.slice(0, 12)}…)`, time), id };
+}
+
+export function removeCheckpoint(ws, id) {
+  const list = ws.checkpoints ?? [];
+  const gone = list.find((c) => c.id === id);
+  if (!gone) return ws;
+  const rest = list.filter((c) => c.id !== id);
+  return change(ws, { checkpoints: rest.length ? rest : undefined }, 'checkpoint', `Deleted the checkpoint "${gone.name}"`);
+}

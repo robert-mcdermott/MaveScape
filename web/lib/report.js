@@ -326,6 +326,8 @@ export function writeReport(ws, context = {}) {
   section('log', 'Decision log', history.length ? [
     paragraph(`The workspace's history: ${history.length === 1 ? `1 entry (its SHA-256 ${short(history[0].hash)})` : `${plural(history.length, 'entry', 'entries')}, each chained to the one before by SHA-256 (the last ${short(history.at(-1)?.hash)})`}, ${chain.ok ? 'intact' : `broken at entry ${chain.broken[0].index + 1}`}. Times are UTC.`),
     { kind: 'list', items: history.map((e) => `${String(e.time).slice(0, 10)} ${String(e.time).slice(11, 16)}: ${e.detail}`) },
+    // Checkpoints (wave 6, slice 5): named states of the analysis, each by its state's SHA-256.
+    ...((ws.checkpoints ?? []).length ? [paragraph(`Checkpoints kept with the workspace, each the analysis as it stood: ${list(ws.checkpoints.map((c) => `"${c.name}" (${String(c.created).slice(0, 10)}, state SHA-256 ${short(c.sha256)})`))}.`)] : []),
   ] : []);
 
   // Limitations: what the counts did not record, what each model assumes, what QC raised and was

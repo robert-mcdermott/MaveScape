@@ -48,6 +48,8 @@ import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, 
 import { predictorSide, scoreSetSide } from './compare-cases.mjs';
 import { checkTable } from './robustness-cases.mjs';
 import { contextOf } from './report-cases.mjs';
+import { pairsFor } from './diff-cases.mjs';
+import { analysisState, diffStates } from '../web/lib/diff.js';
 import { comparisonRecord, robustnessRecord, writeReport } from '../web/lib/report.js';
 import { robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_SEED } from '../web/lib/robustness.js';
 import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
@@ -642,6 +644,42 @@ try {
   check('set_design, then score: the example\'s run, from files opened by path', `${set.message} ${rescored.message}`, set.data.valid && rescored.data.outputSha256 === nodeDigest);
   const inAnother = await act('check_figure', { paths: [join(out, 'every-view.svg')] });
   check('check_figure in another workspace that scored the same table to the same output: Run 1\'s panels found by its output\'s SHA-256, as they were; the comparison missing Run 2', inAnother.message, !inAnother.data.workspace.same && inAnother.data.panels.map((p) => p.status).join() === 'unchanged,unchanged,missing,unchanged' && /Run 2 \(output [0-9a-f]{12}…\) is not in this workspace/.test(inAnother.data.panels[2].changes.join(' ')));
+  // Checkpoints and the diff (wave 6, slice 5), in this workspace (its one run): a checkpoint kept,
+  // the run scored again with another pseudocount and minimum input count, the changes as Node
+  // finds them from the workspace's archive (each run recomputed, its QC read with each state's
+  // thresholds); the same between two archives; shown in the Report view and the drawer's history.
+  {
+    const kept = await act('checkpoint', { name: 'Before the rescoring' });
+    await act('export', { what: 'archive', path: join(out, 'diff-before.msz') });
+    const noFrom = await send('diff', { from: 'no such checkpoint' });
+    await act('score', { parameters: { pseudocount: 1, filters: { minInputCount: 10 } } });
+    const diffed = await act('diff');
+    await act('export', { what: 'archive', path: join(out, 'diff-after.msz') });
+    const [archiveBefore, archiveAfter] = [await readArchive(readFileSync(join(out, 'diff-before.msz'))), await readArchive(readFileSync(join(out, 'diff-after.msz')))];
+    const scoredOf = (read) => new Map(read.ws.runs.map((run, i) => [run.id, recompute(read.ws, read.sources, i)]));
+    const after = scoredOf(archiveAfter);
+    const tableOf = [...after.values()][0].table;
+    const results = new Map([...after].map(([id, x]) => [id, x.scored.results]));
+    const checkpointState = archiveAfter.ws.checkpoints[0].state;
+    const nodeDiff = diffStates(checkpointState, analysisState(archiveAfter.ws), { pairs: pairsFor(checkpointState, analysisState(archiveAfter.ws), tableOf, results) });
+    const strip = (x) => JSON.parse(JSON.stringify(x));
+    check('checkpoint and diff: a checkpoint kept (in the history), the run scored again with pseudocount 1 and a minimum input count of 10; the changes the window finds (the run scored, the parameters, the variants moved, crossed, filtered and named) as Node finds them from the workspace\'s archive; an unknown checkpoint refused, listing those kept', `${kept.message.slice(0, 80)} | ${diffed.data.words.slice(1, 4).join(' ')} | ${noFrom.message}`,
+      kept.data.checkpoints.length === 1 && archiveAfter.ws.checkpoints[0].sha256 === kept.data.checkpoints[0].sha256 && JSON.stringify(diffed.data.changes) === JSON.stringify(strip(nodeDiff.changes)) && JSON.stringify(diffed.data.pairs) === JSON.stringify(strip(nodeDiff.pairs)) && diffed.data.pairs[0].parameters.join() === 'the pseudocount 0.5 → 1,the minimum input count 1 → 10' && !noFrom.ok && /Before the rescoring/.test(noFrom.message));
+    const shown = await browser.eval(`(() => ({ head: document.querySelector('.report-changes .report-title')?.textContent, map: Boolean(document.querySelector('.report-change-map svg')), rows: document.querySelectorAll('.report-changes tbody tr').length }))()`);
+    await browser.eval('window.mavescape.toggleDrawer(true)');
+    await sleep(200);
+    const drawn = await browser.eval(`[...document.querySelectorAll('#drawer .history-list li.checkpoint button')].map((b) => b.textContent)`);
+    await browser.eval('window.mavescape.toggleDrawer(false)');
+    check('diff in the Report view: the changes since the checkpoint above the report, the variants that moved most, and the map of the change; the drawer\'s history marks the checkpoint, with the changes since it', `${JSON.stringify(shown)}; drawer ${JSON.stringify(drawn)}`, shown.head === 'Changes since "Before the rescoring"' && shown.map && shown.rows > 0 && drawn.join() === 'Changes since');
+    const two = await act('diff', { paths: [join(out, 'diff-before.msz'), join(out, 'diff-after.msz')] });
+    const before = scoredOf(archiveBefore);
+    const both = new Map([...results, ...[...before].map(([id, x]) => [id, x.scored.results])]);
+    const nodeTwo = diffStates(analysisState(archiveBefore.ws), analysisState(archiveAfter.ws), { pairs: pairsFor(analysisState(archiveBefore.ws), analysisState(archiveAfter.ws), tableOf, both) });
+    check('diff of two workspace archives (before and after the rescoring): the changes as Node finds them from the two, the runs recomputed from each archive\'s own table (the checkpoint kept in between one of them)', two.data.words.slice(0, 3).join(' '), JSON.stringify(two.data.changes) === JSON.stringify(strip(nodeTwo.changes)) && JSON.stringify(two.data.pairs) === JSON.stringify(strip(nodeTwo.pairs)) && two.data.changes.some((c) => c.kind === 'run'));
+    const removed = await act('checkpoint', { remove: 'Before the rescoring' });
+    const none = await send('diff', {});
+    check('checkpoint with remove: deleted (in the history); diff with no checkpoint kept refused, saying how to keep one', `${removed.message} | ${none.message}`, removed.data.checkpoints.length === 0 && !none.ok && /keep one with checkpoint/.test(none.message));
+  }
 
   // The other example.
   const simulated = await act('open_example', { id: 'simulated' });

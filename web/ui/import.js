@@ -33,8 +33,9 @@ export function installImport(app) {
   app.importers.set('json', (items) => importDesigns(app, items));
   app.parseTableFile = (item) => parseTableFile(app, item);
   // A source's table, read again from the library (each file by its SHA-256) when this session has
-  // not read it, and assembled as at import (joined, named, its barcode map applied).
-  app.sourceTable = async (source) => {
+  // not read it, and assembled as at import (joined, named, its barcode map applied). options.target:
+  // the target of a source from outside the workspace (an archive's, wave 6 slice 5).
+  app.sourceTable = async (source, options = {}) => {
     if (app.tables.has(source.id)) return app.tables.get(source.id).table;
     const files = source.files?.length ? source.files : [{ fileName: source.fileName, sha256: source.sha256 }];
     const parsed = [];
@@ -44,7 +45,7 @@ export function installImport(app) {
       parsed.push({ name: f.fileName, table: await parseTableFile(app, { name: f.fileName, file: new Blob([bytes]) }), role: f.role ?? 'counts' });
     }
     const m = source.mapping ?? {};
-    const target = app.store.ws.targets.find((t) => t.id === source.target);
+    const target = options.target ?? app.store.ws.targets.find((t) => t.id === source.target);
     const assembled = assembleTable(parsed, { absentMeans: m.absentMeans ?? 'missing', level: m.level, target, barcodeColumn: m.barcodeColumn ?? undefined, map: m.assembly?.map ?? undefined, codons: m.assembly?.codons ?? undefined });
     if (!assembled.table) throw new Error(`${source.name} could not be assembled again: ${assembled.problems.map((p) => p.message).join(' ')}`);
     app.tables.set(source.id, { table: assembled.table, review: null });

@@ -116,6 +116,8 @@ import { chartsPanel } from '../web/lib/figure-plots.js';
 import { qcCharts, qcPanelData } from '../web/lib/qc-plots.js';
 import { writeReport } from '../web/lib/report.js';
 import { checkReferences, contextOf, CROSSREF_EXCEPTIONS, reportWorkspace } from './report-cases.mjs';
+import { movedApart, pairsFor, plantedChanges } from './diff-cases.mjs';
+import { analysisState, changeMap, diffStates, pairWords, stateDigest } from '../web/lib/diff.js';
 import { buildManifest, checkManifest, compareDrawings, compareManifest, embedPNG, embedSVG, figureForWorkspace, pdfAttachment, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { comparisonCharts, comparisonPoints, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
 import { encodePNG } from '../web/lib/png.js';
@@ -4681,6 +4683,57 @@ const suites = {
     const removed = removeRun(ws, run2.id);
     const after = writeReport(removed, contextOf(removed, scored));
     check('report', 'Run 2 removed: the comparison that read it leaves the report (said in the history), Run 1\'s robustness stays', `${(removed.analyses ?? []).map((a) => a.kind).join(', ')}; ${removed.history.at(-1).detail}`, (removed.analyses ?? []).map((a) => a.kind).join() === 'robustness' && !after.sections.some((x) => x.id === 'comparisons') && after.sections.some((x) => x.id === 'robustness') && /from the report the analysis reading it/.test(removed.history.at(-1).detail), 'gone, said');
+  },
+
+  // Wave 6, slice 5 (R6): checkpoints and the semantic diff (lib/diff.js).
+  async diff() {
+    const { g, table, base, before, scored, planted } = plantedChanges();
+    // Each planted change, described exactly and nothing else.
+    const rows = planted.map((x) => {
+      const after = analysisState(x.ws);
+      const d = diffStates(before, after, { pairs: pairsFor(before, after, table, scored) });
+      const texts = d.changes.map((c) => c.text);
+      const pair = d.pairs[0];
+      const okChanges = JSON.stringify(texts) === JSON.stringify(x.expect.changes);
+      const okPair = x.expect.parameters === null
+        ? (x.expect.findings ? d.pairs.length === 1 && pair.a.id === pair.b.id && JSON.stringify(pair.findings.map((f) => [f.id, f.from, f.to])) === JSON.stringify(x.expect.findings) : !d.pairs.length)
+        : d.pairs.length === 1 && JSON.stringify(pair.parameters) === JSON.stringify(x.expect.parameters) && JSON.stringify(pair.design) === JSON.stringify(x.expect.design) && JSON.stringify(pair.findings.map((f) => [f.id, f.from, f.to])) === JSON.stringify(x.expect.findings);
+      return { x, d, ok: okChanges && okPair, said: [...texts, ...d.pairs.flatMap(pairWords)] };
+    });
+    check('diff', 'planted changes from a checkpoint of GRB2\'s run, each described exactly and nothing else: the pseudocount and the minimum input count scored again, a replicate left out of the design and scored again (the design\'s change and the run\'s, and the outlier-replicate finding no longer assessed), a QC threshold changed (the agreement finding\'s verdict, pass → review), the readout edited', rows.map((r) => `${r.x.id}: ${r.ok ? 'exact' : `said ${r.said.join(' | ')}`}`).join('; '), rows.every((r) => r.ok), 'exactly');
+    // The variants each rescoring moved, computed apart.
+    const moved = rows.filter((r) => r.x.expect.moved).map((r) => {
+      const p = r.d.pairs[0];
+      const t = p.targets[0];
+      const apart = movedApart(scored.get(p.a.id), scored.get(p.b.id));
+      const listed = t.variants.map((v) => v.variant);
+      const same = t.both === apart.both && t.moved === apart.moved.size && t.crossed === apart.crossed.size && t.filtered === apart.filtered && t.scored === apart.scored && listed.every((k) => apart.moved.has(k) || apart.crossed.has(k));
+      return { id: r.x.id, t, same };
+    });
+    check('diff', 'the variants each rescoring moved as computed apart (effects against the wild type, t p-values, Benjamini–Hochberg): beyond the earlier 95% interval, of another class, no longer and newly scored; the variants named among them', moved.map((m) => `${m.id}: ${m.t.both} in both, ${m.t.moved} moved, ${m.t.crossed} crossed, ${m.t.filtered} filtered, ${m.t.scored} scored${m.same ? '' : ' (differs)'}`).join('; '), moved.length === 3 && moved.every((m) => m.same) && moved.some((m) => m.t.moved > 0) && moved.some((m) => m.t.crossed > 0) && moved.some((m) => m.t.filtered > 0), 'the same');
+    // Nothing changed: an analysis against itself, a checkpoint against now when nothing was done.
+    const self = diffStates(before, before, { pairs: pairsFor(before, before, table, scored) });
+    const now = diffStates(before, analysisState(base), { pairs: pairsFor(before, analysisState(base), table, scored) });
+    check('diff', 'an analysis compared with itself has no change, and a checkpoint with the workspace it was just kept from neither', `${self.summary} ${now.summary}`, self.same && now.same && !self.changes.length && !now.changes.length, 'no change');
+    // Through the archive: the checkpoint kept, its state's SHA-256 its own, the same diff.
+    const last = rows.find((r) => r.x.id === 'pseudocount');
+    const archived = await readArchive((await writeArchive(last.x.ws, { software: SOFTWARE, results: new Map() })).bytes);
+    const kept = archived.ws.checkpoints?.[0];
+    const again = diffStates(kept.state, analysisState(archived.ws), { pairs: pairsFor(kept.state, analysisState(archived.ws), table, scored) });
+    check('diff', 'a checkpoint through the workspace archive: kept with its name, the history\'s hash it was kept after, and its state (SHA-256 the state\'s own); the same changes from it, and a diff of the two archives\' states as of their checkpoint and now', `"${kept?.name}" after ${kept?.head?.slice(0, 12)}…, state ${kept && stateDigest(kept.state) === kept.sha256 ? 'its SHA-256' : 'not its SHA-256'}; ${again.summary}`, kept && kept.head === base.history.at(-2).hash && stateDigest(kept.state) === kept.sha256 && JSON.stringify(again.changes) === JSON.stringify(last.d.changes) && JSON.stringify(again.pairs) === JSON.stringify(last.d.pairs) && !archived.problems.length, 'the same');
+    // The map of the change: each variant compared, its change.
+    const p = last.d.pairs[0];
+    const spec = changeMap(g.run, scored.get(p.a.id), last.x.ws.runs[1], scored.get(p.b.id));
+    const model = buildMapModel(spec.results, spec.design, { contrast: 0, colorBy: 'differential' });
+    const svg = mapSVG(model, { results: spec.results });
+    const cells = [...svg.matchAll(/<title>([^<]+)<\/title>/g)].length;
+    const apart = movedApart(scored.get(p.a.id), scored.get(p.b.id));
+    const delta = spec.results.differential[0].delta;
+    const compared = [...delta].filter(Number.isFinite).length;
+    check('diff', 'the map of the change (the pseudocount\'s): a cell for each variant both runs scored, its change the effect after less before, drawn as the map draws a difference', `${compared} variants with a change of ${apart.both} scored in both; ${cells} cells named in the SVG`, compared === apart.both && cells > 0, 'each one');
+    // The report names the checkpoints.
+    const rep = writeReport(base, { software: SOFTWARE });
+    check('diff', 'the report names each checkpoint with its date and its state\'s SHA-256, and the decision log has its entry', rep.sections.find((x) => x.id === 'log')?.blocks.at(-1).text ?? 'none', /Checkpoints kept with the workspace, each the analysis as it stood: "Before" \(2026-10-12, state SHA-256 [0-9a-f]{12}…\)\./.test(rep.markdown) && rep.markdown.includes('Checkpoint "Before": the analysis as it stood'), 'named');
   },
 };
 

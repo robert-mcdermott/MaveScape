@@ -5,6 +5,8 @@ package main
 // exactly these; TestEveryActionHasAPageHandler checks it). GET /api/remote/tools lists them with
 // their arguments, and the MCP server (roadmap wave 7) will offer the same list to agents.
 
+import "encoding/json"
+
 type remoteAction struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
@@ -13,8 +15,25 @@ type remoteAction struct {
 	long bool
 	// output: writes a file at args.path (output.go), so it needs the token.
 	output bool
-	// reads: reads files at args.paths (local.go), so it needs the token.
-	reads bool
+	// reads: reads files at args.paths (local.go), so it needs the token. optionalPaths: the
+	// paths may be left out (diff: between checkpoints, or two archives), and then nothing is read.
+	reads         bool
+	optionalPaths bool
+}
+
+// readsFiles: whether a call of the action reads files (and so needs the token): one that reads,
+// unless its paths are optional and none are given.
+func (a remoteAction) readsFiles(args json.RawMessage) bool {
+	if !a.reads {
+		return false
+	}
+	if !a.optionalPaths {
+		return true
+	}
+	var params struct {
+		Paths []string `json:"paths"`
+	}
+	return json.Unmarshal(args, &params) == nil && len(params.Paths) > 0
 }
 
 func schema(properties map[string]any, required ...string) map[string]any {
@@ -272,6 +291,16 @@ var remoteActions = []remoteAction{
 		"paths":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The figure's file: one absolute path."},
 		"rebuild": flagArg("Rebuild the figure in the workspace and say, panel by panel, whether it is drawn the same."),
 	}, "paths"), long: true, reads: true},
+	{Name: "checkpoint", Description: "Keeps a checkpoint: the analysis as it stands (the targets, design, runs, QC thresholds and acknowledgements, selections, annotations, structure views, figures and what the report keeps), named, with the history's hash at that moment, in the workspace and its archive; or deletes one. Lists the checkpoints kept. Compare with diff.", InputSchema: schema(map[string]any{
+		"name":   textArg("The checkpoint's name (\"Before the rescoring\"): keeps one of the analysis as it stands."),
+		"remove": textArg("A checkpoint, by name or id, to delete."),
+	})},
+	{Name: "diff", Description: "What changed between two states of the analysis, in words: from a checkpoint (the latest if not given) to now or another checkpoint, or between two workspace archives (paths, the earlier first). The tables, targets, design, runs scored and removed, QC thresholds and acknowledgements, selections, annotations, structure views, figures, the report's analyses and MaveDB details; and for each table's latest run, how its analysis changed (parameters, filters, design) and what that did: for each condition, the variants whose effect moved beyond their earlier 95% interval, changed class (lower than, like or higher than the wild type, q < 0.05) or were newly filtered or scored, the most moved by name, and the QC findings whose verdict changed. Shows the changes in the Report view, with a map of the change.", InputSchema: schema(map[string]any{
+		"from":  textArg("The checkpoint compared from, by name or id; the latest if not given."),
+		"to":    textArg("now (the default), or another checkpoint by name or id."),
+		"paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Two workspace archives (.msz), absolute paths, the earlier first: compared instead of checkpoints."},
+		"show":  flagArg("Show the changes in the Report view (the default); false leaves the view shown."),
+	}), long: true, reads: true, optionalPaths: true},
 	{Name: "report", Description: "The workspace's report, shown in the Report view: its methods written from the record (each run's data, design, scoring with a table of its parameters, and QC; the comparisons and robustness checks kept in it; selections, annotations, structures, figures; every input's SHA-256; the software; the decision log; the limitations; the research-use statement), with numbered references: each section, the Markdown and the BibTeX, and the analyses kept in it. Written again on every change: the same workspace gives the same text.", InputSchema: schema(map[string]any{
 		"remove": textArg("An analysis kept in the report, by id or by its words (\"the comparison of Run 1 and Run 2\"), taken out first."),
 		"show":   flagArg("Show the Report view (the default); false leaves the view shown."),

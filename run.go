@@ -676,7 +676,7 @@ func (s *runStepper) perform(action string, args map[string]any) (remoteResult, 
 			defer release()
 			event.Output = output
 		}
-		if spec.reads {
+		if spec.readsFiles(encoded) {
 			files, err := s.hub.openFiles(encoded)
 			if err != nil {
 				return remoteResult{}, err
@@ -855,7 +855,7 @@ func performValidate(ctx context.Context, opts validateOptions, browser string) 
 			return remoteResult{}, err
 		}
 		event := remoteEvent{Action: action, Args: encoded, Client: "mavescape validate"}
-		if spec, ok := findAction(action); ok && spec.reads {
+		if spec, ok := findAction(action); ok && spec.readsFiles(encoded) {
 			files, err := page.hub.openFiles(encoded)
 			if err != nil {
 				return remoteResult{}, err

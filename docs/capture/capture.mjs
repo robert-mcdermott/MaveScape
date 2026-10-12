@@ -722,6 +722,15 @@ const scenes = {
     await js(`document.querySelector('.report-doc .report-table')?.scrollIntoView({ block: 'end' })`);
     await sleep(500);
   },
+  // Checkpoints (wave 6, slice 5): GRB2's run kept as a checkpoint, then scored again with a
+  // pseudocount of 1 and a minimum input count of 10; the Report view with the changes since.
+  async 'report-changes'() {
+    await example('grb2-sh3');
+    await act('checkpoint', { name: 'Before the rescoring' });
+    await act('score', { parameters: { pseudocount: 1, filters: { minInputCount: 10 } } });
+    await act('diff');
+    await sleep(1500);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

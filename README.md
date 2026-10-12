@@ -158,6 +158,9 @@ guides to every view, with screenshots.
     comparisons and robustness checks you add to it, selections, annotations, structures, figures,
     every input's checksum, the decision log and the limitations, with numbered references whose
     DOIs are checked against Crossref.
+  - Checkpoints of the analysis, and what changed since one in words: the design, parameters,
+    filters, thresholds and the rest, and what a rescoring did to the variants (moved beyond their
+    interval, of another class, filtered) and to the QC verdicts, with a map of the change.
   - A run written as a MaveDB deposit (scores, counts, the experiment and score set, the methods
     and the MAVE minimum information's keywords) that MaveDB's own validators accept, written on
     your computer and never sent.
@@ -324,7 +327,7 @@ every file MaveScape reads and writes, and the start page has blank layouts to f
 | **Compare** | Two replicates, conditions, runs, score sets or a predictor; robustness to analysis choices |
 | **Structure** | The scores on a PDB entry, AlphaFold DB model or file, and the structure as evidence |
 | **Figures** | Pages of panels (any view's plots, maps and text) for a paper or a talk, exported as SVG, PDF or PNG |
-| **Report** | The methods of the whole workspace with their references, written from its record, copied as Markdown or downloaded with its BibTeX |
+| **Report** | The methods of the whole workspace with their references, written from its record, copied as Markdown or downloaded with its BibTeX; checkpoints, and what changed since one |
 
 The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page for each.
 
@@ -410,6 +413,7 @@ integration on every change.
 | The record | Archives saved by every release since 0.1.0, reopened | Every run recomputed to its recorded hash |
 | Figures | Nine examples' maps and every view's plots as figure panels (96 QC panels), against the map's own SVG and the results themselves; the PDF's content read back; the window's export against Node's; each file's manifest read back, edited, compared after a rescoring and rebuilt | Every cell the map's own color, every bar and point the results'; the PDF the SVG's rectangles and text, mark for mark; the window's SVG and manifest Node's, byte for byte; an edit caught, exactly the panels a rescoring touches flagged, a rebuilt figure the same bytes |
 | Report | GRB2's workspace built one operation at a time; the 14 examples' runs; every cited DOI against Crossref's record (a recorded fixture); the window's report against Node's | Every operation its sentence, nothing said that was not done; each run's paragraphs its methods word for word; 43 of 43 references agree; the window's text Node's |
+| Checkpoints and changes | Five planted changes from a checkpoint of GRB2's run (a pseudocount, a filter, a replicate left out, a threshold, the readout); the variants each rescoring moved, computed apart; the window's diff against Node's | Each change described exactly and nothing else; the variants moved, crossed and filtered the same; an analysis against itself unchanged |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |
 | Scale | A million barcodes and their million-line map | Imported in 3.5 s, scored in 1.3 s |
 

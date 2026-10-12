@@ -25,17 +25,18 @@ const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') 
 
 // QC of a run (its recorded inputs), for provenance, methods and the report: { qc, findings,
 // thresholds }. The measurement is kept for the run and its measures (runs are immutable); the
-// findings are read again from it with the thresholds and acknowledgements of the moment.
-export async function qcOf(app, run) {
-  const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
+// findings are read again from it with the thresholds and acknowledgements of the moment, or of
+// another state of the analysis (a checkpoint's qc: wave 6, slice 5).
+export async function qcOf(app, run, state = app.store.ws.qc, from = null) {
+  const source = from?.source ?? app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
   if (!source) return null;
-  const thresholds = withDefaultThresholds(app.store.ws.qc?.thresholds);
+  const thresholds = withDefaultThresholds(state?.thresholds);
   const measures = measuresOf(thresholds);
   const key = `${run.id}|${canonicalJSON(measures)}`;
   app.qcCache ??= new Map();
   if (!app.qcCache.has(key)) {
     const pending = (async () => {
-      const table = await app.sourceTable(source);
+      const table = await app.sourceTable(source, from ? { target: from.target } : {});
       const { names, barcodes, columns, transfer } = workerInput(table, run.inputs.design);
       return (await app.worker('score').run('qc', { names, barcodes, columns, design: run.inputs.design, mode: run.inputs.mapping.mode, parameters: run.inputs.parameters, measures }, { transfer }).promise).qc;
     })();
@@ -44,7 +45,7 @@ export async function qcOf(app, run) {
     if (app.qcCache.size > 32) app.qcCache.delete(app.qcCache.keys().next().value);
   }
   const qc = await app.qcCache.get(key);
-  return { qc, findings: findingsFrom(qc, thresholds, { acknowledged: app.store.ws.qc?.acknowledged }), thresholds };
+  return { qc, findings: findingsFrom(qc, thresholds, { acknowledged: state?.acknowledged }), thresholds };
 }
 
 // The methods of a run, with its QC findings.

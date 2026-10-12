@@ -3,13 +3,19 @@
 // QC; the comparisons and robustness checks kept in the report; selections, annotations,
 // structures, figures; every input's SHA-256; the software; the decision log; the limitations;
 // references. Copied as Markdown or downloaded with its BibTeX. Beside it, the analyses kept in the
-// report (each can be taken out) and the robustness checks of this session not yet in it.
+// report (each can be taken out) and the robustness checks of this session not yet in it; and the
+// checkpoints (wave 6, slice 5): kept here, each compared with now or with another, the changes
+// shown above the report (ui/diff.js).
 
 import { h, icon, clear, downloadBlob } from './dom.js';
 import { toast } from './overlays.js';
 import { analysisName } from '../lib/report.js';
 import { possessive } from '../lib/words.js';
 import { keepInReport, keptLike, removeFromReport, reportOf, robustnessForReport } from './report.js';
+import { askCheckpoint, deleteCheckpoint, diffWith, stateOf } from './diff.js';
+import { pairWords } from '../lib/diff.js';
+import { mapSVG } from '../lib/map-svg.js';
+import { confirmDialog } from './overlays.js';
 
 const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'report';
 
@@ -42,11 +48,13 @@ export function mountReportMode(app, container) {
   let token = 0;
   let timer = null;
   const doc = h('article.report-doc', h('p.muted', 'Writing the report: each run\'s QC and scores are read first…'));
+  const changesEl = h('div');
+  let changesToken = 0;
   const side = h('div.report-side');
   const headActions = h('div.btn-row');
   const root = h('div.view',
     h('div.workbench-head', h('h1', icon('report'), 'Report'), h('span.spacer'), headActions),
-    h('div.report-layout', h('div.report-main', doc), side));
+    h('div.report-layout', h('div.report-main', changesEl, doc), side));
   container.append(root);
 
   function renderHead() {
@@ -91,6 +99,19 @@ export function mountReportMode(app, container) {
           doc.querySelector('#report-references')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } }, 'References')) : null)));
     }
+    // Checkpoints: each compared with now, or deleted.
+    const checkpoints = ws.checkpoints ?? [];
+    const shown = app.reportView?.from ?? null;
+    side.append(h('div.pane', h('h3', icon('branch'), 'Checkpoints', h('span.spacer'), h('button.btn.small', { type: 'button', title: 'Keep the analysis as it stands, to see later what changed since', onclick: () => askCheckpoint(app) }, icon('plus'), 'Keep')),
+      checkpoints.length
+        ? h('ul.report-kept', ...checkpoints.slice().reverse().map((c) => h(`li${c.id === shown ? '.selected' : ''}`,
+          h('span', c.name, h('span.muted', { title: c.created }, ` · ${new Date(c.created).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`)),
+          h('span.btn-row',
+            h('button.btn.small', { type: 'button', title: `What changed since "${c.name}"`, onclick: () => showChanges(c.id, 'now') }, 'Changes'),
+            h('button.icon-button', { type: 'button', title: 'Delete the checkpoint', 'aria-label': `Delete the checkpoint "${c.name}"`, onclick: async () => {
+              if (await confirmDialog({ title: 'Delete the checkpoint?', message: `"${c.name}" will no longer be kept with the workspace (its deletion is in the history; undo brings it back).`, confirm: 'Delete', danger: true })) deleteCheckpoint(app, c.id);
+            } }, icon('trash'))))))
+        : h('p.muted', { style: { margin: 0 } }, 'Keep a checkpoint before changing the analysis (a parameter, a filter, the design, a threshold): the report then says what changed since and what it did to the scores.')));
     const kept = ws.analyses ?? [];
     side.append(h('div.pane', h('h3', icon('report'), 'Kept in the report'),
       kept.length
@@ -105,6 +126,61 @@ export function mountReportMode(app, container) {
         h('ul.report-kept', ...checks.map(({ run, state }) => h('li', h('span', `${possessive(run.name)} robustness (${state.summary.total - 1} alternative analyses)`),
           h('button.btn.small', { type: 'button', onclick: () => keepInReport(app, robustnessForReport(run, state)) }, icon('plus'), 'Add'))))));
     }
+  }
+
+  // The changes from one state to another, above the report.
+  function showChanges(from, to) {
+    app.reportView = from ? { from, to } : null;
+    renderSide();
+    renderChanges();
+    if (from) root.querySelector('.report-main')?.scrollTo({ top: 0 });
+  }
+
+  async function renderChanges() {
+    const mine = ++changesToken;
+    const view = app.reportView;
+    const from = view?.from ? stateOf(app, view.from) : null;
+    const to = view?.from ? stateOf(app, view.to ?? 'now') : null;
+    if (!from || !to) {
+      clear(changesEl);
+      return;
+    }
+    if (!changesEl.firstChild) changesEl.append(h('article.report-doc.report-changes', h('p.muted', `Comparing ${from.label} with ${to.label}: the runs' scores and QC are read first…`)));
+    const result = await diffWith(app, from, to).catch((error) => ({ error }));
+    if (mine !== changesToken) return;
+    clear(changesEl);
+    const others = (store.ws.checkpoints ?? []).filter((c) => c.id !== from.id);
+    const toSelect = h('select.input', { 'aria-label': 'Compare with', onchange: (event) => showChanges(from.id, event.target.value) },
+      h('option', { value: 'now', selected: to.id === 'now' }, 'now'), ...others.map((c) => h('option', { value: c.id, selected: to.id === c.id }, `"${c.name}"`)));
+    const art = h('article.report-doc.report-changes',
+      h('div.report-changes-head', h('h2.report-title', `Changes since ${from.label}`), h('span.muted', 'to'), toSelect, h('span.spacer'),
+        h('button.icon-button', { type: 'button', title: 'Close the changes', 'aria-label': 'Close the changes', onclick: () => showChanges(null) }, icon('close'))));
+    if (result.error) {
+      art.append(h('div.callout.danger', icon('warning'), h('span', `The changes could not be worked out: ${result.error.message}`)));
+      changesEl.append(art);
+      return;
+    }
+    const { diff, maps } = result;
+    art.append(h('p', diff.summary));
+    if (diff.changes.length) art.append(h('ul', ...diff.changes.map((c) => h('li', c.text))));
+    diff.pairs.forEach((p, i) => {
+      art.append(h('h3', p.a.id === p.b.id ? `${p.b.name}: its QC` : `${p.a.name} → ${p.b.name}`));
+      for (const line of pairWords(p)) art.append(h('p', line));
+      const t = p.targets.find((x) => x.variants.length);
+      if (t) {
+        const f = (x) => (Number.isFinite(x) ? x.toFixed(3) : '—');
+        art.append(h('div.report-table', h('p.muted', `The variants that moved most${p.targets.length > 1 ? ` (${t.name})` : ''}: each effect (its score less the wild type's) before and after, and the move over its earlier SE.`),
+          h('div.table-scroll', h('table.data.compact', h('thead', h('tr', h('th', 'Variant'), h('th.r', 'Before'), h('th.r', 'After'), h('th.r', 'z'), h('th', 'Class'))),
+            h('tbody', ...t.variants.slice(0, 12).map((v) => h('tr', h('td', v.variant), h('td.r', f(v.before)), h('td.r', f(v.after)), h('td.r', f(v.z)), h('td', v.from === v.to ? v.to : `${v.from} → ${v.to}`))))))));
+      }
+      const map = maps[i];
+      if (map) {
+        const box = h('div.report-change-map', { role: 'img', 'aria-label': `The map of the change, ${p.b.name} − ${p.a.name}: each variant's effect after less before` });
+        box.innerHTML = mapSVG(map.model, { cellW: 7, cellH: 8, results: map.results, title: `${p.b.name} − ${p.a.name}` });
+        art.append(h('p.muted', 'The map of the change: each variant\'s effect after less before (blue lower, red higher); gray where either did not score it.'), box);
+      }
+    });
+    changesEl.append(art);
   }
 
   function refresh() {
@@ -129,10 +205,18 @@ export function mountReportMode(app, container) {
   renderHead();
   renderSide();
   refresh();
+  renderChanges();
   return {
     update(topics) {
-      if (topics.has('ws') || topics.has('workspace-loaded') || topics.has('results')) refresh();
-      else if (topics.has('robustness')) renderSide();
+      if (topics.has('ws') || topics.has('workspace-loaded') || topics.has('results')) {
+        refresh();
+        if (topics.has('workspace-loaded')) app.reportView = null;
+        renderChanges();
+      } else if (topics.has('robustness')) renderSide();
+      else if (topics.has('report-view')) {
+        renderSide();
+        renderChanges();
+      }
     },
     destroy() {
       clearTimeout(timer);

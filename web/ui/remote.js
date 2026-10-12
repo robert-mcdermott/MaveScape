@@ -66,6 +66,7 @@ import { addPanel, checkFigure, createFigure, FIGURE_SIZES, figureSize, mm, pane
 import { drawFigure, drawStructureImage, exportFigure, readFigureFile, rebuildFigure, rebuildWords } from './figure-data.js';
 import { comparisonForReport, keepInReport, removeFromReport, reportOf, robustnessForReport } from './report.js';
 import { analysisName } from '../lib/report.js';
+import { archiveState, deleteCheckpoint, diffWith, keepCheckpoint, stateOf } from './diff.js';
 import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
@@ -1745,6 +1746,87 @@ export function installRemote(app) {
         await settle();
       }
       return { message: `${message}${data.report ? ' Kept in the report.' : ''}`, data };
+    },
+
+    // Checkpoints (wave 6, slice 5): name keeps one of the analysis as it stands; remove deletes one
+    // (by name or id); either way, the checkpoints kept.
+    async checkpoint(args) {
+      const find = (text) => {
+        const list = ws().checkpoints ?? [];
+        const at = list.findIndex((c) => c.id === text);
+        if (at >= 0) return list[at];
+        return list[list.map((c) => c.name).indexOf(choose(String(text), list.map((c) => c.name), 'checkpoint'))];
+      };
+      let message;
+      if (args.remove !== undefined && args.remove !== null) {
+        if (!(ws().checkpoints ?? []).length) throw new ActionError('No checkpoint is kept.');
+        const gone = find(args.remove);
+        deleteCheckpoint(app, gone.id);
+        message = `Deleted the checkpoint "${gone.name}".`;
+      } else if (args.name !== undefined && args.name !== null) {
+        const id = keepCheckpoint(app, args.name);
+        const c = ws().checkpoints.find((x) => x.id === id);
+        message = `Checkpoint "${c.name}": the analysis as it stands (state SHA-256 ${c.sha256.slice(0, 12)}…, after history entry ${c.head ? c.head.slice(0, 12) : '—'}…).`;
+      }
+      await settle();
+      const list = (ws().checkpoints ?? []).map((c) => ({ id: c.id, name: c.name, created: c.created, sha256: c.sha256, head: c.head }));
+      return { message: message ?? (list.length ? `${plural(list.length, 'checkpoint')}: ${list.map((c) => `"${c.name}" (${c.created.slice(0, 16).replace('T', ' ')})`).join(', ')}.` : 'No checkpoint is kept: name one to keep the analysis as it stands.'), data: { checkpoints: list } };
+    },
+
+    // What changed between two states of the analysis (wave 6, slice 5): from a checkpoint (the
+    // latest if not given) to now or another checkpoint; or between two workspace archives (paths).
+    // For each table's latest run, how its analysis changed and what that did to the variants and
+    // its QC. Shows the changes in the Report view.
+    async diff(args, event) {
+      let from;
+      let to;
+      const files = event.files ?? [];
+      if (files.length) {
+        if (files.length !== 2) throw new ActionError('Give two workspace archives (.msz) in paths: the earlier first.');
+        const states = [];
+        for (const file of files) {
+          const response = await fetch(file.url);
+          if (!response.ok) throw new ActionError(`${file.name} could not be read (HTTP ${response.status}).`);
+          states.push(await archiveState(app, file.name, new Uint8Array(await response.arrayBuffer())).catch((error) => {
+            throw new ActionError(`${file.name}: ${error.message}`);
+          }));
+        }
+        [from, to] = states;
+      } else {
+        const list = ws().checkpoints ?? [];
+        if (!list.length) throw new ActionError('No checkpoint is kept: keep one with checkpoint, or give two archives in paths.');
+        const find = (text) => {
+          if (text === 'now') return 'now';
+          const at = list.findIndex((c) => c.id === text);
+          return at >= 0 ? list[at].id : list[list.map((c) => c.name).indexOf(choose(String(text), list.map((c) => c.name), 'checkpoint'))].id;
+        };
+        const fromId = args.from === undefined || args.from === null ? list.at(-1).id : find(args.from);
+        if (fromId === 'now') throw new ActionError('from is a checkpoint; to can be now.');
+        const toId = args.to === undefined || args.to === null ? 'now' : find(args.to);
+        from = stateOf(app, fromId);
+        to = stateOf(app, toId);
+        if (args.show !== false) {
+          app.reportView = { from: fromId, to: toId };
+          await app.setMode('report');
+          app.store.notify(['report-view']);
+        }
+      }
+      const result = await diffWith(app, from, to);
+      await settle();
+      const { diff } = result;
+      return {
+        message: `From ${from.label} to ${to.label}: ${result.words.join(' ')}`,
+        data: {
+          from: { id: from.id, label: from.label, created: from.created },
+          to: { id: to.id, label: to.label, created: to.created },
+          same: diff.same,
+          summary: diff.summary,
+          changes: diff.changes,
+          pairs: diff.pairs,
+          words: result.words,
+          ...(files.length ? { problems: [...from.problems, ...to.problems] } : {}),
+        },
+      };
     },
 
     // The workspace's report (wave 6, slice 4): its methods written from the record, as the Report

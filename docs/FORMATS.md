@@ -527,6 +527,26 @@ name, output }, total, skipped, max, seed, choices: [{ id, label, options: [{ id
 targets: [{ id, name, kind, n, counts, text }] }`, the choices varied (the declared option first),
 how many analyses and each target's verdicts, as the Robustness export's record has them.
 
+`checkpoints` (MaveScape 0.6, absent until the first) keeps the **checkpoints**: each a named
+state of the analysis, `{ id, name, created, head, sha256, state }`, where `state` is the workspace
+document as it stood without its identity (`format`, `version`, `id`, `created`, `modified`), its
+`history` and its `checkpoints`; `sha256` the SHA-256 of the state's canonical JSON (keys sorted);
+and `head` the hash of the history's last entry then, which places the state in the chain. Keeping
+and deleting one are in the history (action `checkpoint`). A **diff** compares two states (a
+checkpoint and now, two checkpoints, or two archives' workspaces; the Report view, remote control's
+`diff`) and says, in words, each change of the tables, targets, design, runs (scored, removed), QC
+thresholds and acknowledgements, selections, annotations, structure views, figures (made, deleted,
+a panel added, removed, changed or moved), the report's analyses and the MaveDB details. For each
+table scored in both states it pairs the latest run of each and says how its parameters, filters and
+design changed, and, both runs' scores recomputed, for each condition (and difference between
+conditions): the variants scored in both (`both`), those whose effect (the score less the wild
+type's, as robustness's calls) moved beyond the earlier run's 95% interval (`moved`), those of
+another class (`crossed`: lower than, like or higher than the wild type, q < 0.05; `crossings` by
+pair of classes), those no longer scored (`filtered`) and newly scored (`scored`), the most moved by
+name (`variants`, up to 25: `variant`, `before`, `after`, `z`, `from`, `to`); and the QC findings
+whose verdict changed (`findings`: `id`, `title`, `from`, `to`), each read with its state's
+thresholds.
+
 From MaveScape 0.3 the workspace's target can also keep `reference`, the record of
 its last check against its UniProt entry (Experiment, Target: **Check against UniProt**). It is
 provenance, kept with the workspace and not in the design, so a check that changes nothing leaves

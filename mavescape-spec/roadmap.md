@@ -2735,6 +2735,33 @@ and the review report are found. The wave ends with its examples, as waves 2 to 
    - Validation: planted changes (a pseudocount, a filter, a replicate left out, a threshold, a
      design edit) each described exactly, and nothing else; the variants moved equal an independent
      computation; an analysis compared with itself has no change.
+   - **Done.** `lib/diff.js`: a checkpoint is the workspace's state (the document without its
+     identity, history and checkpoints), by the SHA-256 of its canonical JSON, with the history's
+     last hash then (`ws.checkpoints`, inline, so the library and the archive keep it: a rich
+     workspace's state is about 23 KB). `diffStates` says each change of two states in words, and
+     for each table scored in both pairs its latest runs: the parameters and design that changed,
+     and from both runs' scores, per condition and difference, the variants moved beyond the
+     earlier 95% interval (the robustness check's effects, against the wild type), of another class,
+     no longer and newly scored, the most moved by name; the QC findings whose verdict changed (each
+     read with its state's thresholds); `changeMap` draws the change as the map draws a difference.
+     - **In the window** (`ui/diff.js`): the Report view's Checkpoints (keep, compare with now or
+       another, delete) and the changes above the report with the moved variants and the map of
+       the change; the drawer's history marks a checkpoint's entry, **Changes since** on it, and
+       **Keep a checkpoint**. Remote `checkpoint` and `diff` (between two archives too, `paths`,
+       their runs scored again from each archive's own tables). The report names the checkpoints.
+     - The diff says, it does not restore: undo returns to a state, and a checkpoint is the record
+       of one. A diff of two archives on the command line is not built.
+     - Found while building it: an action reading files always needed its paths and the token;
+       `diff`'s paths are optional (`optionalPaths`), so a diff between checkpoints needs neither.
+     - Validation: `diff` (6 checks): five planted changes from a checkpoint of GRB2's run, each
+       described exactly and nothing else (a replicate left out also says the outlier-replicate
+       finding is no longer assessed); the variants each rescoring moved, crossed, filtered and
+       scored equal a computation apart from the scores and SEs; an analysis against itself, and a
+       checkpoint against the workspace it was just kept from, unchanged; a checkpoint through the
+       archive gives the same changes; the map of the change a cell for each variant scored in both;
+       the report names the checkpoint. The remote session (188): the window's diff Node's from the
+       workspace's archive and between two archives; the Report view's changes and map, the
+       drawer's checkpoint entry; `checkpoint` with `remove`.
 6. **The certificate and `mavescape verify` (R7, part 1).** A certificate (`verify.go`, CytoWeave's
    `certificate.js` pattern) holds the workspace with its tables (or only their checksums, when the
    data cannot be shared) and every number reported: each run's scores, SEs and classes, the QC

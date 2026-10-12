@@ -78,6 +78,18 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   `report-references`, and `set_mode` of `figures` and `report`. `mavescape export --format report`
   writes `report.md` and `report.bib` without a window.
 
+- **Checkpoints and what changed** (wave 6, slice 5). A checkpoint keeps the analysis as it
+  stands, named (the workspace's state without its history, by its SHA-256, and the history's hash
+  then), with the workspace and in its archive; kept from the Report view, the drawer's history or
+  remote control's `checkpoint`. The diff (`web/lib/diff.js`) says what changed from a checkpoint to
+  now or another, or between two archives, in words: the tables, targets, design, runs scored and
+  removed, QC thresholds and acknowledgements, selections, annotations, structure views, figures,
+  the report's analyses and MaveDB details. For each table's latest run it says how its parameters,
+  filters and design changed and what that did: the variants whose effect moved beyond the earlier
+  95% interval, changed class, or were newly filtered or scored, the most moved by name, the QC
+  findings whose verdict changed, and a map of the change. Shown above the report; remote `diff`.
+  The report names the checkpoints.
+
 ### Changed
 
 - The README is the project's front page, as CytoWeave's and Proteoscope's are: what MaveScape
@@ -132,6 +144,13 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   session (184 checks): the archive's report and the Report view's, after a comparison and a
   robustness check are added, Node's text; what was kept what Node computes. `headless-run` (33):
   `mavescape export --format report` the archive's report, the same bytes twice.
+- The `diff` suite (6 checks; wave 6, slice 5): five planted changes from a checkpoint of GRB2's
+  run (the pseudocount, the minimum input count, a replicate left out, a QC threshold, the
+  readout), each described exactly and nothing else; the variants each rescoring moved, crossed,
+  filtered and scored, computed apart from the scores and SEs; an analysis against itself and a
+  checkpoint against the workspace it was kept from unchanged; a checkpoint through the archive;
+  the map of the change; the report naming the checkpoint. The remote session: the window's diff
+  Node's, from the workspace's archive and between two archives.
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
   was lost on CI's runner when the command's exit was seen before its output.
 
