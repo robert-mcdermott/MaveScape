@@ -2521,24 +2521,442 @@ reran all twenty runs of every release's archives in a window, each to its recor
 
 ## 0.6.0: figures and a provable record (wave 6)
 
+What a laboratory takes from MaveScape into a paper, and what lets a reader check it. Figures are
+assembled from the live views and carry the analysis behind them. The methods say everything the
+analysis did. A diff says what changed between two states of an analysis. A certificate recomputes
+every number reported, and a review report shows them, each traced to where it comes from.
+CytoWeave built each of these (figures and their provenance, its PDF writer, its diff, certificate
+and review report). MaveScape copies their frameworks with an origin comment in each file, as wave 5
+copied Proteoscope's viewer; what goes in them is MaveScape's.
+
 ### Wave 6
 
-1. **Figure builder (R5).** Multi-panel figures from live views (maps, tracks, QC plots,
-   comparisons, control distributions, structure images, variant evidence, text); SVG,
-   high-resolution PNG, vector PDF, clipboard; embedded analysis metadata and a figure manifest;
-   a reopened figure rebuilt from its inputs with differences reported (CytoWeave's
-   `figure-provenance.js` pattern).
-2. **Methods and citations, complete (R4).** Methods for every model, filter, comparison,
-   annotation and structure mapping, retrieval dates, parameter tables, input checksums, version
-   and commit, the decision log, QC findings, limitations and the research-use statement;
-   regenerated on change.
-3. **Checkpoints and semantic diff (R6).** What changed between two states of an analysis, and
-   which variants it moved.
-4. **Certificate and review report (R7).** A certificate that recomputes every reported number
-   (`mavescape verify`, exit status as the verdict) and a self-contained HTML review report with
-   every number traced. The certificate says what it proves: that the recorded inputs give the
-   recorded outputs. That is reproducibility. Whether the scores are right still rests on the
-   experiment's design and the model's assumptions, which the report states beside it.
+The roadmap first had four items for this wave. Before the wave began they were split into eight
+slices: the figure builder (R5) into three (the view and its drawing, every view's plots, the
+analysis a figure carries), the certificate and review report (R7) into two. The Figures view
+comes with slice 1, and the Report view with slice 4, where methods, checkpoints, the certificate
+and the review report are found. The wave ends with its examples, as waves 2 to 4 did.
+
+1. **Figures: the view, its drawing, and the map (R5, part 1).** A figure is a page of panels
+   (`ws.figures`, in the history and the archive). Each panel says what it shows (a run, its
+   condition or contrast, what colors it, the positions and rows shown, the tracks), never a copy
+   of the numbers, so a figure follows a rescoring until it is exported.
+   - **One drawing, three outputs.** `lib/draw.js` is a list of marks (rectangles, lines, paths,
+     circles, text, images, clipped groups). The same marks are painted on a canvas for the view,
+     written as SVG, and written as PDF through CytoWeave's `pdf.js` (copied with `png.js` and
+     their tests). Node draws them as the page does.
+   - **Panels of this slice:** the variant-effect map (a run, a condition, a difference between
+     conditions or a comparison; a range of positions; cell size), with its tracks, its color bar
+     and the key to its states; text; panel letters (A, B, C…, placed and renumbered as panels
+     move).
+   - **The Figures view** (`ui/mode-figures.js`, after CytoWeave's): the workspace's figures, page
+     sizes of journal columns (85, 114 and 174 mm wide) and a slide, panels dragged and resized
+     with snapping and aligned, nudged from the keyboard, every change undoable. **Add to figure**
+     in the Map view puts the map as it is shown on a figure.
+   - **Exports:** SVG (text as text), PDF (vector, text in Helvetica), PNG at 300 or 600 dpi of the
+     page's printed size, and the clipboard. Remote actions: `figures`, `create_figure`,
+     `add_figure_panel`, `set_figure`, `export_figure`.
+   - Validation: a map panel's cells take the colors `map-svg.js` gives them, cell by cell, in SVG
+     and in PDF; a figure written twice is the same bytes; the PDF read back (its page size in
+     millimeters, its rectangles and its text); Node's marks the page's; figures through the archive.
+   - **Done.** `lib/draw.js` (marks painted on a canvas, written as SVG, written as PDF; paths of
+     absolute commands; marks placed and scaled), CytoWeave's `pdf.js` and `png.js` copied with
+     their tests (MaveScape as creator, the creation date required, more characters written as
+     their nearest ASCII). `lib/figures.js`: the figure document (FORMATS.md, *Figures*), page sizes
+     in points from millimeters, panels placed, lettered in reading order and checked when a figure
+     comes from outside, the page drawn as marks and written as SVG or PDF. `lib/figure-map.js`: the
+     map fitted to its panel at the figure's text size, with the window's encoding, its tracks (drawn
+     at a tenth of the text size per unit, their names whole), the color bar and the states' key
+     laid out before the grid (beside the bar, or below it in a narrow panel); what does not fit is
+     said (names under 6 pt, positions under 0.6 pt, too small to draw).
+     - **The page:** `ui/mode-figures.js` (the figure shown and New figure in the head, the page on
+       a canvas with a box per panel to drag and resize, snapping to the margins, the middle and the
+       other panels' edges; properties of the page or the panel on the right; what is wrong under
+       the page) and `ui/figure-data.js` (a map panel's run recomputed when needed, its model and
+       tracks; SVG, PDF, PNG with its `pHYs`, the clipboard; Add to figure). Making or deleting a
+       figure and adding or removing a panel are in the history (`saveFigure`, `removeFigure`).
+     - **Remote control:** `figures` (with each figure's document), `create_figure`,
+       `add_figure_panel` (a map with `condition` or `contrast`, `color_by`, `rows`, `palette`,
+       `from`, `to`, `tracks` by id or `"shown"`; or text; placed in millimeters), `set_figure`
+       (panels by letter or id, moved, changed or removed; the figure renamed, resized, deleted),
+       `export_figure` (SVG, PDF, PNG at a `dpi`).
+     - The guide's *Figures* page and its screenshot scene (`figures`); FORMATS.md's *Figures*; the
+       scripting page's actions; README's highlights, views and validation.
+     - Validation: the suite `figures` (`figure-cases.mjs` reads an SVG's rectangles, text and cells
+       and a PDF's content streams without MaveScape's drawing code): nine examples' maps every cell
+       `map-svg.js`'s colors, the PDF the SVG's rectangles and text mark for mark, the same bytes
+       again, no text under 6 pt, a range of positions exactly its cells, a difference between
+       conditions, a figure through the archive (7 checks). The remote session: the five actions,
+       the window's SVG the same bytes as Node's of the same document and run, its PDF the same
+       marks, its PNG 2055 × 1417 at 300 dpi with its resolution, refusals, the archive keeping the
+       figure (171 checks). Poppler's `pdftotext` reads the PDF's text, and Quick Look and
+       `pdftoppm` draw it as the PNG; poppler draws Helvetica-Bold in a regular face where its
+       font substitution has no bold, which the file does not decide.
+2. **Every view's plots as panels (R5, part 2).** The QC view's plots (replicate agreement,
+   variance beyond counting, coverage, dropouts, the filter flow, the controls' distributions),
+   the Score view's score distributions by class, Compare's (the scatter, Bland–Altman, the two
+   maps and their difference, a predictor's classes), robustness, a saved structure view (its
+   image at print resolution with its legend, wave 5's figure panel), and a variant's evidence
+   (its score and interval, each replicate, its counts). Each is drawn by a pure function in
+   `lib/` to marks: the window's plots (`ui/plots.js`) move there, so a figure shows what the view
+   shows. **Add to figure** in every view; each panel's own options (ranges, labels, text size).
+   - Validation: each panel's numbers are the view's (a scatter's points, a histogram's bars) on
+     the examples; a structure panel the same pixels as wave 5's; no text under 6 pt at the
+     figure's printed size (checked, and said in the view).
+   - **Done.** `lib/plots.js`: every chart the views draw as marks for any size and text size (bars,
+     lines, scatters, class histograms, the filter flow, coverage, disagreement by position, a
+     predictor's class boxes, a variant's evidence, legends), with the deterministic logarithms of
+     `dmath.js` and ticks thinned where they would crowd. `ui/plots.js` keeps its functions and draws
+     them in the page's colors, so the QC, Score and Compare views and the inspector draw through it;
+     Compare's own canvas and SVG plots moved there too, keeping their hover and click.
+     `lib/qc-plots.js` gives each QC finding's charts (the QC view draws them beside its tables),
+     `lib/view-plots.js` the Score view's, Compare's and the inspector's (scores by class, the
+     flow, a contrast's volcano; agreement, Bland–Altman, positions, classes; a variant's evidence,
+     time course and bins). `lib/figure-plots.js` lays out a panel's charts (title; each chart's
+     heading, legend and chart; the room shared by what each needs) and an image.
+     - **Panels:** `qc` (a finding of a run or of the counts, the agreement pair), `scores`
+       (distribution, flow, volcano), `compare` (the sides, scale and filters; seven plots, three of
+       them maps drawn by `figure-map.js`), `variant` (evidence, time course, bins) and `structure`
+       (a saved view's figure panel drawn at 4× on white, kept in the library by its SHA-256 and in
+       the archive, `sources/<sha256>.png`; a view saved again since is said, and drawn again on
+       request). **Add to figure** beside each plot in the QC, Score, Compare and Structure views
+       and the inspector (`ui/figure-data.js`, `figureMenu`); the Figures view's properties choose
+       what a plot shows, its title and the agreement pair. `add_figure_panel` takes every kind,
+       `set_figure` a plot's `plot`, `title` and `pair`; `export` structure-image takes `light`.
+     - **Robustness** has no plot in its view (its verdicts are tables), so no panel yet.
+     - Found while building it: a panel placed by a script was clipped from where it would have
+       gone, not where it was put (a structure panel drawn at a third of its size); a structure
+       panel drawn in the dark theme came out black (now on white, whatever the theme).
+     - Validation: `figures` grows to 13 checks: every QC finding with a plot of eight examples as a
+       panel one column wide (96), each bar the QC results' value and every point drawn, 91 with no
+       text under 6 pt and the other five (many bars in 90 mm) said; the scores by class each class's
+       count read from the run; a contrast's volcano a point per difference; a variant's evidence
+       each replicate's score and the combined interval as exported, with a time course and bins; a
+       comparison a point per variant compared, in order; a figure of every kind, its PDF the SVG's
+       marks and its image the PNG byte for byte. The remote session (173 checks): the window's SVG
+       of a QC finding, the scores by class, a comparison and a variant's evidence the same bytes as
+       Node's from the runs recomputed from the archive; a structure panel the same pixels as the
+       view's own figure panel drawn on white, its image in the archive.
+3. **Figures that carry their analysis (R5, part 3).** An exported figure carries its manifest:
+   each panel with what it shows, its run and the run's output hash, the parameters, the
+   selection, every input's SHA-256, MaveScape's version and commit (SVG `<metadata>`, a PNG
+   `iTXt` chunk, a PDF attachment; CytoWeave's `figure-provenance.js`). A figure dropped on the
+   window says what it shows and where it came from, compares itself with the workspace (the same
+   run, rescored since, the selection changed), and is rebuilt from its inputs with every
+   difference reported, panel by panel. `mavescape export --format figures` writes a saved
+   workspace's figures and their manifest.
+   - Validation: the manifest read back intact from SVG, PNG and PDF; a figure rebuilt is the same
+     bytes; a rescoring flags exactly the panels it changes; a manifest edited after the fact is
+     caught; `mavescape export` the same bytes twice and as the window writes them.
+   - **Done.** `lib/figure-manifest.js`: the manifest (format `mavescape-figure-manifest`, version
+     1) holds the figure's document and, panel by panel, its letter, what it shows, its inputs and
+     the SHA-256 of its marks written as SVG; the workspace, MaveScape's version and commit, when;
+     and a fingerprint, the SHA-256 of the canonical JSON of the rest. A run is recorded by its
+     output's SHA-256 (which follows from its table, design and parameters) and its table's, with
+     the other runs of that table then; a QC panel by the thresholds' digest and the finding's
+     acknowledgement; a comparison by its sides; a track by its annotation's file; a structure
+     panel by its saved view and image. Panels draw no selection, so none is recorded. Embedded as
+     SVG `<metadata>`, a PNG `iTXt` chunk and a PDF attachment (after CytoWeave 0.8.0's
+     `figure-provenance.js`); `export_figure` writes it alone as `json`.
+     - **Read back:** a figure file dropped on the window (`ui/figure-import.js`) says what it
+       shows, which workspace and version made it, whether its manifest is as written, and per
+       panel *as then*, *changed since* (saying what) or *not here*; a run is found by its id or its
+       output, so a copy of the workspace holds it. **Open** the workspace it came from when the
+       library holds it; **Rebuild here** adds the figure with its runs mapped to this workspace's,
+       draws each panel again and compares its digest with the one recorded, and the Figures view
+       lists which panels are the same drawing. `check_figure` does the same for scripts (with
+       `rebuild`); `mavescape export --format figures` writes every figure of an archive as SVG,
+       PDF and PNG at 300 dpi with `figures.json`.
+     - Found while building it: a map panel colored by SE, the input counts or the replicates (a
+       one-sided scale) crashed its legend's layout, which measured the diverging scale's middle
+       label; a run made since could not be told from one already there by time, since `--time`
+       fixes every run's (each run now records its table's other runs).
+     - Validation: `figures` grows to 18 checks: a figure of GRB2's and factor IX's maps, GRB2's
+       scores and two QC findings and text, its manifest read back intact from SVG, PDF, PNG and
+       JSON; an edit caught three ways (a panel's words, its place, a run's output); GRB2's Enrich2
+       rescoring flagging exactly GRB2's four panels; stricter depth thresholds flagging both QC
+       panels and drawing only the depth panel otherwise; rebuilt in a copy of the workspace, the
+       same drawing panel by panel and the same SVG bytes. `headless-run` (32): `--format figures`
+       of the window's figure twice the same bytes, its SVG the window's but for the manifest's
+       time, every drawing the window's; a workspace without figures exit 1. The remote session
+       (180): the manifest the one Node writes from the archive; `check_figure` in its own
+       workspace, edited, rebuilt (every panel the same drawing) and in another that scored the same
+       table; `open_files` of a figure the window's dialog.
+4. **Methods and citations, complete (R4).** The methods of the workspace, not only of a run: every
+   run's model, parameters (as a table) and filters; comparisons and their statistics; robustness;
+   selections by query; annotations with their sources and retrieval dates; structure mappings and
+   the structural tests; the figures' panels; every input's checksum; MaveScape's version and
+   commit; the decision log (the history's material changes, in words); QC findings and their
+   acknowledgements; limitations (what the readiness finds missing, the model's assumptions); the
+   research-use statement. The **Report** view shows them, written again on every change, with
+   the references in BibTeX; exports and the archive carry them.
+   - Validation: every operation the examples perform has its sentence, and a workspace says
+     nothing of what it did not do; every reference's DOI matches its Crossref record (a recorded
+     fixture); the same text for the same workspace, in Node and the window.
+   - **Done.** `lib/report.js` writes the report from the workspace and what the window knows of
+     each run (its QC findings and scores): sections only for what was done (data, design,
+     scoring with a parameters table across runs, QC with changed thresholds and
+     acknowledgements, comparisons, robustness, selections, annotations, structures, figures,
+     inputs by SHA-256, software, the decision log, limitations, use), runs whose paragraphs read
+     the same named together, references numbered as the text first cites them. A run's paragraphs
+     are its methods' (`lib/methods.js` split into `runParagraphs`, `citations`). The **Report**
+     view (`ui/mode-report.js`) shows it with its contents, copies it as Markdown and downloads it
+     with its BibTeX; the archive carries it (`report.md`, `report.bib`); `mavescape export
+     --format report`; remote `report`, `export` of `report` and `report-references`.
+     - **Comparisons and robustness in the record.** Both were the session's (wave 4). **Add to
+       report** keeps what one found in the workspace (`ws.analyses`, in the history), so that the
+       report can say it whenever it is written; `compare` and `check_robustness` take `report:
+       true`. Removing a run (or an annotation compared) takes out the analyses that read it.
+     - The methods of a run's selections, the figures' panels and the readiness's gaps say only
+       what the record holds; a decision log beyond the history's own words (why a choice was
+       made) waits for the person to write it.
+     - Found while building it: a sorted-bins run's methods listed Peterman and Levine without
+       citing them (both bin methods' references were cited whichever was used); MaveScape and
+       Proteoscope shared a BibTeX key; the DOI of Lin's 2000 note is right, but Crossref records it
+       as "Corrections" without its author.
+     - Validation: `report` (8 checks): GRB2's workspace built one operation at a time (its run,
+       a UniProt check, an Enrich2 rescoring, a threshold changed, a finding acknowledged, a
+       selection by query, a comparison and a robustness check kept, UniProt's features, a view
+       of 2VWF, a figure), each said and the log the history; the example alone says nothing more
+       and cites what its methods cite; the 14 examples' runs, the report's paragraphs their
+       methods word for word; 43 DOIs against Crossref (`fixtures/crossref.json`); references in
+       citing order, BibTeX keys unique; the same text again and from the archive; a run removed
+       takes its comparison out. The remote session (184): the archive's report and the view's
+       Node's text, the kept analyses what Node computes; `headless-run` (33): `--format report`
+       the archive's, twice the same bytes.
+5. **Checkpoints and semantic diff (R6).** A checkpoint keeps a named state of the analysis (the
+   workspace by its history's hash; tables are already kept by checksum), in the library and the
+   archive. `lib/diff.js` (CytoWeave's framework) says what changed between two states (two
+   checkpoints, a checkpoint and now, two archives): the target, design, parameters, filters, QC
+   thresholds and acknowledgements, runs, selections, annotations, structure views and figures, in
+   words. For each pair of runs it says which variants moved: beyond their uncertainty, across a
+   class, newly filtered or scored, and the QC findings whose verdict changed, with a map of the
+   change. In the Report view and the drawer's history; remote actions `checkpoint` and `diff`.
+   - Validation: planted changes (a pseudocount, a filter, a replicate left out, a threshold, a
+     design edit) each described exactly, and nothing else; the variants moved equal an independent
+     computation; an analysis compared with itself has no change.
+   - **Done.** `lib/diff.js`: a checkpoint is the workspace's state (the document without its
+     identity, history and checkpoints), by the SHA-256 of its canonical JSON, with the history's
+     last hash then (`ws.checkpoints`, inline, so the library and the archive keep it: a rich
+     workspace's state is about 23 KB). `diffStates` says each change of two states in words, and
+     for each table scored in both pairs its latest runs: the parameters and design that changed,
+     and from both runs' scores, per condition and difference, the variants moved beyond the
+     earlier 95% interval (the robustness check's effects, against the wild type), of another class,
+     no longer and newly scored, the most moved by name; the QC findings whose verdict changed (each
+     read with its state's thresholds); `changeMap` draws the change as the map draws a difference.
+     - **In the window** (`ui/diff.js`): the Report view's Checkpoints (keep, compare with now or
+       another, delete) and the changes above the report with the moved variants and the map of
+       the change; the drawer's history marks a checkpoint's entry, **Changes since** on it, and
+       **Keep a checkpoint**. Remote `checkpoint` and `diff` (between two archives too, `paths`,
+       their runs scored again from each archive's own tables). The report names the checkpoints.
+     - The diff says, it does not restore: undo returns to a state, and a checkpoint is the record
+       of one. A diff of two archives on the command line is not built.
+     - Found while building it: an action reading files always needed its paths and the token;
+       `diff`'s paths are optional (`optionalPaths`), so a diff between checkpoints needs neither.
+     - Validation: `diff` (6 checks): five planted changes from a checkpoint of GRB2's run, each
+       described exactly and nothing else (a replicate left out also says the outlier-replicate
+       finding is no longer assessed); the variants each rescoring moved, crossed, filtered and
+       scored equal a computation apart from the scores and SEs; an analysis against itself, and a
+       checkpoint against the workspace it was just kept from, unchanged; a checkpoint through the
+       archive gives the same changes; the map of the change a cell for each variant scored in both;
+       the report names the checkpoint. The remote session (188): the window's diff Node's from the
+       workspace's archive and between two archives; the Report view's changes and map, the
+       drawer's checkpoint entry; `checkpoint` with `remove`.
+6. **The certificate and `mavescape verify` (R7, part 1).** A certificate (`verify.go`, CytoWeave's
+   `certificate.js` pattern) holds the workspace with its tables (or only their checksums, when the
+   data cannot be shared) and every number reported: each run's scores, SEs and classes, the QC
+   findings' values, the comparisons' statistics, robustness classes, the figures' numbers and the
+   methods. Its fingerprint, the SHA-256 of its canonical JSON, names exactly what was certified.
+   `mavescape verify` checks every checksum and the history's chain, computes every number again
+   with the same code and compares them bit for bit: exit 0 verified, 1 a difference (listed), 2
+   not checkable (a table missing). It says what it proves: the recorded inputs give the recorded
+   outputs. That is reproducibility; whether the scores are right still rests on the experiment's
+   design and the model's assumptions.
+   - Validation: every example certified and verified; six kinds of tampering caught; a
+     certificate made in the window verified in Node and the reverse; each earlier release's
+     archives certified.
+   - **Done.** `lib/certificate.js` (after CytoWeave's `certificate.js`): a certificate is the
+     workspace archive (`lib/archive.js` takes `certificate.json` and `README.txt`) with every
+     number computed again from its files: each run's scores, SEs and classes (`callsOf`, as
+     robustness and the diff call them) and each difference between conditions', the SHA-256 of its
+     whole output; its QC findings (status, value, acknowledgement) and the SHA-256 of every number
+     its QC computed; the comparisons and robustness checks kept in the report; each figure panel's
+     drawing by its SHA-256, as the figure's manifest records it; the report's text and references.
+     It names the workspace and every file by their SHA-256 (`needed` when a number is read from
+     it), the history's head and the checkpoints; `notChecked` (a selection's variants, a structure
+     view's evidence, a map panel's structure tracks) and `notes` (a run that no longer gives its
+     recorded output, an analysis kept that no longer computes the same) say what it does not
+     prove. Its fingerprint is the SHA-256 of its canonical JSON. MaveScape's numbers do not depend
+     on the engine, so the certificate compares bit for bit, with no tolerance (CytoWeave allows 12
+     digits between engines); the window's certificate and Node's are the same bytes.
+     - **One computation.** The certificate computes with the code the views use, moved into `lib/`
+       for it: a source's table read from its files (`source-table.js`, as the CSV worker parses
+       them), the engine's input (`score-input.js`), QC subjects (`qc-subjects.js`), a comparison's
+       sides (`compare-pair.js`, from the Compare view), a run's tracks (`run-tracks.js`) and a
+       figure's panels (`figure-data.js`, resolved through a context the window and the certificate
+       each give). In the window it runs in a worker (`workers/certificate-worker.js`).
+     - **Verifying** reads the archive (each file against the manifest), checks the fingerprint, the
+       workspace's SHA-256, the history's chain and head, each checkpoint's state and each run's id
+       (which follows from its recorded inputs), finds every file (the archive, beside it, the
+       library), computes every number again and compares: verified (exit 0), differs (1, each
+       difference by the number it is), incomplete (2: the numbers read from a missing file not
+       computed rather than said to differ). `verify.go` runs it in a headless page
+       (`verify_certificate`); `--data`, `--report`. The Report view's Certificate pane certifies
+       (the tables included or not) and verifies; a certificate opened as a workspace offers to
+       verify itself; remote `certify` and `verify_certificate` (`library: false` verifies as
+       someone without this library).
+     - Exit 2 for not checkable is also the exit of a wrong command line, as `mavescape run`'s
+       "an input is missing" is: 1 is kept for a difference alone.
+     - Validation: `certificate` (7 checks): GRB2's workspace of every operation (a figure of six
+       panels, a checkpoint) certified, each kind of number what is computed apart from the
+       certificate, verified bit for bit, the same bytes again, the fingerprint computed with Node's
+       own SHA-256; another version says so; six kinds of tampering (a count in the table; a score's
+       last bit, with and without the fingerprint made again; a run's pseudocount, a history entry
+       and a checkpoint's state edited with `certificate.json` made to agree) caught and said;
+       without its tables not checkable, then verified; the 14 examples (172,383 numbers) and each
+       earlier release's archive certified and verified. The remote session (191): the window's
+       certificate verified in Node and Node's bytes, its panels their manifests' drawings; Node's
+       verified in the window, a tampered one's difference Node's; not checkable without the
+       library, verified with the table beside. `headless-run` (34): `mavescape verify` 0, 1, 2.
+     - Found while building it: the window's example opens record how its files were assembled
+       (codons read at the protein level, a barcode map), and the validation's examples did not;
+       the certificate suite opens them as the window does (`windowExample`).
+7. **The review report (R7, part 2).** One self-contained HTML file a reviewer opens in any browser
+   without MaveScape (CytoWeave's `review-report.js` pattern): the experiment and design, the
+   inputs with their checksums, the QC findings with their plots, each run's map and parameters,
+   the comparisons, structure views, figures, methods, decision log, and the certificate's
+   fingerprint with what it proves and does not. Every number is traced (clicked, it says where it
+   comes from) and carries its key and exact value for checking; the file loads nothing.
+   - Validation: every number equal to the certificate's; nothing loaded from outside the file; no
+     axe-core violations in either theme; the same bytes twice.
+   - **Done.** `lib/review.js` (after CytoWeave's `review-report.js`) composes the review report
+     from the certificate's own computation (`computeNumbers` keeps each run's QC, each analysis's
+     comparison or robustness summary and each figure's drawing) and the certificate: an overview;
+     the certificate (its fingerprint, what it proves and does not, how to verify it, what is not
+     computed again, its notes); the experiment and design; the inputs with their SHA-256; each run
+     (output recorded and computed, method, every parameter, its variants by class, a map of each
+     condition and difference); each run's QC findings with their plots; the comparisons and
+     robustness checks kept in the report; selections; structure views; figures (each page drawn,
+     each panel's digest); the methods (the report, references linked by DOI); the decision log.
+     - **Traced.** Every number is a button with `data-k` and `data-v`: a certificate's key and
+       value, `ws|<path>` for what the workspace records, `count|<run>|<condition>|<class>` for a
+       count of the certificate's classes; clicked, a panel says where it comes from. A variant is
+       looked up by name; the whole certificate is in the JSON block `mavescape-review`, and the
+       file checks its numbers against the fingerprint with the browser's SHA-256.
+     - **No time of its own, and neither has a certificate** (`created` dropped from
+       `certificate.json`): the same workspace and MaveScape give the same certificate whenever it
+       is made, so a review report made apart names the certificate `certify` writes.
+     - Written from the Certificate pane (**Review report…**), remote `review_report`, `mavescape
+       export --format review`, and from a certificate verified (`verify_certificate` with
+       `review`, `mavescape verify --review`, the verification dialog's **Review report**): the
+       same bytes from each. A certificate that does not verify gives none.
+     - Found while building it: a figure's SVG named each panel's group (`aria-label` on a bare
+       `g`), which axe-core flags; `lib/draw.js` now writes `role="group"` (panel digests change
+       with it, before any release). axe-core 4.13.0 joins `sources.json` (the capture's audit
+       named it; it was missing).
+     - Validation: `review` (5 checks): every traced number of GRB2's workspace of every operation
+       (182) and of the 14 examples (1,164) where it says it comes from; nothing loaded from outside
+       (an image, a stylesheet and a request planted in it caught); the same bytes again and from
+       the certificate verified, none from a tampered one; every section, the certificate whole, each
+       input, map, QC plot, figure, reference and history entry. The remote session (193): the
+       window's review Node's bytes; opened from its file, nothing requested but the file, no
+       axe-core violation (WCAG 2.1 A and AA) in either theme, a number traced, a variant looked
+       up, the fingerprint checked. `headless-run` (35): `mavescape verify --review` and `export
+       --format review` Node's bytes.
+8. **Examples.** The wave's lessons on the examples: GRB2's figure (the map, the structure, the QC
+   finding behind its bottleneck), what a choice moves (a checkpoint before and after a change of
+   pseudocount on Hsp90), and the BRCA1 RING domain certified, verified and reported.
+   - **Done.** Each lesson is a step of its example's guide, the guides kept to six steps (GRB2's
+     deposit joins its scoring step, Hsp90's methods its scoring step, BRCA1 RING's round trip one
+     step); a bullet of what to expect; the examples page; the Figures, Report and Certificates
+     pages; a screenshot scene each (`grb2-figure`, `hsp90-checkpoint`, `brca1-ring-certificate`).
+     - **GRB2's figure.** The first step acknowledges the variance beyond counting with its reason
+       (the input bottleneck the Domainome's own analysis found); the last puts Run 1's map, the
+       saved view Core of 2VWF and that finding on one page with **Add to figure**, exports it as
+       PDF and drops it back: each panel as drawn, and the map and QC panels say when the table
+       is scored again since.
+     - **What a choice moves, on Hsp90.** A checkpoint ("All eight samples"), then the columns of
+       generations 9 to 21 set "Not used", fitting the first three samples as the authors fit
+       their null-like variants: 148 of the 188 variants move beyond their earlier 95% interval
+       and 102 change class, 93 from lower than the wild type to like it. The time courses bend:
+       the stops fall faster at first (−0.41 per generation over six generations, −0.32 over 21,
+       still not the published −0.77), while at 584, 588 and 589 most substitutions have barely
+       begun to fall.
+     - **BRCA1 RING certified, verified and reported.** With the published scores, Run 1 and the
+       Enrich2 rescoring: 110,975 numbers from MaveDB's two tables, verified bit for bit; the
+       review report holds them. Made without its tables, the certificate names them by the
+       SHA-256 of MaveDB's files: not checkable alone, verified with the two files from the
+       record.
+     - Found by slice 8:
+       - **The pseudocount moves nothing on Hsp90**, the change this slice was to teach: from 0.5 to
+         0.1 or 1, no variant moves by more than 0.14 of its SE and none changes class. Weighted
+         regression gives a time course's few reads at the floor little weight. On GRB2 and BRCA1
+         RING it changes the class of a few borderline variants (14 and 44 to 87) and moves none
+         beyond its interval. The lesson became the choice that does move Hsp90, its time points;
+         the pseudocount is its contrast.
+       - **The diff compared effects in each run's own units** (slice 5): Hsp90 scored over its
+         whole time course rather than per generation, every effect 21 times, was said to have moved
+         187 of its 188 variants. The later run's effects are now put in the earlier run's units
+         when the time scale, a time series' time points or the rescaling changed them, and the diff
+         says so ("Run 3's effects × 3.5, in Run 2's units: the time points changed"); effects that
+         cannot be put in one unit are not said to have moved.
+       - **The diff said "its ignoredColumns changed"** for a column set "Not used"; it names them.
+       - **A review report shows only some of its numbers**: BRCA1 RING's traces 234 on its pages
+         and holds the other 110,000-odd for its lookup. The guide first said it traced each one.
+       - **The screenshots' accessibility audit had not run since axe-core joined the validation
+         data** (slice 7). On this slice's scenes it found the sidebar's empty sections declared as
+         lists (`role="list"` with no items) and the Report's citations told from their text by
+         color alone; both are fixed (an empty section is no list; a citation is underlined,
+         dotted).
+     - Validation: `examples` (+5): GRB2's figure, its manifest and its reading back
+       (`validation/example-lessons.mjs`; a plain image stands in for the view's in Node); Hsp90's
+       checkpoint, as per generation and as computed apart, and its time courses as the guide says;
+       BRCA1 RING certified and verified with and without its tables. `diff` (7): a change of units
+       moves nothing. The remote session (196): the three made in the window as Node makes them.
+     - Wave 6 is complete with slice 8.
+
+**Released 0.6.0 on 2026-10-12.** Figures, the analyses kept in the report and checkpoints are kept
+with the workspace, and a certificate is the record of its numbers, so 0.6 leaves two archives and a
+certificate (`validation/archives/release-0.6.0-*.msz`, 1.6 MB together), saved by 0.6.0 itself, its
+window driven through remote control offline by `make-0.6.0.mjs`:
+- GRB2's SH3 domain, its record whole: a QC threshold changed and the variance beyond counting
+  acknowledged; Run 2 with the Enrich2-compatible preset; their comparison and Run 1's robustness
+  check kept in the report; a selection by query; UniProt's features and AlphaMissense beside the
+  map; a saved view of 2VWF; a checkpoint; and a figure of six panels (the map with its tracks, the
+  structure view, the scores by AlphaMissense class, the replicates' agreement, a variant's evidence
+  and a caption);
+- that workspace's certificate, 6,872 numbers, made in 0.6.0's worker;
+- Hsp90 with a checkpoint before its first three samples are fitted: three runs, a design with
+  columns set aside.
+
+Every later version must reopen them and reproduce their runs. It must also find each checkpoint's
+state its own, compute every number the workspaces report again (each figure drawn, each kept
+analysis what was kept), and verify 0.6.0's certificate. A later version that writes the report or
+draws a panel otherwise will find those numbers differ, and say which: whether it may is for that
+version to decide. At the release, `mavescape run --from-workspace` reran all twenty-seven runs of
+every release's archives in a window (the certificate's two are its workspace's), each to its
+recorded hash.
+- Found by the release:
+  - **The figure to show the release off had its words cut off.** A plot panel's title wider than
+    its panel ("Run 1 by AlphaMissense: P62993's classes") and a predictor's class names in a narrow
+    comparison panel ("likely pathogenic") ran past the panel's edge and were clipped. Titles and
+    class names end in an ellipsis now, and the class names take up to 45% of the chart as a bar
+    chart's labels do; panels whose text fit draw as before.
+  - **The screenshots' first full accessibility audit** (axe-core, WCAG 2.1 A and AA; 136 captures
+    of 70 scenes) found one problem besides slice 8's: a second `.warn-text` rule, added with
+    wave 3's GenBank coding-sequence list, drew the outlier barcodes' counts in QC at 3.0:1 on
+    white. It is gone, and both take the accessible color. The audit is kept
+    (`docs/capture/audit.json`: no violations).
+  - **A structure panel's legend is part of its image**, so it shrinks with the panel and is not
+    counted when a figure says its smallest text. The README's limitations and the Figures page say
+    so.
+  - **The README still called the review report planned**, the home page's release line described
+    0.5 and its examples card five examples; nothing on it showed figures or the record of wave 6.
+    The home page has a Figures article with a figure of GRB2 (its map and tracks, its structure,
+    AlphaMissense's classes, its replicates), the record's article describes the report,
+    checkpoints and certificates, and its validation table has their rows.
+  - **main had two commits wave 6 lacked**: the README's links to the site, with the capitals of
+    its address, which wave 6's rewritten README already had; merged, its version kept.
 
 ## 0.7.0: agents and scripts (wave 7)
 

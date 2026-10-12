@@ -1,0 +1,63 @@
+---
+title: Report
+description: The workspace's methods, written from its record on every change: each run's data, design, scoring with a table of its parameters, and quality control; the comparisons and robustness checks added to it; selections, annotations, structures and figures; every input's SHA-256; the software; the decision log; the limitations; numbered references with their BibTeX. Checkpoints, and what changed since one. How the report and the changes are checked.
+lede: The Report view writes the methods of the whole workspace from what it holds: what was done, with which inputs, and what to read with care. It says nothing the workspace did not do, and the same workspace gives the same text.
+---
+      <h2 id="what">The report</h2>
+      <shot name="report" alt="The Report view: GRB2's two runs, MaveScape's defaults and an Enrich2 rescoring, each run's scoring in words with its citations, then a table of both runs' parameters side by side; on the right the report's contents and, kept in the report, the comparison of Run 1 and Run 2">GRB2's run and its Enrich2 rescoring: each run's scoring, then the parameters of both side by side. Their comparison has been added to the report.</shot>
+      <p>The <strong>Report</strong> view holds the methods of the workspace, not only of a run. It is written again whenever the workspace changes, from the workspace's record alone: the runs and their recorded inputs, the QC findings as they stand, what was added to the report, the saved selections, annotations, structures and figures, and the history. Runs whose paragraphs read the same are named together ("<strong>Run 1 and Run 2.</strong>").</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Section</th><th>What it says</th></tr></thead>
+          <tbody>
+            <tr><td>Data</td><td>Each run's table by its SHA-256, the variant identifiers and the target: where its sequence came from and its check against UniProt, as the run's own methods say them. Tables imported and not scored.</td></tr>
+            <tr><td>Design</td><td>Each run's design: its samples and replicates, what the assay measures, the controls.</td></tr>
+            <tr><td>Scoring</td><td>Each run's scoring with every parameter and filter, then a table of every run's parameters side by side, named as <code>parameters.json</code> names them.</td></tr>
+            <tr><td>Quality control</td><td>Each run's findings and the findings acknowledged, with their reasons; the thresholds changed from MaveScape's defaults.</td></tr>
+            <tr><td>Comparisons, Robustness</td><td>Each comparison and robustness check added to the report (below).</td></tr>
+            <tr><td>Selections</td><td>Each saved selection: its run, how many variants, and the query that made it.</td></tr>
+            <tr><td>Annotations, Structures</td><td>The tracks beside the map, with their sources and retrieval dates; the structures saved views show, each by its file's SHA-256, the target's mapping onto it and how the structure was read.</td></tr>
+            <tr><td>Figures</td><td>Each figure: its size and its panels by letter, with what each shows.</td></tr>
+            <tr><td>Inputs</td><td>Every file the analysis read, by its SHA-256.</td></tr>
+            <tr><td>Software</td><td>The MaveScape that wrote the report; each run's MaveScape, scoring version and output SHA-256, from which its scores can be recomputed and checked.</td></tr>
+            <tr><td>Decision log</td><td>The workspace's history, entry by entry with its time, and whether its chain of hashes holds.</td></tr>
+            <tr><td>Limitations</td><td>What the counts did not record and what that meant, what each run's model assumes, the QC findings not acknowledged, a predicted structure standing in for one.</td></tr>
+            <tr><td>Use</td><td>MaveScape reports experimental functional effects for research; it does not classify variants as pathogenic or benign.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>References are numbered in the order the text first cites them, each with its DOI, and only those the text cites are listed. A section the workspace has nothing for is left out: a workspace with one run and nothing else has no comparisons, selections or figures to speak of.</p>
+
+      <h2 id="adding">Adding a comparison or a robustness check</h2>
+      <p>A comparison (the Compare view) and a run's robustness to analysis choices (the Score view) are the session's while you explore. <strong>Add to report</strong>, under a comparison's compatibility report or in a run's robustness pane, keeps what it found in the workspace, in its history: the comparison's sides, scale and filters, its compatibility report and statistics; the robustness check's choices, analyses and verdicts. The report then says it, with the methods cited (Lin's concordance, Bland and Altman's limits of agreement, a multiverse analysis), and the workspace archive carries it.</p>
+      <p>The runs they read never change, so what was kept stays true. Take one out with its <strong>×</strong> in the Report view; removing a run takes out the analyses that read it. Robustness checks made in the session and not yet kept are listed beside the report, to add.</p>
+
+      <h2 id="checkpoints">Checkpoints, and what changed</h2>
+      <shot name="report-changes" alt="The Report view with the changes since the checkpoint &quot;Before the rescoring&quot; above the report: Run 2 scored with pseudocount 1 and a minimum input count of 10; Run 1 → Run 2, the parameters that changed, how many variants moved beyond their earlier interval, changed class or were no longer scored, and a table of those that moved most; the Checkpoints pane on the right">GRB2's run kept as a checkpoint, then scored again with another pseudocount and minimum input count: what changed since, and what it did to the variants.</shot>
+      <p>A <strong>checkpoint</strong> keeps the analysis as it stands, named: the tables, targets, design, runs, QC thresholds and acknowledgements, selections, annotations, structure views, figures and what the report keeps. Keep one before you change the analysis, for a reviewer's question or a new parameter, with <strong>Keep</strong> in the Report view's Checkpoints, <strong>Keep a checkpoint</strong> in the drawer's history, or remote control's <code>checkpoint</code>. Checkpoints are kept with the workspace and in its archive; each records the history's hash at that moment, and its state's SHA-256.</p>
+      <p><strong>Changes</strong> beside a checkpoint (or <strong>Changes since</strong> on its entry in the drawer's history) shows, above the report, what changed since, in words: the tables and targets, the design, the runs scored and removed, the QC thresholds and acknowledgements, the selections, annotations, structure views and figures, and what the report keeps. Compare with now, or choose another checkpoint.</p>
+      <p>For each table scored in both, the latest run of each is compared: how its parameters, filters and design changed, and what that did to each condition's variants. It counts those whose effect (the score less the wild type's) moved beyond the earlier run's 95% interval, those that changed class (lower than, like or higher than the wild type, q &lt; 0.05, as the <a href="robustness.html">robustness check</a> calls them), and those no longer scored or newly scored. It lists the variants that moved most and draws a map of the change, each variant's effect after less before. The QC findings whose verdict changed are said too: a threshold changed can move a finding without any run being scored again.</p>
+      <p>A change of units is not a change of effect. When the time scale, a time series' time points or the rescaling changed, the later run's effects are put in the earlier run's units before they are compared, and the diff says so: a score over a time course of 21 generations is 21 times the one per generation, and scored over the whole course instead, no variant has moved. Effects that cannot be put in one unit (replicates whose time courses now span different times) are not said to have moved; their classes still are.</p>
+      <p>Hsp90's example keeps a checkpoint before its time courses are cut to their first three samples, and the diff says what that choice moves (<a href="examples.html#hsp90">Examples</a>).</p>
+      <p>Scripts compare two archives the same way (<code>diff</code> with two paths), their runs scored again from each archive's own tables.</p>
+
+      <h2 id="export">Copying and exporting</h2>
+      <ul>
+        <li><strong>Copy</strong> puts the report on the clipboard as Markdown; <strong>Markdown</strong> and <strong>BibTeX</strong> download it and its references.</li>
+        <li>The workspace archive carries the report as it was written (<code>report.md</code>, <code>report.bib</code>), beside the latest run's methods.</li>
+        <li><code>mavescape export --format report --out report/ workspace.msz</code> writes it without a window; scripts read it with <code>report</code> and write it with <code>export</code> (<a href="scripting.html">Remote control</a>).</li>
+      </ul>
+      <p>A run's own methods (<a href="record.html">Exports and the record</a>) remain: they are its paragraphs in the report, word for word.</p>
+
+      <h2 id="validation">How the report is checked</h2>
+      <p>The validation suite (<a href="../science.html">Science</a>) builds GRB2's workspace in Node, one operation at a time: the run, its target checked against UniProt, an Enrich2 rescoring, a QC threshold changed, a finding acknowledged, a selection by query, a comparison and a robustness check added to the report, UniProt's features beside the map, a saved view of 2VWF and a figure. Then:</p>
+      <ul>
+        <li>every operation has its sentence, and the decision log is the history, entry by entry;</li>
+        <li>the example opened and scored alone says nothing more, and cites what its run's methods cite;</li>
+        <li>each of the 14 examples' runs: the report's paragraphs are its methods word for word;</li>
+        <li>every reference with a DOI (43) agrees with Crossref's record of it: title, journal, year, volume, issue, pages and first author (a recorded fixture; for three references Crossref records a field otherwise, and that field is left out, saying why);</li>
+        <li>references numbered as the text first cites them, one BibTeX entry each, each with its own key;</li>
+        <li>the same report again, from a copy and from the archive; a run removed takes the comparison that read it out.</li>
+      </ul>
+      <p>The diff (the validation suite's <code>diff</code>): from a checkpoint of GRB2's run, five planted changes (the pseudocount, the minimum input count, a replicate left out of the design, a QC threshold, the readout) are each described exactly and nothing else; the variants each rescoring moved, crossed, filtered and scored equal a computation made apart from the scores and SEs; an analysis compared with itself has no change; a checkpoint through the archive gives the same changes.</p>
+      <p>In the window, through remote control: the report the archive carries, and the one the Report view shows after a comparison and a robustness check are added, are the same text as Node writes from the archive, each run's QC and scores recomputed; what was kept is what Node computes. <code>mavescape export --format report</code> writes the archive's report again, the same bytes twice. A checkpoint kept and the run scored again: the changes the window finds are those Node finds from the workspace's archive, and the same between two archives.</p>

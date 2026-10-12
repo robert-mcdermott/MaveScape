@@ -1,6 +1,6 @@
 # File formats
 
-Every file MaveScape 0.1 to 0.5 read and write. Researchers whose counts come from their own pipeline
+Every file MaveScape 0.1 to 0.6 read and write. Researchers whose counts come from their own pipeline
 need only a count table, the target's sequence, and the design: which column is which sample.
 Blank, annotated layouts of each are on the Start page and in
 [`web/examples/layouts/`](../web/examples/layouts/). The Start page also opens two worked examples.
@@ -15,11 +15,12 @@ Blank, annotated layouts of each are on the Start page and in
 | Designs | `*.design.json`; sample sheets (CSV, TSV); DiMSum's experiment design file | `*.design.json` |
 | Import templates | `*.import.json` | `*.import.json` |
 | Workspaces | `*.msz` archives | `*.msz` archives; the workspace document (JSON) |
-| Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3); a comparison's matched variants (CSV) and its report and statistics (JSON, 0.4) |
+| Results | | QC per sample and per variant (CSV), selections (CSV, JSON), provenance (JSON), methods (Markdown) and references (BibTeX), the map (SVG, PNG); a nucleotide run's scores at the protein level (CSV, 0.3); a comparison's matched variants (CSV) and its report and statistics (JSON, 0.4); the workspace's report (Markdown) and its references (BibTeX, 0.6) |
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
 | Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV); a figure panel (PNG); the view as a Proteoscope session (JSON, or a link to a running Proteoscope) |
+| Figures (0.6) | a figure MaveScape exported (SVG, PDF, PNG or its manifest as JSON): checked against the workspace and rebuilt from its manifest; kept in the workspace and its archive (`figures`, and the images of structure panels) | a figure as SVG (vector, text as text), PDF (vector, one page at its printed size) or PNG (at a resolution of its printed size), each carrying its manifest; the manifest alone (JSON); `figures.json` (`mavescape export --format figures`) |
 
 Coming later: Excel workbooks.
 
@@ -375,6 +376,10 @@ results/<run-id>.csv     each run's scores (results/<run-id>.<condition>.csv for
                          conditions), as the scores export below
 methods.md               the latest run's methods
 references.bib           and their references
+report.md                the workspace's report (MaveScape 0.6; below, The report)
+report.bib               and its references
+certificate.json         in a certificate only (MaveScape 0.6; below, Reproducibility certificates)
+README.txt               and what it is and how to verify it
 ```
 
 Saved, reopened and saved again, an archive has the same bytes. On opening, MaveScape reads only
@@ -496,6 +501,58 @@ the history.
 A **target** (in `targets`, and as the design's copy in `design.targets`) is as in a design
 file (above). A target made from a GenBank record or fetched for a MaveDB record keeps `origin`,
 where its sequence came from (above, "Targets: GenBank"), in the workspace and not in the design.
+`analyses` (MaveScape 0.6, absent until the first) keeps the **analyses added to the report**: a
+comparison or a run's robustness check, which are the session's until then. Each is recorded as it
+was made, so that the report can say it whenever it is written; the runs it read are immutable, so
+what it records stays true, and removing a run (or a score set kept beside the workspace) takes the
+analyses that read it out too. Adding one and taking one out are in the history (action `report`).
+
+```json
+{ "id": "comparison", "kind": "comparison", "created": "2026-10-12T12:20:00.000Z",
+  "a": { "spec": { "run": "run-…", "condition": 0 }, "label": "Run 1", "source": "run", "run": "run-…",
+         "runName": "Run 1", "output": "<SHA-256>", "condition": "All replicates" },
+  "b": { "spec": { "run": "run-…", "condition": 0 }, "label": "Run 2", … },
+  "level": "protein", "coordinates": null, "bNegated": false, "sameScale": true,
+  "scale": { "mode": "scored", "applied": false, "reason": null },
+  "filters": { "lowConfidence": false, "maxSE": null, "minReads": null },
+  "report": { "status": "qualified", "items": [{ "id": "independence", "status": "qualified", "label": "Independence", "text": "…" }] },
+  "matched": { … }, "statistics": { "n": 1117, "pearson": { "r": 0.991, "low": …, "high": … }, "spearman": { … },
+  "concordance": { … }, "blandAltman": { … } },
+  "discordance": { "valid": false, "reason": "…", "tested": 0, "discordant": 0, "dispersion": null, "q": 0.05 },
+  "classes": null, "withheld": ["discordance"] }
+```
+
+A comparison keeps its two sides (`spec`, as the Compare view names them, with each run's output
+SHA-256), the scale and filters, the compatibility report and the statistics, as the comparison's
+JSON export has them (below, Comparisons). A robustness check: `{ kind: "robustness", run: { id,
+name, output }, total, skipped, max, seed, choices: [{ id, label, options: [{ id, label }] }],
+targets: [{ id, name, kind, n, counts, text }] }`, the choices varied (the declared option first),
+how many analyses and each target's verdicts, as the Robustness export's record has them.
+
+`checkpoints` (MaveScape 0.6, absent until the first) keeps the **checkpoints**: each a named
+state of the analysis, `{ id, name, created, head, sha256, state }`, where `state` is the workspace
+document as it stood without its identity (`format`, `version`, `id`, `created`, `modified`), its
+`history` and its `checkpoints`; `sha256` the SHA-256 of the state's canonical JSON (keys sorted);
+and `head` the hash of the history's last entry then, which places the state in the chain. Keeping
+and deleting one are in the history (action `checkpoint`). A **diff** compares two states (a
+checkpoint and now, two checkpoints, or two archives' workspaces; the Report view, remote control's
+`diff`) and says, in words, each change of the tables, targets, design, runs (scored, removed), QC
+thresholds and acknowledgements, selections, annotations, structure views, figures (made, deleted,
+a panel added, removed, changed or moved), the report's analyses and the MaveDB details. For each
+table scored in both states it pairs the latest run of each and says how its parameters, filters and
+design changed, and, both runs' scores recomputed, for each condition (and difference between
+conditions): the variants scored in both (`both`), those whose effect (the score less the wild
+type's, as robustness's calls) moved beyond the earlier run's 95% interval (`moved`), those of
+another class (`crossed`: lower than, like or higher than the wild type, q < 0.05; `crossings` by
+pair of classes), those no longer scored (`filtered`) and newly scored (`scored`), the most moved by
+name (`variants`, up to 25: `variant`, `before`, `after`, `z`, `from`, `to`); and the QC findings
+whose verdict changed (`findings`: `id`, `title`, `from`, `to`), each read with its state's
+thresholds. When the time scale, a time series' time points or the rescaling changed the units of
+the effects (from MaveScape 0.6), the later run's are put in the earlier run's units first:
+`units` is `{ "factor", "why" }` (the factor the later effects were multiplied by, and what changed
+them), `after` is in the earlier run's units, and `moved` is `null` (not said) where the factor is
+`null` (replicates whose time courses span different times).
+
 From MaveScape 0.3 the workspace's target can also keep `reference`, the record of
 its last check against its UniProt entry (Experiment, Target: **Check against UniProt**). It is
 provenance, kept with the workspace and not in the design, so a check that changes nothing leaves
@@ -533,6 +590,114 @@ its id), `phiPrior` and `dfPrior` (the moderated dispersions' prior; `null` for 
 of freedom). Runs that combined by another method record it, and
 runs made before 0.2 recorded `reml`; they reopen to their hashes. A run's output hash covers each
 score's degrees of freedom when it has them.
+
+## Reproducibility certificates, `*.certificate.msz`
+
+A **certificate** (MaveScape 0.6) is a workspace archive (above) that also holds every number the
+workspace reports, computed again from its files when it was made, so that anyone can compute them
+once more and compare. It is made from the Report view (**Certify…**), with remote control's
+`certify`, or in Node (`web/lib/certificate.js`, `writeCertificate`); `mavescape verify`, the
+Report view's **Verify…** and remote control's `verify_certificate` check one. Opened as a
+workspace, it is the workspace; MaveScape offers to verify it.
+
+Its files are the archive's, every table included or (for data that cannot be shared) each named
+by its SHA-256 only, every annotation's file and figure image always, every structure's file when
+the library holds them all; and two more:
+
+- `certificate.json`, format `mavescape-certificate`, version 1:
+  - `software` (`name`, `version`, `commit`). A certificate has no time of its own: the same
+    workspace, files and MaveScape give the same bytes, and so the same fingerprint, whenever and
+    wherever it is made;
+  - `workspace`: `id`, `name`, `path` (`workspace.json`), `sha256` (of `workspace.json`'s bytes),
+    `modified`;
+  - `inputs`: each file the workspace names, once: `role` (`table`, `annotation`, `image`,
+    `structure`), `name`, `fileName`, `sha256`, `needed` (whether a number is computed from it),
+    `bytes`, `path` (in the archive; `null` when named by its SHA-256 only);
+  - `history`: `entries`, `head` (the last entry's hash), `ok`;
+  - `checkpoints`: `id`, `name`, `created`, `sha256` (of its state);
+  - `numbers` (below) and `total`, how many;
+  - `notChecked`: `{ what, reason }`, what is not computed again (a selection's variants are kept
+    as chosen; a structure view's evidence; a map panel's structure tracks, which need the
+    structure open);
+  - `notes`: what making it found (a run's scores computed now not those recorded when it was
+    scored; an analysis kept in the report not what it computes now: the certificate records what
+    the files give now);
+  - `fingerprint`: the SHA-256 of the canonical JSON (keys sorted) of everything else. Quoted with
+    the analysis (its short form `xxxx-xxxx-xxxx-xxxx` is its first 16 characters), it names
+    exactly what was certified.
+- `README.txt`: the fingerprint, what the certificate proves and does not, how to verify it, what
+  is not computed again.
+
+`numbers`:
+
+| | |
+|---|---|
+| `runs` | each run: `id`, `name`, `recorded` (its output's SHA-256 when scored), `output` (now), `variants` (keys, in order), `conditions` (each `id`, `name`, `score`, `se`, `class`: 0 not scored, 1 like the wild type, 2 lower, 3 higher, as robustness and the diff call them) and `contrasts` (each difference between conditions' `delta`, `se`, `q`, `class`) |
+| `qc` | each run's QC: `digest` (the SHA-256 of every number its QC computed), `findings` (`id`, `status`, `value`, `acknowledged`: the status it was acknowledged at, or null) |
+| `analyses` | each comparison and robustness check kept in the report, computed again: a comparison's `matched`, `statistics`, `discordance` and `classes`; a robustness check's `total`, `skipped` and each target's verdict `counts` |
+| `figures` | each figure's panels: `id`, `letter`, `kind`, `drawing` (the SHA-256 of its marks written as SVG, as the figure's manifest records it), `missing` when it cannot be drawn |
+| `report` | the SHA-256 of the report (`report.md`) and of its references (`report.bib`) as MaveScape writes them, with the certified version and commit |
+
+Numbers are JSON's shortest round-trip text, NaN and infinities as text (`"NaN"`). MaveScape's
+results do not depend on the JavaScript engine (the deterministic `dmath.js`), so the window's
+certificate and Node's are the same bytes, and verifying compares every number bit for bit.
+
+**Verifying** reads the archive (each file against the manifest), checks the fingerprint, the
+workspace's SHA-256, the history's chain and head, each checkpoint's state and each run's id
+(which follows from its recorded inputs), finds every file it names (in the archive, beside it, or
+in the library), computes every number again from them with this MaveScape's code, and compares.
+The verdict: **verified** (exit 0), **differs** (exit 1; each difference listed, with its number's
+place: `Run 1: the score of p.Trp36Ala`), or **incomplete** (exit 2; a file it names is missing,
+and the numbers read from it are not computed rather than said to differ). With another version
+of MaveScape, it says so. The verification as JSON (`mavescape verify --report`, the action's data)
+holds `verdict`, `exit`, `fingerprint`, `software`, `workspace`, `archive`, `history`,
+`checkpoints`, `runs`, `inputs` (each `status`: `ok`, `missing`, `changed`, `absent` when not
+needed; and `from`: `archive`, `supplied`, `library`), `numbers` (`checked`, `same`, `differs`,
+`differ` (the first 200: `label`, `recorded`, `computed`), `missing`), `notChecked`, `notes` and
+`summary`.
+
+What it proves: that these inputs, analyzed as the workspace records, give these numbers (the
+analysis is reproducible), and that the record is the one certified. Not that the scores are
+right: that rests on the experiment's design and the model's assumptions, which the report states.
+A certificate made again by whoever changed its files has another fingerprint.
+
+## Review reports, `*.review.html`
+
+A **review report** (MaveScape 0.6) is a certificate's numbers as one self-contained HTML file that
+a reviewer opens in any browser, without MaveScape (`web/lib/review.js`). It is written from the
+Report view's Certificate pane (**Review report…**), with remote control's `review_report`,
+`mavescape export --format review`, or, from a certificate verified, `mavescape verify --review`
+and the verification's **Review report**; for the same workspace and MaveScape, all give the same
+bytes, and the report names the fingerprint of the certificate `certify` writes.
+
+It holds, in sections: an overview; the certificate (its fingerprint, what it proves and does not,
+how to verify it, what is not computed again, its notes); the experiment and design (targets, their
+UniProt check, samples, replicates); the inputs with their SHA-256; each run (its id, table, output
+recorded and computed, method, every parameter, each condition's and difference's variants by
+class, a map of each); the QC findings of each run (verdict, what each found, its threshold, its
+acknowledgement) with their plots; the comparisons (their statistics with 95% intervals, the
+variants that differ beyond their uncertainty, a plot) and robustness checks (each verdict's count)
+kept in the report; the selections; the structure views; the figures (each page drawn, each panel's
+drawing by its SHA-256); the methods (the report, its references linked by DOI); and the decision
+log (every history entry, the chain's state).
+
+**Every number is traced.** Each is a button carrying `data-k`, its key, and `data-v`, its exact
+value as JSON; clicked, it says where the number comes from:
+
+| Key | What it is |
+|---|---|
+| a certificate's key (`run|<id>|<condition>|score|<row>`, `qc|<run>|<finding>|value`, `analysis|<id>|values.statistics.pearson.r`, `figure|<figure>|<panel>`, `report|markdown`…) | a number the certificate records, under that key (above, numbers) |
+| `ws|<path>` (`ws|runs.0.inputs.parameters.pseudocount`) | a value the workspace records (an input, not computed), at that path of `workspace.json` |
+| `count|<run>|<condition>|<class>` (`scored`, or 1–3) | the variants of a class, counted from the certificate's classes |
+
+**Look up a variant** gives its score, SE and class in each condition of a run, traced. The whole
+certificate is in the JSON block `mavescape-review` (with what the trace panel says of runs,
+findings, analyses and figures), and **Check this file's numbers against the fingerprint** computes
+the SHA-256 of its canonical JSON in the browser and compares it with the fingerprint.
+
+The file loads nothing: its styles and script are inline, its maps, plots and figures inline SVG (a
+structure panel's image a `data:` URI), and its only links, DOIs, are followed when clicked. It has
+no time of its own.
 
 ## The cache of public data
 
@@ -760,7 +925,7 @@ CSV (`hgvs_pro`, `score`, `SE`, `status`) or JSON (`format: "mavescape-selection
 run's map (a nucleotide run's: the protein variants it makes), in the order selected; a selection
 by query lists them along the target, then by amino acid (`ARNDCQEGHILKMFPSTWYV*`). From MaveScape
 0.4, `query` is the query that made the selection, in MaveScape's selection language
-([Selections](https://robert-mcdermott.github.io/mavescape/docs/selections.html#query)), or
+([Selections](https://robert-mcdermott.github.io/MaveScape/docs/selections.html#query)), or
 `null` when it was made or changed by hand: run on the same run, it selects `keys` again.
 
 ```json
@@ -795,6 +960,36 @@ target, the design (and what was not recorded with the counts, with what that me
 with the counts: the cells carried into selection (the bottleneck QC infers was not checked against
 them)", MaveScape 0.2), the scoring with every parameter and filter, the QC findings, the software
 and the run's output hash, with numbered references, and the same references as BibTeX.
+
+### The report (`*_report.md`, `*_report.bib`; `mavescape export --format report`)
+
+The methods of the whole workspace (MaveScape 0.6, the Report view; remote control's `report` and
+`export` of `report` and `report-references`), written from its record whenever it is shown, in
+Markdown: a title (`# Methods: <workspace>`), a sentence of what it holds, then these sections, each
+present only when the workspace did what it says:
+
+| Section | What it says |
+| --- | --- |
+| Data | each run's table (SHA-256, rows, its origin), identifiers and target (where its sequence came from, its check against UniProt), as the run's methods say them; the tables imported and not scored |
+| Design | each run's design |
+| Scoring | each run's scoring, and a table of every run's parameters as `parameters.json` names them |
+| Quality control | each run's findings and acknowledgements; the thresholds changed from MaveScape's defaults |
+| Comparisons | each comparison added to the report: its scale, filters and variants compared, the correlations, Lin's concordance and the limits of agreement with their intervals, the variants that differ beyond their uncertainty, a predictor's classes, and what to read with care |
+| Robustness to analysis choices | each robustness check added: the choices varied, how many analyses, each target's verdicts |
+| Selections | each saved selection: its run, how many variants, the query that made it |
+| Annotations, Structures | as a run's methods say them |
+| Figures | each figure: its size and its panels by letter, with what each shows |
+| Inputs | every file read, by SHA-256: tables, MaveDB's mapped variants, annotations' files, structures' files, figures' images |
+| Software | the MaveScape that wrote the report; each run's MaveScape, scoring version and output SHA-256 |
+| Decision log | the history, entry by entry with its time (UTC), and whether its chain holds |
+| Limitations | what the counts did not record (and what that meant), what each run's model assumes, the QC findings not acknowledged, a predicted structure standing in for one |
+| Use | the research-use statement |
+
+Runs whose paragraphs read the same are named together ("**Run 1 and Run 2.**"). References are
+numbered in the order the text first cites them, and only those it cites are listed; `report.bib`
+holds each once, with its own key. The same workspace gives the same text, in the window, in Node
+and from the archive (which carries it, above). `mavescape export --format report --out DIR W.msz`
+writes `report.md` and `report.bib` without a window.
 
 ### The analysis package (`*_package.zip`)
 
@@ -927,6 +1122,8 @@ one was opened), `coloring` (`kind`, `how`, `label`, `source`, `run` with its ou
 `condition`, `palette`, `domain`; or the structure's own `scheme`), `legend` (`title`, `low`,
 `center`, `high`, `meaning`, `items`) and `image` (`width`, `height`, `scale`, `view`, `legend`,
 `renderer`). Wave 6's figure builder reads it; any PNG reader that lists text chunks shows it.
+`light: true` (MaveScape 0.6) draws it on white whatever the page's theme, as a figure's structure
+panel draws it.
 
 ### Proteoscope sessions (`*.proteoscope.json`, and the link)
 
@@ -1044,6 +1241,134 @@ target_position,reference_position,target_residue,structure,chain,residue_number
   0.25) or `exposed`;
 - `median_score`: the position's median score (the map's run and condition), when there is one.
 
+## Figures
+
+A figure (the Figures view; remote actions `create_figure`, `add_figure_panel`, `set_figure`;
+MaveScape 0.6) is a page of panels kept in the workspace document's `figures`, and with it in the
+archive. A panel says what it shows, never a copy of the numbers: the page is drawn again from the
+workspace whenever it is shown or exported, so a figure follows a rescoring until it is exported.
+Lengths are in points (1/72 inch).
+
+```json
+{
+  "id": "figure-…", "name": "Figure 1", "size": "double", "width": 493.23, "height": 340.16,
+  "text": 7, "letters": true,
+  "panels": [
+    { "id": "panel-1", "kind": "map", "x": 8, "y": 8, "w": 477.23, "h": 204.09,
+      "run": "run-b981d1a1b2d769de", "condition": 0, "colorBy": "score", "rowOrder": "biochemical",
+      "palette": "rdbu", "from": 20, "to": 40, "tracks": ["reference", "effect"] },
+    { "id": "panel-2", "kind": "text", "x": 269.29, "y": 226.77, "w": 212.6, "h": 56.69,
+      "text": "Abundance of every substitution…", "size": 7, "bold": false, "align": "left" }
+  ]
+}
+```
+
+- `size`: `single` (85 mm wide), `onehalf` (114 mm), `double` (174 mm), `slide` (960 × 540 pt,
+  16:9) or `custom`; `width` and `height` are the page's. `text`: the text size at the printed
+  size, in points (7; 14 on a slide). `letters`: the panels lettered A, B, C… in reading order
+  (rows from the top, each from the left); a panel with `letter: false` has none.
+- A `map` panel: `run` (its id), and either `condition` (an index of the run's conditions) with
+  `colorBy` (`score`, `se`, `replicates` or `input`), or `contrast` (an index of its differences
+  between conditions); `rowOrder` (`biochemical`, `hydrophobicity` or `alphabetical`), `palette`
+  (`rdbu` or `puor`), `from` and `to` (the positions shown, on the target's numbering; the whole
+  target when absent), `tracks` (the ids of the tracks drawn below it, in order, as `list_tracks`
+  gives them), `title` (absent: the map's own; `""`: none), `medians: false` and `legend: false`
+  leave out the medians and the legend.
+- A `text` panel: `text` (wrapped to the panel's width; `\n` starts a line), `size`, `bold`,
+  `align` (`left`, `center`, `right`).
+- The views' plots (MaveScape 0.6, wave 6 slice 2), each drawn as its view draws it, with `title`
+  (absent: the plot's own; `""`: none):
+  - `qc`: `subject` (a run's id, or `"counts"`: the counts with the current design), `finding` (its
+    id, as `qc_findings` gives it) and `findingTitle`, `pair` (replicate agreement: the pair drawn,
+    from 0): the finding's charts.
+  - `scores`: `run`, `plot` (`distribution`: the scores by class, `flow`: the filter flow, with
+    `condition`; `volcano`: a contrast's differences against their p, with `contrast`).
+  - `compare`: `a` and `b` (the sides as the Compare view keeps them: a run's condition or
+    replicate, or an annotation kept beside the workspace), `scale`, `filters`, `plot`
+    (`agreement`, `bland-altman`, `positions`, `classes`, `map-first`, `map-second`,
+    `map-difference`), `labels` (the sides' names when the panel was made).
+  - `variant`: `run`, `condition`, `variant` (its MAVE-HGVS name), `plot` (`evidence`: its score and
+    95% interval with each replicate's score ± 1.96 SE; `time-course`; `bins`).
+  - `structure`: `view` (a saved view's id) and `image` (`sha256`, `width`, `height`, `scale`,
+    `drawn`: the saved view's time when the image was drawn): the view's figure panel (below,
+    *Figure panels of a structure*) drawn on white at 4× and kept in the library by its SHA-256; a
+    view saved again since is said, and the image drawn again on request.
+
+A figure read from an archive or sent by a script is checked before it is drawn (every field what a
+figure holds, every panel on the page). A structure panel's image goes into the archive with the
+workspace, always (`sources/<sha256>.png`), and back into the library when the archive is opened. Making or deleting a figure, and adding or removing a
+panel, are in the workspace's history; moving and resizing panels are not, but can be undone.
+
+### A figure written (`*.svg`, `*.pdf`, `*.png`)
+
+The Figures view's **Export**, or the remote action `export_figure`:
+
+- **SVG**: the page in points (`width="493.23pt"`), its text as text in Helvetica (Arial where the
+  system has no Helvetica), its name as `<title>` and the figure in words as `<desc>`; each cell of a
+  map named by its variant as a `<title>`, as the map's own SVG names them.
+- **PDF**: one page at the figure's printed size, drawn as vectors, its text in the standard fonts
+  Helvetica and Helvetica-Bold (WinAnsi; a character outside it, such as − or Δ, written as its
+  nearest ASCII: - or delta); the figure's name as its title and the figure in words as its
+  subject.
+- **PNG**: at 300 dpi of the printed size by default (72 to 1200), its resolution recorded in the
+  file (`pHYs`), so that it opens at its printed size.
+
+The same figure is the same bytes when written again (the PDF's creation date and the manifest's
+`created` are the time, which `mavescape run`'s and `mavescape export`'s `--time` fix). The
+clipboard takes the PNG at 300 dpi, and the SVG where the browser accepts it.
+
+### What a figure carries: its manifest
+
+Each figure written (MaveScape 0.6, wave 6 slice 3) carries its **manifest**: the figure's document
+and, panel by panel, what it shows, what it was drawn from and a digest of what it drew. It is in
+the SVG as `<metadata id="mavescape-figure">` (the JSON in CDATA), in the PNG as an `iTXt` chunk
+with the keyword `mavescape-figure`, and in the PDF as an attached file, `mavescape-figure.json`;
+`export_figure`'s `json` format writes it alone.
+
+```json
+{
+  "format": "mavescape-figure-manifest", "version": 1, "created": "2026-10-12T12:00:00.000Z",
+  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
+  "workspace": { "id": "ws-…", "name": "GRB2 SH3 domain (published)" },
+  "figure": { "id": "figure-…", "name": "Figure 1", "…": "the figure's document, as above" },
+  "description": "Figure 1. A: …",
+  "panels": [
+    { "id": "panel-1", "letter": "A", "kind": "map", "shows": "the map of Run 1",
+      "drawing": "<SHA-256>",
+      "inputs": { "run": { "id": "run-…", "name": "Run 1", "output": "<SHA-256>", "table": "<SHA-256>",
+                           "tableName": "counts.csv", "others": [] }, "condition": 0 } }
+  ],
+  "drawing": "<SHA-256>",
+  "fingerprint": "<SHA-256>"
+}
+```
+
+- `inputs`, by kind: a run (`map`, `scores`, `variant`, a `qc` finding of a run) by its output's
+  SHA-256 (the run record's) and its table's, with `others`, the ids of the other runs of that table
+  then; a map's `tracks`, an annotation's with its file's SHA-256; a `qc` panel's `finding`, the
+  QC thresholds' digest and the finding's acknowledgement (or, of the counts, the table's SHA-256
+  and the design's digest); a `compare` panel's two sides (a run's condition or replicate, or an
+  annotation), `scale` and `filters`; a `structure` panel's saved view (its id, name and when it was
+  saved), the structure's file by its SHA-256, and its image's SHA-256. Digests are SHA-256 of the
+  canonical JSON (keys sorted, as the workspace's record is).
+- `drawing`: a panel's digest is the SHA-256 of its marks written as SVG, so two drawings of a panel
+  compare whatever the format; the manifest's is the digest of the panels' digests.
+- `fingerprint`: the SHA-256 of the canonical JSON of the manifest without it. A manifest changed
+  after it was written (a panel's words, its place, a run's output) no longer follows from it.
+
+**Reading one back.** A figure file dropped on the window (or `check_figure`) is read for its
+manifest and compared with the workspace open, panel by panel: *as then*; *changed since* (the run's
+table scored again since, the QC thresholds or the finding's acknowledgement changed, the design
+changed, an annotation's file changed, a structure view saved again), saying what; or *not here* (a
+run not in this workspace, found by its id or its output's SHA-256, so that a copy of the workspace
+holds it). **Rebuild here** adds the figure to the workspace, its runs mapped to this workspace's
+by their outputs, and draws each panel again from its inputs: each drawing's digest is compared with
+the one recorded, and the Figures view says which panels are the same drawing.
+
+**`mavescape export --format figures`** writes each figure of a workspace archive as SVG, PDF and
+PNG (300 dpi), named after it, with `figures.json` (format `mavescape-figures`, version 1,
+`figures`: each figure's manifest) and `export.json`. With `--time`, twice the same bytes.
+
 ## Comparisons
 
 A comparison (the Compare view, remote control's `compare`; MaveScape 0.4) pairs two sets of scores,
@@ -1097,7 +1422,7 @@ legend saying so; a variant scored on one side only, or left out by the filters,
 {
   "format": "mavescape-comparison",
   "version": 1,
-  "software": { "name": "MaveScape", "version": "0.5.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
   "a": { "label": "Run 1: Replicate 1", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep1" },
   "b": { "label": "Run 1: Replicate 2", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep2" },
   "level": "protein",
@@ -1188,7 +1513,7 @@ many `analyses` it is among the least tolerant tenth (`least_tolerant_in`).
 {
   "format": "mavescape-robustness",
   "version": 1,
-  "software": { "name": "MaveScape", "version": "0.5.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
   "run": { "id": "run-…", "name": "Run 1", "output": "<SHA-256>" },
   "q": 0.05,
   "choices": [{ "id": "pseudocount", "label": "Pseudocount", "options": [{ "id": "declared", "label": "0.5" }, { "id": "pc-0.1", "label": "0.1", "parameters": { "pseudocount": 0.1 } }] }],
@@ -1242,7 +1567,8 @@ With a fixed time, the same inputs write the same bytes in every file but `run.j
 `mavescape export` (MaveScape 0.3) writes `export.json` beside its files: format
 `mavescape-export`, version 1, the fields of `run.json` (its `inputs` the workspace archive and the
 `--details` file), with `deposit` (`--format mavedb`: what the deposit holds and lacks, as the
-`mavedb_deposit` action gives it) or `run` (`--format tables`).
+`mavedb_deposit` action gives it) or `run` (`--format tables`); `--format figures` and `--format
+report` (0.6) list their files in `outputs`.
 
 ## Remote control: `remote.json`
 
@@ -1255,7 +1581,7 @@ it stops:
 {
   "url": "http://127.0.0.1:8820",
   "token": "…",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "pid": 41237
 }
 ```
@@ -1264,7 +1590,7 @@ Actions are posted to `<url>/api/remote/action` as `{"action": "…", "args": {�
 and answered with `{"ok": true|false, "message": "…", "data": …}`; `open_files` and `export` need
 the header `X-MaveScape-Token: <token>`. `GET <url>/api/remote/tools` lists every action with its
 arguments as JSON Schema. The site's guide describes each action
-([Remote control and scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)).
+([Remote control and scripting](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html)).
 
 MaveScape reports experimental functional effects for research; nothing it writes classifies a
 variant as pathogenic or benign.

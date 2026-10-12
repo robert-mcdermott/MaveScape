@@ -2,8 +2,9 @@
 // across other reasonable analysis choices in the score worker (lib/robustness.js), and what it
 // says of each variant, difference and position: in the Score view (the run's Robustness pane),
 // the inspector (a variant's block) and remote control's `check_robustness`. A check is the
-// session's, not the workspace's (as a comparison is): its specifications are seeded, so it is the
-// same each time the run is checked, and its record (JSON) names every one.
+// session's, not the workspace's (as a comparison is), until it is added to the report (wave 6,
+// slice 4): its specifications are seeded, so it is the same each time the run is checked, and its
+// record (JSON) names every one.
 
 import { h, icon, downloadBlob, formatCount } from './dom.js';
 import { CLASS_NAMES, CONTRAST_CLASS_NAMES, DEFAULT_MAX_SPECIFICATIONS, leastTolerantSentence, methodsSentence, robustnessChoices, robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_Q, ROBUSTNESS_SEED, specifications, summarizeRobustness, VERDICT, VERDICT_NAMES } from '../lib/robustness.js';
@@ -13,6 +14,7 @@ import { ensureResults, runEntry } from './run-results.js';
 import { selectOnMap } from './selections.js';
 import { toast } from './overlays.js';
 import { possessive } from '../lib/words.js';
+import { reportButton, robustnessForReport } from './report.js';
 
 const fmt = (x, d = 3) => (Number.isFinite(x) ? x.toFixed(d) : '—');
 const pct = (x) => (Number.isFinite(x) ? `${Math.round(100 * x)}%` : '—');
@@ -187,6 +189,7 @@ export function robustnessPane(app, run, results, view) {
       h('button.btn', { type: 'button', onclick: () => downloadBlob(new Blob([files.csv.text], { type: 'text/csv' }), files.csv.name) }, icon('download'), 'Variants (CSV)'),
       h('button.btn', { type: 'button', onclick: () => downloadBlob(new Blob([files.positions.text], { type: 'text/csv' }), files.positions.name) }, icon('download'), 'Positions (CSV)'),
       h('button.btn', { type: 'button', onclick: () => downloadBlob(new Blob([files.json.text], { type: 'application/json' }), files.json.name) }, icon('download'), 'Record (JSON)'),
+      reportButton(app, () => robustnessForReport(run, state), { small: false }),
       h('span.spacer'),
       h('button.btn.small', { type: 'button', onclick: () => { app.robustness.delete(run.id); checkRobustness(app, run); } }, 'Check again')));
   return pane;

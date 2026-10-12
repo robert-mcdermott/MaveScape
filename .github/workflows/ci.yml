@@ -1,10 +1,25 @@
 name: CI
 
+# Not for a change of documentation alone: no check reads the Markdown files, the spec, the
+# license or the citation (the site's pages and screenshots are checked, so docs/site and
+# docs/images still run it). A push or pull request that changes anything else runs it all;
+# Actions' "Run workflow" button runs it by hand.
 on:
   push:
     # A wave's branch too, so each slice meets the runner as it is built, not at the release.
     branches: [main, 'wave*']
+    paths-ignore:
+      - '**.md'
+      - 'mavescape-spec/**'
+      - 'LICENSE'
+      - 'CITATION.cff'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'mavescape-spec/**'
+      - 'LICENSE'
+      - 'CITATION.cff'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -83,16 +98,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Cache the MaveDB tables the session compares with Node (DHFR's two score sets, BAP1's, TP53's three)
+      - name: Cache the MaveDB tables the session compares with Node (DHFR's two score sets, BAP1's, TP53's three, BRCA1 RING's certified) and axe-core (the review report's accessibility)
         uses: actions/cache@v4
         with:
           path: |
             validation/cache/mavedb-dhfr
             validation/cache/mavedb-bap1-sge
             validation/cache/mavedb-tp53-screens
+            validation/cache/mavedb-brca1-ring
+            validation/cache/axe-core
           key: validation-remote-${{ hashFiles('validation/sources.json') }}
-      - name: Fetch those MaveDB tables
-        run: node validation/fetch.mjs mavedb-dhfr mavedb-bap1-sge mavedb-tp53-screens
+      - name: Fetch those MaveDB tables and axe-core
+        run: node validation/fetch.mjs mavedb-dhfr mavedb-bap1-sge mavedb-tp53-screens mavedb-brca1-ring axe-core
       - name: Every remote action, in the program and headless Chrome, against Node
         run: node validation/remote-session.mjs --verbose --require-data
         env:

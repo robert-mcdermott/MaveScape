@@ -54,6 +54,16 @@ export const REFERENCES = {
   plip: { type: 'article', authors: ['Adasme, Melissa F', 'Linnemann, Katja L', 'Bolz, Sarah Naomi', 'Kaiser, Florian', 'Salentin, Sebastian', 'Haupt, V Joachim', 'Schroeder, Michael'], title: 'PLIP 2021: expanding the scope of the protein-ligand interaction profiler to DNA and RNA', journal: 'Nucleic Acids Research', year: 2021, volume: 49, number: 'W1', pages: 'W530--W534', doi: '10.1093/nar/gkab294' },
   mannwhitney: { type: 'article', authors: ['Mann, Henry B', 'Whitney, Donald R'], title: 'On a test of whether one of two random variables is stochastically larger than the other', journal: 'The Annals of Mathematical Statistics', year: 1947, volume: 18, number: 1, pages: '50--60', doi: '10.1214/aoms/1177730491' },
   proteoscope: { type: 'software', authors: ['McDermott, Robert'], title: 'Proteoscope', version: '0.10.0', year: 2026, url: 'https://github.com/robert-mcdermott/proteoscope' },
+  // Wave 6, slice 4: the workspace's report: comparisons (lib/agreement.js cites each method where
+  // it computes it) and robustness to analysis choices (lib/robustness.js).
+  bonett2000: { type: 'article', authors: ['Bonett, Douglas G', 'Wright, Thomas A'], title: 'Sample size requirements for estimating Pearson, Kendall and Spearman correlations', journal: 'Psychometrika', year: 2000, volume: 65, number: 1, pages: '23--28', doi: '10.1007/BF02294183' },
+  lin1989: { type: 'article', authors: ['Lin, Lawrence I-Kuei'], title: 'A concordance correlation coefficient to evaluate reproducibility', journal: 'Biometrics', year: 1989, volume: 45, number: 1, pages: '255--268', doi: '10.2307/2532051' },
+  lin2000: { type: 'article', authors: ['Lin, Lawrence I-Kuei'], title: 'A note on the concordance correlation coefficient', journal: 'Biometrics', year: 2000, volume: 56, number: 1, pages: '324--325', doi: '10.1111/j.0006-341X.2000.00324.x' },
+  blandAltman1986: { type: 'article', authors: ['Bland, J Martin', 'Altman, Douglas G'], title: 'Statistical methods for assessing agreement between two methods of clinical measurement', journal: 'The Lancet', year: 1986, volume: 327, number: 8476, pages: '307--310', doi: '10.1016/S0140-6736(86)90837-8' },
+  blandAltman1999: { type: 'article', authors: ['Bland, J Martin', 'Altman, Douglas G'], title: 'Measuring agreement in method comparison studies', journal: 'Statistical Methods in Medical Research', year: 1999, volume: 8, number: 2, pages: '135--160', doi: '10.1177/096228029900800204' },
+  delong1988: { type: 'article', authors: ['DeLong, Elizabeth R', 'DeLong, David M', 'Clarke-Pearson, Daniel L'], title: 'Comparing the areas under two or more correlated receiver operating characteristic curves: a nonparametric approach', journal: 'Biometrics', year: 1988, volume: 44, number: 3, pages: '837--845', doi: '10.2307/2531595' },
+  steegen2016: { type: 'article', authors: ['Steegen, Sara', 'Tuerlinckx, Francis', 'Gelman, Andrew', 'Vanpaemel, Wolf'], title: 'Increasing transparency through a multiverse analysis', journal: 'Perspectives on Psychological Science', year: 2016, volume: 11, number: 5, pages: '702--712', doi: '10.1177/1745691616658637' },
+  simonsohn2020: { type: 'article', authors: ['Simonsohn, Uri', 'Simmons, Joseph P', 'Nelson, Leif D'], title: 'Specification curve analysis', journal: 'Nature Human Behaviour', year: 2020, volume: 4, number: 11, pages: '1208--1214', doi: '10.1038/s41562-020-0912-z' },
   mavedb: { type: 'article', authors: ['Esposito, Daniel', 'Weile, Jochen', 'Shendure, Jay', 'Starita, Lea M', 'Papenfuss, Anthony T', 'Roth, Frederick P', 'Fowler, Douglas M', 'Rubin, Alan F'], title: 'MaveDB: an open-source platform to distribute and interpret data from multiplexed assays of variant effect', journal: 'Genome Biology', year: 2019, volume: 20, pages: '223', doi: '10.1186/s13059-019-1845-6' },
 };
 
@@ -73,7 +83,9 @@ export function referenceText(ref) {
   return `${by}${by.endsWith('.') ? '' : '.'} ${ref.title}. ${ref.journal}. ${ref.year};${ref.volume}${ref.number ? `(${ref.number})` : ''}:${ref.pages.replace('--', '–')}. doi:${ref.doi}`;
 }
 
-const bibKey = (key, ref) => `${(ref.authors?.[0] ?? key).split(',')[0].replace(/[^A-Za-z]/g, '').toLowerCase()}${ref.year ?? ''}${key === 'reml' ? 'a' : key === 'metafor' ? 'b' : ''}`;
+// A BibTeX key: the first author's family name and the year (software: its name and the year, so
+// that two programs by one author in one year keep their own keys).
+const bibKey = (key, ref) => `${(ref.type === 'software' ? ref.title : ref.authors?.[0] ?? key).split(',')[0].replace(/[^A-Za-z]/g, '').toLowerCase()}${ref.year ?? ''}${key === 'reml' ? 'a' : key === 'metafor' ? 'b' : ''}`;
 
 export function toBibTeX(refs) {
   return `${refs.map(({ key, ref }) => {
@@ -85,9 +97,10 @@ export function toBibTeX(refs) {
   }).join('\n\n')}\n`;
 }
 
-// Writes the methods of a run. options: { software: { version, commit }, findings (QC, optional),
-// thresholds, results (the run's scores, optional: the rescaling anchors' SEs) }. Returns { paragraphs, references: [{ n, key, text }], markdown, bibtex }.
-export function writeMethods(ws, run, options = {}) {
+// References numbered in the order first cited, shared by every paragraph that cites them (a run's
+// methods, or the workspace's report, lib/report.js): { cite(key, ref?) → "[n]", cited,
+// references() → [{ n, key, text }], bibtex() }.
+export function citations() {
   const cited = [];
   const cite = (key, ref = REFERENCES[key]) => {
     let n = cited.findIndex((c) => c.key === key) + 1;
@@ -97,6 +110,50 @@ export function writeMethods(ws, run, options = {}) {
     }
     return `[${n}]`;
   };
+  return { cite, cited, references: () => cited.map(({ key, ref }, i) => ({ n: i + 1, key, text: referenceText(ref) })), bibtex: () => toBibTeX(cited) };
+}
+
+// Writes the methods of a run. options: { software: { version, commit }, findings (QC, optional),
+// thresholds, results (the run's scores, optional: the rescaling anchors' SEs) }. Returns { paragraphs, references: [{ n, key, text }], markdown, bibtex }.
+export function writeMethods(ws, run, options = {}) {
+  const refs = citations();
+  const { cite } = refs;
+  const own = runParagraphs(ws, run, options, cite);
+  const paragraphs = [own.data, own.design, own.scoring, ...(own.qc ? [own.qc] : [])];
+
+  // The annotations beside the map (wave 3, slice 5): each one's source, release and date, and
+  // how MaveScape read it.
+  const annotations = ws.annotations ?? [];
+  if (annotations.length) {
+    const lines = annotations.map((a) => annotationSentence(a, cite)).filter(Boolean);
+    if (lines.length) paragraphs.push(`Annotations shown beside the map: ${lines.join(' ')}`);
+  }
+
+  // The structures saved views show (wave 5, slice 5): each with its file's SHA-256, the target's
+  // mapping onto it as the views were saved, and how what it says of each position was read.
+  const structures = ws.structures ?? [];
+  if (structures.length) paragraphs.push(...structureParagraphs(ws, cite));
+
+  // Software.
+  const sw = run.software;
+  paragraphs.push(`Analyses were made with MaveScape ${sw.version}${sw.commit ? ` (commit ${sw.commit.slice(0, 12)})` : ''} ${cite('mavescape', mavescapeReference(sw.version, run.created))}, scoring version ${sw.scoring}; the run ${run.id} has output SHA-256 ${run.output.sha256}, and its scores can be recomputed from the recorded inputs. ${RESEARCH_USE}`);
+
+  const references = refs.references();
+  const markdown = `# Methods\n\n${paragraphs.join('\n\n')}\n\n## References\n\n${references.map((r) => `${r.n}. ${r.text}`).join('\n')}\n`;
+  return { paragraphs, references, markdown, bibtex: refs.bibtex() };
+}
+
+// What MaveScape is for, said wherever its methods are.
+export const RESEARCH_USE = 'MaveScape reports experimental functional effects for research; it does not classify variants as pathogenic or benign.';
+
+// MaveScape as a reference: its version, and the year of the work it made (a run's, a report's).
+export const mavescapeReference = (version, created) => ({ type: 'software', authors: ['McDermott, Robert'], title: 'MaveScape', version, year: Number(String(created ?? '').slice(0, 4)) || null, url: 'https://github.com/robert-mcdermott/mavescape' });
+
+// The paragraphs of a run's own methods, its references numbered by cite: { data, design,
+// scoring, qc (null without findings), missing (what the counts did not record) }. options as
+// writeMethods', and missingApart: what was not recorded left out of the design's paragraph (the
+// report says it with the limitations).
+export function runParagraphs(ws, run, options, cite) {
   const p = withDefaults(run.inputs.parameters);
   const design = run.inputs.design;
   const source = ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
@@ -146,7 +203,7 @@ export function writeMethods(ws, run, options = {}) {
   // The design, and what the assay measures (left out when the design does not say); then what was
   // not recorded with the counts, and what that meant (wave 2, slice 10: never filled by guessing).
   const missing = source ? notRecorded(readiness({ ...ws, design, designSource: source.id }, { design })) : [];
-  paragraphs.push(`Design: ${summarizeDesign(design).lines.filter((line) => design.readout || !line.startsWith('Readout:')).join(' ')}${missing.length ? ` Not recorded with the counts: ${missing.join('; ')}.` : ''}`);
+  paragraphs.push(`Design: ${summarizeDesign(design).lines.filter((line) => design.readout || !line.startsWith('Readout:')).join(' ')}${missing.length && !options.missingApart ? ` Not recorded with the counts: ${missing.join('; ')}.` : ''}`);
 
   // Scoring.
   const scoring = [];
@@ -171,7 +228,7 @@ export function writeMethods(ws, run, options = {}) {
   }
   else if (p.model === 'ratio') scoring.push(`Scores are natural-log ratios of each variant's frequency after selection to before${design.model === 'time-series' ? ` (the first and last time points${p.timeScale === 'unit' ? `, over the time between them: a score per ${unitOf(design)}` : ''})` : ''} ${cite('enrich2')}, normalized by the ${NORMALIZATIONS[p.normalization]}, with a pseudocount of ${p.pseudocount}; a replicate's standard error is the square root of the summed reciprocal counts${p.normalization === 'synonymous' ? '' : ' and normalizers'}.`);
   else if (p.model === 'wls' || p.model === 'ols') scoring.push(regressionSentence(p, cite('enrich2'), design).replace(/ \((\[\d+\])\)/, ' $1'));
-  else scoring.push(binSentence(p, { average: cite('vampseq'), mle: cite('peterman') }).replace(/ \((\[\d+\])\)/, ' $1'));
+  else scoring.push(binSentence(p, p.model === 'bins' ? { average: cite('vampseq') } : { mle: cite('peterman') }).replace(/ \((\[\d+\])\)/, ' $1'));
   if (!published) countsScoring();
   paragraphs.push(scoring.join(' '));
 
@@ -213,39 +270,19 @@ export function writeMethods(ws, run, options = {}) {
   }
 
   // Quality control.
+  let qc = null;
   if (options.findings) {
     const f = options.findings;
     const flagged = f.filter((x) => x.status === 'review' || x.status === 'fail');
     const bottleneck = flagged.some((x) => x.id === 'excess-variance');
     const acknowledged = flagged.filter((x) => x.acknowledged?.current);
-    paragraphs.push(`Quality control: ${f.filter((x) => x.status === 'pass').length} findings passed, ${f.filter((x) => x.status === 'review').length} were to review and ${f.filter((x) => x.status === 'fail').length} failed${f.some((x) => x.status === 'na') ? ` (${f.filter((x) => x.status === 'na').length} not assessed)` : ''}.${flagged.length ? ` ${flagged.map((x) => `${x.title}: ${x.value} (${x.status}; ${x.threshold})`).join('. ')}.` : ''}${acknowledged.length ? ` ${acknowledged.length === 1 ? 'One finding was' : `${acknowledged.length} findings were`} acknowledged, ${acknowledged.length === 1 ? 'its status' : 'their statuses'} unchanged: ${acknowledged.map((x) => `${x.title.charAt(0).toLowerCase()}${x.title.slice(1)} ("${x.acknowledged.reason.replace(/[.\s]+$/, '')}")`).join('; ')}.` : ''}${bottleneck ? ` Variance beyond counting is read as in DiMSum's error model ${cite('dimsum')}.` : ''} Thresholds are recorded with the workspace.`);
+    qc = `Quality control: ${f.filter((x) => x.status === 'pass').length} findings passed, ${f.filter((x) => x.status === 'review').length} were to review and ${f.filter((x) => x.status === 'fail').length} failed${f.some((x) => x.status === 'na') ? ` (${f.filter((x) => x.status === 'na').length} not assessed)` : ''}.${flagged.length ? ` ${flagged.map((x) => `${x.title}: ${x.value} (${x.status}; ${x.threshold})`).join('. ')}.` : ''}${acknowledged.length ? ` ${acknowledged.length === 1 ? 'One finding was' : `${acknowledged.length} findings were`} acknowledged, ${acknowledged.length === 1 ? 'its status' : 'their statuses'} unchanged: ${acknowledged.map((x) => `${x.title.charAt(0).toLowerCase()}${x.title.slice(1)} ("${x.acknowledged.reason.replace(/[.\s]+$/, '')}")`).join('; ')}.` : ''}${bottleneck ? ` Variance beyond counting is read as in DiMSum's error model ${cite('dimsum')}.` : ''} Thresholds are recorded with the workspace.`;
   }
-
-  // The annotations beside the map (wave 3, slice 5): each one's source, release and date, and
-  // how MaveScape read it.
-  const annotations = ws.annotations ?? [];
-  if (annotations.length) {
-    const lines = annotations.map((a) => annotationSentence(a, cite)).filter(Boolean);
-    if (lines.length) paragraphs.push(`Annotations shown beside the map: ${lines.join(' ')}`);
-  }
-
-  // The structures saved views show (wave 5, slice 5): each with its file's SHA-256, the target's
-  // mapping onto it as the views were saved, and how what it says of each position was read.
-  const structures = ws.structures ?? [];
-  if (structures.length) paragraphs.push(...structureParagraphs(ws, cite));
-
-  // Software.
-  const sw = run.software;
-  const mavescape = { type: 'software', authors: ['McDermott, Robert'], title: 'MaveScape', version: sw.version, year: Number((run.created ?? '').slice(0, 4)) || null, url: 'https://github.com/robert-mcdermott/mavescape' };
-  paragraphs.push(`Analyses were made with MaveScape ${sw.version}${sw.commit ? ` (commit ${sw.commit.slice(0, 12)})` : ''} ${cite('mavescape', mavescape)}, scoring version ${sw.scoring}; the run ${run.id} has output SHA-256 ${run.output.sha256}, and its scores can be recomputed from the recorded inputs. MaveScape reports experimental functional effects for research; it does not classify variants as pathogenic or benign.`);
-
-  const references = cited.map(({ key, ref }, i) => ({ n: i + 1, key, text: referenceText(ref) }));
-  const markdown = `# Methods\n\n${paragraphs.join('\n\n')}\n\n## References\n\n${references.map((r) => `${r.n}. ${r.text}`).join('\n')}\n`;
-  return { paragraphs, references, markdown, bibtex: toBibTeX(cited) };
+  return { data: paragraphs[0], design: paragraphs[1], scoring: paragraphs[2], qc, missing };
 }
 
 // An annotation in the methods: what it is, where from and when, and what MaveScape did with it.
-function annotationSentence(a, cite) {
+export function annotationSentence(a, cite) {
   const r = a.record ?? {};
   const day = r.retrieved ? `, retrieved ${String(r.retrieved).slice(0, 10)}` : '';
   switch (a.provider) {
@@ -276,7 +313,7 @@ const pct = (x) => `${Math.round(100 * x)}%`;
 
 // The structures paragraphs: one for the structures and their mappings, one for what they say of
 // each position.
-function structureParagraphs(ws, cite) {
+export function structureParagraphs(ws, cite) {
   const views = ws.structureViews ?? [];
   const lines = [];
   for (const entry of ws.structures ?? []) {

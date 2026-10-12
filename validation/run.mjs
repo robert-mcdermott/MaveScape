@@ -43,7 +43,7 @@ import { cachedRecord, EXAMPLE_DATASETS, exampleRecords, MissingExampleData, ope
 import { proteinChange } from '../web/lib/codons.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf, uniparcEntries } from '../web/lib/uniprot.js';
 import { countsDesign, mappedCSV, mappedVariants, readMapped, readoutOf, readScoreSet, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
-import { writeMethods } from '../web/lib/methods.js';
+import { REFERENCES, writeMethods } from '../web/lib/methods.js';
 import { intervalOf } from '../web/lib/exports.js';
 import { readZip } from '../web/lib/zip.js';
 import { readiness } from '../web/lib/readiness.js';
@@ -64,7 +64,7 @@ import { annotationTracks, providerById as annotationProvider } from '../web/lib
 import { readProfile } from '../web/lib/providers/pdbe.js';
 import { readClinVarTable } from '../web/lib/providers/clinvar.js';
 import { gnomadRows } from '../web/lib/providers/gnomad.js';
-import { clinvarClass, REVIEW_STARS, tracksCSV } from '../web/lib/tracks.js';
+import { builtinTracks, clinvarClass, REVIEW_STARS, tracksCSV } from '../web/lib/tracks.js';
 import { addAnnotation } from '../web/lib/workspace.js';
 import { createHash } from 'node:crypto';
 import { proteinView } from '../web/lib/collapse.js';
@@ -76,7 +76,7 @@ import { scoreExperiment, PRESETS, DEFAULT_PARAMETERS, defaultParameters, MODELS
 import { scoreDimsumGroup } from '../web/lib/score-dimsum.js';
 import { combineFixed, combineREML, heterogeneity } from '../web/lib/replicates.js';
 import { STAGE_BY_CODE, STAGE_BY_ID, REPLICATE_STATE, REPLICATE_STATE_NAMES } from '../web/lib/filters.js';
-import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs, reproduction } from '../web/lib/runs.js';
+import { makeRun, outputDigest, runId, runInputs, addRun, recordedInputs, removeRun, reproduction } from '../web/lib/runs.js';
 import { median } from '../web/lib/score-ratio.js';
 import { QC_FIXTURES, QC_SEEDS, matches, raised, runFixture } from './qc-cases.mjs';
 import { computeQC } from '../web/lib/qc.js';
@@ -110,6 +110,23 @@ import { addSelection } from '../web/lib/workspace.js';
 import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
+import { asPDFText, readPDF, readSVG, sameRects } from './figure-cases.mjs';
+import { addPanel, checkFigure, createFigure, figureMarks, figurePDF, figureSVG, mm } from '../web/lib/figures.js';
+import { chartsPanel } from '../web/lib/figure-plots.js';
+import { qcCharts, qcPanelData } from '../web/lib/qc-plots.js';
+import { writeReport } from '../web/lib/report.js';
+import { checkReferences, contextOf, CROSSREF_EXCEPTIONS, reportWorkspace } from './report-cases.mjs';
+import { movedApart, pairsFor, plantedChanges } from './diff-cases.mjs';
+import { certifiedWorkspace, checkTraced, externalReferences, repack, tamperings, windowExample } from './certificate-cases.mjs';
+import { GRB2_ACKNOWLEDGED, grb2Figure, hsp90Checkpoint, ringCertified } from './example-lessons.mjs';
+import { certificateFingerprint, computeNumbers, countNumbers, encodeAll, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
+import { canonicalJSON } from '../web/lib/workspace.js';
+import { panelDigests } from '../web/lib/figure-manifest.js';
+import { analysisState, changeMap, diffStates, pairWords, stateDigest, variantChanges } from '../web/lib/diff.js';
+import { buildManifest, checkManifest, compareDrawings, compareManifest, embedPNG, embedSVG, figureForWorkspace, pdfAttachment, readFigureManifest } from '../web/lib/figure-manifest.js';
+import { comparisonCharts, comparisonPoints, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
+import { encodePNG } from '../web/lib/png.js';
+import { textMarks } from '../web/lib/draw.js';
 import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, nodeEvidence, openCached, openFixture, paeFixture, pdbFile, positionScores, replayStructureViews, siftsOf, siftsRetrieved } from './structure-cases.mjs';
 import { bhAdjust, clusterTest, CONTACT_DISTANCE, effectsByClass, mannWhitney, MAX_ASA, structureTracks } from '../web/lib/structure-evidence.js';
 import { mappingChanges, mappingSummary } from '../web/lib/structure-record.js';
@@ -2259,6 +2276,14 @@ const suites = {
         const views = await replayStructureViews(opened.ws, opened.sources);
         check('roundtrip', `${file}: each saved view's structure read again (from the archive's own file, or, named by checksum only, fetched again by its ID), the file recorded, and the target mapped again onto the view's chain as it was saved`, views.map((x) => `${x.view}: ${x.structure} ${x.from}${x.ok ? '' : ` (${x.why})`}`).join('; '), views.every((x) => x.ok), 'the same');
       }
+      // What 0.6 keeps (figures, analyses kept in the report, checkpoints): each checkpoint's state its
+      // own SHA-256, and every number the workspace reports computed again from the archive's own
+      // files (each figure drawn, each analysis kept in the report what it computes now).
+      if (opened.ws.figures?.length || opened.ws.checkpoints?.length || opened.ws.analyses?.length) {
+        const computed = await computeNumbers(opened.ws, async (sha) => opened.sources.get(sha) ?? null, { software: SOFTWARE });
+        const kept = (opened.ws.checkpoints ?? []).map((c) => ({ name: c.name, ok: stateDigest(c.state) === c.sha256 }));
+        check('roundtrip', `${file}: each checkpoint's state its own SHA-256, and every number the workspace reports computed again from the archive's own files (each figure drawn, each analysis kept in the report what it computes now)`, `checkpoints ${kept.map((c) => `${c.name} ${c.ok ? 'as kept' : 'changed'}`).join(', ') || 'none'}; ${(opened.ws.figures ?? []).map((f) => `${f.name}, ${f.panels.length} panels`).join('; ') || 'no figures'}; ${(opened.ws.analyses ?? []).length} analyses kept; ${computed.notes.length ? computed.notes.join(' ') : 'no notes'}; ${computed.blocked.size ? [...computed.blocked].map(([g, why]) => `${g}: ${why}`).join('; ') : 'nothing left out'}`, kept.every((c) => c.ok) && !computed.notes.length && !computed.blocked.size, 'as kept; computed, as kept');
+      }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
     // The blank layouts: filled in as they say, they make a valid design.
@@ -2328,7 +2353,7 @@ const suites = {
   // own lesson, checked: Hsp90's codon variants and its per-generation scores against the
   // published fitness, factor IX against MultiSTEP's scores, and the simulated problems against
   // their truth.
-  examples() {
+  async examples() {
     const pct = (x) => `${(100 * x).toFixed(1)}%`;
     const opened = new Map();
     for (const example of EXAMPLES) {
@@ -2349,7 +2374,7 @@ const suites = {
       const gaps = o.readiness.gaps.map((g) => g.id);
       const missing = (example.teaches ?? []).filter((g) => !gaps.includes(g));
       check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
-      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare', 'structure'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
+      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare', 'structure', 'figures', 'report'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
       if (example.mavedb) {
         // Opened from MaveDB: its tables the ones the example was made with (and the validation
         // pins), each record's license the example's (several records, wave 3 slice 6).
@@ -2656,6 +2681,71 @@ const suites = {
       check('examples', 'TP53, two screens on two scales, as the guide says: matched on P04637\'s numbering, r −0.78 as published; with Kotler et al.\'s direction stated, r 0.78 and ρ 0.72, Lin\'s concordance withheld; rescaled by their anchors, Lin\'s concordance 0.78 and a bias of −0.04; four of the eight positions that differ most at 180–184, lower under etoposide; Giacomelli et al.\'s nutlin-3 screen against etoposide r 0.75 and 0.72 rescaled', `${asPublished.matched.n} matched, r ${fmt(asPublished.statistics.pearson.r, 3)}; stated r ${fmt(negated.statistics.pearson.r, 3)}, ρ ${fmt(negated.statistics.spearman.rho, 3)}, Lin's ${negated.statistics.concordance ? 'given' : 'withheld'}; rescaled Lin's ${fmt(rescaled.statistics.concordance.ccc, 3)}, bias ${fmt(ba.bias, 3)} (${fmt(ba.lower, 2)} to ${fmt(ba.upper, 2)}); largest ${largest.map((x) => `${x.residue}${x.reference} ${fmt(x.mean, 2)}`).join(', ')}; nutlin ${compareSides(a, nutlin.side).matched.n}, r ${fmt(compareSides(a, nutlin.side).statistics.pearson.r, 3)}, rescaled ${fmt(compareSides(a, nutlin.side, { scale: 'synonymous-nonsense' }).statistics.concordance.ccc, 3)}`,
         asPublished.matched.n === 3341 && fmt(asPublished.statistics.pearson.r, 2) === '-0.78' && fmt(negated.statistics.pearson.r, 2) === '0.78' && fmt(negated.statistics.spearman.rho, 2) === '0.72' && !negated.statistics.concordance && fmt(rescaled.statistics.concordance.ccc, 2) === '0.78' && fmt(ba.bias, 2) === '-0.04' && fmt(ba.lower, 2) === '-0.71' && fmt(ba.upper, 2) === '0.63' && helix.length === 4 && helix.every((x) => x.mean < 0) && fmt(compareSides(a, nutlin.side).statistics.pearson.r, 2) === '0.75' && fmt(compareSides(a, nutlin.side, { scale: 'synonymous-nonsense' }).statistics.concordance.ccc, 2) === '0.72' && !rescaled.discordance.valid
         && said('tp53-screens', '3,341 variants', 'r −0.78', 'r 0.78', 'ρ 0.72', 'concordance is 0.78', 'bias −0.04', '−0.71 to 0.63', 'D184, E180, R181, C182', 'r 0.75', '0.72 rescaled'), 'as the guide says');
+    }
+
+    // Wave 6, slice 8: the wave's lessons on the examples (example-lessons.mjs). GRB2's figure: Run
+    // 1's map, the view Core and the QC finding behind its bottleneck, acknowledged; exported as PDF
+    // and read back.
+    {
+      const f = await grb2Figure();
+      const [a, b, c] = f.manifest.panels;
+      const pdb = sha256(cachedBytes('pdb', pdbFile('2VWF')));
+      const status = (cmp) => cmp.panels.map((p) => `${p.letter} ${p.status}${p.changes.length ? ` (${p.changes.join('; ')})` : ''}`).join(', ');
+      const rescoredSays = f.rescored.panels.map((p) => p.status).join() === 'changed,unchanged,changed' && f.rescored.panels.filter((p) => p.status === 'changed').every((p) => p.changes.join() === 'Run 1\'s table was scored again since (Run 3)');
+      check('examples', 'GRB2\'s figure as its guide makes it (its sixth step): Run 1\'s map, the view Core of 2VWF and the variance beyond counting (failing, acknowledged in the first step), exported as PDF with its manifest: Run 1 by its output\'s SHA-256, the QC thresholds and the acknowledgement\'s reason, 2VWF and the view\'s image by theirs; read back, every panel as it was drawn, and once the table is scored again the map and the QC panel say so (the view\'s image stands in for the window\'s; the remote session draws it)', `${f.shows.join('; ')}; ${f.finding.title} ${f.finding.status}, ${f.finding.value}; manifest: Run 1 ${a.inputs.run.output.slice(0, 12)}…, acknowledged "${c.inputs.acknowledged?.slice(0, 40)}…", 2VWF ${b.inputs.structure?.sha256.slice(0, 12)}…, image ${b.inputs.image.slice(0, 12)}…; its smallest text ${f.drawn.smallest.toFixed(1)} pt, ${f.drawn.notes.length} notes; PDF ${f.pdf.length.toLocaleString('en-US')} bytes, its manifest ${f.read?.fingerprint === f.manifest.fingerprint ? 'as written' : 'not read back'}; ${status(f.comparison)}; after Run 3: ${status(f.rescored)}`,
+        f.shows.join('; ') === 'A, the map of Run 1; B, the structure view "Core"; C, the QC finding "Variance beyond counting (bottleneck)" of Run 1' && !f.drawn.notes.length && f.drawn.smallest >= 6 && f.finding.status === 'fail' && /^11\.\d× the counting variance/.test(f.finding.value)
+          && a.inputs.run.output === f.run1.output.sha256 && c.inputs.run.output === f.run1.output.sha256 && c.inputs.acknowledged === GRB2_ACKNOWLEDGED && b.inputs.structure?.sha256 === pdb && f.files.has(b.inputs.image)
+          && f.read?.fingerprint === f.manifest.fingerprint && f.comparison.intact && f.comparison.panels.every((p) => p.status === 'unchanged') && rescoredSays
+          && said('grb2-sh3', 'Acknowledge it with that reason', 'Add to figure', 'Export the figure as PDF', 'Run 1 by its output\'s SHA-256, the QC thresholds and the acknowledgement', 'once the table is scored again, the map and the QC panel say so'), 'A map, B Core, C the finding (fail, acknowledged), text ≥ 6 pt; as written; unchanged; A and C scored again since');
+    }
+
+    // Hsp90: a checkpoint, then the first three samples fitted (generations 9 to 21 not used).
+    {
+      const h = hsp90Checkpoint();
+      const [pair] = h.diff.pairs;
+      const t = pair.targets[0];
+      const perGeneration = variantChanges(h.g.run, h.g.results, h.apart.firstThree.run, h.apart.firstThree.results)[0];
+      const apart = movedApart(h.g.results, h.apart.firstThree.results);
+      const crossings = t.crossings.map((x) => `${x.n} ${x.from} → ${x.to}`);
+      check('examples', 'Hsp90\'s checkpoint as its guide says (its fifth step): from "All eight samples", the columns of generations 9 to 21 set "Not used" and scored again with Run 2\'s parameters (over the time course): the design\'s change in words; 148 of the 188 variants moved beyond their earlier 95% interval, compared in Run 2\'s units (Run 3 spans 6 generations, Run 2 21), and 102 changed class, 93 from lower than the wild type to like it; the same per generation (Run 1 against the first three), and as computed apart', `${h.words[1]} ${h.words.at(-1)} Per generation: ${perGeneration.moved} moved, ${perGeneration.crossed} changed class; apart ${apart.moved.size} and ${apart.crossed.size}`,
+        h.diff.changes.length === 2 && /the columns Gen_9, Gen_12, Gen_15, Gen_18 and Gen_21 set aside/.test(h.words[1]) && t.both === 188 && t.moved === 148 && t.crossed === 102 && crossings[0] === '93 lower than the wild type → like the wild type' && t.units?.factor === 3.5 && t.units.why.join() === 'the time points changed'
+          && perGeneration.moved === 148 && perGeneration.crossed === 102 && !perGeneration.units && apart.moved.size === 148 && apart.crossed.size === 102
+          && said('hsp90', 'keep a checkpoint ("All eight samples")', 'generations 9 to 21 "Not used"', '148 of the 188 variants moved beyond their earlier 95% interval and 102 changed class', '93 from lower than the wild type to like it'), '148 and 102 (93 lower → like), × 3.5; the same per generation and apart');
+      // Why: the time courses bend. Each per generation, less the wild type's.
+      const medians = (results) => {
+        const cnd = results.conditions[0];
+        const wt = cnd.score[results.controls.wt];
+        const off = h.g.run.inputs.design.targets[0].offset;
+        const by = new Map();
+        const stops = [];
+        results.variants.key.forEach((k, i) => {
+          if (cnd.reason[i]) return;
+          if (results.variants.kind[i] === KIND.NONSENSE) stops.push(cnd.score[i] - wt);
+          if (results.variants.kind[i] === KIND.MISSENSE) by.set(results.variants.position[i] + off, [...(by.get(results.variants.position[i] + off) ?? []), cnd.score[i] - wt]);
+        });
+        return { stops: median(stops), at: (p) => median(by.get(p)) };
+      };
+      const all = medians(h.g.results);
+      const first = medians(h.apart.firstThree.results);
+      const late = [584, 588, 589];
+      const pc = variantChanges(h.g.run, h.g.results, h.apart.pseudocount.run, h.apart.pseudocount.results)[0];
+      check('examples', 'Hsp90\'s time courses bend, as its guide says: per generation, the stops\' median falls faster over the first six generations than over 21 (not to the published −0.77), while at 584, 588 and 589 the substitutions\' median has barely begun to fall; the pseudocount alone (0.5 → 0.1) moves no variant and changes no class', `stops ${fmt(first.stops, 3)} over 6 generations, ${fmt(all.stops, 3)} over 21; ${late.map((p) => `${p}: ${fmt(first.at(p), 3)} against ${fmt(all.at(p), 3)}`).join(', ')}; the pseudocount: ${pc.moved} moved, ${pc.crossed} changed class of ${pc.both}`,
+        fmt(first.stops, 2) === '-0.41' && fmt(all.stops, 2) === '-0.32' && late.every((p) => first.at(p) > -0.03 && first.at(p) < 0) && late.every((p) => all.at(p) <= -0.16 && all.at(p) >= -0.26) && pc.moved === 0 && pc.crossed === 0
+          && said('hsp90', '−0.41 per generation over six generations, −0.32 over 21', 'about −0.02 per generation, against −0.16 to −0.26', 'The pseudocount moves none (0.5 → 0.1)'), '−0.41 and −0.32; > −0.03 against −0.16 to −0.26; none');
+    }
+
+    // The BRCA1 RING domain certified, verified and reported (external data: MaveDB's tables).
+    if (opened.has('brca1-ring')) {
+      const r = await ringCertified();
+      const c = r.made.certificate;
+      const traced = checkTraced(r.made.review, c, r.ws);
+      const named = r.bare.certificate.inputs.map((x) => x.sha256).sort();
+      check('examples', 'BRCA1 RING certified as its guide says (its fifth step): the published scores, Run 1 and the Enrich2 rescoring, 110,975 numbers computed again from MaveDB\'s two tables and verified bit for bit; its review report self-contained, every number it shows traced and the certificate\'s, any variant\'s looked up in it', `${r.ws.runs.map((x) => x.name).join(', ')}: ${c.total.toLocaleString('en-US')} numbers; ${r.verified.verdict} (${r.verified.numbers.same.toLocaleString('en-US')} identical); review ${(r.made.review.length / 1e6).toFixed(1)} MB, ${traced.total.toLocaleString('en-US')} traced, ${traced.bad.length} not as recorded, ${externalReferences(r.made.review).length} references outside`,
+        r.ws.runs.map((x) => x.name).join() === 'Published scores,Run 1,Run 2' && c.total === 110975 && r.verified.verdict === 'verified' && r.verified.numbers.same === c.total && traced.total >= 200 && !traced.bad.length && !externalReferences(r.made.review).length
+          && said('brca1-ring', '110,975', 'verified bit for bit', 'every number it shows traced'), '110,975; verified; every number traced, nothing outside');
+      check('examples', 'BRCA1 RING certified without its tables, as its guide says: the two tables named by the SHA-256 of MaveDB\'s files (the example\'s), not checkable alone, verified with the two files downloaded from the record', `named ${named.map((x) => `${x.slice(0, 12)}…`).join(', ')}; alone: ${r.missing.verdict} (exit ${r.missing.exit}, ${r.missing.inputs.filter((x) => x.status !== 'ok').length} missing); with MaveDB's files: ${r.supplied.verdict}`,
+        named.join() === r.tables.map((x) => x.sha256).sort().join() && r.tables.every((x) => x.held) && r.bare.certificate.inputs.every((x) => x.path === null) && r.missing.verdict === 'incomplete' && r.missing.exit === 2 && r.supplied.verdict === 'verified' && r.supplied.numbers.same === c.total
+          && said('brca1-ring', 'it names them by the SHA-256 of MaveDB\'s files', 'with the two files downloaded from the record it is verified'), 'MaveDB\'s; incomplete (exit 2); verified');
     }
   },
 
@@ -4057,7 +4147,7 @@ const suites = {
       const contact = middle(touching.map((r) => r.median));
       const rest = middle(rows.filter((r) => !touching.includes(r)).map((r) => r.median));
       const example = exampleById('grb2-sh3');
-      const bullet = example.expected.at(-1);
+      const bullet = example.expected.find((x) => x.startsWith('On 2VWF')) ?? '';
       const said = bullet.includes(`a median of ${core.toFixed(1)} Cα atoms within 10 Å, the ten highest ${surface.toFixed(1)}`) && bullet.includes(`the ten that touch the Gab2 peptide are tolerant (a median of ${contact.toFixed(2).replace('-', '−')}, against ${rest.toFixed(2).replace('-', '−')} for the rest)`) && touching.length === 10 && example.steps.some(([, text]) => text.includes(`"${words}"`));
       check('structures', 'the GRB2 example\'s guide, on 2VWF colored by the median score: its ten least tolerant residues have more Cα atoms within 10 Å (the core) than its ten most tolerant, and the residues that touch the Gab2 peptide (chain B), selected in the words its guide gives as every distance finds them, score nearer the wild type than the rest; the guide says so, with these numbers', `${rows.length} positions; neighbors within 10 Å: ten least tolerant ${core}, ten most ${surface}; touching the peptide ${touching.length} (${touching.map((r) => `${r.p.code}${r.p.reference}`).join(' ')}), ${sameResidues ? 'as the words select them' : `the words select ${byWords.length}`}: median ${fmt(contact, 2)}, the rest ${fmt(rest, 2)}; the guide ${said ? 'says so' : 'says otherwise'}`, core > surface && contact > rest && sameResidues && said && target.offset === 158, 'core packed; the binding surface tolerant; said');
     }
@@ -4367,6 +4457,560 @@ const suites = {
       check('structures', 'the Proteoscope session of each example\'s run on its PDB entry and its AlphaFold DB model, colored by the median: every value on a residue as Proteoscope\'s reader keys it, the median of the position\'s scored missense substitutions in the run\'s results (read without the map\'s model), every position scored on a residue given one; the range centered on the wild type; the link\'s session read back with zlib as sent', sessions.map((x) => `${x.id} on ${x.structure}: ${x.values} of ${x.scoredOnResidues} values, a link of ${x.length} characters${x.problems.length ? `; ${x.problems.slice(0, 3).join('; ')}` : ''}`).join('; '), sessions.length === 16 && sessions.every((x) => x.ok), 'all');
     }
   },
+
+  // Wave 6, slice 1 (R5): figures. Each example scored in Node, its map as a figure's panel with its
+  // built-in tracks: every cell the color map-svg.js gives it; the PDF drawing the SVG's rectangles
+  // and text, read back from its content streams; the same bytes when written again; the text at
+  // the figure's size; a range of positions, a difference between conditions, a page too narrow for
+  // a long target; figures through the workspace archive.
+  async figures() {
+    const date = new Date('2026-10-12T00:00:00Z');
+    const ids = ['grb2-sh3', 'hsp90', 'factor9', 'simulated', 'simulated-time-series', 'simulated-sort-seq', 'simulated-barcodes', 'simulated-conditions', 'simulated-problems'];
+    const rows = [];
+    const built = new Map();
+    for (const id of ids) {
+      const g = exampleRun(id);
+      const design = g.run.inputs.design;
+      const model = buildMapModel(g.results, design);
+      const tracks = builtinTracks(model);
+      let fig = createFigure(`Figure of ${id}`, 'double');
+      ({ figure: fig } = addPanel(fig, { kind: 'map', run: g.run.id, tracks: tracks.map((t) => t.id) }));
+      const resolved = new Map([[fig.panels[0].id, { model, results: g.results, tracks }]]);
+      const svg = await figureSVG(fig, resolved);
+      const pdf = await figurePDF(fig, resolved, { date });
+      const ours = readSVG(svg);
+      const theirs = readSVG(mapSVG(model, { results: g.results }));
+      let differ = 0;
+      for (const [title, fill] of theirs.cells) if (ours.cells.get(title) !== fill) differ += 1;
+      const read = readPDF(pdf);
+      const rects = sameRects(ours.rects, read.rects);
+      const svgText = asPDFText(ours.texts).map((b) => String.fromCharCode(...b));
+      const pdfText = read.texts.map((b) => String.fromCharCode(...b));
+      const textSame = svgText.length === pdfText.length && svgText.every((t, i) => t === pdfText[i]);
+      const again = (await figureSVG(fig, resolved)) === svg && Buffer.compare(Buffer.from(await figurePDF(fig, resolved, { date })), Buffer.from(pdf)) === 0;
+      const drawn = figureMarks(fig, resolved);
+      const whole = tracks.every((t) => ours.texts.includes(t.label));
+      rows.push({ id, cells: theirs.cells.size, differ, rects, textSame, texts: pdfText.length, again, smallest: drawn.smallest, notes: drawn.notes, whole, mm: [read.width, read.height] });
+      built.set(id, { g, model, fig, resolved, svg });
+    }
+    check('figures', 'each example\'s map as a figure panel (two columns, 174 × 120 mm), with its built-in tracks: every cell the color map-svg.js gives it (the same title, the same fill or hatch)', rows.map((r) => `${r.id} ${r.cells - r.differ}/${r.cells}`).join(', '), rows.every((r) => r.differ === 0 && r.cells > 0), 'every cell');
+    check('figures', 'the PDF draws what the SVG draws: its content streams read back give the same filled rectangles in the same order (color exact, place within 0.006 pt) and the same text, as WinAnsi', rows.map((r) => `${r.id}: ${r.rects.why}, ${r.texts} strings ${r.textSame ? 'alike' : 'differ'}`).join('; '), rows.every((r) => r.rects.ok && r.textSame), 'the same');
+    check('figures', 'written again, the same bytes (SVG, and PDF with its date fixed); the page 493.23 × 340.16 pt (174 × 120 mm)', rows.map((r) => `${r.id} ${r.again ? 'same' : 'differs'}`).join(', '), rows.every((r) => r.again && r.mm[0] === 493.23 && r.mm[1] === 340.16), 'the same');
+    check('figures', 'the text at the figure\'s size (7 pt), nothing under 6 pt and nothing said wrong at this size; every track\'s name whole', rows.map((r) => `${r.id} ${r.smallest.toFixed(1)} pt${r.notes.length ? ` (${r.notes.join(' ')})` : ''}${r.whole ? '' : ', a name shortened'}`).join(', '), rows.every((r) => r.smallest >= 6 && !r.notes.length && r.whole), '≥ 6 pt, no notes');
+    // A range of positions: exactly its cells.
+    const f9 = built.get('factor9');
+    let ranged = createFigure('Factor IX, 200–260', 'single');
+    ({ figure: ranged } = addPanel(ranged, { kind: 'map', run: f9.g.run.id, from: 200, to: 260 }));
+    const rangedSVG = readSVG(await figureSVG(ranged, new Map([[ranged.panels[0].id, { model: f9.model, results: f9.g.results, tracks: [] }]])));
+    const inRange = [...rangedSVG.cells.keys()].map((t) => Number(t.match(/^[A-Z*](\d+)/)[1]));
+    let designed = 0;
+    for (let p = 200; p <= 260; p += 1) for (let r = 0; r < f9.model.rows.length; r += 1) if (f9.model.state[(p - 1) * f9.model.rows.length + r] !== STATE.NOT_DESIGNED) designed += 1;
+    let whole = createFigure('Factor IX', 'single');
+    ({ figure: whole } = addPanel(whole, { kind: 'map', run: f9.g.run.id }));
+    const narrow = figureMarks(whole, new Map([[whole.panels[0].id, { model: f9.model, results: f9.g.results, tracks: [] }]]));
+    check('figures', 'a range of positions (factor IX 200–260, one column): exactly its designed cells; the whole of its 461 positions in one column (85 mm) said to be too narrow', `${rangedSVG.cells.size} cells of ${designed}, positions ${Math.min(...inRange)}–${Math.max(...inRange)}; whole: ${narrow.notes.join(' ') || 'nothing said'}`, rangedSVG.cells.size === designed && Math.min(...inRange) === 200 && Math.max(...inRange) === 260 && /pt wide: show fewer positions/.test(narrow.notes.join(' ')), 'exact; said');
+    // A difference between conditions.
+    const sc = built.get('simulated-conditions');
+    const diffModel = buildMapModel(sc.g.results, sc.g.run.inputs.design, { contrast: 0, colorBy: 'differential' });
+    let diffFig = createFigure('Difference', 'double');
+    ({ figure: diffFig } = addPanel(diffFig, { kind: 'map', run: sc.g.run.id, contrast: 0 }));
+    const diffSVG = await figureSVG(diffFig, new Map([[diffFig.panels[0].id, { model: diffModel, results: sc.g.results, tracks: [] }]]));
+    const dOurs = readSVG(diffSVG);
+    const dTheirs = readSVG(mapSVG(diffModel, { results: sc.g.results }));
+    const dDiffer = [...dTheirs.cells].filter(([t, f]) => dOurs.cells.get(t) !== f).length;
+    check('figures', 'a difference between conditions (the simulated two conditions\' With ligand vs Without ligand): every cell map-svg.js\'s, the legend saying what it measures', `${dTheirs.cells.size - dDiffer}/${dTheirs.cells.size} cells; ${dOurs.texts.find((t) => t.startsWith('differential score')) ?? 'no legend label'}`, dDiffer === 0 && dOurs.texts.some((t) => t.startsWith('differential score')), 'every cell');
+    // Figures through the archive.
+    const grb2 = built.get('grb2-sh3');
+    let text;
+    let fig = grb2.fig;
+    ({ figure: fig, panel: text } = addPanel(fig, { kind: 'text', text: 'Abundance of every substitution in the SH3 domain of GRB2.', w: 200, h: 30 }));
+    const ws = { ...grb2.g.ws, runs: [grb2.g.run], figures: [fig] };
+    const table = grb2.g.o.parts[0].bytes;
+    const written = await writeArchive(ws, { software: SOFTWARE, sources: new Map([[ws.sources[0].sha256, table]]), results: new Map([[grb2.g.run.id, grb2.g.results]]) });
+    const reopened = await readArchive(written.bytes);
+    const back = reopened.ws.figures?.[0];
+    const backSVG = back ? await figureSVG(checkFigure(back), new Map([[back.panels[0].id, grb2.resolved.get(grb2.fig.panels[0].id)]])) : null;
+    const original = await figureSVG(fig, grb2.resolved);
+    check('figures', 'a figure through the workspace archive: the same document, checked as a figure from outside is, and the same SVG drawn from it', `${back ? `${back.panels.length} panels (${back.panels.map((p) => p.kind).join(', ')})` : 'no figure'}; ${backSVG === original ? 'the same SVG' : 'a different SVG'}`, back && JSON.stringify(back) === JSON.stringify(fig) && backSVG === original && text.kind === 'text', 'the same');
+
+    // Wave 6, slice 2: every view's plots as panels, drawing the view's numbers.
+    const qcRows = [];
+    for (const id of ['grb2-sh3', 'hsp90', 'factor9', 'simulated-time-series', 'simulated-sort-seq', 'simulated-barcodes', 'simulated-conditions', 'simulated-problems']) {
+      const g = built.get(id).g;
+      const design = g.run.inputs.design;
+      const qc = computeQC({ ...inputFor(g.o.table, design), design, results: g.results });
+      const t = withDefaultThresholds(null);
+      for (const f of findingsFrom(qc, t)) {
+        const { charts } = qcCharts(f.plot, qc, t);
+        if (!charts.length) continue;
+        const box = { x: 0, y: 0, w: mm(85), h: mm(90) };
+        const drawn = chartsPanel(box, { title: f.title, charts }, { text: 7 });
+        // What each chart drew against the QC results it comes from, read independently.
+        let same = true;
+        drawn.charts.forEach((d, k) => {
+          const c = charts[k];
+          if (c.kind === 'bar') same &&= JSON.stringify(d.drawn.bars.map((b) => b.value)) === JSON.stringify(c.spec.items.map((x) => (Number.isFinite(x.value) && (!c.spec.log || x.value > 0) ? x.value : null)));
+          if (c.kind === 'scatter') same &&= d.drawn.drawn === c.spec.points.filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])).length;
+          if (c.kind === 'histogram') same &&= d.drawn.groups.every((gr) => gr.n === c.spec.groups.find((x) => x.label === gr.label).values.length);
+          if (c.kind === 'line') same &&= d.drawn.series.reduce((a, x) => a + x.points.length, 0) === c.spec.series.reduce((a, x) => a + x.points.filter(([px, py]) => Number.isFinite(px) && Number.isFinite(py) && (!c.spec.xLog || px > 0) && (!c.spec.yLog || py > 0)).length, 0);
+        });
+        if (f.plot === 'depth') same &&= JSON.stringify(drawn.charts[0].drawn.bars.map((b) => b.value)) === JSON.stringify(qc.samples.map((x) => (x.readsPerVariant > 0 ? x.readsPerVariant : null)));
+        if (f.plot === 'agreement') same &&= drawn.charts[0].drawn.drawn === qc.conditions.flatMap((cc) => cc.pairs)[0].points.length;
+        const sizes = textMarks(drawn.marks).map((m) => m.size);
+        qcRows.push({ id, finding: f.id, plot: f.plot, charts: charts.length, same, smallest: Math.min(...sizes), notes: drawn.notes });
+      }
+    }
+    const qcSmall = qcRows.filter((r) => r.smallest < 6);
+    check('figures', 'every QC finding with a plot, of eight examples, as a panel one column wide (85 × 90 mm): its charts drawn with the QC results\' own numbers (each bar the value, every point and line point drawn, each class\'s count; sequencing depth\'s bars every sample\'s reads per variant, agreement\'s points the pair\'s)', `${qcRows.length} panels, ${qcRows.filter((r) => r.same).length} the same; ${qcRows.filter((r) => !r.same).map((r) => `${r.id}/${r.finding}`).join(', ') || 'none different'}`, qcRows.length > 40 && qcRows.every((r) => r.same), 'every one');
+    check('figures', 'the QC panels\' text at 7 pt, a bar\'s label shrunk to its row only where a panel holds many bars, and said', `${qcRows.filter((r) => r.smallest >= 6).length} of ${qcRows.length} with no text under 6 pt; ${qcSmall.map((r) => `${r.id}/${r.finding} ${r.smallest.toFixed(1)} pt`).join(', ') || 'none smaller'}`, qcRows.filter((r) => r.smallest >= 6).length >= qcRows.length * 0.8, 'at least 80% (the rest said in the figure)');
+    // A run's scores by class: each class's count, read from the run's own arrays.
+    const scoreRows = [];
+    for (const id of ['grb2-sh3', 'factor9', 'simulated', 'simulated-conditions']) {
+      const g = built.get(id).g;
+      const out = scoreCharts(g.results, g.run);
+      const drawn = chartsPanel({ x: 0, y: 0, w: mm(85), h: mm(60) }, out, { text: 7 });
+      const c = g.results.conditions[0];
+      const count = (kind) => {
+        let n = 0;
+        for (let i = 0; i < g.results.rows; i += 1) if (!c.reason[i] && g.results.variants.kind[i] === kind && Number.isFinite(c.score[i])) n += 1;
+        return n;
+      };
+      const groups = Object.fromEntries(drawn.charts[0].drawn.groups.map((gr) => [gr.label, gr.n]));
+      scoreRows.push({ id, groups, ok: (groups.Missense ?? 0) === count(KIND.MISSENSE) && (groups.Nonsense ?? 0) === count(KIND.NONSENSE) && (groups.Synonymous ?? 0) === count(KIND.SYNONYMOUS) });
+    }
+    const volcano = scoreCharts(built.get('simulated-conditions').g.results, built.get('simulated-conditions').g.run, { plot: 'volcano' });
+    const d0 = built.get('simulated-conditions').g.results.differential[0];
+    const vDrawn = chartsPanel({ x: 0, y: 0, w: mm(85), h: mm(70) }, volcano, { text: 7 });
+    const vCount = Array.from(d0.reason).filter((r) => !r).length;
+    check('figures', 'a run\'s scores by class as a panel: each class\'s count the run\'s own (synonymous, nonsense, missense); a contrast\'s volcano a point for every variant with a difference', `${scoreRows.map((r) => `${r.id} ${Object.entries(r.groups).map(([k, v]) => `${k.toLowerCase()} ${v}`).join(' ')}`).join('; ')}; volcano ${vDrawn.charts[0].drawn.drawn} of ${vCount}`, scoreRows.every((r) => r.ok) && vDrawn.charts[0].drawn.drawn === vCount, 'the same');
+    // A variant's evidence.
+    const evRows = [];
+    for (const [id, key] of [['grb2-sh3', 'p.Trp36Ala'], ['factor9', null], ['simulated-time-series', null], ['simulated-sort-seq', null]]) {
+      const g = built.get(id).g;
+      const c = g.results.conditions[0];
+      const row = key ? g.results.variants.key.indexOf(key) : Array.from(c.reason).findIndex((r, i) => !r && g.results.variants.kind[i] === KIND.MISSENSE);
+      const name = g.results.variants.key[row];
+      const ev = variantCharts(g.results, g.run, name);
+      const reps = ev.rows.map((r) => r.score);
+      const own = g.results.replicates.filter((r) => c.replicates.includes(r.id) && Number.isFinite(r.score[row])).map((r) => r.score[row]);
+      const [lo, hi] = intervalOf(c, row);
+      const extra = g.run.inputs.parameters.model === 'wls' || g.run.inputs.parameters.model === 'ols' ? variantCharts(g.results, g.run, name, { plot: 'time-course' }) : g.results.replicates.some((r) => r.bins) ? variantCharts(g.results, g.run, name, { plot: 'bins' }) : null;
+      evRows.push({ id, name, ok: JSON.stringify(reps.filter(Number.isFinite)) === JSON.stringify(own) && ev.combined.score === c.score[row] && ev.combined.low === lo && ev.combined.high === hi && (!extra || extra.charts.length === 1), extra: extra?.title ?? null });
+    }
+    check('figures', 'a variant\'s evidence as a panel: each replicate\'s score the run\'s, the combined score and its 95% interval as exported; a time series\' variant its time course, a sort\'s its bins', evRows.map((r) => `${r.id} ${r.name}${r.extra ? ` (and ${r.extra.split(': ')[1]})` : ''} ${r.ok ? 'the same' : 'different'}`).join('; '), evRows.every((r) => r.ok), 'the same');
+    // A comparison: GRB2's Run 1 against its rescoring by the Enrich2-compatible preset.
+    const g2 = built.get('grb2-sh3').g;
+    const enrich2Run = exampleRun('grb2-sh3', { name: 'Run 2', parameters: PRESETS.enrich2.parameters });
+    const sides = [describeSide(g2.ws, g2.run, g2.results, { condition: 0 }), describeSide(g2.ws, enrich2Run.run, enrich2Run.results, { condition: 0 })];
+    // As the Compare view computes it (ui/mode-compare.js): compareSides, with its sides.
+    const cmp = { ...compareSides(sides[0], sides[1]), sides };
+    const agreement = chartsPanel({ x: 0, y: 0, w: mm(85), h: mm(80) }, comparisonCharts(cmp, 'agreement'), { text: 7 });
+    const ba = comparisonCharts(cmp, 'bland-altman');
+    const pos = comparisonCharts(cmp, 'positions');
+    const hits = agreement.charts[0].drawn.hits;
+    const { order } = comparisonPoints(cmp.x, cmp.y, Uint8Array.from(cmp.rows, ([i]) => cmp.values.a.kind[i]));
+    // The points' order on the page: x rank against the comparison's x rank.
+    let monotone = true;
+    for (let j = 1; j < order.length; j += 1) if ((cmp.x[order[j]] - cmp.x[order[j - 1]]) * (hits.px[j] - hits.px[j - 1]) < -1e-9) monotone = false;
+    check('figures', 'a comparison as panels (GRB2\'s Run 1 against its Enrich2 rescoring): a point for every variant compared, where its two scores put it; Bland–Altman, or why not; the disagreement by position, or why not', `${agreement.charts[0].drawn.drawn} of ${cmp.rows.length} points${monotone ? ', in order' : ', out of order'}; Bland–Altman ${ba.charts.length ? 'drawn' : `not: ${ba.reason}`}; by position ${pos.charts.length ? `${pos.charts[0].spec.list.length} positions` : `not: ${pos.reason}`}`, agreement.charts[0].drawn.drawn === cmp.rows.length && monotone && (ba.charts.length || ba.reason) && (pos.charts.length || pos.reason), 'every point');
+    // A figure of every kind written as SVG and PDF: the PDF draws the SVG's marks; an image's pixels kept.
+    let all = createFigure('Every kind', 'double', { height: mm(240) });
+    const gq = built.get('grb2-sh3').g;
+    const qcG = computeQC({ ...inputFor(gq.o.table, gq.run.inputs.design), design: gq.run.inputs.design, results: gq.results });
+    const rgba = new Uint8Array(40 * 30 * 4).map((_, i) => (i % 4 === 3 ? 255 : (i * 7) % 256));
+    const imagePng = await encodePNG(rgba, 40, 30);
+    const kinds = [
+      [{ kind: 'qc', subject: gq.run.id, finding: 'agreement', pair: 0, x: 8, y: 8, w: 236, h: 180 }, { title: 'Replicate agreement', charts: qcCharts('agreement', qcG, withDefaultThresholds(null)).charts }],
+      [{ kind: 'scores', run: gq.run.id, plot: 'distribution', x: 250, y: 8, w: 236, h: 180 }, scoreCharts(gq.results, gq.run)],
+      [{ kind: 'compare', a: { run: gq.run.id, condition: 0 }, b: { run: enrich2Run.run.id, condition: 0 }, plot: 'agreement', x: 8, y: 196, w: 236, h: 200 }, comparisonCharts(cmp, 'agreement')],
+      [{ kind: 'variant', run: gq.run.id, variant: 'p.Trp36Ala', plot: 'evidence', x: 250, y: 196, w: 236, h: 140 }, variantCharts(gq.results, gq.run, 'p.Trp36Ala')],
+      [{ kind: 'structure', view: 'core', image: { sha256: sha256(imagePng), width: 40, height: 30, drawn: '2026-10-12T00:00:00.000Z' }, x: 8, y: 404, w: 236, h: 200 }, { image: { width: 40, height: 30, rgba, png: imagePng }, title: 'Core' }],
+    ];
+    const resolvedAll = new Map();
+    for (const [panel, data] of kinds) {
+      let placed;
+      ({ figure: all, panel: placed } = addPanel(all, panel));
+      resolvedAll.set(placed.id, data);
+    }
+    checkFigure(all);
+    const allSVG = await figureSVG(all, resolvedAll);
+    const allPDF = await figurePDF(all, resolvedAll, { date });
+    const sv = readSVG(allSVG);
+    const pd = readPDF(allPDF);
+    const allRects = sameRects(sv.rects, pd.rects);
+    const svgT = asPDFText(sv.texts).map((b) => String.fromCharCode(...b));
+    const pdfT = pd.texts.map((b) => String.fromCharCode(...b));
+    const embedded = Buffer.from(allSVG.match(/href="data:image\/png;base64,([^"]+)"/)?.[1] ?? '', 'base64');
+    const pdfImage = Buffer.from(allPDF).toString('latin1').match(/\/Subtype \/Image \/Width (\d+) \/Height (\d+)/);
+    check('figures', 'a figure of every kind of panel (QC, scores, comparison, variant, structure, beside the maps above): the PDF draws the SVG\'s rectangles and text mark for mark; the structure\'s image is its PNG byte for byte in the SVG, at its own pixels in the PDF', `${allRects.why}; ${pdfT.length} strings ${svgT.join('|') === pdfT.join('|') ? 'alike' : 'differ'}; image ${Buffer.compare(embedded, Buffer.from(imagePng)) === 0 ? 'the PNG' : 'not the PNG'}, PDF image ${pdfImage ? `${pdfImage[1]} × ${pdfImage[2]}` : 'none'}`, allRects.ok && svgT.join('|') === pdfT.join('|') && Buffer.compare(embedded, Buffer.from(imagePng)) === 0 && pdfImage?.[1] === '40' && pdfImage?.[2] === '30', 'the same');
+
+    // Wave 6, slice 3: what an exported figure carries. A workspace of GRB2's Run 1 and factor IX's,
+    // a figure of their maps, GRB2's scores and two of its QC findings, and text.
+    const f9g = built.get('factor9').g;
+    const both = { ...gq.ws, id: 'ws-figures', name: 'Two proteins', runs: [gq.run, f9g.run], sources: [...gq.ws.sources, ...f9g.ws.sources], qc: null };
+    const t0 = withDefaultThresholds(null);
+    const qcFinding = (id, thresholds) => findingsFrom(qcG, withDefaultThresholds(thresholds)).find((f) => f.id === id);
+    let mf = createFigure('Figure 2', 'double', { height: mm(200) });
+    const placedPanels = [
+      { kind: 'map', run: gq.run.id, x: 8, y: 8, w: 236, h: 180 },
+      { kind: 'map', run: f9g.run.id, from: 1, to: 120, x: 250, y: 8, w: 236, h: 180 },
+      { kind: 'scores', run: gq.run.id, plot: 'distribution', x: 8, y: 196, w: 236, h: 150 },
+      { kind: 'qc', subject: gq.run.id, finding: 'depth', x: 250, y: 196, w: 236, h: 150 },
+      { kind: 'qc', subject: gq.run.id, finding: 'agreement', pair: 0, x: 8, y: 354, w: 236, h: 200 },
+      { kind: 'text', text: 'GRB2 and factor IX.', x: 250, y: 354, w: 236, h: 30 },
+    ];
+    for (const p of placedPanels) ({ figure: mf } = addPanel(mf, p));
+    const gqModel = buildMapModel(gq.results, gq.run.inputs.design);
+    const f9Model = buildMapModel(f9g.results, f9g.run.inputs.design);
+    const resolveFor = (thresholds) => new Map([
+      [mf.panels[0].id, { model: gqModel, results: gq.results, tracks: [] }],
+      [mf.panels[1].id, { model: f9Model, results: f9g.results, tracks: [] }],
+      [mf.panels[2].id, scoreCharts(gq.results, gq.run)],
+      [mf.panels[3].id, qcPanelData(qcFinding('depth', thresholds), qcG, withDefaultThresholds(thresholds))],
+      [mf.panels[4].id, qcPanelData(qcFinding('agreement', thresholds), qcG, withDefaultThresholds(thresholds), { pair: 0 })],
+    ]);
+    const ctx = { software: { version: 'validation', commit: null }, created: '2026-10-12T12:00:00.000Z' };
+    const mfDrawn = figureMarks(mf, resolveFor(null));
+    const manifest = buildManifest(both, mf, mfDrawn, ctx);
+    const mfSVG = embedSVG(await figureSVG(mf, resolveFor(null)), manifest);
+    const mfPDF = await figurePDF(mf, resolveFor(null), { date, attachments: [pdfAttachment(manifest)] });
+    const mfPNG = embedPNG(await encodePNG(new Uint8Array(4 * 4 * 4).fill(255), 4, 4), manifest);
+    const backs = [readFigureManifest(mfSVG), readFigureManifest(new Uint8Array(mfPDF)), readFigureManifest(mfPNG), readFigureManifest(JSON.stringify(manifest))];
+    check('figures', 'an exported figure carries its manifest (each panel with what it shows, each run by its output\'s and its table\'s SHA-256, the QC thresholds, a digest of its drawing; MaveScape\'s version; a fingerprint), read back intact from SVG, PDF, PNG and JSON', `${backs.filter((b) => b && JSON.stringify(b) === JSON.stringify(manifest) && checkManifest(b).ok).length} of 4 intact; ${manifest.panels.length} panels, fingerprint ${manifest.fingerprint.slice(0, 12)}…`, backs.every((b) => b && JSON.stringify(b) === JSON.stringify(manifest) && checkManifest(b).ok) && manifest.panels[0].inputs.run.output === gq.run.output.sha256, 'every one');
+    // Edited after the fact: a panel's words, a panel moved, a run's output changed.
+    const edits = [
+      (m) => ({ ...m, panels: m.panels.map((p, k) => (k ? p : { ...p, shows: 'the map of another run' })) }),
+      (m) => ({ ...m, figure: { ...m.figure, panels: m.figure.panels.map((p, k) => (k ? p : { ...p, x: p.x + 10 })) } }),
+      (m) => ({ ...m, panels: m.panels.map((p, k) => (k ? p : { ...p, inputs: { ...p.inputs, run: { ...p.inputs.run, output: '0'.repeat(64) } } })) }),
+    ];
+    const caught = edits.map((edit) => {
+      const json = JSON.stringify(edit(manifest)).replace(/]]>/g, ']]]]><![CDATA[>');
+      const svg = mfSVG.replace(/<metadata id="mavescape-figure"><!\[CDATA\[[\s\S]*?\]\]><\/metadata>/, `<metadata id="mavescape-figure"><![CDATA[${json}]]></metadata>`);
+      return checkManifest(readFigureManifest(svg)).ok === false;
+    });
+    check('figures', 'a manifest edited after it was written is caught (its fingerprint no longer follows): a panel\'s words changed, a panel moved, a run\'s output changed', `${caught.filter(Boolean).length} of ${caught.length} caught`, caught.every(Boolean), 'all');
+    // A rescoring: GRB2's table scored again flags exactly GRB2's panels, not factor IX's or the text.
+    const rescored = compareManifest(manifest, { ...both, runs: [...both.runs, enrich2Run.run] });
+    const flagged = rescored.panels.filter((p) => p.status !== 'unchanged').map((p) => p.letter);
+    const unchanged = compareManifest(manifest, both).panels.every((p) => p.status === 'unchanged');
+    check('figures', 'compared with the workspace: unchanged in its own; GRB2\'s table scored again (its Enrich2 rescoring) flags exactly the panels drawn from GRB2\'s Run 1 (its map, scores and two QC findings), not factor IX\'s map or the text', `${unchanged ? 'unchanged' : 'changed'} as it was; after the rescoring ${flagged.join(', ')} flagged: ${rescored.panels.find((p) => p.status !== 'unchanged')?.changes[0]}`, unchanged && flagged.join() === 'A,C,D,E', 'A, C, D, E');
+    // Thresholds changed: both QC panels flagged; drawn again, the depth panel (its threshold lines) differs, agreement's not.
+    const stricter = { ...withDefaultThresholds(null), readsPerVariant: { review: 400, fail: 300 } };
+    const thresholdsNow = compareManifest(manifest, { ...both, qc: { thresholds: stricter } });
+    const redrawn = compareDrawings(manifest, mf, figureMarks(mf, resolveFor(stricter)));
+    check('figures', 'the QC thresholds changed: both QC panels flagged; drawn again, exactly the panel whose thresholds it draws (sequencing depth) differs, agreement\'s and the rest the same drawing', `flagged ${thresholdsNow.panels.filter((p) => p.status === 'changed').map((p) => p.letter).join(', ')}; drawn differently ${redrawn.filter((d) => !d.same).map((d) => d.letter).join(', ') || 'none'}`, thresholdsNow.panels.filter((p) => p.status === 'changed').map((p) => p.letter).join() === 'D,E' && redrawn.filter((d) => !d.same).map((d) => d.letter).join() === 'D', 'D, E flagged; D drawn otherwise');
+    // Rebuilt from its manifest in a copy of the workspace (another id; the same runs): the same bytes.
+    const copy = { ...both, id: 'ws-copy' };
+    const rebuiltFig = figureForWorkspace(manifest, compareManifest(manifest, copy));
+    const rebuiltSVG = embedSVG(await figureSVG(rebuiltFig, resolveFor(null)), buildManifest(both, rebuiltFig, figureMarks(rebuiltFig, resolveFor(null)), ctx));
+    const sameDrawings = compareDrawings(manifest, rebuiltFig, figureMarks(rebuiltFig, resolveFor(null)));
+    check('figures', 'a figure rebuilt from its manifest (in a copy of its workspace) is drawn the same, panel by panel, and written again is the same bytes', `${sameDrawings.filter((d) => d.same).length} of ${sameDrawings.length} panels the same; ${rebuiltSVG === mfSVG ? 'the same bytes' : 'different bytes'}`, sameDrawings.every((d) => d.same) && rebuiltSVG === mfSVG, 'the same');
+  },
+
+  // Wave 6, slice 4 (R4): the workspace's report, written from its record (lib/report.js).
+  async report() {
+    const { g, bare, ws, scored, steps, run2, files } = await reportWorkspace();
+    const context = contextOf(ws, scored);
+    const r = writeReport(ws, context);
+    const missed = steps.filter((x) => !x.expect(r, r.markdown));
+    const covered = new Set(steps.map((x) => x.action));
+    const actions = [...new Set(ws.history.map((e) => e.action))].filter((a) => !['create', 'import', 'design'].includes(a));
+    check('report', 'every operation the workspace performed has its sentence: GRB2\'s run, its target checked against UniProt, an Enrich2 rescoring, a QC threshold changed, a finding acknowledged, a selection by query, a comparison and a robustness check kept in the report, UniProt\'s features beside the map, a saved view of 2VWF, a figure; every kind of history entry among them', `${steps.length - missed.length} of ${steps.length} said${missed.length ? `; not: ${missed.map((x) => x.what).join(', ')}` : ''}; history actions ${actions.join(', ')}`, !missed.length && actions.every((a) => a === 'score' || covered.has(a)), 'every one');
+    const log = r.sections.find((x) => x.id === 'log')?.blocks.find((b) => b.kind === 'list')?.items ?? [];
+    check('report', 'the decision log is the history, every entry in order with its time and words, the chain said intact', `${log.length} of ${ws.history.length} entries; ${r.sections.find((x) => x.id === 'log')?.blocks[0].text.slice(-40)}`, log.length === ws.history.length && ws.history.every((e, i) => log[i] === `${e.time.slice(0, 10)} ${e.time.slice(11, 16)}: ${e.detail}`) && /intact\./.test(r.sections.find((x) => x.id === 'log').blocks[0].text), 'every entry');
+
+    // A workspace says nothing of what it did not do: the example opened and scored, nothing else.
+    const plain = writeReport(bare, contextOf(bare, scored));
+    const plainIds = plain.sections.map((x) => x.id);
+    const own = writeMethods(bare, g.run, { findings: contextOf(bare, scored).runs.get(g.run.id).findings, results: g.results });
+    const sameRefs = plain.references.map((x) => x.key).join() === own.references.map((x) => x.key).join();
+    const quiet = !/(was|were) acknowledged|thresholds were changed|were compared|alternative analys|selected by|beside the map|PDB entry|Figure 1/.test(plain.markdown);
+    check('report', 'and nothing of what it did not do: the example opened and scored alone has its data, design, scoring, QC, inputs, software, log, limitations and use, no comparison, robustness, selection, annotation, structure or figure, and cites what its run\'s methods cite, in the same order', `sections ${plainIds.join(', ')}; references ${sameRefs ? 'the methods\'' : `${plain.references.map((x) => x.key).join(', ')} against ${own.references.map((x) => x.key).join(', ')}`}`, plainIds.join() === 'summary,data,design,scoring,qc,inputs,software,log,limitations,use' && sameRefs && quiet, 'only those');
+
+    // Each example's run: the report's paragraphs are its run's methods, word for word.
+    const rows = [];
+    for (const e of EXAMPLES) {
+      const x = exampleRun(e.id);
+      const w = addRun(x.ws, x.run).ws;
+      const ctx = contextOf(w, new Map([[x.run.id, { table: x.o.table, results: x.results }]]));
+      const rep = writeReport(w, ctx);
+      const m = writeMethods(w, x.run, { findings: ctx.runs.get(x.run.id).findings, results: x.results });
+      const p = (id) => rep.sections.find((s) => s.id === id)?.blocks.find((b) => b.kind === 'p')?.text;
+      const same = p('data') === m.paragraphs[0] && m.paragraphs[1].startsWith(`Design: ${p('design')}`) && p('scoring') === m.paragraphs[2] && `Quality control: ${p('qc').charAt(0).toLowerCase()}${p('qc').slice(1)}` === m.paragraphs[3];
+      rows.push({ id: e.id, same, refs: rep.references.map((z) => z.key).join() === m.references.map((z) => z.key).join() });
+    }
+    check('report', 'each of the 14 examples opened and scored: the report\'s data, design, scoring and QC are its run\'s methods word for word, its references the same in the same order', rows.filter((x) => !x.same || !x.refs).map((x) => `${x.id}: ${x.same ? '' : 'text differs '}${x.refs ? '' : 'references differ'}`).join('; ') || `${rows.length} the same`, rows.every((x) => x.same && x.refs), 'every one');
+
+    // The references.
+    const refs = checkReferences();
+    const wrong = refs.filter((x) => x.problems.length);
+    check('report', `every reference with a DOI against Crossref's record of it (recorded: fixtures/crossref.json): title, journal, year, volume, issue, first page or article number, first author; ${Object.keys(CROSSREF_EXCEPTIONS).length} fields Crossref records otherwise left out, each said`, `${refs.length - wrong.length} of ${refs.length} agree${wrong.length ? `; ${wrong.map((x) => `${x.key}: ${x.problems.join(', ')}`).join('; ')}` : ''}; ${Object.values(CROSSREF_EXCEPTIONS).map((x) => x.why).join('; ')}`, !wrong.length && refs.length >= 40, 'every one');
+    const firsts = [...r.markdown.slice(0, r.markdown.indexOf('## References')).matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1]));
+    const order = firsts.filter((n, i) => firsts.indexOf(n) === i);
+    const keys = [...r.bibtex.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]);
+    const known = r.references.every((x) => REFERENCES[x.key] || x.key === 'mavescape' || x.key.startsWith('data'));
+    check('report', 'its references numbered in the order the text first cites them, each cited, each MaveScape\'s own list\'s (or the data\'s publication, or MaveScape), one BibTeX entry each with its own key', `${r.references.length} references; first cited ${order.slice(0, 8).join(', ')}…; ${keys.length} BibTeX entries, ${new Set(keys).size} keys`, order.every((n, i) => n === i + 1) && order.length === r.references.length && known && keys.length === r.references.length && new Set(keys).size === keys.length, 'in order');
+
+    // The same text again, through the archive, and in a copy.
+    const again = writeReport(JSON.parse(JSON.stringify(ws)), contextOf(ws, scored));
+    const archived = await readArchive((await writeArchive(ws, { software: SOFTWARE, sources: null, annotations: files.annotations, structures: files.structures, results: new Map(), report: r })).bytes);
+    const fromArchive = writeReport(archived.ws, contextOf(archived.ws, scored));
+    check('report', 'the same workspace, the same report: written again, from a copy of the document, and from the workspace archive, which carries it (report.md, report.bib) as written', `${again.markdown === r.markdown ? 'the same' : 'different'} again; archive ${archived.report?.markdown === r.markdown && archived.report?.bibtex === r.bibtex ? 'carries it' : 'does not carry it'}, ${fromArchive.markdown === r.markdown ? 'the same' : 'different'} from it`, again.markdown === r.markdown && archived.report?.markdown === r.markdown && archived.report?.bibtex === r.bibtex && fromArchive.markdown === r.markdown && !archived.problems.length, 'the same');
+
+    // A run removed takes the analyses that read it out of the report.
+    const removed = removeRun(ws, run2.id);
+    const after = writeReport(removed, contextOf(removed, scored));
+    check('report', 'Run 2 removed: the comparison that read it leaves the report (said in the history), Run 1\'s robustness stays', `${(removed.analyses ?? []).map((a) => a.kind).join(', ')}; ${removed.history.at(-1).detail}`, (removed.analyses ?? []).map((a) => a.kind).join() === 'robustness' && !after.sections.some((x) => x.id === 'comparisons') && after.sections.some((x) => x.id === 'robustness') && /from the report the analysis reading it/.test(removed.history.at(-1).detail), 'gone, said');
+  },
+
+  // Wave 6, slice 5 (R6): checkpoints and the semantic diff (lib/diff.js).
+  async diff() {
+    const { g, table, base, before, scored, planted } = plantedChanges();
+    // Each planted change, described exactly and nothing else.
+    const rows = planted.map((x) => {
+      const after = analysisState(x.ws);
+      const d = diffStates(before, after, { pairs: pairsFor(before, after, table, scored) });
+      const texts = d.changes.map((c) => c.text);
+      const pair = d.pairs[0];
+      const okChanges = JSON.stringify(texts) === JSON.stringify(x.expect.changes);
+      const okPair = x.expect.parameters === null
+        ? (x.expect.findings ? d.pairs.length === 1 && pair.a.id === pair.b.id && JSON.stringify(pair.findings.map((f) => [f.id, f.from, f.to])) === JSON.stringify(x.expect.findings) : !d.pairs.length)
+        : d.pairs.length === 1 && JSON.stringify(pair.parameters) === JSON.stringify(x.expect.parameters) && JSON.stringify(pair.design) === JSON.stringify(x.expect.design) && JSON.stringify(pair.findings.map((f) => [f.id, f.from, f.to])) === JSON.stringify(x.expect.findings);
+      return { x, d, ok: okChanges && okPair, said: [...texts, ...d.pairs.flatMap(pairWords)] };
+    });
+    check('diff', 'planted changes from a checkpoint of GRB2\'s run, each described exactly and nothing else: the pseudocount and the minimum input count scored again, a replicate left out of the design and scored again (the design\'s change and the run\'s, and the outlier-replicate finding no longer assessed), a QC threshold changed (the agreement finding\'s verdict, pass → review), the readout edited', rows.map((r) => `${r.x.id}: ${r.ok ? 'exact' : `said ${r.said.join(' | ')}`}`).join('; '), rows.every((r) => r.ok), 'exactly');
+    // The variants each rescoring moved, computed apart.
+    const moved = rows.filter((r) => r.x.expect.moved).map((r) => {
+      const p = r.d.pairs[0];
+      const t = p.targets[0];
+      const apart = movedApart(scored.get(p.a.id), scored.get(p.b.id));
+      const listed = t.variants.map((v) => v.variant);
+      const same = t.both === apart.both && t.moved === apart.moved.size && t.crossed === apart.crossed.size && t.filtered === apart.filtered && t.scored === apart.scored && listed.every((k) => apart.moved.has(k) || apart.crossed.has(k));
+      return { id: r.x.id, t, same };
+    });
+    check('diff', 'the variants each rescoring moved as computed apart (effects against the wild type, t p-values, Benjamini–Hochberg): beyond the earlier 95% interval, of another class, no longer and newly scored; the variants named among them', moved.map((m) => `${m.id}: ${m.t.both} in both, ${m.t.moved} moved, ${m.t.crossed} crossed, ${m.t.filtered} filtered, ${m.t.scored} scored${m.same ? '' : ' (differs)'}`).join('; '), moved.length === 3 && moved.every((m) => m.same) && moved.some((m) => m.t.moved > 0) && moved.some((m) => m.t.crossed > 0) && moved.some((m) => m.t.filtered > 0), 'the same');
+    // Nothing changed: an analysis against itself, a checkpoint against now when nothing was done.
+    const self = diffStates(before, before, { pairs: pairsFor(before, before, table, scored) });
+    const now = diffStates(before, analysisState(base), { pairs: pairsFor(before, analysisState(base), table, scored) });
+    check('diff', 'an analysis compared with itself has no change, and a checkpoint with the workspace it was just kept from neither', `${self.summary} ${now.summary}`, self.same && now.same && !self.changes.length && !now.changes.length, 'no change');
+    // Through the archive: the checkpoint kept, its state's SHA-256 its own, the same diff.
+    const last = rows.find((r) => r.x.id === 'pseudocount');
+    const archived = await readArchive((await writeArchive(last.x.ws, { software: SOFTWARE, results: new Map() })).bytes);
+    const kept = archived.ws.checkpoints?.[0];
+    const again = diffStates(kept.state, analysisState(archived.ws), { pairs: pairsFor(kept.state, analysisState(archived.ws), table, scored) });
+    check('diff', 'a checkpoint through the workspace archive: kept with its name, the history\'s hash it was kept after, and its state (SHA-256 the state\'s own); the same changes from it, and a diff of the two archives\' states as of their checkpoint and now', `"${kept?.name}" after ${kept?.head?.slice(0, 12)}…, state ${kept && stateDigest(kept.state) === kept.sha256 ? 'its SHA-256' : 'not its SHA-256'}; ${again.summary}`, kept && kept.head === base.history.at(-2).hash && stateDigest(kept.state) === kept.sha256 && JSON.stringify(again.changes) === JSON.stringify(last.d.changes) && JSON.stringify(again.pairs) === JSON.stringify(last.d.pairs) && !archived.problems.length, 'the same');
+    // The map of the change: each variant compared, its change.
+    const p = last.d.pairs[0];
+    const spec = changeMap(g.run, scored.get(p.a.id), last.x.ws.runs[1], scored.get(p.b.id));
+    const model = buildMapModel(spec.results, spec.design, { contrast: 0, colorBy: 'differential' });
+    const svg = mapSVG(model, { results: spec.results });
+    const cells = [...svg.matchAll(/<title>([^<]+)<\/title>/g)].length;
+    const apart = movedApart(scored.get(p.a.id), scored.get(p.b.id));
+    const delta = spec.results.differential[0].delta;
+    const compared = [...delta].filter(Number.isFinite).length;
+    check('diff', 'the map of the change (the pseudocount\'s): a cell for each variant both runs scored, its change the effect after less before, drawn as the map draws a difference', `${compared} variants with a change of ${apart.both} scored in both; ${cells} cells named in the SVG`, compared === apart.both && cells > 0, 'each one');
+    // A change of units is not a change of effect (wave 6, slice 8): Hsp90's Run 1 per generation,
+    // then over the whole time course of 21 generations, every effect 21 times.
+    {
+      const h = hsp90Checkpoint();
+      const { run, results } = h.apart.course;
+      const [t] = variantChanges(h.g.run, h.g.results, run, results);
+      const words = pairWords({ a: h.g.run, b: { ...run, name: 'Run 2' }, parameters: ['the time scale unit → course'], design: [], targets: [t], findings: [], recomputed: true });
+      const spec = changeMap(h.g.run, h.g.results, run, results);
+      const largest = Math.max(...[...spec.results.differential[0].delta].filter(Number.isFinite).map(Math.abs));
+      check('diff', 'a change of units is not a change of effect: Hsp90 scored per generation, then over its whole time course (every effect 21 times): no variant moved, compared in the earlier run\'s units, and none changed class; the map of the change empty', `${words[1]} The map: the largest change ${largest.toExponential(1)}`, t.both === 188 && t.moved === 0 && t.crossed === 0 && t.units?.factor === 1 / 21 && t.units.why.join() === 'the time scale changed' && /0 moved beyond their earlier 95% interval \(Run 2's effects × 0\.0476, in Run 1's units: the time scale changed\)/.test(words[1]) && largest < 1e-12, '0 moved, 0 changed class; × 1/21; < 1e-12');
+    }
+    // The report names the checkpoints.
+    const rep = writeReport(base, { software: SOFTWARE });
+    check('diff', 'the report names each checkpoint with its date and its state\'s SHA-256, and the decision log has its entry', rep.sections.find((x) => x.id === 'log')?.blocks.at(-1).text ?? 'none', /Checkpoints kept with the workspace, each the analysis as it stood: "Before" \(2026-10-12, state SHA-256 [0-9a-f]{12}…\)\./.test(rep.markdown) && rep.markdown.includes('Checkpoint "Before": the analysis as it stood'), 'named');
+  },
+
+  // Wave 6, slice 6 (R7, part 1): reproducibility certificates (lib/certificate.js): the workspace
+  // archive with every number it reports, computed again from its files and compared bit for bit.
+  async certificate() {
+    const SW = { version: '0.6.0', commit: '0123456789abcdef' };
+    const r = await certifiedWorkspace();
+    const file = async (sha) => r.files.get(sha) ?? null;
+    const t0 = performance.now();
+    const made = await writeCertificate(r.ws, file, { software: SW });
+    const ms = performance.now() - t0;
+    const c = made.certificate;
+    const verified = await verifyCertificate(await readCertificate(made.bytes), { software: SW });
+
+    // Every number, what the analysis gives computed here apart from the certificate: each run's
+    // scores, SEs and classes; its QC (every number, and each finding); the analyses as kept in the
+    // report; each panel drawn from the numbers computed here; the report's text.
+    const ws = r.ws;
+    const thresholds = withDefaultThresholds(ws.qc?.thresholds);
+    const enc = (a) => Array.from(a, (x) => (Number.isNaN(x) ? 'NaN' : x === 0 ? 0 : x));
+    const runRows = ws.runs.map((run) => {
+      const { table, results } = r.scored.get(run.id);
+      const got = c.numbers.runs.find((x) => x.id === run.id);
+      const cls = callsOf(results, run.inputs.design);
+      const qc = computeQC({ ...inputFor(table, run.inputs.design), design: run.inputs.design, results, measures: measuresOf(thresholds) });
+      const findings = findingsFrom(qc, thresholds, { acknowledged: ws.qc?.acknowledged });
+      const q = c.numbers.qc.find((x) => x.run === run.id);
+      return {
+        name: run.name,
+        scores: got.output === run.output.sha256 && results.conditions.every((cond, j) => canonicalJSON(enc(cond.score)) === canonicalJSON(got.conditions[j].score) && canonicalJSON(enc(cond.se)) === canonicalJSON(got.conditions[j].se) && canonicalJSON(Array.from(cls[j].cls)) === canonicalJSON(got.conditions[j].class)),
+        qc: q.digest === createHash('sha256').update(canonicalJSON(encodeAll(qc))).digest('hex') && canonicalJSON(findings.map((f) => [f.id, f.status, f.value, f.acknowledged?.current ? f.acknowledged.status : null])) === canonicalJSON(q.findings.map((f) => [f.id, f.status, f.value, f.acknowledged])),
+        variants: got.variants.length,
+      };
+    });
+    const kept = (kind) => c.numbers.analyses.find((a) => a.kind === kind).values;
+    const comparisonSame = canonicalJSON(kept('comparison')) === canonicalJSON(encodeAll({ matched: r.comparison.matched, statistics: r.comparison.statistics, discordance: r.comparison.discordance, classes: r.comparison.classes }));
+    const robustnessSame = canonicalJSON(kept('robustness')) === canonicalJSON(encodeAll({ total: r.robustness.total, skipped: r.robustness.skipped, targets: r.robustness.targets.map((x) => ({ id: x.id, n: x.n, counts: x.counts })) }));
+    // The figure drawn from what was computed here, panel by panel (lib/view-plots.js, lib/qc-plots.js).
+    const fig = ws.figures[0];
+    const g1 = r.scored.get(r.g.run.id);
+    const g2 = r.scored.get(r.run2.id);
+    const qc1 = computeQC({ ...inputFor(g1.table, r.g.run.inputs.design), design: r.g.run.inputs.design, results: g1.results, measures: measuresOf(thresholds) });
+    const sides = [describeSide(ws, r.g.run, g1.results, { run: r.g.run.id, condition: 0 }), describeSide(ws, r.run2, g2.results, { run: r.run2.id, condition: 0 })];
+    const byKind = { map: { model: buildMapModel(g1.results, r.g.run.inputs.design, { condition: 0 }), results: g1.results, tracks: [] },
+      qc: qcPanelData(findingsFrom(qc1, thresholds, { acknowledged: ws.qc?.acknowledged }).find((f) => f.id === 'excess-variance'), qc1, thresholds, { pair: 0 }),
+      scores: scoreCharts(g1.results, r.g.run, { condition: 0, contrast: 0, plot: 'distribution' }),
+      compare: comparisonCharts({ ...compareSides(sides[0], sides[1]), sides }, 'agreement'),
+      variant: variantCharts(g1.results, r.g.run, 'p.Trp36Ala', { condition: 0, plot: 'evidence' }) };
+    const digests = panelDigests(fig, figureMarks(fig, new Map(fig.panels.filter((p) => byKind[p.kind]).map((p) => [p.id, byKind[p.kind]]))));
+    const panels = c.numbers.figures[0].panels;
+    const samePanels = panels.filter((p) => p.drawing === digests.get(p.id));
+    const report = writeReport(ws, contextOf(ws, r.scored, SW));
+    const reportSame = c.numbers.report.markdown === createHash('sha256').update(report.markdown).digest('hex') && c.numbers.report.bibtex === createHash('sha256').update(report.bibtex).digest('hex');
+    check('certificate', `GRB2's workspace of every operation (two runs, a threshold changed, a finding acknowledged, a selection, a comparison and a robustness check kept in the report, an annotation, a structure view, a figure of six panels, a checkpoint) certified in ${(ms / 1000).toFixed(1)} s: each run's scores, SEs and classes (callsOf) as scoring gives them here, its QC (every number, and each finding's status, value and acknowledgement), the comparison and robustness check as the report keeps them, each panel as drawn here from the numbers computed here, the report as written here; verified, bit for bit`,
+      `${c.total.toLocaleString('en-US')} numbers; ${runRows.map((x) => `${x.name} (${x.variants} variants): scores ${x.scores ? 'as here' : 'differ'}, QC ${x.qc ? 'as here' : 'differs'}`).join('; ')}; comparison ${comparisonSame ? 'as kept' : 'differs'}, robustness ${robustnessSame ? 'as kept' : 'differs'}; panels ${samePanels.map((p) => p.letter).join('')} of ${panels.map((p) => p.letter).join('')} as drawn here; report ${reportSame ? 'as written here' : 'differs'}; ${verified.verdict}`,
+      runRows.every((x) => x.scores && x.qc) && comparisonSame && robustnessSame && samePanels.length === panels.length && panels.length === 6 && reportSame && verified.verdict === 'verified' && verified.numbers.same === c.total && !made.notes.length, 'all, verified');
+
+    // The same bytes again; the fingerprint, the README, what is not computed again.
+    const again = await writeCertificate(r.ws, file, { software: SW });
+    const { fingerprint, ...rest } = c;
+    const ownFingerprint = createHash('sha256').update(canonicalJSON(rest)).digest('hex');
+    const archived = await readArchive(made.bytes);
+    const readme = new TextDecoder().decode(archived.files.get('README.txt'));
+    const notChecked = c.notChecked.map((x) => x.what);
+    check('certificate', 'certified twice, the same bytes; its fingerprint the SHA-256 of certificate.json\'s canonical JSON without it (computed here), and README.txt names it, what it proves and how to verify it; the selection and the structure view, not computed again, each said; the archive opens as the workspace, its report and scores those certified', `${Buffer.compare(Buffer.from(again.bytes), Buffer.from(made.bytes)) === 0 ? 'the same bytes' : 'different bytes'}; fingerprint ${fingerprint === ownFingerprint ? 'its own' : 'not its own'}; README ${readme.includes(fingerprint) && /mavescape verify/.test(readme) && /It does not prove that\s+the scores are right/.test(readme) ? 'says it' : 'does not say it'}; not computed again: ${notChecked.join('; ')}`,
+      Buffer.compare(Buffer.from(again.bytes), Buffer.from(made.bytes)) === 0 && fingerprint === ownFingerprint && certificateFingerprint(c) === fingerprint && readme.includes(fingerprint) && /mavescape verify/.test(readme) && notChecked.length === 2 && /selection "Core lower"/.test(notChecked[0]) && /structure view "Core"/.test(notChecked[1]) && !archived.problems.length && archived.report.markdown === report.markdown && archived.ws.runs.length === 2, 'the same; said');
+
+    // Verified by another version: said.
+    const later = await verifyCertificate(await readCertificate(made.bytes), { software: { version: '0.7.0', commit: '' } });
+    check('certificate', 'verified by another version of MaveScape: verified, and it says which certified and which verified', later.summary.slice(-160), later.verdict === 'verified' && /Certified with MaveScape 0\.6\.0 and verified with 0\.7\.0\./.test(later.summary), 'said');
+
+    // Tampering, each caught and said.
+    const caught = [];
+    for (const t of tamperings()) {
+      const bytes = await repack(made.bytes, (files) => t.edit(files, c));
+      const rep = await verifyCertificate(await readCertificate(bytes), { software: SW });
+      caught.push({ t, rep, ok: t.expect(rep) && rep.exit === 1 });
+    }
+    check('certificate', 'six kinds of tampering, each caught and said (exit 1), the archive\'s manifest always made to list the change: a count changed in the table it holds; a score in certificate.json changed in its last bit, and the same with its fingerprint made again (the one number listed, by its variant); Run 1\'s pseudocount edited in workspace.json, a history entry\'s words edited, and a checkpoint\'s state edited, each with certificate.json made to agree', caught.map((x) => `${x.t.id}: ${x.ok ? 'caught' : `NOT caught (${x.rep.verdict}: ${x.rep.summary.slice(0, 120)})`}`).join('; '), caught.length === 6 && caught.every((x) => x.ok), 'every one');
+
+    // Without its tables (data that cannot be shared): not checkable, then verified with them.
+    const bare = await writeCertificate(r.ws, file, { software: SW, tables: false });
+    const bareRead = await readCertificate(bare.bytes);
+    const without = await verifyCertificate(bareRead, { software: SW });
+    const table = bare.certificate.inputs.find((i) => i.role === 'table');
+    const withIt = await verifyCertificate(await readCertificate(bare.bytes), { software: SW, file: async (sha) => (sha === table.sha256 ? r.files.get(sha) : null) });
+    check('certificate', 'a certificate without its tables: the table named by its SHA-256 only (not in the archive); not checkable without it (exit 2), the table named, its numbers not computed and none said to differ; verified with it given beside', `${bareRead.archive.sources.has(table.sha256) ? 'the table is in the archive' : 'the table is not in the archive'}; without it: ${without.verdict} (exit ${without.exit}), ${without.numbers.missing.toLocaleString('en-US')} not computed, ${without.numbers.differs} differ; with it: ${withIt.verdict}`,
+      !bareRead.archive.sources.has(table.sha256) && without.verdict === 'incomplete' && without.exit === 2 && without.numbers.differs === 0 && without.summary.includes(table.fileName) && withIt.verdict === 'verified' && withIt.inputs.find((i) => i.role === 'table').from === 'supplied', 'not checkable; verified');
+
+    // Every example, certified and verified.
+    const rows = [];
+    let total = 0;
+    const e0 = performance.now();
+    for (const e of EXAMPLES) {
+      const { ws: w, files } = windowExample(e.id);
+      const m = await writeCertificate(w, async (sha) => files.get(sha) ?? null, { software: SW });
+      const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
+      total += m.certificate.total;
+      rows.push({ id: e.id, n: m.certificate.total, verdict: v.verdict, notes: m.notes.length });
+    }
+    check('certificate', `each of the ${EXAMPLES.length} examples opened as the window opens it (its files kept, its source saying how they were assembled), scored and certified (${((performance.now() - e0) / 1000).toFixed(1)} s), and verified bit for bit`, `${total.toLocaleString('en-US')} numbers; ${rows.filter((x) => x.verdict !== 'verified' || x.notes).map((x) => `${x.id}: ${x.verdict}${x.notes ? `, ${x.notes} notes` : ''}`).join('; ') || `every one verified (${rows.map((x) => x.n).join(', ')})`}`, rows.length === EXAMPLES.length && rows.every((x) => x.verdict === 'verified' && !x.notes), 'every one');
+
+    // Each earlier release's archives, opened by this MaveScape, certified and verified.
+    const releases = [];
+    for (const name of readdirSync(new URL('./archives/', import.meta.url)).filter((f) => f.endsWith('.msz')).sort()) {
+      const opened = await readArchive(new Uint8Array(readFileSync(new URL(`./archives/${name}`, import.meta.url))));
+      const m = await writeCertificate(opened.ws, async (sha) => opened.sources.get(sha) ?? null, { software: SW });
+      const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
+      releases.push({ name, release: opened.manifest.software?.version, n: m.certificate.total, verdict: v.verdict, notes: m.notes });
+    }
+    check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.6), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output', releases.map((x) => `${x.name} (${x.release}): ${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 9 && releases.every((x) => x.verdict === 'verified' && !x.notes.length), 'every one');
+    // Each release's own certificate (from 0.6.0: validation/archives/*.certificate.msz), verified by
+    // this MaveScape: its fingerprint, files, history and checkpoints as certified, and every number
+    // computed again and compared bit for bit with the one that release computed.
+    const certified = [];
+    for (const name of readdirSync(new URL('./archives/', import.meta.url)).filter((f) => f.endsWith('.certificate.msz')).sort()) {
+      const read = await readCertificate(new Uint8Array(readFileSync(new URL(`./archives/${name}`, import.meta.url))));
+      const v = await verifyCertificate(read, { software: SW });
+      certified.push({ name, by: read.certificate.software?.version, total: read.certificate.total, verdict: v.verdict, differ: v.numbers.differ.slice(0, 3).map((d) => d.label) });
+    }
+    check('certificate', 'each release\'s own certificate (validation/archives/, from 0.6.0), verified by this MaveScape: its fingerprint, files, history and checkpoints as certified, every number computed again and identical, bit for bit, to the one that release computed', certified.map((x) => `${x.name} (certified by ${x.by}): ${x.total.toLocaleString('en-US')} numbers, ${x.verdict}${x.differ.length ? ` (${x.differ.join('; ')})` : ''}`).join('; ') || 'none', certified.length >= 1 && certified.every((x) => x.verdict === 'verified'), 'verified');
+  },
+
+  // Wave 6, slice 7 (R7, part 2): the review report (lib/review.js): the certificate's numbers, each
+  // traced, in one self-contained HTML file.
+  async review() {
+    const SW = { version: '0.6.0', commit: '0123456789abcdef' };
+    const r = await certifiedWorkspace();
+    const file = async (sha) => r.files.get(sha) ?? null;
+    const made = await writeCertificate(r.ws, file, { software: SW, review: true });
+    const html = made.review;
+    const c = made.certificate;
+    const t = checkTraced(html, c, r.ws);
+    const needed = ['run', 'count', 'qc', 'analysis', 'figure', 'report', 'ws'];
+    check('review', 'GRB2\'s workspace of every operation, its review report: every traced number, by its key and exact value, the certificate\'s (each run\'s output, each QC finding\'s verdict, measure and acknowledgement and its QC\'s digest, each kept analysis\'s statistics and verdicts, each figure panel\'s drawing, the report), the workspace\'s (each parameter, a recorded output, a replicate, a selection), or counted from the certificate\'s classes; every kind there',
+      `${t.total} traced: ${Object.entries(t.kinds).map(([k, n]) => `${k} ${n}`).join(', ')}; ${t.bad.length ? `wrong: ${t.bad.slice(0, 3).map((b) => `${b.key} ${JSON.stringify(b.value)} (${JSON.stringify(b.expected)})`).join('; ')}` : 'every one as recorded'}`,
+      !t.bad.length && needed.every((k) => t.kinds[k] > 0) && t.total > 150, 'every one');
+
+    // Nothing loaded from outside the file (and the check catches what would be).
+    const external = externalReferences(html);
+    const planted = externalReferences(html.replace('</main>', '<img src="https://example.org/a.png" alt=""><link rel="stylesheet" href="https://example.org/a.css"></main>').replace('<script>', '<script>fetch("https://example.org");'));
+    const dois = [...html.matchAll(/<a href="(https?:[^"]+)"/g)].map((m) => m[1]);
+    check('review', 'the file loads nothing: no script, style, frame, image or media from outside it, nothing in its CSS, no address outside a link (its links, DOIs, followed only when clicked), no request in its script; the check finds an image, a stylesheet and a fetch planted in it',
+      `${external.length ? external.join('; ') : 'nothing from outside'}; ${dois.length} links (${dois.every((d) => d.startsWith('https://doi.org/')) ? 'every one a DOI' : 'not only DOIs'}); planted: ${['img', 'link', 'fetch'].filter((x) => planted.some((p) => p.includes(x))).join(', ')} found`,
+      !external.length && dois.length > 0 && dois.every((d) => d.startsWith('https://doi.org/')) && ['img', 'link', 'fetch'].every((x) => planted.some((p) => p.includes(x))), 'nothing; the planted three');
+
+    // The same bytes again, and from the certificate verified; none from a tampered one.
+    const again = await writeCertificate(r.ws, file, { software: SW, review: true });
+    const verified = await verifyCertificate(await readCertificate(made.bytes), { software: SW, review: true });
+    const tamperedBytes = await repack(made.bytes, (files) => tamperings().find((x) => x.id === 'number-refingerprinted').edit(files, c));
+    const tampered = await verifyCertificate(await readCertificate(tamperedBytes), { software: SW, review: true });
+    check('review', 'made again, the same bytes; made from the certificate verified (mavescape verify --review), the same bytes as its maker\'s; from a certificate that does not verify, none', `${again.review === html ? 'the same' : 'different'} again; from the verification ${verified.review === html ? 'the same' : 'different'}; tampered: ${tampered.verdict}, ${tampered.review ? 'a review' : 'no review'}`, again.review === html && verified.review === html && tampered.verdict === 'differs' && !tampered.review, 'the same; none');
+
+    // What it holds: every section, the certificate whole (its fingerprint its own), each input,
+    // each run's maps, the QC plots, each figure, the report's sections and references, the log.
+    const model = JSON.parse(html.slice(html.indexOf('id="mavescape-review">') + 22, html.indexOf('</script>', html.indexOf('id="mavescape-review">'))));
+    const ids = [...html.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]);
+    const maps = (html.match(/<figure class="map">/g) ?? []).length;
+    const expectedMaps = c.numbers.runs.reduce((n, x) => n + x.conditions.length + x.contrasts.length, 0);
+    const qcPlots = (html.match(/<figure class="plot"><svg[^>]*>\s*<title>[^<]+\(Run \d\)<\/title>/g) ?? []).length;
+    const report = writeReport(r.ws, contextOf(r.ws, r.scored, SW));
+    const reportHeads = report.sections.filter((x) => x.title).every((x) => html.includes(`<h3>${x.title}</h3>`));
+    const refs = (html.slice(html.indexOf('<ol class="refs">')).match(/<li id="ref-/g) ?? []).length;
+    const logged = r.ws.history.every((e) => html.includes(e.time.replace('T', ' ').slice(0, 16)));
+    const parts = {
+      sections: ['overview', 'certificate', 'experiment', 'inputs', 'runs', 'qc', 'comparisons', 'robustness', 'selections', 'structures', 'figures', 'methods', 'log', 'about'].every((x) => ids.includes(x)),
+      certificate: canonicalJSON(model.certificate) === canonicalJSON(c) && certificateFingerprint(model.certificate) === c.fingerprint && html.includes(c.fingerprint),
+      inputs: c.inputs.every((i) => html.includes(i.sha256)),
+      maps: maps === expectedMaps,
+      qc: qcPlots > 5,
+      figure: (html.match(/<figure class="page">/g) ?? []).length === r.ws.figures.length,
+      methods: reportHeads && refs === report.references.length,
+      log: logged,
+    };
+    check('review', 'it holds every section (overview, the certificate with what it proves, the experiment, inputs, runs, QC, comparisons, robustness, selections, structure views, figures, methods, decision log), the certificate whole in its JSON block (its fingerprint its own), each input\'s SHA-256, a map for each condition and difference of each run, the QC findings\' plots, each figure, the report\'s sections and every reference, every history entry',
+      `${Object.entries(parts).map(([k, v]) => `${k} ${v ? 'yes' : 'NO'}`).join(', ')}; ${maps} maps, ${qcPlots} QC plots, ${refs} references, ${(html.length / 1e6).toFixed(2)} MB`, Object.values(parts).every(Boolean), 'all');
+
+    // Every example's review: every traced number as recorded, nothing from outside.
+    const rows = [];
+    for (const e of EXAMPLES) {
+      const { ws, files } = windowExample(e.id);
+      const m = await writeCertificate(ws, async (sha) => files.get(sha) ?? null, { software: SW, review: true });
+      const x = checkTraced(m.review, m.certificate, ws);
+      rows.push({ id: e.id, total: x.total, bad: x.bad.length, external: externalReferences(m.review).length, mb: m.review.length / 1e6 });
+    }
+    check('review', `each of the ${EXAMPLES.length} examples' review report: every traced number as the certificate or the workspace records it, nothing loaded from outside`, `${rows.reduce((n, x) => n + x.total, 0)} traced numbers; ${rows.filter((x) => x.bad || x.external).map((x) => `${x.id}: ${x.bad} wrong, ${x.external} external`).join('; ') || 'every one'}; largest ${Math.max(...rows.map((x) => x.mb)).toFixed(1)} MB`, rows.every((x) => !x.bad && !x.external && x.total > 20), 'every one');
+  },
+
 };
 
 // --- Run ------------------------------------------------------------------------------------------

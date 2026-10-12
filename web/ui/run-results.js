@@ -12,21 +12,24 @@ export function runEntry(app, run) {
   return app.runResults.get(run.id) ?? null;
 }
 
-export async function ensureResults(app, run) {
+// from: a table from outside the workspace, { source, target } (an archive's, its files in the
+// library: wave 6, slice 5); a run's id names its inputs, so its results are the same wherever its
+// table comes from.
+export async function ensureResults(app, run, from = null) {
   app.runResults ??= new Map();
   const existing = app.runResults.get(run.id);
-  if (existing) return existing.pending ?? existing;
+  if (existing && !(existing.status === 'failed' && from)) return existing.pending ?? existing;
   const entry = { status: 'checking' };
   app.runResults.set(run.id, entry);
   entry.pending = (async () => {
     const recorded = recordedInputs(run);
-    const source = app.store.ws.sources.find((x) => x.sha256 === recorded.source.sha256);
+    const source = from?.source ?? app.store.ws.sources.find((x) => x.sha256 === recorded.source.sha256);
     let next;
     if (!source) {
       next = { status: 'failed', message: `The table it scored (SHA-256 ${recorded.source.sha256.slice(0, 12)}…) is not in this workspace.` };
     } else {
       try {
-        const table = await app.sourceTable(source);
+        const table = await app.sourceTable(source, from ? { target: from.target } : {});
         const { names, barcodes, columns, transfer } = workerInput(table, recorded.design);
         const result = await runScore(app, { names, barcodes, columns, design: recorded.design, parameters: recorded.parameters, mode: recorded.mapping.mode }, { transfer }).promise;
         if (!result.ok) throw new Error(result.errors.join(' '));

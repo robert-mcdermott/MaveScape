@@ -21,11 +21,11 @@ import { findPackages, importMaveDB, importMaveDBPackage, openMaveDBDialog, open
 import { importTrackFiles } from './ui/tracks.js';
 import { fixClock } from './lib/clock.js';
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
-// show what they are for (mode-planned.js); Calibrate, Figures and Report join the list in the
-// waves that build them (roadmap.md); Compare joined in wave 4, Structure in wave 5.
+// show what they are for (mode-planned.js); Calibrate joins the list in the wave that builds it
+// (roadmap.md); Compare joined in wave 4, Structure in wave 5, Figures and Report in wave 6.
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
   { id: 'experiment', label: 'Experiment', icon: 'experiment', load: () => import('./ui/mode-experiment.js').then((m) => m.mountExperimentMode) },
@@ -35,6 +35,9 @@ const MODES = [
   { id: 'map', label: 'Map', icon: 'heatmap', load: () => import('./ui/mode-map.js').then((m) => m.mountMapMode) },
   { id: 'compare', label: 'Compare', icon: 'compare', load: () => import('./ui/mode-compare.js').then((m) => m.mountCompareMode) },
   { id: 'structure', label: 'Structure', icon: 'structure', load: () => import('./ui/mode-structure.js').then((m) => m.mountStructureMode) },
+  'sep',
+  { id: 'figures', label: 'Figures', icon: 'figure', load: () => import('./ui/mode-figures.js').then((m) => m.mountFiguresMode) },
+  { id: 'report', label: 'Report', icon: 'report', load: () => import('./ui/mode-report.js').then((m) => m.mountReportMode) },
 ];
 
 // --- Theme ---------------------------------------------------------------------------------------
@@ -65,13 +68,15 @@ export function fileKind(name) {
   if (has('.gff', '.gff3')) return 'annotation';
   if (has('.pdb', '.ent', '.cif', '.mmcif', '.bcif', '.pdb.gz', '.ent.gz', '.cif.gz', '.mmcif.gz', '.bcif.gz')) return 'structure';
   if (has('.zip')) return 'archive';
+  // A figure MaveScape exported, to check and rebuild (wave 6, slice 3).
+  if (has('.svg', '.pdf', '.png')) return 'figure';
   if (has('.json')) return 'json';
   return '';
 }
 
 const KIND_NAMES = {
   workspace: 'workspace archives (.msz)', design: 'designs', template: 'import templates', table: 'tables', sequence: 'sequences',
-  genbank: 'GenBank files', alignment: 'alignments', annotation: 'annotations', structure: 'structures', archive: 'archives', json: 'JSON files',
+  genbank: 'GenBank files', alignment: 'alignments', annotation: 'annotations', structure: 'structures', archive: 'archives', json: 'JSON files', figure: 'figures',
 };
 
 async function start() {
@@ -115,6 +120,7 @@ async function start() {
   app.importers.set('annotation', (items) => importTrackFiles(app, items));
   // Structures: shown in the Structure view, one at a time (wave 5, slice 1).
   app.importers.set('structure', (items) => import('./ui/mode-structure.js').then((m) => m.openStructureFiles(app, items)));
+  app.importers.set('figure', (items) => import('./ui/figure-import.js').then((m) => m.openFigureFiles(app, items)));
   app.inspector.setSection('example', exampleGuide);
 
   // --- Views -------------------------------------------------------------------------------------
@@ -230,7 +236,7 @@ async function start() {
       }
     }
     if (unread.size) messages.push(`This build of MaveScape cannot read ${[...unread.keys()].map((k) => KIND_NAMES[k] ?? k).join(', ')} yet.`);
-    if (unknown.length) messages.push(`${unknown.length === 1 ? unknown[0] : `${unknown.length} files`}: MaveScape opens count and score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif) and workspaces (.msz).`);
+    if (unknown.length) messages.push(`${unknown.length === 1 ? unknown[0] : `${unknown.length} files`}: MaveScape opens count and score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif), workspaces (.msz) and the figures it exported (.svg, .pdf, .png).`);
     for (const message of messages) {
       toast(message, { kind: 'error' });
       app.log(message);

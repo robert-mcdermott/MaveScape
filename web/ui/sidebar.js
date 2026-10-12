@@ -60,7 +60,9 @@ export function mountSidebar(app) {
     const body = h('div.panel-body', { style: { paddingTop: '4px' } });
     for (const section of SECTIONS) {
       const items = section.items(ws);
-      const list = h('div', { role: 'list' });
+      // A list only when it has items: an empty one says what goes in it (axe-core's
+      // aria-required-children).
+      const list = h('div', { role: items.length ? 'list' : null });
       for (const item of items) {
         const selected = ui.focus?.kind === section.kind && ui.focus?.id === item.id;
         list.append(h(`button.dataset-row${selected ? '.selected' : ''}`, {

@@ -14,7 +14,7 @@ import { PROVIDERS, annotationTracks, providerById, providerForFile } from '../l
 import { annotationsOf, arrangeTracks, arrangement, builtinTracks, describeTrack, sourceText, trackFilters, trackTarget, tracksCSV } from '../lib/tracks.js';
 import { buildMapModel } from '../lib/map-model.js';
 import { proteinView } from '../lib/collapse.js';
-import { cellText } from '../lib/csv.js';
+import { readsVariants, trackContext } from '../lib/run-tracks.js';
 import { addAnnotation, removeAnnotation, setTrackLayout } from '../lib/workspace.js';
 import { normalizeUrn } from '../lib/mavedb.js';
 import { scoreSetResults } from '../lib/scoreset.js';
@@ -42,40 +42,22 @@ export async function annotationText(app, annotation) {
   return texts.get(sha);
 }
 
-// What a run gives the providers: its design's target (with the identifiers the workspace's has
-// gained since: lib/tracks.js, trackTarget), the protein its map numbers, the offset, a MaveDB
-// record's URN, and its variants by name and MaveDB accession (→ the map's cell and position).
+// What a run gives the providers (lib/run-tracks.js): its scores and its table read first when a
+// MaveDB record's variants are named by accession.
 async function contextOf(app, run, model) {
-  const design = run.inputs.design;
-  const target = trackTarget(design.targets?.[0] ?? null, app.store.ws.targets);
-  const source = app.store.ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
-  const origin = source?.origin?.database === 'MaveDB' && source.origin.urn ? { urn: source.origin.urn } : null;
-  let variants = null;
-  if (origin) {
-    const entry = runEntry(app, run) ?? await ensureResults(app, run);
-    const own = entry?.results;
-    if (own) {
-      variants = new Map();
-      const v = own.variants;
-      const single = (key) => /^p\.[A-Z][a-z]{2}\d+([A-Z][a-z]{2}|=)$/.test(key ?? '');
-      let accession = null;
-      try {
-        const table = source ? await app.sourceTable(source) : null;
-        const column = table?.columns.find((c) => c.name === 'accession');
-        if (column && table.rows === own.rows) accession = (i) => cellText(column, i);
-      } catch {
-        accession = null;
-      }
-      for (let i = 0; i < own.rows; i += 1) {
-        const key = v.proKey ? v.proKey[i] : v.key[i];
-        const item = { key: single(key) ? key : null, position: v.proPosition ? v.proPosition[i] : v.position[i] };
-        variants.set(v.original[i], item);
-        variants.set(v.key[i], item);
-        if (accession) variants.set(accession(i), item);
-      }
+  const ws = app.store.ws;
+  let results = null;
+  let table = null;
+  if (readsVariants(ws, run)) {
+    results = (runEntry(app, run) ?? await ensureResults(app, run))?.results ?? null;
+    const source = ws.sources.find((s) => s.sha256 === run.inputs.source.sha256);
+    try {
+      table = results && source ? await app.sourceTable(source) : null;
+    } catch {
+      table = null;
     }
   }
-  return { target, protein: model.protein, offset: model.target.offset ?? 0, length: model.length, origin, variants };
+  return trackContext(ws, run, model, { results, table });
 }
 
 // A run's tracks for a map model: { tracks (every one, unarranged), problems: [{ annotation,

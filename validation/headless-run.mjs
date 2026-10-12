@@ -23,6 +23,7 @@ import { computeQC } from '../web/lib/qc.js';
 import { findingsFrom, measuresOf, withDefaultThresholds } from '../web/lib/findings.js';
 import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV } from '../web/lib/exports.js';
 import { MAVEDB_FILES, mavedbDeposit } from '../web/lib/mavedb-export.js';
+import { checkManifest, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { proteinView } from '../web/lib/collapse.js';
 import { readScoreSet, scoresDesign } from '../web/lib/mavedb.js';
 import { detectLayout } from '../web/lib/importer.js';
@@ -38,6 +39,8 @@ import { readiness } from '../web/lib/readiness.js';
 import { workspaceOf } from './readiness-cases.mjs';
 import { openExampleInNode, recordTarget } from './example-cases.mjs';
 import { exampleById } from '../web/lib/examples.js';
+import { writeCertificate } from '../web/lib/certificate.js';
+import { repack, tamperings } from './certificate-cases.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const verbose = process.argv.includes('--verbose');
@@ -60,7 +63,9 @@ function mavescape(args, env = {}) {
     let stderr = '';
     child.stdout.on('data', (c) => { stdout += c; });
     child.stderr.on('data', (c) => { stderr += c; });
-    child.on('exit', (code) => done({ code, stdout, stderr, seconds: (Date.now() - began) / 1000 }));
+    // 'close', not 'exit': 'exit' can come before the pipes are read to their end, which lost a
+    // reason on stderr on CI's runner (five commands at once).
+    child.on('close', (code) => done({ code, stdout, stderr, seconds: (Date.now() - began) / 1000 }));
   });
 }
 const out = (name) => join(temp, name);
@@ -102,6 +107,8 @@ function nodeFiles(dir) {
   return { files: out, digest: outputDigest(r), recorded: run.output.sha256, ws, sources, run, results: r, methods };
 }
 let archiveReader = null;
+// The window's figure (wave 6, slice 3), for mavescape export --format figures to write again.
+let windowFigure = null;
 function readArchiveSync(path) {
   return archiveReader.get(path);
 }
@@ -177,6 +184,16 @@ try {
       const rerun = await mavescape(['run', '--design', join(packageDir, 'design.json'), '--parameters', join(packageDir, 'parameters.json'), '--out', out('from-package'), ...counts.map((n) => join(packageDir, n))]);
       const rerunHash = rerun.code === 0 ? record(out('from-package')).run?.outputSha256 : null;
       check('the analysis package written by the window: mavescape run with its files alone, as its README says, scores the window\'s run again', `${[...unpacked.keys()].join(', ')}; exit ${rerun.code}; output SHA-256 ${rerunHash === scored.data.outputSha256 ? 'the window run\'s' : `${rerunHash} against ${scored.data.outputSha256}`}`, rerun.code === 0 && rerunHash === scored.data.outputSha256 && readme.includes('mavescape run --design design.json --parameters parameters.json') && unpacked.has('samples.csv') && unpacked.has('readiness.json'));
+      // A figure of the run (its map, a QC finding, its scores, text), written by the window as SVG
+      // with the workspace's archive, for mavescape export --format figures below.
+      await act('create_figure', { name: 'Figure 1', size: 'double', height_mm: 150 });
+      await act('add_figure_panel', { figure: 'Figure 1', kind: 'map', run: 'Run 1', x_mm: 3, y_mm: 3, width_mm: 168, height_mm: 80 });
+      await act('add_figure_panel', { figure: 'Figure 1', kind: 'qc', subject: 'Run 1', finding: 'agreement', x_mm: 3, y_mm: 86, width_mm: 83, height_mm: 60 });
+      await act('add_figure_panel', { figure: 'Figure 1', kind: 'scores', run: 'Run 1', x_mm: 89, y_mm: 86, width_mm: 82, height_mm: 50 });
+      await act('add_figure_panel', { figure: 'Figure 1', kind: 'text', text: 'GRB2\'s SH3 domain.', x_mm: 89, y_mm: 138, width_mm: 82, height_mm: 8 });
+      await act('export_figure', { figure: 'Figure 1', path: join(dir, 'Figure_1.svg') });
+      await act('export', { what: 'archive', path: join(dir, 'figures.msz') });
+      windowFigure = { svg: join(dir, 'Figure_1.svg'), archive: join(dir, 'figures.msz') };
     } finally {
       await browser.close();
       server.kill();
@@ -207,6 +224,21 @@ try {
     const again = existsSync(join(out('pten'), 'workspace.msz')) ? await readArchive(readFileSync(join(out('pten'), 'workspace.msz'))) : null;
     const archiveStep = recP.steps.find((x) => x.action === 'export' && /workspace\.msz/.test(x.message ?? ''));
     check('--from-workspace on an archive naming its structures by checksum (0.5.0\'s PTEN): the run reproduced, and the workspace archive written again names the structure by ID and checksum, its saved views kept', `exit ${p.code}; ${recP.steps.find((x) => x.action === 'reproduce_run')?.message?.slice(0, 80)}; ${archiveStep?.message?.slice(0, 160) ?? recP.problems.join(' ').slice(0, 160)}; structures ${again?.manifest.structures}, views ${(again?.ws.structureViews ?? []).map((v) => v.name).join(', ')}`, p.code === 0 && recP.run?.status === 'reproduced' && again?.manifest.structures === 'checksums' && !again.problems.length && again.ws.structureViews?.length === 2);
+  }
+
+  {
+    // 0.6.0's own record (validation/archives/make-0.6.0.mjs): its certificate verified by this
+    // MaveScape, and its GRB2 workspace rerun, the archive written again keeping its figure, the
+    // analyses kept in its report and its checkpoint.
+    const cert = join(ROOT, 'validation/archives/release-0.6.0-grb2-figure.certificate.msz');
+    const v = await mavescape(['verify', cert]);
+    check('mavescape verify on 0.6.0\'s certificate: verified (exit 0), every number computed again identical', `exit ${v.code}; ${v.stdout.split('\n').find((l) => /^Verified|^Not verified|^Not checkable/.test(l))?.slice(0, 160) ?? v.stderr.slice(0, 160)}`, v.code === 0 && /^Verified: all [\d,]+ numbers/m.test(v.stdout));
+    const grb2 = join(ROOT, 'validation/archives/release-0.6.0-grb2-figure.msz');
+    const g = await mavescape(['run', '--from-workspace', grb2, '--out', out('grb2-0.6'), '--time', TIME]);
+    const recG = record(out('grb2-0.6'));
+    const kept = existsSync(join(out('grb2-0.6'), 'workspace.msz')) ? await readArchive(readFileSync(join(out('grb2-0.6'), 'workspace.msz'))) : null;
+    const original = await readArchive(readFileSync(grb2));
+    check('--from-workspace on 0.6.0\'s GRB2 archive: its runs reproduced, and the archive written again keeping its figure, the analyses kept in its report and its checkpoint', `exit ${g.code}; ${recG.run?.status}; figures ${(kept?.ws.figures ?? []).map((f) => `${f.name} (${f.panels.length})`).join(', ')}, ${(kept?.ws.analyses ?? []).length} analyses, checkpoints ${(kept?.ws.checkpoints ?? []).map((c) => c.name).join(', ')}`, g.code === 0 && recG.run?.status === 'reproduced' && JSON.stringify(kept?.ws.figures) === JSON.stringify(original.ws.figures) && JSON.stringify(kept?.ws.analyses) === JSON.stringify(original.ws.analyses) && JSON.stringify(kept?.ws.checkpoints) === JSON.stringify(original.ws.checkpoints));
   }
 
   // --- Two conditions, and a table of barcodes ------------------------------------------------
@@ -350,6 +382,81 @@ try {
       mavescape(['export', '--out', out('dep1'), saved]),
     ]);
     check('mavescape export: a wrong command line, a file that is not a workspace archive, a folder in use: exit 2 with the reason', wrong.map((w) => `${w.code}: ${w.stderr.trim().split('\n')[0].slice(0, 60)}`).join(' | '), wrong.every((w) => w.code === 2 && w.stderr.trim()));
+    // --format figures (wave 6, slice 3): the window's figure written again from its archive.
+    if (windowFigure) {
+      const f1 = await mavescape(['export', '--format', 'figures', '--out', out('fig1'), '--time', TIME, windowFigure.archive]);
+      const f2 = await mavescape(['export', '--format', 'figures', '--out', out('fig2'), '--time', TIME, windowFigure.archive]);
+      const recF = JSON.parse(readFileSync(join(out('fig1'), 'export.json'), 'utf8'));
+      const doc = JSON.parse(readFileSync(join(out('fig1'), 'figures.json'), 'utf8'));
+      const svg = readFileSync(join(out('fig1'), 'Figure_1.svg'), 'utf8');
+      const windowSVG = readFileSync(windowFigure.svg, 'utf8');
+      const unmanifested = (text) => text.replace(/<metadata id="mavescape-figure"><!\[CDATA\[[\s\S]*?\]\]><\/metadata>/, '');
+      const embedded = { svg: readFigureManifest(svg), pdf: readFigureManifest(new Uint8Array(readFileSync(join(out('fig1'), 'Figure_1.pdf')))), png: readFigureManifest(new Uint8Array(readFileSync(join(out('fig1'), 'Figure_1.png')))) };
+      const fromWindow = readFigureManifest(windowSVG);
+      const digests = (m) => m?.panels.map((p) => p.drawing).join();
+      const agree = Object.values(embedded).every((m) => m && checkManifest(m).ok && JSON.stringify(m) === JSON.stringify(doc.figures[0]));
+      check('mavescape export --format figures: each figure of a saved workspace as SVG, PDF and PNG with figures.json, twice the same bytes; each file\'s manifest intact and figures.json\'s; the SVG the window wrote, byte for byte but for its manifest\'s time, and each panel the window\'s drawing', `exit ${f1.code}; ${listed(out('fig1')).join(', ')}; ${sameFiles(out('fig1'), out('fig2')) ? 'twice the same' : 'not the same twice'}; manifests ${agree ? 'intact, figures.json\'s' : 'differ'}; SVG ${unmanifested(svg) === unmanifested(windowSVG) ? 'the window\'s' : 'not the window\'s'}; drawings ${digests(embedded.svg) === digests(fromWindow) ? 'the window\'s' : 'differ'}`,
+        f1.code === 0 && f2.code === 0 && listed(out('fig1')).join() === 'Figure_1.pdf,Figure_1.png,Figure_1.svg,figures.json' && sameFiles(out('fig1'), out('fig2')) && agree && doc.format === 'mavescape-figures' && recF.outputs.length === 4 && unmanifested(svg) === unmanifested(windowSVG) && digests(embedded.svg) === digests(fromWindow) && embedded.svg.panels.length === 4);
+      const none = await mavescape(['export', '--format', 'figures', '--out', out('fig3'), saved]);
+      const refused = await mavescape(['export', '--format', 'figures', '--run', 'Run 1', '--out', out('fig4'), windowFigure.archive]);
+      check('--format figures: a workspace without figures exits 1, export.json saying so; a run, condition, details or --strict given exits 2', `exit ${none.code}: ${JSON.parse(readFileSync(join(out('fig3'), 'export.json'), 'utf8')).problems.join(' ').slice(0, 80)}; exit ${refused.code}: ${refused.stderr.trim().split('\n')[0].slice(0, 80)}`, none.code === 1 && /no figures/.test(JSON.parse(readFileSync(join(out('fig3'), 'export.json'), 'utf8')).problems.join(' ')) && refused.code === 2 && refused.stderr.trim());
+    } else {
+      check('mavescape export --format figures: the window wrote a figure to export again', 'the window\'s figure was not written', false);
+    }
+    // --format report (wave 6, slice 4): the workspace's report, as the window wrote it into the archive.
+    if (windowFigure) {
+      const p1 = await mavescape(['export', '--format', 'report', '--out', out('rep1'), '--time', TIME, windowFigure.archive]);
+      const p2 = await mavescape(['export', '--format', 'report', '--out', out('rep2'), '--time', TIME, windowFigure.archive]);
+      const { report } = await readArchive(readFileSync(windowFigure.archive));
+      const md = existsSync(join(out('rep1'), 'report.md')) ? readFileSync(join(out('rep1'), 'report.md'), 'utf8') : '';
+      const bib = existsSync(join(out('rep1'), 'report.bib')) ? readFileSync(join(out('rep1'), 'report.bib'), 'utf8') : '';
+      const refusedReport = await mavescape(['export', '--format', 'report', '--condition', '1', '--out', out('rep3'), windowFigure.archive]);
+      check('mavescape export --format report: the workspace\'s report (report.md) and its references (report.bib), twice the same bytes, as the window wrote them into its archive; a run or condition given exits 2', `exit ${p1.code}; ${listed(out('rep1')).join(', ')}; ${sameFiles(out('rep1'), out('rep2')) ? 'twice the same' : 'not the same twice'}; ${md === report?.markdown && bib === report?.bibtex ? 'the archive\'s' : 'not the archive\'s'}; ${md.split('\n')[0]}; exit ${refusedReport.code}`,
+        p1.code === 0 && p2.code === 0 && listed(out('rep1')).join() === 'report.bib,report.md' && sameFiles(out('rep1'), out('rep2')) && md === report?.markdown && bib === report?.bibtex && /^# Methods: /.test(md) && /## Figures/.test(md) && refusedReport.code === 2);
+    }
+    // mavescape verify (wave 6, slice 6): a certificate Node writes of the window's workspace, verified
+    // without a window (exit 0); tampered (exit 1, the difference listed); without its tables (exit 2,
+    // then 0 with --data); a wrong command line (exit 2).
+    if (windowFigure) {
+      const archived = await readArchive(readFileSync(windowFigure.archive));
+      const software = { version: archived.manifest.software?.version, commit: archived.manifest.software?.commit ?? '' };
+      const file = async (sha) => archived.sources.get(sha) ?? null;
+      const made = await writeCertificate(archived.ws, file, { software, review: true });
+      const bare = await writeCertificate(archived.ws, file, { software, tables: false });
+      mkdirSync(out('cert'), { recursive: true });
+      const certPath = join(out('cert'), 'grb2.certificate.msz');
+      const tamperedPath = join(out('cert'), 'tampered.certificate.msz');
+      const barePath = join(out('cert'), 'bare.certificate.msz');
+      writeFileSync(certPath, made.bytes);
+      writeFileSync(tamperedPath, await repack(made.bytes, (files) => tamperings().find((t) => t.id === 'number-refingerprinted').edit(files, made.certificate)));
+      writeFileSync(barePath, bare.bytes);
+      const table = bare.certificate.inputs.find((i) => i.role === 'table');
+      mkdirSync(out('certdata'), { recursive: true });
+      writeFileSync(join(out('certdata'), 'counts.csv'), archived.sources.get(table.sha256));
+      const ok = await mavescape(['verify', '--report', join(out('cert'), 'verified.json'), certPath]);
+      const verified = JSON.parse(readFileSync(join(out('cert'), 'verified.json'), 'utf8'));
+      const tampered = await mavescape(['verify', tamperedPath]);
+      const missing = await mavescape(['verify', barePath]);
+      const given = await mavescape(['verify', '--data', out('certdata'), barePath]);
+      const wrong = [await mavescape(['verify']), await mavescape(['verify', join(out('certdata'), 'counts.csv')]), await mavescape(['verify', windowFigure.archive])];
+      check('mavescape verify: a certificate of the window\'s workspace (Node\'s) verified without a window, exit 0, every number identical, --report its JSON; tampered (a score\'s last bit, the fingerprint made again), exit 1 and the number listed; without its tables, exit 2 naming the table, then exit 0 with --data; no certificate, a table, an archive that is not a certificate: exit 2 with the reason',
+        `exit ${ok.code}: ${ok.stdout.split('\n')[1]?.slice(0, 90)}; tampered exit ${tampered.code}: ${tampered.stdout.split('\n').find((l) => /certified,/.test(l))?.trim().slice(0, 100)}; without tables exit ${missing.code}, with --data ${given.code}; wrong ${wrong.map((w) => w.code).join(', ')}`,
+        ok.code === 0 && /^Verified: all/m.test(ok.stdout) && verified.verdict === 'verified' && verified.numbers.same === made.certificate.total
+        && tampered.code === 1 && /Not verified: 1 number differs/.test(tampered.stdout) && /: the score of p\.[^:]+: .* certified, .* now/.test(tampered.stdout)
+        && missing.code === 2 && missing.stdout.includes(table.fileName) && /Not checkable/.test(missing.stdout) && given.code === 0
+        && wrong.every((w) => w.code === 2 && (w.stderr.trim() || /not a certificate/.test(w.stderr + w.stdout))));
+      // The review report (wave 6, slice 7): written by mavescape verify --review of the certificate
+      // verified, and by mavescape export --format review of the workspace, each Node's bytes.
+      const reviewPath = join(out('cert'), 'grb2.review.html');
+      const reviewed = await mavescape(['verify', '--review', reviewPath, certPath]);
+      const exported = await mavescape(['export', '--format', 'review', '--out', out('rev'), windowFigure.archive]);
+      const notVerified = await mavescape(['verify', '--review', join(out('cert'), 'tampered.review.html'), tamperedPath]);
+      const fromVerify = existsSync(reviewPath) ? readFileSync(reviewPath, 'utf8') : '';
+      const fromExport = existsSync(join(out('rev'), 'review.html')) ? readFileSync(join(out('rev'), 'review.html'), 'utf8') : '';
+      check('mavescape verify --review writes the review report of the certificate verified, and mavescape export --format review the workspace\'s, each the same bytes as Node\'s; a certificate that does not verify gives none (exit 1)',
+        `exit ${reviewed.code}: ${fromVerify === made.review ? 'Node\'s bytes' : 'not Node\'s'}; export exit ${exported.code}: ${fromExport === made.review ? 'Node\'s bytes' : 'not Node\'s'}; tampered exit ${notVerified.code}, ${existsSync(join(out('cert'), 'tampered.review.html')) ? 'a review written' : 'no review'}`,
+        reviewed.code === 0 && fromVerify === made.review && exported.code === 0 && fromExport === made.review && notVerified.code === 1 && !existsSync(join(out('cert'), 'tampered.review.html')));
+    }
   }
 } catch (error) {
   check('the headless runs ran to the end', error.stack ?? error.message, false);

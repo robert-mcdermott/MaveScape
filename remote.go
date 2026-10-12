@@ -248,9 +248,10 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		h.respond(w, r, event)
 		return
 	}
-	if (action.output || action.reads) && !h.hasToken(r) {
+	reads := action.readsFiles(request.Args)
+	if (action.output || reads) && !h.hasToken(r) {
 		what := "Writing files"
-		if action.reads {
+		if reads {
 			what = "Reading files"
 		}
 		writeError(w, http.StatusUnauthorized, what+" needs the "+remoteTokenHeader+" header with the token MaveScape printed when it started (also in remote.json).")
@@ -265,7 +266,7 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		defer release()
 		event.Output = output
 	}
-	if action.reads {
+	if reads {
 		files, err := h.openFiles(request.Args)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())

@@ -11,7 +11,7 @@ import { coversPosition, validateDesign, summarizeDesign } from '../lib/design.j
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
 import { addRun, makeRun, nextRunName, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
-import { acknowledgeFinding, addSelection, addTarget, createWorkspace, rename, setDeposit, setDesign } from '../lib/workspace.js';
+import { acknowledgeFinding, addSelection, addTarget, createWorkspace, removeFigure, rename, saveFigure, setDeposit, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
 import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
@@ -62,6 +62,14 @@ import { handOff, sessionFile } from './proteoscope.js';
 import { structureWords, viewWords } from '../lib/structure-record.js';
 import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
+import { addPanel, checkFigure, createFigure, FIGURE_SIZES, figureSize, mm, panelLetters, panelSummary, PANEL_KINDS, PANEL_PLOTS, pngSize, removePanel, toMM, updatePanel } from '../lib/figures.js';
+import { drawFigure, drawStructureImage, exportFigure, readFigureFile, rebuildFigure, rebuildWords } from './figure-data.js';
+import { comparisonForReport, keepInReport, removeFromReport, reportOf, robustnessForReport } from './report.js';
+import { analysisName } from '../lib/report.js';
+import { archiveState, deleteCheckpoint, diffWith, keepCheckpoint, stateOf } from './diff.js';
+import { certificateState, makeCertificate, reviewName, verifyBytes } from './certificate.js';
+import { shortFingerprint } from '../lib/certificate.js';
+import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
 import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
@@ -73,7 +81,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const ONE_TO_THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter', X: 'Ter' };
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure' };
+const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure', figures: 'figures', figure: 'figures', report: 'report', methods: 'report' };
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -181,6 +189,189 @@ export function installRemote(app) {
       });
       return { contrast: d.name, method: d.method, compared, lowerAtQ05: lower, higherAtQ05: higher, ...(d.note ? { note: d.note } : {}) };
     });
+  }
+
+  // --- Figures (wave 6, slice 1) ---------------------------------------------------------------
+
+  const figureById = (id) => (ws().figures ?? []).find((f) => f.id === id) ?? null;
+
+  function resolveFigure(ref) {
+    const list = ws().figures ?? [];
+    if (!list.length) throw new ActionError('The workspace has no figures: create_figure makes one.');
+    const byId = list.find((f) => f.id === ref);
+    if (byId) return byId;
+    const name = choose(String(ref), list.map((f) => f.name), 'figure');
+    return list.find((f) => f.name === name);
+  }
+
+  function checked(fig) {
+    try {
+      return checkFigure(fig);
+    } catch (error) {
+      throw new ActionError(error.message);
+    }
+  }
+
+  // A page's size and text from width_mm, height_mm and text; the panels kept on it.
+  function pageOf(fig, args) {
+    let next = fig;
+    for (const [key, field] of [['width_mm', 'width'], ['height_mm', 'height']]) {
+      if (args[key] === undefined) continue;
+      const v = Number(args[key]);
+      if (!(v >= 25 && v <= 700)) throw new ActionError(`${key} is from 25 to 700 mm.`);
+      next = { ...next, size: 'custom', [field]: Math.round(mm(v) * 100) / 100 };
+    }
+    if (args.text !== undefined) {
+      const t = Number(args.text);
+      if (!(t >= 4 && t <= 36)) throw new ActionError('text is from 4 to 36 pt.');
+      next = { ...next, text: t };
+    }
+    if (next !== fig) next = { ...next, panels: next.panels.map((p) => ({ ...p, w: Math.min(p.w, next.width - p.x), h: Math.min(p.h, next.height - p.y) })) };
+    return next;
+  }
+
+  // Where a panel is, from x_mm, y_mm, width_mm and height_mm (points; only those given).
+  function placement(args, fig, panel = null) {
+    const out = {};
+    for (const [key, field] of [['x_mm', 'x'], ['y_mm', 'y'], ['width_mm', 'w'], ['height_mm', 'h']]) {
+      if (args[key] === undefined) continue;
+      const v = Number(args[key]);
+      if (!Number.isFinite(v) || v < 0) throw new ActionError(`${key} is a number of millimeters.`);
+      out[field] = Math.round(mm(v) * 100) / 100;
+    }
+    const at = { x: 8, y: 8, w: fig.width - 16, h: 60, ...(panel ?? {}), ...out };
+    if (at.x + at.w > fig.width + 0.5 || at.y + at.h > fig.height + 0.5) throw new ActionError(`The panel would leave the page (${toMM(fig.width)} × ${toMM(fig.height)} mm).`);
+    return out;
+  }
+
+  // A map panel's fields from an action's arguments (a change to one: only those given).
+  async function mapPanelFrom(args, panel) {
+    const run = args.run !== undefined || !panel ? resolveRun(args.run) : ws().runs.find((r) => r.id === panel.run);
+    if (!run) throw new ActionError(`The panel's run ${panel.run} is no longer in the workspace: give run.`);
+    const { results: own } = await resultsOf(run);
+    const results = proteinView(own) ?? own;
+    const out = panel ? {} : { kind: 'map', rowOrder: 'biochemical', palette: 'rdbu', tracks: [] };
+    if (!panel || args.run !== undefined) out.run = run.id;
+    if (args.contrast !== undefined && args.contrast !== null) {
+      const names = (results.differential ?? []).map((d) => d.name);
+      if (!names.length) throw new ActionError(`${run.name} compares no conditions: it has no difference to draw.`);
+      Object.assign(out, { contrast: names.indexOf(choose(args.contrast, names, 'contrast')), condition: undefined, colorBy: undefined });
+    } else if (args.condition !== undefined || !panel) {
+      Object.assign(out, { condition: resolveCondition(results, args.condition), contrast: undefined, colorBy: panel?.colorBy ?? 'score' });
+    }
+    if (args.color_by !== undefined) out.colorBy = choose(args.color_by, Object.keys(COLOR_BY).filter((k) => k !== 'differential'), 'coloring');
+    if (args.rows !== undefined) out.rowOrder = choose(args.rows, Object.keys(ROW_ORDERS), 'row order');
+    if (args.palette !== undefined) out.palette = choose(args.palette, ['rdbu', 'puor'], 'palette');
+    const length = buildMapModel(results, run.inputs.design, { condition: 0 }).length;
+    for (const key of ['from', 'to']) {
+      if (args[key] === undefined) continue;
+      if (args[key] === null) {
+        out[key] = undefined;
+        continue;
+      }
+      const v = Number(args[key]);
+      if (!Number.isInteger(v) || v < 1 || v > length) throw new ActionError(`${key} is a position from 1 to ${length}.`);
+      out[key] = v;
+    }
+    const from = out.from ?? panel?.from ?? 1;
+    const to = out.to ?? panel?.to ?? length;
+    if (from > to) throw new ActionError(`from (${from}) is after to (${to}).`);
+    if (args.tracks !== undefined) {
+      const condition = out.condition ?? panel?.condition ?? 0;
+      const state = await runTrackState(app, run, { condition: Number.isInteger(condition) ? condition : 0 });
+      const ids = state.arranged.map((t) => t.id);
+      const wanted = args.tracks === 'shown' || (Array.isArray(args.tracks) && args.tracks.length === 1 && args.tracks[0] === 'shown') ? state.arranged.filter((t) => t.shown).map((t) => t.id) : args.tracks;
+      if (!Array.isArray(wanted)) throw new ActionError('tracks is a list of track ids (list_tracks gives them), or "shown".');
+      for (const id of wanted) if (!ids.includes(id)) throw new ActionError(`"${id}" is not a track of ${run.name}: its tracks are ${ids.join(', ')}.`);
+      out.tracks = wanted;
+    }
+    for (const key of ['title']) if (args[key] !== undefined) out[key] = args[key] === null ? undefined : String(args[key]);
+    for (const key of ['medians', 'legend']) if (args[key] !== undefined) out[key] = args[key] === false ? false : undefined;
+    return out;
+  }
+
+  // A plot panel's fields from add_figure_panel's arguments (wave 6, slice 2).
+  async function plotPanelFrom(kind, args) {
+    const plotOf = (fallback) => (args.plot ? choose(args.plot, Object.keys(PANEL_PLOTS[kind]), 'plot') : fallback);
+    if (kind === 'qc') {
+      // The subject: a run by name, "counts", or the latest run.
+      let sub;
+      if (args.subject === undefined) sub = qcSubjects(ws())[0];
+      else if (/^counts$/i.test(String(args.subject))) sub = qcSubjects(ws()).find((o) => o.id === 'counts');
+      else sub = qcSubjects(ws()).find((o) => o.id === `run:${resolveRun(args.subject).id}`);
+      if (!sub) throw new ActionError('There is nothing to check: score a run, or set the design of the counts.');
+      const inputs = qcInputsOf(ws(), sub);
+      if (inputs.problem) throw new ActionError(inputs.problem);
+      const entry = await computeQc(app, inputs);
+      if (entry.status !== 'done') throw new ActionError(`Quality control could not be computed: ${entry.message}`);
+      const findings = findingsFrom(entry.qc, withDefaultThresholds(ws().qc?.thresholds), { acknowledged: ws().qc?.acknowledged });
+      if (!args.finding) throw new ActionError(`Name the finding: ${findings.map((f) => f.id).join(', ')}.`);
+      const finding = findings.find((f) => f.id === args.finding) ?? findings.find((f) => f.title === choose(args.finding, findings.map((x) => x.title), 'finding'));
+      if (!qcCharts(finding.plot, entry.qc, withDefaultThresholds(ws().qc?.thresholds)).charts.length) throw new ActionError(`The finding "${finding.title}" has no chart (it is a table, or there is nothing to draw).`);
+      return { kind, subject: sub.run ? sub.run.id : 'counts', finding: finding.id, findingTitle: finding.title, ...(finding.plot === 'agreement' ? { pair: Math.max(0, Math.round(Number(args.pair ?? 1)) - 1) } : {}), h: 170 };
+    }
+    if (kind === 'scores') {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      const plot = plotOf('distribution');
+      if (plot === 'volcano') {
+        const names = (results.differential ?? []).map((d) => d.name);
+        if (!names.length) throw new ActionError(`${run.name} compares no conditions: it has no volcano.`);
+        return { kind, run: run.id, plot, contrast: args.contrast ? names.indexOf(choose(args.contrast, names, 'contrast')) : 0, h: 180 };
+      }
+      return { kind, run: run.id, plot, condition: resolveCondition(results, args.condition), h: 150 };
+    }
+    if (kind === 'compare') {
+      if (args.a !== undefined || args.b !== undefined || args.scale !== undefined) await actions.compare({ a: args.a, b: args.b, ...(args.scale ? { scale: args.scale } : {}) });
+      const pair = currentPair(app);
+      if (!pair) throw new ActionError('There is nothing compared: give a and b (as compare takes them).');
+      const plot = plotOf('agreement');
+      const c = await computeComparison(app, pair, currentFilters(app), plot.startsWith('map-') ? 'protein' : null, currentScale(app));
+      if (c.error) throw new ActionError(c.error);
+      return { kind, a: pair.a, b: pair.b, scale: currentScale(app), filters: currentFilters(app), plot, labels: { a: c.a.label, b: c.b.label }, h: 200 };
+    }
+    if (kind === 'variant') {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      if (!args.variant) throw new ActionError('Name the variant (its MAVE-HGVS name, such as p.Trp36Ala).');
+      const name = String(args.variant).startsWith('p.') || String(args.variant).includes(':') || /^[cgnmr]\./.test(String(args.variant)) ? String(args.variant) : `p.${args.variant}`;
+      const view = proteinView(results);
+      if (!results.variants.key.includes(name) && !view?.variants.key.includes(name)) throw new ActionError(`${name} is not in ${run.name}.`);
+      return { kind, run: run.id, condition: resolveCondition(results, args.condition), variant: name, plot: plotOf('evidence'), w: 240, h: 130 };
+    }
+    if (kind === 'structure') {
+      const views = ws().structureViews ?? [];
+      if (!views.length) throw new ActionError('No saved structure view: save one first (save_structure_view).');
+      const name = args.view ? choose(args.view, views.map((v) => v.name), 'saved view') : views.at(-1).name;
+      const view = views.find((v) => v.name === name);
+      const image = await drawStructureImage(app, view.id);
+      return { kind, view: view.id, image, w: 220, h: 220 };
+    }
+    throw new ActionError(`A panel is ${Object.keys(PANEL_KINDS).join(', ')}.`);
+  }
+
+  // A figure as figures returns it: in millimeters, its panels lettered, what is wrong with each.
+  async function figureData(fig) {
+    const drawn = await drawFigure(app, fig);
+    const at = (v) => toMM(v);
+    return {
+      id: fig.id, name: fig.name, size: fig.size, widthMm: at(fig.width), heightMm: at(fig.height), text: fig.text, letters: fig.letters,
+      smallestText: drawn.smallest === null ? null : Math.round(drawn.smallest * 10) / 10,
+      panels: fig.panels.map((p) => {
+        const d = drawn.panels.find((x) => x.id === p.id);
+        const { id, kind, x, y, w, h, ...options } = p;
+        return { id, letter: d?.letter ?? null, kind, shows: panelSummary(p, ws()), xMm: at(x), yMm: at(y), widthMm: at(w), heightMm: at(h), options, notes: d?.notes ?? [] };
+      }),
+      notes: drawn.notes,
+      description: drawn.description,
+      // The figure as the workspace keeps it (FORMATS.md, "Figures").
+      document: fig,
+    };
+  }
+
+  async function showFigure(id, panel = null) {
+    app.figuresView = { figure: id, panel };
+    await show('figures');
   }
 
   // Waits for the views to draw what an action changed (the store notifies them synchronously;
@@ -690,6 +881,144 @@ export function installRemote(app) {
       const removed = removeView(app, views.find((v) => v.name === name).id);
       await settle();
       return { message: removed.message, data: { removed: name, views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
+    },
+
+    // --- Figures (wave 6, slice 1) -----------------------------------------------------------------
+
+    async figures(args) {
+      const list = args.figure ? [resolveFigure(args.figure)] : (ws().figures ?? []);
+      const out = [];
+      for (const fig of list) out.push(await figureData(fig));
+      return { message: list.length ? out.map((f) => f.description).join(' ') : 'The workspace has no figures: create_figure makes one.', data: { figures: out } };
+    },
+
+    async create_figure(args) {
+      const size = args.size ? choose(args.size, FIGURE_SIZES.map((x) => x.id), 'page size') : 'double';
+      const fig = pageOf(createFigure(args.name || `Figure ${(ws().figures?.length ?? 0) + 1}`, size), args);
+      if ((ws().figures ?? []).some((f) => f.name === fig.name)) throw new ActionError(`There is a figure "${fig.name}" already: name this one otherwise.`);
+      store.commit(saveFigure(ws(), fig, `Made the figure "${fig.name}" (${toMM(fig.width)} × ${toMM(fig.height)} mm)`), 'New figure');
+      await showFigure(fig.id);
+      return { message: `Made the figure "${fig.name}": ${toMM(fig.width)} × ${toMM(fig.height)} mm, text ${fig.text} pt. Add panels with add_figure_panel.`, data: await figureData(figureById(fig.id)) };
+    },
+
+    async add_figure_panel(args) {
+      const kind = args.kind ? choose(args.kind, Object.keys(PANEL_KINDS), 'kind of panel') : 'map';
+      let panel;
+      if (kind === 'text') {
+        if (typeof args.text !== 'string' || !args.text.trim()) throw new ActionError('A text panel needs its text.');
+        panel = { kind: 'text', text: args.text };
+      } else if (kind === 'map') {
+        panel = await mapPanelFrom(args, null);
+      } else {
+        panel = await plotPanelFrom(kind, args);
+      }
+      const existing = args.figure ? resolveFigure(args.figure) : null;
+      let fig = existing ?? createFigure(`Figure ${(ws().figures?.length ?? 0) + 1}`, 'double');
+      Object.assign(panel, placement(args, fig));
+      const added = addPanel(fig, panel);
+      fig = checked(added.figure);
+      const what = panelSummary(added.panel, ws());
+      store.commit(saveFigure(ws(), fig, existing ? `Added to the figure "${fig.name}" ${what}` : `Made the figure "${fig.name}" with ${what}`), existing ? 'Add to figure' : 'New figure');
+      await showFigure(fig.id, added.panel.id);
+      const data = await figureData(figureById(fig.id));
+      const placed = data.panels.find((p) => p.id === added.panel.id);
+      return { message: `${placed.letter ? `Panel ${placed.letter}` : 'A panel'} of "${fig.name}": ${what}.${placed.notes.length ? ` ${placed.notes.join(' ')}` : ''}`, data: { figure: data.name, panel: placed } };
+    },
+
+    async set_figure(args) {
+      let fig = resolveFigure(args.figure);
+      if (args.delete === true) {
+        store.commit(removeFigure(ws(), fig.id), 'Delete figure');
+        await settle();
+        return { message: `Deleted the figure "${fig.name}".`, data: { deleted: fig.name, figures: (ws().figures ?? []).map((f) => f.name) } };
+      }
+      const before = fig;
+      const words = [];
+      if (args.name !== undefined) {
+        const name = String(args.name).trim();
+        if (!name) throw new ActionError('A figure has a name.');
+        if (name !== fig.name && (ws().figures ?? []).some((f) => f.name === name)) throw new ActionError(`There is a figure "${name}" already.`);
+        if (name !== fig.name) words.push(`renamed "${name}"`);
+        fig = { ...fig, name };
+      }
+      if (args.size) {
+        const s = figureSize(choose(args.size, FIGURE_SIZES.map((x) => x.id), 'page size'));
+        fig = { ...fig, size: s.id, width: Math.round(s.width * 100) / 100, height: Math.round(s.height * 100) / 100 };
+      }
+      fig = pageOf(fig, args);
+      if (args.letters !== undefined) fig = { ...fig, letters: Boolean(args.letters) };
+      const letters = panelLetters(fig);
+      for (const change of args.panels ?? []) {
+        if (!change || typeof change !== 'object') throw new ActionError('Each change of panels is an object naming its panel.');
+        const ref = String(change.panel ?? '');
+        const target = fig.panels.find((p) => p.id === ref) ?? fig.panels.find((p) => letters.get(p.id) === ref.toUpperCase());
+        if (!target) throw new ActionError(`"${ref}" is not a panel of "${fig.name}": its panels are ${fig.panels.map((p) => `${letters.get(p.id) ?? ''} (${p.id})`).join(', ')}.`);
+        if (change.remove === true) {
+          words.push(`removed ${letters.get(target.id) ? `panel ${letters.get(target.id)}` : target.id}: ${panelSummary(target, ws())}`);
+          fig = removePanel(fig, target.id);
+          continue;
+        }
+        const patch = { ...placement(change, fig, target) };
+        if (target.kind === 'map') Object.assign(patch, await mapPanelFrom(change, target));
+        else if (target.kind !== 'text') {
+          if (change.plot !== undefined && PANEL_PLOTS[target.kind]) patch.plot = choose(change.plot, Object.keys(PANEL_PLOTS[target.kind]), 'plot');
+          if (change.title !== undefined) patch.title = change.title === null ? undefined : String(change.title);
+          if (change.pair !== undefined && target.kind === 'qc') patch.pair = Math.max(0, Math.round(Number(change.pair)) - 1);
+        } else {
+          if (change.text !== undefined) patch.text = String(change.text);
+          if (change.size !== undefined) patch.size = Number(change.size);
+          if (change.bold !== undefined) patch.bold = Boolean(change.bold) || undefined;
+          if (change.align !== undefined) patch.align = choose(change.align, ['left', 'center', 'right'], 'alignment');
+        }
+        if (change.letter !== undefined) patch.letter = change.letter === false ? false : undefined;
+        fig = updatePanel(fig, target.id, patch);
+      }
+      checked(fig);
+      store.commit(saveFigure(ws(), fig, words.length ? `The figure "${before.name}": ${words.join('; ')}` : null), 'Edit figure');
+      await showFigure(fig.id);
+      const data = await figureData(figureById(fig.id));
+      return { message: data.description, data };
+    },
+
+    async export_figure(args) {
+      const fig = resolveFigure(args.figure);
+      const format = args.format ? choose(args.format, ['svg', 'pdf', 'png', 'json'], 'format') : (String(args.path ?? '').match(/\.(svg|pdf|png|json)$/i)?.[1].toLowerCase() ?? null);
+      if (!format) throw new ActionError('Say the format (svg, pdf, png, or json for its manifest), or give a path ending in one.');
+      let out;
+      try {
+        out = await exportFigure(app, fig, format, args.dpi === undefined ? {} : { dpi: Number(args.dpi) });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await showFigure(fig.id);
+      const size = format === 'png' ? `, ${pngSize(fig, out.dpi).width} × ${pngSize(fig, out.dpi).height} pixels at ${out.dpi} dpi` : '';
+      return { file: out.data, message: `"${fig.name}" as ${format === 'json' ? 'its manifest (JSON)' : format.toUpperCase()} (${toMM(fig.width)} × ${toMM(fig.height)} mm${size}), its manifest's fingerprint ${out.manifest.fingerprint.slice(0, 12)}….${out.notes.length ? ` ${out.notes.join(' ')}` : ''}` };
+    },
+
+    // A figure MaveScape exported, read back (wave 6, slice 3): what it shows and where it came
+    // from, whether its manifest is as written, what changed here since; rebuilt on request.
+    async check_figure(args, event) {
+      const files = event.files ?? [];
+      if (files.length !== 1) throw new ActionError('Give one figure file (SVG, PDF, PNG or its manifest as JSON) in paths.');
+      const response = await fetch(files[0].url);
+      if (!response.ok) throw new ActionError(`${files[0].name} could not be read (HTTP ${response.status}).`);
+      const read = readFigureFile(app, new Uint8Array(await response.arrayBuffer()));
+      if (!read) throw new ActionError(`${files[0].name} carries no MaveScape figure manifest.`);
+      const { manifest: m, comparison: c } = read;
+      const data = {
+        figure: m.figure.name, created: m.created, software: m.software, workspace: { ...m.workspace, same: c.sameWorkspace }, fingerprint: m.fingerprint, intact: c.intact, problem: c.problem,
+        panels: c.panels.map((p) => ({ letter: p.letter, kind: p.kind, shows: p.shows, status: p.status, changes: p.changes })),
+      };
+      let words = [];
+      if (args.rebuild === true) {
+        const report = await rebuildFigure(app, m);
+        words = rebuildWords(report);
+        data.rebuilt = { figure: report.figure.name, id: report.figure.id, panels: report.drawings.map((d) => ({ letter: d.letter, same: d.same })), words };
+        await showFigure(report.figure.id);
+      }
+      const changed = c.panels.filter((p) => p.status !== 'unchanged');
+      const message = `${files[0].name}: "${m.figure.name}", ${m.panels.length} panels, exported by MaveScape ${m.software?.version ?? '?'}${m.created ? ` on ${m.created.slice(0, 10)}` : ''} from "${m.workspace?.name}"${c.sameWorkspace ? ' (this workspace)' : ''}. ${c.intact ? 'Its manifest is as written.' : c.problem} ${changed.length ? changed.map((p) => `${p.letter ? `Panel ${p.letter}` : 'A panel'}: ${p.changes.join('; ')}.`).join(' ') : 'Nothing it was drawn from changed here.'}${words.length ? ` Rebuilt: ${words.join(' ')}` : ''}`;
+      return { message, data };
     },
 
     // Proteoscope (wave 5, slice 6): the view shown handed to a Proteoscope running on this computer.
@@ -1336,7 +1665,10 @@ export function installRemote(app) {
       await settle();
       const { summary } = state;
       const data = JSON.parse(robustnessJSON(summary, run, state.results.map(({ kind, picks, label, ok, error }) => ({ kind, picks, label, ok, error }))));
-      return { message: `${run.name}, checked against ${summary.total - 1} alternative analyses. ${summary.targets.map((t) => `${t.name}: ${t.text}`).join(' ')}${state.notes?.length ? ` ${state.notes.join(' ')}` : ''}`, data: { ...data, notes: state.notes ?? [] } };
+      // Kept in the workspace's report (wave 6, slice 4).
+      const inReport = args.report === true ? keepInReport(app, robustnessForReport(run, state)) : null;
+      if (inReport) await settle();
+      return { message: `${run.name}, checked against ${summary.total - 1} alternative analyses. ${summary.targets.map((t) => `${t.name}: ${t.text}`).join(' ')}${state.notes?.length ? ` ${state.notes.join(' ')}` : ''}${inReport ? ' Kept in the report.' : ''}`, data: { ...data, notes: state.notes ?? [], ...(inReport ? { report: inReport } : {}) } };
     },
 
     // Compares two sets of scores (wave 4, slices 1–3): each side a run's condition or replicate by
@@ -1409,13 +1741,204 @@ export function installRemote(app) {
         ? `${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared${c.matched.compared !== c.matched.n ? ` of ${c.matched.n} scored on both sides` : ''}${c.scale?.applied ? ` (${c.scale.anchors ? 'rescaled by their anchors' : 'stated to be on one scale'})` : ''}. ${agreement}.${discordance}${classes}${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
         : `${c.a.label} and ${c.b.label} cannot be compared: ${flagged.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`;
       const { software, ...data } = JSON.parse(comparisonJSON(c));
-      return { message, data };
+      // Kept in the workspace's report (wave 6, slice 4).
+      if (args.report === true) {
+        if (!s) throw new ActionError(`${c.a.label} and ${c.b.label} cannot be compared, so there is nothing to keep in the report.`);
+        data.report = keepInReport(app, comparisonForReport(c, pair));
+        await settle();
+      }
+      return { message: `${message}${data.report ? ' Kept in the report.' : ''}`, data };
+    },
+
+    // Certificates (wave 6, slice 6; ui/certificate.js): the workspace certified, every number
+    // computed again from the files the library keeps, written where the caller asks; tables: false
+    // names the count tables by their SHA-256 only.
+    async certify(args) {
+      if (!ws().runs.length) throw new ActionError('There is no score run to certify: score one first.');
+      const tables = args.tables !== false;
+      let made;
+      try {
+        made = await makeCertificate(app, { tables });
+      } catch (error) {
+        throw new ActionError(`The certificate could not be made: ${error.message}`);
+      }
+      const c = made.certificate;
+      const used = c.inputs.filter((i) => i.needed);
+      return {
+        file: made.bytes,
+        message: `Certified "${ws().name}": ${plural(c.total, 'number')} computed again from ${plural(used.length, 'file')}${tables ? '' : ' (the tables named by their SHA-256 only)'}; fingerprint ${c.fingerprint}.${made.notes.length ? ` Notes: ${made.notes.join(' ')}` : ''}`,
+        data: { name: made.name, fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), created: c.created, software: c.software, total: c.total, tables, workspace: c.workspace, inputs: c.inputs, history: c.history, checkpoints: c.checkpoints, notChecked: c.notChecked, notes: c.notes },
+      };
+    },
+
+    // The review report (wave 6, slice 7; lib/review.js): the certificate's numbers, each traced, as
+    // one self-contained HTML file written where the caller asks; tables: false, the report of the
+    // certificate that names the tables by their SHA-256 only.
+    async review_report(args) {
+      if (!ws().runs.length) throw new ActionError('There is no score run to report: score one first.');
+      const tables = args.tables !== false;
+      let made;
+      try {
+        made = await makeCertificate(app, { tables, review: true });
+      } catch (error) {
+        throw new ActionError(`The review report could not be made: ${error.message}`);
+      }
+      const c = made.certificate;
+      return {
+        file: made.review,
+        message: `The review report of "${ws().name}": the ${c.total.toLocaleString('en-US')} numbers of the certificate ${c.fingerprint} (certify writes it), each traced.`,
+        data: { name: reviewName(made.name), fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), total: c.total, tables, bytes: new TextEncoder().encode(made.review).length },
+      };
+    },
+
+    // A certificate verified: paths, the certificate (.msz) and the files it names that it does not
+    // hold (a folder of them, or each), found by their SHA-256; the library's too (library: false,
+    // only those given, as someone without this library verifies it). Every number
+    // computed again and compared bit for bit: verdict verified, differs or incomplete.
+    async verify_certificate(args, event) {
+      const files = event.files ?? [];
+      if (!files.length) throw new ActionError('Give the certificate (.msz) in paths, and after it the tables it names when it was made without them.');
+      const read = [];
+      for (const file of files) {
+        const response = await fetch(file.url);
+        if (!response.ok) throw new ActionError(`${file.name} could not be read (HTTP ${response.status}).`);
+        read.push({ name: file.name, bytes: new Uint8Array(await response.arrayBuffer()) });
+      }
+      const certificates = read.filter((f) => /\.msz$/i.test(f.name));
+      if (certificates.length !== 1) throw new ActionError(`Give one certificate (.msz) in paths${certificates.length ? `, not ${certificates.length}` : ''}.`);
+      let report;
+      try {
+        ({ report } = await verifyBytes(app, certificates[0].bytes, { name: certificates[0].name, beside: read.filter((f) => f !== certificates[0]), library: args.library !== false }));
+      } catch (error) {
+        throw new ActionError(`${certificates[0].name}: ${error.message}`);
+      }
+      if (args.show !== false) await app.setMode('report');
+      await settle();
+      // With review, the review report of a certificate verified (mavescape verify --review).
+      return { message: `${certificates[0].name}: ${report.summary}`, data: args.review === true ? { ...report, review: certificateState(app).verified?.review ?? null } : report };
+    },
+
+    // Checkpoints (wave 6, slice 5): name keeps one of the analysis as it stands; remove deletes one
+    // (by name or id); either way, the checkpoints kept.
+    async checkpoint(args) {
+      const find = (text) => {
+        const list = ws().checkpoints ?? [];
+        const at = list.findIndex((c) => c.id === text);
+        if (at >= 0) return list[at];
+        return list[list.map((c) => c.name).indexOf(choose(String(text), list.map((c) => c.name), 'checkpoint'))];
+      };
+      let message;
+      if (args.remove !== undefined && args.remove !== null) {
+        if (!(ws().checkpoints ?? []).length) throw new ActionError('No checkpoint is kept.');
+        const gone = find(args.remove);
+        deleteCheckpoint(app, gone.id);
+        message = `Deleted the checkpoint "${gone.name}".`;
+      } else if (args.name !== undefined && args.name !== null) {
+        const id = keepCheckpoint(app, args.name);
+        const c = ws().checkpoints.find((x) => x.id === id);
+        message = `Checkpoint "${c.name}": the analysis as it stands (state SHA-256 ${c.sha256.slice(0, 12)}…, after history entry ${c.head ? c.head.slice(0, 12) : '—'}…).`;
+      }
+      await settle();
+      const list = (ws().checkpoints ?? []).map((c) => ({ id: c.id, name: c.name, created: c.created, sha256: c.sha256, head: c.head }));
+      return { message: message ?? (list.length ? `${plural(list.length, 'checkpoint')}: ${list.map((c) => `"${c.name}" (${c.created.slice(0, 16).replace('T', ' ')})`).join(', ')}.` : 'No checkpoint is kept: name one to keep the analysis as it stands.'), data: { checkpoints: list } };
+    },
+
+    // What changed between two states of the analysis (wave 6, slice 5): from a checkpoint (the
+    // latest if not given) to now or another checkpoint; or between two workspace archives (paths).
+    // For each table's latest run, how its analysis changed and what that did to the variants and
+    // its QC. Shows the changes in the Report view.
+    async diff(args, event) {
+      let from;
+      let to;
+      const files = event.files ?? [];
+      if (files.length) {
+        if (files.length !== 2) throw new ActionError('Give two workspace archives (.msz) in paths: the earlier first.');
+        const states = [];
+        for (const file of files) {
+          const response = await fetch(file.url);
+          if (!response.ok) throw new ActionError(`${file.name} could not be read (HTTP ${response.status}).`);
+          states.push(await archiveState(app, file.name, new Uint8Array(await response.arrayBuffer())).catch((error) => {
+            throw new ActionError(`${file.name}: ${error.message}`);
+          }));
+        }
+        [from, to] = states;
+      } else {
+        const list = ws().checkpoints ?? [];
+        if (!list.length) throw new ActionError('No checkpoint is kept: keep one with checkpoint, or give two archives in paths.');
+        const find = (text) => {
+          if (text === 'now') return 'now';
+          const at = list.findIndex((c) => c.id === text);
+          return at >= 0 ? list[at].id : list[list.map((c) => c.name).indexOf(choose(String(text), list.map((c) => c.name), 'checkpoint'))].id;
+        };
+        const fromId = args.from === undefined || args.from === null ? list.at(-1).id : find(args.from);
+        if (fromId === 'now') throw new ActionError('from is a checkpoint; to can be now.');
+        const toId = args.to === undefined || args.to === null ? 'now' : find(args.to);
+        from = stateOf(app, fromId);
+        to = stateOf(app, toId);
+        if (args.show !== false) {
+          app.reportView = { from: fromId, to: toId };
+          await app.setMode('report');
+          app.store.notify(['report-view']);
+        }
+      }
+      const result = await diffWith(app, from, to);
+      await settle();
+      const { diff } = result;
+      return {
+        message: `From ${from.label} to ${to.label}: ${result.words.join(' ')}`,
+        data: {
+          from: { id: from.id, label: from.label, created: from.created },
+          to: { id: to.id, label: to.label, created: to.created },
+          same: diff.same,
+          summary: diff.summary,
+          changes: diff.changes,
+          pairs: diff.pairs,
+          words: result.words,
+          ...(files.length ? { problems: [...from.problems, ...to.problems] } : {}),
+        },
+      };
+    },
+
+    // The workspace's report (wave 6, slice 4): its methods written from the record, as the Report
+    // view shows them (Markdown, BibTeX, and each section). remove: an analysis kept in it, by id
+    // or by its words ("the comparison of Run 1 and Run 2"), taken out first.
+    async report(args) {
+      if (args.remove !== undefined && args.remove !== null) {
+        const kept = ws().analyses ?? [];
+        if (!kept.length) throw new ActionError('Nothing is kept in the report.');
+        const names = kept.map((a) => analysisName(a));
+        const text = String(args.remove).trim().toLowerCase();
+        const at = [(a, i) => a.id === args.remove, (a, i) => names[i].toLowerCase() === text, (a, i) => names[i].toLowerCase().includes(text)].reduce((found, test) => (found >= 0 ? found : kept.findIndex(test)), -1);
+        if (at < 0) throw new ActionError(`No analysis "${args.remove}" is kept in the report. Kept: ${kept.map((a, i) => `${names[i]} (${a.id})`).join('; ')}.`);
+        removeFromReport(app, kept[at].id);
+      }
+      if (args.show !== false) await app.setMode('report');
+      const report = await reportOf(app);
+      await settle();
+      return {
+        message: `${report.title}: ${report.sections.filter((x) => x.title).map((x) => x.title).join(', ')}; ${report.references.length} references. Kept in it: ${(ws().analyses ?? []).map((a) => analysisName(a)).join('; ') || 'nothing'}.`,
+        data: {
+          title: report.title,
+          sections: report.sections.map((x) => ({ id: x.id, title: x.title, blocks: x.blocks })),
+          references: report.references,
+          analyses: (ws().analyses ?? []).map((a) => ({ id: a.id, kind: a.kind, name: analysisName(a), created: a.created })),
+          markdown: report.markdown,
+          bibtex: report.bibtex,
+        },
+      };
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence', 'structure-image', 'proteoscope-session'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence', 'structure-image', 'proteoscope-session', 'report', 'report-references'];
       const what = choose(args.what, kinds, 'export');
       let file;
+      // The workspace's report (wave 6, slice 4): Markdown, or its references as BibTeX.
+      if (what === 'report' || what === 'report-references') {
+        const report = await reportOf(app);
+        return what === 'report'
+          ? { file: report.markdown, message: `The report of "${ws().name}" (Markdown): ${report.sections.filter((x) => x.title).length} sections, ${report.references.length} references.` }
+          : { file: report.bibtex, message: `The report's ${report.references.length} references (BibTeX).` };
+      }
       // The target on the structure shown (wave 5, slice 2), position by position.
       if (what === 'structure-mapping') {
         const state = structureState(app);
@@ -1429,7 +1952,7 @@ export function installRemote(app) {
         if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure.');
         const scale = args.scale === undefined || args.scale === null ? 4 : Number(args.scale);
         if (!(scale >= 1 && scale <= 8)) throw new ActionError('scale is from 1 to 8: the image\'s size against the view\'s.');
-        const panel = await figurePanel(app, { scale, legend: args.legend !== false });
+        const panel = await figurePanel(app, { scale, legend: args.legend !== false, light: args.light === true });
         return { file: panel.bytes, message: `A figure panel of ${panel.metadata.structure.name}: ${panel.metadata.image.width} × ${panel.metadata.image.height} pixels (${scale}× the view${panel.metadata.image.legend ? ', its legend below it' : ''}), what it shows written into it (PNG text "mavescape-figure-panel").` };
       }
       // The view shown as a Proteoscope session (wave 5, slice 6), whether Proteoscope runs or not.

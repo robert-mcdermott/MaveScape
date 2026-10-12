@@ -24,7 +24,7 @@ import { parseTable } from '../web/lib/csv.js';
 import { makeRun, outputDigest, recordedInputs, runInputs } from '../web/lib/runs.js';
 import { DEFAULT_PARAMETERS, PRESETS, defaultParameters } from '../web/lib/score.js';
 import { FINGERPRINT } from '../web/lib/dmath.js';
-import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
+import { allExports, inputFor, recompute, scoreTable } from './roundtrip-cases.mjs';
 import { exampleById, simulatedExample } from '../web/lib/examples.js';
 import { assembleTable } from '../web/lib/assemble.js';
 import { barcodesCSV, differentialCSV, proteinScoresCSV } from '../web/lib/exports.js';
@@ -35,15 +35,30 @@ import { depositPackages } from './mavedb-export-cases.mjs';
 import { nodeTracks } from './annotation-cases.mjs';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
-import { tracksCSV } from '../web/lib/tracks.js';
+import { builtinTracks, tracksCSV } from '../web/lib/tracks.js';
+import { figureMarks, figureSVG } from '../web/lib/figures.js';
+import { buildManifest, checkManifest, embedSVG, panelDigests, readFigureManifest } from '../web/lib/figure-manifest.js';
+import { asPDFText, decodePNG, readPDF, readSVG, sameRects } from './figure-cases.mjs';
+import { qcPanelData } from '../web/lib/qc-plots.js';
+import { comparisonCharts, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
+import { computeQC } from '../web/lib/qc.js';
+import { findingsFrom, withDefaultThresholds } from '../web/lib/findings.js';
 import { openExampleInNode } from './example-cases.mjs';
 import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
 import { predictorSide, scoreSetSide } from './compare-cases.mjs';
 import { checkTable } from './robustness-cases.mjs';
-import { robustnessCSV, robustnessJSON, robustnessPositionsCSV } from '../web/lib/robustness.js';
+import { contextOf } from './report-cases.mjs';
+import { pairsFor } from './diff-cases.mjs';
+import { analysisState, diffStates } from '../web/lib/diff.js';
+import { comparisonRecord, robustnessRecord, writeReport } from '../web/lib/report.js';
+import { robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_SEED } from '../web/lib/robustness.js';
 import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
+import { computeNumbers, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
+import { GRB2_ACKNOWLEDGED, GRB2_FIGURE, hsp90Checkpoint } from './example-lessons.mjs';
+import { assignColumn } from '../web/lib/design-edit.js';
+import { checkTraced, externalReferences, repack, tamperings } from './certificate-cases.mjs';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLE_STRUCTURES, cachedBytes, cachedJSON, exampleTarget, modelFile, nodeEvidence, openCached, paeFixture, pdbFile } from './structure-cases.mjs';
 import { clusterTest, effectsByClass, evidenceCSV } from '../web/lib/structure-evidence.js';
@@ -72,6 +87,10 @@ const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:0000
 // them: the example opens the first, and compares the others kept beside.
 const TP53 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-tp53-screens');
 const TP53_TABLES = [['urn:mavedb:00000068-c-1', 'scores.csv'], ['urn:mavedb:00000068-b-1', 'nutlin.csv'], ['urn:mavedb:00000059-a-1', 'kotler.csv']];
+// The BRCA1 RING domain's scores and counts (wave 6, slice 8), as node validation/fetch.mjs
+// mavedb-brca1-ring keeps them: the example opened offline, then certified.
+const RING = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-brca1-ring', 'aa');
+const RING_URN = 'urn:mavedb:00000003-a-2';
 const results = [];
 const fmtShare = (x) => `${(100 * x).toFixed(0)}% drawn`;
 function check(name, value, ok, required = '') {
@@ -102,6 +121,13 @@ async function startMaveScape() {
         cpSync(join(DHFR, dir, `${table}.csv`), join(cache, 'mavedb', name));
         writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
       }
+    }
+  }
+  if (existsSync(join(RING, 'counts.csv'))) {
+    for (const table of ['scores', 'counts']) {
+      const name = `${RING_URN.replaceAll(':', '_')}.${table}.csv`;
+      cpSync(join(RING, `${table}.csv`), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${RING_URN}/${table}`, retrieved: '2026-10-08T22:09:00Z' }, null, 2)}\n`);
     }
   }
   if (existsSync(join(TP53, 'kotler.csv'))) {
@@ -270,6 +296,45 @@ try {
   check('render_map: the map in words, by state, with the settings asked', `${map.data.colorBy}, ${map.data.rows}; ${JSON.stringify(map.data.counts)}`, map.data.colorBy === 'se' && map.data.rows === 'hydrophobicity' && total === 56 * 21 && /Variant-effect map/.test(map.message) && (await browser.eval(`Boolean(document.querySelector('.map-pane canvas'))`)));
   await act('render_map', { run: 'Run 1', color_by: 'score', rows: 'biochemical', zoom: 1 });
 
+  // Figures (wave 6, slice 1): a page of panels, drawn in the window as Node draws it.
+  const made = await act('create_figure', { name: 'Figure 1', size: 'double' });
+  check('create_figure: a page two columns wide, shown in the Figures view', made.message, made.data.widthMm === 174 && made.data.heightMm === 120 && made.data.text === 7 && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'figures');
+  const mapPanel = await act('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', tracks: ['reference', 'effect'], height_mm: 90 });
+  const textPanel = await act('add_figure_panel', { figure: 'Figure 1', kind: 'text', text: 'Abundance of every substitution in the SH3 domain of GRB2 (Human Domainome).', x_mm: 95, y_mm: 94, width_mm: 75, height_mm: 20 });
+  const badPanel = await send('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', from: 50, to: 10 });
+  const badTrack = await send('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', tracks: ['no-such-track'] });
+  check('add_figure_panel: a run\'s map with two of its tracks, lettered A, and a text panel B where placed; a range backward and an unknown track refused, saying why', `${mapPanel.message} ${textPanel.message} ${badPanel.message} ${badTrack.message}`, mapPanel.data.panel.letter === 'A' && mapPanel.data.panel.notes.length === 0 && textPanel.data.panel.letter === 'B' && textPanel.data.panel.xMm === 95 && !badPanel.ok && /after/.test(badPanel.message) && !badTrack.ok && /reference, coverage, effect, uncertainty/.test(badTrack.message));
+  const figureDoc = (await act('figures', { figure: 'Figure 1' })).data.figures[0];
+  const run1Node = scoreTable(exampleTable, workspaceDesign, DEFAULT_PARAMETERS).results;
+  const run1Model = buildMapModel(run1Node, workspaceDesign, { condition: 0, colorBy: 'score', rowOrder: 'biochemical' });
+  const run1Tracks = builtinTracks(run1Model);
+  const nodeResolved = new Map([[figureDoc.document.panels[0].id, { model: run1Model, results: run1Node, tracks: ['reference', 'effect'].map((id) => run1Tracks.find((t) => t.id === id)) }]]);
+  await act('export_figure', { figure: 'Figure 1', path: join(out, 'figure-1.svg') });
+  await act('export_figure', { figure: 'Figure 1', format: 'pdf', path: join(out, 'figure-1.pdf') });
+  const png = await act('export_figure', { figure: 'Figure 1', dpi: 300, path: join(out, 'figure-1.png') });
+  const windowSVG = readFileSync(join(out, 'figure-1.svg'), 'utf8');
+  const nodeSVG = await figureSVG(figureDoc.document, nodeResolved);
+  const windowManifest = readFigureManifest(windowSVG);
+  check('export_figure SVG: the same bytes as Node draws the figure from its document and Run 1 scored in Node, with its manifest (intact) in <metadata>', `${windowSVG.length} bytes; manifest ${windowManifest ? (checkManifest(windowManifest).ok ? 'intact' : checkManifest(windowManifest).problem) : 'none'}`, windowManifest && checkManifest(windowManifest).ok && windowSVG === embedSVG(nodeSVG, windowManifest), `${nodeSVG.length} bytes and the manifest`);
+  const windowPDF = readPDF(readFileSync(join(out, 'figure-1.pdf')));
+  const pdfManifest = readFigureManifest(new Uint8Array(readFileSync(join(out, 'figure-1.pdf'))));
+  const nodeRects = readSVG(nodeSVG);
+  const pdfRects = sameRects(nodeRects.rects, windowPDF.rects);
+  const pdfTexts = windowPDF.texts.map((b) => String.fromCharCode(...b));
+  const svgTexts = asPDFText(nodeRects.texts).map((b) => String.fromCharCode(...b));
+  check('export_figure PDF: a page of 174 × 120 mm drawing Node\'s rectangles and text, the manifest attached', `${windowPDF.width} × ${windowPDF.height} pt; ${pdfRects.why}; ${pdfTexts.length} strings`, windowPDF.width === 493.23 && windowPDF.height === 340.16 && pdfRects.ok && pdfTexts.join('|') === svgTexts.join('|') && JSON.stringify(pdfManifest?.panels) === JSON.stringify(windowManifest?.panels));
+  const pngBytes = readFileSync(join(out, 'figure-1.png'));
+  const pngW = pngBytes.readUInt32BE(16);
+  const pngH = pngBytes.readUInt32BE(20);
+  const phys = pngBytes.indexOf(Buffer.from('pHYs'));
+  check('export_figure PNG at 300 dpi: 2055 × 1417 pixels, its resolution recorded (11811 pixels per meter), the manifest in it', `${png.message} ${pngW} × ${pngH}; pHYs ${phys > 0 ? pngBytes.readUInt32BE(phys + 4) : 'none'}`, pngW === 2055 && pngH === 1417 && phys > 0 && pngBytes.readUInt32BE(phys + 4) === 11811 && pngBytes[phys + 12] === 1 && JSON.stringify(readFigureManifest(new Uint8Array(pngBytes))?.panels) === JSON.stringify(windowManifest?.panels));
+  const changedFigure = await act('set_figure', { figure: 'Figure 1', name: 'Figure 2', panels: [{ panel: 'A', from: 20, to: 40, height_mm: 60 }, { panel: 'B', y_mm: 70 }] });
+  const offPage = await send('set_figure', { figure: 'Figure 2', panels: [{ panel: 'B', x_mm: 160 }] });
+  const unknownPanel = await send('set_figure', { figure: 'Figure 2', panels: [{ panel: 'Z', remove: true }] });
+  check('set_figure: renamed, panel A showing positions 20–40 and shorter, B moved; a panel off the page and an unknown one refused, saying why', `${changedFigure.data.name}: ${changedFigure.data.panels.map((p) => `${p.letter} ${p.shows}`).join('; ')}. ${offPage.message} ${unknownPanel.message}`, changedFigure.data.name === 'Figure 2' && changedFigure.data.panels[0].shows === 'the map of Run 1, positions 20–40' && changedFigure.data.panels[0].heightMm === 60 && changedFigure.data.panels[1].yMm === 70 && !offPage.ok && /leave the page/.test(offPage.message) && !unknownPanel.ok && /not a panel/.test(unknownPanel.message));
+  const noTokenFigure = await send('export_figure', { figure: 'Figure 2', path: join(out, 'x.svg') }, { withToken: false });
+  check('export_figure without the token is refused', `${noTokenFigure.status}`, noTokenFigure.status === 401);
+
   // Selection and the inspector.
   const sel = await act('select_variants', { positions: [36], filter: 'scored', save_as: 'Position 36', run: '1' });
   check('select_variants by position, saved by name', sel.message, sel.data.variants.length >= 15 && sel.data.saved === 'Position 36' && (await act('get_state')).data.selections.some((s) => s.name === 'Position 36'));
@@ -314,6 +379,17 @@ try {
   // Every export equals the same file made in Node from the exported archive.
   const archive = await readArchive(readFileSync(join(out, 'grb2.msz')));
   check('the exported archive opens', `${archived.message} ${archive.problems.length} problems`, archive.problems.length === 0 && archive.ws.runs.length === 3 && archive.ws.selections.length === 1);
+  check('the archive keeps the figure as the workspace has it', `${archive.ws.figures?.map((f) => `${f.name}, ${f.panels.length} panels`).join('; ') ?? 'none'}`, archive.ws.figures?.length === 1 && archive.ws.figures[0].name === 'Figure 2' && archive.ws.figures[0].panels.length === 2);
+  // The workspace's report (wave 6, slice 4), in the archive as Node writes it from the archive: each
+  // run's QC findings and scores recomputed, the window's MaveScape (its version and commit).
+  const info = await (await fetch(`${connection.url}/api/info`)).json();
+  const windowSoftware = { version: info.version, commit: info.commit ?? '' };
+  const recomputedRuns = (w, sources) => new Map(w.runs.map((run, i) => {
+    const x = recompute(w, sources, i);
+    return [run.id, { table: x.table, results: x.scored.results }];
+  }));
+  const archiveReport = writeReport(archive.ws, contextOf(archive.ws, recomputedRuns(archive.ws, archive.sources), windowSoftware));
+  check('the archive carries the workspace\'s report (report.md, report.bib) as Node writes it from the archive, each run\'s QC and scores recomputed', `${archive.report ? `${archive.report.markdown.length} characters, ${archive.report.bibtex.split('@').length - 1} references` : 'none'}; ${archive.report?.markdown === archiveReport.markdown && archive.report?.bibtex === archiveReport.bibtex ? 'Node\'s' : 'not Node\'s'}`, archive.report?.markdown === archiveReport.markdown && archive.report?.bibtex === archiveReport.bibtex);
   const { table, scored } = recompute(archive.ws, archive.sources);
   const expected = allExports(archive.ws, table, scored.results);
   for (const name of ['scores.csv', 'counts.csv', 'qc_samples.csv', 'qc_variants.csv', 'qc_findings.csv', 'methods.md', 'references.bib', 'map.svg', 'selection.csv', 'selection.json']) {
@@ -337,6 +413,59 @@ try {
   const repCompare = await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2' });
   const repNode = nodeCompare([0, { run: nodeRuns[0].run.id, replicate: reps[0] }], [0, { run: nodeRuns[0].run.id, replicate: reps[1] }]);
   check('compare: GRB2\'s replicates 1 and 2 in the Compare view, the report and every statistic as Node compares them', repCompare.message.slice(0, 200), JSON.stringify(repCompare.data) === withoutSoftware(comparisonJSON(repNode)) && repCompare.data.report.status === 'ok' && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'compare' && (await browser.eval(`Boolean(document.querySelector('.compare-report'))`)));
+  // Every view's plots as panels (wave 6, slice 2): drawn in the window as Node draws them from the
+  // runs it recomputes from the archive.
+  await act('create_figure', { name: 'Every view', height_mm: 200 });
+  const qcPanel = await act('add_figure_panel', { figure: 'Every view', kind: 'qc', subject: 'Run 1', finding: 'agreement', x_mm: 3, y_mm: 3, width_mm: 83, height_mm: 62 });
+  await act('add_figure_panel', { figure: 'Every view', kind: 'scores', run: 'Run 1', x_mm: 89, y_mm: 3, width_mm: 82, height_mm: 62 });
+  await act('add_figure_panel', { figure: 'Every view', kind: 'compare', a: 'Run 1', b: 'Run 2', x_mm: 3, y_mm: 68, width_mm: 83, height_mm: 70 });
+  await act('add_figure_panel', { figure: 'Every view', kind: 'variant', run: 'Run 1', variant: 'p.Trp36Ala', x_mm: 89, y_mm: 68, width_mm: 82, height_mm: 50 });
+  const noFinding = await send('add_figure_panel', { figure: 'Every view', kind: 'qc', finding: 'no-such-finding' });
+  const noVariant = await send('add_figure_panel', { figure: 'Every view', kind: 'variant', variant: 'p.Trp999Ala' });
+  const everyDoc = (await act('figures', { figure: 'Every view' })).data.figures[0].document;
+  await act('export_figure', { figure: 'Every view', path: join(out, 'every-view.svg') });
+  const everySVG = readFileSync(join(out, 'every-view.svg'), 'utf8');
+  {
+    const [r1, r2] = nodeRuns;
+    const t = withDefaultThresholds(archive.ws.qc?.thresholds);
+    const qcNode = computeQC({ ...inputFor(table, r1.run.inputs.design), design: r1.run.inputs.design, results: r1.results });
+    const finding = findingsFrom(qcNode, t, { acknowledged: archive.ws.qc?.acknowledged }).find((f) => f.id === 'agreement');
+    const sides = [describeSide(archive.ws, r1.run, r1.results, { run: r1.run.id, condition: 0 }), describeSide(archive.ws, r2.run, r2.results, { run: r2.run.id, condition: 0 })];
+    const resolvedNode = new Map([
+      [everyDoc.panels[0].id, qcPanelData(finding, qcNode, t, { pair: 0 })],
+      [everyDoc.panels[1].id, scoreCharts(r1.results, r1.run)],
+      [everyDoc.panels[2].id, comparisonCharts({ ...compareSides(sides[0], sides[1]), sides }, 'agreement')],
+      [everyDoc.panels[3].id, variantCharts(r1.results, r1.run, 'p.Trp36Ala')],
+    ]);
+    const nodeEverySVG = await figureSVG(everyDoc, resolvedNode);
+    const everyManifest = readFigureManifest(everySVG);
+    check('add_figure_panel of every view\'s plots (a QC finding\'s, the scores by class, a comparison, a variant\'s evidence) and export_figure: the window\'s SVG the same bytes as Node draws the same document from Run 1 and Run 2 recomputed from the archive, with its manifest; an unknown finding and a variant not measured refused, saying why', `${everySVG.length} bytes against ${nodeEverySVG.length}; ${qcPanel.data.panel.shows}; ${noFinding.message.slice(0, 60)}; ${noVariant.message.slice(0, 60)}`, everyManifest && everySVG === embedSVG(nodeEverySVG, everyManifest) && !noFinding.ok && /Name the finding|not raised|no-such/.test(noFinding.message) && !noVariant.ok && /is not in Run \d/.test(noVariant.message));
+    // What the figure carries (wave 6, slice 3): its manifest as Node writes it from the archive.
+    const nodeManifest = buildManifest(archive.ws, everyDoc, figureMarks(everyDoc, resolvedNode), { software: everyManifest.software, created: everyManifest.created });
+    check('export_figure\'s manifest: what Node writes from the archive (each panel\'s inputs: Run 1\'s and Run 2\'s outputs and their table by SHA-256, the QC thresholds, the comparison\'s sides; a digest of each panel\'s drawing; MaveScape\'s version; its fingerprint)', `${everyManifest.panels.map((p) => `${p.letter}: ${p.shows}`).join('; ')}; fingerprint ${everyManifest.fingerprint.slice(0, 12)}… against ${nodeManifest.fingerprint.slice(0, 12)}…`, JSON.stringify(nodeManifest) === JSON.stringify(everyManifest) && everyManifest.panels[0].inputs.run.output === r1.run.output.sha256);
+  }
+  {
+    // The manifest alone; the figure read back, edited, rebuilt and opened in the window.
+    const asJSON = await act('export_figure', { figure: 'Every view', format: 'json', path: join(out, 'every-view.json') });
+    const jsonManifest = JSON.parse(readFileSync(join(out, 'every-view.json'), 'utf8'));
+    const svgManifest = readFigureManifest(readFileSync(join(out, 'every-view.svg'), 'utf8'));
+    check('export_figure json: the manifest alone, the SVG\'s but for when it was written', asJSON.message, checkManifest(jsonManifest).ok && JSON.stringify(jsonManifest.panels) === JSON.stringify(svgManifest.panels) && JSON.stringify(jsonManifest.figure) === JSON.stringify(svgManifest.figure) && asJSON.message.includes(jsonManifest.fingerprint.slice(0, 12)));
+    const checked = await act('check_figure', { paths: [join(out, 'every-view.svg')] });
+    check('check_figure of the figure\'s SVG in its own workspace: its manifest intact, every panel as it was drawn from', checked.message, checked.data.intact && checked.data.workspace.same && checked.data.panels.length === 4 && checked.data.panels.every((p) => p.status === 'unchanged'));
+    const edited = readFileSync(join(out, 'every-view.svg'), 'utf8').replace('"shows":"score distributions by class of Run 1"', '"shows":"score distributions by class of Run 2"');
+    writeFileSync(join(out, 'every-view-edited.svg'), edited);
+    const tampered = await act('check_figure', { paths: [join(out, 'every-view-edited.svg')] });
+    const plain = await send('check_figure', { paths: [join(out, 'map.svg')] });
+    check('check_figure: a manifest edited after it was written is caught (its fingerprint); a file without one refused, saying so', `${tampered.data.problem} | ${plain.message}`, edited.includes('of Run 2"') && tampered.data.intact === false && /changed after it was written/.test(tampered.data.problem) && !plain.ok && /no MaveScape figure manifest/.test(plain.message));
+    const rebuilt = await act('check_figure', { paths: [join(out, 'every-view.svg')], rebuild: true });
+    const listedFigures = (await act('figures')).data.figures.map((f) => f.name);
+    check('check_figure with rebuild: the figure added to the workspace from its manifest, each panel drawn again the same drawing the file records', `${rebuilt.data.rebuilt?.figure}: ${rebuilt.data.rebuilt?.panels.map((p) => `${p.letter} ${p.same ? 'the same' : 'different'}`).join(', ')}`, rebuilt.data.rebuilt?.panels.length === 4 && rebuilt.data.rebuilt.panels.every((p) => p.same) && listedFigures.includes(rebuilt.data.rebuilt.figure));
+    await act('open_files', { paths: [join(out, 'every-view.svg')] });
+    await sleep(300);
+    const dialog = await browser.eval(`(() => { const d = document.querySelector('.dialog[aria-label="A figure from MaveScape"]'); return d ? { rows: d.querySelectorAll('tbody tr').length, badges: [...d.querySelectorAll('tbody .badge')].map((b) => b.textContent), buttons: [...d.querySelectorAll('.dialog-foot button')].map((b) => b.textContent) } : null; })()`);
+    await browser.eval(`document.querySelector('.dialog[aria-label="A figure from MaveScape"] .dialog-head button')?.click()`);
+    check('open_files of the figure: the window says what it shows and where it came from, panel by panel as it was, and offers to rebuild it', JSON.stringify(dialog), dialog?.rows === 4 && dialog.badges.every((b) => b === 'as then') && dialog.buttons.includes('Rebuild here'));
+  }
   const runsCompare = await act('compare', { a: 'Run 1', b: 'Run 2' });
   check('compare: Run 1 against Run 2 (the Enrich2 preset): one table scored twice, qualified, on one scale', runsCompare.data.report.items.find((i) => i.id === 'independence').text, runsCompare.data.report.status === 'qualified' && runsCompare.data.sameScale === true && runsCompare.data.statistics.concordance !== null);
   const scalesCompare = await act('compare', { a: 'Run 1', b: 'Run 3' });
@@ -460,6 +589,35 @@ try {
   const publishedRobust = await send('check_robustness', { run: 'Run 1', max: 1 });
   check('check_robustness with too few analyses: refused, saying how many', publishedRobust.message, !publishedRobust.ok && /from 2 to 256/.test(publishedRobust.message));
 
+  // Kept in the report (wave 6, slice 4): the comparison of Run 1 and Run 2 and Run 1's robustness,
+  // as Node computes them; the window's report as Node writes it from the workspace's archive; its
+  // files; an analysis taken out.
+  {
+    const keptCompare = await act('compare', { a: 'Run 1', b: 'Run 2', scale: 'scored', low_confidence: false, max_se: null, min_reads: null, report: true });
+    const keptRobust = await act('check_robustness', { run: 'Run 1', max: 24, report: true });
+    const shown = await act('report');
+    await act('export', { what: 'archive', path: join(out, 'with-report.msz') });
+    await act('export', { what: 'report', path: join(out, 'report.md') });
+    await act('export', { what: 'report-references', path: join(out, 'report.bib') });
+    const withReport = await readArchive(readFileSync(join(out, 'with-report.msz')));
+    const strip = (a) => JSON.parse(JSON.stringify(a, (k, v) => (k === 'id' || k === 'created' ? undefined : v)));
+    const [comparisonKept, robustnessKept] = withReport.ws.analyses ?? [];
+    const pairNode = { a: { run: nodeRuns[0].run.id, condition: 0 }, b: { run: nodeRuns[1].run.id, condition: 0 } };
+    const comparisonNode = comparisonRecord(nodeCompare([0, pairNode.a], [1, pairNode.b]), pairNode);
+    const robustnessNode = robustnessRecord(r1, nodeCheck.summary, { max: 24, seed: ROBUSTNESS_SEED });
+    check('compare and check_robustness with report: the comparison of Run 1 and Run 2 and Run 1\'s robustness kept in the workspace, in its history, as Node computes them from the archive (sides, scale, report, statistics; choices, analyses, verdicts)', `${keptCompare.data.report} and ${keptRobust.data.report}; ${withReport.ws.history.slice(-2).map((e) => e.detail).join(' | ')}`,
+      JSON.stringify(strip(comparisonKept)) === JSON.stringify(strip(comparisonNode)) && JSON.stringify(strip(robustnessKept)) === JSON.stringify(strip(robustnessNode)) && withReport.ws.history.slice(-2).every((e) => e.action === 'report' && e.detail.startsWith('Added to the report')));
+    const nodeReport = writeReport(withReport.ws, contextOf(withReport.ws, recomputedRuns(withReport.ws, withReport.sources), windowSoftware));
+    const sections = shown.data.sections.filter((x) => x.title).map((x) => x.title);
+    const view = await browser.eval(`(() => { const d = document.querySelector('.report-doc'); return d ? { headings: d.querySelectorAll('h3').length, references: d.querySelectorAll('.report-references li').length, kept: document.querySelectorAll('.report-kept li').length } : null; })()`);
+    check('report: the window\'s report the same text as Node writes from the workspace\'s archive (and the archive\'s report.md and report.bib), shown in the Report view with its references and the two analyses kept; export report and report-references write it', `${sections.join(', ')}; ${shown.data.references.length} references; view ${JSON.stringify(view)}`,
+      shown.data.markdown === nodeReport.markdown && shown.data.bibtex === nodeReport.bibtex && withReport.report?.markdown === nodeReport.markdown && readFileSync(join(out, 'report.md'), 'utf8') === nodeReport.markdown && readFileSync(join(out, 'report.bib'), 'utf8') === nodeReport.bibtex
+      && sections.includes('Comparisons') && sections.includes('Robustness to analysis choices') && view?.headings === sections.length + 1 && view.references === shown.data.references.length && view.kept === 2);
+    const taken = await act('report', { remove: 'the comparison of Run 1 and Run 2', show: false });
+    const unknownAnalysis = await send('report', { remove: 'no such analysis' });
+    check('report with remove: the comparison taken out of the report (in the history), the robustness check kept; an analysis not kept refused, listing those that are', `${taken.data.analyses.map((a) => a.name).join('; ')}; ${unknownAnalysis.message}`, taken.data.analyses.length === 1 && taken.data.analyses[0].kind === 'robustness' && !taken.data.sections.some((x) => x.id === 'comparisons') && !unknownAnalysis.ok && /is kept in the report\. Kept: Run 1's robustness/.test(unknownAnalysis.message));
+  }
+
   // Selections by query (wave 4, slice 5), as Node selects on the run it recomputes from the archive:
   // a query, an operation on the selection, a saved selection used in another query, the robustness
   // verdicts (Run 1 checked above), a mistake named in place, and the selection's file.
@@ -485,6 +643,105 @@ try {
   };
   check('select_variants by query, as Node selects on the run it recomputes from the archive: a query, its matches subtracted from the selection (the query composed and saved with it), a saved selection named in a query, the robustness verdicts of the run checked, a mistake named in place; the saved selection\'s file keeps its query; the Map view shows the query', `${q1.data.count} by query, ${q2.data.count} after subtracting, ${q3.data.count} of the saved lower, ${q4.data.count} fragile or uncertain; ${Object.entries(queryParts).map(([k, v]) => `${k} ${v ? 'ok' : 'different'}`).join(', ')}`, Object.values(queryParts).every(Boolean));
 
+  // Certificates (wave 6, slice 6): this workspace (its runs, Run 1's robustness kept in the report,
+  // selections, annotations, two figures with every kind of panel) certified in the window's
+  // worker from the library's files, and verified in Node; the same bytes as Node certifies from the
+  // workspace's archive; its panels the drawings the figures' manifests record. Node's verified in
+  // the window, one tampered and one without its tables too.
+  {
+    const certPath = join(out, 'grb2.certificate.msz');
+    const made = await act('certify', { path: certPath });
+    const bytes = new Uint8Array(readFileSync(certPath));
+    const read = await readCertificate(bytes);
+    const inNode = await verifyCertificate(read, { software: windowSoftware });
+    await act('export', { what: 'archive', path: join(out, 'to-certify.msz') });
+    const toCertify = await readArchive(readFileSync(join(out, 'to-certify.msz')));
+    const nodeMade = await writeCertificate(toCertify.ws, async (sha) => toCertify.sources.get(sha) ?? null, { software: windowSoftware });
+    const sameBytes = Buffer.compare(Buffer.from(nodeMade.bytes), Buffer.from(bytes)) === 0;
+    // Each figure's panels: the drawings its manifest (export_figure json) records.
+    const panelRows = [];
+    for (const f of read.certificate.numbers.figures) {
+      const path = join(out, `${f.id}.manifest.json`);
+      await act('export_figure', { figure: f.name, format: 'json', path });
+      const manifest = JSON.parse(readFileSync(path, 'utf8'));
+      for (const p of f.panels) panelRows.push({ figure: f.name, letter: p.letter, same: manifest.panels.find((x) => x.id === p.id)?.drawing === p.drawing });
+    }
+    check('certify: the workspace (its runs, a robustness check kept in the report, selections, annotations, two figures of every kind of panel) certified in the window\'s worker from the library\'s files, verified in Node bit for bit; the same bytes as Node certifies from the workspace\'s archive; every figure panel the drawing the figure\'s manifest (export_figure) records',
+      `${made.message.slice(0, 160)}… Node: ${inNode.verdict}, ${inNode.numbers.same.toLocaleString('en-US')} of ${inNode.numbers.checked.toLocaleString('en-US')} identical; ${sameBytes ? 'the same bytes as Node\'s' : 'not Node\'s bytes'}; panels ${panelRows.filter((x) => x.same).length} of ${panelRows.length} as their manifests`,
+      inNode.verdict === 'verified' && inNode.numbers.same === read.certificate.total && sameBytes && panelRows.length > 6 && panelRows.every((x) => x.same) && made.data.fingerprint === read.certificate.fingerprint && read.certificate.inputs.some((i) => i.role === 'annotation'));
+    // Node's certificate verified in the window; tampered (a score's last bit, its fingerprint made
+    // again), the window finds the difference Node finds.
+    const nodePath = join(out, 'node.certificate.msz');
+    writeFileSync(nodePath, nodeMade.bytes);
+    const inWindow = await act('verify_certificate', { paths: [nodePath] });
+    const tamperedPath = join(out, 'tampered.certificate.msz');
+    writeFileSync(tamperedPath, await repack(nodeMade.bytes, (files) => tamperings().find((t) => t.id === 'number-refingerprinted').edit(files, nodeMade.certificate)));
+    const tamperedWindow = await act('verify_certificate', { paths: [tamperedPath], show: true });
+    const tamperedNode = await verifyCertificate(await readCertificate(readFileSync(tamperedPath)), { software: windowSoftware });
+    const paneVerdict = await browser.eval(`document.querySelector('.certificate-pane')?.textContent ?? ''`);
+    check('verify_certificate: Node\'s certificate verified in the window, bit for bit; tampered (a score changed in its last bit, the fingerprint made again to match), not verified, the one number that differs the one Node finds; the Certificate pane says it',
+      `${inWindow.message.slice(0, 120)}… | ${tamperedWindow.message.slice(0, 220)}`,
+      inWindow.data.verdict === 'verified' && inWindow.data.numbers.same === nodeMade.certificate.total && tamperedWindow.data.verdict === 'differs' && tamperedWindow.data.numbers.differs === 1 && JSON.stringify(tamperedWindow.data.numbers.differ) === JSON.stringify(tamperedNode.numbers.differ) && /not verified/.test(paneVerdict));
+    // Without its tables: not checkable in the window, then verified with the table beside it.
+    const barePath = join(out, 'bare.certificate.msz');
+    await act('certify', { path: barePath, tables: false });
+    const bareRead = await readCertificate(readFileSync(barePath));
+    const table = bareRead.certificate.inputs.find((i) => i.role === 'table');
+    const tablePath = join(out, 'counts-beside.csv');
+    writeFileSync(tablePath, readFileSync(join(ROOT, 'web/examples/grb2-sh3/counts.csv')));
+    const fromLibrary = await act('verify_certificate', { paths: [barePath], show: false });
+    const withoutTable = await act('verify_certificate', { paths: [barePath], library: false, show: false });
+    const withTable = await act('verify_certificate', { paths: [barePath, tablePath], library: false, show: false });
+    const notMsz = await send('verify_certificate', { paths: [tablePath] });
+    const notCertificate = await send('verify_certificate', { paths: [join(out, 'to-certify.msz')] });
+    check('certify without the tables: the table named by its SHA-256 only; verify_certificate finds it in the library by its SHA-256, verified; with library false (as a reviewer without this library), not checkable, naming it, then verified with it given beside; a table alone, or an archive that is not a certificate, refused saying why',
+      `${bareRead.archive.sources.has(table.sha256) ? 'the table in it' : 'the table not in it'}; ${fromLibrary.data.verdict} (the table ${fromLibrary.data.inputs.find((i) => i.role === 'table').from}); without the library ${withoutTable.data.verdict}; with the table given ${withTable.data.verdict} | ${notMsz.message} | ${notCertificate.message.slice(0, 120)}`,
+      !bareRead.archive.sources.has(table.sha256) && fromLibrary.data.verdict === 'verified' && fromLibrary.data.inputs.find((i) => i.role === 'table').from === 'library' && withoutTable.data.verdict === 'incomplete' && withoutTable.message.includes(table.fileName) && withTable.data.verdict === 'verified' && !notMsz.ok && /one certificate/.test(notMsz.message) && !notCertificate.ok && /not a certificate/.test(notCertificate.message));
+    // The review report (wave 6, slice 7): written in the window, the same bytes as Node's of the
+    // workspace's archive, its numbers the certificate's; opened from its file in the browser, it
+    // loads nothing, has no axe-core violations in either theme, and traces a number clicked.
+    const reviewPath = join(out, 'grb2.review.html');
+    const reviewMade = await act('review_report', { path: reviewPath });
+    const reviewHTML = readFileSync(reviewPath, 'utf8');
+    const nodeReview = (await writeCertificate(toCertify.ws, async (sha) => toCertify.sources.get(sha) ?? null, { software: windowSoftware, review: true })).review;
+    const reviewTraced = checkTraced(reviewHTML, read.certificate, toCertify.ws);
+    check('review_report: the review report written in the window\'s worker, the same bytes as Node\'s of the workspace\'s archive; every traced number the certificate\'s (the one certify wrote: the same fingerprint) or the workspace\'s; nothing in it from outside',
+      `${reviewMade.message.slice(0, 120)}… ${reviewHTML === nodeReview ? 'Node\'s bytes' : 'not Node\'s bytes'}; ${reviewTraced.total} traced, ${reviewTraced.bad.length} wrong; ${externalReferences(reviewHTML).length} external`,
+      reviewHTML === nodeReview && reviewMade.data.fingerprint === read.certificate.fingerprint && reviewTraced.total > 100 && !reviewTraced.bad.length && !externalReferences(reviewHTML).length);
+    await browser.eval('window.mavescape.saveNow()');
+    const fileURL = `file://${reviewPath}`;
+    const before = requested.length;
+    await browser.goto(fileURL, 1500);
+    const reviewRequests = requested.splice(before).filter((u) => !/^(data|blob):/.test(u));
+    const axeSource = join(ROOT, 'validation/cache/axe-core/axe.min.js');
+    const audits = [];
+    if (existsSync(axeSource)) {
+      await browser.eval(`(0, eval)(${JSON.stringify(readFileSync(axeSource, 'utf8'))}); true`);
+      for (const dark of [false, true]) {
+        await browser.theme(dark);
+        await sleep(200);
+        audits.push(...await browser.eval(`(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] }, resultTypes: ['violations'] })).violations.map((v) => '${dark ? 'dark' : 'light'} ' + v.id + ' (' + v.nodes.length + ')'))()`));
+      }
+      await browser.theme(false);
+    }
+    const reviewUse = await browser.eval(`(async () => {
+      document.querySelector('#qc button.n').click();
+      const trace = document.getElementById('trace').textContent;
+      document.getElementById('lookup-variant').value = 'Trp36Ala';
+      document.getElementById('lookup-go').click();
+      const lookup = document.getElementById('lookup-result').textContent;
+      document.getElementById('check-fingerprint').click();
+      for (let i = 0; i < 50 && !document.getElementById('fingerprint-result').textContent; i += 1) await new Promise((r) => setTimeout(r, 50));
+      return { trace, lookup, fingerprint: document.getElementById('fingerprint-result').textContent, title: document.title };
+    })()`);
+    check('the review report opened from its file in the browser: nothing requested but the file itself; no axe-core violation (WCAG 2.1 A and AA) in the light theme or the dark; a QC number clicked says what it is, its key and exact value; a variant looked up gives its score, SE and class; the fingerprint checked in the file, the same',
+      `${reviewRequests.length} requests (${reviewRequests.filter((u) => u !== fileURL).slice(0, 2).join(', ') || 'the file alone'}); axe ${existsSync(axeSource) ? (audits.length ? audits.join(', ') : 'no violations') : 'missing (node validation/fetch.mjs axe-core)'}; trace "${reviewUse.trace.slice(0, 80)}…"; lookup "${reviewUse.lookup.slice(0, 60)}"; ${reviewUse.fingerprint.slice(0, 50)}`,
+      reviewRequests.length === 1 && reviewRequests[0] === fileURL && existsSync(axeSource) && !audits.length && /Key: qc\|/.test(reviewUse.trace) && /Exact value:/.test(reviewUse.trace) && /p\.Trp36Ala in Run 1/.test(reviewUse.lookup) && /^The same/.test(reviewUse.fingerprint));
+    await browser.goto(URL, 1500);
+    for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);
+    await sleep(500);
+  }
+
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.
   const noTokenOpen = await send('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] }, { withToken: false });
   check('open_files without the token is refused', `${noTokenOpen.status}: ${noTokenOpen.error}`, noTokenOpen.status === 401);
@@ -499,6 +756,44 @@ try {
   const set = await act('set_design', { design: exampleDesign });
   const rescored = await act('score');
   check('set_design, then score: the example\'s run, from files opened by path', `${set.message} ${rescored.message}`, set.data.valid && rescored.data.outputSha256 === nodeDigest);
+  const inAnother = await act('check_figure', { paths: [join(out, 'every-view.svg')] });
+  check('check_figure in another workspace that scored the same table to the same output: Run 1\'s panels found by its output\'s SHA-256, as they were; the comparison missing Run 2', inAnother.message, !inAnother.data.workspace.same && inAnother.data.panels.map((p) => p.status).join() === 'unchanged,unchanged,missing,unchanged' && /Run 2 \(output [0-9a-f]{12}…\) is not in this workspace/.test(inAnother.data.panels[2].changes.join(' ')));
+  // Checkpoints and the diff (wave 6, slice 5), in this workspace (its one run): a checkpoint kept,
+  // the run scored again with another pseudocount and minimum input count, the changes as Node
+  // finds them from the workspace's archive (each run recomputed, its QC read with each state's
+  // thresholds); the same between two archives; shown in the Report view and the drawer's history.
+  {
+    const kept = await act('checkpoint', { name: 'Before the rescoring' });
+    await act('export', { what: 'archive', path: join(out, 'diff-before.msz') });
+    const noFrom = await send('diff', { from: 'no such checkpoint' });
+    await act('score', { parameters: { pseudocount: 1, filters: { minInputCount: 10 } } });
+    const diffed = await act('diff');
+    await act('export', { what: 'archive', path: join(out, 'diff-after.msz') });
+    const [archiveBefore, archiveAfter] = [await readArchive(readFileSync(join(out, 'diff-before.msz'))), await readArchive(readFileSync(join(out, 'diff-after.msz')))];
+    const scoredOf = (read) => new Map(read.ws.runs.map((run, i) => [run.id, recompute(read.ws, read.sources, i)]));
+    const after = scoredOf(archiveAfter);
+    const tableOf = [...after.values()][0].table;
+    const results = new Map([...after].map(([id, x]) => [id, x.scored.results]));
+    const checkpointState = archiveAfter.ws.checkpoints[0].state;
+    const nodeDiff = diffStates(checkpointState, analysisState(archiveAfter.ws), { pairs: pairsFor(checkpointState, analysisState(archiveAfter.ws), tableOf, results) });
+    const strip = (x) => JSON.parse(JSON.stringify(x));
+    check('checkpoint and diff: a checkpoint kept (in the history), the run scored again with pseudocount 1 and a minimum input count of 10; the changes the window finds (the run scored, the parameters, the variants moved, crossed, filtered and named) as Node finds them from the workspace\'s archive; an unknown checkpoint refused, listing those kept', `${kept.message.slice(0, 80)} | ${diffed.data.words.slice(1, 4).join(' ')} | ${noFrom.message}`,
+      kept.data.checkpoints.length === 1 && archiveAfter.ws.checkpoints[0].sha256 === kept.data.checkpoints[0].sha256 && JSON.stringify(diffed.data.changes) === JSON.stringify(strip(nodeDiff.changes)) && JSON.stringify(diffed.data.pairs) === JSON.stringify(strip(nodeDiff.pairs)) && diffed.data.pairs[0].parameters.join() === 'the pseudocount 0.5 → 1,the minimum input count 1 → 10' && !noFrom.ok && /Before the rescoring/.test(noFrom.message));
+    const shown = await browser.eval(`(() => ({ head: document.querySelector('.report-changes .report-title')?.textContent, map: Boolean(document.querySelector('.report-change-map svg')), rows: document.querySelectorAll('.report-changes tbody tr').length }))()`);
+    await browser.eval('window.mavescape.toggleDrawer(true)');
+    await sleep(200);
+    const drawn = await browser.eval(`[...document.querySelectorAll('#drawer .history-list li.checkpoint button')].map((b) => b.textContent)`);
+    await browser.eval('window.mavescape.toggleDrawer(false)');
+    check('diff in the Report view: the changes since the checkpoint above the report, the variants that moved most, and the map of the change; the drawer\'s history marks the checkpoint, with the changes since it', `${JSON.stringify(shown)}; drawer ${JSON.stringify(drawn)}`, shown.head === 'Changes since "Before the rescoring"' && shown.map && shown.rows > 0 && drawn.join() === 'Changes since');
+    const two = await act('diff', { paths: [join(out, 'diff-before.msz'), join(out, 'diff-after.msz')] });
+    const before = scoredOf(archiveBefore);
+    const both = new Map([...results, ...[...before].map(([id, x]) => [id, x.scored.results])]);
+    const nodeTwo = diffStates(analysisState(archiveBefore.ws), analysisState(archiveAfter.ws), { pairs: pairsFor(analysisState(archiveBefore.ws), analysisState(archiveAfter.ws), tableOf, both) });
+    check('diff of two workspace archives (before and after the rescoring): the changes as Node finds them from the two, the runs recomputed from each archive\'s own table (the checkpoint kept in between one of them)', two.data.words.slice(0, 3).join(' '), JSON.stringify(two.data.changes) === JSON.stringify(strip(nodeTwo.changes)) && JSON.stringify(two.data.pairs) === JSON.stringify(strip(nodeTwo.pairs)) && two.data.changes.some((c) => c.kind === 'run'));
+    const removed = await act('checkpoint', { remove: 'Before the rescoring' });
+    const none = await send('diff', {});
+    check('checkpoint with remove: deleted (in the history); diff with no checkpoint kept refused, saying how to keep one', `${removed.message} | ${none.message}`, removed.data.checkpoints.length === 0 && !none.ok && /keep one with checkpoint/.test(none.message));
+  }
 
   // The other example.
   const simulated = await act('open_example', { id: 'simulated' });
@@ -597,6 +892,59 @@ try {
   } else {
     console.log('  TP53\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-tp53-screens (the TP53 example\'s checks skipped)');
     if (requireData) check('TP53\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
+  }
+
+  // Wave 6, slice 8: Hsp90's checkpoint as its guide makes it. Run 2 over the whole time course, a
+  // checkpoint, the columns of generations 9 to 21 "Not used" (as the Experiment view sets them) and
+  // scored again: the runs Node's, and what changed as Node says it.
+  {
+    await act('open_example', { id: 'hsp90' });
+    const two = await act('score', { parameters: { timeScale: 'course' } });
+    await act('checkpoint', { name: 'All eight samples' });
+    let cut = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws.design)'));
+    for (const column of ['Gen_9', 'Gen_12', 'Gen_15', 'Gen_18', 'Gen_21']) cut = assignColumn(cut, column, { kind: 'ignored', reason: 'not used: the first three samples fitted, as the authors fit null-like variants' }).design;
+    await act('set_design', { design: cut });
+    const three = await act('score', { parameters: { timeScale: 'course' } });
+    const changed = await act('diff', {});
+    const node = hsp90Checkpoint();
+    const runs = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws.runs.map((r) => ({ name: r.name, output: r.output.sha256 })))'));
+    const [t] = changed.data.pairs[0]?.targets ?? [];
+    const [n] = node.diff.pairs[0].targets;
+    check('Hsp90\'s checkpoint as its guide makes it: Run 2 over the whole time course, a checkpoint, generations 9 to 21 "Not used" and scored again: Run 2 and Run 3 Node\'s, and what changed as Node says it (148 of 188 moved beyond their earlier 95% interval in Run 2\'s units, 102 changed class); the Report view shows it',
+      `${runs.map((r) => `${r.name} ${r.output.slice(0, 12)}…`).join(', ')} | ${changed.data.words.at(-1)}`,
+      two.ok !== false && three.ok !== false && runs.find((r) => r.name === 'Run 2')?.output === node.runs.run2.output.sha256 && runs.find((r) => r.name === 'Run 3')?.output === node.runs.run3.output.sha256
+        && t?.moved === 148 && t.crossed === 102 && JSON.stringify(t) === JSON.stringify(n) && changed.data.words.at(-1) === node.words.at(-1) && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'report');
+  }
+
+  // The BRCA1 RING domain certified as its guide makes it (wave 6, slice 8): opened offline from
+  // MaveDB's two tables, scored with the Enrich2-compatible preset, certified in the window, the
+  // certificate verified in Node bit for bit; certified without its tables and verified in the
+  // window with MaveDB's two files given beside it, as a reviewer would; its review report Node's.
+  if (existsSync(join(RING, 'counts.csv'))) {
+    const opened = await act('open_example', { id: 'brca1-ring' });
+    const enrich2 = await act('score', { preset: 'enrich2' });
+    const certPath = join(out, 'brca1-ring.certificate.msz');
+    const made = await act('certify', { path: certPath });
+    const read = await readCertificate(new Uint8Array(readFileSync(certPath)));
+    const inNode = await verifyCertificate(read, { software: windowSoftware });
+    const barePath = join(out, 'brca1-ring.bare.certificate.msz');
+    await act('certify', { path: barePath, tables: false });
+    const bare = await readCertificate(new Uint8Array(readFileSync(barePath)));
+    const alone = await act('verify_certificate', { paths: [barePath], library: false, show: false });
+    const given = await act('verify_certificate', { paths: [barePath, join(RING, 'scores.csv'), join(RING, 'counts.csv')], library: false, show: false });
+    const example = exampleById('brca1-ring');
+    const reviewPath = join(out, 'brca1-ring.review.html');
+    await act('review_report', { path: reviewPath });
+    const reviewHTML = readFileSync(reviewPath, 'utf8');
+    const traced = checkTraced(reviewHTML, read.certificate, read.archive.ws);
+    check('open_example "brca1-ring" offline, scored with the Enrich2-compatible preset and certified, as its guide says: the published scores, Run 1 and Run 2, 110,975 numbers, verified in Node bit for bit; without its tables, named by the SHA-256 of MaveDB\'s files, not checkable alone and verified with MaveDB\'s two files beside it; the review report\'s numbers the certificate\'s',
+      `${read.archive.ws.runs.map((r) => r.name).join(', ')}: ${read.certificate.total.toLocaleString('en-US')} numbers; Node ${inNode.verdict}; bare: ${bare.certificate.inputs.map((i) => `${i.sha256.slice(0, 12)}…`).join(', ')}; alone ${alone.data.verdict}, with MaveDB's files ${given.data.verdict}; review ${traced.total} traced, ${traced.bad.length} wrong`,
+      opened.ok !== false && enrich2.ok !== false && made.ok !== false && read.archive.ws.runs.map((r) => r.name).join() === 'Published scores,Run 1,Run 2' && read.certificate.total === 110975 && inNode.verdict === 'verified' && inNode.numbers.same === 110975
+        && bare.certificate.inputs.map((i) => i.sha256).sort().join() === [example.mavedb.scores.sha256, example.mavedb.counts.sha256].sort().join() && alone.data.verdict === 'incomplete' && given.data.verdict === 'verified'
+        && traced.total >= 200 && !traced.bad.length && !externalReferences(reviewHTML).length);
+  } else {
+    console.log('  BRCA1 RING\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-brca1-ring (its certificate\'s checks skipped)');
+    if (requireData) check('BRCA1 RING\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
   }
 
   // Two conditions (wave 2, slice 6): the example opens on its differential map; scored in the
@@ -887,9 +1235,21 @@ try {
   const grb2RunState = await act('get_state');
   const run1 = grb2RunState.data.runs.find((r) => r.name === 'Run 1');
   check('export structure-image: a figure panel, twice the view saved, its legend below it, what it shows written into it (PNG text): the structure\'s file by its SHA-256, the view, the coloring of Run 1 by its output\'s SHA-256, the legend', JSON.stringify({ structure: panel.structure.sha256.slice(0, 12), view: panel.view.saved, coloring: panel.coloring.how, run: panel.coloring.run?.name, legend: panel.legend?.title, image: panel.image }), panel.format === 'mavescape-figure-panel' && panel.structure.sha256 === vwfSha && panel.view.saved === 'Core' && panel.coloring.how === 'median' && panel.coloring.run?.output === run1?.outputSha256 && panel.legend?.title === 'Median score, Run 1' && panel.image.legend && panel.image.width === 2 * panel.image.view.width && panel.image.height > 2 * panel.image.view.height);
+  // A saved view as a figure's panel (wave 6, slice 2): its figure panel drawn on white at 4×, kept
+  // with the figure in the library and the archive, the same pixels as the view's own figure panel.
+  const structureFigure = await act('add_figure_panel', { kind: 'structure', view: 'Core' });
+  await act('export', { what: 'structure-image', path: join(out, 'core-4x.png'), scale: 4, light: true });
+  await act('export_figure', { figure: structureFigure.data.figure, path: join(out, 'structure-figure.svg') });
+  const structureSVG = readFileSync(join(out, 'structure-figure.svg'), 'utf8');
+  const panelImage = Buffer.from(structureSVG.match(/href="data:image\/png;base64,([^"]+)"/)?.[1] ?? '', 'base64');
+  const own4x = decodePNG(readFileSync(join(out, 'core-4x.png')));
+  const inFigure = panelImage.length ? decodePNG(panelImage) : null;
+  const imageField = structureFigure.data.panel.options.image;
   // Through the archive, opened again in the page (a copy: the workspace is in the library).
   await act('export', { what: 'archive', path: join(out, 'grb2-views.msz') });
   const viewsArchive = await readArchive(readFileSync(join(out, 'grb2-views.msz')));
+  const archivedImage = viewsArchive.sources.get(imageField.sha256);
+  check('add_figure_panel of a saved structure view: its figure panel drawn at 4× on white and kept with the figure, the same pixels as export structure-image draws the view (light: on white), the same bytes in the figure\'s SVG and in the archive', `${structureFigure.message.slice(0, 80)}; ${inFigure ? `${inFigure.width} × ${inFigure.height}` : 'no image'} against ${own4x.width} × ${own4x.height}, ${inFigure && Buffer.compare(Buffer.from(inFigure.rgba), Buffer.from(own4x.rgba)) === 0 ? 'the same pixels' : 'different pixels'}; archive ${archivedImage && Buffer.compare(Buffer.from(archivedImage), panelImage) === 0 ? 'the same bytes' : 'not the same'}`, inFigure && inFigure.width === own4x.width && inFigure.height === own4x.height && Buffer.compare(Buffer.from(inFigure.rgba), Buffer.from(own4x.rgba)) === 0 && imageField.width === own4x.width && archivedImage && Buffer.compare(Buffer.from(archivedImage), panelImage) === 0);
   const methodsText = viewsArchive.methods?.markdown ?? '';
   await act('open_files', { paths: [join(out, 'grb2-views.msz')] });
   const fromArchive = await act('open_structure_view', { name: 'Core' });
@@ -904,6 +1264,40 @@ try {
   const refetchedView = await act('open_structure_view', { name: 'Core' });
   await browser.eval(`(() => { window.mavescape.library.getFile = window.__getFile; return true; })()`);
   check('an archive with the structures named by checksum only: no structure file in it; a view whose file the library lacks fetches it again by its ID (the fetcher\'s cache) and finds its SHA-256 the one saved', `${lightArchive.manifest.structures}, ${lightArchive.sources.has(vwfSha) ? 'the file in it' : 'no file'} | ${refetchedView.message}`, lightArchive.manifest.structures === 'checksums' && !lightArchive.sources.has(vwfSha) && refetchedView.data.notes.some((n) => /fetched again by its ID, its SHA-256 the one saved/.test(n)));
+  // Wave 6, slice 8: GRB2's figure as its guide makes it. The variance beyond counting acknowledged,
+  // then Run 1's map, the view Core and the finding on one page, exported as PDF and dropped back
+  // (check_figure): every panel as it was drawn, drawn again the same by Node from the workspace's
+  // archive; the acknowledgement withdrawn, the QC panel says so.
+  {
+    await act('acknowledge_finding', { finding: 'excess-variance', run: 'Run 1', reason: GRB2_ACKNOWLEDGED });
+    await act('create_figure', { name: 'GRB2 SH3', size: 'double', height_mm: GRB2_FIGURE.height });
+    const at = (k) => ({ x_mm: GRB2_FIGURE[k][0], y_mm: GRB2_FIGURE[k][1], width_mm: GRB2_FIGURE[k][2], height_mm: GRB2_FIGURE[k][3] });
+    const placed = [
+      await act('add_figure_panel', { figure: 'GRB2 SH3', run: 'Run 1', tracks: ['reference', 'effect'], ...at('map') }),
+      await act('add_figure_panel', { figure: 'GRB2 SH3', kind: 'structure', view: 'Core', ...at('structure') }),
+      await act('add_figure_panel', { figure: 'GRB2 SH3', kind: 'qc', subject: 'Run 1', finding: 'excess-variance', ...at('qc') }),
+    ];
+    const laidOut = (await act('figures', { figure: 'GRB2 SH3' })).data.figures[0];
+    const figurePath = join(out, 'grb2-sh3.pdf');
+    await act('export_figure', { figure: 'GRB2 SH3', path: figurePath });
+    const manifest = readFigureManifest(new Uint8Array(readFileSync(figurePath)));
+    const dropped = await act('check_figure', { paths: [figurePath] });
+    await act('export', { what: 'archive', path: join(out, 'grb2-figure.msz') });
+    const archived = await readArchive(readFileSync(join(out, 'grb2-figure.msz')));
+    const fig = archived.ws.figures.find((f) => f.name === 'GRB2 SH3');
+    const computed = await computeNumbers(archived.ws, async (sha) => archived.sources.get(sha) ?? null, { software: windowSoftware });
+    const digests = panelDigests(fig, computed.detail.figures.get(fig.id).drawn);
+    await act('acknowledge_finding', { finding: 'excess-variance', run: 'Run 1', reason: '' });
+    const withdrawn = await act('check_figure', { paths: [figurePath] });
+    const run1 = archived.ws.runs.find((r) => r.name === 'Run 1');
+    const [a, b, c] = manifest?.panels ?? [];
+    const statuses = (r) => r.data.panels.map((x) => `${x.letter} ${x.status}${x.changes.length ? ` (${x.changes.join('; ')})` : ''}`).join(', ');
+    check('GRB2\'s figure as its guide makes it: the variance beyond counting acknowledged, Run 1\'s map, the view Core and the finding on one page, exported as PDF with its manifest (Run 1 by its output\'s SHA-256, the acknowledgement\'s reason, 2VWF and the view\'s image by theirs); dropped back, every panel as it was drawn, and Node draws each again from the archive the same; the acknowledgement withdrawn, the QC panel says so',
+      `${placed.map((x) => `${x.data.panel.letter}: ${x.data.panel.shows}`).join('; ')} | ${statuses(dropped)}; Node's drawings ${fig?.panels.filter((x) => digests.get(x.id) === manifest?.panels.find((m) => m.id === x.id)?.drawing).length} of 3 the manifest's | withdrawn: ${statuses(withdrawn)}`,
+      placed.map((x) => x.data.panel.letter).join() === 'A,B,C' && laidOut.panels.every((x) => !x.notes.length) && a?.inputs.run.output === run1.output.sha256 && c?.inputs.acknowledged === GRB2_ACKNOWLEDGED && b?.inputs.structure?.sha256 === vwfSha && archived.sources.has(b?.inputs.image)
+        && dropped.data.intact && dropped.data.panels.every((x) => x.status === 'unchanged') && fig.panels.every((x) => digests.get(x.id) === manifest.panels.find((m) => m.id === x.id)?.drawing)
+        && withdrawn.data.panels.map((x) => x.status).join() === 'unchanged,unchanged,changed' && withdrawn.data.panels[2].changes.join() === 'the finding\'s acknowledgement was withdrawn since');
+  }
   const removedView = await act('remove_structure_view', { name: 'Core' });
   const noView = await send('open_structure_view', { name: 'Core' });
   check('remove_structure_view: the view removed, and its structure with it (no other view shows it); opened again, refused', `${removedView.message} | ${noView.message}`, !removedView.data.views.includes('Core') && !removedView.data.structures.length && !noView.ok);

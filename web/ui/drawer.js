@@ -25,9 +25,21 @@ export function mountDrawer(app) {
       ? h('p.muted', { style: { margin: '4px 0 6px', fontSize: '12px' } }, `${history.length} change${history.length === 1 ? '' : 's'}, each chained to the one before (SHA-256; the latest ${check.head ? `${check.head.slice(0, 12)}…` : '—'}): a change altered or removed later breaks the chain.${undone ? ` ${undone} undone change${undone > 1 ? 's' : ''} can be redone (⇧⌘Z).` : ''}`)
       : h('div.callout.danger', { style: { margin: '4px 0 6px' } }, `The history's chain is broken at entry ${check.broken[0].index + 1}: ${check.broken[0].reason}.`);
     if (!history.length) return h('p.muted', 'Changes to the analysis are listed here as you make them.');
-    return h('div', status, h('ol.history-list', ...history.slice().reverse().map((entry) => h('li',
+    // Checkpoints (wave 6, slice 5): kept from here, and each entry that kept one opens what
+    // changed since in the Report view.
+    const checkpoints = ws.checkpoints ?? [];
+    const changesSince = (entry) => {
+      const c = entry.action === 'checkpoint' ? checkpoints.find((x) => entry.detail.startsWith(`Checkpoint "${x.name}"`) && entry.detail.includes(x.sha256.slice(0, 12))) : null;
+      return c ? h('button.btn.small', { type: 'button', style: { marginLeft: '8px' }, onclick: async () => {
+        app.reportView = { from: c.id, to: 'now' };
+        await app.setMode('report');
+        app.store.notify(['report-view']);
+      } }, 'Changes since') : null;
+    };
+    const keep = h('button.btn.small', { type: 'button', title: 'Keep the analysis as it stands, to see later what changed since', onclick: () => import('./diff.js').then((m) => m.askCheckpoint(app)) }, 'Keep a checkpoint');
+    return h('div', h('div.row', { style: { alignItems: 'center', gap: '8px' } }, status, h('span.spacer'), keep), h('ol.history-list', ...history.slice().reverse().map((entry) => h(`li${entry.action === 'checkpoint' ? '.checkpoint' : ''}`,
       h('time', { title: entry.time }, new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
-      h('span', entry.detail || entry.action)))));
+      h('span', entry.detail || entry.action, changesSince(entry))))));
   }
 
   function renderLog() {

@@ -5,6 +5,8 @@ package main
 // exactly these; TestEveryActionHasAPageHandler checks it). GET /api/remote/tools lists them with
 // their arguments, and the MCP server (roadmap wave 7) will offer the same list to agents.
 
+import "encoding/json"
+
 type remoteAction struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
@@ -13,8 +15,25 @@ type remoteAction struct {
 	long bool
 	// output: writes a file at args.path (output.go), so it needs the token.
 	output bool
-	// reads: reads files at args.paths (local.go), so it needs the token.
-	reads bool
+	// reads: reads files at args.paths (local.go), so it needs the token. optionalPaths: the
+	// paths may be left out (diff: between checkpoints, or two archives), and then nothing is read.
+	reads         bool
+	optionalPaths bool
+}
+
+// readsFiles: whether a call of the action reads files (and so needs the token): one that reads,
+// unless its paths are optional and none are given.
+func (a remoteAction) readsFiles(args json.RawMessage) bool {
+	if !a.reads {
+		return false
+	}
+	if !a.optionalPaths {
+		return true
+	}
+	var params struct {
+		Paths []string `json:"paths"`
+	}
+	return json.Unmarshal(args, &params) == nil && len(params.Paths) > 0
 }
 
 func schema(properties map[string]any, required ...string) map[string]any {
@@ -50,8 +69,8 @@ var remoteActions = []remoteAction{
 		"paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths of files or folders."},
 		"new_workspace": flagArg("Open them in a new workspace rather than the open one."),
 	}, "paths"), long: true, reads: true},
-	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map, compare or structure.", InputSchema: schema(map[string]any{
-		"mode": textArg("start, experiment, qc, score, map, compare or structure."),
+	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map, compare, structure, figures or report.", InputSchema: schema(map[string]any{
+		"mode": textArg("start, experiment, qc, score, map, compare, structure, figures or report."),
 	}, "mode")},
 	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
 		"kind": textArg("table, target, run, selection, structure view or variant; found by name across all of them if not given."),
@@ -143,10 +162,12 @@ var remoteActions = []remoteAction{
 		"max_se":         map[string]any{"type": "number", "minimum": 0, "description": "Leave out the variants whose SE on either side is above this."},
 		"min_reads":      map[string]any{"type": "number", "minimum": 0, "description": "Leave out the variants with fewer input reads than this on either side."},
 		"show":           textArg("The tab shown: agreement (the scatter plot and statistics), maps (the two maps and their difference), disagreement (the discordant variants and the positions) or classes (a predictor's classes)."),
+		"report":         flagArg("Keep the comparison in the workspace's report (true): its sides, scale, filters and statistics, in the history; the report says it."),
 	}), long: true},
 	{Name: "check_robustness", Description: "Checks a run's robustness to other reasonable analysis choices, as the Score view's Robustness pane does: the run scored again with each alternative alone (pseudocount; normalization; the model of uncertainty, DiMSum's error model or a regression's; the combination of replicates; the minimum input count, replicates and time points; each replicate left out), then seeded combinations of them. For each variant (and each difference between conditions) its class (lower than, like or higher than the wild type, q < 0.05), effect, rank, SE and inclusion in every analysis, and its verdict: robust, fragile (a choice moves its effect beyond its 95% interval and changes its class, the choice named), depends on its uncertainty, borderline, its effect's size depends on a choice, or not always scored; each alternative's effect; the least tolerant positions. Export with what robustness (the variants, CSV; or its record, a .json path) or robustness-positions.", InputSchema: schema(map[string]any{
-		"run": runArg,
-		"max": map[string]any{"type": "integer", "minimum": 2, "maximum": 256, "description": "How many analyses in all (48 by default): the declared, each alternative alone, then seeded combinations."},
+		"run":    runArg,
+		"max":    map[string]any{"type": "integer", "minimum": 2, "maximum": 256, "description": "How many analyses in all (48 by default): the declared, each alternative alone, then seeded combinations."},
+		"report": flagArg("Keep the check in the workspace's report (true): the choices varied and what each target's verdicts were, in the history; the report says it."),
 	}), long: true},
 	{Name: "list_tracks", Description: "The sequence tracks beside a run's map, in order: the run's own (reference, coverage, position effect, uncertainty) and the workspace's annotations' (UniProt features, conservation, AlphaMissense, ClinVar, gnomAD, MaveDB's annotations, an alignment, a predictor, a custom track), each with its source (service, release, retrieval date), whether it is shown, its filter and the filters it offers, and what it holds; the annotations that could not be read; and what can be added.", InputSchema: schema(map[string]any{
 		"run":       runArg,
@@ -211,9 +232,98 @@ var remoteActions = []remoteAction{
 	{Name: "remove_structure_view", Description: "Removes a saved view, and its structure when no other view shows it (undoable, in the history).", InputSchema: schema(map[string]any{
 		"name": textArg("The saved view's name."),
 	}, "name")},
+	{Name: "figures", Description: "The workspace's figures: each one's name, page (millimeters, and the text size in points), its panels lettered in reading order with what each shows, where it is (millimeters) and anything wrong with it (text under 6 pt, a map too narrow for its positions, a run no longer there), and the figure described in words.", InputSchema: schema(map[string]any{
+		"figure": textArg("A figure by name or id: only that one."),
+	})},
+	{Name: "create_figure", Description: "Makes a figure: an empty page at a journal's column width or a slide, shown in the Figures view. Add panels with add_figure_panel.", InputSchema: schema(map[string]any{
+		"name":      textArg("Its name (\"Figure 2\"); Figure n if not given."),
+		"size":      textArg("single (85 mm wide), onehalf (114 mm), double (174 mm, the default) or slide (16:9)."),
+		"width_mm":  map[string]any{"type": "number", "minimum": 25, "maximum": 700, "description": "The page's width in millimeters, instead of the size's."},
+		"height_mm": map[string]any{"type": "number", "minimum": 25, "maximum": 700, "description": "The page's height in millimeters, instead of the size's."},
+		"text":      map[string]any{"type": "number", "minimum": 4, "maximum": 36, "description": "The text size in points at the printed size (7, or 14 on a slide)."},
+	})},
+	{Name: "add_figure_panel", Description: "Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's variant-effect map (a condition or a difference between conditions, colored as render_map colors it, a range of positions, tracks below it, its color bar and the key to its states); a QC finding's charts (of a run, or of the counts); a run's scores by class, filter flow or a contrast's volcano; a comparison (as compare takes its sides: agreement, Bland–Altman, disagreement by position, a predictor's classes, or a map of either side or of the difference); a variant's evidence (its score and each replicate's with their intervals, its time course, or its distribution over the bins); a saved structure view (its figure panel, drawn at 4x on white and kept with the figure); or text. Placed below the panels already there unless placed; shown in the Figures view. Returns the panel's id and letter, and what it shows.", InputSchema: schema(map[string]any{
+		"figure":    textArg("The figure, by name or id; a new figure if not given."),
+		"kind":      textArg("map (the default), qc, scores, compare, variant, structure or text."),
+		"plot":      textArg("What a scores panel shows (distribution, flow, volcano), a compare panel (agreement, bland-altman, positions, classes, map-first, map-second, map-difference) or a variant panel (evidence, time-course, bins)."),
+		"subject":   textArg("qc: the run whose QC (by name), or counts; the latest run if not given."),
+		"finding":   textArg("qc: the finding, by id (qc_findings lists them) or title."),
+		"pair":      map[string]any{"type": "integer", "minimum": 1, "description": "qc, replicate agreement: the pair of replicates drawn, from 1."},
+		"a":         textArg("compare: the first side, as compare takes it; the pair compared last if not given."),
+		"b":         textArg("compare: the second side."),
+		"scale":     textArg("compare: the scale, as compare takes it."),
+		"variant":   textArg("variant: its MAVE-HGVS name, such as p.Trp36Ala."),
+		"view":      textArg("structure: the saved view, by name; the last saved if not given."),
+		"run":       runArg,
+		"condition": conditionArg,
+		"contrast":  textArg("With conditions compared: the difference to draw, by name (such as \"With ligand vs Without ligand\")."),
+		"color_by":  textArg("score (the default), se, replicates or input."),
+		"rows":      textArg("The order of the substitutions: biochemical, hydrophobicity or alphabetical."),
+		"palette":   textArg("rdbu or puor."),
+		"from":      map[string]any{"type": "integer", "minimum": 1, "description": "The first position shown (the target's numbering)."},
+		"to":        map[string]any{"type": "integer", "minimum": 1, "description": "The last position shown."},
+		"tracks":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The tracks below the map, by id (list_tracks gives them); \"shown\" alone for those shown beside the map; none if not given."},
+		"text":      textArg("text: the panel's text."),
+		"x_mm":      map[string]any{"type": "number", "minimum": 0, "description": "Where the panel's left edge is, in millimeters from the page's."},
+		"y_mm":      map[string]any{"type": "number", "minimum": 0, "description": "Where its top is."},
+		"width_mm":  map[string]any{"type": "number", "minimum": 4, "description": "Its width (the page's, less its margins, if not given)."},
+		"height_mm": map[string]any{"type": "number", "minimum": 4, "description": "Its height."},
+	})},
+	{Name: "set_figure", Description: "Changes a figure: its name, page size, text size and lettering, and its panels (moved, resized, their options changed, removed), each change undoable. Returns the figure as figures does.", InputSchema: schema(map[string]any{
+		"figure":    textArg("The figure, by name or id."),
+		"name":      textArg("A new name."),
+		"size":      textArg("single, onehalf, double or slide: the page's size (panels kept on it)."),
+		"width_mm":  map[string]any{"type": "number", "minimum": 25, "maximum": 700},
+		"height_mm": map[string]any{"type": "number", "minimum": 25, "maximum": 700},
+		"text":      map[string]any{"type": "number", "minimum": 4, "maximum": 36, "description": "The text size in points."},
+		"letters":   flagArg("Letter the panels A, B, C… in reading order."),
+		"panels":    map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Changes to panels: each { panel (its id or letter), and any of x_mm, y_mm, width_mm, height_mm; a map's from, to, condition, contrast, color_by, rows, palette, tracks, medians, legend; a plot's plot and pair; any panel's title and letter; a text's text, size, bold, align; or remove: true }."},
+		"delete":    flagArg("Delete the figure."),
+	}, "figure")},
+	{Name: "export_figure", Description: "Writes a figure: SVG (vector, its text as text and its description in <desc>), PDF (vector, one page at its printed size, text in Helvetica) or PNG at a resolution of its printed size (300 dpi if not given, its resolution recorded in the file), each carrying its manifest (what each panel shows and was drawn from: each run by its output's SHA-256, the QC thresholds, the sides of a comparison, the tracks' files, a structure view's image; a digest of each panel's drawing; MaveScape's version and commit; a fingerprint), or the manifest alone (json). The same figure is the same bytes (with a fixed time, as mavescape run fixes it). Needs the token.", InputSchema: schema(map[string]any{
+		"figure":    textArg("The figure, by name or id."),
+		"format":    textArg("svg, pdf, png or json (the manifest); from the path's extension if not given."),
+		"dpi":       map[string]any{"type": "number", "minimum": 72, "maximum": 1200, "description": "png: dots per inch of the printed size."},
+		"path":      textArg("The absolute path of the file to write."),
+		"overwrite": flagArg("Replace the file if it exists."),
+	}, "figure", "path"), long: true, output: true},
+	{Name: "check_figure", Description: "Reads a figure MaveScape exported (SVG, PDF, PNG, or its manifest as JSON): what it shows and where it came from (the workspace, MaveScape's version, when), whether its manifest is as it was written (its fingerprint), and panel by panel what changed in the workspace open since (a run not here, a table scored again since, the QC thresholds or an acknowledgement changed, an annotation's file changed, a structure view saved again). With rebuild, adds the figure to the workspace, its panels drawn again from their inputs and each drawing compared with the one the file records. Needs the token.", InputSchema: schema(map[string]any{
+		"paths":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The figure's file: one absolute path."},
+		"rebuild": flagArg("Rebuild the figure in the workspace and say, panel by panel, whether it is drawn the same."),
+	}, "paths"), long: true, reads: true},
+	{Name: "checkpoint", Description: "Keeps a checkpoint: the analysis as it stands (the targets, design, runs, QC thresholds and acknowledgements, selections, annotations, structure views, figures and what the report keeps), named, with the history's hash at that moment, in the workspace and its archive; or deletes one. Lists the checkpoints kept. Compare with diff.", InputSchema: schema(map[string]any{
+		"name":   textArg("The checkpoint's name (\"Before the rescoring\"): keeps one of the analysis as it stands."),
+		"remove": textArg("A checkpoint, by name or id, to delete."),
+	})},
+	{Name: "diff", Description: "What changed between two states of the analysis, in words: from a checkpoint (the latest if not given) to now or another checkpoint, or between two workspace archives (paths, the earlier first). The tables, targets, design, runs scored and removed, QC thresholds and acknowledgements, selections, annotations, structure views, figures, the report's analyses and MaveDB details; and for each table's latest run, how its analysis changed (parameters, filters, design) and what that did: for each condition, the variants whose effect moved beyond their earlier 95% interval, changed class (lower than, like or higher than the wild type, q < 0.05) or were newly filtered or scored, the most moved by name, and the QC findings whose verdict changed. Shows the changes in the Report view, with a map of the change.", InputSchema: schema(map[string]any{
+		"from":  textArg("The checkpoint compared from, by name or id; the latest if not given."),
+		"to":    textArg("now (the default), or another checkpoint by name or id."),
+		"paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Two workspace archives (.msz), absolute paths, the earlier first: compared instead of checkpoints."},
+		"show":  flagArg("Show the changes in the Report view (the default); false leaves the view shown."),
+	}), long: true, reads: true, optionalPaths: true},
+	{Name: "certify", Description: "Writes a reproducibility certificate of the workspace (.msz): the workspace archive with every number it reports computed again from its files (each run's scores, SEs and classes and its output's SHA-256; its QC findings and the SHA-256 of its whole QC; the comparisons and robustness checks kept in the report; each figure panel's drawing by its SHA-256; the report), the files by their SHA-256, the history's head, the checkpoints, what is not computed again, and a fingerprint (the SHA-256 of what was certified, to quote with the analysis). mavescape verify (or verify_certificate) computes every number again and compares them bit for bit. Needs the token.", InputSchema: schema(map[string]any{
+		"path":      textArg("The absolute path of the certificate to write (.msz)."),
+		"tables":    flagArg("Include the count tables (the default); false names each by its SHA-256 only, for data that cannot be shared (verifying then needs them beside it)."),
+		"overwrite": flagArg("Replace the file if it exists."),
+	}, "path"), long: true, output: true},
+	{Name: "review_report", Description: "Writes the review report of the workspace (.html): one self-contained file a reviewer opens in any browser, without MaveScape (the experiment and design, the inputs with their SHA-256, each run's parameters, classes and maps, the QC findings with their plots, the comparisons and robustness checks kept in the report, the selections, structure views and figures, the methods and the decision log), every number traced to where it comes from with its key and exact value: the numbers of the certificate certify writes, whose fingerprint it names. It loads nothing. Needs the token.", InputSchema: schema(map[string]any{
+		"path":      textArg("The absolute path of the report to write (.html)."),
+		"tables":    flagArg("The report of the certificate with the count tables (the default); false, of the one naming them by their SHA-256 only."),
+		"overwrite": flagArg("Replace the file if it exists."),
+	}, "path"), long: true, output: true},
+	{Name: "verify_certificate", Description: "Verifies a reproducibility certificate: checks its fingerprint, the workspace and every file against their SHA-256 and the history's chain, computes every number again from the files with this MaveScape's code and compares them bit for bit. Verdict verified, differs (each difference listed) or incomplete (a file it names is missing: give it in paths; the library's are found by their SHA-256). Shows the result in the Report view. Needs the token.", InputSchema: schema(map[string]any{
+		"paths":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths: the certificate (.msz), and after it the files it names but does not hold (each, or a folder of them), found by their SHA-256."},
+		"library": flagArg("Look for the files it names in this MaveScape's library too (the default); false uses only the certificate's and those given, as someone without this library would."),
+		"review":  flagArg("Also return the review report of the certificate verified (its HTML, as review), the same file its maker writes."),
+		"show":    flagArg("Show the result in the Report view (the default); false leaves the view shown."),
+	}, "paths"), long: true, reads: true},
+	{Name: "report", Description: "The workspace's report, shown in the Report view: its methods written from the record (each run's data, design, scoring with a table of its parameters, and QC; the comparisons and robustness checks kept in it; selections, annotations, structures, figures; every input's SHA-256; the software; the decision log; the limitations; the research-use statement), with numbered references: each section, the Markdown and the BibTeX, and the analyses kept in it. Written again on every change: the same workspace gives the same text.", InputSchema: schema(map[string]any{
+		"remove": textArg("An analysis kept in the report, by id or by its words (\"the comparison of Run 1 and Run 2\"), taken out first."),
+		"show":   flagArg("Show the Report view (the default); false leaves the view shown."),
+	}), long: true},
 	{Name: "proteoscope_link", Description: "Hands the structure shown to a Proteoscope running on this computer (found on its ports, 8765-8814, or those --proteoscope names), in what it accepts: for a PDB entry or AlphaFold DB model and a Proteoscope MaveScape was tested with (0.10), the link that opens it there with the scores as its custom residue data, the residues drawn, hidden, selected, labeled and focused on, and the camera (open the link in a browser); for another version, a link to the structure alone; for a file of the person's, the session to open there as a file (export proteoscope-session writes it). Refused, saying why, when Proteoscope is not running.", InputSchema: schema(map[string]any{})},
-	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), the comparison shown (its matched variants, CSV; its report and statistics, JSON; its positions, maps or a predictor's classes), or a run's robustness to analysis choices. Needs the token.", InputSchema: schema(map[string]any{
-		"what":               textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb, comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions, structure-mapping (the target on the structure shown, position by position, CSV), structure-scores (the scores the structure is colored by, position by position, with each residue's color, CSV), structure-evidence (what the structure says of each position: secondary structure, accessibility, exposure, partner, class, with its median score, CSV) structure-image (a figure panel of the view shown: PNG, its legend below it, what it shows written into it) or proteoscope-session (the view shown as a Proteoscope session, .proteoscope.json: the structure, by its ID or embedded, its scores as residue data, the residues drawn, selected and labeled, the camera; Proteoscope need not be running)."),
+	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), the comparison shown (its matched variants, CSV; its report and statistics, JSON; its positions, maps or a predictor's classes), a run's robustness to analysis choices, or the workspace's report (Markdown, its references BibTeX). Needs the token.", InputSchema: schema(map[string]any{
+		"what":               textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb, comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions, structure-mapping (the target on the structure shown, position by position, CSV), structure-scores (the scores the structure is colored by, position by position, with each residue's color, CSV), structure-evidence (what the structure says of each position: secondary structure, accessibility, exposure, partner, class, with its median score, CSV) structure-image (a figure panel of the view shown: PNG, its legend below it, what it shows written into it), proteoscope-session (the view shown as a Proteoscope session, .proteoscope.json: the structure, by its ID or embedded, its scores as residue data, the residues drawn, selected and labeled, the camera; Proteoscope need not be running), report (the workspace's report: its methods from the record, Markdown) or report-references (its references, BibTeX)."),
 		"path":               textArg("The absolute path of the file to write."),
 		"overwrite":          flagArg("Replace the file if it exists."),
 		"run":                runArg,
@@ -222,6 +332,7 @@ var remoteActions = []remoteAction{
 		"include_structures": flagArg("archive: include the files of the structures the saved views show, or name each by its ID and SHA-256 only (false). Not given: included when the library holds every file, named by ID and SHA-256 when it does not (a workspace opened from an archive that named them so), which the message says."),
 		"scale":              map[string]any{"type": "number", "minimum": 1, "maximum": 8, "description": "structure-image: the image's size against the view's (4 if not given)."},
 		"legend":             flagArg("structure-image: draw the legend below the image (the default)."),
+		"light":              flagArg("structure-image: on white whatever the page's theme, as a figure's structure panel draws it."),
 		"selection":          textArg("selection: a saved selection by name; the current selection if not given."),
 		"map":                textArg("comparison-map: first, second or difference (the default)."),
 	}, "what", "path"), long: true, output: true},

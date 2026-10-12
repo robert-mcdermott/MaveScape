@@ -26,7 +26,7 @@ import (
 //go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/lib/providers/*.js web/lib/structure/*.js web/ui/*.js web/workers/*.js web/examples
 var content embed.FS
 
-var version = "0.5.0"
+var version = "0.6.0"
 
 // commit is the source revision the program was built from. Release builds set it with
 // -ldflags "-X main.commit=..."; otherwise it comes from the version-control stamp Go records
@@ -84,7 +84,7 @@ func init() {
 }
 
 func main() {
-	// Headless commands (run.go, export.go).
+	// Headless commands (run.go, export.go, verify.go).
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "run":
@@ -93,6 +93,8 @@ func main() {
 			os.Exit(validateHeadless(os.Args[2:], os.Stdout, os.Stderr))
 		case "export":
 			os.Exit(exportHeadless(os.Args[2:], os.Stdout, os.Stderr))
+		case "verify":
+			os.Exit(verifyHeadless(os.Args[2:], os.Stdout, os.Stderr))
 		}
 	}
 	cfg, err := parseConfig(os.Args[1:])
@@ -300,6 +302,7 @@ func parseConfig(args []string) (config, error) {
 		fmt.Fprintln(flags.Output(), "       mavescape run --design design.json --out results/ counts.csv   (scores without a window; mavescape run -h)")
 		fmt.Fprintln(flags.Output(), "       mavescape validate [--design design.json] [tables...]         (checks them as scoring would; mavescape validate -h)")
 		fmt.Fprintln(flags.Output(), "       mavescape export --format mavedb --out deposit/ analysis.msz  (a run as a MaveDB deposit, or tables; mavescape export -h)")
+		fmt.Fprintln(flags.Output(), "       mavescape verify analysis.certificate.msz                     (computes a certificate's numbers again; mavescape verify -h)")
 		flags.PrintDefaults()
 	}
 	files, err := parseArgs(flags, args)

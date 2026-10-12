@@ -40,7 +40,7 @@ if (pagesCheckout && !publish) {
   console.error(`${out} is a checkout of gh-pages, which publishes the website: add --publish to build into it (when a release is out), or give another folder.`);
   process.exit(2);
 }
-const SITE = 'https://robert-mcdermott.github.io/mavescape/';
+const SITE = 'https://robert-mcdermott.github.io/MaveScape/';
 const GITHUB = 'https://github.com/robert-mcdermott/mavescape';
 const VERSION = /var version = "([^"]+)"/.exec(readFileSync(join(repo, 'main.go'), 'utf8'))[1];
 
@@ -48,7 +48,7 @@ const VERSION = /var version = "([^"]+)"/.exec(readFileSync(join(repo, 'main.go'
 const DOCS = [
   { group: 'Start', pages: [['index', 'Overview'], ['getting-started', 'Getting started'], ['examples', 'Examples'], ['opening-data', 'Opening your data'], ['public-data', 'Public data']] },
   { group: 'Analysis', pages: [['experiment', 'The design'], ['scoring', 'Scoring'], ['qc', 'Quality control'], ['map', 'The map and the inspector'], ['selections', 'Selections'], ['compare', 'Comparisons'], ['robustness', 'Robustness'], ['structure', 'Structures']] },
-  { group: 'Results', pages: [['record', 'Exports and the record']] },
+  { group: 'Results', pages: [['figures', 'Figures'], ['report', 'Report'], ['certificate', 'Certificates and review reports'], ['record', 'Exports and the record']] },
   { group: 'Automate', pages: [['scripting', 'Remote control, headless runs and scripting']] },
   { group: 'Reference', pages: [['troubleshooting', 'Troubleshooting']] },
 ];

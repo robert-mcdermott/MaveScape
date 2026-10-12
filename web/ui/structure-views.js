@@ -302,16 +302,24 @@ function drawLegend(ctx, legend, { x, y, width, scale, dark }) {
 // opened: the size it was saved at, so the same view gives the same image), its legend drawn below
 // it (legend: false, the image alone), what it shows written into it (an iTXt chunk, keyword
 // mavescape-figure-panel). Returns { name, bytes, metadata }.
-export async function figurePanel(app, { scale = 4, legend: withLegend = true } = {}) {
+export async function figurePanel(app, { scale = 4, legend: withLegend = true, light = false } = {}) {
   const state = structureState(app);
   const viewer = state.viewer;
   if (!viewer?.structure) throw new Error('No structure is open.');
   const opened = (app.store.ws.structureViews ?? []).find((v) => v.id === state.view);
   const size = opened?.size ?? viewer.size;
-  const blob = await viewer.capturePNG(scale, size);
+  // light: on white whatever the page's theme (a figure's panel, wave 6 slice 2).
+  const themed = document.documentElement.dataset.theme === 'dark';
+  const dark = themed && !light;
+  if (themed && light) viewer.setTheme(false);
+  let blob;
+  try {
+    blob = await viewer.capturePNG(scale, size);
+  } finally {
+    if (themed && light) viewer.setTheme(true);
+  }
   const image = await createImageBitmap(blob);
   const legend = withLegend ? legendOf(state) : null;
-  const dark = document.documentElement.dataset.theme === 'dark';
   // The legend's height, measured by drawing it on a scratch canvas first.
   const scratch = h('canvas', { width: image.width, height: 10 });
   const legendHeight = legend ? Math.ceil(drawLegend(scratch.getContext('2d'), legend, { x: 16 * scale, y: 0, width: image.width - 32 * scale, scale, dark })) : 0;

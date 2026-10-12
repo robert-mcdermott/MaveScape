@@ -29,6 +29,7 @@ import { exportSelection } from './record.js';
 import { annotationsSignature, exportTracks, runTracks, tracksPanel } from './tracks.js';
 import { arrangeTracks, describeTrack, describeTrackAt, sourceText } from '../lib/tracks.js';
 import { possessive } from '../lib/words.js';
+import { figureMenu, mapPanelOf } from './figure-data.js';
 
 // Named by their colors only: which end is loss of function depends on the assay (the readout).
 const PALETTES = [['rdbu', 'Blue (lower) – red (higher)'], ['puor', 'Purple (lower) – orange (higher)']];
@@ -183,11 +184,20 @@ export function mountMapMode(app, container) {
       h('button.icon-button', { type: 'button', title: 'Zoom out (−)', 'aria-label': 'Zoom out', onclick: () => map?.zoom(1 / 1.5) }, icon('minus')),
       h('button.icon-button', { type: 'button', title: 'Zoom in (+)', 'aria-label': 'Zoom in', onclick: () => map?.zoom(1.5) }, icon('plus')),
       h('button.btn.small', { type: 'button', onclick: () => map?.fit() }, 'Fit'),
+      h('button.btn.small', { type: 'button', title: 'The map as it is shown (its positions, colors and tracks) as a panel of a figure', onclick: (event) => addToFigureMenu(event.currentTarget) }, icon('figure'), 'Add to figure'),
       h('button.btn.small', { type: 'button', onclick: (event) => showMenu(event.currentTarget, [
         { label: 'SVG (vector, for figures)', icon: 'download', onSelect: exportSVG },
         { label: 'PNG (3× resolution)', icon: 'download', onSelect: exportPNG },
         { label: 'The tracks shown (CSV)', icon: 'download', disabled: !shownTracks().length, onSelect: () => exportTracks(app, run, model, shownTracks()) },
       ]) }, icon('download'), 'Export'));
+  }
+
+  // The map as it is shown, as a panel of a figure (wave 6, slice 1): an existing figure or a new one.
+  function addToFigureMenu(anchor) {
+    const range = map?.shownRange();
+    const whole = !range || (range.from === 1 && range.to === model.length);
+    const panel = mapPanelOf({ ...view, colorBy: model.colorBy }, run, whole ? null : range, shownTracks());
+    figureMenu(app, anchor, () => panel, `${possessive(run.name)} map${whole ? '' : ` (positions ${range.from}–${range.to})`}`);
   }
 
   const legendEl = h('div.map-legend');
