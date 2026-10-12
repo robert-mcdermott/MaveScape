@@ -60,7 +60,9 @@ function mavescape(args, env = {}) {
     let stderr = '';
     child.stdout.on('data', (c) => { stdout += c; });
     child.stderr.on('data', (c) => { stderr += c; });
-    child.on('exit', (code) => done({ code, stdout, stderr, seconds: (Date.now() - began) / 1000 }));
+    // 'close', not 'exit': 'exit' can come before the pipes are read to their end, which lost a
+    // reason on stderr on CI's runner (five commands at once).
+    child.on('close', (code) => done({ code, stdout, stderr, seconds: (Date.now() - began) / 1000 }));
   });
 }
 const out = (name) => join(temp, name);

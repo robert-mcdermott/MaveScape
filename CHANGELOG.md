@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 (unreleased)
+
+### Changed
+
+- The README is the project's front page, as CytoWeave's and Proteoscope's are: what MaveScape
+  is and covers, highlights, install, the examples, opening data, the views, options, scripting,
+  validation, privacy, limitations, development and credits.
+- CI does not run for a change of documentation alone (Markdown files, the spec, the license or
+  the citation); the site's pages and screenshots still run it, and it can be run by hand.
+
+### Validation
+
+- `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
+  was lost on CI's runner when the command's exit was seen before its output.
+
 ## 0.5.0 (2026-10-12)
 
 Wave 5 of the [roadmap](mavescape-spec/roadmap.md): variants in 3D. MaveScape draws a protein's

@@ -1,10 +1,25 @@
 name: CI
 
+# Not for a change of documentation alone: no check reads the Markdown files, the spec, the
+# license or the citation (the site's pages and screenshots are checked, so docs/site and
+# docs/images still run it). A push or pull request that changes anything else runs it all;
+# Actions' "Run workflow" button runs it by hand.
 on:
   push:
     # A wave's branch too, so each slice meets the runner as it is built, not at the release.
     branches: [main, 'wave*']
+    paths-ignore:
+      - '**.md'
+      - 'mavescape-spec/**'
+      - 'LICENSE'
+      - 'CITATION.cff'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'mavescape-spec/**'
+      - 'LICENSE'
+      - 'CITATION.cff'
+  workflow_dispatch:
 
 permissions:
   contents: read
