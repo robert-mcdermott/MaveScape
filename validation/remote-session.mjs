@@ -44,12 +44,18 @@ import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLE_STRUCTURES, cachedBytes, cachedJSON, exampleTarget, modelFile, nodeEvidence, openCached, paeFixture, pdbFile } from './structure-cases.mjs';
 import { clusterTest, effectsByClass, evidenceCSV } from '../web/lib/structure-evidence.js';
 import { PANEL_KEYWORD, pngTexts } from '../web/lib/structure-record.js';
+import { dataRange, residueData } from '../web/lib/proteoscope.js';
+import { createServer } from 'node:http';
+import { gunzipSync, inflateRawSync } from 'node:zlib';
 import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/lib/mapping.js';
 import { cellsAtPositions, coloringCSV, coloringLegend, coloringPalette, placeOnTarget, POSITION, positionValues, residueColors, thresholdClasses } from '../web/lib/structure-scores.js';
 import { cellAt, cellName } from '../web/lib/map-model.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
+// Where MaveScape looks for Proteoscope (--proteoscope): a fake one runs there for slice 6's checks,
+// and nothing before them, whatever runs on Proteoscope's own ports on this computer.
+const PROTEOSCOPE_PORT = 8856;
 const verbose = process.argv.includes('--verbose');
 const requireData = process.argv.includes('--require-data');
 // DHFR's MaveDB tables (wave 3, slice 6), as node validation/fetch.mjs mavedb-dhfr keeps them: copied
@@ -99,7 +105,7 @@ async function startMaveScape() {
       writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/scores`, retrieved: '2026-10-12T01:15:25Z' }, null, 2)}\n`);
     }
   }
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache, '--proteoscope', String(PROTEOSCOPE_PORT)], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   for (let i = 0; i < 300; i += 1) {
@@ -882,6 +888,104 @@ try {
   const removedView = await act('remove_structure_view', { name: 'Core' });
   const noView = await send('open_structure_view', { name: 'Core' });
   check('remove_structure_view: the view removed, and its structure with it (no other view shows it); opened again, refused', `${removedView.message} | ${noView.message}`, !removedView.data.views.includes('Core') && !removedView.data.structures.length && !noView.ok);
+
+  // Wave 5, slice 6: open in Proteoscope. A fake Proteoscope (its startup answer, as 0.10.0's
+  // local.go writes it) where --proteoscope says; nothing there at first.
+  const psSeen = [];
+  let psVersion = '0.10.0';
+  const fakeProteoscope = createServer((request, response) => {
+    psSeen.push(`${request.method} ${request.url}`);
+    if (request.url === '/api/startup') {
+      response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      response.end(JSON.stringify({ version: psVersion, offline: false, remoteControl: false, files: null }));
+    } else {
+      response.writeHead(200, { 'Content-Type': 'text/html' });
+      response.end('<!doctype html><title>Proteoscope (a fake)</title>');
+    }
+  });
+  const psListen = () => new Promise((done) => fakeProteoscope.listen(PROTEOSCOPE_PORT, '127.0.0.1', done));
+  const psClose = () => new Promise((done) => { fakeProteoscope.close(() => done()); fakeProteoscope.closeAllConnections?.(); });
+  const psButton = () => browser.eval(`Boolean(document.querySelector('.proteoscope-handoff'))`);
+  const payloadOf = (link) => JSON.parse(inflateRawSync(Buffer.from(link.split('#session=')[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64')).toString('utf8'));
+  await act('open_structure', { pdb: '2VWF' });
+  await act('set_structure', { color: 'median', select: 'pos 20-26', show: 'sticks' });
+  await act('set_structure', { select: 'chain B and resi 1-3', show: 'hide' });
+  await act('set_structure', { select: 'pos 21+25', label: true });
+  const noProteoscope = await send('proteoscope_link');
+  const noButton = !(await psButton());
+  check('proteoscope_link with no Proteoscope running: refused, saying where it was looked for; the Structure view offers no Proteoscope button', noProteoscope.message, !noProteoscope.ok && new RegExp(`not running on this computer \\(looked at 127\\.0\\.0\\.1:${PROTEOSCOPE_PORT}\\)`).test(noProteoscope.message) && noButton);
+
+  await psListen();
+  // Handed over at once after a focus, while the camera moves to it: the session has the camera
+  // where it comes to rest.
+  await act('set_structure', { select: 'pos 25', focus: true });
+  await act('set_structure', { select: 'pos 21+25' });
+  const handed = await act('proteoscope_link');
+  const cameraNow = () => browser.eval(`import('/ui/mode-structure.js').then((m) => JSON.stringify(m.structureState(window.mavescape).viewer.camera))`);
+  for (let i = 0, last = ''; i < 50; i += 1) {
+    const c = await cameraNow();
+    if (c === last) break;
+    last = c;
+    await sleep(200);
+  }
+  const link = handed.data.link ?? '';
+  const sent = link.includes('#session=') ? payloadOf(link) : null;
+  const one = sent?.structures?.[0];
+  const viewNow = await browser.eval(`import('/ui/mode-structure.js').then((m) => { const v = m.structureState(window.mavescape).viewer; return { camera: v.camera, styled: [...v.styled], hidden: v.hidden, focus: v.focused, selection: [...v.selection], labels: [...v.labels] }; })`);
+  const dataNode = residueData(medianNode, vwfMaps);
+  const sameData = one?.proteomics?.data?.length === dataNode.length && dataNode.every(([k, v], i) => one.proteomics.data[i][0] === k && Math.abs(one.proteomics.data[i][1] - v) <= 1e-5 * Math.max(1, Math.abs(v)));
+  const range = dataRange(medianNode.domain);
+  const unlike = Object.entries({
+    how: handed.data.how === 'session', link: link.startsWith(`http://127.0.0.1:${PROTEOSCOPE_PORT}/#session=`), returned: JSON.stringify(sent) === JSON.stringify(handed.data.session),
+    format: sent?.format === 'proteoscope-session' && sent?.version === 1, source: one?.source?.type === 'fetch' && one?.source?.id === '2VWF',
+    data: sameData && dataNode.length === 56 && one.proteomics.dataLabel === 'Median score, Run 1',
+    colors: one?.color?.scheme === 'data' && one.color.colormap === 'bwr' && Math.abs(one.color.range.min - range.min) < 1e-9 && Math.abs(one.color.range.max - range.max) < 1e-9 && Math.abs((range.min + range.max) / 2 - medianNode.domain.center) < 1e-9,
+    styles: JSON.stringify(one?.display?.residueStyles) === JSON.stringify(viewNow.styled) && viewNow.styled.length === 7,
+    hidden: JSON.stringify(one?.display?.hiddenResidues) === JSON.stringify(viewNow.hidden) && viewNow.hidden.length === 3,
+    focus: JSON.stringify(one?.focus) === JSON.stringify(viewNow.focus) && viewNow.focus.length === 1,
+    selection: one?.selection?.join() === 'A:21:ARG,A:25:ILE' && one?.labels?.join() === 'A:21:ARG,A:25:ILE',
+    camera: sent?.view?.camera?.distance === viewNow.camera.distance && sent.view.camera.rotation.join() === viewNow.camera.rotation.join() && sent.view.camera.target.join() === viewNow.camera.target.join(),
+  }).filter(([, ok]) => !ok).map(([k]) => k);
+  check('proteoscope_link with Proteoscope 0.10.0 running: a link to it carrying the session (deflated, URL-safe base64), the session the action returns; 2VWF fetched by its ID; GRB2\'s median scores on the 56 residues Node places them on, as its custom residue data, on Proteoscope\'s blue–white–red over the map\'s range centered on the wild type; the residues drawn as sticks, hidden, focused on, selected and labeled, and the camera, as the view has them', `${handed.message} | ${link.length} characters; ${one?.proteomics?.data?.length} values, ${sameData ? 'as Node\'s' : 'not Node\'s'}; range ${one?.color?.range?.min?.toFixed(3)} to ${one?.color?.range?.max?.toFixed(3)}${unlike.length ? `; not as the view: ${unlike.join(', ')}` : ''}`, !unlike.length);
+  check('the handoff sends Proteoscope nothing: MaveScape only asked its startup answer, the session travels in the link', psSeen.join(', '), psSeen.length >= 1 && psSeen.every((r) => r === 'GET /api/startup'));
+
+  // The button, as a click opens the link: a new tab at the fake Proteoscope's address.
+  for (let i = 0; i < 50 && !(await psButton()); i += 1) await sleep(100);
+  const buttonShown = await psButton();
+  await browser.send('Runtime.evaluate', { expression: `document.querySelector('.proteoscope-handoff').click()`, userGesture: true });
+  let psTab = null;
+  for (let i = 0; i < 50 && !psTab; i += 1) {
+    await sleep(100);
+    psTab = (await browser.send('Target.getTargets')).targetInfos.find((t) => t.type === 'page' && t.url.startsWith(`http://127.0.0.1:${PROTEOSCOPE_PORT}/`));
+  }
+  const toastText = await browser.eval(`[...document.querySelectorAll('.toast')].map((t) => t.textContent).join(' | ')`);
+  if (psTab) await browser.send('Target.closeTarget', { targetId: psTab.targetId });
+  check('the Structure view\'s Proteoscope button, shown while Proteoscope runs: a click opens the link in a new tab, the same session, and says what it sent', `${buttonShown ? 'shown' : 'not shown'}; ${psTab ? `a tab at ${psTab.url.slice(0, 60)}…` : 'no tab'}; ${toastText.slice(0, 200)}`, buttonShown && Boolean(psTab) && JSON.stringify(payloadOf(psTab.url).structures[0].proteomics) === JSON.stringify(one.proteomics) && /Opened 2VWF in Proteoscope 0\.10\.0/.test(toastText));
+
+  // A version not tested: the structure alone in the link, the session as a file.
+  psVersion = '0.11.0';
+  const untested = await act('proteoscope_link');
+  check('proteoscope_link with Proteoscope 0.11.0 (a version not tested): a link to the structure alone (#fetch=2VWF), the scores and view in a session file, saying why', untested.message, untested.data.how === 'structure' && untested.data.link === `http://127.0.0.1:${PROTEOSCOPE_PORT}/#fetch=2VWF` && untested.data.file === '2VWF.proteoscope.json' && untested.data.session.structures[0].proteomics.data.length === 56 && /tested with Proteoscope 0\.10/.test(untested.message));
+
+  // A file of the person's: the session as a file, the file embedded (its text, as MaveScape read it).
+  psVersion = '0.10.0';
+  const pdbPath = join(ROOT, 'validation/fixtures/structures/2VWF.pdb.gz');
+  await act('open_files', { paths: [pdbPath] });
+  await act('set_structure', { color: 'median' });
+  const psFromFile = await act('proteoscope_link');
+  const embedded = psFromFile.data.session.structures[0].source;
+  const embeddedText = embedded.type === 'file' ? gunzipSync(Buffer.from(embedded.data, 'base64')).toString('utf8') : '';
+  const fileData = psFromFile.data.session.structures[0].proteomics.data ?? [];
+  check('proteoscope_link on a file of the person\'s (RCSB\'s PDB-format 2VWF): no link; the session to open as a file, the file\'s text embedded as Proteoscope embeds one (gzip, base64), the same scores on the same residues as the entry\'s', `${psFromFile.message.slice(0, 220)} | ${embedded.name}: ${embeddedText.length} characters, the file's ${gunzipSync(readFileSync(pdbPath)).length}; ${fileData.length} values`, psFromFile.data.how === 'file' && psFromFile.data.link === null && embedded.name === '2VWF.pdb' && embeddedText === gunzipSync(readFileSync(pdbPath)).toString('utf8') && JSON.stringify(fileData) === JSON.stringify(one.proteomics.data));
+
+  // Proteoscope gone: the button goes, the action is refused; the session file is still written.
+  await psClose();
+  const gone = await send('proteoscope_link');
+  for (let i = 0; i < 50 && (await psButton()); i += 1) await sleep(100);
+  const sessionPath = join(out, '2VWF.proteoscope.json');
+  const exported = await act('export', { what: 'proteoscope-session', path: sessionPath });
+  const written = JSON.parse(readFileSync(sessionPath, 'utf8'));
+  check('Proteoscope stopped: proteoscope_link refused, the button gone; export proteoscope-session writes the session file all the same (Proteoscope need not run)', `${gone.message} | ${exported.message.slice(0, 160)}`, !gone.ok && /not running/.test(gone.message) && !(await psButton()) && written.format === 'proteoscope-session' && written.structures[0].source.type === 'file' && written.structures[0].proteomics.data.length === 56);
   await act('open_example', { id: 'factor9' });
   await act('open_structure', { pdb: '1RFN' });
   const lightChain = await act('map_structure', { chain: 'B' });

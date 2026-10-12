@@ -82,6 +82,7 @@ export function currentView(app, name) {
     selection: [...viewer.selection],
     labels: [...viewer.labels],
     styles: Object.fromEntries(viewer.styled),
+    hidden: viewer.hidden,
     focus: viewer.focused,
     evidence: ev.status === 'ready' ? { choice: ev.choice, fraction: ev.fraction, seed: ev.seed } : null,
   };
@@ -196,6 +197,7 @@ export async function openView(app, which) {
   const byStyle = new Map();
   for (const [key, how] of Object.entries(view.styles ?? {})) byStyle.set(how, [...(byStyle.get(how) ?? []), key]);
   for (const [how, keys] of byStyle) viewer.styleResidues(keys, how);
+  if (view.hidden?.length) viewer.styleResidues(view.hidden, 'hide');
   if (view.labels?.length) viewer.label(view.labels, true);
   if (view.focus?.length) viewer.focus(view.focus);
   viewer.select(view.selection ?? []);

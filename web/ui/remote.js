@@ -58,6 +58,7 @@ import { computeEvidence, evidenceState, evidenceStatistics, evidenceValues } fr
 import { scoreSource } from './structure-coloring.js';
 import { CLASSES, describeClusters, describeEffects, evidenceCSV } from '../lib/structure-evidence.js';
 import { figurePanel, openView, removeView, saveView } from './structure-views.js';
+import { handOff, sessionFile } from './proteoscope.js';
 import { structureWords, viewWords } from '../lib/structure-record.js';
 import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
@@ -689,6 +690,15 @@ export function installRemote(app) {
       const removed = removeView(app, views.find((v) => v.name === name).id);
       await settle();
       return { message: removed.message, data: { removed: name, views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
+    },
+
+    // Proteoscope (wave 5, slice 6): the view shown handed to a Proteoscope running on this computer.
+    async proteoscope_link() {
+      if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure.');
+      const handed = await handOff(app, { open: false });
+      if (!handed.ok) throw new ActionError(handed.message);
+      const f = handed.found;
+      return { message: handed.message, data: { how: handed.how, link: handed.link, file: handed.file?.name ?? null, proteoscope: { url: f.url, version: f.version, tested: f.tested, remoteControl: f.remoteControl, offline: f.offline }, session: handed.session } };
     },
 
     async set_mode(args) {
@@ -1403,7 +1413,7 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence', 'structure-image'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence', 'structure-image', 'proteoscope-session'];
       const what = choose(args.what, kinds, 'export');
       let file;
       // The target on the structure shown (wave 5, slice 2), position by position.
@@ -1421,6 +1431,12 @@ export function installRemote(app) {
         if (!(scale >= 1 && scale <= 8)) throw new ActionError('scale is from 1 to 8: the image\'s size against the view\'s.');
         const panel = await figurePanel(app, { scale, legend: args.legend !== false });
         return { file: panel.bytes, message: `A figure panel of ${panel.metadata.structure.name}: ${panel.metadata.image.width} × ${panel.metadata.image.height} pixels (${scale}× the view${panel.metadata.image.legend ? ', its legend below it' : ''}), what it shows written into it (PNG text "mavescape-figure-panel").` };
+      }
+      // The view shown as a Proteoscope session (wave 5, slice 6), whether Proteoscope runs or not.
+      if (what === 'proteoscope-session') {
+        if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure.');
+        const f = await sessionFile(app);
+        return { file: f.bytes, message: `${f.name}: ${f.session.name} as a Proteoscope session (${f.session.fetchable ? 'fetched by its ID' : 'its file embedded'}): ${f.session.words}. Open it in Proteoscope.` };
       }
       // What the structure says of each position (wave 5, slice 4), with its median score.
       if (what === 'structure-evidence') {

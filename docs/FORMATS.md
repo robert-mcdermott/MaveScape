@@ -19,7 +19,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
-| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV) |
+| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV); a figure panel (PNG); the view as a Proteoscope session (JSON, or a link to a running Proteoscope) |
 
 Coming later: Excel workbooks.
 
@@ -470,7 +470,7 @@ while a view shows it. A view:
   "style": "cartoon",
   "color": { "scheme": "scores", "scores": { "how": "median", "substitution": "P", "abnormal": { … } },
     "palette": "rdbu", "run": "run-b981d1a1b2d769de", "condition": 0, "contrast": null },
-  "surface": "off", "selection": ["A:21:ARG", …], "labels": [ … ], "styles": { "A:21:ARG": "sticks" }, "focus": [],
+  "surface": "off", "selection": ["A:21:ARG", …], "labels": [ … ], "styles": { "A:21:ARG": "sticks" }, "hidden": [], "focus": [],
   "evidence": { "choice": "all", "fraction": 0.2, "seed": 1 }
 }
 ```
@@ -478,7 +478,8 @@ while a view shows it. A view:
 `mapping` is the target's mapping when the view was saved (lib/structure-record.js,
 `mappingSummary`); opened, the view maps the target again and says what differs. `size` is the
 view's in CSS pixels: a figure panel of the view is drawn at it, so the same view gives the same
-image anywhere. Residues are keyed `chain:number[insertion code]:name`. Saving and removing a view
+image anywhere. Residues are keyed `chain:number[insertion code]:name`; `hidden` (from 0.5's sixth
+slice; absent before) the residues hidden. Saving and removing a view
 are in the history; a view saved under a name already used replaces it. Exported with the
 structures named by checksum only, a PDB entry or AlphaFold DB model is fetched again by its ID when
 its view opens, and its SHA-256 compared with the one saved; a file of the person's must be opened
@@ -926,6 +927,36 @@ one was opened), `coloring` (`kind`, `how`, `label`, `source`, `run` with its ou
 `condition`, `palette`, `domain`; or the structure's own `scheme`), `legend` (`title`, `low`,
 `center`, `high`, `meaning`, `items`) and `image` (`width`, `height`, `scale`, `view`, `legend`,
 `renderer`). Wave 6's figure builder reads it; any PNG reader that lists text chunks shows it.
+
+### Proteoscope sessions (`*.proteoscope.json`, and the link)
+
+The Structure view's **Proteoscope** (shown while Proteoscope runs on this computer;
+`proteoscope_link`), or `export` with `what: "proteoscope-session"` (MaveScape 0.5): the view
+shown as Proteoscope 0.10's own session, format `proteoscope-session`, version 1, which
+Proteoscope opens as it opens its own (lib/proteoscope.js). Only what Proteoscope already reads:
+
+- `application` `MaveScape` and its version; `view.camera` (`target`, `distance`, `rotation`, `fov`,
+  `orthographic`): the view's.
+- One structure. Its `source`: `{ "type": "fetch", "id": "2VWF" }` for a PDB entry, or the UniProt
+  accession for an AlphaFold DB model (Proteoscope fetches its current model); for a file of yours,
+  `{ "type": "file", "name", "encoding": "gzip-base64", "data" }`, the file's text (BinaryCIF read
+  to mmCIF), as Proteoscope embeds a local file. `assembly`, `display` (`polymer`, `ligand`: the
+  style; `residueStyles`, `hiddenResidues`), `surface.kind`, `selection`, `labels`, `focus`.
+- The colors. Colored by the scores: `color` `{ "scheme": "data", "colormap", "range" }` and
+  `proteomics.data` `[[residue key, value], …]` with its `dataLabel` (the legend's title, "Median
+  score, Run 1"): Proteoscope's *Custom residue data*. Each target position with a value, on every
+  chain mapped (filtered, missing and other residues have none: Proteoscope draws them gray); the
+  range the map's, a diverging one centered on the wild type; the colormap Proteoscope's nearest,
+  `bwr` (blue–white–red, low blue as MaveScape's) for a diverging scale, `viridis` for the rest.
+  Colored by categories (QC state, structural class): `colorOverrides` `[[key, "#rrggbb"], …]`,
+  MaveScape's colors, over `{ "scheme": "uniform" }`. Otherwise the structure's own scheme, named
+  as Proteoscope names it.
+
+Residues are keyed `chain:number[insertion code]:name`, as Proteoscope's reader keys them
+(MaveScape's is a copy of it). The link, for a PDB entry or a model and a Proteoscope MaveScape was
+tested with (0.10), is `http://127.0.0.1:<port>/#session=` and the session deflated (raw DEFLATE)
+in URL-safe base64 without padding, as Proteoscope's own links are; for another version,
+`#fetch=<ID>`, the structure alone. A file of yours goes in the file, not a link.
 
 ### Structure mappings
 

@@ -151,6 +151,29 @@ section grows with each.
     views kept.
   - **The GRB2 example's sixth step** saves its view of 2VWF as "Core".
 
+- **Open in Proteoscope (wave 5, slice 6; X6).** For what Proteoscope does beyond MaveScape
+  (validation reports, density maps, superposition, ligands), the view shown is handed to a
+  Proteoscope running on this computer, in what it already accepts (`handoff.go`,
+  `lib/proteoscope.js`, `ui/proteoscope.js`). Nothing else depends on it.
+  - **Finding it:** the program asks Proteoscope's ports (8765–8814) for its startup answer, which
+    tells it from any other program and gives its version; only a page on this computer is
+    answered. `--proteoscope off` stops the looking, `--proteoscope 9000-9010` looks elsewhere.
+    Nothing leaves the computer (NETWORK.md).
+  - **The Structure view's Proteoscope button**, only while one runs: the view as Proteoscope's own
+    session, in a link opened in a new tab. The PDB entry or AlphaFold DB model by its ID; the
+    scores as its custom residue data, titled as the legend, on its blue–white–red (viridis for
+    counts and the like) over the map's range centered on the wild type; categories (QC state,
+    structural class) as residue colors; the style, residues drawn, hidden, selected, labeled and
+    focused on; the camera, once it comes to rest.
+  - **Proteoscope 0.10** (the version tested) gets all of it; another version the structure alone
+    (`#fetch=`), the rest as a session file; a file of the person's the session file, the file
+    embedded (FORMATS.md).
+  - **Remote control:** `proteoscope_link` (the link, or the session; refused, saying where it
+    looked, when Proteoscope is not running); `export` of `proteoscope-session` writes the session
+    file whether Proteoscope runs or not.
+  - The guide page *Structures*, its section *Open in Proteoscope*, with GRB2's three steps; a
+    screenshot scene of Proteoscope's window (`structure-proteoscope`).
+
 ### Changed
 
 - The Structure view's words give a chain's UniProt residues as the entry gives them ("the entry
@@ -158,6 +181,7 @@ section grows with each.
 - The target mapped onto a structure is the target of the run the map shows (the workspace's, as
   before, when it has one target), so the mapping follows the run.
 - The Structure view's **Image** is a menu: the image (2×, as before) or a figure panel.
+- A saved view keeps the residues hidden too (`hidden`), which it did not.
 - The archive's dialog asks whether to include the structures' files when the workspace keeps any;
   its manifest says which (`structures`: `included` or `checksums`). MaveScape 0.4 reads such
   archives, the structures' files among its sources.
@@ -242,12 +266,44 @@ section grows with each.
 - The remote-control session (150 checks), slice 4: `structure_evidence` in the page as Node reads
   it, its choices and refusals, the structure's tracks, the evidence's file, the class coloring,
   a model's aligned error.
+- `structures`, slice 5 (2 more checks, 23 in all): a saved view of each example protein's PDB
+  entry and AlphaFold DB model (14) through the workspace archive, every file the same bytes and
+  every view the same, the mapping made again from each file the one saved; named by checksum
+  only, each fetched again by its ID the file recorded; the methods of GRB2's run with a view of
+  2VWF (the entry, its SHA-256, the mapping, the view, each method cited).
+- The remote-control session (155 checks), slice 5: a view of 2VWF saved, changed and opened again
+  gives the same figure panel pixel for pixel, as do the view opened from the workspace's archive
+  in a copy and from an archive naming the structure by checksum (fetched again); the panel's
+  metadata; a view removed with its structure.
+- `structures`, slice 6 (1 more check, 24 in all): the Proteoscope session of each example's run on
+  its PDB entry and its AlphaFold DB model (16): each position's median, as the run's results give
+  it, on the residue Proteoscope's reader keys it on, every scored position on a residue given one;
+  the range centered on the wild type; the link read back with zlib as sent (at most 4,818
+  characters).
+- The remote-control session (162 checks), slice 6, against a fake Proteoscope where
+  `--proteoscope` says: refused and no button while none runs; with 0.10.0, the link's session
+  (decoded with zlib) the one returned, GRB2's medians on the residues Node places them on, the
+  residues drawn, hidden, focused on, selected and labeled, the camera where it comes to rest
+  (handed over during a focus); the program asks Proteoscope only for its startup answer; the
+  button's click opens the link in a new tab; 0.11.0 gets the structure alone; a file of the
+  person's goes embedded in a session file; Proteoscope stopped, the button goes and the session
+  file is still written.
+- `proteoscope-handoff.mjs` (4 checks; not in CI, run where Proteoscope is installed): Proteoscope
+  0.10.0 itself opens the link of 2VWF colored by GRB2's medians and of GRB2's AlphaFold DB model
+  (each fetched by its ID), and the session file of RCSB's PDB-format 2VWF given as a file,
+  offline: every value on a residue its own reader reads, the legend's title, the residues drawn,
+  hidden, focused on, selected and labeled, and the camera as MaveScape had them.
 - Unit tests: Proteoscope's tests of the copied modules (100: parsers, structure, chemistry, DSSP,
   surfaces, selection language, formats, alignment, exposure, interactions; the two chemistry
   tests that waited for `interactions.js` among them), `structures.test.mjs` (6),
-  `mapping.test.mjs` (8), `structure-scores.test.mjs` (7) and `structure-evidence.test.mjs` (9).
+  `mapping.test.mjs` (8), `structure-scores.test.mjs` (7), `structure-evidence.test.mjs` (9),
+  `structure-record.test.mjs` (6) and `proteoscope.test.mjs` (4).
 - Go tests: a file stored again is read to its end before the answer
   (`TestAFileStoredAgainIsReadToItsEnd`).
+- Go tests: Proteoscope found by its startup answer (the version tested, another, without remote
+  control; the first in order), and nowhere another program, MaveScape itself, a closed port or one
+  that never answers is, within the timeout; `--proteoscope`; `/api/proteoscope` refusing a page
+  on another computer (`handoff_test.go`).
 - Go tests: the structure requests (and PDBe's best structures, and a model's aligned error) ask what NETWORK.md says, keep what
   the service sent, refuse a cut-off file or a page that is not a structure, and refuse anything
   but a PDB ID or an accession before it is sent.

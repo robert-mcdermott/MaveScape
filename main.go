@@ -53,6 +53,8 @@ type config struct {
 	// Score sets to open from MaveDB (--mavedb, or URNs among the arguments).
 	mavedb listFlag
 	files  []string
+	// Where to look for a running Proteoscope (handoff.go): "" its own ports, "off", or ports.
+	proteoscope string
 }
 
 type app struct {
@@ -68,6 +70,8 @@ type app struct {
 	fetch *fetcher
 	// records: score sets to open from MaveDB, named on the command line or by a later launch.
 	records *startupRecords
+	// proteoscope: a running Proteoscope found on this computer (handoff.go).
+	proteoscope *proteoscopeFinder
 }
 
 func init() {
@@ -289,6 +293,7 @@ func parseConfig(args []string) (config, error) {
 	flags.BoolVar(&cfg.noFetch, "no-fetch", false, "switch public data off entirely: no requests, no cache")
 	flags.StringVar(&cfg.cacheDir, "cache-dir", "", "folder for the cache of public data (default: <user cache dir>/MaveScape)")
 	flags.BoolVar(&cfg.remote, "remote-control", false, "accept actions from programs on this computer at /api/remote/action (scripts, the documentation's screenshots)")
+	flags.StringVar(&cfg.proteoscope, "proteoscope", "", "where to look for a running Proteoscope to open structures in: its own ports (8765-8814) by default, another port or range (9000-9010), or off")
 	noOpen := flags.Bool("no-open", false, "same as --window none")
 	flags.Usage = func() {
 		fmt.Fprintln(flags.Output(), "Usage: mavescape [flags] [count or score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif), workspaces (.msz) or folders of them, MaveDB URNs...]")
@@ -307,6 +312,12 @@ func parseConfig(args []string) (config, error) {
 		if err == nil {
 			fmt.Fprintf(flags.Output(), "--window must be app, browser or none, not %q\n", cfg.window)
 			err = errors.New("invalid --window")
+		}
+	}
+	if err == nil {
+		if _, _, perr := parseProteoscopePorts(cfg.proteoscope); perr != nil {
+			fmt.Fprintln(flags.Output(), perr)
+			err = perr
 		}
 	}
 	if cfg.dataDir == "" && err == nil {
@@ -351,6 +362,11 @@ func newApp(cfg config) (*app, error) {
 		fetch:   newFetcher(cfg),
 		records: &startupRecords{},
 	}
+	finder, err := newProteoscopeFinder(cfg.proteoscope)
+	if err != nil {
+		return nil, err
+	}
+	a.proteoscope = finder
 	for _, problem := range a.records.add(cfg.mavedb) {
 		log.Print(problem)
 	}
@@ -458,6 +474,9 @@ func (a *app) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/local/{index}", a.files.serve)
 	mux.HandleFunc("POST /api/open", a.openPaths)
 	a.fetch.register(mux)
+	if a.proteoscope != nil {
+		mux.HandleFunc("GET /api/proteoscope", a.proteoscope.serve)
+	}
 	if a.control != nil {
 		a.control.register(mux)
 	}

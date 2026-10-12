@@ -10,7 +10,8 @@
 //
 // A saved view (ws.structureViews): { id, name, structure (its id), created, assembly, chain,
 // mapping (mappingSummary's), camera, style, color: { scheme, scores, palette, run, condition,
-// contrast }, surface, selection, labels, styles, focus, evidence: { choice, fraction, seed } }:
+// contrast }, surface, selection, labels, styles, hidden (residues hidden; MaveScape 0.5, slice 6),
+// focus, evidence: { choice, fraction, seed } }:
 // enough to draw the view again as it was, and to check that the mapping is the one it was saved
 // with.
 

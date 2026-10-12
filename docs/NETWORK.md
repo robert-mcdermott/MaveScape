@@ -26,6 +26,7 @@ cache.
 | `--offline` | No network request at all. Public data come only from copies already in the cache; anything else is refused with a message saying so. |
 | `--no-fetch` | Public data are off: no request, no cache. The page says so where it would have offered them. |
 | `--mavedb URN` | Opens a MaveDB score set when MaveScape starts (as `mavescape urn:mavedb:…`): its record and tables, through the requests below. |
+| `--proteoscope off` | Do not look for Proteoscope on this computer (below, "Proteoscope, on this computer"). `--proteoscope 9000-9010` (or one port) looks there instead of on its own ports. |
 | `--cache-dir DIR` | The cache's folder. The default is `<user cache dir>/MaveScape`: `~/Library/Caches/MaveScape` on macOS, `~/.cache/MaveScape` on Linux, `%LocalAppData%\MaveScape` on Windows. |
 
 `mavescape run` and `mavescape validate` read only the files they are given: public data are off
@@ -110,6 +111,25 @@ not to its upload). You upload the package yourself, on mavedb.org or through it
 decide to. None of the requests above writes to MaveDB; of MaveDB's, only the search is a POST
 (gnomAD's queries are POSTs too, as its GraphQL API takes them, and write nothing).
 
+## Proteoscope, on this computer
+
+MaveScape 0.5 can hand the structure shown to [Proteoscope](https://github.com/robert-mcdermott/proteoscope),
+a separate program, when it runs on this computer (the Structure view's **Proteoscope**;
+`proteoscope_link`). Nothing else in MaveScape needs it, and nothing of this leaves the computer:
+
+- **Looking for it.** When the Structure view shows a structure (at most every few seconds), the
+  program (`handoff.go`) asks `http://127.0.0.1:<port>/api/startup` on the ports Proteoscope takes,
+  8765–8814, and nothing else; Proteoscope's answer names its version. A port where nothing listens
+  refuses at once; another program's answer is not Proteoscope's. Only a page on this computer is
+  answered. `--proteoscope off` stops the looking; `--proteoscope 9000-9010` looks there instead.
+- **The handoff** is a link the page opens in a new tab, `http://127.0.0.1:<port>/#session=…`: the
+  session (the structure's PDB ID or UniProt accession, the scores on its residues, the residues
+  drawn, selected and labeled, the camera) is after the `#`, which a browser does not send to any
+  server; Proteoscope's page reads it. A file of yours goes as a session file you open in
+  Proteoscope. MaveScape sends Proteoscope no request but the one above.
+- **Proteoscope fetches** the entry or model by its ID from RCSB PDB or AlphaFold DB itself, as its
+  own documentation says, unless it has it cached or was started with `--offline`.
+
 ## What every request carries
 
 - `User-Agent: MaveScape/<version> (local research software; docs/NETWORK.md)`
@@ -190,6 +210,10 @@ variant's reference base against the sequence it got.
   script in the page names another origin in a request. `structures_test.go`: the structure
   requests send a PDB ID or an accession only, keep the bytes the service sent (compressed), and
   refuse a cut-off file or a page that is not a structure, keeping neither.
+- `go test` (`handoff_test.go`): Proteoscope looked for on this computer only (127.0.0.1), by its
+  startup answer, quickly, and found nowhere another program, MaveScape itself or a port that never
+  answers is; `--proteoscope off`; no answer to a page on another computer. The remote session
+  checks that MaveScape asks a (fake) Proteoscope nothing but its startup answer.
 - `validation/remote-session.mjs` drives a whole session offline, and records every request the
   page makes: none goes beyond its own origin.
 - `validation/mavedb-live.mjs` opens the feasibility records from MaveDB, live (CI runs it), and

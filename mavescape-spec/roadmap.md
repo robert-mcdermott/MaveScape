@@ -2409,6 +2409,58 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    command otherwise; files as the last resort). Nothing else in MaveScape depends on it.
    - Validation: Go tests against a fake Proteoscope (tested version, unknown version, no remote
      control, absent).
+   - **Done.** `handoff.go` finds a running Proteoscope: its ports (8765–8814; `--proteoscope`
+     names others, or `off`) asked for `/api/startup`, whose answer (version, offline, remote
+     control, files) tells it from any other program; only a page on this computer is answered, and
+     nothing leaves the computer (NETWORK.md). `lib/proteoscope.js` writes the view as Proteoscope
+     0.10's own session (`proteoscope-session`, version 1; FORMATS.md): the structure by its ID (a
+     file of the person's embedded), the scores as its custom residue data with the legend's title,
+     `bwr` (or `viridis`) over the map's range centered on the wild type, categories as residue
+     colors, the style, residues drawn, hidden, selected, labeled and focused on, the camera once
+     still. `ui/proteoscope.js`: the Structure view's **Proteoscope** button, only while one runs.
+     - **Delivered:** for Proteoscope 0.10, a `#session=` link (deflated, URL-safe base64) opened in
+       a new tab; another version, `#fetch=<ID>` and the session as a file; a file of the person's,
+       the session file. Not built, as proposed before the slice: remote commands with binned
+       colors (they need `--remote-control`, which lets any program command Proteoscope, and carry
+       no values or legend), a B-factor file (the session file carries the values), a separate
+       handoff document (design.md says why).
+     - Remote control's `proteoscope_link`, `export` of `proteoscope-session`. The guide page
+       *Structures*, its section *Open in Proteoscope* with GRB2's three steps; a screenshot scene
+       of Proteoscope's window (`structure-proteoscope`, the real Proteoscope started for it).
+     - Validation:
+       - Go tests (`handoff_test.go`): found by its startup answer (0.10.0 tested, 0.11.2 not,
+         without remote control, the first in order); not found where nothing, another program,
+         MaveScape itself or a port that never answers is; the flag; the endpoint.
+       - `structures` (24 checks, 1 new): each example's session on its entry and model (16), each
+         median on the residue Proteoscope's reader keys, the link read back with zlib.
+       - `remote-session.mjs` (162 checks): a fake Proteoscope where `--proteoscope` says; absent,
+         0.10.0 (the session, the residues, the camera handed over during a focus, the button's new
+         tab), 0.11.0, a file of the person's, stopped.
+       - `proteoscope-handoff.mjs` (4 checks, where Proteoscope is installed; not in CI):
+         Proteoscope 0.10.0 itself opens the links of 2VWF and GRB2's model and the session file
+         of a PDB-format file, every value on a residue its reader reads, the residues and camera
+         as sent.
+       - Unit tests: `proteoscope.test.mjs` (4).
+   - Found by slice 6:
+     - **Proteoscope's ports are not only Proteoscope's.** On the computer this was built on, two
+       other programs answer JSON on 8767 and 8768, inside Proteoscope's range (one asks for a
+       bearer token, one says "route not found"). Proteoscope is told by its startup answer's
+       fields, not by a port or an answer.
+     - **A Proteoscope may already be running.** Two were, for an AI agent's use (`proteoscope
+       mcp`), on 8765 and 8766. The screenshots and the remote session look on ports of their own
+       (`--proteoscope`), or every Structure view picture would show the button there and not
+       elsewhere.
+     - **The camera on its way.** Handed over just after a focus, the session had the camera in
+       mid-flight (the remote session caught it); the handoff now waits for the view to come to
+       rest.
+     - **Saved views did not keep hidden residues.** Writing the session's `hiddenResidues` showed
+       slice 5's views kept residues drawn their own way but not those hidden: a view with hidden
+       residues did not reopen as it was. They are kept now (`hidden`).
+     - **The residue keys agree by construction.** Every value MaveScape sent landed on a residue
+       Proteoscope's own reader reads, including on the copy of 2VWF Proteoscope fetched for
+       itself: MaveScape's reader is a copy of Proteoscope's.
+     - **The links are short.** The largest of the examples' sessions is 4,818 characters (factor
+       IX on its model, 452 values); the part after `#` never leaves the browser.
 
 ## 0.6.0: figures and a provable record (wave 6)
 

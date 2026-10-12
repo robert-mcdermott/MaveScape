@@ -617,6 +617,13 @@ export function createStructureViewer(options = {}) {
     get styled() {
       return new Map(state.display.residueStyles ?? []);
     },
+    get hidden() {
+      return [...(state.display.hiddenResidues ?? [])];
+    },
+    // The camera on its way somewhere (a focus, a fit): 450 ms at most.
+    get moving() {
+      return Boolean(state.cameraAnimation || state.pendingFit);
+    },
     // The camera, as a saved view keeps it (wave 5, slice 5).
     get camera() {
       const c = cloneCamera(state.camera);

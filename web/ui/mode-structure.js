@@ -34,6 +34,7 @@ import { coloringCSV } from '../lib/structure-scores.js';
 import { computeEvidence, evidenceState, evidenceStatistics, evidenceValues } from './structure-evidence.js';
 import { CLASSES, CLASS_BY_ID, describeClusters, describeEffects, evidenceCSV, SS_WORDS } from '../lib/structure-evidence.js';
 import { figurePanel, openView, removeView, saveView } from './structure-views.js';
+import { findProteoscope, handOff } from './proteoscope.js';
 import { structureWords, viewWords } from '../lib/structure-record.js';
 
 // Residue styles for a selection, as the selection pane offers them.
@@ -484,7 +485,32 @@ export function mountStructureMode(app, container) {
       h('button.btn.small', { type: 'button', title: 'An image of the view, or a figure panel with its legend', onclick: (event) => showMenu(event.currentTarget, [
         { label: 'Image (PNG, twice the view\'s size)', icon: 'download', onSelect: saveImage },
         { label: 'Figure panel (PNG, 4×, with its legend and what it shows)', icon: 'download', onSelect: savePanel },
-      ]) }, icon('download'), 'Image'));
+      ]) }, icon('download'), 'Image'),
+      // Wave 5, slice 6: only when a Proteoscope is running on this computer.
+      state.proteoscope?.found
+        ? h('button.btn.small.proteoscope-handoff', { type: 'button', title: `Open this view in Proteoscope ${state.proteoscope.version}, running on this computer: the structure, the scores as its residue data, the residues selected, drawn and labeled, the camera${state.proteoscope.tested ? '' : ` (a version MaveScape was not tested with: the structure alone, the view in a session file)`}`, onclick: openInProteoscope }, icon('structure'), 'Proteoscope')
+        : null);
+    lookForProteoscope();
+  }
+
+  // Is a Proteoscope running? Looked for when the toolbar is drawn, at most every few seconds
+  // (findProteoscope has the view drawn again when that changes).
+  function lookForProteoscope() {
+    if (state.proteoscopeLooking || Date.now() - (state.proteoscopeAt ?? 0) < 4000) return;
+    state.proteoscopeLooking = true;
+    findProteoscope(app).finally(() => {
+      state.proteoscopeLooking = false;
+    });
+  }
+
+  async function openInProteoscope() {
+    try {
+      const handed = await handOff(app);
+      toast(handed.message, { kind: handed.ok ? 'ok' : 'error' });
+      if (!handed.ok) renderToolbar();
+    } catch (error) {
+      toast(error.message, { kind: 'error' });
+    }
   }
 
   // A coloring chosen: "scores:<how>", or one of the structure's own schemes.

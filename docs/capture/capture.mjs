@@ -20,13 +20,16 @@
 import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch, sleep } from './cdp.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const IMAGES = join(ROOT, 'docs/images');
 const PORT = 8830;
+// Where MaveScape looks for Proteoscope (--proteoscope): only the structure-proteoscope scene starts
+// one there, so no other picture shows a Proteoscope running on this computer.
+const PROTEOSCOPE_PORT = 8840;
 // What the status bar and start page show as the library's place (not this run's temporary one).
 const LIBRARY_SHOWN = '~/Library/Application Support/MaveScape';
 
@@ -73,6 +76,12 @@ for (const [, dir, scene] of MAVEDB_TABLES) {
   if ((wanted.length === 0 || wanted.some((w) => scenes.includes(w))) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
 }
 if (audit && !existsSync(AXE)) throw new Error('axe-core is missing: run node validation/fetch.mjs axe-core');
+// Proteoscope, for the scene of a view handed to it (wave 5, slice 6): PROTEOSCOPE names its
+// program, else "proteoscope" on the PATH.
+const PROTEOSCOPE = process.env.PROTEOSCOPE ?? (process.env.PATH ?? '').split(delimiter).map((dir) => join(dir, process.platform === 'win32' ? 'proteoscope.exe' : 'proteoscope')).find((file) => existsSync(file));
+if ((wanted.length === 0 || wanted.includes('structure-proteoscope')) && !(PROTEOSCOPE && existsSync(PROTEOSCOPE))) throw new Error('The structure-proteoscope scene needs Proteoscope 0.10: install it, or set PROTEOSCOPE to its program');
+// Run after the scene's picture is taken (a program the scene started).
+const afterScene = [];
 
 // --- MaveScape ------------------------------------------------------------------------------------
 
@@ -113,7 +122,7 @@ async function startMaveScape() {
       writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
     }
   }
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache, '--proteoscope', `${PROTEOSCOPE_PORT}-${PROTEOSCOPE_PORT + 4}`], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
   let output = '';
   server.stdout.on('data', (chunk) => { output += chunk; });
   const stop = async () => {
@@ -666,6 +675,29 @@ const scenes = {
     await scrollTo('.structure-views', 'start');
     await sleep(1200);
   },
+  // Open in Proteoscope (wave 5, slice 6): 2VWF colored by GRB2's median scores, residues drawn and
+  // labeled, handed to Proteoscope (started for the scene, its downloads cached in
+  // validation/cache/proteoscope): its window, as it opened the link.
+  async 'structure-proteoscope'() {
+    const proteoscope = spawn(PROTEOSCOPE, ['--no-open', '--port', String(PROTEOSCOPE_PORT), '--cache-dir', join(ROOT, 'validation/cache/proteoscope')], { stdio: ['ignore', 'pipe', 'inherit'] });
+    afterScene.push(async () => {
+      const exited = new Promise((done) => proteoscope.once('exit', done));
+      proteoscope.kill();
+      await Promise.race([exited, sleep(3000)]);
+    });
+    let banner = '';
+    proteoscope.stdout.on('data', (chunk) => { banner += chunk; });
+    for (let i = 0; i < 100 && !/running at/.test(banner); i += 1) await sleep(100);
+    await example('grb2-sh3');
+    await act('open_structure', { pdb: '2VWF' });
+    await act('set_structure', { color: 'median', select: 'pos 20-26', show: 'sticks' });
+    await act('set_structure', { select: 'pos 21+25', label: true });
+    await sleep(1500);
+    const handed = await act('proteoscope_link');
+    await b.goto(handed.data.link, 1000);
+    await waitFor('Boolean(globalThis.proteoscope?.state?.active?.proteomics?.data)', 90000);
+    await sleep(3000);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');
@@ -718,7 +750,8 @@ try {
         await clearToasts();
         await sleep(600);
         if (shots) await b.capture(join(IMAGES, `${name}-${theme}.webp`), { format: 'webp', quality: 86 });
-        if (audit) {
+        if (audit && !(await js('Boolean(window.mavescape)'))) console.log(`${name} (${theme}): not MaveScape's page, not audited`);
+        else if (audit) {
           const found = await runAxe();
           audits.push({ scene: name, theme, violations: found });
           console.log(`${name} (${theme}): ${found.length ? found.map((v) => `${v.id} ×${v.count} (${v.impact})`).join(', ') : 'no violations'}`);
@@ -729,6 +762,7 @@ try {
       } finally {
         await b.close();
         await maveScape.stop();
+        for (const after of afterScene.splice(0)) await after();
       }
     }
   }

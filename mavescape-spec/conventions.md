@@ -32,7 +32,7 @@ web/workers/*.js      module workers wrapping heavy lib functions
 web/examples/         compact bundled example data (published, with license and citation)
 validation/           comparisons against reference tools and fixtures (numbers only)
 clients/              Python and R clients generated from the tool list
-docs/                 installation, file formats, MCP, network requests, the handoff
+docs/                 installation, file formats (the Proteoscope session too), MCP, network requests
 docs/capture/         screenshots: scenes driven through remote control in headless Chrome
 docs/site/            the website (GitHub Pages, gh-pages branch), built by build.mjs
 mavescape-spec/       requirements, design, roadmap, research, these conventions

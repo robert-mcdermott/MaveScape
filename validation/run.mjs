@@ -113,6 +113,8 @@ import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, nodeEvidence, openCached, openFixture, paeFixture, pdbFile, positionScores, siftsOf, siftsRetrieved } from './structure-cases.mjs';
 import { bhAdjust, clusterTest, CONTACT_DISTANCE, effectsByClass, mannWhitney, MAX_ASA, structureTracks } from '../web/lib/structure-evidence.js';
 import { mappingChanges, mappingSummary } from '../web/lib/structure-record.js';
+import { dataRange, linkPayload, residueData, sessionDocument } from '../web/lib/proteoscope.js';
+import { inflateRawSync } from 'node:zlib';
 import { saveStructureView } from '../web/lib/workspace.js';
 import { structureFiles } from '../web/lib/archive.js';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
@@ -4317,6 +4319,45 @@ const suites = {
       const says = paragraph.includes(`its file's SHA-256 ${vwf.sha}`) && paragraph.includes(`placed on chain ${mapping.chain}: ${mapping.onStructure} of its ${mapping.target.length} positions on residues`) && paragraph.includes(`${mapping.counts.identical} identical`) && paragraph.includes('one residue different (P54A)') && paragraph.includes('"Core" (2VWF, chain A; colored by the median score of Run 1)');
       const cites = ['pdb', 'proteoscope', 'blosum62', 'dssp', 'shrake', 'tien', 'structuremap', 'plip', 'mannwhitney'].every((k) => m.references.some((r) => r.key === k));
       check('structures', 'the methods of the GRB2 example\'s run with a saved view of 2VWF: the entry, when it was retrieved and its file\'s SHA-256, the mapping as made again from the file (chain, positions on residues, identical, the engineered difference), the view and what it is colored by; how the structure was read, each method cited', paragraph.slice(0, 400), says && cites, 'said and cited');
+
+      // Wave 5, slice 6 (X6): open in Proteoscope. Each example's run, colored by its median on its
+      // PDB entry and its AlphaFold DB model, as the session MaveScape hands Proteoscope: each value
+      // on a residue Proteoscope's reader keys so (MaveScape's copy of it), the median of the
+      // position's scored missense substitutions in the run's results (read without the map's
+      // model), every position scored on a residue given one; the range centered on the wild
+      // type; the link read back with zlib as the session sent.
+      const sessions = [];
+      for (const [id, run] of scoredRuns) {
+        const e = EXAMPLE_STRUCTURES.find((x) => x.examples.includes(id));
+        const shift = run.target.offset - (run.o.design.targets[0].offset ?? 0);
+        const values = placeOnTarget(positionValues(run.model, 'median'), run.target);
+        for (const [kind, structure] of [['pdb', run.structure], ['alphafold', await openCached('alphafold', modelFile(e.accession, e.model))]]) {
+          const maps = kind === 'pdb' ? run.maps : mapTarget(structure, run.target);
+          const data = residueData(values, maps);
+          const keys = new Set(structure.models[0].residues.map((r) => r.key));
+          const problems = [];
+          let scoredOnResidues = 0;
+          for (const m of maps) {
+            for (const p of m.positions) {
+              if (!p.residue) continue;
+              const list = [...(run.own.get(p.position - shift)?.scored.values() ?? [])];
+              if (!list.length) continue;
+              scoredOnResidues += 1;
+              const want = middle(list.map((x) => x.score));
+              const got = data.find(([k]) => k === p.residue);
+              if (!got || Math.abs(got[1] - want) > 1e-5 * Math.max(1, Math.abs(want))) problems.push(`${p.residue}: ${got?.[1]} for ${want}`);
+            }
+          }
+          for (const [k] of data) if (!keys.has(k)) problems.push(`${k} is no residue of the structure`);
+          const doc = sessionDocument({ name: kind === 'pdb' ? e.pdb : e.accession, source: { type: 'fetch', id: kind === 'pdb' ? e.pdb : e.accession }, data: { label: 'Median score, Run 1', values: data, domain: values.domain } });
+          const payload = await linkPayload(doc);
+          const back = JSON.parse(inflateRawSync(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64')).toString('utf8'));
+          const range = dataRange(values.domain);
+          const centered = Math.abs((range.min + range.max) / 2 - values.domain.center) < 1e-9;
+          sessions.push({ id, structure: kind === 'pdb' ? e.pdb : `AF-${e.accession}`, values: data.length, scoredOnResidues, length: payload.length, ok: data.length > 0 && data.length === scoredOnResidues && !problems.length && centered && JSON.stringify(back) === JSON.stringify(doc), problems });
+        }
+      }
+      check('structures', 'the Proteoscope session of each example\'s run on its PDB entry and its AlphaFold DB model, colored by the median: every value on a residue as Proteoscope\'s reader keys it, the median of the position\'s scored missense substitutions in the run\'s results (read without the map\'s model), every position scored on a residue given one; the range centered on the wild type; the link\'s session read back with zlib as sent', sessions.map((x) => `${x.id} on ${x.structure}: ${x.values} of ${x.scoredOnResidues} values, a link of ${x.length} characters${x.problems.length ? `; ${x.problems.slice(0, 3).join('; ')}` : ''}`).join('; '), sessions.length === 16 && sessions.every((x) => x.ok), 'all');
     }
   },
 };

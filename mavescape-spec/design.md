@@ -242,26 +242,34 @@ so fixes can be carried across:
 Proteoscope adds deeper structural analysis (interfaces, ligands, validation reports,
 superposition, density maps) for users who have it. MaveScape needs nothing from it, and this plan
 makes no changes to Proteoscope: the handoff uses only what released Proteoscope versions already
-accept. The browser cannot call
-Proteoscope's API directly (it refuses cross-origin requests, by design), so the MaveScape host
-does the talking:
+accept. The browser cannot read Proteoscope's API (it refuses cross-origin requests, by design), so
+the MaveScape host does the looking (built in wave 5, slice 6):
 
-1. `handoff.go` finds a running Proteoscope by probing 8765–8814 for `/api/startup`, which also
-   gives its version.
-2. MaveScape writes its own handoff document (`mavescape-proteoscope-handoff`, version 1,
-   `docs/HANDOFF.md`): structure reference (PDB ID, AlphaFold accession or a local file the user
-   chose), chain and sequence mapping, per-residue values with palette, range and legend title,
-   selected residues, the active condition, and the workspace and run IDs. It is MaveScape's
-   record of what was sent, exported with the workspace.
-3. It delivers what Proteoscope can take, best first:
-   - **A Proteoscope link** opened in the browser: `#fetch=<id>` for the structure, or a
-     `#session=` payload whose "Custom residue data" coloring carries the values, color map and
-     legend. The session format is internal to Proteoscope, so MaveScape uses it only for
-     Proteoscope versions it has been tested against (from `/api/startup`).
-   - **Remote commands**, when Proteoscope runs with `--remote-control`: select residues
-     (`/A:315`, `uniprot 175`) and color them in binned palette steps. No legend.
-   - **Files**: the structure with scores in the B-factor column and a residue-value table, with
-     short instructions.
+1. `handoff.go` finds a running Proteoscope by probing 8765–8814 (or the ports `--proteoscope`
+   names; `off` for none) for `/api/startup`, whose answer (`version`, `offline`, `remoteControl`,
+   `files`) tells Proteoscope from any other program and gives its version. Only for a page on this
+   computer; the Structure view's **Proteoscope** button exists only while one is found.
+2. MaveScape writes Proteoscope's own session (`proteoscope-session`, version 1;
+   `web/lib/proteoscope.js`, FORMATS.md): the structure by its PDB ID or UniProt accession (a file
+   of the user's embedded), the scores as its *Custom residue data* with the legend's title, a
+   colormap and the map's range centered on the wild type (categories as residue colors), the
+   style, residues drawn, hidden, selected, labeled and focused on, and the camera. Residue keys are
+   Proteoscope's own: MaveScape's reader is a copy of its reader.
+3. It delivers it, best first:
+   - **A link** opened in a new tab, `#session=` (deflated, URL-safe base64, as Proteoscope's own
+     links), for a Proteoscope version it was tested against (0.10): the session format is
+     internal to Proteoscope.
+   - For another version, **`#fetch=<id>`**, the structure alone, and the session as a file to try.
+   - For a file of the user's, which a link cannot carry: **the session file**, the file embedded,
+     to open in Proteoscope.
+
+Not built, and why: a separate MaveScape handoff document (the session is what Proteoscope reads,
+and the handoff changes nothing in the analysis, so it is in MaveScape's log, not the workspace's
+history); remote commands with binned colors (they need Proteoscope started with
+`--remote-control`, which lets any program on the computer command it, and carry no values or
+legend); a structure file with scores in its B-factor column (the session file carries the values
+and Proteoscope reads it directly). The fake Proteoscope of the Go tests and the remote session,
+and `validation/proteoscope-handoff.mjs` against Proteoscope itself where it is installed, check it.
 
 ## Testing
 
