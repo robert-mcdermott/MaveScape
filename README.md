@@ -34,7 +34,7 @@ It covers the path from a count table to a result you can defend, and checks eac
 MaveScape reports experimental functional effects for research. It does not classify variants as
 pathogenic or benign. It is free and open source (Apache 2.0).
 
-**[Website and user guide](https://robert-mcdermott.github.io/mavescape/)**: step-by-step
+**[Website and user guide](https://robert-mcdermott.github.io/MaveScape/)**: step-by-step
 guides to every view, with screenshots.
 
 - [Highlights](#highlights)
