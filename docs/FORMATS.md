@@ -19,7 +19,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
-| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV) |
+| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV) |
 
 Coming later: Excel workbooks, structures kept with the workspace (0.5).
 
@@ -898,6 +898,37 @@ target_position,reference_position,target_residue,structure,chain,residue_number
   `struct_ref_seq`) gives the residue, to set beside `reference_position`;
 - `difference`: the entry's reason for another residue (`engineered mutation`, `conflict`…), as it
   records it (`SEQADV`, `struct_ref_seq_dif`).
+
+### Scores on a structure
+
+`<entry>_chain-<chain>_<coloring>.csv` (the Structure view's **Colors**, under *Scores on the
+structure*; `export` with `what: "structure-scores"`; MaveScape 0.5): the values the residues are
+colored by, one row per target position, on the chain the target is mapped onto:
+
+```csv
+target_position,reference_position,target_residue,structure,chain,residue_number,insertion_code,structure_residue,coloring,value,state,substitutions_scored,substitutions_designed,color
+25,183,Ile,2VWF,A,25,,Ile,median,-4.39105,scored,19,19,#195696
+54,212,Pro,2VWF,A,54,,Ala,median,-0.299877,scored,19,19,#ecf2f5
+```
+
+- `target_position` to `structure_residue`: as in the mapping's file (above), the residue empty for
+  a position on no residue of the structure;
+- `coloring`: `median`, `mean`, `minimum`, `maximum` (of the position's missense substitutions
+  scored, low confidence or not; at the first methionine, its start-lost substitutions), `fraction`
+  (the share abnormal-like, by a threshold or a published calibration's abnormal classes), `count`
+  (substitutions scored), `substitution:<letter>` (the score of one substitution; `*` a stop),
+  `uncertainty` (the median SE), `disagreement` (the median difference between the two sides
+  Compare shows) or `qc`;
+- `value`: the position's value (6 significant digits); for `qc`, its class (`complete`, `low`,
+  `partial`, `sparse`); `NA` where there is none;
+- `state`: `scored`, `low confidence` (a value from scores of low confidence only), `filtered`
+  (measured, nothing scored), `missing` (nothing measured), `not designed`, or `the residue itself`
+  (one substitution: the wild type's own residue);
+- `substitutions_scored`, `substitutions_designed`: of its missense substitutions (1 or 0 for one
+  substitution);
+- `color`: the residue's color as drawn (hex): the map's palette at the map's scale for scores,
+  viridis for the rest; `#4f5357` filtered, `#8c8c8c` missing, `#cfcfcf` not designed; empty for a
+  position on no residue.
 
 ## Comparisons
 

@@ -631,6 +631,17 @@ const scenes = {
     await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'pos 132-188'; })()`);
     await sleep(1200);
   },
+  // Scores on the structure (wave 5, slice 3): GRB2's SH3 domain on 2VWF colored by the median
+  // score, the residues that touch the Gab2 peptide selected in the words of the example's guide and
+  // drawn as sticks (their substitutions selected on the map), the strip of positions below.
+  async 'structure-scores'() {
+    await example('grb2-sh3');
+    await act('open_structure', { pdb: '2VWF' });
+    await act('set_structure', { color: 'median', select: 'byres (chain A and protein and within 4 of (chain B and protein))', show: 'sticks' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'byres (chain A and protein and within 4 of (chain B and protein))'; })()`);
+    await scrollTo('.structure-scores', 'start');
+    await sleep(1200);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

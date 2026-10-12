@@ -1,6 +1,6 @@
 ---
 title: Selections
-description: Variants selected on the map by click, rectangle, freeform shape or query ("missense at 40-80 with se < 0.2", "variants whose class depends on the pseudocount", "from C in feature disulfide"), saved by name with their query, combined (union, intersection, difference), carried to the Score, Robustness and Compare views and back, exported, and scripted; how the query language was validated.
+description: Variants selected on the map by click, rectangle, freeform shape or query ("missense at 40-80 with se < 0.2", "variants whose class depends on the pseudocount", "from C in feature disulfide"), saved by name with their query, combined (union, intersection, difference), carried to the Score, Robustness, Compare and Structure views and back, exported, and scripted; how the query language was validated.
 lede: A selection is a set of variants on a run's map, made by hand or said in words. Saved by name, it is combined with others, used in other runs of the same protein and in the other views, and written out with the query that made it.
 ---
       <h2 id="what">Selecting variants</h2>
@@ -48,7 +48,8 @@ lede: A selection is a set of variants on a run's map, made by hand or said in w
         <li><strong>Score:</strong> the variants table lists the run's variants selected on the map (<em>Selected on the map</em>), a nucleotide run's by the protein variants they make. Any list it shows (low confidence, filtered, a search) goes to the map with <strong>Select on the map</strong>.</li>
         <li><strong>Robustness:</strong> each verdict's variants go to the map with <strong>Select on the map</strong>, selected by the verdict's word (<code>fragile</code>); a difference's, on that contrast's map.</li>
         <li><strong>Compare:</strong> the maps outline the selection on the side of its run; the variants that differ beyond their uncertainty go to the map with <strong>Select them on the map</strong>.</li>
-        <li><strong>The inspector</strong> shows the selection's first variant, and a saved selection when it is selected in the dataset tree.</li>
+        <li><strong>Structure:</strong> the selection's positions are drawn on their residues, on every chain that holds the target. A residue clicked there selects its position's variants here (<code>at 25</code>), and residues selected in words there select theirs (<a href="structure.html#scores">Scores on the structure</a>).</li>
+        <li><strong>The inspector</strong> shows the selection's first variant, and a saved selection when it is selected in the dataset tree; a residue clicked on the structure, its position.</li>
       </ul>
 
       <h2 id="files">The files and scripts</h2>

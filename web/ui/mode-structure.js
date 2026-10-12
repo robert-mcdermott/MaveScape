@@ -8,7 +8,10 @@
 // (X2): the workspace's target is mapped onto it (lib/mapping.js: every chain that holds it, each
 // position's state, the entry's own record compared), the structures that cover the target are
 // listed from PDBe's SIFTS, residues are selected by target position (`pos`) or reference
-// (`uniprot`), and a selection is kept, position by position, from one structure to the next.
+// (`uniprot`), and a selection is kept, position by position, from one structure to the next. Wave 5,
+// slice 3 (X3): residues colored by their positions' scores (ui/structure-coloring.js,
+// lib/structure-scores.js) in the map's grammar, the run and condition the map shows; the selection
+// shared with the map both ways, a picked residue's position shown in the inspector.
 
 import { h, icon, clear, downloadBlob } from './dom.js';
 import { toast } from './overlays.js';
@@ -21,6 +24,11 @@ import { alphafoldEntry, applyAlphafoldEntry, ASYMMETRIC_UNIT_ID, assemblyChoice
 import { describeMapping, mapTarget, mappedLabel, mappingCSV, rankStructures, stretches } from '../lib/mapping.js';
 import { targetProtein } from '../lib/target.js';
 import { now } from '../lib/clock.js';
+import { cellAt, cellName } from '../lib/map-model.js';
+import { cellsAtPositions, positionRanges, positionsOfKeys, SCORE_COLORINGS } from '../lib/structure-scores.js';
+import { activeRun } from './selections.js';
+import { colorStructure, coloringControls, createPositionStrip, positionWords, scoresLegend, scoresSettings, scoreSource, sourceControls, stripRows } from './structure-coloring.js';
+import { coloringCSV } from '../lib/structure-scores.js';
 
 // Residue styles for a selection, as the selection pane offers them.
 export const RESIDUE_STYLES = { sticks: 'Sticks', 'ball-stick': 'Ball and stick', spacefill: 'Spacefill', hide: 'Hide', none: 'As the rest' };
@@ -40,15 +48,31 @@ function viewerOf(app) {
     onPick: (residue, how) => state.handlers?.onPick?.(residue, how),
     onFocus: (residues) => state.handlers?.onFocus?.(residues),
     onChange: () => state.handlers?.onChange?.(),
-    describe: (residue) => mappedLabel(state.mapping, residue.key),
+    describe: (residue) => {
+      const at = positionOfResidue(state, residue.key);
+      if (!at) return '';
+      const words = positionWords(state.colored, at.position);
+      return `${mappedLabel(at.map, residue.key)}${words ? ` · ${words}` : ''}`;
+    },
   });
   return state.viewer;
 }
 
-// The workspace's target as the mapping reads it (the design's target, else the first): its protein,
-// offset and UniProt accession; null without one.
-export function workspaceTarget(ws) {
-  const target = ws.targets.find((t) => t.id === ws.design?.targets?.[0]?.id) ?? ws.targets[0];
+// A residue's target position on any chain the target is mapped onto: { map, position } or null.
+export function positionOfResidue(state, key) {
+  for (const map of [state.mapping, ...state.maps]) {
+    const position = map?.residuePosition.get(key);
+    if (position) return { map, position };
+  }
+  return null;
+}
+
+// The workspace's target as the mapping reads it (a run's, when one is given: the run the map shows,
+// wave 5, slice 3; else the design's target, else the first): its protein, offset and UniProt
+// accession; null without one.
+export function workspaceTarget(ws, run = null) {
+  const own = run?.inputs?.design?.targets?.length === 1 ? run.inputs.design.targets[0] : null;
+  const target = (own && (ws.targets.find((t) => t.id === own.id) ?? own)) ?? ws.targets.find((t) => t.id === ws.design?.targets?.[0]?.id) ?? ws.targets[0];
   if (!target?.sequence) return null;
   let sequence;
   try {
@@ -66,7 +90,7 @@ const targetKey = (t) => (t ? `${t.id}|${t.offset}|${t.accession}|${t.sequence}`
 export function mapStructure(app, chain = null) {
   const state = structureState(app);
   const structure = state.viewer?.structure;
-  const target = workspaceTarget(app.store.ws);
+  const target = workspaceTarget(app.store.ws, activeRun(app));
   state.mapTarget = target;
   state.mapKey = `${state.serial}|${structure?.activeAssemblyId ?? ''}|${targetKey(target)}`;
   state.maps = structure && target ? mapTarget(structure, target) : [];
@@ -89,10 +113,85 @@ export function selectPositions(app, positions) {
   return keys.length;
 }
 
+// Positions of the mapped target as positions of a scores' target ({ protein, offset }: a map
+// model's, a run's), by reference numbering where their residues agree; and back.
+function toModelPositions(model, target, positions) {
+  const shift = (target.offset ?? 0) - (model.target?.offset ?? model.offset ?? 0);
+  const protein = model.protein;
+  return positions.map((q) => q + shift).filter((p, k) => p >= 1 && p <= protein.length && protein[p - 1] === target.sequence[positions[k] - 1]);
+}
+
+function fromModelPositions(model, target, positions) {
+  const shift = (model.offset ?? 0) - (target.offset ?? 0);
+  return positions.map((p) => p + shift).filter((q, k) => q >= 1 && q <= target.length && target.sequence[q - 1] === model.protein[positions[k] - 1]);
+}
+
+// The structure's selection shared with the map (wave 5, slice 3): the target positions of the
+// residues selected, on any chain that holds the target → their designed cells on the map of the run
+// and condition (or contrast) it shows, as "at …" selects them; nothing selected there when no
+// position is. With focus, a residue picked puts its position in the inspector.
+export function shareSelection(app, { focusKey = null } = {}) {
+  const state = structureState(app);
+  const viewer = state.viewer;
+  if (!viewer?.structure || !state.mapping) return null;
+  const from = scoreSource(app);
+  if (!from.ok) return null;
+  const positions = [...new Set([...viewer.selection].map((key) => positionOfResidue(state, key)?.position).filter(Boolean))].sort((a, b) => a - b);
+  const onModel = toModelPositions(from.model, state.mapTarget, positions);
+  const keys = cellsAtPositions(from.model, onModel, cellName, cellAt);
+  const selection = keys.length ? { run: from.run.id, condition: from.condition, keys, query: `at ${positionRanges(onModel)}` } : null;
+  state.syncedSelection = selection;
+  app.store.setUI({ selection }, ['selection']);
+  const picked = focusKey && viewer.selection.has(focusKey) ? positionOfResidue(state, focusKey) : null;
+  const position = picked ? toModelPositions(from.model, state.mapTarget, [picked.position])[0] : null;
+  if (position) app.focusItem({ kind: 'position', run: from.run.id, condition: from.condition, position });
+  return { positions: onModel, keys, position };
+}
+
+// The map's selection drawn on the structure: the residues of its variants' positions, on every
+// chain that holds the target (a selection of another run of the same protein too). Nothing
+// selected on the map, nothing here. Returns whether the structure's selection was set.
+export function applyMapSelection(app) {
+  const state = structureState(app);
+  const viewer = state.viewer;
+  const sel = app.store.ui.selection;
+  state.syncedSelection = sel;
+  if (!viewer?.structure) return false;
+  if (!sel) {
+    if (!viewer.selection.size) return false;
+    viewer.select([]);
+    return true;
+  }
+  const run = app.store.ws.runs.find((r) => r.id === sel.run);
+  const own = run?.inputs.design.targets?.length === 1 ? run.inputs.design.targets[0] : null;
+  if (!own || !state.mapping) return false;
+  let protein;
+  try {
+    protein = targetProtein(own).replace(/\*+$/, '');
+  } catch {
+    return false;
+  }
+  const positions = fromModelPositions({ protein, offset: own.offset ?? 0 }, state.mapTarget, positionsOfKeys(sel.keys));
+  viewer.select(state.maps.flatMap((m) => positions.map((q) => m.positions[q - 1]?.residue).filter(Boolean)));
+  state.query = '';
+  return true;
+}
+
+// A residue picked (a click, or remote control): selected (with additive, added or taken away), the
+// selection shared with the map, its position in the inspector.
+export function pickResidue(app, key, { additive = false } = {}) {
+  const viewer = structureState(app).viewer;
+  if (!key) {
+    if (!additive) viewer.select([]);
+  } else viewer.select([key], { additive });
+  structureState(app).query = '';
+  return shareSelection(app, { focusKey: key });
+}
+
 // The PDB entries that cover the target, ranked (PDBe's best_structures, through the program).
 export async function findStructures(app) {
   const state = structureState(app);
-  const target = workspaceTarget(app.store.ws);
+  const target = workspaceTarget(app.store.ws, activeRun(app));
   if (!target) return { ok: false, message: 'This workspace has no target: the structures listed are those that cover it.' };
   if (!target.accession) return { ok: false, message: `${target.name} has no UniProt accession: give it in Experiment, Target, and the PDB entries that cover it are listed.` };
   const key = `${target.accession}|${target.offset}|${target.length}`;
@@ -251,13 +350,10 @@ export function mountStructureMode(app, container) {
 
   state.handlers = {
     onPick(residue, { additive }) {
-      if (!residue) {
-        if (!additive) viewer.select([]);
-        return;
-      }
-      viewer.select([residue.key], { additive });
-      state.query = '';
+      if (!residue && additive) return;
+      pickResidue(app, residue?.key ?? null, { additive });
       renderSide();
+      renderStrip();
     },
     onFocus(residues) {
       state.query = '';
@@ -267,9 +363,70 @@ export function mountStructureMode(app, container) {
       renderToolbar();
       renderStatus();
       renderLegend();
+      renderStrip();
       if (viewer.structure && root.querySelector('.structure-body')) renderSide();
     },
   };
+  const settings = scoresSettings(state);
+
+  // Colors the residues by scores again (the settings, the run, the mapping or the palette changed).
+  async function refreshScores() {
+    await colorStructure(app, state);
+    if (!state.handlers) return;
+    renderToolbar();
+    renderLegend();
+    renderStrip();
+    if (viewer.structure) renderSide();
+  }
+
+  // A selection made here, shared with the map.
+  function shared() {
+    shareSelection(app);
+    renderStrip();
+  }
+
+  // The strip of target positions below the view: a click selects a position's residues (on every
+  // chain that holds it), a drag a stretch.
+  const strip = createPositionStrip({
+    onSelect(positions, additive) {
+      const keys = state.maps.flatMap((m) => positions.map((q) => m.positions[q - 1]?.residue).filter(Boolean));
+      if (!keys.length) {
+        notice(`${positions.length === 1 ? `Position ${positions[0]} is` : 'These positions are'} on no residue of ${viewer.structure.meta.code || 'the structure'}.`, 'warn');
+        return;
+      }
+      const next = additive ? [...new Set([...viewer.selection, ...keys])] : keys;
+      viewer.select(next);
+      state.query = '';
+      shareSelection(app, { focusKey: positions.length === 1 ? keys[0] : null });
+      renderSide();
+      renderStrip();
+    },
+    describe(q) {
+      const m = state.mapping;
+      const p = m?.positions[q - 1];
+      if (!p) return '';
+      const three = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val' }[p.code] ?? p.code;
+      const residue = p.residue ? viewer.model.residueMap.get(p.residue) : null;
+      const where = residue ? residueLabel(residue) : p.state === 'unobserved' ? 'not observed in the structure' : p.state === 'deleted' ? 'missing from the structure\'s sequence' : 'outside the structure';
+      const confidence = residue && viewer.structure.meta.isPredicted && Number.isFinite(residue.confidence) ? ` · pLDDT ${residue.confidence.toFixed(1)}` : '';
+      const words = positionWords(state.colored, q);
+      return `Position ${q} · ${three}${m.target.offset ? ` (${p.reference})` : ''}: ${where}${confidence}${words ? ` · ${words}` : ''}`;
+    },
+  });
+
+  function renderStrip() {
+    const m = state.mapping;
+    if (!viewer.structure || !m) {
+      strip.update({ length: 0, rows: [] });
+      return;
+    }
+    const selected = new Set();
+    for (const key of viewer.selection) {
+      const at = positionOfResidue(state, key);
+      if (at) selected.add(at.position);
+    }
+    strip.update({ length: m.positions.length, offset: m.target.offset, rows: stripRows(viewer.colorScheme === 'scores' ? state.colored : null, m, viewer.model, viewer.structure.meta.code || 'the structure'), selected });
+  }
 
   async function open(what) {
     const result = await openStructure(app, what);
@@ -293,9 +450,13 @@ export function mountStructureMode(app, container) {
     if (!structure) return;
     const assemblies = assemblyChoices(structure);
     const schemes = COLOR_SCHEMES.filter((s) => s.id !== 'plddt' || structure.meta.isPredicted).filter((s) => s.id !== 'nucleotide' || structure.chains.some((c) => c.polymerKind === 'nucleic'));
+    // The scores' colorings first (wave 5, slice 3), when the target is on the structure.
+    const colorSelect = h('select.input.small', { 'aria-label': 'Color by', title: 'Color by', onchange: () => chooseColoring(colorSelect.value) },
+      state.mapping ? h('optgroup', { label: 'Scores' }, ...Object.entries(SCORE_COLORINGS).map(([k, v]) => h('option', { value: `scores:${k}`, selected: viewer.colorScheme === 'scores' && settings.how === k }, v.label))) : null,
+      h('optgroup', { label: 'The structure' }, ...schemes.map((s) => h('option', { value: s.id, selected: viewer.colorScheme === s.id }, s.label))));
     toolbarEl.append(
       select('Style', viewer.style, Object.entries(STYLES).map(([k, v]) => [k, v.label]), (v) => viewer.setStyle(v)),
-      select('Color by', viewer.colorScheme, schemes.map((s) => [s.id, s.label]), (v) => viewer.setColor(v)),
+      colorSelect,
       select('Surface', viewer.surface.kind, Object.entries(SURFACES).map(([k, v]) => [k, v.label, viewer.kind !== 'webgpu' && k !== 'off']), (v) => viewer.setSurface(v)),
       assemblies.length ? select('Assembly', structure.activeAssemblyId ?? ASYMMETRIC_UNIT_ID, assemblies.map((a) => [a.id, `${a.label} · ${fmtCount(a.atoms)} atoms${a.tooLarge ? ' (too large)' : ''}`, a.tooLarge]), (v) => setAssembly(v)) : null,
       h('span.spacer'),
@@ -304,12 +465,26 @@ export function mountStructureMode(app, container) {
       h('button.btn.small', { type: 'button', title: 'Save an image of the view (PNG, twice its size)', onclick: saveImage }, icon('download'), 'Image'));
   }
 
+  // A coloring chosen: "scores:<how>", or one of the structure's own schemes.
+  function chooseColoring(value) {
+    if (value.startsWith('scores:')) {
+      settings.how = value.slice(7);
+      refreshScores();
+      return;
+    }
+    settings.how = null;
+    state.colored = null;
+    viewer.setColor(value);
+    renderSide();
+  }
+
   function setAssembly(id) {
     try {
       viewer.setAssembly(id);
       mapStructure(app, state.mapping?.chain);
       state.query = '';
       render();
+      if (settings.how) refreshScores();
     } catch (error) {
       notice(error.message, 'warn');
     }
@@ -327,6 +502,11 @@ export function mountStructureMode(app, container) {
 
   function renderLegend() {
     clear(legendEl);
+    if (viewer.colorScheme === 'scores' && viewer.structure) {
+      const legend = scoresLegend(state.colored);
+      if (legend) legendEl.append(legend);
+      return;
+    }
     const legend = viewer.legend;
     if (!legend || !viewer.structure) return;
     if (legend.type === 'categorical') {
@@ -379,12 +559,14 @@ export function mountStructureMode(app, container) {
       state.query = input.value.trim();
       if (!state.query) {
         viewer.select([]);
+        shared();
         renderSide();
         return;
       }
       try {
         const { keys } = selectResidues(app, state.query);
         viewer.select(keys);
+        shared();
         notice(keys.length ? null : `"${state.query}" selects no residue of ${structure.meta.code || 'this structure'}.`, 'warn');
       } catch (error) {
         // The field's text from where it goes wrong is selected, as the map's query field does.
@@ -404,7 +586,7 @@ export function mountStructureMode(app, container) {
         action('Label', () => { viewer.label(keys, !keys.every((k) => viewer.labels.has(k))); renderSide(); }, 'Label the selected residues (again: remove their labels)'),
         action('Focus', () => { viewer.focus(keys); renderSide(); }, 'Focus on the selected residues and their neighbors within 5 Å'),
         viewer.focused.length ? h('button.btn.small', { type: 'button', onclick: () => { viewer.clearFocus(); viewer.fit(); renderSide(); } }, 'Whole structure') : null,
-        action('Clear', () => { viewer.select([]); state.query = ''; renderSide(); }, 'Clear the selection')),
+        action('Clear', () => { viewer.select([]); state.query = ''; shared(); renderSide(); }, 'Clear the selection')),
       selected.length ? h('p.structure-residues', ...(() => {
         const runs = residueRuns(selected);
         return [runs.slice(0, 24).join(', '), runs.length > 24 ? ` and ${fmtCount(runs.length - 24)} more` : ''];
@@ -426,10 +608,10 @@ export function mountStructureMode(app, container) {
     const on = positionsOf((p) => p.residue);
     const different = positionsOf((p) => p.state === 'different');
     const ambiguous = positionsOf((p) => p.ambiguous && p.residue);
-    const pick = (label, positions, title) => (positions.length ? h('button.btn.small', { type: 'button', title, onclick: () => { selectPositions(app, positions); state.query = ''; renderSide(); } }, label) : null);
+    const pick = (label, positions, title) => (positions.length ? h('button.btn.small', { type: 'button', title, onclick: () => { selectPositions(app, positions); state.query = ''; shared(); renderSide(); } }, label) : null);
     const exportCSV = () => downloadBlob(new Blob([mappingCSV(m, code)], { type: 'text/csv' }), `${code.toLowerCase()}_chain-${m.chain}_mapping.csv`);
     return h('div.pane.structure-mapping', head,
-      state.maps.length > 1 ? h('div.structure-chain', h('label', 'Chain'), select('Chain the target is mapped on', m.chain, state.maps.map((x) => [x.chain, `${x.chain} · ${fmtCount(x.onStructure)} positions, ${fmtCount(x.counts.identical)} identical`]), (chain) => { mapStructure(app, chain); renderSide(); })) : null,
+      state.maps.length > 1 ? h('div.structure-chain', h('label', 'Chain'), select('Chain the target is mapped on', m.chain, state.maps.map((x) => [x.chain, `${x.chain} · ${fmtCount(x.onStructure)} positions, ${fmtCount(x.counts.identical)} identical`]), (chain) => { mapStructure(app, chain); if (settings.how) refreshScores(); else { renderSide(); renderStrip(); } })) : null,
       h('p.structure-mapping-lead', first),
       ...rest.map((line) => h('p', line)),
       h('div.btn-row',
@@ -438,6 +620,34 @@ export function mountStructureMode(app, container) {
         pick('Select the ambiguous', ambiguous, 'Select the residues an alignment as good would place otherwise'),
         h('button.btn.small', { type: 'button', title: 'The mapping, position by position (CSV)', onclick: exportCSV }, icon('download'), 'Mapping')),
       h('p.muted.small', 'Positions can be selected under Residues: "pos 30-40" (the target\'s), "uniprot 188-198" (the reference\'s). A selection is kept, position by position, when another structure is opened.'));
+  }
+
+  // Scores on the structure (wave 5, slice 3): the coloring, the run and condition the map shows (or
+  // the comparison's sides), the coloring's own choices, its words, its file.
+  function scoresPane() {
+    if (!state.mapping) return null;
+    const head = h('h3', icon('heatmap'), 'Scores on the structure');
+    const from = settings.how === 'disagreement' ? null : scoreSource(app);
+    const choose = h('select.input.small', { 'aria-label': 'Color the residues by', onchange: () => chooseColoring(choose.value ? `scores:${choose.value}` : (viewer.structure.meta.isPredicted ? 'plddt' : 'chain')) },
+      h('option', { value: '', selected: !settings.how }, 'The structure\'s own colors'),
+      ...Object.entries(SCORE_COLORINGS).map(([k, v]) => h('option', { value: k, selected: settings.how === k }, v.label)));
+    const colored = viewer.colorScheme === 'scores' ? state.colored : null;
+    const code = viewer.structure.meta.code || viewer.structure.label;
+    const exportCSV = () => downloadBlob(new Blob([coloringCSV(colored.values, state.mapping, code, colored.palette)], { type: 'text/csv' }), `${code.toLowerCase()}_chain-${state.mapping.chain}_${colored.values.how === 'substitution' ? `to-${colored.values.substitution === '*' ? 'stop' : colored.values.substitution}` : colored.values.how}.csv`);
+    const palette = colored?.ok && colored.values.domain.kind === 'diverging'
+      ? select('Colors', app.mapView?.palette ?? 'rdbu', [['rdbu', 'Blue (lower) – red (higher)'], ['puor', 'Purple (lower) – orange (higher)']], (v) => { app.mapView ??= { colorBy: 'score', rowOrder: 'biochemical', palette: 'rdbu', condition: 0, contrast: 0, show: 'all', page: 0 }; app.mapView.palette = v; refreshScores(); })
+      : null;
+    return h('div.pane.structure-scores', head,
+      h('div.structure-chain', h('label', 'Color by'), choose, palette),
+      settings.how && settings.how !== 'disagreement' ? sourceControls(app, from, () => { mapStructure(app, state.mapping?.chain); refreshScores(); }) : null,
+      coloringControls(app, settings, from?.run ?? null, () => refreshScores()),
+      colored ? (colored.ok ? colored.words.map((line) => h('p', line)) : h(`div.callout.${colored.pending ? 'ok' : 'warn'}`, icon(colored.pending ? 'info' : 'warning'), h('span', colored.message)))
+        : h('p.muted', from?.ok ? `Each residue of the target can take its position's scores (${from.words}), in the map's colors: positions whose substitutions were not measured drawn gray, never in the wild type's color.` : from?.message ?? ''),
+      h('div.btn-row',
+        !colored && from?.ok ? h('button.btn.small.primary', { type: 'button', onclick: () => chooseColoring('scores:median') }, 'Color by the median score') : null,
+        colored?.ok ? h('button.btn.small', { type: 'button', title: 'Each target position\'s value, state and color, with its residue (CSV)', onclick: exportCSV }, icon('download'), 'Colors') : null,
+        app.store.ui.selection?.keys.length ? h('button.btn.small', { type: 'button', title: 'The Map view, with the selection', onclick: () => app.setMode('map') }, icon('heatmap'), `${fmtCount(app.store.ui.selection.keys.length)} selected on the map`) : null),
+      h('p.muted.small', 'A click on a residue (or a position in the strip below the view) selects its substitutions on the map and shows the position in the inspector; a selection made on the map is drawn here. The view follows the run and condition the map shows.'));
   }
 
   const METHOD_WORDS = { 'X-ray diffraction': 'X-ray', 'Electron Microscopy': 'cryo-EM', 'Solution NMR': 'NMR', 'Solid-state NMR': 'solid-state NMR', 'Electron Crystallography': 'electron crystallography', 'Neutron Diffraction': 'neutron' };
@@ -492,8 +702,10 @@ export function mountStructureMode(app, container) {
     const lines = describeStructure(structure);
     sideEl.append(
       h('div.pane.structure-words', h('h3', icon('info'), 'In words'), h('p.structure-origin', originText(state.origin, structure)), ...lines.map((line) => h('p', line))),
-      mappingPane(),
-      selectionPane());
+      mappingPane());
+    const scores = scoresPane();
+    if (scores) sideEl.append(scores);
+    sideEl.append(selectionPane());
     const list = structuresPane(true);
     if (list) sideEl.append(list);
     sideEl.append(openPane(true));
@@ -524,17 +736,24 @@ export function mountStructureMode(app, container) {
       return;
     }
     root.append(h('div.view-body.structure-body',
-      h('div.pane.structure-pane', toolbarEl, viewer.el, legendEl, statusEl),
+      h('div.pane.structure-pane', toolbarEl, viewer.el, legendEl, strip.el, statusEl),
       sideEl));
     viewer.attach();
     renderToolbar();
     renderLegend();
+    renderStrip();
     renderStatus();
     renderSide();
   }
 
-  if (viewer.structure && state.mapKey !== `${state.serial}|${viewer.structure.activeAssemblyId ?? ''}|${targetKey(workspaceTarget(store.ws))}`) mapStructure(app, state.mapping?.chain);
+  // What the mapping was made for: the structure, its assembly, the target (the run the map shows).
+  const mapKeyNow = () => `${state.serial}|${viewer.structure?.activeAssemblyId ?? ''}|${targetKey(workspaceTarget(store.ws, activeRun(app)))}`;
+
+  if (viewer.structure && state.mapKey !== mapKeyNow()) mapStructure(app, state.mapping?.chain);
+  // A selection made on the map since the view was last shown is drawn here.
+  if (viewer.structure && store.ui.selection !== state.syncedSelection) applyMapSelection(app);
   render();
+  if (viewer.structure && settings.how) refreshScores();
   return {
     update(topics) {
       if (topics.has('theme')) viewer.setTheme(document.documentElement.dataset.theme === 'dark');
@@ -542,14 +761,21 @@ export function mountStructureMode(app, container) {
         render();
         return;
       }
-      // Another target (the workspace changed): mapped again.
-      if (topics.has('ws') && viewer.structure) {
-        const target = workspaceTarget(store.ws);
-        if (state.mapKey !== `${state.serial}|${viewer.structure.activeAssemblyId ?? ''}|${targetKey(target)}`) {
-          mapStructure(app, state.mapping?.chain);
-          renderSide();
-        }
+      // Another target (the workspace changed, or the run the map shows): mapped again.
+      let changed = false;
+      if ((topics.has('ws') || topics.has('focus')) && viewer.structure && state.mapKey !== mapKeyNow()) {
+        mapStructure(app, state.mapping?.chain);
+        changed = true;
       } else if (topics.has('ws') && !viewer.structure) renderSide();
+      // A selection made on the map (or elsewhere: Score, Compare, remote control) drawn here.
+      if (topics.has('selection') && viewer.structure && store.ui.selection !== state.syncedSelection && applyMapSelection(app)) changed = true;
+      // The scores colored by: their run's results, the comparison, the colors' setting, the run.
+      const runChanged = topics.has('focus') && settings.how !== 'disagreement' && activeRun(app)?.id !== state.colored?.run?.id;
+      if (viewer.structure && settings.how && (changed || runChanged || ['ws', 'results', 'compare', 'colors', 'workspace-loaded'].some((t) => topics.has(t)))) refreshScores();
+      else if (changed) {
+        renderSide();
+        renderStrip();
+      } else if (viewer.structure && (topics.has('selection') || topics.has('results'))) renderSide();
     },
     destroy() {
       viewer.detach();

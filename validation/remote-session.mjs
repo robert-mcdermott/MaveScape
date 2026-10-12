@@ -43,6 +43,8 @@ import { recordTargetCheck } from '../web/lib/workspace.js';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLE_STRUCTURES, cachedJSON, exampleTarget, modelFile, openCached, pdbFile } from './structure-cases.mjs';
 import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/lib/mapping.js';
+import { cellsAtPositions, coloringCSV, coloringLegend, coloringPalette, placeOnTarget, positionValues, residueColors, thresholdClasses } from '../web/lib/structure-scores.js';
+import { cellAt, cellName } from '../web/lib/map-model.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -748,6 +750,48 @@ try {
   await act('export', { what: 'structure-mapping', path: join(out, 'mapping.csv') });
   const [modelNode] = mapTarget(await openCached('alphafold', modelFile('P62993', 6)), grb2Target);
   check('export structure-mapping: the target on the structure shown, position by position, the same bytes as Node\'s', `${readFileSync(join(out, 'mapping.csv'), 'utf8').split('\n').length - 2} positions`, readFileSync(join(out, 'mapping.csv'), 'utf8') === mappingCSV(modelNode, 'AF-P62993-F1'));
+  // Wave 5, slice 3: scores on the structure, as Node colors them. GRB2's Run 1 on 2VWF; the
+  // selection shared with the map both ways; the coloring's file; the other colorings; a model's
+  // confidence beside the scores.
+  const grb2Node = openExampleInNode(exampleById('grb2-sh3'));
+  const grb2Results = proteinView(grb2Node.scored.results) ?? grb2Node.scored.results;
+  const grb2Model = buildMapModel(grb2Results, grb2Node.design, {});
+  const vwfMaps = mapTarget(await openCached('pdb', pdbFile('2VWF')), grb2Target);
+  const medianNode = placeOnTarget(positionValues(grb2Model, 'median'), grb2Target);
+  const medianPalette = coloringPalette(medianNode, 'rdbu');
+  const hexOf = (rgb) => `#${rgb.map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('')}`;
+  const nodeColors = new Map([...residueColors(medianNode, vwfMaps, medianPalette)].map(([k, rgb]) => [k, hexOf(rgb)]));
+  await act('open_structure', { pdb: '2VWF' });
+  const byMedian = await act('set_structure', { color: 'median' });
+  const drawn = await browser.eval(`import('/ui/mode-structure.js').then((m) => { const s = m.structureState(window.mavescape); return s.mapping.positions.filter((p) => p.residue).map((p) => [p.residue, s.viewer.residueColor(p.residue)]); })`);
+  const legendNode = coloringLegend(medianNode, vwfMaps[0], medianPalette, 'Run 1');
+  check('set_structure color median: GRB2\'s Run 1 on 2VWF, every residue of the target drawn in the color Node gives its position (the map\'s scale and palette), the legend and words as Node\'s', `${byMedian.message.slice(0, 260)} | ${drawn.length} residues, ${drawn.filter(([k, c]) => nodeColors.get(k) === c).length} as Node's`, byMedian.data.scores?.coloring === 'median' && byMedian.data.scores.source === 'Run 1' && drawn.length === 56 && drawn.every(([k, c]) => nodeColors.get(k) === c) && byMedian.data.scores.legend.low === legendNode.gradient.low && byMedian.data.scores.legend.center === legendNode.gradient.center && byMedian.data.scores.positions.scored === 56 && /less function/.test(byMedian.data.scores.legend.meaning));
+  const pickedResidue = await act('set_structure', { pick: 'A 25' });
+  const afterPick = await act('get_state');
+  const inspectorText = await browser.eval(`document.getElementById('inspector').innerText`);
+  const column = cellsAtPositions(grb2Model, [25], cellName, cellAt);
+  check('set_structure pick: Ile 183 (2VWF A 25) picked as a click picks it: its position\'s 21 variants selected on the map ("at 25"), the position in the inspector', `${pickedResidue.message.slice(-160)} | selection ${afterPick.data.selection?.count} by "${afterPick.data.selection?.query}"; focus ${JSON.stringify(afterPick.data.focus)}`, pickedResidue.data.picked?.position === 25 && afterPick.data.selection?.count === column.length && afterPick.data.selection.query === 'at 25' && afterPick.data.selection.variants.every((k) => column.includes(k)) && afterPick.data.focus?.kind === 'position' && afterPick.data.focus.position === 25 && /Position 25 · Ile/i.test(inspectorText) && /2VWF Ile 25 · A/.test(inspectorText));
+  await act('select_variants', { query: 'missense at 1-10 and score < -3' });
+  await act('set_mode', { mode: 'structure' });
+  const fromMap = await act('get_state');
+  const mapPositions = [...new Set(fromMap.data.selection.variants.map((k) => Number(/\d+/.exec(k)[0])))].sort((a, b) => a - b);
+  check('a selection made on the map (select_variants, a query) drawn on the structure when the Structure view is shown again: the residues of its positions', `${fromMap.data.selection.count} variants at ${mapPositions.join(', ')} → ${fromMap.data.structure.selected.runs.join(', ')}`, fromMap.data.structure.selected.count === mapPositions.length && fromMap.data.structure.selected.residues.length === mapPositions.length && mapPositions.length >= 5);
+  await act('export', { what: 'structure-scores', path: join(out, 'scores-on-2vwf.csv') });
+  check('export structure-scores: the scores the structure is colored by, position by position with each residue\'s color, the same bytes as Node\'s', `${readFileSync(join(out, 'scores-on-2vwf.csv'), 'utf8').split('\n').length - 2} positions`, readFileSync(join(out, 'scores-on-2vwf.csv'), 'utf8') === coloringCSV(medianNode, vwfMaps[0], '2VWF', medianPalette));
+  const noThreshold = await send('set_structure', { color: 'fraction' });
+  const fraction = await act('set_structure', { color: 'fraction', threshold: -2 });
+  const fractionNode = placeOnTarget(positionValues(grb2Model, 'fraction', { abnormal: thresholdClasses(-2, 'below') }), grb2Target);
+  const byQC = await act('set_structure', { color: 'qc' });
+  const qcNode = coloringLegend(placeOnTarget(positionValues(grb2Model, 'qc'), grb2Target), vwfMaps[0], medianPalette);
+  const toPro = await act('set_structure', { color: 'substitution', substitution: 'Pro' });
+  const badAmino = await send('set_structure', { substitution: 'Xyz' });
+  const disagreement = await act('set_structure', { color: 'disagreement' });
+  check('the other colorings: fraction abnormal-like refused without a threshold, saying so, then below −2 as Node computes it; the QC state\'s classes as Node counts them; the substitution to proline; the disagreement of the comparison Compare shows (Run 1\'s two replicates); an amino acid that is none refused', `${noThreshold.message.slice(0, 120)} | ${fraction.data.scores.words[0].slice(0, 80)} | QC ${byQC.data.scores.legend.items.slice(0, 4).map((i) => i.count).join('/')} | ${toPro.data.scores.label} | ${disagreement.data.scores?.source} | ${badAmino.message}`, !noThreshold.ok && /needs a threshold/.test(noThreshold.message) && fraction.data.scores.abnormal === fractionNode.abnormal && fraction.data.scores.positions.scored === 56 && JSON.stringify(byQC.data.scores.legend.items.slice(0, 4).map((i) => i.count)) === JSON.stringify(qcNode.items.slice(0, 4).map((i) => i.count)) && toPro.data.scores.label === 'Substitution to Pro' && toPro.data.scores.positions.residueItself === 4 && /Replicate 1 − Run 1: Replicate 2/.test(disagreement.data.scores?.source ?? '') && !badAmino.ok && /not an amino acid/.test(badAmino.message));
+  await act('open_structure', { alphafold: 'target' });
+  const onModel = await act('set_structure', { color: 'median' });
+  const strip = await browser.eval(`(() => [...document.querySelectorAll('.structure-strip-label')].map((x) => x.textContent))()`);
+  check('on GRB2\'s AlphaFold DB model, colored by the median score: every position of the target on the model; the strip below the view shows the scores, the positions on the structure and the model\'s confidence (pLDDT) beside them', `${onModel.data.scores.positions.onStructure} positions; strip rows: ${strip.filter(Boolean).join(', ')}`, onModel.data.scores.positions.onStructure === 56 && onModel.data.scores.positions.scored === 56 && strip.includes('pLDDT') && strip.includes('Median score'));
+  await act('set_structure', { color: 'plddt' });
   await act('open_example', { id: 'factor9' });
   await act('open_structure', { pdb: '1RFN' });
   const lightChain = await act('map_structure', { chain: 'B' });

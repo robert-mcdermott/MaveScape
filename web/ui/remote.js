@@ -50,7 +50,10 @@ import { setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 import { possessive } from '../lib/words.js';
-import { findStructures, mapStructure, openStructure, originText, RESIDUE_STYLES, selectResidues, structureState, targetAccession, workspaceTarget } from './mode-structure.js';
+import { findStructures, mapStructure, openStructure, originText, pickResidue, RESIDUE_STYLES, selectResidues, shareSelection, structureState, targetAccession, workspaceTarget } from './mode-structure.js';
+import { calibrationsFor, colorStructure, scoresSettings } from './structure-coloring.js';
+import { coloringCSV, POSITION, SCORE_COLORINGS, substitutionCode } from '../lib/structure-scores.js';
+import { activeRun } from './selections.js';
 import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
@@ -284,8 +287,29 @@ export function installRemote(app) {
       focused: viewer.focused.length,
     };
     if (state.mapping) summary.mapping = mappingSummary(state);
+    // The scores the residues are colored by (wave 5, slice 3).
+    if (viewer.colorScheme === 'scores' && state.colored) summary.scores = scoresSummary(state.colored);
     if (!full) return summary;
     return { ...summary, chains: chainSummaries(structure), assemblies: assemblyChoices(structure), words: describeStructure(structure) };
+  }
+
+  // The scores on the structure (wave 5, slice 3): the coloring, of which run and condition (or
+  // comparison), the legend, the target positions on the structure by state, the words.
+  function scoresSummary(colored) {
+    if (!colored.ok) return { error: colored.message };
+    const v = colored.values;
+    const { legend } = colored;
+    const n = legend.counts.byState;
+    return {
+      coloring: v.how,
+      label: v.label,
+      source: colored.source,
+      ...(v.substitution ? { substitution: v.substitution } : {}),
+      ...(v.abnormal ? { abnormal: v.abnormal } : {}),
+      legend: { title: legend.title, ...(legend.gradient ? { low: legend.gradient.low, center: legend.gradient.center, high: legend.gradient.high, meaning: legend.gradient.meaning ?? null } : {}), items: legend.items.map((i) => ({ label: i.label, color: i.color, count: i.count })) },
+      positions: { onStructure: legend.counts.onStructure, scored: n[POSITION.VALUE], lowConfidence: n[POSITION.LOW], filtered: n[POSITION.FILTERED], missing: n[POSITION.MISSING], notDesigned: n[POSITION.NOT_DESIGNED], residueItself: n[POSITION.REFERENCE], valuedOffStructure: legend.counts.offStructure },
+      words: colored.words,
+    };
   }
 
   // The target on the structure (wave 5, slice 2): the chain, the counts by state, the stretches,
@@ -453,9 +477,54 @@ export function installRemote(app) {
       if (store.ui.mode !== 'structure') await app.setMode('structure');
       if (args.assembly) setAssembly(args.assembly);
       if (args.style) viewer.setStyle(choose(args.style, Object.keys(STYLES), 'style'));
-      if (args.color) {
+      // Colored by the scores (wave 5, slice 3) or by the structure's own colors.
+      const settings = scoresSettings(state);
+      const scoring = ['substitution', 'threshold', 'side', 'calibration'].some((k) => args[k] !== undefined && args[k] !== null);
+      if (args.color || (scoring && settings.how)) {
         const schemes = COLOR_SCHEMES.map((c) => c.id).filter((id) => id !== 'plddt' || viewer.structure.meta.isPredicted);
-        viewer.setColor(choose(args.color, schemes, 'color scheme'));
+        const chosen = args.color ? choose(args.color, [...Object.keys(SCORE_COLORINGS), ...schemes], 'color scheme') : settings.how;
+        if (Object.hasOwn(SCORE_COLORINGS, chosen)) {
+          const before = { how: settings.how, substitution: settings.substitution, abnormal: { ...settings.abnormal }, scheme: viewer.colorScheme };
+          settings.how = chosen;
+          if (args.substitution !== undefined && args.substitution !== null) {
+            const code = substitutionCode(args.substitution);
+            if (!code) throw new ActionError(`"${args.substitution}" is not an amino acid (A or Ala) or a stop (* or Ter).`);
+            settings.substitution = code;
+          }
+          if (args.calibration !== undefined && args.calibration !== null) {
+            const list = calibrationsFor(app, activeRun(app));
+            if (!list.length) throw new ActionError('The run the map shows has no published calibration to read abnormal-like by: only a MaveDB record\'s scores, as published, have them. Give a threshold.');
+            const titles = list.map((c) => c.calibration.title);
+            const at = /^\d+$/.test(String(args.calibration)) ? Number(args.calibration) - 1 : titles.indexOf(choose(args.calibration, titles, 'calibration'));
+            if (!list[at]) throw new ActionError(`There ${list.length === 1 ? 'is 1 calibration' : `are ${list.length} calibrations`}: ${titles.join('; ')}.`);
+            settings.abnormal = { ...settings.abnormal, kind: 'calibration', calibration: list[at].index };
+          } else if (args.threshold !== undefined && args.threshold !== null) {
+            const value = Number(args.threshold);
+            if (!Number.isFinite(value)) throw new ActionError('threshold is a number: the score beyond which a substitution is abnormal-like.');
+            settings.abnormal = { ...settings.abnormal, kind: 'threshold', value, side: args.side ? choose(args.side, ['below', 'above'], 'side') : settings.abnormal.side };
+          } else if (args.side) settings.abnormal = { ...settings.abnormal, side: choose(args.side, ['below', 'above'], 'side') };
+          let colored = await colorStructure(app, state);
+          // A run's scores recomputed first, when they are not yet.
+          for (let i = 0; i < 600 && colored?.pending; i += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            colored = await colorStructure(app, state);
+          }
+          if (!colored?.ok) {
+            Object.assign(settings, { how: before.how, substitution: before.substitution, abnormal: before.abnormal });
+            if (before.how) await colorStructure(app, state);
+            else {
+              state.colored = null;
+              viewer.setColor(before.scheme === 'scores' ? (viewer.structure.meta.isPredicted ? 'plddt' : 'chain') : before.scheme);
+            }
+            store.notify(['structure']);
+            throw new ActionError(colored?.message ?? 'The structure could not be colored by the scores.');
+          }
+        } else {
+          settings.how = null;
+          state.colored = null;
+          viewer.setColor(chosen);
+        }
+        store.notify(['structure']);
       }
       if (args.surface) viewer.setSurface(choose(args.surface, Object.keys(SURFACES), 'surface'));
       if (args.select !== undefined && args.select !== null) {
@@ -472,6 +541,8 @@ export function installRemote(app) {
           if (!found.keys.length) throw new ActionError(`"${text}" selects no residue of ${viewer.structure.meta.code || 'the structure'}.`);
           viewer.select(found.keys);
         }
+        // Shared with the map, as a selection made in the view is (wave 5, slice 3).
+        shareSelection(app);
       }
       const keys = [...viewer.selection];
       const needs = (what) => {
@@ -493,6 +564,17 @@ export function installRemote(app) {
         viewer.fit();
       }
       if (args.fit) viewer.fit();
+      // A residue picked, as a click picks it (wave 5, slice 3).
+      let picked = null;
+      if (args.pick !== undefined && args.pick !== null) {
+        const m = /^\s*([A-Za-z0-9]{1,4})[\s:]+(-?\d+)([A-Za-z]?)\s*$/.exec(String(args.pick));
+        if (!m) throw new ActionError(`"${args.pick}" is not a residue: give its chain and number, "A 183".`);
+        const prefix = `${m[1]}:${m[2]}${m[3]}:`;
+        const key = [...viewer.model.residueMap.keys()].find((k) => k.startsWith(prefix));
+        if (!key) throw new ActionError(`${viewer.structure.meta.code || 'The structure'} has no residue ${m[2]}${m[3]} in chain ${m[1]}.`);
+        picked = { key, shared: pickResidue(app, key, { additive: Boolean(args.add) }) };
+        store.notify(['structure']);
+      }
       await surfaceReady(viewer);
       await settle();
       const summary = structureSummary();
@@ -501,7 +583,15 @@ export function installRemote(app) {
       if (summary.selected.count) parts.push(`${plural(summary.selected.count, 'residue')} selected (${summary.selected.runs.slice(0, 8).join(', ')}${summary.selected.runs.length > 8 ? ', …' : ''})`);
       if (summary.labels) parts.push(`${plural(summary.labels, 'label')}`);
       if (summary.focused) parts.push(`focused on ${plural(summary.focused, 'residue')}`);
-      return { message: `${parts.join('; ')}. Drawn with ${viewer.kind === 'webgpu' ? 'WebGPU' : 'the Canvas renderer'}.`, data: summary };
+      if (summary.scores && !summary.scores.error) parts[0] = `${summary.name}: ${STYLES[summary.style].label.toLowerCase()}, colored by ${summary.scores.label.toLowerCase()} (${summary.scores.source})`;
+      if (picked) {
+        const sel = store.ui.selection;
+        const run = sel ? ws().runs.find((r) => r.id === sel.run) : null;
+        parts.push(picked.shared?.position ? `${residueLabel(viewer.model.residueMap.get(picked.key))} picked: target position ${picked.shared.position}, its ${plural(picked.shared.keys.length, 'variant')} selected on ${run ? possessive(run.name) : 'the'} map and the position in the inspector` : `${residueLabel(viewer.model.residueMap.get(picked.key))} picked${picked.shared ? ', on no target position' : ''}`);
+        summary.picked = { residue: picked.key, position: picked.shared?.position ?? null, selected: picked.shared?.keys.length ?? 0 };
+      }
+      const words = summary.scores?.words ? ` ${summary.scores.words.join(' ')}` : summary.scores?.error ? ` ${summary.scores.error}` : '';
+      return { message: `${parts.join('; ')}. Drawn with ${viewer.kind === 'webgpu' ? 'WebGPU' : 'the Canvas renderer'}.${words}`, data: summary };
     },
 
     async set_mode(args) {
@@ -1216,7 +1306,7 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores'];
       const what = choose(args.what, kinds, 'export');
       let file;
       // The target on the structure shown (wave 5, slice 2), position by position.
@@ -1225,6 +1315,14 @@ export function installRemote(app) {
         if (!state.mapping) throw new ActionError(state.viewer?.structure ? 'The target is not mapped onto the structure shown (map_structure says why).' : 'No structure is open: open one with open_structure.');
         const name = state.viewer.structure.meta.code || state.viewer.structure.label;
         return { file: mappingCSV(state.mapping, name), message: `The mapping of ${state.mapping.target.name} onto chain ${state.mapping.chain} of ${name}: ${state.mapping.target.length} positions.` };
+      }
+      // The scores the structure shown is colored by (wave 5, slice 3), position by position.
+      if (what === 'structure-scores') {
+        const state = structureState(app);
+        const colored = state.viewer?.colorScheme === 'scores' ? state.colored : null;
+        if (!colored?.ok) throw new ActionError(colored ? colored.message : 'The structure shown is not colored by the scores: set_structure with color median (or another of the scores\' colorings).');
+        const name = state.viewer.structure.meta.code || state.viewer.structure.label;
+        return { file: coloringCSV(colored.values, state.mapping, name, colored.palette), message: `${colored.values.label} (${colored.source}) on chain ${state.mapping.chain} of ${name}: ${state.mapping.target.length} positions.` };
       }
       // A run's robustness to analysis choices (wave 4, slice 4): its variants (CSV, or its record to
       // a path ending in .json) and its positions, checked first when it has not been.

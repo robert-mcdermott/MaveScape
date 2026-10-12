@@ -67,10 +67,39 @@ section grows with each.
     mapping: chain A at 227–461 though numbered as chymotrypsin is, chain B at 132–188, which the
     entry's own record numbers five earlier.
 
+- **Scores on the structure (wave 5, slice 3; X3).** Each residue of the target takes its
+  position's scores, in the map's colors (`lib/structure-scores.js`, `ui/structure-coloring.js`).
+  - **Colorings:** the median, mean, lowest or highest score of a position's missense
+    substitutions; the fraction abnormal-like (below or above a threshold set by hand, or by a MaveDB
+    record's published calibration, for its scores as published); how many are scored; one
+    substitution; the uncertainty (median SE); the disagreement of the two sides Compare shows;
+    the QC state. On every chain that holds the target.
+  - **The map's grammar:** its palette and scale, centered on the wild type; filtered and missing
+    positions drawn in grays the palettes do not hold, never in the wild type's color; a value
+    from scores of low confidence only drawn paler; a legend, with how many positions are in each.
+  - **The run and condition the map shows** (or its contrast) are those colored by, chosen here or
+    on the map.
+  - **A strip of the target's positions** below the view: their colors, which are on the
+    structure, and an AlphaFold DB model's confidence beside them; a click or a drag selects.
+  - **One selection for the map and the structure:** a residue picked selects its position's
+    variants on the map (as `at` selects them) and puts the position in the inspector, a new
+    section with its substitutions' scores and its residue on each chain; a selection made on the
+    map is drawn on the structure; residues selected in words are selected on the map too. With
+    residues colored by scores, a selection is shown by its side chains, not by a tint.
+  - **The coloring written out** (`<entry>_chain-<chain>_<coloring>.csv`; FORMATS.md).
+  - **Remote control:** `set_structure`'s `color` takes the scores' colorings (with
+    `substitution`, `threshold`, `side`, `calibration`), `pick` picks a residue as a click does;
+    `export` writes `structure-scores`; `get_state` gives the scores colored by.
+  - **The GRB2 example's sixth step** colors 2VWF by the median score: the core is the least
+    tolerant, and the residues that touch the Gab2 peptide score near the wild type, an abundance
+    assay not seeing binding. Its fourth step now points to what the analysis can do.
+
 ### Changed
 
 - The Structure view's words give a chain's UniProt residues as the entry gives them ("the entry
   gives UniProt P00740 128–183"): the mapping may place them otherwise.
+- The target mapped onto a structure is the target of the run the map shows (the workspace's, as
+  before, when it has one target), so the mapping follows the run.
 
 - Headless Chrome is started with WebGPU allowed (`docs/capture/cdp.mjs`), for the screenshots and
   the validation's sessions.
@@ -113,15 +142,33 @@ section grows with each.
     1RFN's light chain and its own record five off, PTEN's removed loop and its ambiguous join.
   - **The structures of each target**, ranked from PDBe's answers in the cache, the example's entry
     among them with its chain.
-- The remote-control session (138 checks): every example protein's PDB entry and AlphaFold DB model
+- The remote-control session: every example protein's PDB entry and AlphaFold DB model
   opened and drawn, with WebGPU and then with the Canvas renderer, each with the atoms Node reads
   and an image that is not empty; `set_structure`'s selections, styles, labels, focus, surface and
   assembly; refusals, saying why; a structure file opened with `open_files`. Slice 2:
   `find_structures`, `open_structure`'s and `map_structure`'s mappings and the mapping's file as
   Node makes them; a selection by target position kept from 2VWF to GRB2's model.
+- `structures`, slice 3 (4 more checks, 14 in all):
+  - **Each example's run on its entry, by every coloring:** every residue of every chain that
+    holds the target has the value its position's missense substitutions have in the run's
+    results (read without the map's model) and the map's color for it; every position with nothing
+    scored is gray, at least 100 (RGB) from the wild type's color.
+  - **Selections both ways:** each example's ten least tolerant positions, selected on the map (as
+    `at` selects them), are drawn on the residues SIFTS places them on, and picked there select the
+    same positions.
+  - **The GRB2 example's account,** from the atoms: the least tolerant residues packed (more Cα
+    atoms within 10 Å), those that touch the Gab2 peptide, selected in the guide's words as every
+    distance finds them, nearer the wild type; the guide gives these numbers.
+  - **Fraction abnormal-like** by PTEN's published calibrations: the share in the abnormal ranges
+    as the record's own JSON gives them (ExCALIBR's five, the Gaussian mixture's one).
+- The remote-control session (144 checks), slice 3: 2VWF colored by the median score in the page,
+  every residue as Node colors it; a residue picked, its position's variants selected on the map
+  and the position in the inspector; a map query's selection drawn on the structure; the
+  coloring's file as Node makes it; the other colorings, refusals included; the strip with an
+  AlphaFold DB model's pLDDT.
 - Unit tests: Proteoscope's tests of the copied modules (74: parsers, structure, chemistry, DSSP,
-  surfaces, selection language, formats, alignment), `structures.test.mjs` (6) and
-  `mapping.test.mjs` (8).
+  surfaces, selection language, formats, alignment), `structures.test.mjs` (6),
+  `mapping.test.mjs` (8) and `structure-scores.test.mjs` (7).
 - Go tests: a file stored again is read to its end before the answer
   (`TestAFileStoredAgainIsReadToItsEnd`).
 - Go tests: the structure requests (and PDBe's best structures) ask what NETWORK.md says, keep what

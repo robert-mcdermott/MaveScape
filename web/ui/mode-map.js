@@ -20,7 +20,7 @@ import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, STAGE_BY_CODE } from '../lib/filters.js';
 import { addSelection, removeSelection } from '../lib/workspace.js';
 import { combineSelections, QUERY_HELP, QueryError } from '../lib/query.js';
-import { runQuery, setsFor } from './selections.js';
+import { activeRun, runQuery, setsFor } from './selections.js';
 import { checkRobustness, robustnessOf } from './robustness.js';
 import { addPublicTrack } from './tracks.js';
 import { ensureResults, runEntry } from './run-results.js';
@@ -58,18 +58,7 @@ export function mountMapMode(app, container) {
   const panel = tracksPanel(app);
   const shownTracks = () => (trackState && trackState.model === model ? trackState.tracks.filter((t) => t.shown) : []);
 
-  function currentRun() {
-    const ws = store.ws;
-    const focus = store.ui.focus;
-    if (focus?.kind === 'run') return ws.runs.find((r) => r.id === focus.id) ?? null;
-    if (focus?.kind === 'variant' && focus.run) return ws.runs.find((r) => r.id === focus.run) ?? ws.runs.at(-1) ?? null;
-    if (focus?.kind === 'selection') {
-      const saved = ws.selections.find((s) => s.id === focus.id);
-      if (saved) return ws.runs.find((r) => r.id === saved.run) ?? ws.runs.at(-1) ?? null;
-    }
-    if (view.run && ws.runs.some((r) => r.id === view.run)) return ws.runs.find((r) => r.id === view.run);
-    return ws.runs.at(-1) ?? null;
-  }
+  const currentRun = () => activeRun(app);
 
   // The condition a selection or the inspector refers to: the one shown, or a contrast's condition.
   const conditionIndex = () => (model?.contrast ? results.conditions.findIndex((x) => x.id === model.contrast.condition) : view.condition);

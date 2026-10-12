@@ -10,6 +10,8 @@ import { readStructureBytes, openStructureText } from '../web/lib/structures.js'
 import { exampleById } from '../web/lib/examples.js';
 import { targetProtein } from '../web/lib/target.js';
 import { cachedRecord, recordTarget } from './example-cases.mjs';
+import { KIND, STATUS } from '../web/lib/variants.js';
+import { STAGE_BY_ID } from '../web/lib/filters.js';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
 
@@ -75,4 +77,35 @@ export const modelFile = (accession, version) => `AF-${accession}-F1-model_v${ve
 // structure read from two formats gives the same lines.
 export function atomLines(model) {
   return model.atoms.map((a) => `${a.chain} ${a.resName} ${a.resSeq}${a.iCode || ''} ${a.name} ${a.element} ${a.x.toFixed(3)} ${a.y.toFixed(3)} ${a.z.toFixed(3)}`);
+}
+
+// Each position's missense substitutions read straight from a run's results (wave 5, slice 3), for
+// checking the scores drawn on a structure without the map's model (the first methionine's
+// substitutions, start-lost, among them, as its column of the map holds them): position → { scored: Map(alt
+// code → { score, se, low }), filtered: Set(alt code) }. A substitution written twice is the last
+// row's, as the map takes it.
+export function positionScores(results, condition = 0) {
+  const v = results.variants;
+  const c = results.conditions[condition];
+  const measured = STAGE_BY_ID.get('measured').code;
+  const out = new Map();
+  for (let i = 0; i < results.rows; i += 1) {
+    if ((v.kind[i] !== KIND.MISSENSE && v.kind[i] !== KIND.START_LOST) || v.status[i] === STATUS.INVALID) continue;
+    const p = v.position[i];
+    if (!out.has(p)) out.set(p, { scored: new Map(), filtered: new Set() });
+    const at = out.get(p);
+    at.scored.delete(v.alt[i]);
+    at.filtered.delete(v.alt[i]);
+    if (!c.reason[i] && Number.isFinite(c.score[i])) at.scored.set(v.alt[i], { score: c.score[i], se: c.se?.[i], low: c.flags[i] !== 0 });
+    else if (c.reason[i] && c.reason[i] !== measured) at.filtered.add(v.alt[i]);
+  }
+  return out;
+}
+
+// The middle of numbers (the mean of the two middle ones for an even count).
+export function middle(values) {
+  const s = [...values].sort((a, b) => a - b);
+  const n = s.length;
+  if (!n) return Number.NaN;
+  return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2;
 }

@@ -87,7 +87,7 @@ import { buildMapModel, cellAt, cellName, colorPosition, describeMap, ROW_ORDERS
 import { mapPalette } from '../web/lib/map-render.js';
 import { EXPORT_THEME, mapSVG } from '../web/lib/map-svg.js';
 import { lab as labColor, deltaE2000 } from '../web/lib/colorvision.js';
-import { hexToRgb, rgbToHex } from '../web/lib/colormaps.js';
+import { colormapLUT, hexToRgb, rgbToHex } from '../web/lib/colormaps.js';
 import { writeFileSync } from 'node:fs';
 import { SOFTWARE, allExports, buildWorkspace, inputFor, recompute, scoreTable } from './roundtrip-cases.mjs';
 import { assembleTable } from '../web/lib/assemble.js';
@@ -110,7 +110,8 @@ import { addSelection } from '../web/lib/workspace.js';
 import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
-import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, modelFile, openCached, openFixture, pdbFile, siftsOf, siftsRetrieved } from './structure-cases.mjs';
+import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, openCached, openFixture, pdbFile, positionScores, siftsOf, siftsRetrieved } from './structure-cases.mjs';
+import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
 import { describeMapping, mapTarget, mapTargetOnChain, rankStructures } from '../web/lib/mapping.js';
 import { assemblyChoices, chainSummaries, readStructureBytes } from '../web/lib/structures.js';
 import { deriveStructure, materializeAssemblyModels } from '../web/lib/structure/structure.js';
@@ -3898,6 +3899,183 @@ const suites = {
       ranked.push({ e, n: rows.length, first: rows[0], named, ok: rows.length > 0 && ordered && within && named?.chains.some((c) => c.id === e.chain) });
     }
     check('structures', 'the PDB entries that cover each example\'s target, ranked from PDBe\'s SIFTS (best_structures, from the cache): the most of the target first, then the best resolution, each within the target; the entry the guide names among them, with its chain', ranked.map((x) => `${x.e.accession}: ${x.n} entries, first ${x.first?.id} (${x.first?.covered} positions), ${x.e.pdb} ${x.named ? `${x.named.covered} positions, rank ${ranked.length && x.n ? 1 + rankStructures(cachedJSON('pdbe', `${x.e.accession}.best-structures.json`), { ...exampleTarget(x.e.examples[0]), accession: x.e.accession }).findIndex((r) => r.id === x.e.pdb) : '?'}` : 'missing'}`).join('; '), ranked.every((x) => x.ok), 'all');
+
+    // Wave 5, slice 3 (X3): scores on the structure. Each example's run, scored in Node, colored on
+    // its entry by every coloring; each residue's value and color checked against the run's results
+    // read without the map's model (structure-cases.mjs, positionScores), and the map's grammar:
+    // a position with nothing scored drawn gray, never in the wild type's color.
+    const lut = colormapLUT('rdbu');
+    const hexAt = (t, pale) => {
+      const k = Math.max(0, Math.min(255, Math.round(t * 255)));
+      return `#${[lut[k * 3], lut[k * 3 + 1], lut[k * 3 + 2]].map((x) => Math.round(pale ? (x + 110) / 2 : x).toString(16).padStart(2, '0')).join('')}`;
+    };
+    const rgbDistance = (a, b) => Math.hypot(...[1, 3, 5].map((k) => parseInt(a.slice(k, k + 2), 16) - parseInt(b.slice(k, k + 2), 16)));
+    const colorings = [];
+    const scoredRuns = new Map();
+    for (const e of EXAMPLE_STRUCTURES) {
+      const structure = await openCached('pdb', pdbFile(e.pdb));
+      for (const id of e.examples) {
+        const o = openExampleInNode(exampleById(id));
+        const results = proteinView(o.scored.results) ?? o.scored.results;
+        const model = buildMapModel(results, o.design, {});
+        const target = exampleTarget(id);
+        const maps = mapTarget(structure, target);
+        const own = positionScores(results);
+        scoredRuns.set(id, { o, results, model, target, maps, own, structure });
+        const shift = target.offset - (o.design.targets[0].offset ?? 0);
+        const wild = hexAt(0.5);
+        const problems = [];
+        let compared = 0;
+        let gray = 0;
+        let nearest = Infinity;
+        const tried = [];
+        for (const how of ['median', 'mean', 'minimum', 'maximum', 'count', 'uncertainty', 'substitution', 'qc']) {
+          let values;
+          try {
+            values = placeOnTarget(positionValues(model, how, { substitution: 'P' }), target);
+          } catch (error) {
+            tried.push(`${how}: ${/no standard errors/.test(error.message) ? 'no SEs' : error.message}`);
+            continue;
+          }
+          tried.push(how);
+          const pal = coloringPalette(values, 'rdbu');
+          const colors = residueColors(values, maps, pal);
+          for (const m of maps) {
+            for (const p of m.positions) {
+              if (!p.residue) continue;
+              const at = own.get(p.position - shift) ?? { scored: new Map(), filtered: new Set() };
+              const reference = target.sequence[p.position - 1];
+              let expected;
+              let state;
+              let low = false;
+              if (how === 'substitution') {
+                const one = at.scored.get('ARNDCQEGHILKMFPSTWYV*'.indexOf('P') + 1);
+                if (reference === 'P') state = POSITION.REFERENCE;
+                else if (one) {
+                  expected = one.score;
+                  low = one.low;
+                  state = POSITION.VALUE;
+                } else state = at.filtered.has(15) ? POSITION.FILTERED : POSITION.MISSING;
+              } else {
+                const list = [...at.scored.values()];
+                if (!list.length) state = at.filtered.size ? POSITION.FILTERED : POSITION.MISSING;
+                else {
+                  state = POSITION.VALUE;
+                  low = list.every((x) => x.low) && how !== 'qc' && how !== 'count';
+                  const xs = list.map((x) => x.score);
+                  expected = how === 'median' ? middle(xs) : how === 'mean' ? xs.reduce((a, b) => a + b, 0) / xs.length : how === 'minimum' ? Math.min(...xs) : how === 'maximum' ? Math.max(...xs) : how === 'count' ? xs.length : how === 'uncertainty' ? middle(list.map((x) => x.se).filter(Number.isFinite)) : (list.length * 2 < 19 ? 3 : list.length < 19 ? 2 : list.some((x) => x.low) ? 1 : 0);
+                }
+              }
+              const got = colors.get(p.residue).map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+              let want;
+              if (state === POSITION.FILTERED) want = STATE_COLORS.filtered;
+              else if (state === POSITION.MISSING) want = STATE_COLORS.missing;
+              else if (state === POSITION.REFERENCE) want = wild;
+              else if (how === 'qc') want = QC_CLASSES[expected].color;
+              else if (values.domain.kind === 'diverging') want = hexAt(Math.max(0, Math.min(1, 0.5 + (expected - model.domain.center) / (2 * (model.domain.max - model.domain.center)))), low);
+              else want = null;
+              const value = values.value[p.position - 1];
+              const valueOk = state !== POSITION.VALUE || (how === 'qc' ? values.category[p.position - 1] === expected : Math.abs(value - expected) <= 1e-12 * Math.max(1, Math.abs(expected)));
+              const stateOk = values.state[p.position - 1] === (low ? POSITION.LOW : state);
+              if (state === POSITION.FILTERED || state === POSITION.MISSING) {
+                gray += 1;
+                nearest = Math.min(nearest, rgbDistance(`#${got}`, wild));
+              }
+              if (!valueOk || !stateOk || (want && `#${got}` !== want)) problems.push(`${how} ${p.residue}: ${fmt(value, 3)} ${POSITION_NAMES[values.state[p.position - 1]]} ${'#' + got}, expected ${fmt(expected, 3)} ${POSITION_NAMES[low ? POSITION.LOW : state]} ${want ?? ''}`);
+              compared += 1;
+            }
+          }
+        }
+        colorings.push({ id, entry: e.pdb, compared, gray, nearest, tried, problems, ok: compared > 0 && !problems.length && (!gray || nearest > 100) });
+      }
+    }
+    check('structures', 'scores on each example\'s PDB entry: its run (scored in Node) colored by every coloring (median, mean, lowest, highest, count, uncertainty, the substitution to proline, QC state), every residue of every chain that holds the target given the value its position\'s missense substitutions have in the run\'s results (read without the map\'s model) and the map\'s color for it (rdbu, the map\'s scale; paler where all are of low confidence); a position with nothing scored gray (filtered or missing), at least 100 (RGB) from the wild type\'s color', colorings.map((x) => `${x.id} on ${x.entry}: ${x.compared} residue colorings (${x.tried.join(', ')})${x.gray ? `, ${x.gray} gray, nearest ${x.nearest.toFixed(0)} from the wild type's` : ''}${x.problems.length ? `; ${x.problems.slice(0, 3).join('; ')}` : ''}`).join('; '), colorings.length === 8 && colorings.every((x) => x.ok), 'all; gray ≥ 100 away');
+
+    // Selections both ways: a map selection's positions drawn on the residues SIFTS places them on,
+    // and a residue picked selecting what "at" selects on the map.
+    const shared = [];
+    for (const e of EXAMPLE_STRUCTURES) {
+      const sifts = siftsOf(e.pdb);
+      for (const id of e.examples) {
+        const { model, target, maps, own, structure, o } = scoredRuns.get(id);
+        const shift = target.offset - (o.design.targets[0].offset ?? 0);
+        // The ten least tolerant positions on the structure, by their median.
+        const m = maps[0];
+        const on = m.positions.filter((p) => p.residue && own.get(p.position - shift)?.scored.size).map((p) => [p.position - shift, middle([...own.get(p.position - shift).scored.values()].map((x) => x.score))]).sort((a, b) => a[1] - b[1]).slice(0, 10).map(([p]) => p);
+        const keys = cellsAtPositions(model, on, cellName, cellAt);
+        const query = evaluateQuery(parseQuery(`at ${positionRanges(on)}`), queryContext({ model, results: scoredRuns.get(id).results, design: o.design }));
+        const sameAsQuery = keys.length === query.keys.length && keys.every((k) => query.keys.includes(k));
+        const back = positionsOfKeys(keys);
+        const residues = maps.flatMap((x) => back.map((p) => x.positions[p + shift - 1]?.residue).filter(Boolean));
+        const residueMap = structure.models[0].residueMap;
+        const siftsAt = residues.map((key) => {
+          const r = residueMap.get(key);
+          return sifts.get(r.labelChain)?.get(Number(r.labelSeq))?.position;
+        });
+        const expected = residues.map((key) => maps.find((x) => x.residuePosition.has(key)).residuePosition.get(key) + target.offset);
+        const asSifts = siftsAt.every((x, k) => x === expected[k]);
+        const picked = residues.map((key) => maps.find((x) => x.residuePosition.has(key)).residuePosition.get(key) - shift);
+        const roundTrip = JSON.stringify([...new Set(picked)].sort((a, b) => a - b)) === JSON.stringify([...on].sort((a, b) => a - b));
+        const available = m.positions.filter((p) => p.residue && own.get(p.position - shift)?.scored.size).length;
+        shared.push({ id, entry: e.pdb, positions: on.length, keys: keys.length, residues: residues.length, ok: on.length === Math.min(10, available) && sameAsQuery && JSON.stringify(back) === JSON.stringify([...on].sort((a, b) => a - b)) && asSifts && roundTrip && residues.length >= 10, sameAsQuery, asSifts, roundTrip });
+      }
+    }
+    check('structures', 'selections shared both ways: each example\'s ten least tolerant positions on its entry (Hsp90\'s nine), selected on the map (what "at" selects there), drawn on the residues SIFTS places those positions on (on every chain that holds the target); those residues picked select the same positions again', shared.map((x) => `${x.id} on ${x.entry}: ${x.positions} positions, ${x.keys} variants, ${x.residues} residues${x.sameAsQuery ? '' : ', not as "at" selects'}${x.asSifts ? '' : ', not where SIFTS places them'}${x.roundTrip ? '' : ', picked otherwise'}`).join('; '), shared.every((x) => x.ok), 'all');
+
+    // The GRB2 example's guide: on 2VWF its least tolerant residues pack the core, and those that
+    // touch the Gab2 peptide (selected in words) are tolerant: the assay measured abundance.
+    {
+      const { target, maps, own, structure } = scoredRuns.get('grb2-sh3');
+      const model = structure.models[0];
+      const m = maps.find((x) => x.chain === 'A');
+      const ca = (key) => model.residueMap.get(key).atoms.find((a) => a.name === 'CA');
+      const cas = model.residues.filter((r) => r.chain === 'A' && r.kind === 'protein').map((r) => r.atoms.find((a) => a.name === 'CA')).filter(Boolean);
+      const near = (a, b, d) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) <= d;
+      const rows = m.positions.filter((p) => p.residue && own.get(p.position)?.scored.size).map((p) => ({ p, median: middle([...own.get(p.position).scored.values()].map((x) => x.score)), neighbors: cas.filter((b) => b !== ca(p.residue) && near(ca(p.residue), b, 10)).length }));
+      rows.sort((a, b) => a.median - b.median);
+      const core = middle(rows.slice(0, 10).map((r) => r.neighbors));
+      const surface = middle(rows.slice(-10).map((r) => r.neighbors));
+      const peptide = model.atoms.filter((a) => a.chain === 'B' && a.kind === 'protein');
+      const touching = rows.filter((r) => model.residueMap.get(r.p.residue).atoms.some((a) => peptide.some((b) => near(a, b, 4))));
+      const words = 'byres (chain A and protein and within 4 of (chain B and protein))';
+      const t = { id: 1, index: 1, name: '2VWF', model, structure, context: { selected: new Set(), focus: null, values: {} } };
+      const byWords = [...residueKeysFromMask(model, selectAtoms(words, [t]).get(1))].sort();
+      const sameResidues = byWords.join() === touching.map((r) => r.p.residue).sort().join();
+      const contact = middle(touching.map((r) => r.median));
+      const rest = middle(rows.filter((r) => !touching.includes(r)).map((r) => r.median));
+      const example = exampleById('grb2-sh3');
+      const bullet = example.expected.at(-1);
+      const said = bullet.includes(`a median of ${core.toFixed(1)} Cα atoms within 10 Å, the ten highest ${surface.toFixed(1)}`) && bullet.includes(`the ten that touch the Gab2 peptide are tolerant (a median of ${contact.toFixed(2).replace('-', '−')}, against ${rest.toFixed(2).replace('-', '−')} for the rest)`) && touching.length === 10 && example.steps.some(([, text]) => text.includes(`"${words}"`));
+      check('structures', 'the GRB2 example\'s guide, on 2VWF colored by the median score: its ten least tolerant residues have more Cα atoms within 10 Å (the core) than its ten most tolerant, and the residues that touch the Gab2 peptide (chain B), selected in the words its guide gives as every distance finds them, score nearer the wild type than the rest; the guide says so, with these numbers', `${rows.length} positions; neighbors within 10 Å: ten least tolerant ${core}, ten most ${surface}; touching the peptide ${touching.length} (${touching.map((r) => `${r.p.code}${r.p.reference}`).join(' ')}), ${sameResidues ? 'as the words select them' : `the words select ${byWords.length}`}: median ${fmt(contact, 2)}, the rest ${fmt(rest, 2)}; the guide ${said ? 'says so' : 'says otherwise'}`, core > surface && contact > rest && sameResidues && said && target.offset === 158, 'core packed; the binding surface tolerant; said');
+    }
+
+    // Fraction abnormal-like, by PTEN's published calibrations (read from the record's own JSON,
+    // not through MaveScape's reading of it), on 1D5R; and by a threshold.
+    {
+      const { model, target, maps, own } = scoredRuns.get('pten-mavedb');
+      const raw = cachedJSON('mavedb', 'urn_mavedb_00000013-a-1.json').scoreCalibrations;
+      const record = cachedRecord('urn:mavedb:00000013-a-1');
+      const results = [];
+      for (const title of ['Calibration by Gaussian mixture model', 'ExCALIBR calibration']) {
+        const published = raw.find((c) => c.title === title).functionalClassifications.filter((k) => k.functionalClassification === 'abnormal' && Array.isArray(k.range));
+        const abnormal = (x) => published.some((k) => (k.range[0] === null || (k.inclusiveLowerBound ? x >= k.range[0] : x > k.range[0])) && (k.range[1] === null || (k.inclusiveUpperBound ? x <= k.range[1] : x < k.range[1])));
+        const values = placeOnTarget(positionValues(model, 'fraction', { abnormal: calibrationClasses(record.calibrations.find((c) => c.title === title)) }), target);
+        let compared = 0;
+        let differ = 0;
+        for (const p of maps[0].positions) {
+          const list = [...(own.get(p.position)?.scored.values() ?? [])].map((x) => x.score);
+          if (!p.residue || !list.length) continue;
+          compared += 1;
+          if (Math.abs(values.value[p.position - 1] - list.filter(abnormal).length / list.length) > 1e-12) differ += 1;
+        }
+        results.push({ title, ranges: published.length, compared, differ });
+      }
+      const below = placeOnTarget(positionValues(model, 'fraction', { abnormal: thresholdClasses(0.5, 'below') }), target);
+      const p = maps[0].positions.find((x) => x.residue && (own.get(x.position)?.scored.size ?? 0) >= 10);
+      const list = [...own.get(p.position).scored.values()].map((x) => x.score);
+      const thresholdOk = Math.abs(below.value[p.position - 1] - list.filter((x) => x < 0.5).length / list.length) < 1e-12;
+      check('structures', 'fraction abnormal-like by PTEN\'s published calibrations on 1D5R: the share of each position\'s scored missense substitutions in the calibration\'s abnormal ranges as the record\'s own JSON gives them (bounds included or not as published; ExCALIBR\'s five abnormal ranges, the Gaussian mixture\'s one), and by a threshold set by hand', `${results.map((x) => `${x.title}: ${x.ranges} abnormal ${x.ranges === 1 ? 'range' : 'ranges'}, ${x.compared} positions, ${x.differ} differ`).join('; ')}; threshold 0.5 at position ${p.position}: ${thresholdOk ? 'the same' : 'different'}`, results.every((x) => x.compared > 0 && !x.differ) && thresholdOk, 'the same');
+    }
   },
 };
 

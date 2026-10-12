@@ -77,6 +77,10 @@ export function createStructureViewer(options = {}) {
     style: 'cartoon',
     display: { ...DISPLAY },
     color: { scheme: 'chain', palette: 'vivid', heteroByElement: true },
+    // Wave 5, slice 3: the colors of residues by their target positions' scores (the 'scores'
+    // scheme): residue key → [r, g, b], the rest in the context color.
+    residueColors: null,
+    contextColor: '#cfcfcf',
     surface: { kind: 'off', opacity: 1, key: '', pending: 0, data: null, status: '', computing: false },
     selection: new Set(),
     focus: null,
@@ -150,7 +154,10 @@ export function createStructureViewer(options = {}) {
     const m = model();
     if (!m) return;
     const cartoon = state.display.polymer === 'cartoon' ? cartoonFor(m) : null;
-    const scene = buildScene(m, state.structure, state.display, { cartoon, focusResidues: state.focus?.neighborhood ?? new Set() });
+    // Colored by scores (wave 5, slice 3), a selection is shown by its side chains, in their own
+    // colors, rather than by a tint that would change what the colors say.
+    const scored = state.color.scheme === 'scores' && state.selection.size <= 400 ? state.selection : new Set();
+    const scene = buildScene(m, state.structure, state.display, { cartoon, focusResidues: state.focus?.neighborhood ?? new Set(), emphasisResidues: scored });
     state.renderer.setSpheres(scene.spheres.data, scene.spheres.count);
     state.renderer.setCylinders(scene.cylinders.data, scene.cylinders.count);
     if (cartoon) {
@@ -168,9 +175,14 @@ export function createStructureViewer(options = {}) {
   function updateColors() {
     const m = model();
     if (!m) return;
-    const { colors, legend } = computeAtomColors(m, state.structure, state.color);
+    // Scores (wave 5, slice 3): each residue of the target its position's color, every atom of it
+    // (no element colors, which would read as scores), ligands by element, the rest the context.
+    const scores = state.color.scheme === 'scores';
+    const { colors, legend } = scores
+      ? computeAtomColors(m, state.structure, { scheme: 'uniform', uniformColor: state.contextColor, heteroByElement: false }, { overrides: state.residueColors ?? new Map() })
+      : computeAtomColors(m, state.structure, state.color);
     state.atomColors = colors;
-    state.legend = legend;
+    state.legend = scores ? null : legend;
     if (!state.atomFlags || state.atomFlags.length !== m.atoms.length) state.atomFlags = new Uint32Array(Math.max(1, m.atoms.length));
     state.renderer.setAtomData(colors, state.atomFlags);
     state.dirty.colors = false;
@@ -225,7 +237,7 @@ export function createStructureViewer(options = {}) {
       material: { ambient: LIGHTING.ambient, diffuse: LIGHTING.diffuse, specular: LIGHTING.specular, shininess: LIGHTING.shininess },
       flat: LIGHTING.flat,
       highlightColor: [0.35, 1, 0.55],
-      highlightStrength: 0.5,
+      highlightStrength: state.color.scheme === 'scores' ? 0.12 : 0.5,
       hoverColor: [1, 0.85, 0.3],
       hoverStrength: 0.38,
       glow: LIGHTING.glow,
@@ -677,10 +689,31 @@ export function createStructureViewer(options = {}) {
       options.onChange?.();
     },
     setColor(scheme) {
+      if ((scheme === 'scores') !== (state.color.scheme === 'scores') && state.selection.size) state.dirty.scene = true;
       state.color = { ...state.color, scheme };
       state.dirty.colors = true;
       requestRender();
       options.onChange?.();
+    },
+    // The residues' colors for the 'scores' scheme (residue key → [r, g, b], 0–1), and the color of
+    // the rest; shown when the scheme is 'scores'.
+    setResidueColors(colors, context = state.contextColor) {
+      state.residueColors = colors;
+      state.contextColor = context;
+      if (state.color.scheme === 'scores') {
+        state.dirty.colors = true;
+        requestRender();
+      }
+    },
+    // A residue's color as drawn now (its first atom's), as a hex string; null when not drawn.
+    residueColor(key) {
+      const m = model();
+      const residue = m?.residueMap.get(key);
+      const atom = residue?.atoms[0];
+      if (atom && state.dirty.colors && state.renderer) updateColors();
+      if (!atom || !state.atomColors) return null;
+      const c = state.atomColors.subarray(atom.id * 4, atom.id * 4 + 3);
+      return `#${[...c].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
     },
     setSurface(kind) {
       if (!SURFACES[kind]) throw new Error(`No surface "${kind}". Surfaces: ${Object.keys(SURFACES).join(', ')}.`);
@@ -703,6 +736,7 @@ export function createStructureViewer(options = {}) {
       }
       state.selection = next;
       state.dirty.flags = true;
+      if (state.color.scheme === 'scores') state.dirty.scene = true;
       requestRender();
       options.onChange?.();
     },

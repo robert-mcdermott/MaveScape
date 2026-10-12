@@ -1101,3 +1101,27 @@ dl.kv.annotations dd { white-space: normal; }
 .structure-rows li.current { border-color: var(--accent); background: var(--accent-soft); }
 .structure-rows li div { display: flex; flex-direction: column; min-width: 0; }
 .structure-rows li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Scores on the structure (wave 5, slice 3: ui/structure-coloring.js): the legend in the map's grammar,
+   the strip of target positions below the view, the pane. */
+.score-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.score-scale { display: inline-grid; grid-template-columns: 160px; gap: 1px; }
+.score-scale-bar { height: 10px; border-radius: 2px; border: 1px solid var(--line); }
+.score-scale-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.score-scale-title { font-size: 10.5px; color: var(--text-3); }
+.score-swatch { width: 12px; height: 10px; border-radius: 2px; display: inline-block; position: relative; border: 1px solid color-mix(in srgb, var(--text) 18%, transparent); }
+.score-swatch.hatch { background-image: repeating-linear-gradient(-45deg, transparent 0 2px, rgba(255, 255, 255, 0.45) 2px 3px) !important; }
+.score-swatch.dot::after { content: ""; position: absolute; left: 5px; top: 4px; width: 2px; height: 2px; background: #fff; }
+.structure-strip { --strip-label: 86px; display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-2); user-select: none; }
+.structure-strip[hidden] { display: none; }
+.structure-strip-grid { position: relative; display: grid; grid-template-columns: var(--strip-label) minmax(0, 1fr); row-gap: 2px; align-items: center; cursor: crosshair; touch-action: none; }
+.structure-strip-label { font-size: 10.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
+.structure-strip-row { width: 100%; height: 12px; display: block; background: var(--map-empty); }
+.structure-strip-row.selected { height: 4px; background: none; }
+.structure-strip-band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 22%, transparent); border: 1px solid var(--accent); pointer-events: none; }
+.structure-strip-ticks { position: relative; height: 12px; font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.structure-strip-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.structure-strip-readout { min-height: 15px; font-size: 11.5px; color: var(--text-2); }
+.structure-scores p { margin: 0 0 6px; font-size: 12.5px; color: var(--text-2); }
+.structure-scores .structure-chain label { white-space: nowrap; }
+.structure-scores .structure-chain .input { min-width: 0; }
+.structure-source { margin-bottom: 8px; }

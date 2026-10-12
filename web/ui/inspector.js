@@ -4,6 +4,7 @@
 
 import { h, icon, clear, relativeTime, formatBytes, formatCount } from './dom.js';
 import { variantSection } from './variant-inspector.js';
+import { positionSection } from './position-inspector.js';
 import { targetOriginText } from '../lib/genbank.js';
 import { retrievalText } from '../lib/uniprot.js';
 import { recordView } from './mavedb.js';
@@ -119,6 +120,11 @@ export function mountInspector(app) {
     }
     if (focus?.kind === 'variant') {
       const section = variantSection(app, focus);
+      if (section) return section;
+    }
+    // A position of a run's target (wave 5, slice 3): a residue picked on the structure.
+    if (focus?.kind === 'position') {
+      const section = positionSection(app, focus);
       if (section) return section;
     }
     if (focus?.kind === 'run') {

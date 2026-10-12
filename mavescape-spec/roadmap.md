@@ -2226,6 +2226,59 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    shown beside. Selections are shared both ways: a map selection highlights residues, a picked
    residue selects its map column and fills the inspector. The view follows the active run and
    condition.
+   - **Done.** `lib/structure-scores.js` gives each target position its value for a coloring of
+     the run's map (median, mean, lowest and highest score of its missense substitutions, the
+     fraction abnormal-like, the count scored, one substitution, the median SE, Compare's
+     disagreement, the QC state) and its state in the map's grammar, places it on the mapped
+     target by reference numbering, and colors every chain that holds the target: the map's
+     palette and scale, filtered and missing in grays no palette holds, low confidence paler.
+     - **The view** (`ui/structure-coloring.js`): *Scores on the structure* beside it, the scores'
+       colorings first under Color by, a legend with each state's positions, and a strip of the
+       target's positions below it (their colors, which are on the structure, an AlphaFold DB
+       model's pLDDT beside them). The run and condition (or contrast) are the map's; the target
+       mapped is the run's.
+     - **Abnormal-like** by a threshold set by hand (research use), or, for a MaveDB record's scores
+       as published, by one of its calibrations' abnormal ranges.
+     - **One selection:** a residue picked selects its position's variants on the map ("at …") and
+       fills the inspector's new position section (`ui/position-inspector.js`); a map selection is
+       drawn on the structure; residues selected in words, or by remote control, select their
+       positions on the map.
+     - The coloring's file (FORMATS.md); remote control's `set_structure` colorings and `pick`,
+       `export` of `structure-scores`. The GRB2 example's sixth step (2VWF by the median score, the
+       Gab2 peptide's neighbors); a screenshot scene (`structure-scores`); the guide page
+       *Structures*, its section on the scores.
+     - Validation:
+       - `structures` (14 checks, 4 new): every example's run on its entry by every coloring,
+         each residue's value and color against the run's results read without the map's model,
+         nothing scored gray; the ten least tolerant positions shared both ways, on the residues
+         SIFTS places them on; the GRB2 guide's account from the atoms; PTEN's fraction
+         abnormal-like by its published calibrations' ranges as its JSON gives them.
+       - `remote-session.mjs` (144 checks): 2VWF colored in the page as Node colors it, a pick, a
+         map query drawn on the structure, the coloring's file, the other colorings, the strip.
+       - Unit tests: `structure-scores.test.mjs` (7).
+   - Found by slice 3:
+     - **The selection's tint hid the scores.** Proteoscope marks selected residues by mixing
+       their color half way to green; on residues colored by scores that changed what the colors
+       say (the peptide's tolerant neighbors read green). Colored by scores, a selection is drawn by
+       its side chains, in their own colors, with a faint tint. The renderers are unchanged.
+     - **Waters carry their chain.** On 2VWF, "within 4 of chain B" also reaches Pro206 through the
+       waters the entry gives chain B, and selects chain A's own waters; the guide's words add
+       `protein` on both sides.
+     - **The first methionine's column is start-lost.** Its substitutions are start-lost variants,
+       not missense; they are its column on the map, and are counted as its substitutions. The
+       validation's own reading first left them out, and found BRCA1's (SGE) and DHFR's Met1
+       colored where it expected missing.
+     - **Half of PTEN's calibrations classify variants, not ranges.** Three of its six (the
+       investigators' and IGVF's two) give each variant's class in a column of the scores, with no
+       range; fraction abnormal-like reads a calibration by its ranges, so those are not offered.
+     - **The map's scale leaves medians pale.** It spans the cells (GRB2: ±5.10 about the wild
+       type), and a position's median runs only from −4.60 to 0.08. It is kept, so that a residue
+       is the color of a cell with its score.
+     - **An abundance assay does not see binding.** On 2VWF, the ten residues within 4 Å of the Gab2
+       peptide (W193 and Y209 among them) score a median of −0.39,
+       against −0.81 for the rest; the ten least tolerant pack the core.
+     - TP53's published Z-scores and BRCA1's saturation genome editing scores at the protein level
+       have no standard errors: the uncertainty coloring is refused for them, saying so.
 4. **Structure as evidence (X4).** Structure-derived position tracks beside the map: secondary
    structure (DSSP), relative solvent accessibility (`surface.js`), exposure and disorder (pPSE,
    Bludau et al. 2022, Proteoscope's `exposure.js`), AlphaFold pLDDT, distance to a partner
