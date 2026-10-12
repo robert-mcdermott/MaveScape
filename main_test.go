@@ -480,3 +480,36 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	c.n += n
 	return n, err
 }
+
+// Files remote control's open_files registers are served but not listed for the window to open:
+// listed, the window would open them again later, over whatever was open by then (the 0.5.0
+// release's CI). A file a later launch names is listed, though a script registered it first.
+func TestFilesRemoteControlOpensAreNotListedForTheWindow(t *testing.T) {
+	dir := t.TempDir()
+	byScript := filepath.Join(dir, "script.csv")
+	byLaunch := filepath.Join(dir, "launch.csv")
+	for _, path := range []string{byScript, byLaunch} {
+		if err := os.WriteFile(path, []byte("hgvs_pro,count\np.=,1\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := newLocalFiles()
+	registered, problems := files.register([]string{byScript})
+	if len(problems) > 0 || len(registered) != 1 || registered[0].URL == "" {
+		t.Fatalf("registered: %+v %v", registered, problems)
+	}
+	if served, ok := files.path(strings.TrimPrefix(registered[0].URL, "/api/local/")); !ok || served != byScript {
+		t.Fatalf("a script's file is not served: %q %v", served, ok)
+	}
+	if problems := files.add([]string{byLaunch}); len(problems) > 0 {
+		t.Fatal(problems)
+	}
+	listed := files.list()
+	if len(listed) != 1 || listed[0].Name != "launch.csv" {
+		t.Fatalf("listed for the window: %+v", listed)
+	}
+	files.add([]string{byScript})
+	if listed := files.list(); len(listed) != 2 {
+		t.Fatalf("a script's file named by a launch is not listed: %+v", listed)
+	}
+}

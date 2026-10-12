@@ -230,7 +230,7 @@ async function start() {
       }
     }
     if (unread.size) messages.push(`This build of MaveScape cannot read ${[...unread.keys()].map((k) => KIND_NAMES[k] ?? k).join(', ')} yet.`);
-    if (unknown.length) messages.push(`${unknown.length === 1 ? unknown[0] : `${unknown.length} files`}: MaveScape opens count and score tables (.csv, .tsv, .xlsx), sequences (.fasta, .gb), structures (.pdb, .cif) and workspaces (.msz).`);
+    if (unknown.length) messages.push(`${unknown.length === 1 ? unknown[0] : `${unknown.length} files`}: MaveScape opens count and score tables (.csv, .tsv), sequences (.fasta, .gb), structures (.pdb, .cif) and workspaces (.msz).`);
     for (const message of messages) {
       toast(message, { kind: 'error' });
       app.log(message);

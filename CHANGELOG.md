@@ -215,6 +215,14 @@ two saved by 0.5.0 are kept for later versions to do the same, their saved views
   on a fresh canvas, its badge saying why, everything drawn again; an image whose drawing loses WebGPU
   is drawn again by the Canvas renderer. CI's runners, which draw WebGPU in software, lose it at the
   first image.
+- After WebGPU was lost, the Canvas renderer's 2D surface, which the browser loses too when its
+  graphics process crashes, could give a blank image: an image waits for the surface to come back
+  (at most 3 s), is taken again if the surface is lost under it, and the view is drawn again when
+  it returns.
+- Files a script opened with remote control's `open_files` were listed as files for the window to
+  open, so the window opened them again later (on focus, or within 30 s), over whatever workspace
+  was open by then. They are served to the page but no longer listed.
+- The message for a file MaveScape does not open listed `.xlsx` among the tables it opens.
 - An image of the Structure view taken just after a change, before a frame had drawn it, could
   show the scene as it was: the scene is brought up to date first.
 - The Structure view's legend, wrapped onto two lines in a narrower window, was drawn over the strip
@@ -342,6 +350,12 @@ two saved by 0.5.0 are kept for later versions to do the same, their saved views
   (`Browser.crashGpuProcess`): the view goes on with the Canvas renderer, saying why, and draws;
   where the browser loses WebGPU by itself (CI's runners, drawing in software), the session finds
   the view on the Canvas renderer after its first image and checks it so.
+- `remote-session.mjs --like-ci [rate]`: the session as GitHub's runners run it, WebGPU drawn in
+  software (Chrome's SwiftShader adapter) and the page's processor slowed (4 times by default). It
+  reproduced CI's failures of the release here, and passes.
+- CI runs on every push to a wave's branch, not only on pull requests and main.
+- Go tests: files remote control registers are served but not listed for the window; a file a later
+  launch names is (`TestFilesRemoteControlOpensAreNotListedForTheWindow`).
 - `headless-run.mjs` (30 checks): `mavescape run --from-workspace` on 0.5.0's PTEN archive, its
   structure named by checksum: the run reproduced, the archive written again naming it the same
   way, its views kept.

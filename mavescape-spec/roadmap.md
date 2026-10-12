@@ -2501,6 +2501,15 @@ reran all twenty runs of every release's archives in a window, each to its recor
     (`--use-webgpu-adapter=swiftshader`) the runner's failure was reproduced here and passes now.
     Two more came with it: an image taken before a frame had drawn a change showed the scene as it
     was, and the legend, wrapped onto two lines in a narrower window, was drawn over the strip.
+  - **CI on main failed where the pull request had passed**: the workspace open in the window
+    became an earlier one partway through the session. Remote control's `open_files` registered its
+    files in the list of files named for the window (the command line, a later launch), and the
+    window, checking that list on focus and every 30 s, opened BAP1's package again over GRB2's
+    example. On the slow runner the check fell inside the session. `remote-session.mjs --like-ci`
+    (software WebGPU, the page's processor four times slower) reproduced it here; a script's files
+    are now served but not listed. With it, a blank image after a second GPU crash (the Canvas
+    renderer's 2D surface lost too, now waited for) and CI now on every push to a wave's branch, so
+    a slice meets the runner as it is built rather than at the release.
   - **One Chrome that did not start ended the recapture**: the light screenshots were done when a
     headless Chrome did not open its debugging connection, and the script stopped there, leaving that
     scene's MaveScape running. A Chrome is now started again once, and a scene that still cannot

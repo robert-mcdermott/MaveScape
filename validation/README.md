@@ -31,7 +31,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 
 ## The remote-control session (`remote-session.mjs`)
 
-`node validation/remote-session.mjs [--verbose]` builds MaveScape, starts it with
+`node validation/remote-session.mjs [--verbose] [--like-ci [rate]]` builds MaveScape, starts it with
 `--remote-control` on an empty library, opens it in headless Chrome (`docs/capture/cdp.mjs`; set
 `CHROME` to choose the browser) and sends every action (`actions.go`) as a script would. It checks
 the connection file and its permissions, refusals (no page, no token, a relative or existing path,
@@ -130,6 +130,12 @@ process crashed under the Structure view (`Browser.crashGpuProcess`), the view g
 Canvas renderer, saying why, and drawing; where the browser loses WebGPU by itself (GitHub's runners
 draw it in software, and lose it at the first image), the session finds the view on the Canvas
 renderer and checks it so. 163 checks; in CI as the `remote` job.
+
+`--like-ci` runs the session as GitHub's runners do: WebGPU drawn in software (Chrome's
+`--use-webgpu-adapter=swiftshader`, whose graphics process does not last) and the page's processor
+slowed (`Emulation.setCPUThrottlingRate`, 4 times unless a rate is given). Every failure the 0.5.0
+release met only in CI failed this way here first; run it before a release, and after any change to
+the Structure view or to what runs in the background.
 
 ## Proteoscope itself (`proteoscope-handoff.mjs`, wave 5 slice 6)
 

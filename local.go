@@ -21,6 +21,10 @@ type localFile struct {
 	Folder string `json:"folder,omitempty"`
 	Kind   string `json:"kind"`
 	path   string
+	// forWindow: named on the command line or by a later launch, for the window to open. A file
+	// remote control's open_files registers is served but not listed: the script opens it, and the
+	// window, finding it listed, would open it again later (the 0.5.0 release's CI).
+	forWindow bool
 }
 
 type localFiles struct {
@@ -93,15 +97,20 @@ func absPath(name string) (string, error) {
 	return filepath.Abs(name)
 }
 
-// add registers files and the openable files inside folders; it returns what it skipped.
+// add registers files and the openable files inside folders, for the window to open (list); it
+// returns what it skipped.
 func (l *localFiles) add(paths []string) []string {
-	_, problems := l.register(paths)
+	_, problems := l.registerFiles(paths, true)
 	return problems
 }
 
-// register adds files like add and returns them (with their URLs), including ones registered
-// before.
+// register registers files as add does, for remote control to open itself: served, not listed. It
+// returns them (with their URLs), including ones registered before.
 func (l *localFiles) register(paths []string) ([]localFile, []string) {
+	return l.registerFiles(paths, false)
+}
+
+func (l *localFiles) registerFiles(paths []string, forWindow bool) ([]localFile, []string) {
 	var problems []string
 	var found []localFile
 	for _, raw := range paths {
@@ -138,10 +147,15 @@ func (l *localFiles) register(paths []string) ([]localFile, []string) {
 	registered := make([]localFile, 0, len(found))
 	for _, file := range found {
 		if index, known := l.index[file.path]; known {
+			// Named by a launch after a script registered it: the window opens it.
+			if forWindow {
+				l.files[index].forWindow = true
+			}
 			registered = append(registered, l.files[index])
 			continue
 		}
 		index := len(l.files)
+		file.forWindow = forWindow
 		file.URL = "/api/local/" + strconv.Itoa(index)
 		l.index[file.path] = index
 		l.files = append(l.files, file)
@@ -194,11 +208,16 @@ func walkFolder(dir string) ([]localFile, string) {
 	return files, problem
 }
 
+// list is the files for the window to open, not those remote control registered.
 func (l *localFiles) list() []localFile {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	out := make([]localFile, len(l.files))
-	copy(out, l.files)
+	out := make([]localFile, 0, len(l.files))
+	for _, file := range l.files {
+		if file.forWindow {
+			out = append(out, file)
+		}
+	}
 	return out
 }
 
