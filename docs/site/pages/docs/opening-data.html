@@ -5,7 +5,7 @@ lede: An analysis needs three things: the counts, the sequence the variants are 
 ---
       <h2 id="what-to-bring">What to bring</h2>
       <ul>
-        <li><strong>Variant counts:</strong> a table with one row per variant and one column per sequenced sample (CSV, TSV or Excel), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per sample. Or a table of barcodes, one row per barcode, with the barcode-to-variant map that says which variant each carries (<a href="#barcodes">below</a>).</li>
+        <li><strong>Variant counts:</strong> a table with one row per variant and one column per sequenced sample (CSV or TSV, gzipped or not), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per sample. Or a table of barcodes, one row per barcode, with the barcode-to-variant map that says which variant each carries (<a href="#barcodes">below</a>).</li>
         <li><strong>The target sequence</strong> the variants are named against: a FASTA file, protein or DNA, or a GenBank file (a plasmid map, a RefSeq record), its coding feature chosen (<a href="#genbank">below</a>).</li>
         <li><strong>The design:</strong> which column is which sample, replicate and time point. MaveScape drafts it from the column names, or reads it from a sample sheet (<a href="experiment.html">The design</a>).</li>
       </ul>

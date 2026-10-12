@@ -14,6 +14,11 @@ import { KIND, STATUS } from '../web/lib/variants.js';
 import { STAGE_BY_ID } from '../web/lib/filters.js';
 import { computeGroupedSASA } from '../web/lib/structure/surface.js';
 import { accessibilityInput, chosenPartners, exposureOf, paeOf, partnerDistances, partnerInteractions, partnersOf, residueAccessibility, SASA_POINTS, structureEvidence } from '../web/lib/structure-evidence.js';
+import { mapTarget } from '../web/lib/mapping.js';
+import { mappingChanges, mappingSummary } from '../web/lib/structure-record.js';
+import { sha256 } from '../web/lib/sha256.js';
+import { deriveStructure, materializeAssemblyModels } from '../web/lib/structure/structure.js';
+import { ASYMMETRIC_UNIT_ID } from '../web/lib/structure/parse.js';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
 
@@ -139,3 +144,59 @@ export const paeFixture = (accession, version = 6) => {
     return null;
   }
 };
+
+// The workspace's target as the Structure view maps it (ui/mode-structure.js, workspaceTarget): the
+// run's, when the view is of a run; else the design's; its protein, offset and accession.
+export function workspaceTargetOf(ws, run = null) {
+  const own = run?.inputs?.design?.targets?.length === 1 ? run.inputs.design.targets[0] : null;
+  const target = (own && (ws.targets.find((t) => t.id === own.id) ?? own)) ?? ws.targets.find((t) => t.id === ws.design?.targets?.[0]?.id) ?? ws.targets[0];
+  if (!target?.sequence) return null;
+  const sequence = targetProtein(target).replace(/\*+$/, '');
+  return { id: target.id, name: target.name || 'The target', sequence, offset: target.offset ?? 0, accession: target.identifiers?.uniprot ?? '', length: sequence.length };
+}
+
+// A workspace's saved views reopened as the Structure view reopens them (MaveScape 0.5): each view's
+// structure from the archive's own file or, named by checksum only, fetched again by its ID (the
+// fetcher's answer, here the cache), its SHA-256 the one recorded; its assembly built; the target
+// mapped again onto the view's chain and compared with the mapping the view was saved with.
+// [{ view, structure, from, sameFile, changes, ok, why }]
+export async function replayStructureViews(ws, sources) {
+  const out = [];
+  for (const view of ws.structureViews ?? []) {
+    const entry = (ws.structures ?? []).find((s) => s.id === view.structure);
+    if (!entry) {
+      out.push({ view: view.name, ok: false, why: 'its structure is not in the workspace' });
+      continue;
+    }
+    let bytes = sources.get(entry.file.sha256) ?? null;
+    let from = 'from the archive';
+    if (!bytes) {
+      const o = entry.origin ?? {};
+      const cached = o.kind === 'pdb' ? ['pdb', pdbFile(o.id)] : o.kind === 'alphafold' ? ['alphafold', modelFile(o.id, o.version)] : null;
+      try {
+        if (cached) bytes = cachedBytes(...cached);
+        from = 'fetched again by its ID';
+      } catch {
+        bytes = null;
+      }
+    }
+    if (!bytes) {
+      out.push({ view: view.name, structure: entry.name, ok: false, why: `${entry.file.fileName} is not at hand` });
+      continue;
+    }
+    const sameFile = sha256(bytes) === entry.file.sha256;
+    const { text, name } = await readStructureBytes(bytes, entry.file.fileName);
+    const structure = openStructureText(text, name);
+    if (view.assembly && view.assembly !== ASYMMETRIC_UNIT_ID) {
+      structure.activeAssemblyId = view.assembly;
+      structure.models = materializeAssemblyModels(structure, view.assembly);
+      deriveStructure(structure, { secondaryMode: 'auto' });
+    }
+    const run = view.color?.run ? ws.runs.find((r) => r.id === view.color.run) : null;
+    const target = workspaceTargetOf(ws, run);
+    const mapping = (target ? mapTarget(structure, target) : []).find((m) => m.chain === view.chain) ?? null;
+    const changes = mappingChanges(view.mapping, mappingSummary(mapping));
+    out.push({ view: view.name, structure: entry.name, from, sameFile, changes, ok: sameFile && !changes.length, why: !sameFile ? 'not the file recorded' : changes.join('; ') });
+  }
+  return out;
+}

@@ -1518,9 +1518,10 @@ export function installRemote(app) {
         return { file: made.bytes, message: `${possessive(run.name)} MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
       }
       if (what === 'archive') {
-        file = await archiveFile(app, { includeTables: args.include_tables !== false, includeStructures: args.include_structures !== false });
+        // Not asked: the structures' files when the library holds them all, else their IDs and SHA-256s.
+        file = await archiveFile(app, { includeTables: args.include_tables !== false, includeStructures: args.include_structures === undefined || args.include_structures === null ? 'available' : args.include_structures !== false });
         const kept = (ws().structures ?? []).length;
-        return { file: file.bytes, message: `The workspace archive of "${ws().name}" (${plural(ws().runs.length, 'run')}${args.include_tables === false ? ', tables by checksum only' : ', with its tables'}${kept ? `; ${plural(kept, 'structure')}${args.include_structures === false ? ' by ID and checksum only' : ''}` : ''}).` };
+        return { file: file.bytes, message: `The workspace archive of "${ws().name}" (${plural(ws().runs.length, 'run')}${args.include_tables === false ? ', tables by checksum only' : ', with its tables'}${kept ? `; ${plural(kept, 'structure')}${file.structures === 'checksums' ? ` by ID and checksum only${args.include_structures === false ? '' : `: ${kept === 1 ? 'its file is' : 'their files are'} not in this library (the archive it was opened from named ${kept === 1 ? 'it' : 'them'} so)`}` : ''}` : ''}).` };
       }
       if (what === 'selection') {
         const saved = args.selection ? ws().selections.find((s) => s.name === choose(args.selection, ws().selections.map((x) => x.name), 'saved selection')) : null;

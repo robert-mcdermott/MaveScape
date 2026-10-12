@@ -17,7 +17,7 @@ functional effects for research; it does not classify variants as pathogenic or 
 **[Website and user guide](https://robert-mcdermott.github.io/MaveScape/)**: getting started,
 opening your data, scoring, quality control, the map, the record and scripting, with screenshots.
 
-> **Status: 0.4.0 released; 0.5.0 in progress.** Count tables import, designs are set in the
+> **Status: 0.5.0 released; 0.6.0 in progress.** Count tables import, designs are set in the
 > Experiment view, two-population experiments (by log ratio or DiMSum's fitness and error model),
 > time series (by weighted regression on every time point), sorted bins (by their weighted average
 > or maximum likelihood) and barcoded libraries (their barcodes summed, or each scored and
@@ -33,7 +33,7 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
 > would add, and writes the analysis package that `mavescape run` reads. Fourteen examples are on the Start page (eight published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
-> [roadmap](mavescape-spec/roadmap.md)'s waves 3 and 4 are complete. Wave 3 brought public data in and out,
+> [roadmap](mavescape-spec/roadmap.md)'s waves 3, 4 and 5 are complete. Wave 3 brought public data in and out,
 > through a fixed list of services: a target checked against its UniProt entry, and any published
 > MaveDB score set opened by search or URN, its scores on the map as published and its counts ready
 > to score again; several score sets of one target open together, their counts joined as
@@ -66,11 +66,21 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > to the other views. The wave's examples teach it on published data: two laboratories' screens of
 > TP53 that correlate at r −0.78 as published and agree on one scale (Lin's concordance 0.78), and
 > Hsp90's rescoring, correlated with its published scores (r 0.95) but not in agreement (0.48).
-> Wave 5 brings protein structure: the variant-effect map seen on the protein, and the structure used
-> as evidence. It has begun with the Structure view, which needs no other program: a PDB entry, an
-> AlphaFold DB model or a file of your own (PDB, mmCIF, BinaryCIF), drawn with WebGPU or a Canvas
-> renderer as a cartoon, sticks, spheres or a surface, its biological assemblies built, residues
-> selected in words, labeled and focused on.
+> Wave 5 brought protein structure: the variant-effect map seen on the protein, and the structure
+> used as evidence. The Structure view needs no other program: a PDB entry, an AlphaFold DB model or
+> a file of your own (PDB, mmCIF, BinaryCIF), drawn with WebGPU or a Canvas renderer, its biological
+> assemblies built, residues selected in words. The target is mapped onto every chain that holds it,
+> position by position, as SIFTS maps it, with the structures that cover it ranked from SIFTS.
+> Residues take their positions' scores in the map's colors (median, fraction abnormal-like by a
+> threshold or a record's published calibration, uncertainty, Compare's disagreement, QC state), and
+> a selection is shared between the map and the structure. What the structure says of each position
+> (DSSP's secondary structure, accessibility, StructureMap's exposure and disorder, contacts with
+> partners typed by PLIP's rules) becomes tracks beside the map; the scores are compared by
+> structural class (Mann–Whitney, BH), and a seeded test asks whether the least tolerant positions
+> cluster beyond what burial explains, calibrated on simulated maps. Views are saved with the
+> workspace, its archive and methods, the structure's file kept by its SHA-256, and figure panels
+> carry their legend and what they show. A Proteoscope running on the same computer opens the view
+> as its own session.
 
 ## What is a MAVE?
 
@@ -114,8 +124,8 @@ opens in its own window.
 
 ## What you bring
 
-- **Variant counts**: a table with one row per variant and one column per sample (CSV, TSV or
-  Excel), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per
+- **Variant counts**: a table with one row per variant and one column per sample (CSV or TSV,
+  gzipped or not), as Enrich2, DiMSum, dms_variants or a lab's own scripts write them, or one file per
   sample; or a table of barcode counts with its barcode-to-variant map.
 - **The target sequence** the variants are named against (FASTA, a GenBank file such as a
   plasmid map or a RefSeq record, or pasted).
@@ -138,6 +148,7 @@ MaveScape starts from counts; reads (FASTQ) are counted by those upstream tools.
 | `mavescape urn:mavedb:…`, `--mavedb URN` | Open a MaveDB score set: its record, published scores and counts ([public data](https://robert-mcdermott.github.io/mavescape/docs/public-data.html)) |
 | `--offline`, `--no-fetch`, `--cache-dir DIR` | Public data from the cache only, or none; where the cache is ([`docs/NETWORK.md`](docs/NETWORK.md)) |
 | `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/mavescape/docs/scripting.html)) |
+| `--proteoscope off\|PORTS` | Do not look for a running Proteoscope, or look on other ports than its own 8765–8814 ([open in Proteoscope](https://robert-mcdermott.github.io/mavescape/docs/structure.html#proteoscope)) |
 | `--version` | Print the version |
 | `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/mavescape/docs/scripting.html#headless)) |
 | `mavescape validate [--design D] [tables]` | Check tables and a design as scoring would; exit 1 when something blocks scoring |
@@ -189,7 +200,8 @@ fixed list of services, sending public identifiers, and caches each answer with 
 came from; a request that would send a sequence is made only after you confirm it.
 [`docs/NETWORK.md`](docs/NETWORK.md) lists every request. `--offline` uses cached copies only and
 `--no-fetch` switches public data off. Remote control is off unless asked for, and then answers
-only programs on this computer.
+only programs on this computer. To offer opening a structure in Proteoscope, the program asks this
+computer's Proteoscope ports for its startup answer, and nothing else (`--proteoscope off` stops it).
 
 ## Development
 

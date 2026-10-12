@@ -2461,6 +2461,40 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
        itself: MaveScape's reader is a copy of Proteoscope's.
      - **The links are short.** The largest of the examples' sessions is 4,818 characters (factor
        IX on its model, 452 values); the part after `#` never leaves the browser.
+     - Wave 5 is complete with slice 6.
+
+**Released 0.5.0 on 2026-10-12.** A view of a structure is kept with the workspace, so 0.5 leaves two
+archives that keep views (`validation/archives/release-0.5.0-*.msz`, 1.2 MB together), saved by
+0.5.0 itself, its window driven through remote control offline by `make-0.5.0.mjs`:
+- GRB2's SH3 domain and its structures: Run 1 and three saved views, their structures' files in
+  the archive (2VWF by the median score with residues drawn and labeled; 2VWF by structural class
+  with residues hidden; GRB2's AlphaFold DB model with its aligned error);
+- PTEN on 1D5R: its published scores and two views (the fraction abnormal-like of its record's
+  ExCALIBR calibration; structural class), the structure named by its ID and SHA-256 only.
+
+Every later version must reopen them and reproduce their two runs. It must also read each view's
+structure again (from the archive, or fetched again by its ID, the file recorded) and map its
+target onto the view's chain as it was saved. At the release, `mavescape run --from-workspace`
+reran all twenty runs of every release's archives in a window, each to its recorded hash.
+- Found by the release:
+  - **The README said count tables could be Excel workbooks**, as did the guide's *Opening your
+    data*; MaveScape reads CSV and TSV, gzipped or not, and FORMATS.md lists Excel as to come. Both
+    now say so.
+  - **The archives' replay assumed a selection**: every earlier release's archive had one, 0.5.0's
+    have none, and the replay's exports failed on them. A workspace without a selection is replayed
+    now.
+  - **The site's home page and science page said nothing of structure**: the home page's release
+    line still described 0.1.0, and neither validation table had a row for wave 5's checks. Both
+    describe wave 5 now, with its validation and methods.
+  - **A workspace whose structures were named by checksum could not be archived again**:
+    `mavescape run --from-workspace` on 0.5.0's PTEN archive reproduced its run and then failed
+    writing its archive, which asked for the structure's file the library did not hold; so would
+    the window's export, until a view was opened. Not asked otherwise, an archive names such
+    structures by ID and SHA-256 again, and says so; the export dialog says which files are missing.
+  - **One Chrome that did not start ended the recapture**: the light screenshots were done when a
+    headless Chrome did not open its debugging connection, and the script stopped there, leaving that
+    scene's MaveScape running. A Chrome is now started again once, and a scene that still cannot
+    start fails alone.
 
 ## 0.6.0: figures and a provable record (wave 6)
 

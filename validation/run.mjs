@@ -110,7 +110,7 @@ import { addSelection } from '../web/lib/workspace.js';
 import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
-import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, nodeEvidence, openCached, openFixture, paeFixture, pdbFile, positionScores, siftsOf, siftsRetrieved } from './structure-cases.mjs';
+import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, nodeEvidence, openCached, openFixture, paeFixture, pdbFile, positionScores, replayStructureViews, siftsOf, siftsRetrieved } from './structure-cases.mjs';
 import { bhAdjust, clusterTest, CONTACT_DISTANCE, effectsByClass, mannWhitney, MAX_ASA, structureTracks } from '../web/lib/structure-evidence.js';
 import { mappingChanges, mappingSummary } from '../web/lib/structure-record.js';
 import { dataRange, linkPayload, residueData, sessionDocument } from '../web/lib/proteoscope.js';
@@ -2210,7 +2210,7 @@ const suites = {
         // The reopened workspace makes its QC (with its own thresholds), exports and methods.
         const made = allExports({ ...opened.ws, runs: [last.run] }, last.table, last.results);
         const thresholds = withDefaultThresholds(opened.ws.qc?.thresholds);
-        check('roundtrip', `${file}: the reopened workspace keeps its QC thresholds (where changed) and selection, and makes its exports and methods`, `replicate agreement review at ${thresholds.agreement.review}; selection "${opened.ws.selections[0]?.name}" of ${opened.ws.selections[0]?.keys.length} variants; ${Object.keys(made).length - 1} files`, Object.values(made).every((x) => x) && made['methods.md'].includes(last.run.output.sha256) && (!opened.ws.qc?.thresholds || opened.ws.qc.thresholds.agreement?.review === thresholds.agreement.review), 'all made');
+        check('roundtrip', `${file}: the reopened workspace keeps its QC thresholds (where changed) and selection, and makes its exports and methods`, `replicate agreement review at ${thresholds.agreement.review}; ${opened.ws.selections[0] ? `selection "${opened.ws.selections[0].name}" of ${opened.ws.selections[0].keys.length} variants` : 'no selection'}; ${Object.keys(made).length - 1} files`, Object.values(made).every((x) => x) && made['methods.md'].includes(last.run.output.sha256) && (!opened.ws.qc?.thresholds || opened.ws.qc.thresholds.agreement?.review === thresholds.agreement.review), 'all made');
         // The annotations beside the map (0.3's) read again from the archive's own files, arranged as
         // the workspace keeps them.
         if (opened.ws.annotations?.length) {
@@ -2251,6 +2251,13 @@ const suites = {
           return { name: x.name, ok: JSON.stringify(keys) === JSON.stringify(x.keys), why: `${keys.length} of ${x.keys.length}` };
         });
         check('roundtrip', `${file}: each selection made by a query, its query run again on its run's map, selects its variants again (one of the robustness verdicts keeps them on the map)`, again.map((x) => `${x.name}: ${x.why}`).join('; '), again.every((x) => x.ok), 'the same');
+      }
+      // The structures saved views show (0.5's): each view reopened as the Structure view reopens it,
+      // its structure from the archive's own file or, named by checksum only, fetched again by its
+      // ID, the file recorded, and the target mapped again onto its chain as the view was saved.
+      if (opened.ws.structureViews?.length) {
+        const views = await replayStructureViews(opened.ws, opened.sources);
+        check('roundtrip', `${file}: each saved view's structure read again (from the archive's own file, or, named by checksum only, fetched again by its ID), the file recorded, and the target mapped again onto the view's chain as it was saved`, views.map((x) => `${x.view}: ${x.structure} ${x.from}${x.ok ? '' : ` (${x.why})`}`).join('; '), views.every((x) => x.ok), 'the same');
       }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');

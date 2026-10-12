@@ -738,9 +738,16 @@ await new Promise((done, fail) => spawn('go', ['build', '-o', binary, '.'], { cw
 try {
   for (const theme of themes) {
     for (const name of names) {
-      const maveScape = await startMaveScape();
-      b = await launch();
+      let maveScape = null;
+      b = null;
       try {
+        maveScape = await startMaveScape();
+        // A Chrome that does not start (its debugging connection not opened) is started again
+        // once; a scene that cannot start fails alone, not the scenes after it.
+        b = await launch().catch(async () => {
+          await sleep(2000);
+          return launch();
+        });
         await b.theme(theme === 'dark');
         await b.goto(URL, 800);
         await waitFor('Boolean(window.mavescape?.remote)', 30000);
@@ -760,8 +767,8 @@ try {
         console.error(`${name} (${theme}) failed: ${error.message}`);
         process.exitCode = 1;
       } finally {
-        await b.close();
-        await maveScape.stop();
+        await b?.close();
+        await maveScape?.stop();
         for (const after of afterScene.splice(0)) await after();
       }
     }

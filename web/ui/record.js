@@ -174,9 +174,20 @@ export async function exportSelection(app, selection, format) {
 
 // --- The archive ---------------------------------------------------------------------------------
 
-// The workspace archive, made (not downloaded): { name, bytes }. includeStructures: false names
-// the saved views' structures by their IDs and SHA-256s only (wave 5, slice 5).
+// The saved views' structure files the library does not hold: a workspace opened from an archive
+// that named them by checksum, their views not opened since. [{ name, fileName, sha256 }]
+export async function structuresNotAtHand(app) {
+  const missing = [];
+  for (const f of structureFiles(app.store.ws)) if (!(await app.library.hasFile(f.sha256).catch(() => false))) missing.push(f);
+  return missing;
+}
+
+// The workspace archive, made (not downloaded): { name, bytes, structures }. includeStructures:
+// true puts the saved views' structure files in it, false names them by their IDs and SHA-256s
+// only (wave 5, slice 5), 'available' the first when the library holds every file and the second
+// when it does not; structures says which ('included', 'checksums' or null without any).
 export async function archiveFile(app, { includeTables = true, includeStructures = true } = {}) {
+  if (includeStructures === 'available') includeStructures = !(await structuresNotAtHand(app)).length;
   const ws = app.store.ws;
   let sources = null;
   if (includeTables) {
@@ -213,7 +224,7 @@ export async function archiveFile(app, { includeTables = true, includeStructures
   const last = ws.runs.at(-1);
   const methods = last ? await methodsOf(app, last) : null;
   const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, annotations, structures, results, methods });
-  return { name: `${safe(ws.name)}.msz`, bytes };
+  return { name: `${safe(ws.name)}.msz`, bytes, structures: structureFiles(ws).length ? (includeStructures ? 'included' : 'checksums') : null };
 }
 
 export async function exportArchive(app, { includeTables = true, includeStructures = true } = {}) {
@@ -227,16 +238,21 @@ export async function exportArchive(app, { includeTables = true, includeStructur
   }
 }
 
-export function chooseArchiveExport(app) {
+export async function chooseArchiveExport(app) {
   const tables = h('input', { type: 'checkbox', checked: true });
-  const structures = h('input', { type: 'checkbox', checked: true });
   const kept = (app.store.ws.structures ?? []).length;
+  // Structures the library does not hold (named by checksum in the archive this was opened from)
+  // can only be named so again, until their views are opened.
+  const missing = kept ? await structuresNotAtHand(app) : [];
+  const structures = h('input', { type: 'checkbox', checked: !missing.length, disabled: missing.length > 0 });
   showDialog({
     title: 'Export the workspace archive (.msz)',
     content: [
       h('p', 'One file with everything needed to reopen this analysis on another computer: the workspace (targets, design, score runs, selections, QC thresholds and the chained history), each run\'s scores, the methods with references, and the tables.'),
       h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, tables, 'Include the count tables (otherwise each is named by its SHA-256 only, and must be opened again to rescore)'),
-      kept ? h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, structures, `Include the ${kept === 1 ? 'structure' : `${kept} structures`} the saved views show (otherwise a PDB entry or AlphaFold DB model is named by its ID and SHA-256 and fetched again when its view opens; a file must be opened again)`) : null,
+      kept ? h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, structures, missing.length
+        ? `${kept === 1 ? 'The structure the saved views show goes' : `The ${kept} structures the saved views show go`} by ID and SHA-256: ${missing.map((f) => f.fileName).join(', ')} ${missing.length === 1 ? 'is' : 'are'} not in this library (the archive this came from named ${kept === 1 ? 'it' : 'them'} so). Open ${kept === 1 ? 'a view of it to fetch it again, and it' : 'their views to fetch them again, and they'} can be included.`
+        : `Include the ${kept === 1 ? 'structure' : `${kept} structures`} the saved views show (otherwise a PDB entry or AlphaFold DB model is named by its ID and SHA-256 and fetched again when its view opens; a file must be opened again)`) : null,
     ],
     buttons: [{ label: 'Cancel' }, { label: 'Export', primary: true, onClick: () => exportArchive(app, { includeTables: tables.checked, includeStructures: structures.checked }) }],
   });

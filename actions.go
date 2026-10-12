@@ -219,7 +219,7 @@ var remoteActions = []remoteAction{
 		"run":                runArg,
 		"condition":          conditionArg,
 		"include_tables":     flagArg("archive: include the count tables (the default), or name each by its SHA-256 only."),
-		"include_structures": flagArg("archive: include the files of the structures the saved views show (the default), or name each by its ID and SHA-256 only."),
+		"include_structures": flagArg("archive: include the files of the structures the saved views show, or name each by its ID and SHA-256 only (false). Not given: included when the library holds every file, named by ID and SHA-256 when it does not (a workspace opened from an archive that named them so), which the message says."),
 		"scale":              map[string]any{"type": "number", "minimum": 1, "maximum": 8, "description": "structure-image: the image's size against the view's (4 if not given)."},
 		"legend":             flagArg("structure-image: draw the legend below the image (the default)."),
 		"selection":          textArg("selection: a saved selection by name; the current selection if not given."),

@@ -5,7 +5,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
 ---
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Counts to a trustworthy map: scoring, quality control, the map and a record that reopens identically</a>
+        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Variants in 3D: the map on the protein, and the structure as evidence</a>
         <h1>Variant-effect scores <span class="accent">you can check</span></h1>
         <p class="lede">MaveScape turns the variant count tables of a deep mutational scan into functional scores with standard errors, quality control that says when not to trust them, and an interactive variant-effect map, and keeps every analysis decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R. Files are analyzed in your browser and never leave your machine.</p>
         <shot name="map" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from less abundant (blue) to more (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" window eager>The GRB2 SH3 domain from the Human Domainome (MaveDB, CC0), one of the bundled examples, with one variant's evidence in the inspector.</shot>
@@ -155,7 +155,6 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
               <li>Tracks below it: domains, conservation, AlphaMissense, ClinVar, gnomAD and your own</li>
               <li>Selections by click, rectangle, freeform shape or query ("missense at 40-80 with se &lt; 0.2"), saved by name and combined, exported with their scores (<a href="docs/selections.html">Selections</a>)</li>
               <li>SVG and PNG export; the map described in words</li>
-              <li>The protein's structure, from the PDB, AlphaFold DB or your own file, drawn with WebGPU: residues selected in words, labeled and focused on (<a href="docs/structure.html">Structures</a>)</li>
               <li>Keyboard operation, with each cell announced</li>
             </ul>
             <a class="more-link" href="docs/map.html">The map and the inspector</a>
@@ -164,6 +163,23 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
         </article>
 
         <article class="feature reverse">
+          <div class="feature-text">
+            <span class="kicker">The structure</span>
+            <h3>The map on the protein, and the protein as evidence</h3>
+            <p>A PDB entry, an AlphaFold DB model or your own file, drawn by MaveScape itself. The target is mapped onto every chain that holds it, position by position, as SIFTS maps it, and each residue takes its position's scores in the map's colors; a selection on one is a selection on the other. What the structure says of each position becomes tracks beside the map.</p>
+            <ul class="checklist">
+              <li>The structures that cover the target, ranked; an experimental structure and a predicted model alike</li>
+              <li>Secondary structure by DSSP, accessibility, exposure and disorder, and contacts with partners, checked against DSSP's own output</li>
+              <li>The scores by structural class, and a test of whether the least tolerant positions cluster beyond what burial explains</li>
+              <li>Views saved with the workspace, its archive and methods; figure panels with their legend</li>
+              <li>Opened in Proteoscope, when it runs on your computer</li>
+            </ul>
+            <a class="more-link" href="docs/structure.html">Structures</a>
+          </div>
+          <shot name="structure-scores" alt="GRB2's SH3 domain on 2VWF colored by the median score of each position's missense substitutions, the core dark blue, the residues that touch the Gab2 peptide pale and drawn as sticks; the legend below the view runs from −5.10 through 0.00 (the wild type) to 5.10, blue less function, filtered and missing gray; the strip of the 56 positions below it, ten selected; beside it, the pane Scores on the structure, and 210 variants selected on the map">GRB2's SH3 domain on 2VWF, colored by each position's median score: the core is dark blue, the residues that touch the Gab2 peptide are pale.</shot>
+        </article>
+
+        <article class="feature">
           <div class="feature-text">
             <span class="kicker">The record</span>
             <h3>Files a reviewer can repeat</h3>
@@ -235,6 +251,8 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
               <tr><td><strong>The map</strong></td><td>BRCA1's RING domain</td><td class="agree">the zinc ligands least tolerant</td></tr>
               <tr><td><strong>The record</strong></td><td>Workspaces saved, reopened and saved again</td><td class="agree">the same bytes; every export identical</td></tr>
               <tr><td><strong>MaveDB deposits</strong></td><td>MaveDB's own validators (its <code>mavedb</code> package, mavehgvs, biocommons hgvs) on 19 deposits of every kind of run and target; each read back and written again</td><td class="agree">all accepted; the same bytes</td></tr>
+              <tr><td><strong>Structures</strong></td><td>PDBe's residue-level SIFTS mapping of each example's entry, read with gemmi</td><td class="agree">every residue where SIFTS places it</td></tr>
+              <tr><td><strong>Structure as evidence</strong></td><td>DSSP 4.6.1's own output; SciPy 1.18.1's Mann–Whitney test and Benjamini–Hochberg</td><td class="agree">every code but five π-helix residues; area within 1 Å²; tests within 10⁻¹²</td></tr>
               <tr><td><strong>Remote control</strong></td><td>Every action in the browser against the same analysis in Node</td><td class="agree">identical scores and exports</td></tr>
             </tbody>
           </table>

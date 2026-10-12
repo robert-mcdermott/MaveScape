@@ -1,9 +1,19 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.0 (2026-10-12)
 
-Wave 5 of the [roadmap](mavescape-spec/roadmap.md): variants in 3D. Built slice by slice; this
-section grows with each.
+Wave 5 of the [roadmap](mavescape-spec/roadmap.md): variants in 3D. MaveScape draws a protein's
+structure itself, a PDB entry, an AlphaFold DB model or a file of your own, with the viewer it
+shares with Proteoscope, and needs no other program. The target is mapped onto every chain that
+holds it, position by position, checked against SIFTS. Residues take their positions' scores in the
+map's colors, and a selection is shared between the map and the structure. What the structure says
+of each position (secondary structure by DSSP, accessibility, exposure and disorder, contacts with
+partners) becomes tracks beside the map, the scores by structural class are tested, and a test asks
+whether the least tolerant positions cluster beyond what burial explains. Views of a structure are
+saved with the workspace, its archive and methods, the structure's file kept by its SHA-256, and
+figure panels carry their legend and what they show. A Proteoscope running on the same computer
+opens the view as its own session. Workspaces saved by 0.1.0 to 0.4.0 open and reproduce their runs;
+two saved by 0.5.0 are kept for later versions to do the same, their saved views drawn again.
 
 ### Added
 
@@ -190,12 +200,24 @@ section grows with each.
   the validation's sessions.
 - Unit tests are run as `node --test "web/lib/**/*.test.mjs"`, the structure viewer's included;
   `MAVESCAPE_TIME_SCALE` gives its performance tests more time on shared runners (CI sets 5).
+- The screenshots (`docs/capture/capture.mjs`): a Chrome that does not start is started again once,
+  and a scene that still cannot start fails alone; one failed start ended the whole recapture. The
+  screenshots look for Proteoscope on ports of their own, so a Proteoscope running on the computer
+  does not appear in them.
 
 ### Fixed
 
 - A file the library already holds is read to its end before the program answers that it has it.
   Answered first, a large upload's connection was closed under the browser: opening the factor IX
   example (a 2 MB table) a second time in one library failed with "Failed to fetch".
+- The README and the guide (*Opening your data*) said count tables could be Excel workbooks:
+  MaveScape reads CSV and TSV, gzipped or not, as FORMATS.md says.
+- A workspace opened from an archive that named its structures by checksum could not be archived
+  again until each view was opened: its structures' files are not in the library, and the archive
+  asked for them. `mavescape run --from-workspace` on such an archive reproduced its run, then
+  failed writing `workspace.msz`. Not asked otherwise, an archive now includes the structures'
+  files when the library holds them all and names them by ID and SHA-256 when it does not, saying
+  so; the export dialog says which files are missing, and that opening a view fetches them again.
 
 ### Validation
 
@@ -307,6 +329,15 @@ section grows with each.
 - Go tests: the structure requests (and PDBe's best structures, and a model's aligned error) ask what NETWORK.md says, keep what
   the service sent, refuse a cut-off file or a page that is not a structure, and refuse anything
   but a PDB ID or an accession before it is sent.
+- `headless-run.mjs` (30 checks): `mavescape run --from-workspace` on 0.5.0's PTEN archive, its
+  structure named by checksum: the run reproduced, the archive written again naming it the same
+  way, its views kept.
+- Two workspace archives saved by 0.5.0 itself (`validation/archives/release-0.5.0-*.msz`, by
+  `make-0.5.0.mjs`): GRB2 with three saved views of 2VWF and its AlphaFold DB model, their files in
+  the archive; PTEN's published scores with two views of 1D5R, the structure named by its ID and
+  SHA-256 only. The `roundtrip` suite's replay of each release's archive now draws its saved views
+  again: each structure read from the archive or fetched again by its ID, the file recorded, and the
+  target mapped again as the view was saved; a workspace without a selection is replayed too.
 - The fixtures (`validation/fixtures/public-data/pdb/`, `…/alphafold/`, `…/pdbe/*.best-structures.json`)
   are the program's cached answers for the examples' proteins and the structures Proteoscope's
   tests read, retrieved 2026-10-12 (slice 4: 2HYY, 6OIM, 4ZQK, five models' aligned error, PTEN's
