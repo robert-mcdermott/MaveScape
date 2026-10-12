@@ -599,7 +599,12 @@ export function compareSides(a, b, options = {}) {
   };
   const unmatched = [oneSide(a, b, found.onlyA, found.notScoredB), oneSide(b, a, found.onlyB, found.notScoredA)].filter(Boolean);
   if (rows.length < MIN_MATCHED) return blocked('variants', 'Variants', `${fmtCount(rows.length)} variant${rows.length === 1 ? ' is' : 's are'} scored on both sides: too few to compare (${MIN_MATCHED} at least).${unmatched.length ? ` ${unmatched.join('; ')}.` : ''}`);
-  items.push({ id: 'variants', status: 'ok', label: 'Variants', text: `${fmtCount(rows.length)} scored on both sides${unmatched.length ? `; ${unmatched.join('; ')}` : ''}. The wild type, the reference of both, is left out.` });
+  // Published scores that write a protein variant on several rows (wave 4, slice 6): merged, said so.
+  const mergedText = [a, b].filter((side) => side.results?.merged).map((side) => {
+    const m = side.results.merged;
+    return `${possessive(side.label)} published scores write ${m.variants ? `${fmtCount(m.variants)} protein variant${m.variants > 1 ? 's' : ''} on several rows with different scores (${fmtCount(m.rows)} rows: several codons, or measurements), each read as one, ${m.weighted ? 'weighted by 1/SE²' : 'averaged'}, as DiMSum merges codons` : ''}${m.variants && m.alike ? '; and ' : ''}${m.alike ? `${fmtCount(m.alike)} frameshift${m.alike > 1 ? 's' : ''} alike on several rows, not told apart and left out` : ''}.`;
+  });
+  items.push({ id: 'variants', status: 'ok', label: 'Variants', text: `${fmtCount(rows.length)} scored on both sides${unmatched.length ? `; ${unmatched.join('; ')}` : ''}. The wild type, the reference of both, is left out.${mergedText.length ? ` ${mergedText.join(' ')}` : ''}` });
 
   // Rescaling by the anchors (wave 4, slice 3): each side's from its own scores; not a prediction's.
   const preset = SCALES[mode].anchors ?? null;

@@ -600,6 +600,13 @@ function positionsOf(dt, across, declaredIndex, verdict, results, design, direct
 const plural = (n, one, many = `${one}s`) => `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`;
 
 // A target's summary in words.
+// The least tolerant positions in words: how many stay among them, or among the least tolerant
+// fifth, in every analysis (one position said as one: Hsp90's nine positions have a tenth of one).
+export function leastTolerantSentence(least) {
+  if (least.size === 1) return `The least tolerant position (the tenth with the least function) is ${least.every ? 'among them in every analysis' : `not among them in every analysis, ${least.wide ? 'but is among the least tolerant fifth in every one' : 'nor among the least tolerant fifth'}`}.`;
+  return `Of the ${least.size} least tolerant positions (the tenth with the least function), ${least.every} are among them in every analysis, and ${least.wide} among the least tolerant fifth.`;
+}
+
 function textOf(dt, counts, declaredClasses, everyClasses, attribution, alone, total, least, mostCalls) {
   const names = dt.kind === 'contrast' ? CONTRAST_CLASS_NAMES : CLASS_NAMES;
   const n = declaredClasses.reduce((s, x) => s + x, 0);
@@ -624,7 +631,7 @@ function textOf(dt, counts, declaredClasses, everyClasses, attribution, alone, t
   let text = `${parts.join('; ')}.`;
   if (calls) text += ` Of the ${plural(calls, dt.kind === 'contrast' ? 'difference' : 'variant')} it calls ${dt.kind === 'contrast' ? 'beyond their uncertainty' : 'lower or higher than the wild type'}, ${callsKept.toLocaleString('en-US')} are called so in every analysis, and ${mostCalls.toLocaleString('en-US')} in ${Math.round(100 * MOST)}% of them or more.`;
   if (!dt.classified) text += ' The run scores no wild type and no synonymous variants: classes cannot be called, and only the effects, ranks and inclusion are followed.';
-  if (dt.kind === 'condition' && least?.size) text += ` Of the ${least.size} least tolerant positions (the tenth with the least function), ${least.every} are among them in every analysis, and ${least.wide} among the least tolerant fifth.`;
+  if (dt.kind === 'condition' && least?.size) text += ` ${leastTolerantSentence(least)}`;
   return text;
 }
 

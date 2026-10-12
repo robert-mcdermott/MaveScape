@@ -1998,9 +1998,71 @@ follow, and the wave ends with its examples, as waves 2 and 3 did.
      - **A rectangle always added to the selection**, because the Shift that drew it also meant add.
        With the drag modes, a rectangle or a shape replaces the selection unless ⌘, Ctrl or Shift is
        held.
-6. **Examples.** Published comparisons that teach what the wave built: two assays of one protein
-   that only seem to disagree until they are on one scale, a rescoring against the published
+6. **Examples: done.** Published comparisons that teach what the wave built: two assays of one
+   protein that only seem to disagree until they are on one scale, a rescoring against the published
    scores, and a conclusion that depends on an analysis choice.
+
+   Earlier slices had already given the examples a rescoring each (BRCA1 SGE's counts against its
+   published scores, slice 1; GRB2's record, slice 3) and a conclusion that depends on a choice
+   (DHFR's differences, slice 4). The lesson no example taught was two assays that only seem to
+   disagree; PTEN's two assays (slice 3) disagree for real. This slice adds:
+   - **TP53, two screens on two scales** (`tp53-screens`), the fourteenth example, opened from MaveDB.
+     It opens Giacomelli et al.'s etoposide screen (urn:mavedb:00000068-c-1), published Z-scores of
+     every substitution of TP53 with arginine at 72. It keeps two others beside it, not opened:
+     Kotler et al.'s screen of the DNA-binding domain by the growth of H1299 cells
+     (urn:mavedb:00000059-a-1), log₂ fold changes; and Giacomelli et al.'s nutlin-3 screen
+     (urn:mavedb:00000068-b-1). The guide:
+     - checks the target against UniProt P04637 (the record names none);
+     - compares the screens as published, with the direction stated, and rescaled by their anchors;
+     - reads the positions that differ most;
+     - compares the study's two selections.
+   - **Hsp90's sixth step**, a rescoring against the published scores that is also a conclusion
+     depending on a choice. Run 1 is compared with the record's own scores kept beside; stated on
+     one scale, the Bland–Altman plot shows the authors' choice of time points for null-like variants.
+   - The examples page, the guide *Comparisons* (two screens that only seem to disagree; a rescoring
+     against the published scores), two screenshot scenes (`tp53-screens`, `hsp90-rescoring`).
+   - Validation:
+     - `examples` (52 checks):
+       - the TP53 example opened as the window opens it, its table MaveDB's, pinned as a new data set
+         (`mavedb-tp53-screens`; the three records and UniProt's P04637 in `fixtures/public-data`);
+       - TP53's numbers as its guide states them, and Hsp90's comparison with its record.
+     - `remote-session.mjs` 124 checks: the TP53 example offline, its target checked, both other
+       screens compared by URN as Node compares them.
+     - Unit tests: `score.test.mjs`, repeated published protein variants merged.
+   - Found by slice 6:
+     - **A published score set that writes a protein variant on several rows could not be compared
+       at all.** Kotler et al.'s record writes 936 protein variants on 2,908 rows with different
+       scores (several codons, and no nucleotide names to tell them apart), and MaveScape refused
+       it. Published protein variants on several rows are now merged as DiMSum merges a protein
+       variant's codons (unweighted, without SEs), and the report says so. Its 191 frameshifts,
+       which MAVE-HGVS names alike at a codon, are left out rather than merged.
+     - **Two laboratories' screens of TP53 only seemed to disagree.** As published, the 3,341
+       variants they share correlate at r −0.78: opposite signs, and a Z-score against a log₂ fold
+       change. With the direction stated, r 0.78; rescaled each by its own anchors, Lin's
+       concordance is 0.78 and the bias −0.04. Four of the eight positions that differ most lie at
+       180–184, lower under etoposide.
+     - **Two selections of one library differ about as much as two laboratories' screens.**
+       Giacomelli et al.'s nutlin-3 and etoposide screens agree at Lin's 0.72 rescaled; their
+       records' keywords name two assays.
+     - **Correlation is not agreement in a rescoring.** Hsp90's Run 1 correlates with its record's
+       scores at r 0.95, but on one scale Lin's concordance is 0.48. The difference grows with the
+       effect (Bland–Altman slope −0.91), largest at 585–587, where the authors fit null-like
+       variants on their first three time points. How deleterious those variants are depends on that
+       choice. MaveScape's own robustness check cannot vary it: it is not among the run's choices.
+     - **A record without a UniProt entry is matched once its target is checked.** Giacomelli et
+       al.'s record names none, and its target carries arginine at 72; checked against P04637 (one
+       difference, P72R), it is matched with Kotler et al.'s domain on UniProt's numbering.
+     - **Two data sets were considered and set aside.** UBE2I's TileSeq and BarSeq scores
+       (urn:mavedb:00000001-a-3 and -a-2) are already put on 0 to 1 by their authors, and BarSeq's
+       are mostly multi-mutants. CBS's low-B6 record (urn:mavedb:00000005-a-5) holds eight selections
+       on four inputs (inputs 5–8 copies of 1–4), and the paper's low B6 is two levels (0 and 1
+       ng/ml), but the record does not say which columns are which. Its published scores agree with
+       selections 1–4 and 5–8 alike (r 0.71 and 0.72), and a quarter of them are exactly 0 (2,538
+       of 11,478, floored). The validation's limma check uses selections 1–4 as low B6, as before.
+     - **A plot's axis read −5.55e-17 for 0** (Hsp90's Bland–Altman plot): ticks summed a
+       fractional step; each is now a whole multiple of it. A robustness check of nine positions
+       said "Of the 1 least tolerant positions"; one is now said as one.
+     - Wave 4 is complete with slice 6.
 
 ## 0.5.0: variants in 3D (wave 5)
 

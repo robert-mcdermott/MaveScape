@@ -11,6 +11,10 @@ export const STAGES = [
   // Published scores (a design of model 'scores', wave 3 slice 2): the table gives no score.
   { id: 'given', code: 10, label: 'A score in the table', rule: true, published: true, reason: 'the table gives it no score' },
   { id: 'copy', code: 11, label: 'Written once', rule: true, published: true, reason: 'a copy of an earlier row (the same variant and the same scores): read once' },
+  // Published scores that write a protein variant on several rows with different scores (wave 4,
+  // slice 6): merged into its first row; frameshifts named alike at a codon, not told apart.
+  { id: 'merged', code: 13, label: 'One row per variant', rule: true, published: true, reason: 'another row of the same protein variant (another codon, or another measurement), merged into its first row as DiMSum merges codons' },
+  { id: 'alike', code: 14, label: 'Told apart', rule: true, published: true, reason: 'written alike on several rows with different scores though they are different variants (frameshifts at one codon, which MAVE-HGVS names alike): not told apart' },
   // A score set of several targets opened one target at a time (wave 3, slice 3).
   { id: 'target', code: 12, label: 'On the target', rule: true, reason: 'named on another of the score set\'s targets' },
   { id: 'measured', code: 1, label: 'Counted in a replicate', rule: true, reason: 'not measured in any replicate (not counted in enough of its samples; a zero count with no pseudocount, scored by DiMSum; or, from sorted bins, no estimate)' },
@@ -136,8 +140,9 @@ export function filterFlow(reasons, barcodes = false, published = false) {
   const all = published ? STAGES.filter((s) => s.published || ['target', 'identifier', 'class', 'excluded', 'se'].includes(s.id)) : STAGES.filter((s) => !s.published && (barcodes || !s.barcodes));
   const removed = new Map(all.map((s) => [s.code, 0]));
   for (const r of reasons) if (r) removed.set(r, removed.get(r) + 1);
-  // The target's stage is listed when it sets rows aside (a score set of several targets).
-  const stages = all.filter((s) => s.id !== 'target' || removed.get(s.code));
+  // The target's stage is listed when it sets rows aside (a score set of several targets), as are
+  // a published protein variant's rows merged and frameshifts not told apart.
+  const stages = all.filter((s) => !['target', 'merged', 'alike'].includes(s.id) || removed.get(s.code));
   let remaining = reasons.length;
   return stages.map((s) => {
     remaining -= removed.get(s.code);

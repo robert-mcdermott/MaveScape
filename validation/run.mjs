@@ -123,6 +123,12 @@ function check(suite, name, value, ok, required) {
 }
 
 const fmt = (v, d = 3) => (Number.isFinite(v) ? Number(v.toFixed(d)).toString() : String(v));
+// A file of an external data set (validation/cache), or MissingExampleData naming its data set.
+const cachePath = (relative) => {
+  const url = new URL(`./cache/${relative}`, import.meta.url);
+  if (!existsSync(url)) throw new MissingExampleData(`needs ${relative}: node validation/fetch.mjs ${relative.split('/')[0]}`);
+  return url;
+};
 
 // A suite throws MissingData when its external data are not in validation/cache/.
 class MissingData extends Error {}
@@ -2547,6 +2553,54 @@ const suites = {
       const multistep = openExampleInNode(exampleById('factor9'), { parameters: { binScale: 'low5-wt', combination: 'mean' } });
       check('examples', 'factor IX against MultiSTEP\'s published scores: with MaveScape\'s defaults (nonsense 0, wild type 1, the moderated combination) and with MultiSTEP\'s own settings set in the Score view (the lowest 5% at 0, the replicates\' mean), as the guide says', `defaults r ${rOf(o.scored.results).toFixed(4)}; MultiSTEP's settings r ${rOf(multistep.scored.results).toFixed(4)}`, rOf(o.scored.results) >= 0.99 && rOf(multistep.scored.results) >= 0.999, '≥ 0.99; ≥ 0.999');
     }
+    // Wave 4, slice 6: the examples' published comparisons, as their guides say. The run "Published
+    // scores" (or Run 1) as a side, and each score set kept beside the workspace as the window keeps it.
+    const sideOfExample = (o, name, ws = o.ws) => {
+      const source = { ...ws.sources[0], sha256: sha256(o.parts[0].bytes) };
+      const workspace = { ...ws, sources: [source] };
+      const run = makeRun({ inputs: runInputs({ source, design: o.design, parameters: o.parameters }), source, results: o.scored.results, software: { version: 'validation', commit: '' }, name });
+      return describeSide(workspace, run, o.scored.results, { run: run.id, condition: 0 });
+    };
+    const said = (example, ...texts) => texts.every((t) => exampleById(example).expected.join(' ').includes(t) || exampleById(example).steps.map((x) => x[1]).join(' ').includes(t));
+    // Hsp90 against its record's own published scores, kept beside (external data, its table).
+    if (existsSync(new URL('./cache/mavedb-hsp90/scores.csv', import.meta.url))) {
+      const o = opened.get('hsp90');
+      const record = scoreSetSide('urn:mavedb:00000011-a-1', cachePath('mavedb-hsp90/scores.csv'), { direction: 'higher-more' });
+      const a = sideOfExample(o, 'Run 1');
+      const scored = compareSides(a, record.side);
+      const stated = compareSides(a, record.side, { scale: 'stated' });
+      const ba = stated.statistics.blandAltman;
+      const at = (p) => stated.positions.list.find((x) => x.reference === p);
+      const core = [585, 586, 587].map((p) => at(p).mean);
+      const independent = stated.report.items.find((x) => x.id === 'independence');
+      check('examples', 'Hsp90 against its record\'s own published scores kept beside (urn:mavedb:00000011-a-1), as the guide says: r 0.95; stated on one scale, Lin\'s concordance 0.48 and a bias of 0.22, the difference growing with the effect (Bland–Altman\'s trend), most at 585–587 (where the authors fit null-like variants on their first three time points); one experiment analysed twice, so no difference is tested', `${scored.matched.n} variants, r ${fmt(scored.statistics.pearson.r, 3)}, Lin's concordance ${scored.statistics.concordance ? 'given' : 'withheld'} as scored; stated: ${fmt(stated.statistics.concordance.ccc, 3)}, bias ${fmt(ba.bias, 3)}, trend ${fmt(ba.trend.slope, 3)} (${fmt(ba.trend.low, 3)} to ${fmt(ba.trend.high, 3)}); 585–587 ${core.map((x) => fmt(x, 2)).join(', ')}, Q582 ${fmt(at(582).mean, 2)}; independence ${independent?.status}; discordance ${stated.discordance.valid ? 'tested' : 'not tested'}`, scored.matched.n === 187 && !scored.statistics.concordance && fmt(scored.statistics.pearson.r, 2) === '0.95' && fmt(stated.statistics.concordance.ccc, 2) === '0.48' && fmt(ba.bias, 2) === '0.22' && fmt(ba.trend.slope, 2) === '-0.91' && core.every((x) => x >= 0.34 && x <= 0.4) && Math.abs(at(582).mean) < 0.05 && !stated.discordance.valid && said('hsp90', 'r 0.95', 'only 0.48', 'the bias 0.22', 'slope of −0.91', '0.34 to 0.39'), '187; 0.95; 0.48; 0.22; −0.91; said so');
+    }
+    if (opened.has('tp53-screens') && existsSync(new URL('./cache/mavedb-tp53-screens/kotler.csv', import.meta.url))) {
+      // TP53: the target checked against UniProt (the record names no entry), then the two other
+      // screens kept beside and compared as the guide says.
+      const o = opened.get('tp53-screens');
+      const entry = readUniProtEntry(JSON.parse(readFileSync(new URL('./fixtures/public-data/uniprot/P04637.json', import.meta.url), 'utf8')));
+      const target = o.ws.targets[0];
+      const placement = placeTarget(target, entry);
+      const patch = placementPatch(target, entry, placement);
+      const ws = recordTargetCheck(o.ws, target.id, patch, referenceOf(entry, { service: 'UniProt', version: '2026_03' }, placement), 'Checked against UniProt P04637');
+      const a = sideOfExample(o, 'Published scores', ws);
+      const kotlerFile = cachePath('mavedb-tp53-screens/kotler.csv');
+      const unstated = scoreSetSide('urn:mavedb:00000059-a-1', kotlerFile);
+      const kotler = scoreSetSide('urn:mavedb:00000059-a-1', kotlerFile, { direction: 'higher-less' });
+      const nutlin = scoreSetSide('urn:mavedb:00000068-b-1', cachePath('mavedb-tp53-screens/nutlin.csv'), { direction: 'higher-less' });
+      const asPublished = compareSides(a, unstated.side);
+      const negated = compareSides(a, kotler.side);
+      const rescaled = compareSides(a, kotler.side, { scale: 'synonymous-nonsense' });
+      const merged = kotler.side.results.merged;
+      const largest = [...rescaled.positions.list].sort((x, y) => Math.abs(y.mean) - Math.abs(x.mean)).slice(0, 8);
+      const helix = largest.filter((x) => x.reference >= 180 && x.reference <= 184);
+      const ba = rescaled.statistics.blandAltman;
+      check('examples', 'TP53: the etoposide screen\'s published scores on TP53 with arginine at 72, checked against UniProt P04637 (positions 1–393, one difference, P72R); Kotler et al.\'s record kept beside, its protein variants on several rows merged as DiMSum merges codons and its frameshifts written alike left out, the report saying so', `${o.scored.results.conditions[0].scored} of ${o.scored.results.rows} scored; P04637 ${placement.start}–${placement.end}, ${placement.differences.map((d) => `${d.reference}${d.position}${d.target}`).join(', ')}; identifiers ${JSON.stringify(ws.targets[0].identifiers)}; Kotler: ${merged.variants} merged (${merged.rows} rows), ${merged.alike} frameshifts left out`, o.scored.results.conditions[0].scored === 8258 && placement.start === 1 && placement.end === 393 && placement.differences.length === 1 && placement.differences[0].position === 72 && ws.targets[0].identifiers.uniprot === 'P04637' && merged.variants === 936 && merged.rows === 2908 && merged.alike === 191 && /936 protein variants on several rows/.test(rescaled.report.items.find((x) => x.id === 'variants').text) && said('tp53-screens', '936 protein variants', '2,908 rows', '191 frameshifts'), '8,258; P72R; 936, 2,908, 191; said so');
+      check('examples', 'TP53, two screens on two scales, as the guide says: matched on P04637\'s numbering, r −0.78 as published; with Kotler et al.\'s direction stated, r 0.78 and ρ 0.72, Lin\'s concordance withheld; rescaled by their anchors, Lin\'s concordance 0.78 and a bias of −0.04; four of the eight positions that differ most at 180–184, lower under etoposide; Giacomelli et al.\'s nutlin-3 screen against etoposide r 0.75 and 0.72 rescaled', `${asPublished.matched.n} matched, r ${fmt(asPublished.statistics.pearson.r, 3)}; stated r ${fmt(negated.statistics.pearson.r, 3)}, ρ ${fmt(negated.statistics.spearman.rho, 3)}, Lin's ${negated.statistics.concordance ? 'given' : 'withheld'}; rescaled Lin's ${fmt(rescaled.statistics.concordance.ccc, 3)}, bias ${fmt(ba.bias, 3)} (${fmt(ba.lower, 2)} to ${fmt(ba.upper, 2)}); largest ${largest.map((x) => `${x.residue}${x.reference} ${fmt(x.mean, 2)}`).join(', ')}; nutlin ${compareSides(a, nutlin.side).matched.n}, r ${fmt(compareSides(a, nutlin.side).statistics.pearson.r, 3)}, rescaled ${fmt(compareSides(a, nutlin.side, { scale: 'synonymous-nonsense' }).statistics.concordance.ccc, 3)}`,
+        asPublished.matched.n === 3341 && fmt(asPublished.statistics.pearson.r, 2) === '-0.78' && fmt(negated.statistics.pearson.r, 2) === '0.78' && fmt(negated.statistics.spearman.rho, 2) === '0.72' && !negated.statistics.concordance && fmt(rescaled.statistics.concordance.ccc, 2) === '0.78' && fmt(ba.bias, 2) === '-0.04' && fmt(ba.lower, 2) === '-0.71' && fmt(ba.upper, 2) === '0.63' && helix.length === 4 && helix.every((x) => x.mean < 0) && fmt(compareSides(a, nutlin.side).statistics.pearson.r, 2) === '0.75' && fmt(compareSides(a, nutlin.side, { scale: 'synonymous-nonsense' }).statistics.concordance.ccc, 2) === '0.72' && !rescaled.discordance.valid
+        && said('tp53-screens', '3,341 variants', 'r −0.78', 'r 0.78', 'ρ 0.72', 'concordance is 0.78', 'bias −0.04', '−0.71 to 0.63', 'D184, E180, R181, C182', 'r 0.75', '0.72 rescaled'), 'as the guide says');
+    }
   },
 
   // Public data (wave 3, slice 1): UniProt's answers as MaveScape's fetcher cached them
@@ -3279,11 +3333,6 @@ const suites = {
 
       // Wave 4, slice 3. DHFR's −Lon record kept beside the workspace, not opened: the same comparison
       // with Run 1 as the record opened gives.
-      const cachePath = (relative) => {
-        const url = new URL(`./cache/${relative}`, import.meta.url);
-        if (!existsSync(url)) throw new MissingExampleData(`needs ${relative}: node validation/fetch.mjs ${relative.split('/')[0]}`);
-        return url;
-      };
       // The direction stated as the example states it for the record it opens.
       const minusSet = scoreSetSide('urn:mavedb:00000063-b-1', cachePath('mavedb-dhfr/minus-lon/scores.csv'), { direction: EXAMPLES.find((e) => e.id === 'dhfr-lon').readout.direction });
       const viaSet = compareSides(side(wd, d, { condition: 0 }), minusSet.side);

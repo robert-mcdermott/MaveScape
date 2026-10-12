@@ -262,7 +262,13 @@ and every other column is in `ignoredColumns`. Its run (the model `published`) t
 SE and interval as given, never rescoring them; a variant is left out when its name is not valid
 against the target, its class or itself is excluded, its SE is above a maximum, the table gives it
 no score (the stage `given`), or it repeats an earlier row's variant with the same scores (`copy`:
-read once; with other scores the table is refused). The scores export writes the given interval.
+read once). From MaveScape 0.4, a protein variant written on several rows with other scores (several
+codons, or measurements, with no nucleotide names to tell them apart) is read as one, as DiMSum
+merges a protein variant's codons: its first row holds the mean of its rows' scores, weighted by
+1/SE² (unweighted, its SE unknown, without SEs), and the others are left out (`merged`); frameshifts
+written alike on several rows (MAVE-HGVS names every frameshift at a codon alike) are left out, not
+told apart (`alike`). Nucleotide variants on several rows with other scores are refused. The scores
+export writes the given interval.
 A design of a MaveDB record (Open from MaveDB) also has the record's `source` (URN, citation,
 license), and its `readout` and `library.method` from the experiment's controlled keywords.
 
@@ -583,7 +589,7 @@ MaveDB's score layout, one row per variant of the table, in the table's order:
 | `df` | the score's degrees of freedom (moderated combination, MaveScape 0.2); `Inf` for a score whose replicates' variance is known; `NA` with the other combinations |
 | `SE_scale` | for rescaled scores (MaveScape 0.2), the rescaling anchors' uncertainty at this score, shared by every score and not in `SE`: needed to compare a score with another assay's or with the anchors' true values; `NA` without rescaling |
 | `replicates`, `replicates_expected` | biological replicates used, and that could have measured it |
-| `status` | `scored`, `low confidence`, `filtered: <stage>` (`target`, `identifier`, `class`, `excluded`, `input-count`, `total-count`, `barcodes`, `replicates`, `se`; published scores also `given`, `copy`) or `not measured` |
+| `status` | `scored`, `low confidence`, `filtered: <stage>` (`target`, `identifier`, `class`, `excluded`, `input-count`, `total-count`, `barcodes`, `replicates`, `se`; published scores also `given`, `copy`, `merged`, `alike`) or `not measured` |
 | `flags` | why a score has low confidence |
 | `tau2`, `I2`, `leave_one_out` | between-replicate variance (REML and Enrich2's estimator; `NA` with the others), I², and the largest change when one replicate is left out |
 | `variant_as_written`, `variant_class` | the name as in the table, and its class |

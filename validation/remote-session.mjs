@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { launch, sleep } from '../docs/capture/cdp.mjs';
 import { readArchive } from '../web/lib/archive.js';
 import { parseTable } from '../web/lib/csv.js';
-import { outputDigest, recordedInputs } from '../web/lib/runs.js';
+import { makeRun, outputDigest, recordedInputs, runInputs } from '../web/lib/runs.js';
 import { DEFAULT_PARAMETERS, PRESETS, defaultParameters } from '../web/lib/score.js';
 import { FINGERPRINT } from '../web/lib/dmath.js';
 import { allExports, recompute, scoreTable } from './roundtrip-cases.mjs';
@@ -38,6 +38,9 @@ import { predictorSide, scoreSetSide } from './compare-cases.mjs';
 import { checkTable } from './robustness-cases.mjs';
 import { robustnessCSV, robustnessJSON, robustnessPositionsCSV } from '../web/lib/robustness.js';
 import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
+import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
+import { recordTargetCheck } from '../web/lib/workspace.js';
+import { sha256 } from '../web/lib/sha256.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -47,6 +50,10 @@ const requireData = process.argv.includes('--require-data');
 // into the fetcher's cache, so that its two score sets open together offline.
 const DHFR = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-dhfr');
 const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:00000063-a-1', 'plus-lon']];
+// TP53's three score sets (wave 4, slice 6), as node validation/fetch.mjs mavedb-tp53-screens keeps
+// them: the example opens the first, and compares the others kept beside.
+const TP53 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-tp53-screens');
+const TP53_TABLES = [['urn:mavedb:00000068-c-1', 'scores.csv'], ['urn:mavedb:00000068-b-1', 'nutlin.csv'], ['urn:mavedb:00000059-a-1', 'kotler.csv']];
 const results = [];
 function check(name, value, ok, required = '') {
   results.push({ name, ok });
@@ -76,6 +83,13 @@ async function startMaveScape() {
         cpSync(join(DHFR, dir, `${table}.csv`), join(cache, 'mavedb', name));
         writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
       }
+    }
+  }
+  if (existsSync(join(TP53, 'kotler.csv'))) {
+    for (const [urn, file] of TP53_TABLES) {
+      const name = `${urn.replaceAll(':', '_')}.scores.csv`;
+      cpSync(join(TP53, file), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/scores`, retrieved: '2026-10-12T01:15:25Z' }, null, 2)}\n`);
     }
   }
   const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -527,6 +541,39 @@ try {
   } else {
     console.log('  DHFR\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-dhfr (the checks of score sets opened together skipped)');
     if (requireData) check('DHFR\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
+  }
+
+  // Two screens on two scales (wave 4, slice 6): the TP53 example opened offline, its target checked
+  // against UniProt's entry, and the other two screens compared without opening them, as Node
+  // compares them (the examples suite's way).
+  if (existsSync(join(TP53, 'kotler.csv'))) {
+    const tp53 = await act('open_example', { id: 'tp53-screens' });
+    const checked = await act('check_target', { accession: 'P04637', apply: true });
+    const unstated = await act('compare', { a: 'Published scores', b: 'urn:mavedb:00000059-a-1', scale: 'scored' });
+    const rescaled = await act('compare', { a: 'Published scores', b: 'urn:mavedb:00000059-a-1', direction: 'higher-less', scale: 'synonymous-nonsense' });
+    const nutlin = await act('compare', { a: 'Published scores', b: 'urn:mavedb:00000068-b-1', direction: 'higher-less', scale: 'synonymous-nonsense' });
+    const o = openExampleInNode(exampleById('tp53-screens'));
+    const entry = readUniProtEntry(JSON.parse(readFileSync(join(ROOT, 'validation/fixtures/public-data/uniprot/P04637.json'), 'utf8')));
+    const placement = placeTarget(o.ws.targets[0], entry);
+    const ws = recordTargetCheck(o.ws, o.ws.targets[0].id, placementPatch(o.ws.targets[0], entry, placement), referenceOf(entry, { service: 'UniProt', version: '2026_03' }, placement), 'check');
+    const source = { ...ws.sources[0], sha256: sha256(o.parts[0].bytes) };
+    const run = makeRun({ inputs: runInputs({ source, design: o.design, parameters: o.parameters }), source, results: o.scored.results, software: { version: 'node', commit: '' }, name: 'Published scores' });
+    const sideA = describeSide({ ...ws, sources: [source] }, run, o.scored.results, { run: run.id, condition: 0 });
+    const nodeUnstated = compareSides(sideA, scoreSetSide('urn:mavedb:00000059-a-1', join(TP53, 'kotler.csv')).side);
+    const nodeRescaled = compareSides(sideA, scoreSetSide('urn:mavedb:00000059-a-1', join(TP53, 'kotler.csv'), { direction: 'higher-less' }).side, { scale: 'synonymous-nonsense' });
+    const nodeNutlin = compareSides(sideA, scoreSetSide('urn:mavedb:00000068-b-1', join(TP53, 'nutlin.csv'), { direction: 'higher-less' }).side, { scale: 'synonymous-nonsense' });
+    const sameStats = (window, node) => JSON.stringify(window.data.statistics) === JSON.stringify(JSON.parse(JSON.stringify(node.statistics)));
+    const reportOf = (x) => JSON.stringify(x.items.map((i) => [i.id, i.status, i.text]));
+    const parts = {
+      opened: tp53.ok !== false && checked.data.applied !== false && /P72R/.test(checked.message),
+      unstated: sameStats(unstated, nodeUnstated) && unstated.data.statistics.pearson.r < -0.78,
+      rescaled: sameStats(rescaled, nodeRescaled) && reportOf(rescaled.data.report) === reportOf(nodeRescaled.report) && /936 protein variants on several rows/.test(rescaled.message + JSON.stringify(rescaled.data.report)),
+      nutlin: sameStats(nutlin, nodeNutlin),
+    };
+    check('open_example "tp53-screens" offline, its target checked against UniProt P04637 (P72R), and the two other screens compared by URN without opening them: as published r −0.78; Kotler et al.\'s direction stated and both rescaled by their anchors, its protein variants on several rows merged, the statistics and report as Node gives them', `${rescaled.message.slice(0, 220)}… ${Object.entries(parts).map(([k, v]) => `${k} ${v ? 'as Node' : 'different'}`).join(', ')}`, Object.values(parts).every(Boolean));
+  } else {
+    console.log('  TP53\'s MaveDB tables are not in validation/cache: node validation/fetch.mjs mavedb-tp53-screens (the TP53 example\'s checks skipped)');
+    if (requireData) check('TP53\'s MaveDB tables present', 'not in validation/cache', false, 'present (--require-data)');
   }
 
   // Two conditions (wave 2, slice 6): the example opens on its differential map; scored in the

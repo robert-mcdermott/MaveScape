@@ -177,6 +177,24 @@ grows with each.
     cysteines by query: 345 of the 399 scored are lower than the wild type, against 2,124 of 8,529
     missense variants. The guide page *Selections*.
 
+- **The wave's examples (wave 4, slice 6; T4): fourteen in all.** Published comparisons that teach
+  what the wave built.
+  - **TP53, two screens on two scales** (`tp53-screens`), opened from MaveDB:
+    - Giacomelli et al.'s etoposide screen of every substitution of TP53, its published Z-scores;
+    - Kotler et al.'s screen of the DNA-binding domain by the growth of H1299 cells, and Giacomelli
+      et al.'s nutlin-3 screen, kept beside it by URN, not opened.
+
+    The record names no UniProt entry: checked against P04637, the target is TP53 with arginine at
+    72. Matched on UniProt's numbering, the two laboratories' screens correlate at r −0.78 as
+    published; with Kotler et al.'s direction stated, 0.78, on two scales; rescaled each by its own
+    anchors, Lin's concordance is 0.78. They only seemed to disagree.
+  - **Hsp90's sixth step**, a rescoring against the published scores: Run 1 against its record's own
+    scores kept beside correlates at r 0.95. Stated to be on one scale, Lin's concordance is only
+    0.48: the difference grows with the effect, where the authors fit null-like variants on their
+    first three time points.
+  - The examples page, the guide *Comparisons* (two screens that only seem to disagree; a rescoring
+    against the published scores), and two screenshot scenes (`tp53-screens`, `hsp90-rescoring`).
+
 ### Changed
 
 - An example opened from MaveDB gives its readout (what a higher score means, from the paper) to its
@@ -191,6 +209,17 @@ grows with each.
 - A saved selection is listed under the map of every run of the same protein, not only its own.
 - A rectangle drawn without Shift (the Rectangle drag mode) replaces the selection; with ⌘, Ctrl or
   Shift held it adds, as Shift-drag always did.
+- Published scores that write a protein variant on several rows with different scores (several
+  codons, or measurements, with no nucleotide names to tell them apart, as Kotler et al.'s TP53
+  record does: 936 variants on 2,908 rows) were refused. Each is now read as one, merged as DiMSum
+  merges a protein variant's codons: weighted by 1/SE², or averaged without SEs. The other rows are
+  left out with the stage `merged`. Frameshifts written alike at a codon are left out, not told
+  apart (`alike`). A comparison's report says how many were merged. Nucleotide variants on several
+  rows with other scores are still refused.
+- A plot's axis labelled 0 as −5.55e-17 where its ticks summed a fractional step (Hsp90's
+  Bland–Altman plot): each tick is now a whole multiple of the step.
+- A robustness check of a run of fewer than twenty positions said "Of the 1 least tolerant
+  positions"; one position is now said as one.
 
 ### Validation
 
@@ -293,6 +322,22 @@ grows with each.
 - Unit tests: `query.test.mjs` (5): parsing, mistakes, classes, states, positions and residues on a
   toy map, sets and their operations, features and verdicts. `map-render.test.mjs`: a freeform
   shape's cells.
+- `examples` validation suite (slice 6, 52 checks): the TP53 example opened as the window opens it,
+  its table MaveDB's (`mavedb-tp53-screens`, a new data set in `sources.json`; the three records and
+  UniProt's P04637 in `fixtures/public-data`).
+  - **TP53:** the target checked against P04637 (P72R). Kotler et al.'s 936 protein variants merged
+    from 2,908 rows, and its 191 frameshifts left out, the report saying so. As published r −0.78,
+    as stated 0.78 (ρ 0.72), rescaled Lin's concordance 0.78 with a bias of −0.04. Four of the eight
+    positions that differ most at 180–184. Nutlin-3 against etoposide: 0.75 and 0.72. Each number as
+    the guide states it.
+  - **Hsp90:** against its record's own scores, r 0.95; stated on one scale, Lin's concordance 0.48,
+    a bias of 0.22 and a Bland–Altman slope of −0.91, the differences largest at 585–587; one
+    experiment analysed twice, so no difference is tested.
+- The remote-control session (124 checks): the TP53 example opened offline, its target checked
+  against UniProt, and both other screens compared by URN, the statistics and report as Node gives
+  them.
+- Unit tests: `score.test.mjs`: a protein variant on several rows merged (unweighted, or by 1/SE²),
+  a copy among them read once, frameshifts alike left out, nucleotide variants still refused.
 
 ## 0.3.0 (2026-10-11)
 

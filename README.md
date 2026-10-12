@@ -31,7 +31,7 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > cause it and what to do. Replicates are combined under a shared error model whose 95% intervals
 > hold the truth 94–97% of the time in 26 kinds of simulated experiment. For the open workspace,
 > MaveScape says what each analysis can do with what is there and what the bench or the protocol
-> would add, and writes the analysis package that `mavescape run` reads. Thirteen examples are on the Start page (seven published, six simulated);
+> would add, and writes the analysis package that `mavescape run` reads. Fourteen examples are on the Start page (eight published, six simulated);
 > [`docs/FORMATS.md`](docs/FORMATS.md) describes every file. The
 > [roadmap](mavescape-spec/roadmap.md)'s wave 3 is complete. It brought public data in and out,
 > through a fixed list of services: a target checked against its UniProt entry, and any published
@@ -63,7 +63,9 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > one or to depend on a choice, which is named. Variants are selected on the map by click, rectangle,
 > freeform shape or query ("missense at 40-80 with se < 0.2", "variants whose class depends on the
 > pseudocount", "from C in feature disulfide"), saved by name with their query, combined, and carried
-> to the other views. Next: the wave's examples.
+> to the other views. The wave's examples teach it on published data: two laboratories' screens of
+> TP53 that correlate at r −0.78 as published and agree on one scale (Lin's concordance 0.78), and
+> Hsp90's rescoring, correlated with its published scores (r 0.95) but not in agreement (0.48).
 
 ## What is a MAVE?
 

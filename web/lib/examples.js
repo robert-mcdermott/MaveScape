@@ -66,6 +66,7 @@ export const EXAMPLES = [
       'The scores follow the published fitness per generation where the authors fit every time point: r about 0.95, a median 0.005 apart. The record says its slopes are of log₂ ratios, but they are of natural logarithms, as MaveScape\'s are. Stops score about −0.32 against the published −0.77: the authors fit null-like variants on the first three time points only.',
       'QC fails the fit of the time courses: they scatter about 44× more than counting predicts, and stops fall to the floor within a few generations. Each slope\'s SE comes from its own residuals.',
       'One replicate: agreement, the variance beyond counting and outlier replicates are not assessed. What the analysis can do says so, and that the record gives no MaveDB terms for the assay or the library.',
+      'Compared with the record\'s own published scores, kept beside (urn:mavedb:00000011-a-1): 187 variants, r 0.95; stated to be on one scale (both natural-log change per generation), Lin\'s concordance is only 0.48 and the bias 0.22. The difference grows with the effect (a Bland–Altman slope of −0.91), most at 585–587 (0.34 to 0.39 on average). One experiment analysed twice: the agreement measures the analyses.',
     ],
     steps: [
       ['map', 'Look at the map: nine positions by every substitution. Click a dark cell at position 585: the inspector draws its time course over the eight samples.'],
@@ -73,6 +74,7 @@ export const EXAMPLES = [
       ['score', 'In Score, set "A score is the change" to over the whole time course and score again: every score is 21 times the one per generation.'],
       ['experiment', 'In Experiment, read "What the analysis can do": with one replicate nothing between replicates is assessed, and a second replicate would add it.'],
       ['score', 'Export the scores and the methods from the run\'s menu: the methods say the scores are per generation, and what was not recorded.'],
+      ['compare', 'In Compare, Other sources: add urn:mavedb:00000011-a-1, the record\'s own published scores (a higher score is more growth), kept beside without opening it. They correlate at r 0.95, but under Scale, stated to be on one scale, Lin\'s concordance is only 0.48: the Bland–Altman plot shows the difference growing with the effect, most at 585–587. The authors fit null-like variants on their first three time points, before they reach the floor; Run 1 fits all eight. How deleterious those variants are depends on that choice.'],
     ],
   },
   {
@@ -245,6 +247,41 @@ export const EXAMPLES = [
       ['score', 'From Run 1\'s Export menu, "Deposit in MaveDB": the scores, counts and methods as MaveDB takes a score set, the experiment described as the record\'s (give its URN, urn:mavedb:00000003-a, to add the score set to it). Download the package as a ZIP.'],
       ['experiment', 'Drop the ZIP on the window: it opens as a record from MaveDB does, and its scores, read as published, are Run 1\'s exactly.'],
       ['qc', 'In QC, the dropout and the fit of the time courses: over five rounds most variants that lose activity fall below detection, as stops do.'],
+    ],
+  },
+  {
+    id: 'tp53-screens',
+    title: 'TP53, two screens on two scales, opened from MaveDB (published scores)',
+    summary: 'Every substitution of TP53 (with arginine at 72) screened in p53-null A549 cells under etoposide, as Z-scores (Giacomelli et al. 2018), compared with an independent screen of its DNA-binding domain by the growth of H1299 cells, as log₂ fold changes (Kotler et al. 2018): two assays, two scales, opposite signs.',
+    question: 'Do two screens of p53\'s function, in different cells, on different scales and with opposite signs, agree on which variants lose it?',
+    source: 'MaveDB urn:mavedb:00000068-c-1 (opened) and urn:mavedb:00000059-a-1 and urn:mavedb:00000068-b-1 (kept beside, not opened): published scores, downloaded when used; SHA-256 checked',
+    license: 'CC0 1.0',
+    citation: 'Giacomelli AO, et al. Mutational processes shape the landscape of TP53 mutations in human cancer. Nature Genetics 2018;50:1381–1387. doi:10.1038/s41588-018-0204-y; Kotler E, et al. A systematic p53 mutation library links differential functional impact to cancer mutation pattern and evolutionary conservation. Molecular Cell 2018;71:178–190. doi:10.1016/j.molcel.2018.06.012',
+    simulated: false,
+    // Published scores only (wave 4, slice 6): the two other screens are compared without opening
+    // them (Compare, Other sources).
+    mavedb: { urn: 'urn:mavedb:00000068-c-1', scores: { sha256: '085237d96f287ce8642d49372b46ef9dc07c08e84240c04cfc17d8fb42977022', size: 553289 } },
+    // Under etoposide a variant like the wild type scores higher (its synonymous variants' median
+    // 0.37, its nonsense variants' −1.52); MaveDB records no direction.
+    readout: { direction: 'higher-more' },
+    findings: { separation: 'review' },
+    teaches: ['target-identifiers', 'score-se'],
+    opens: 'map',
+    expected: [
+      'Opened from MaveDB, the etoposide screen\'s published scores: 8,258 of 8,274 variants, Z-scores without standard errors, on TP53 with arginine at 72. The record names no UniProt entry; checked against P04637, the target is its positions 1–393 with one difference, P72R.',
+      'Kotler et al.\'s record (urn:mavedb:00000059-a-1), kept beside without opening it, writes 936 protein variants on several rows with different scores (2,908 rows: several codons, and no nucleotide names to tell them apart). Each is read as one, averaged, as DiMSum merges codons; its 191 frameshifts written alike at a codon are left out.',
+      'Matched on P04637\'s numbering (Kotler et al.\'s target is the DNA-binding domain alone, numbered from 102), 3,341 variants: r −0.78 as published. With Kotler et al.\'s direction stated (a higher score is less of p53\'s function), r 0.78 and Spearman\'s ρ 0.72; on two scales, Lin\'s concordance and Bland–Altman are withheld.',
+      'Rescaled by their anchors (synonymous median 0, nonsense median −1), Lin\'s concordance is 0.78 and the bias −0.04 (limits of agreement −0.71 to 0.63): on one scale the two screens agree. Of the positions whose differences are largest, four lie at 180–184 (D184, E180, R181, C182), lower under etoposide.',
+      'Giacomelli et al.\'s nutlin-3 screen of the same library (urn:mavedb:00000068-b-1; there a higher score is less function) against etoposide: 8,258 variants, r 0.75 as stated, Lin\'s concordance 0.72 rescaled.',
+      'QC reviews the separation of the controls. Neither record gives standard errors, so the scores\' resolution is not judged and no difference between the screens is tested.',
+    ],
+    steps: [
+      ['map', 'The map shows Giacomelli et al.\'s etoposide screen as published: Z-scores of 8,258 variants over all 393 residues of TP53, with arginine at 72. Here a variant like the wild type scores higher (synonymous variants 0.37, nonsense −1.52); the positions that tolerate nothing lie in the DNA-binding domain, 102–292.'],
+      ['experiment', 'The record names no UniProt entry. In Experiment, Target, "Check against UniProt" with P04637: positions 1–393, one difference, arginine at 72 (the allele the screen used). "Record the check": the target now carries P04637, as Kotler et al.\'s record does.'],
+      ['compare', 'In Compare, Other sources: add urn:mavedb:00000059-a-1, Kotler et al.\'s screen of the DNA-binding domain by the growth of H1299 cells, kept beside the workspace without opening it, and compare it with the published scores. Matched on P04637\'s numbering (its target is the domain alone, numbered from 102): 3,341 variants, r −0.78. The two screens seem to disagree completely.'],
+      ['compare', 'MaveDB records no direction. In Kotler et al.\'s screen cells without p53\'s function outgrow the others, so a higher score is less of it: say so for the score set. Compared negated, r 0.78; but a Z-score and a log₂ fold change are two scales, so Lin\'s concordance and Bland–Altman are withheld, and the report says why.'],
+      ['compare', 'Under Scale, rescale each by its own anchors (synonymous median 0, nonsense median −1): Lin\'s concordance 0.78, a bias of −0.04. On one scale the two screens agree. Neither gives SEs, so no variant is tested as different; under Disagreement, the positions that differ most, four of them at 180–184.'],
+      ['compare', 'Add urn:mavedb:00000068-b-1, Giacomelli et al.\'s nutlin-3 screen of the same library (a higher score is less function there too) and compare it with etoposide: r 0.75, Lin\'s concordance 0.72 rescaled. Two selections of one library differ about as much as two laboratories\' screens.'],
     ],
   },
   {

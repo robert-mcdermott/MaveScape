@@ -22,6 +22,7 @@
 // rescaling anchor missing) is refused with the reasons, never quietly done another way.
 
 import { buildVariants, duplicateKeys, KIND, STATUS } from './variants.js';
+import { mean } from './collapse.js';
 import { engineColumns, replicateSamples, sharedSamples, tileRows, tileView, validateDesign } from './design.js';
 import { parseHgvs } from './hgvs.js';
 import { median, normalizers, ratioScores, NORMALIZATIONS } from './score-ratio.js';
@@ -509,7 +510,7 @@ function scoreDimsum({ design, pooled, p, controls, variants, n, warnings, info,
 // error and 95% interval as the table gives them, read, not computed; one condition, no
 // replicates. A variant is left out when its name is not valid against the target, its class or
 // itself is excluded, the table gives it no score, or its SE is above the maximum.
-function publishedResults({ variants, n, columns, design, p, controls, warnings, info, copies }) {
+function publishedResults({ variants, n, columns, design, p, controls, warnings, info, copies, merges = null }) {
   const s = design.scores;
   const column = (key) => {
     if (!s[key]) return null;
@@ -529,11 +530,46 @@ function publishedResults({ variants, n, columns, design, p, controls, warnings,
   const ciHigh = high ? new Float64Array(n).fill(Number.NaN) : null;
   const reason = new Uint8Array(n);
   const none = STAGE_BY_ID.get('given').code;
+  // A protein variant on several rows: its first row holds them merged, the others are left; a
+  // frameshift's rows are all left.
+  const group = new Map();
+  const left = new Map();
+  for (const m of merges ?? []) {
+    if (m.alike) for (const r of m.rows) left.set(r, STAGE_BY_ID.get('alike').code);
+    else {
+      group.set(m.rows[0], m.rows);
+      for (const r of m.rows.slice(1)) left.set(r, STAGE_BY_ID.get('merged').code);
+    }
+  }
+  let unweighted = 0;
   for (let i = 0; i < n; i += 1) {
     const stage = variantStage(i, variants, excludeKinds, excluded);
     if (copies?.has(i)) reason[i] = STAGE_BY_ID.get('copy').code;
+    else if (left.has(i)) reason[i] = left.get(i);
     else if (stage) reason[i] = stage;
-    else if (!Number.isFinite(given[i])) reason[i] = none;
+    if (reason[i]) continue;
+    const rows = group.get(i);
+    if (rows) {
+      const used = rows.filter((r) => Number.isFinite(given[r]));
+      if (!used.length) {
+        reason[i] = none;
+        continue;
+      }
+      const merged = mean(used.map((r) => given[r]), used.map((r) => (givenSE ? givenSE[r] : Number.NaN)));
+      if (used.length > 1 && !Number.isFinite(merged.se)) unweighted += 1;
+      if (f.maxSE !== null && !(merged.se <= f.maxSE)) {
+        reason[i] = STAGE_BY_ID.get('se').code;
+        continue;
+      }
+      score[i] = merged.score;
+      se[i] = merged.se;
+      if (ciLow && used.length === 1) {
+        ciLow[i] = low[used[0]];
+        ciHigh[i] = high[used[0]];
+      }
+      continue;
+    }
+    if (!Number.isFinite(given[i])) reason[i] = none;
     else if (f.maxSE !== null && !(givenSE?.[i] <= f.maxSE)) reason[i] = STAGE_BY_ID.get('se').code;
     if (reason[i]) continue;
     score[i] = given[i];
@@ -548,6 +584,10 @@ function publishedResults({ variants, n, columns, design, p, controls, warnings,
   info.push(`Scores as published, read from "${s.score}"${givenSE ? `, with standard errors from "${s.se}"` : ' (no standard errors given)'}${ciLow ? ` and 95% intervals from "${s.ciLow}" and "${s.ciHigh}"` : ''}: not rescored.`);
   if (without) info.push(`${without} row${without > 1 ? 's give' : ' gives'} no score (NA in the table).`);
   if (copies?.size) info.push(`${copies.size} row${copies.size > 1 ? 's repeat' : ' repeats'} an earlier row's variant and scores (${[...new Set([...copies].map((i) => variants.key[i]))].slice(0, 3).join(', ')}): read once.`);
+  const mergedGroups = (merges ?? []).filter((m) => !m.alike);
+  const alikeGroups = (merges ?? []).filter((m) => m.alike);
+  if (mergedGroups.length) info.push(`${mergedGroups.length} protein variant${mergedGroups.length > 1 ? 's are' : ' is'} written on several rows with different scores (${mergedGroups.reduce((a, m) => a + m.rows.length, 0)} rows: several codons, or several measurements, with no nucleotide names to tell them apart; ${mergedGroups.slice(0, 3).map((m) => m.key).join(', ')}): each merged into one as DiMSum merges a protein variant's codons, ${givenSE ? 'weighted by 1/SE²' : 'averaged (the table gives no standard errors)'}${unweighted && givenSE ? `, ${unweighted} averaged for want of SEs` : ''}.`);
+  if (alikeGroups.length) warnings.push({ code: 'frameshifts-alike', message: `${alikeGroups.length} frameshift${alikeGroups.length > 1 ? 's are' : ' is'} written alike on several rows with different scores (${alikeGroups.slice(0, 3).map((m) => m.key).join(', ')}): MAVE-HGVS names every frameshift at a codon alike, though they make different proteins, so they are not told apart and not scored.` });
   if (!givenSE) warnings.push({ code: 'no-se', message: 'The table gives no standard errors: the scores\' uncertainty is unknown, and QC cannot judge their resolution.' });
   const nan = () => new Float64Array(n).fill(Number.NaN);
   return {
@@ -573,6 +613,9 @@ function publishedResults({ variants, n, columns, design, p, controls, warnings,
     barcodes: null,
     dimsum: null,
     differential: null,
+    // A protein variant's rows merged, and frameshifts not told apart (wave 4, slice 6), for the
+    // comparison's report; not part of the output hash.
+    merged: mergedGroups.length || alikeGroups.length ? { variants: mergedGroups.length, rows: mergedGroups.reduce((a, m) => a + m.rows.length, 0), weighted: Boolean(givenSE), alike: alikeGroups.length } : null,
     warnings,
     info,
   };
@@ -633,20 +676,30 @@ function run({ names, barcodes = null, columns, design, mode = 'lenient', parame
   // Published scores (a design of model 'scores') may write a variant on several rows with the same
   // scores (Hsp90's record writes its wild type once per position): copies, read once.
   let copies = null;
+  let merges = null;
   if (!groups) {
     let duplicates = duplicateKeys(variants);
     if (duplicates.length && design.model === 'scores') {
       const read = engineColumns(design).map((c) => columns[c]).filter(Boolean);
       const same = (a, b) => read.every((x) => Object.is(x[a], x[b]) || (Number.isNaN(x[a]) && Number.isNaN(x[b])));
-      copies = new Set(duplicates.filter((d) => d.rows.every((r) => same(d.rows[0], r))).flatMap((d) => d.rows.slice(1)));
+      copies = new Set(duplicates.flatMap((d) => d.rows.filter((r, j) => d.rows.slice(0, j).some((q) => same(q, r)))));
       duplicates = duplicates.filter((d) => !d.rows.every((r) => same(d.rows[0], r)));
+      // A protein variant on several rows with different scores (several codons, or measurements,
+      // with no nucleotide names to tell them apart, as Kotler et al.'s TP53 record writes them;
+      // wave 4, slice 6): merged into its first row as DiMSum merges a protein variant's codons. A
+      // frameshift is not merged: MAVE-HGVS names every frameshift at a codon alike, though they
+      // make different proteins.
+      if (duplicates.length && design.variants.level === 'protein') {
+        merges = duplicates.map((d) => ({ key: d.key, rows: d.rows.filter((r) => !copies.has(r)), alike: variants.kind[d.rows[0]] === KIND.FRAMESHIFT }));
+        duplicates = [];
+      }
     }
     if (duplicates.length) throw new Refused([`${duplicates.length} variant${duplicates.length > 1 ? 's are' : ' is'} on more than one row (${duplicates.slice(0, 3).map((d) => d.key).join(', ')})${design.model === 'scores' ? ' with different scores' : ''}: resolve them at import before scoring.`]);
   }
   const controls = controlRows(design, variants);
   const warnings = [];
   const info = [];
-  if (design.model === 'scores') return publishedResults({ variants, n, columns, design, p, controls, warnings, info, copies });
+  if (design.model === 'scores') return publishedResults({ variants, n, columns, design, p, controls, warnings, info, copies, merges });
   if (p.normalization === 'wt' && controls.wtProblem) throw new Refused([controls.wtProblem]);
 
   // Samples: technical replicates summed; a barcode table's counts also summed per variant.

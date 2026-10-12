@@ -6,7 +6,7 @@
 // same each time the run is checked, and its record (JSON) names every one.
 
 import { h, icon, downloadBlob, formatCount } from './dom.js';
-import { CLASS_NAMES, CONTRAST_CLASS_NAMES, DEFAULT_MAX_SPECIFICATIONS, methodsSentence, robustnessChoices, robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_Q, ROBUSTNESS_SEED, specifications, summarizeRobustness, VERDICT, VERDICT_NAMES } from '../lib/robustness.js';
+import { CLASS_NAMES, CONTRAST_CLASS_NAMES, DEFAULT_MAX_SPECIFICATIONS, leastTolerantSentence, methodsSentence, robustnessChoices, robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_Q, ROBUSTNESS_SEED, specifications, summarizeRobustness, VERDICT, VERDICT_NAMES } from '../lib/robustness.js';
 import { recordedInputs } from '../lib/runs.js';
 import { workerInput } from './score-input.js';
 import { ensureResults, runEntry } from './run-results.js';
@@ -176,7 +176,7 @@ export function robustnessPane(app, run, results, view) {
     h('p', { style: { margin: '0 0 4px' } }, `Of ${formatCount(t.n)} ${t.kind === 'contrast' ? 'differences' : 'variants'} the declared analysis ${t.kind === 'contrast' ? 'estimates' : 'scores'}:`),
     badges,
     t.calls.declared ? h('p', { style: { margin: '0 0 4px', fontSize: '12.5px' } }, `Of the ${formatCount(t.calls.declared)} ${callWord}, ${formatCount(t.calls.every)} are called so in every analysis and ${formatCount(t.calls.most)} in 90% of them or more.`) : null,
-    t.kind === 'condition' && t.leastTolerant?.size ? h('p', { style: { margin: '0 0 4px', fontSize: '12.5px' } }, `Of the ${t.leastTolerant.size} least tolerant positions (the tenth with the least function), ${t.leastTolerant.every} are among them in every analysis, and ${t.leastTolerant.wide} among the least tolerant fifth.`) : null,
+    t.kind === 'condition' && t.leastTolerant?.size ? h('p', { style: { margin: '0 0 4px', fontSize: '12.5px' } }, leastTolerantSentence(t.leastTolerant)) : null,
     h('details', { style: { margin: '4px 0' } }, h('summary', 'In words'), h('p', { style: { fontSize: '12.5px' } }, t.text)),
     choicesTable(t),
     variantsTable(app, run, results, t, names, view.robustVerdict, summary.total),

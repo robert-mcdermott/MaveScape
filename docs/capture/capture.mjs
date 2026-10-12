@@ -57,6 +57,17 @@ const MAVEDB_TABLES = [
   ['urn:mavedb:00000063-a-1', join(ROOT, 'validation/cache/mavedb-dhfr/plus-lon'), 'dhfr-lon'],
   ['urn:mavedb:00000003-a-2', join(ROOT, 'validation/cache/mavedb-brca1-ring/aa'), 'brca1-ring'],
 ];
+// Published scores compared without opening them, or opened (wave 4, slice 6): TP53's three screens
+// and Hsp90's record's scores, from the validation's external data.
+const SCORE_TABLES = [
+  ['urn:mavedb:00000068-c-1', join(ROOT, 'validation/cache/mavedb-tp53-screens/scores.csv'), 'tp53-screens'],
+  ['urn:mavedb:00000068-b-1', join(ROOT, 'validation/cache/mavedb-tp53-screens/nutlin.csv'), 'tp53-screens'],
+  ['urn:mavedb:00000059-a-1', join(ROOT, 'validation/cache/mavedb-tp53-screens/kotler.csv'), 'tp53-screens'],
+  ['urn:mavedb:00000011-a-1', join(ROOT, 'validation/cache/mavedb-hsp90/scores.csv'), 'hsp90-rescoring'],
+];
+for (const [, file, scene] of SCORE_TABLES) {
+  if ((wanted.length === 0 || wanted.includes(scene)) && !existsSync(file)) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'tp53-screens' ? 'mavedb-tp53-screens' : 'mavedb-hsp90'}`);
+}
 for (const [, dir, scene] of MAVEDB_TABLES) {
   const scenes = scene === 'dhfr-lon' ? ['dhfr-lon', 'compare-maps', 'compare-disagreement', 'robustness'] : [scene];
   if ((wanted.length === 0 || wanted.some((w) => scenes.includes(w))) && !existsSync(join(dir, 'counts.csv'))) throw new Error(`The ${scene} scene needs MaveDB's tables: run node validation/fetch.mjs ${scene === 'dhfr-lon' ? 'mavedb-dhfr' : 'mavedb-brca1-ring'}`);
@@ -87,6 +98,12 @@ async function startMaveScape() {
     if (!existsSync(join(BRCA1_SGE, `${table}.csv`))) continue;
     cpSync(join(BRCA1_SGE, `${table}.csv`), join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv`));
     writeFileSync(join(cache, 'mavedb', `urn_mavedb_00000097-0-2.${table}.csv.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000097-0-2/${table}`, retrieved: '2026-10-11T04:13:31Z' }, null, 2)}\n`);
+  }
+  for (const [urn, file] of SCORE_TABLES) {
+    if (!existsSync(file)) continue;
+    const name = `${urn.replaceAll(':', '_')}.scores.csv`;
+    cpSync(file, join(cache, 'mavedb', name));
+    writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/scores`, retrieved: '2026-10-12T01:15:25Z' }, null, 2)}\n`);
   }
   for (const [urn, dir] of MAVEDB_TABLES) {
     for (const table of ['scores', 'counts']) {
@@ -548,6 +565,27 @@ const scenes = {
     await scrollTo('.robustness-pane', 'start');
     await clearToasts();
     await sleep(600);
+  },
+  // Two screens on two scales (wave 4, slice 6): TP53's etoposide screen, its target checked against
+  // UniProt, against Kotler et al.'s screen of the DNA-binding domain kept beside, both rescaled by
+  // their anchors.
+  async 'tp53-screens'() {
+    await example('tp53-screens');
+    await act('check_target', { accession: 'P04637', apply: true });
+    await act('compare', { a: 'Published scores', b: 'urn:mavedb:00000059-a-1', direction: 'higher-less', scale: 'synonymous-nonsense', show: 'agreement' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await sleep(800);
+  },
+  // A rescoring against the published scores (wave 4, slice 6): Hsp90's Run 1 against its record's
+  // own scores kept beside, stated to be on one scale, the Bland–Altman plot's trend in view.
+  async 'hsp90-rescoring'() {
+    await example('hsp90');
+    await act('compare', { a: 'Run 1', b: 'urn:mavedb:00000011-a-1', direction: 'higher-more', scale: 'stated', show: 'agreement' });
+    await act('set_mode', { mode: 'compare' });
+    await clearToasts();
+    await scrollTo('.compare-stats', 'start');
+    await sleep(800);
   },
   // Selections by query (wave 4, slice 5): factor IX's map with UniProt's features beside it, the
   // lost substitutions of the cysteines in its disulfide bonds selected by query and saved, the
