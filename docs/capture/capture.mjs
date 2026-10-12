@@ -654,6 +654,18 @@ const scenes = {
     await scrollTo('.structure-evidence', 'start');
     await sleep(1200);
   },
+  // Structures in the record (wave 5, slice 5): a view of 2VWF colored by GRB2's median scores,
+  // residues drawn and labeled, saved as Core: in the pane, the dataset tree and the inspector.
+  async 'structure-views'() {
+    await example('grb2-sh3');
+    await act('open_structure', { pdb: '2VWF' });
+    await act('set_structure', { color: 'median', select: 'pos 20-26', show: 'sticks' });
+    await act('set_structure', { select: 'pos 21+25', label: true });
+    await act('save_structure_view', { name: 'Core' });
+    await act('focus', { kind: 'structure view', name: 'Core' });
+    await scrollTo('.structure-views', 'start');
+    await sleep(1200);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

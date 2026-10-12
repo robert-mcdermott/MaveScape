@@ -121,12 +121,46 @@ section grows with each.
     least tolerant clustered beyond burial, one group joining the two domains. Its second step now
     points to what the analysis can do.
 
+- **Structures in the record (wave 5, slice 5; X5).** A view of a structure is kept with the
+  workspace, its structure with it (`lib/structure-record.js`, `ui/structure-views.js`).
+  - **Saved views** (Structure view, *Saved views*; the sidebar's *Structure views*): the
+    structure, assembly, chain, camera and view size, style, coloring (with the run, condition or
+    contrast and palette), surface, selection, labels, residue styles, focus and the evidence's
+    choices, under a name; saved again under a name, a view is replaced. Opened, from the list,
+    the sidebar or the inspector, a view is drawn again as it was, its target mapped again and any
+    difference from the mapping it was saved with said. Saving and removing are in the history.
+  - **The structure kept** (`structures`; FORMATS.md): the file as it came (RCSB's gzipped mmCIF,
+    AlphaFold DB's model with its aligned error, a file of the person's), stored in the library by
+    its SHA-256 and in the archive under `sources/`, with where and when it was retrieved. An
+    archive may name the structures by checksum only: a PDB entry or AlphaFold DB model is then
+    fetched again by its ID when its view opens, and its SHA-256 compared with the one saved.
+  - **Figure panels** (*Image*, *Figure panel*): the view at 4× its size in CSS pixels (a saved
+    view: the size it was saved at, so the same view gives the same image anywhere), the legend of
+    its colors below it, and what it shows as JSON in the PNG (`iTXt`, `mavescape-figure-panel`:
+    the structure and its file's SHA-256, the view, the coloring with its run's output, the legend)
+    for wave 6's figure builder.
+  - **The methods** describe each structure a view shows (its source, retrieval and SHA-256, the
+    readers and viewer), the target's alignment and its chain (positions on residues, identity,
+    residues that differ), the saved views, and, when evidence is read, DSSP, the accessible area,
+    StructureMap's exposure, PLIP's contacts and the tests with their settings; with their
+    references.
+  - **Remote control:** `save_structure_view`, `open_structure_view` (it says what differs in the
+    mapping, and how the structure was found), `remove_structure_view`; `export` writes
+    `structure-image` (`scale`, `legend`), an archive with or without the structures
+    (`include_structures`); `focus` takes a structure view; `get_state` gives the structures and
+    views kept.
+  - **The GRB2 example's sixth step** saves its view of 2VWF as "Core".
+
 ### Changed
 
 - The Structure view's words give a chain's UniProt residues as the entry gives them ("the entry
   gives UniProt P00740 128–183"): the mapping may place them otherwise.
 - The target mapped onto a structure is the target of the run the map shows (the workspace's, as
   before, when it has one target), so the mapping follows the run.
+- The Structure view's **Image** is a menu: the image (2×, as before) or a figure panel.
+- The archive's dialog asks whether to include the structures' files when the workspace keeps any;
+  its manifest says which (`structures`: `included` or `checksums`). MaveScape 0.4 reads such
+  archives, the structures' files among its sources.
 
 - Headless Chrome is started with WebGPU allowed (`docs/capture/cdp.mjs`), for the screenshots and
   the validation's sessions.

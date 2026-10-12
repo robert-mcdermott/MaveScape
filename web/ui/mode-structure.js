@@ -16,7 +16,7 @@
 // the scores by structural class, and the cluster test.
 
 import { h, icon, clear, downloadBlob } from './dom.js';
-import { toast } from './overlays.js';
+import { promptDialog, showMenu, toast } from './overlays.js';
 import { fetchPublic } from './public-data.js';
 import { createStructureViewer, STYLES, SURFACES } from './structure-viewer.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
@@ -33,6 +33,8 @@ import { colorStructure, coloringControls, createPositionStrip, positionWords, s
 import { coloringCSV } from '../lib/structure-scores.js';
 import { computeEvidence, evidenceState, evidenceStatistics, evidenceValues } from './structure-evidence.js';
 import { CLASSES, CLASS_BY_ID, describeClusters, describeEffects, evidenceCSV, SS_WORDS } from '../lib/structure-evidence.js';
+import { figurePanel, openView, removeView, saveView } from './structure-views.js';
+import { structureWords, viewWords } from '../lib/structure-record.js';
 
 // Residue styles for a selection, as the selection pane offers them.
 export const RESIDUE_STYLES = { sticks: 'Sticks', 'ball-stick': 'Ball and stick', spacefill: 'Spacefill', hide: 'Hide', none: 'As the rest' };
@@ -224,9 +226,12 @@ export function targetAccession(ws) {
   return target?.identifiers?.uniprot ?? '';
 }
 
-// Opens a structure: { pdb }, { alphafold } (an accession), or { file: { name, bytes } }, and the
-// chain to map the target on (`chain`; the best otherwise). Returns { ok, message, structure,
-// origin, mapping }; the structure is shown, replacing any other, the selection kept by position.
+// Opens a structure: { pdb }, { alphafold } (an accession), or { file: { name, bytes }, origin }
+// (origin: a kept structure's, wave 5 slice 5; a file of the person's otherwise), and the chain to
+// map the target on (`chain`; the best otherwise). keep: false not to keep the selection. Returns {
+// ok, message, structure, origin, mapping }; the structure is shown, replacing any other, the
+// selection kept by position. The bytes read are kept for the session (state.file), so a view of
+// it can be saved.
 export async function openStructure(app, what) {
   const state = structureState(app);
   const viewer = viewerOf(app);
@@ -238,7 +243,8 @@ export async function openStructure(app, what) {
     if (what.file) {
       bytes = what.file.bytes;
       name = what.file.name;
-      origin = { kind: 'file', name, opened: now() };
+      origin = what.origin ?? { kind: 'file', name, opened: now() };
+      if (origin.kind === 'alphafold' && origin.entry) entry = origin.entry;
     } else {
       const request = structureRequest(what.pdb ?? what.alphafold ?? '', what.pdb ? 'pdb' : 'alphafold');
       if (!request) return { ok: false, message: what.pdb ? `"${what.pdb}" is not a PDB ID (such as 2VWF).` : `"${what.alphafold}" is not a UniProt accession (such as P62993).` };
@@ -259,7 +265,9 @@ export async function openStructure(app, what) {
         if (!got.ok) return { ok: false, message: got.message };
         bytes = got.bytes;
         name = `AF-${request.id}-F1-model_v${entry.latestVersion}.cif`;
-        origin = { kind: 'alphafold', id: request.id, version: entry.latestVersion, retrieval: got.retrieval };
+        // The entry's words, kept with the origin so a saved view reopens offline as it was.
+        const kept = Object.fromEntries(['entryId', 'uniprotAccession', 'uniprotDescription', 'gene', 'organismScientificName', 'latestVersion', 'modelCreatedDate'].filter((k) => entry[k] !== undefined).map((k) => [k, entry[k]]));
+        origin = { kind: 'alphafold', id: request.id, version: entry.latestVersion, entry: kept, retrieval: got.retrieval };
       }
     }
     state.busy = `Reading ${name}…`;
@@ -268,8 +276,10 @@ export async function openStructure(app, what) {
     const structure = openStructureText(text, textName);
     if (entry) applyAlphafoldEntry(structure, entry);
     // The selection's target positions, to select them again on the new structure.
-    const kept = selectedPositions(state);
+    const kept = what.keep === false ? [] : selectedPositions(state);
     state.origin = origin;
+    state.file = { name, bytes };
+    state.view = null;
     state.query = '';
     state.message = null;
     state.serial += 1;
@@ -471,7 +481,10 @@ export function mountStructureMode(app, container) {
       h('span.spacer'),
       h(`span.renderer-badge${viewer.kind === 'canvas' ? '.fallback' : ''}`, { title: viewer.kind === 'canvas' ? `Drawn by the Canvas renderer: ${viewer.failure}. It draws without surfaces or ambient occlusion; Chrome, Edge and Brave offer WebGPU.` : 'Drawn with WebGPU' }, viewer.kind === 'canvas' ? 'Canvas' : 'WebGPU'),
       h('button.btn.small', { type: 'button', title: 'Fit the structure in the view (F)', onclick: () => viewer.fit() }, 'Fit'),
-      h('button.btn.small', { type: 'button', title: 'Save an image of the view (PNG, twice its size)', onclick: saveImage }, icon('download'), 'Image'));
+      h('button.btn.small', { type: 'button', title: 'An image of the view, or a figure panel with its legend', onclick: (event) => showMenu(event.currentTarget, [
+        { label: 'Image (PNG, twice the view\'s size)', icon: 'download', onSelect: saveImage },
+        { label: 'Figure panel (PNG, 4×, with its legend and what it shows)', icon: 'download', onSelect: savePanel },
+      ]) }, icon('download'), 'Image'));
   }
 
   // A coloring chosen: "scores:<how>", or one of the structure's own schemes.
@@ -504,6 +517,17 @@ export function mountStructureMode(app, container) {
       const blob = await viewer.capturePNG(2);
       const code = (viewer.structure.meta.code || 'structure').toLowerCase();
       downloadBlob(blob, `${code}.png`);
+    } catch (error) {
+      toast(error.message, { kind: 'error' });
+    }
+  }
+
+  // A figure panel (wave 5, slice 5): 4× the view, its legend below, what it shows written into it.
+  async function savePanel() {
+    try {
+      const panel = await figurePanel(app, { scale: 4, legend: true });
+      downloadBlob(new Blob([panel.bytes], { type: 'image/png' }), panel.name);
+      app.log(`Wrote the figure panel ${panel.name} (${panel.metadata.image.width} × ${panel.metadata.image.height}).`);
     } catch (error) {
       toast(error.message, { kind: 'error' });
     }
@@ -659,6 +683,34 @@ export function mountStructureMode(app, container) {
       h('p.muted.small', 'A click on a residue (or a position in the strip below the view) selects its substitutions on the map and shows the position in the inspector; a selection made on the map is drawn here. The view follows the run and condition the map shows.'));
   }
 
+  // Saved views (wave 5, slice 5): the workspace's, each reopened as it was saved; the view shown
+  // saved under a name.
+  function viewsPane(compact) {
+    const views = store.ws.structureViews ?? [];
+    if (!views.length && !viewer.structure) return null;
+    const save = async () => {
+      const name = await promptDialog({ title: 'Save the view', label: 'Name', value: views.find((v) => v.id === state.view)?.name ?? `${viewer.structure.meta.code || 'Structure'} ${views.length + 1}`, hint: 'The structure, its chain and mapping, the camera, style, colors (and the run they are of), the residues selected, drawn and labeled. A view saved under a name already used is saved again.' });
+      if (!name) return;
+      const saved = await saveView(app, name);
+      notice(saved.message, saved.ok ? 'ok' : 'warn');
+    };
+    const openIt = async (id) => {
+      const opened = await openView(app, id);
+      if (!opened.ok) notice(opened.message, 'warn');
+    };
+    const rows = views.map((v) => {
+      const entry = (store.ws.structures ?? []).find((x) => x.id === v.structure);
+      return h(`li${v.id === state.view ? '.current' : ''}`,
+        h('div', h('strong', v.name), h('span.muted', { title: entry ? structureWords(entry) : '' }, viewWords(v, store.ws))),
+        h('span.btn-row', h('button.btn.small', { type: 'button', onclick: () => openIt(v.id) }, v.id === state.view ? 'Again' : 'Open'),
+          h('button.icon-button', { type: 'button', title: `Remove the view "${v.name}"`, 'aria-label': `Remove the view ${v.name}`, onclick: () => { const r = removeView(app, v.id); notice(r.message, r.ok ? 'ok' : 'warn'); } }, icon('trash'))));
+    });
+    return h(`div.pane.structure-views${compact ? '.compact' : ''}`,
+      h('h3', icon('save'), 'Saved views', h('span.spacer'), views.length ? h('span.muted', String(views.length)) : null),
+      views.length ? h('ul.structure-rows', ...rows) : h('p.muted', 'A view saved here keeps the structure with the workspace (in the library, by its SHA-256, and in its archive) and reopens as it was: chain, camera, style, colors and the run they are of, residues selected, drawn and labeled.'),
+      viewer.structure ? h('div.btn-row', h('button.btn.small.primary', { type: 'button', onclick: save }, icon('save'), 'Save the view…')) : null);
+  }
+
   // Structure as evidence (wave 5, slice 4): the structural classes and the partners they are read
   // with, the scores by class, the cluster test, the file; the tracks beside the map.
   function evidencePane() {
@@ -762,15 +814,16 @@ export function mountStructureMode(app, container) {
     const structure = viewer.structure;
     if (state.message) sideEl.append(h(`div.callout.${state.message.kind === 'warn' ? 'warn' : 'ok'}`, icon(state.message.kind === 'warn' ? 'warning' : 'info'), h('span', state.message.text)));
     if (!structure) {
+      const views = viewsPane(false);
+      if (views) sideEl.append(views);
       sideEl.append(openPane(false));
       const list = structuresPane(false);
       if (list) sideEl.append(list);
       return;
     }
     const lines = describeStructure(structure);
-    sideEl.append(
-      h('div.pane.structure-words', h('h3', icon('info'), 'In words'), h('p.structure-origin', originText(state.origin, structure)), ...lines.map((line) => h('p', line))),
-      mappingPane());
+    sideEl.append(h('div.pane.structure-words', h('h3', icon('info'), 'In words'), h('p.structure-origin', originText(state.origin, structure)), ...lines.map((line) => h('p', line))));
+    sideEl.append(viewsPane(true), mappingPane());
     const scores = scoresPane();
     if (scores) sideEl.append(scores);
     const evidence = evidencePane();
@@ -836,7 +889,7 @@ export function mountStructureMode(app, container) {
       if ((topics.has('ws') || topics.has('focus')) && viewer.structure && state.mapKey !== mapKeyNow()) {
         mapStructure(app, state.mapping?.chain);
         changed = true;
-      } else if (topics.has('ws') && !viewer.structure) renderSide();
+      } else if (topics.has('ws')) renderSide();
       // A selection made on the map (or elsewhere: Score, Compare, remote control) drawn here.
       if (topics.has('selection') && viewer.structure && store.ui.selection !== state.syncedSelection && applyMapSelection(app)) changed = true;
       // The scores colored by: their run's results, the comparison, the colors' setting, the run.

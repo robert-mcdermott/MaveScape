@@ -1,5 +1,5 @@
 // The dataset tree: what the workspace holds, by kind (tables, targets, the design, score runs,
-// selections). Selecting an item focuses it (store.ui.focus): the inspector describes it, and the
+// structure views, selections). Selecting an item focuses it (store.ui.focus): the inspector describes it, and the
 // views that use it open on it.
 
 import { h, icon, clear, formatCount } from './dom.js';
@@ -33,6 +33,14 @@ const SECTIONS = [
     label: (r) => r.name ?? r.model ?? 'Score run',
     meta: (r) => (r.output ? `${formatCount(r.output.conditions[0]?.scored ?? 0)} scored` : ''),
     empty: 'Each scoring of the counts, with its parameters, kept unchanged.',
+  },
+  {
+    // Views of structures saved in Structure (wave 5, slice 5).
+    kind: 'structureView', title: 'Structure views', icon: 'structure',
+    items: (ws) => ws.structureViews ?? [],
+    label: (v) => v.name ?? 'View',
+    meta: (v) => v.chain ?? '',
+    empty: 'Views saved in Structure: the structure, its camera, colors and selection.',
   },
   {
     kind: 'selection', title: 'Selections', icon: 'target',

@@ -5,8 +5,12 @@
 //   workspace.json         the workspace document (targets, design, runs, selections, QC
 //                          thresholds, the hash-chained history)
 //   sources/<sha256>.<ext> the imported tables, byte for byte (left out when exported with
-//                          checksums only: the workspace names each by its SHA-256), and the files
-//                          of the annotations beside the map (always: wave 3, slice 5)
+//                          checksums only: the workspace names each by its SHA-256), the files
+//                          of the annotations beside the map (always: wave 3, slice 5), and the
+//                          files of the structures saved views show, as they came (wave 5, slice
+//                          5; left out when exported with checksums only: a PDB entry or
+//                          AlphaFold DB model is then fetched again by its ID, its SHA-256
+//                          checked)
 //   results/<run>.csv      each run's scores (one file per condition beyond the first)
 //   methods.md, references.bib   the latest run's methods and references
 //
@@ -35,7 +39,8 @@ const extension = (fileName) => {
 };
 
 // Writes the archive. options: { software: { version, commit }, sources: Map(sha256 → bytes) or
-// null for checksums only, annotations: Map(sha256 → bytes) of the annotations' files, results:
+// null for checksums only, annotations: Map(sha256 → bytes) of the annotations' files, structures:
+// Map(sha256 → bytes) of the structures' files or null for checksums only, results:
 // Map(run id → results) (runs without results are left out of results/), methods: { markdown,
 // bibtex } }. Returns { bytes, manifest }.
 // The files of a source the library keeps: its tables, and MaveDB's mapped variants beside them
@@ -50,6 +55,15 @@ export function sourceFiles(source) {
 // files; wave 3, slice 5).
 export function annotationFiles(ws) {
   return (ws.annotations ?? []).filter((a) => a.file?.sha256).map((a) => ({ sha256: a.file.sha256, fileName: a.file.fileName, name: a.name }));
+}
+
+// The files of the structures the workspace's saved views show (ws.structures; wave 5, slice 5): each
+// structure's file and a model's aligned error.
+export function structureFiles(ws) {
+  return (ws.structures ?? []).flatMap((s) => [
+    { sha256: s.file.sha256, fileName: s.file.fileName, name: s.name },
+    ...(s.pae?.sha256 ? [{ sha256: s.pae.sha256, fileName: s.pae.fileName, name: `${s.name}'s aligned error` }] : []),
+  ]);
 }
 
 export async function writeArchive(ws, options = {}) {
@@ -76,6 +90,16 @@ export async function writeArchive(ws, options = {}) {
       if (!bytes) throw new Error(`The annotation ${f.name} (${f.fileName}) is not in the library: remove it, or add it again.`);
       files.push({ name: `sources/${f.sha256}${extension(f.fileName)}`, data: bytes });
     }
+    // The structures' files (wave 5, slice 5), unless named by their checksums only.
+    if (options.structures) {
+      for (const f of structureFiles(ws)) {
+        if (seen.has(f.sha256)) continue;
+        seen.add(f.sha256);
+        const bytes = options.structures.get(f.sha256);
+        if (!bytes) throw new Error(`The structure file of ${f.name} (${f.fileName}) is not in the library: export with checksums only, or open the view again.`);
+        files.push({ name: `sources/${f.sha256}${extension(f.fileName)}`, data: bytes });
+      }
+    }
   }
   for (const run of ws.runs) {
     const results = options.results?.get(run.id);
@@ -95,6 +119,7 @@ export async function writeArchive(ws, options = {}) {
     software: { name: 'MaveScape', version: options.software?.version ?? null, commit: options.software?.commit || null },
     workspace: { id: ws.id, name: ws.name, format: ws.format, version: ws.version },
     sources: options.sources ? 'included' : 'checksums',
+    ...((ws.structures ?? []).length ? { structures: options.structures ? 'included' : 'checksums' } : {}),
     contents: files.map((f) => ({ path: f.name, sha256: sha256(f.data), bytes: f.data.length })),
   };
   const all = [{ name: 'manifest.json', data: encoder.encode(`${JSON.stringify(manifest, null, 2)}\n`) }, ...files];
@@ -188,6 +213,7 @@ export async function readArchive(bytes, limits = LIMITS) {
     for (const s of ws.sources) for (const f of sourceFiles(s)) if (!sources.has(f.sha256)) problems.push(`The table ${f.fileName ?? s.name} is not in the archive.`);
   }
   for (const f of annotationFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The annotation ${possessive(f.name)} file (${f.fileName}) is not in the archive: its tracks will not show.`);
+  if (manifest.structures === 'included') for (const f of structureFiles(ws)) if (!sources.has(f.sha256)) problems.push(`The structure file of ${f.name} (${f.fileName}) is not in the archive: its saved views will fetch it again or ask for it.`);
   const results = new Map([...files].filter(([n]) => n.startsWith('results/')).map(([n, d]) => [n, decoder.decode(d)]));
   const methods = files.has('methods.md') ? { markdown: decoder.decode(files.get('methods.md')), bibtex: files.has('references.bib') ? decoder.decode(files.get('references.bib')) : '' } : null;
   return { manifest, ws, sources, results, methods, problems };

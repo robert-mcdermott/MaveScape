@@ -21,7 +21,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
 | Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV) |
 
-Coming later: Excel workbooks, structures kept with the workspace (0.5).
+Coming later: Excel workbooks.
 
 ## Structures
 
@@ -44,8 +44,9 @@ The first model of a file is drawn; an assembly is built from the deposited coor
 operators. The entry's record of the UniProt residues each chain covers (`DBREF`, `struct_ref_seq`)
 and of where its sequence differs from UniProt's (`SEQADV`, `struct_ref_seq_dif`) are read, and
 reported beside the mapping of the target (below, "Structure mappings"). The view's image is a PNG
-at twice the view's size. A structure is shown for the session: it is not yet saved with the
-workspace.
+at twice the view's size, or a figure panel (below, "Figure panels"). A structure is shown for the
+session; a view of it saved (MaveScape 0.5) keeps it with the workspace (below, "Workspace
+archives": `structures`, `structureViews`).
 
 ## Count tables
 
@@ -363,11 +364,13 @@ A ZIP archive holding everything needed to reopen an analysis elsewhere:
 
 ```
 manifest.json            format "mavescape-archive", version 1, created, software (version, commit),
-                         sources ("included" or "checksums"), and every other file with its
-                         SHA-256 and size
+                         sources ("included" or "checksums"), structures (the same, when the
+                         workspace keeps any), and every other file with its SHA-256 and size
 workspace.json           the workspace document (below)
-sources/<sha256>.<ext>   each imported table, byte for byte (left out with "checksums only"), and
-                         each annotation's file (always; MaveScape 0.3)
+sources/<sha256>.<ext>   each imported table, byte for byte (left out with "checksums only"),
+                         each annotation's file (always; MaveScape 0.3), and the file of each
+                         structure a saved view shows, as it came, with a model's aligned error
+                         (MaveScape 0.5; left out when the structures are named by checksum)
 results/<run-id>.csv     each run's scores (results/<run-id>.<condition>.csv for further
                          conditions), as the scores export below
 methods.md               the latest run's methods
@@ -445,6 +448,41 @@ license: { short, open }, keywords, variants, target, targetOrigin, others, read
 }` (the target as a design's, fetched when the record names a transcript; `readout.direction` as a
 person states it, MaveDB recording none). Adding and removing one, and stating a score set's
 direction, are in the history.
+
+`structures` and `structureViews` (MaveScape 0.5, absent until a view is saved) keep the
+**structures** the Structure view's saved views show, and the views. A structure: `{ id, name,
+title, method, origin, file: { fileName, sha256, size }, pae, added }`, where `origin` is `{ kind:
+"pdb", id, retrieval: { retrieved, source } }`, `{ kind: "alphafold", id (the accession), version,
+entry (AlphaFold DB's words of it), retrieval }` or `{ kind: "file", name }`; `file` is the structure's
+file as it came (RCSB's gzipped mmCIF, AlphaFold DB's file, the person's), kept in the library and
+the archive by its SHA-256, and `pae` a model's aligned error, kept the same way. A structure stays
+while a view shows it. A view:
+
+```json
+{
+  "id": "Core", "name": "Core", "structure": "pdb-2VWF", "created": "2026-10-12T05:42:02.543Z",
+  "assembly": "asym", "chain": "A",
+  "mapping": { "target": { "name": "GRB2 SH3 domain", "length": 56, "offset": 158, "accession": "P62993" },
+    "chain": "A", "onStructure": 56, "identical": 55, "aligned": 56, "identity": 0.982143,
+    "positions": ["1–56"], "reference": ["159–214"], "differences": ["P54A"] },
+  "camera": { "target": [x, y, z], "distance": 61.2, "rotation": [x, y, z, w], "fov": 0.748, "orthographic": false, … },
+  "size": { "width": 859, "height": 848 },
+  "style": "cartoon",
+  "color": { "scheme": "scores", "scores": { "how": "median", "substitution": "P", "abnormal": { … } },
+    "palette": "rdbu", "run": "run-b981d1a1b2d769de", "condition": 0, "contrast": null },
+  "surface": "off", "selection": ["A:21:ARG", …], "labels": [ … ], "styles": { "A:21:ARG": "sticks" }, "focus": [],
+  "evidence": { "choice": "all", "fraction": 0.2, "seed": 1 }
+}
+```
+
+`mapping` is the target's mapping when the view was saved (lib/structure-record.js,
+`mappingSummary`); opened, the view maps the target again and says what differs. `size` is the
+view's in CSS pixels: a figure panel of the view is drawn at it, so the same view gives the same
+image anywhere. Residues are keyed `chain:number[insertion code]:name`. Saving and removing a view
+are in the history; a view saved under a name already used replaces it. Exported with the
+structures named by checksum only, a PDB entry or AlphaFold DB model is fetched again by its ID when
+its view opens, and its SHA-256 compared with the one saved; a file of the person's must be opened
+again.
 
 `tracks` (MaveScape 0.3, absent until changed) is the arrangement of the tracks: `{ order: [track
 ids], hidden: [track ids], filters: { track id: filter } }`. A track's id is a built-in one
@@ -874,6 +912,20 @@ The tracks shown, position by position: `position`, `reference_position` (with a
 the count, largest or mean as the track draws it, and a second column, `<track>: variants`, each
 variant there with its label; a features track: the features covering the position). Read again,
 it is a custom track (above).
+
+### Figure panels of a structure (`*_panel.png`)
+
+The Structure view's **Image**, *Figure panel* (`export` with `what: "structure-image"`; MaveScape
+0.5): a PNG of the view, `scale` times its size in CSS pixels (4 by default; a saved view opened:
+the size it was saved at), the legend of its colors drawn below it, and an `iTXt` chunk (UTF-8,
+uncompressed), keyword `mavescape-figure-panel`, holding what it shows as JSON: `format`
+(`mavescape-figure-panel`), `version` 1, `kind` (`structure`), `created`, `software`, `workspace`
+(`id`, `name`), `structure` (`name`, `title`, `origin`, `sha256` of its file, `kept`: the kept
+structure's id), `view` (the view as a saved view records it, and `saved`: the saved view's id when
+one was opened), `coloring` (`kind`, `how`, `label`, `source`, `run` with its output's SHA-256,
+`condition`, `palette`, `domain`; or the structure's own `scheme`), `legend` (`title`, `low`,
+`center`, `high`, `meaning`, `items`) and `image` (`width`, `height`, `scale`, `view`, `legend`,
+`renderer`). Wave 6's figure builder reads it; any PNG reader that lists text chunks shows it.
 
 ### Structure mappings
 

@@ -5,6 +5,8 @@
 import { h, icon, clear, relativeTime, formatBytes, formatCount } from './dom.js';
 import { variantSection } from './variant-inspector.js';
 import { positionSection } from './position-inspector.js';
+import { structureWords, viewWords } from '../lib/structure-record.js';
+import { toast } from './overlays.js';
 import { targetOriginText } from '../lib/genbank.js';
 import { retrievalText } from '../lib/uniprot.js';
 import { recordView } from './mavedb.js';
@@ -104,6 +106,25 @@ export function mountInspector(app) {
         h('button.btn.small', { type: 'button', onclick: () => exportSelection(app, selection, 'json') }, icon('download'), 'JSON')));
   }
 
+  // A saved view of a structure (wave 5, slice 5): what it shows, its structure's file and origin.
+  function structureViewSection(view) {
+    const ws = app.store.ws;
+    const entry = (ws.structures ?? []).find((s) => s.id === view.structure);
+    return h('section.inspector-section', h('h3', icon('structure'), view.name),
+      h('dl.kv',
+        h('dt', 'Shows'), h('dd', viewWords(view, ws)),
+        entry ? [h('dt', 'Structure'), h('dd', structureWords(entry, { sha: false }))] : null,
+        entry ? [h('dt', 'File'), h('dd', { title: entry.file.sha256 }, `${entry.file.fileName}, SHA-256 ${entry.file.sha256.slice(0, 12)}…`)] : null,
+        view.mapping ? [h('dt', 'Mapping'), h('dd', `${view.mapping.target.name} on chain ${view.mapping.chain}: ${view.mapping.onStructure} positions, ${view.mapping.identical} identical`)] : null,
+        h('dt', 'Saved'), h('dd', relativeTime(view.created))),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: async () => {
+        await app.setMode('structure');
+        const { openView } = await import('./structure-views.js');
+        const opened = await openView(app, view.id);
+        if (!opened.ok) toast(opened.message, { kind: 'error' });
+      } }, icon('structure'), 'Open the view')));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
     if (focus?.kind === 'source') {
@@ -126,6 +147,10 @@ export function mountInspector(app) {
     if (focus?.kind === 'position') {
       const section = positionSection(app, focus);
       if (section) return section;
+    }
+    if (focus?.kind === 'structureView') {
+      const view = (app.store.ws.structureViews ?? []).find((x) => x.id === focus.id);
+      if (view) return structureViewSection(view);
     }
     if (focus?.kind === 'run') {
       const run = app.store.ws.runs.find((x) => x.id === focus.id);

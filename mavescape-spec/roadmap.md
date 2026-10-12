@@ -2349,6 +2349,59 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    `.msz` archive (or referenced by ID with checksums); saved views (structure, chain, mapping,
    camera, style, coloring) reopen identically; high-resolution images with their legend as
    figure panels for wave 6; the mapping and structural tracks in the methods.
+   - **Done.** `lib/structure-record.js` (pure) and `ui/structure-views.js`. A view saved in the
+     Structure view's *Saved views* keeps the structure, assembly, chain, the mapping in brief
+     (`mappingSummary`), the camera and the view's size, style, coloring (with the run,
+     condition or contrast and palette it shows), surface, selection, labels, residue styles,
+     focus and the evidence's choices (`ws.structureViews`); its structure (`ws.structures`) keeps
+     the file as it came (RCSB's gzipped mmCIF, AlphaFold DB's model and its aligned error, a
+     file of the person's) by SHA-256 in the library, with where and when it was retrieved, and
+     stays while a view shows it.
+     - **Reopened** from the list, the sidebar's *Structure views* or the inspector: everything
+       restored, the camera last; the target mapped again and any difference from the mapping
+       saved said (`mappingChanges`).
+     - **The archive** carries each structure's file under `sources/` (`structures: "included"`),
+       or names it by checksum (`"checksums"`): a PDB entry or AlphaFold DB model is then fetched
+       again by its ID when its view opens, its SHA-256 compared with the one saved.
+     - **Figure panels:** *Image*, *Figure panel*: 4× the view's size in CSS pixels (a saved view:
+       the size it was saved at), the legend of its colors drawn below, and what it shows as JSON
+       in the PNG (`iTXt`, `mavescape-figure-panel`) for wave 6's figure builder (FORMATS.md).
+     - **The methods:** each structure (its source, retrieval date and file's SHA-256, read with
+       MaveScape's copy of Proteoscope's readers), the target's alignment and chain, the saved
+       views, and the structural measures and tests with their settings; ten new references.
+     - Remote control's `save_structure_view`, `open_structure_view`, `remove_structure_view`,
+       `export` of `structure-image` and of an archive without the structures
+       (`include_structures`), `focus` on a structure view. GRB2's sixth step saves its view; a
+       screenshot scene (`structure-views`); the guide page *Structures*, its section on saved
+       views and figure panels.
+     - Validation:
+       - `structures` (23 checks, 2 new): a saved view of each example protein's PDB entry and
+         AlphaFold DB model (14) through the archive, every file the same bytes and every view the
+         same, the mapping made again from each file the one saved, named by checksum only and
+         each fetched again by its ID; the methods of GRB2's run with a view of 2VWF.
+       - `remote-session.mjs` (155 checks): a view of 2VWF saved, changed and opened again gives
+         the same figure panel pixel for pixel, as does the view opened from the workspace's
+         archive in a copy and from an archive naming the structure by checksum (fetched again);
+         the panel's metadata; a view removed with its structure.
+       - Unit tests: `structure-record.test.mjs` (6).
+   - Found by slice 5:
+     - **Reopening identically needs the view's size.** The same camera draws a different image in
+       a canvas of another shape, and the canvas's shape follows the window and the panes beside
+       it. A view keeps its size in CSS pixels, and its panel is drawn at that size, scaled from
+       CSS pixels rather than by the screen's density: the panel of a view saved, changed and
+       opened again, or opened from its archive in another workspace, is the same image pixel for
+       pixel.
+     - **0.4 reads 0.5's archives.** The structures' files go under `sources/`, which 0.4's reader
+       accepts by name, and the workspace's new fields pass through it: 0.4.0's `readArchive`
+       reads an archive with them, included or named by checksum, with no problems and its
+       history whole.
+     - **A structure fetched again may not be the one saved.** RCSB revises entries (slice 1), so
+       a structure named by checksum is compared, after it is fetched again, with the SHA-256
+       saved, and the view says when it differs; its mapping is checked as well.
+     - **A legend is not Latin-1.** The legend's minus sign and Ångström do not fit a PNG `tEXt`
+       chunk; the panel's metadata goes in `iTXt` (UTF-8).
+     - **Every example structure maps again as saved** from its archived file: all 14 entries
+       and models, the same chain, positions and differences.
 6. **Optional: open in Proteoscope (X6).** For Proteoscope's deeper analyses (interfaces,
    ligands, validation reports, superposition, maps), when it is installed: `handoff.go` finds a
    running Proteoscope and sends what it already accepts (a link with the structure and a

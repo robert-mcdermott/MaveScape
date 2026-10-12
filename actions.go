@@ -53,8 +53,8 @@ var remoteActions = []remoteAction{
 	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map, compare or structure.", InputSchema: schema(map[string]any{
 		"mode": textArg("start, experiment, qc, score, map, compare or structure."),
 	}, "mode")},
-	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
-		"kind": textArg("table, target, run, selection or variant; found by name across all of them if not given."),
+	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
+		"kind": textArg("table, target, run, selection, structure view or variant; found by name across all of them if not given."),
 		"name": textArg("Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala)."),
 		"run":  runArg,
 	})},
@@ -202,15 +202,27 @@ var remoteActions = []remoteAction{
 		"fraction": map[string]any{"type": "number", "minimum": 0.05, "maximum": 0.5, "description": "The share of positions called least tolerant for the cluster test (0.2 if not given)."},
 		"seed":     map[string]any{"type": "integer", "minimum": 1, "description": "The seed of the cluster test's draws (1 if not given)."},
 	}), long: true},
+	{Name: "save_structure_view", Description: "Saves the view of the structure shown with the workspace, under a name (one already used is saved again): the structure's file kept in the library by its SHA-256 (and a model's aligned error), the assembly, the chain and the mapping, the camera, style, colors and the run and condition they are of, the surface, the residues selected, drawn, labeled and focused on, and the evidence's settings. It reopens as it was, goes into the workspace's archive and is described in its methods.", InputSchema: schema(map[string]any{
+		"name": textArg("The view's name."),
+	}, "name"), long: true},
+	{Name: "open_structure_view", Description: "Opens a saved view as it was saved: its structure from the library (or fetched again by its ID, its SHA-256 checked), and everything the view records. Says whether the mapping is the one the view was saved with.", InputSchema: schema(map[string]any{
+		"name": textArg("The saved view's name."),
+	}, "name"), long: true},
+	{Name: "remove_structure_view", Description: "Removes a saved view, and its structure when no other view shows it (undoable, in the history).", InputSchema: schema(map[string]any{
+		"name": textArg("The saved view's name."),
+	}, "name")},
 	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), the comparison shown (its matched variants, CSV; its report and statistics, JSON; its positions, maps or a predictor's classes), or a run's robustness to analysis choices. Needs the token.", InputSchema: schema(map[string]any{
-		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb, comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions, structure-mapping (the target on the structure shown, position by position, CSV), structure-scores (the scores the structure is colored by, position by position, with each residue's color, CSV) or structure-evidence (what the structure says of each position: secondary structure, accessibility, exposure, partner, class, with its median score, CSV)."),
-		"path":           textArg("The absolute path of the file to write."),
-		"overwrite":      flagArg("Replace the file if it exists."),
-		"run":            runArg,
-		"condition":      conditionArg,
-		"include_tables": flagArg("archive: include the count tables (the default), or name each by its SHA-256 only."),
-		"selection":      textArg("selection: a saved selection by name; the current selection if not given."),
-		"map":            textArg("comparison-map: first, second or difference (the default)."),
+		"what":               textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb, comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions, structure-mapping (the target on the structure shown, position by position, CSV), structure-scores (the scores the structure is colored by, position by position, with each residue's color, CSV), structure-evidence (what the structure says of each position: secondary structure, accessibility, exposure, partner, class, with its median score, CSV) or structure-image (a figure panel of the view shown: PNG, its legend below it, what it shows written into it)."),
+		"path":               textArg("The absolute path of the file to write."),
+		"overwrite":          flagArg("Replace the file if it exists."),
+		"run":                runArg,
+		"condition":          conditionArg,
+		"include_tables":     flagArg("archive: include the count tables (the default), or name each by its SHA-256 only."),
+		"include_structures": flagArg("archive: include the files of the structures the saved views show (the default), or name each by its ID and SHA-256 only."),
+		"scale":              map[string]any{"type": "number", "minimum": 1, "maximum": 8, "description": "structure-image: the image's size against the view's (4 if not given)."},
+		"legend":             flagArg("structure-image: draw the legend below the image (the default)."),
+		"selection":          textArg("selection: a saved selection by name; the current selection if not given."),
+		"map":                textArg("comparison-map: first, second or difference (the default)."),
 	}, "what", "path"), long: true, output: true},
 }
 

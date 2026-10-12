@@ -57,6 +57,8 @@ import { activeRun } from './selections.js';
 import { computeEvidence, evidenceState, evidenceStatistics, evidenceValues } from './structure-evidence.js';
 import { scoreSource } from './structure-coloring.js';
 import { CLASSES, describeClusters, describeEffects, evidenceCSV } from '../lib/structure-evidence.js';
+import { figurePanel, openView, removeView, saveView } from './structure-views.js';
+import { structureWords, viewWords } from '../lib/structure-record.js';
 import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
@@ -373,6 +375,9 @@ export function installRemote(app) {
         steps: steps.map((s) => ({ id: s.id, label: s.label, state: s.state, detail: s.detail })),
         next: next ? { step: next.id, state: next.state, detail: next.detail, action: next.action?.label ?? null } : null,
         structure: structureSummary(false),
+        // The structures kept and their saved views (wave 5, slice 5).
+        structures: (w.structures ?? []).map((x) => ({ id: x.id, name: x.name, origin: x.origin?.kind ?? null, file: x.file.fileName, sha256: x.file.sha256, ...(x.pae ? { alignedError: x.pae.sha256 } : {}) })),
+        structureViews: (w.structureViews ?? []).map((v) => ({ id: v.id, name: v.name, structure: v.structure, chain: v.chain, shows: viewWords(v, w), created: v.created })),
       };
       const message = `${w.name}: ${plural(w.sources.length, 'table')}, ${plural(w.runs.length, 'score run')}${w.design ? `, a ${w.design.model} design` : ', no design'}; showing ${data.mode}.${next ? ` ${next.state === 'optional' ? 'All done' : 'Next'}: ${next.detail}` : ''}`;
       return { message, data };
@@ -656,6 +661,36 @@ export function installRemote(app) {
       return { message: lines.join(' '), data };
     },
 
+    // Saved views of structures (wave 5, slice 5).
+    async save_structure_view(args) {
+      if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure, then save the view of it.');
+      if (!args.name || !String(args.name).trim()) throw new ActionError('Give the view a name.');
+      const saved = await saveView(app, String(args.name));
+      if (!saved.ok) throw new ActionError(saved.message);
+      await settle();
+      return { message: saved.message, data: { id: saved.id, name: saved.view.name, structure: { id: saved.structure.id, name: saved.structure.name, file: saved.structure.file, origin: saved.structure.origin?.kind ?? null, ...(saved.structure.pae ? { alignedError: saved.structure.pae } : {}) }, view: saved.view } };
+    },
+
+    async open_structure_view(args) {
+      const views = ws().structureViews ?? [];
+      if (!views.length) throw new ActionError('This workspace has no saved view: save one with save_structure_view.');
+      const name = choose(String(args.name ?? ''), views.map((v) => v.name), 'saved view');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      const opened = await openView(app, views.find((v) => v.name === name).id);
+      if (!opened.ok) throw new ActionError(opened.message);
+      await surfaceReady(structureState(app).viewer);
+      await settle();
+      return { message: opened.message, data: { view: name, structure: structureWords(opened.structure), mappingChanges: opened.changes, notes: opened.notes, state: structureSummary() } };
+    },
+
+    async remove_structure_view(args) {
+      const views = ws().structureViews ?? [];
+      const name = choose(String(args.name ?? ''), views.map((v) => v.name), 'saved view');
+      const removed = removeView(app, views.find((v) => v.name === name).id);
+      await settle();
+      return { message: removed.message, data: { removed: name, views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
+    },
+
     async set_mode(args) {
       const mode = MODES[choose(args.mode, Object.keys(MODES), 'view')];
       await app.setMode(mode);
@@ -669,9 +704,9 @@ export function installRemote(app) {
         app.focusItem(null);
         return { message: 'Cleared the focus.' };
       }
-      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant' };
+      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant', 'structure view': 'structureView' };
       const kind = args.kind ? kinds[choose(args.kind, Object.keys(kinds), 'kind')] : null;
-      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections };
+      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections, structureView: w.structureViews ?? [] };
       const candidates = Object.entries(lists).filter(([k]) => !kind || k === kind).flatMap(([k, items]) => items.map((item) => ({ kind: k, id: item.id, name: item.name })));
       // A variant by its name, when nothing else is called that.
       const looksLikeVariant = /^p\.[A-Z][a-z]{2}\d+/.test(variantName(args.name)) && !candidates.some((c) => c.name === args.name);
@@ -680,7 +715,7 @@ export function installRemote(app) {
       const item = candidates.find((c) => c.name === name);
       app.focusItem({ kind: item.kind, id: item.id });
       await settle();
-      return { message: `Showing ${name} in the inspector.`, data: { kind: item.kind === 'source' ? 'table' : item.kind, name } };
+      return { message: `Showing ${name} in the inspector.`, data: { kind: item.kind === 'source' ? 'table' : item.kind === 'structureView' ? 'structure view' : item.kind, name } };
     },
 
     async draft_design(args) {
@@ -1368,7 +1403,7 @@ export function installRemote(app) {
     },
 
     async export(args) {
-      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence'];
+      const kinds = [...RUN_FILES, 'map', 'selection', 'archive', 'package', 'mavedb', 'tracks', 'comparison', 'comparison-positions', 'comparison-map', 'comparison-classes', 'robustness', 'robustness-positions', 'structure-mapping', 'structure-scores', 'structure-evidence', 'structure-image'];
       const what = choose(args.what, kinds, 'export');
       let file;
       // The target on the structure shown (wave 5, slice 2), position by position.
@@ -1377,6 +1412,15 @@ export function installRemote(app) {
         if (!state.mapping) throw new ActionError(state.viewer?.structure ? 'The target is not mapped onto the structure shown (map_structure says why).' : 'No structure is open: open one with open_structure.');
         const name = state.viewer.structure.meta.code || state.viewer.structure.label;
         return { file: mappingCSV(state.mapping, name), message: `The mapping of ${state.mapping.target.name} onto chain ${state.mapping.chain} of ${name}: ${state.mapping.target.length} positions.` };
+      }
+      // A figure panel of the view shown (wave 5, slice 5): a PNG, its legend below it, what it
+      // shows written into it.
+      if (what === 'structure-image') {
+        if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure.');
+        const scale = args.scale === undefined || args.scale === null ? 4 : Number(args.scale);
+        if (!(scale >= 1 && scale <= 8)) throw new ActionError('scale is from 1 to 8: the image\'s size against the view\'s.');
+        const panel = await figurePanel(app, { scale, legend: args.legend !== false });
+        return { file: panel.bytes, message: `A figure panel of ${panel.metadata.structure.name}: ${panel.metadata.image.width} × ${panel.metadata.image.height} pixels (${scale}× the view${panel.metadata.image.legend ? ', its legend below it' : ''}), what it shows written into it (PNG text "mavescape-figure-panel").` };
       }
       // What the structure says of each position (wave 5, slice 4), with its median score.
       if (what === 'structure-evidence') {
@@ -1458,8 +1502,9 @@ export function installRemote(app) {
         return { file: made.bytes, message: `${possessive(run.name)} MaveDB deposit: ${r.variants.exported} variants${r.missing.length ? `; MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.field).join(', ')}` : ', ready for MaveDB'}.`, data: { mode: r.mode, variants: r.variants, missing: r.missing, ready: r.ready, files: made.deposit.files.map((f) => f.name) } };
       }
       if (what === 'archive') {
-        file = await archiveFile(app, { includeTables: args.include_tables !== false });
-        return { file: file.bytes, message: `The workspace archive of "${ws().name}" (${plural(ws().runs.length, 'run')}${args.include_tables === false ? ', tables by checksum only' : ', with its tables'}).` };
+        file = await archiveFile(app, { includeTables: args.include_tables !== false, includeStructures: args.include_structures !== false });
+        const kept = (ws().structures ?? []).length;
+        return { file: file.bytes, message: `The workspace archive of "${ws().name}" (${plural(ws().runs.length, 'run')}${args.include_tables === false ? ', tables by checksum only' : ', with its tables'}${kept ? `; ${plural(kept, 'structure')}${args.include_structures === false ? ' by ID and checksum only' : ''}` : ''}).` };
       }
       if (what === 'selection') {
         const saved = args.selection ? ws().selections.find((s) => s.name === choose(args.selection, ws().selections.map((x) => x.name), 'saved selection')) : null;

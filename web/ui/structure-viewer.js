@@ -617,6 +617,19 @@ export function createStructureViewer(options = {}) {
     get styled() {
       return new Map(state.display.residueStyles ?? []);
     },
+    // The camera, as a saved view keeps it (wave 5, slice 5).
+    get camera() {
+      const c = cloneCamera(state.camera);
+      return { target: c.target, distance: c.distance, rotation: c.rotation, fov: c.fov, orthographic: c.orthographic, near: c.near, far: c.far, offset: c.offset, sceneRadius: c.sceneRadius };
+    },
+    // A saved camera: the view drawn from it exactly, no fitting after it.
+    setCamera(camera) {
+      Object.assign(state.camera, cloneCamera({ ...state.camera, ...camera }));
+      state.cameraAnimation = null;
+      state.pendingFit = false;
+      state.fitted = false;
+      requestRender();
+    },
     // Drawing runs while the viewer is in the page.
     attach() {
       if (state.attached) return;
@@ -792,11 +805,17 @@ export function createStructureViewer(options = {}) {
       const m = model();
       return m ? { atoms: m.atoms.length, residues: m.residues.length, renderer: state.kind } : null;
     },
-    // An image of what is shown (a PNG blob), `factor` times the canvas's size.
-    async capturePNG(factor = 1) {
-      const view = currentView();
-      const width = Math.round(canvas.width * factor);
-      const height = Math.round(canvas.height * factor);
+    // The view's size in CSS pixels (a saved view keeps it; wave 5, slice 5).
+    get size() {
+      return { width: canvas.clientWidth, height: canvas.clientHeight };
+    },
+    // An image of what is shown (a PNG blob), `factor` times the canvas's size; or, with a size in
+    // CSS pixels, `factor` times that size, drawn at its aspect (a figure panel of a saved view: the
+    // same image whatever the window and screen).
+    async capturePNG(factor = 1, size = null) {
+      const width = Math.max(1, Math.round((size ? size.width : canvas.width) * factor));
+      const height = Math.max(1, Math.round((size ? size.height : canvas.height) * factor));
+      const view = size ? { ...cameraMatrices(state.camera, width / height), orthographic: state.camera.orthographic } : currentView();
       const image = state.kind === 'webgpu' ? await state.renderer.capture(view, renderSettings(), width, height, 2) : await state.renderer.capture(view, renderSettings(), width, height);
       const out = h('canvas', { width: image.width, height: image.height });
       out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength), image.width, image.height), 0, 0);

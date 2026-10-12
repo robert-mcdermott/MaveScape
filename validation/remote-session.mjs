@@ -41,8 +41,9 @@ import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
 import { sha256 } from '../web/lib/sha256.js';
-import { EXAMPLE_STRUCTURES, cachedJSON, exampleTarget, modelFile, nodeEvidence, openCached, paeFixture, pdbFile } from './structure-cases.mjs';
+import { EXAMPLE_STRUCTURES, cachedBytes, cachedJSON, exampleTarget, modelFile, nodeEvidence, openCached, paeFixture, pdbFile } from './structure-cases.mjs';
 import { clusterTest, effectsByClass, evidenceCSV } from '../web/lib/structure-evidence.js';
+import { PANEL_KEYWORD, pngTexts } from '../web/lib/structure-record.js';
 import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/lib/mapping.js';
 import { cellsAtPositions, coloringCSV, coloringLegend, coloringPalette, placeOnTarget, POSITION, positionValues, residueColors, thresholdClasses } from '../web/lib/structure-scores.js';
 import { cellAt, cellName } from '../web/lib/map-model.js';
@@ -826,6 +827,61 @@ try {
   const evDisorderedNode = evModelNode.evidence.positions.filter((p) => p.class === 'disordered').length;
   check('structure_evidence on GRB2\'s AlphaFold DB model: its aligned error fetched (from the cache) and used, the classes as Node reads them with it', `aligned error ${evOnModelEvidence.data.alignedError}; ${JSON.stringify(evOnModelEvidence.data.classes)}`, evOnModelEvidence.data.alignedError === true && evModelNode.pae && evOnModelEvidence.data.classes.disordered === evDisorderedNode && evOnModelEvidence.data.classes.buried === evModelNode.evidence.positions.filter((p) => p.class === 'buried').length);
   await act('set_structure', { color: 'plddt' });
+  // Wave 5, slice 5: structures in the record. A view of 2VWF saved, changed, opened again: its
+  // figure panels the same image; through the archive; its structure fetched again by its ID.
+  // A PNG without its text chunks: the image alone, to compare.
+  const imageOnly = (bytes) => {
+    const out = [bytes.subarray(0, 8)];
+    let at = 8;
+    while (at + 12 <= bytes.length) {
+      const length = bytes.readUInt32BE(at);
+      const type = bytes.subarray(at + 4, at + 8).toString('latin1');
+      if (type !== 'tEXt' && type !== 'iTXt') out.push(bytes.subarray(at, at + 12 + length));
+      at += 12 + length;
+    }
+    return Buffer.concat(out);
+  };
+  const turn = (q) => browser.eval(`import('/ui/mode-structure.js').then((m) => { const v = m.structureState(window.mavescape).viewer; const c = v.camera; c.rotation = ${JSON.stringify(q)}; v.setCamera(c); return true; })`);
+  await act('open_structure', { pdb: '2VWF' });
+  await act('set_structure', { color: 'median', select: 'pos 20-26', show: 'sticks', label: true });
+  await turn([0.2, 0.3, 0.1, Math.sqrt(1 - 0.14)]);
+  const savedCore = await act('save_structure_view', { name: 'Core' });
+  await act('export', { what: 'structure-image', path: join(out, 'core-1.png'), scale: 2 });
+  await act('set_structure', { show: 'none' });
+  await act('set_structure', { color: 'secondary', select: '' });
+  await turn([0.5, 0.1, 0.3, Math.sqrt(1 - 0.35)]);
+  await act('export', { what: 'structure-image', path: join(out, 'core-changed.png'), scale: 2 });
+  const reopenedCore = await act('open_structure_view', { name: 'Core' });
+  await act('export', { what: 'structure-image', path: join(out, 'core-2.png'), scale: 2 });
+  const core1 = readFileSync(join(out, 'core-1.png'));
+  const core2 = readFileSync(join(out, 'core-2.png'));
+  const coreChanged = readFileSync(join(out, 'core-changed.png'));
+  const vwfSha = sha256(cachedBytes('pdb', pdbFile('2VWF')));
+  check('save_structure_view and open_structure_view: 2VWF colored by GRB2\'s median scores, residues selected, drawn and labeled, turned; saved with its file (the fetcher\'s, by its SHA-256) and the mapping; changed (colors, selection, camera), then opened: the same image as when saved (a figure panel, pixel for pixel), the changed one another', `${savedCore.message.slice(0, 160)} | ${reopenedCore.message.slice(0, 120)}; images ${imageOnly(core1).equals(imageOnly(core2)) ? 'the same' : 'different'}, changed ${imageOnly(core1).equals(imageOnly(coreChanged)) ? 'the same' : 'different'}`, savedCore.data.structure.file.sha256 === vwfSha && savedCore.data.view.chain === 'A' && savedCore.data.view.selection.length === 7 && savedCore.data.view.color.scores.how === 'median' && !reopenedCore.data.mappingChanges.length && reopenedCore.data.state.selected.count === 7 && reopenedCore.data.state.labels === 7 && imageOnly(core1).equals(imageOnly(core2)) && !imageOnly(core1).equals(imageOnly(coreChanged)));
+  const panel = JSON.parse(pngTexts(new Uint8Array(core2)).get(PANEL_KEYWORD));
+  const grb2RunState = await act('get_state');
+  const run1 = grb2RunState.data.runs.find((r) => r.name === 'Run 1');
+  check('export structure-image: a figure panel, twice the view saved, its legend below it, what it shows written into it (PNG text): the structure\'s file by its SHA-256, the view, the coloring of Run 1 by its output\'s SHA-256, the legend', JSON.stringify({ structure: panel.structure.sha256.slice(0, 12), view: panel.view.saved, coloring: panel.coloring.how, run: panel.coloring.run?.name, legend: panel.legend?.title, image: panel.image }), panel.format === 'mavescape-figure-panel' && panel.structure.sha256 === vwfSha && panel.view.saved === 'Core' && panel.coloring.how === 'median' && panel.coloring.run?.output === run1?.outputSha256 && panel.legend?.title === 'Median score, Run 1' && panel.image.legend && panel.image.width === 2 * panel.image.view.width && panel.image.height > 2 * panel.image.view.height);
+  // Through the archive, opened again in the page (a copy: the workspace is in the library).
+  await act('export', { what: 'archive', path: join(out, 'grb2-views.msz') });
+  const viewsArchive = await readArchive(readFileSync(join(out, 'grb2-views.msz')));
+  const methodsText = viewsArchive.methods?.markdown ?? '';
+  await act('open_files', { paths: [join(out, 'grb2-views.msz')] });
+  const fromArchive = await act('open_structure_view', { name: 'Core' });
+  await act('export', { what: 'structure-image', path: join(out, 'core-3.png'), scale: 2 });
+  const core3 = readFileSync(join(out, 'core-3.png'));
+  const copyState = await act('get_state');
+  check('the workspace archive with the saved view: the structure\'s file in it (by its SHA-256), the methods naming it and its mapping; opened as a copy, the view opens from it as it was saved, the same image', `${viewsArchive.manifest.structures}; ${viewsArchive.sources.has(vwfSha) ? 'the file in it' : 'no file'}; methods ${/its file's SHA-256 [0-9a-f]{64}/.test(methodsText) ? 'name it' : 'do not name it'}; opened in "${copyState.data.workspace.name}": ${fromArchive.message.slice(0, 100)}; images ${imageOnly(core1).equals(imageOnly(core3)) ? 'the same' : 'different'}`, viewsArchive.manifest.structures === 'included' && viewsArchive.sources.has(vwfSha) && !viewsArchive.problems.length && methodsText.includes(`its file's SHA-256 ${vwfSha}`) && /placed on chain A: 56 of its 56 positions on residues/.test(methodsText) && copyState.data.structureViews.some((v) => v.name === 'Core') && imageOnly(core1).equals(imageOnly(core3)));
+  // Named by checksum only (the file not in the library): fetched again by its ID, its SHA-256 the one saved.
+  await act('export', { what: 'archive', path: join(out, 'grb2-views-light.msz'), include_structures: false });
+  const lightArchive = await readArchive(readFileSync(join(out, 'grb2-views-light.msz')));
+  await browser.eval(`(() => { const lib = window.mavescape.library; const get = lib.getFile.bind(lib); window.__getFile = get; lib.getFile = async (sha) => (sha === ${JSON.stringify(vwfSha)} ? null : get(sha)); return true; })()`);
+  const refetchedView = await act('open_structure_view', { name: 'Core' });
+  await browser.eval(`(() => { window.mavescape.library.getFile = window.__getFile; return true; })()`);
+  check('an archive with the structures named by checksum only: no structure file in it; a view whose file the library lacks fetches it again by its ID (the fetcher\'s cache) and finds its SHA-256 the one saved', `${lightArchive.manifest.structures}, ${lightArchive.sources.has(vwfSha) ? 'the file in it' : 'no file'} | ${refetchedView.message}`, lightArchive.manifest.structures === 'checksums' && !lightArchive.sources.has(vwfSha) && refetchedView.data.notes.some((n) => /fetched again by its ID, its SHA-256 the one saved/.test(n)));
+  const removedView = await act('remove_structure_view', { name: 'Core' });
+  const noView = await send('open_structure_view', { name: 'Core' });
+  check('remove_structure_view: the view removed, and its structure with it (no other view shows it); opened again, refused', `${removedView.message} | ${noView.message}`, !removedView.data.views.includes('Core') && !removedView.data.structures.length && !noView.ok);
   await act('open_example', { id: 'factor9' });
   await act('open_structure', { pdb: '1RFN' });
   const lightChain = await act('map_structure', { chain: 'B' });

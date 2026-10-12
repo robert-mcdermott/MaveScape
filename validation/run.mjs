@@ -112,9 +112,12 @@ import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
 import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, nodeEvidence, openCached, openFixture, paeFixture, pdbFile, positionScores, siftsOf, siftsRetrieved } from './structure-cases.mjs';
 import { bhAdjust, clusterTest, CONTACT_DISTANCE, effectsByClass, mannWhitney, MAX_ASA, structureTracks } from '../web/lib/structure-evidence.js';
+import { mappingChanges, mappingSummary } from '../web/lib/structure-record.js';
+import { saveStructureView } from '../web/lib/workspace.js';
+import { structureFiles } from '../web/lib/archive.js';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
 import { describeMapping, mapTarget, mapTargetOnChain, rankStructures } from '../web/lib/mapping.js';
-import { assemblyChoices, chainSummaries, readStructureBytes } from '../web/lib/structures.js';
+import { assemblyChoices, chainSummaries, openStructureText, readStructureBytes } from '../web/lib/structures.js';
 import { deriveStructure, materializeAssemblyModels } from '../web/lib/structure/structure.js';
 import { buildCartoon } from '../web/lib/structure/cartoon.js';
 import { buildScene } from '../web/lib/structure/scene.js';
@@ -4255,6 +4258,65 @@ const suites = {
       const step = example.steps.at(-1)[1];
       const said = bullet.includes(`buried positions (${buried.n}) score a median of ${buried.median.toFixed(2)}, exposed ones (${exposed.n}) ${exposed.median.toFixed(2)}`) && bullet.includes(`${Math.round(100 * buried.test.below)}% of the time`) && bullet.includes(`make ${t.observed} pairs within 8 Å, against ${t.expected.toFixed(1)} among positions as buried`) && bullet.includes(`${t.any.expected.toFixed(1)} among any`) && joining && step.includes(joining.slice(0, 4).map(name).join(', '));
       check('structures', 'the PTEN example\'s guide, on 1D5R (its median scores read without the map\'s model): buried positions score lower than exposed ones; the 20% least tolerant make more pairs within 8 Å than positions as buried do (seed 1), and more still than any positions; a compact group of them joins the phosphatase and C2 domains (UniProt\'s); the guide says so, with these numbers', `buried ${buried.n}, median ${buried.median.toFixed(2)}; exposed ${exposed.n}, median ${exposed.median.toFixed(2)}; lower ${(100 * buried.test.below).toFixed(0)}% of the time, q ${buried.test.q.toExponential(1)}; ${t.observed} pairs, ${t.expected.toFixed(1)} as buried (p ${t.p.toFixed(3)}), ${t.any.expected.toFixed(1)} any; joining the domains: ${joining ? joining.map((q) => `${name(q)} (${domainOf(q)?.split(' ')[0] ?? 'between'})`).join(', ') : 'none'}; the guide ${said ? 'says so' : 'says otherwise'}`, buried.median < exposed.median && buried.test.q < 0.001 && t.observed > t.expected && t.p <= 0.01 && t.any.expected < t.expected && Boolean(joining) && said, 'as the guide says');
+    }
+
+    // Wave 5, slice 5 (X5): structures in the record. A saved view of each example's PDB entry and
+    // AlphaFold DB model, its structure's file the fetcher's cached answer: through the archive
+    // (included, and named by checksum only), each file the same bytes, each view the same, its
+    // mapping made again from the file the one it was saved with; the methods of each example's
+    // run with its views.
+    {
+      let ws = createWorkspace('Structures', { now: '2026-10-12T00:00:00.000Z', id: 'ws-structures' });
+      const files = new Map();
+      const saved = [];
+      for (const e of EXAMPLE_STRUCTURES) {
+        const target = exampleTarget(e.examples[0]);
+        for (const [kind, name] of [['pdb', pdbFile(e.pdb)], ['alphafold', modelFile(e.accession, e.model)]]) {
+          const bytes = cachedBytes(kind, name);
+          const meta = JSON.parse(readFileSync(new URL(`./fixtures/public-data/${kind}/${name}.meta.json`, import.meta.url), 'utf8'));
+          const sha = sha256(bytes);
+          files.set(sha, bytes);
+          const structure = await openCached(kind, name);
+          const [mapping] = mapTarget(structure, target);
+          const origin = kind === 'pdb' ? { kind, id: e.pdb, retrieval: { retrieved: meta.retrieved, source: meta.source } } : { kind, id: e.accession, version: e.model, retrieval: { retrieved: meta.retrieved, source: meta.source } };
+          const view = { name: `${e.protein} on ${kind === 'pdb' ? e.pdb : 'its model'}`, assembly: 'asym', chain: mapping.chain, mapping: mappingSummary(mapping), camera: { target: [0, 0, 0], distance: 50, rotation: [0, 0, 0, 1] }, size: { width: 800, height: 600 }, style: 'cartoon', color: { scheme: 'chain', scores: null }, surface: 'off', selection: [], labels: [], styles: {}, focus: [], evidence: null };
+          ws = saveStructureView(ws, { id: kind === 'pdb' ? `pdb-${e.pdb}` : `af-${e.accession}-v${e.model}`, name: kind === 'pdb' ? e.pdb : `AF-${e.accession}-F1 v${e.model}`, title: structure.meta.title, method: '', origin, file: { fileName: name, sha256: sha, size: bytes.length } }, view, '2026-10-12T01:00:00.000Z').ws;
+          saved.push({ kind, name, sha, target, view });
+        }
+      }
+      const full = await writeArchive(ws, { sources: null, structures: files });
+      const read = await readArchive(full.bytes);
+      const light = await readArchive((await writeArchive(ws, { sources: null, structures: null })).bytes);
+      let same = 0;
+      let remapped = 0;
+      const changed = [];
+      for (const x of saved) {
+        const bytes = read.sources.get(x.sha);
+        if (bytes && sha256(bytes) === x.sha && bytes.length === files.get(x.sha).length) same += 1;
+        const { text, name } = await readStructureBytes(bytes, x.name);
+        const [again] = mapTarget(openStructureText(text, name), x.target);
+        const diff = mappingChanges(x.view.mapping, mappingSummary(again));
+        if (!diff.length) remapped += 1;
+        else changed.push(`${x.name}: ${diff.join('; ')}`);
+      }
+      // Named by checksum only, each structure is fetched again by its ID: the fetcher's answer for
+      // it (the cache) has the SHA-256 recorded.
+      const refetched = saved.filter((x) => sha256(cachedBytes(x.kind, x.name)) === x.sha).length;
+      check('structures', 'saved views of each example protein\'s PDB entry and AlphaFold DB model through the workspace archive: every structure\'s file in it, the same bytes (its SHA-256 the one the workspace records), every view the same; the mapping made again from each file the one its view was saved with; named by checksum only, no structure file in the archive and none missing said, and each one fetched again by its ID (the fetcher\'s answer) the file recorded', `${saved.length} views of ${ws.structures.length} structures; ${structureFiles(ws).length} files; included: ${same} the same bytes, ${read.problems.length} problems; mapped again: ${remapped} as saved${changed.length ? ` (${changed.slice(0, 2).join(' | ')})` : ''}; checksums only: ${light.manifest.structures}, ${light.sources.size} files, ${light.problems.length} problems; fetched again: ${refetched} the same`, saved.length === 14 && same === 14 && !read.problems.length && JSON.stringify(read.ws.structureViews) === JSON.stringify(ws.structureViews) && remapped === 14 && light.manifest.structures === 'checksums' && light.sources.size === 0 && !light.problems.length && refetched === 14, 'all the same');
+
+      // The methods of the GRB2 example's run, with a view of 2VWF: the structure, its file's
+      // SHA-256, the mapping as made again from the file, the structural methods cited.
+      const o = openExampleInNode(exampleById('grb2-sh3'));
+      const runRecord = makeRun({ inputs: runInputs({ source: o.ws.sources[0], design: o.design, parameters: o.parameters }), source: o.ws.sources[0], results: o.scored.results, software: { version: '0.5.0', commit: '' }, name: 'Run 1', created: '2026-10-12T00:00:00.000Z' });
+      const vwf = saved.find((x) => x.name === pdbFile('2VWF'));
+      const entry = ws.structures.find((x) => x.file.sha256 === vwf.sha);
+      const withView = saveStructureView({ ...o.ws, runs: [runRecord] }, entry, { ...vwf.view, name: 'Core', color: { scheme: 'scores', scores: { how: 'median' }, run: runRecord.id, condition: 0 }, evidence: { choice: 'all', fraction: 0.2, seed: 1 } }).ws;
+      const m = writeMethods(withView, runRecord);
+      const paragraph = m.paragraphs.find((x) => x.startsWith('Structures:')) ?? '';
+      const [mapping] = mapTarget(await openCached('pdb', pdbFile('2VWF')), exampleTarget('grb2-sh3'));
+      const says = paragraph.includes(`its file's SHA-256 ${vwf.sha}`) && paragraph.includes(`placed on chain ${mapping.chain}: ${mapping.onStructure} of its ${mapping.target.length} positions on residues`) && paragraph.includes(`${mapping.counts.identical} identical`) && paragraph.includes('one residue different (P54A)') && paragraph.includes('"Core" (2VWF, chain A; colored by the median score of Run 1)');
+      const cites = ['pdb', 'proteoscope', 'blosum62', 'dssp', 'shrake', 'tien', 'structuremap', 'plip', 'mannwhitney'].every((k) => m.references.some((r) => r.key === k));
+      check('structures', 'the methods of the GRB2 example\'s run with a saved view of 2VWF: the entry, when it was retrieved and its file\'s SHA-256, the mapping as made again from the file (chain, positions on residues, identical, the engineered difference), the view and what it is colored by; how the structure was read, each method cited', paragraph.slice(0, 400), says && cites, 'said and cited');
     }
   },
 };

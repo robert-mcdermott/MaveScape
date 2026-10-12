@@ -5,7 +5,7 @@
 
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
-import { annotationFiles, readArchive, writeArchive, sourceFiles } from '../lib/archive.js';
+import { annotationFiles, readArchive, structureFiles, writeArchive, sourceFiles } from '../lib/archive.js';
 import { writePackage } from '../lib/package.js';
 import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, provenanceJSON, provenanceText, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
 import { proteinView } from '../lib/collapse.js';
@@ -174,8 +174,9 @@ export async function exportSelection(app, selection, format) {
 
 // --- The archive ---------------------------------------------------------------------------------
 
-// The workspace archive, made (not downloaded): { name, bytes }.
-export async function archiveFile(app, { includeTables = true } = {}) {
+// The workspace archive, made (not downloaded): { name, bytes }. includeStructures: false names
+// the saved views' structures by their IDs and SHA-256s only (wave 5, slice 5).
+export async function archiveFile(app, { includeTables = true, includeStructures = true } = {}) {
   const ws = app.store.ws;
   let sources = null;
   if (includeTables) {
@@ -195,6 +196,15 @@ export async function archiveFile(app, { includeTables = true } = {}) {
     if (!bytes) throw new Error(`The annotation ${f.name} (${f.fileName}) is not in the library: remove it, or add it again.`);
     annotations.set(f.sha256, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));
   }
+  let structures = null;
+  if (includeStructures) {
+    structures = new Map();
+    for (const f of structureFiles(ws)) {
+      const bytes = await app.library.getFile(f.sha256);
+      if (!bytes) throw new Error(`The structure file of ${f.name} (${f.fileName}) is not in the library: export with the structures named by their checksums, or open the view again.`);
+      structures.set(f.sha256, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer()));
+    }
+  }
   const results = new Map();
   for (const run of ws.runs) {
     const entry = await ensureResults(app, run);
@@ -202,14 +212,14 @@ export async function archiveFile(app, { includeTables = true } = {}) {
   }
   const last = ws.runs.at(-1);
   const methods = last ? await methodsOf(app, last) : null;
-  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, annotations, results, methods });
+  const { bytes } = await writeArchive(ws, { software: { version: app.version, commit: app.commit }, sources, annotations, structures, results, methods });
   return { name: `${safe(ws.name)}.msz`, bytes };
 }
 
-export async function exportArchive(app, { includeTables = true } = {}) {
+export async function exportArchive(app, { includeTables = true, includeStructures = true } = {}) {
   const busy = progressToast('Writing the workspace archive…');
   try {
-    const { name, bytes } = await archiveFile(app, { includeTables });
+    const { name, bytes } = await archiveFile(app, { includeTables, includeStructures });
     downloadBlob(new Blob([bytes], { type: 'application/zip' }), name);
     busy.done(`Wrote ${name}${includeTables ? '' : ' (tables by checksum only)'}.`);
   } catch (error) {
@@ -219,13 +229,16 @@ export async function exportArchive(app, { includeTables = true } = {}) {
 
 export function chooseArchiveExport(app) {
   const tables = h('input', { type: 'checkbox', checked: true });
+  const structures = h('input', { type: 'checkbox', checked: true });
+  const kept = (app.store.ws.structures ?? []).length;
   showDialog({
     title: 'Export the workspace archive (.msz)',
     content: [
       h('p', 'One file with everything needed to reopen this analysis on another computer: the workspace (targets, design, score runs, selections, QC thresholds and the chained history), each run\'s scores, the methods with references, and the tables.'),
       h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, tables, 'Include the count tables (otherwise each is named by its SHA-256 only, and must be opened again to rescore)'),
+      kept ? h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, structures, `Include the ${kept === 1 ? 'structure' : `${kept} structures`} the saved views show (otherwise a PDB entry or AlphaFold DB model is named by its ID and SHA-256 and fetched again when its view opens; a file must be opened again)`) : null,
     ],
-    buttons: [{ label: 'Cancel' }, { label: 'Export', primary: true, onClick: () => exportArchive(app, { includeTables: tables.checked }) }],
+    buttons: [{ label: 'Cancel' }, { label: 'Export', primary: true, onClick: () => exportArchive(app, { includeTables: tables.checked, includeStructures: structures.checked }) }],
   });
 }
 
