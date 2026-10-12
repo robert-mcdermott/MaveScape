@@ -14,7 +14,7 @@ It runs on your own computer as one self-contained program, with no account, Pyt
 are analyzed in the browser and never leave your machine. MaveScape reports experimental
 functional effects for research; it does not classify variants as pathogenic or benign.
 
-**[Website and user guide](https://robert-mcdermott.github.io/mavescape/)**: getting started,
+**[Website and user guide](https://robert-mcdermott.github.io/MaveScape/)**: getting started,
 opening your data, scoring, quality control, the map, the record and scripting, with screenshots.
 
 > **Status: 0.4.0 released; 0.5.0 in progress.** Count tables import, designs are set in the
