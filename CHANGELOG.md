@@ -210,6 +210,15 @@ two saved by 0.5.0 are kept for later versions to do the same, their saved views
 - A file the library already holds is read to its end before the program answers that it has it.
   Answered first, a large upload's connection was closed under the browser: opening the factor IX
   example (a 2 MB table) a second time in one library failed with "Failed to fetch".
+- WebGPU lost under the Structure view (the browser's graphics process crashed or was reset) left
+  the view unable to draw, and an image of it failed. The view now goes on with the Canvas renderer
+  on a fresh canvas, its badge saying why, everything drawn again; an image whose drawing loses WebGPU
+  is drawn again by the Canvas renderer. CI's runners, which draw WebGPU in software, lose it at the
+  first image.
+- An image of the Structure view taken just after a change, before a frame had drawn it, could
+  show the scene as it was: the scene is brought up to date first.
+- The Structure view's legend, wrapped onto two lines in a narrower window, was drawn over the strip
+  of positions below it: the 3D view gives way instead.
 - The README and the guide (*Opening your data*) said count tables could be Excel workbooks:
   MaveScape reads CSV and TSV, gzipped or not, as FORMATS.md says.
 - A workspace opened from an archive that named its structures by checksum could not be archived
@@ -329,6 +338,10 @@ two saved by 0.5.0 are kept for later versions to do the same, their saved views
 - Go tests: the structure requests (and PDBe's best structures, and a model's aligned error) ask what NETWORK.md says, keep what
   the service sent, refuse a cut-off file or a page that is not a structure, and refuse anything
   but a PDB ID or an accession before it is sent.
+- The remote-control session (163 checks): Chrome's GPU process crashed under the Structure view
+  (`Browser.crashGpuProcess`): the view goes on with the Canvas renderer, saying why, and draws;
+  where the browser loses WebGPU by itself (CI's runners, drawing in software), the session finds
+  the view on the Canvas renderer after its first image and checks it so.
 - `headless-run.mjs` (30 checks): `mavescape run --from-workspace` on 0.5.0's PTEN archive, its
   structure named by checksum: the run reproduced, the archive written again naming it the same
   way, its views kept.

@@ -65,7 +65,8 @@ let surfaceWorker = null;
 // options: { onPick(residue | null, { additive }), onFocus(residues), onChange(), describe(residue)
 // (more words for the tooltip) }.
 export function createStructureViewer(options = {}) {
-  const canvas = h('canvas.structure-canvas', { tabindex: '0', 'aria-label': 'The structure, drawn in 3D' });
+  // The canvas drawn on: replaced by a fresh one when WebGPU's device is lost (fallBack).
+  let canvas = h('canvas.structure-canvas', { tabindex: '0', 'aria-label': 'The structure, drawn in 3D' });
   const labelLayer = h('div.structure-labels', { 'aria-hidden': 'true' });
   const tooltip = h('div.structure-tooltip', { role: 'status' });
   const el = h('div.structure-viewport', canvas, labelLayer, tooltip);
@@ -113,7 +114,7 @@ export function createStructureViewer(options = {}) {
       // Why not WebGPU, as a clause: "Surfaces need WebGPU: <failure>."
       if (forced) throw new Error('the Canvas renderer was asked for (?renderer=canvas)');
       if (!navigator.gpu) throw new Error('this browser does not offer WebGPU');
-      state.renderer = await withTimeout(createRenderer(canvas, { onDeviceLost: (info) => fail(`the graphics device was lost (${info?.message || 'unknown reason'}): reload the page`) }), 5000, 'WebGPU did not start within 5 seconds');
+      state.renderer = await withTimeout(createRenderer(canvas, { onDeviceLost: (info) => fallBack(`the graphics device was lost (${info?.message || 'unknown reason'})`) }), 5000, 'WebGPU did not start within 5 seconds');
       state.kind = 'webgpu';
     } catch (error) {
       state.renderer = createCanvasRenderer(canvas);
@@ -123,8 +124,28 @@ export function createStructureViewer(options = {}) {
     return state.kind;
   }
 
-  function fail(message) {
-    state.failure = message;
+  // WebGPU lost (its device lost, as when the GPU process crashes or is reset, or a capture that
+  // fails): the view goes on with the Canvas renderer on a fresh canvas (one that had a WebGPU
+  // context cannot have a 2D one), everything drawn again, and says why. A reload tries WebGPU again.
+  function fallBack(reason) {
+    if (state.kind !== 'webgpu') return;
+    const fresh = h('canvas.structure-canvas', { tabindex: '0', 'aria-label': canvas.getAttribute('aria-label') });
+    const focused = document.activeElement === canvas;
+    resize.unobserve(canvas);
+    canvas.replaceWith(fresh);
+    canvas = fresh;
+    bindCanvas(canvas);
+    resize.observe(canvas);
+    if (focused) canvas.focus();
+    state.renderer = createCanvasRenderer(canvas);
+    state.kind = 'canvas';
+    state.failure = `${reason}; the view went on with the Canvas renderer (reload the page to try WebGPU again)`;
+    state.meshes.clear();
+    state.surface.data = null;
+    state.surface.key = '';
+    markScene();
+    if (state.surface.kind !== 'off') refreshSurface();
+    requestRender();
     options.onChange?.();
   }
 
@@ -393,101 +414,105 @@ export function createStructureViewer(options = {}) {
     }
   }
 
-  canvas.addEventListener('pointerdown', (event) => {
-    canvas.setPointerCapture(event.pointerId);
-    state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    state.cameraAnimation = null;
-    if (state.pointers.size === 2) {
-      const [a, b] = [...state.pointers.values()];
-      state.drag = { mode: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y), moved: true };
-      return;
-    }
-    const mode = event.button === 2 || event.button === 1 || event.shiftKey ? 'pan' : event.altKey ? 'roll' : 'rotate';
-    state.drag = { mode, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false };
-  });
-  canvas.addEventListener('pointermove', (event) => {
-    if (state.pointers.has(event.pointerId)) state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const drag = state.drag;
-    if (drag) {
-      if (drag.mode === 'pinch' && state.pointers.size >= 2) {
+  // The canvas's handlers, bound again to a fresh canvas (fallBack).
+  function bindCanvas(target) {
+    target.addEventListener('pointerdown', (event) => {
+      canvas.setPointerCapture(event.pointerId);
+      state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      state.cameraAnimation = null;
+      if (state.pointers.size === 2) {
         const [a, b] = [...state.pointers.values()];
-        const distance = Math.hypot(a.x - b.x, a.y - b.y);
-        zoomCamera(state.camera, drag.distance / Math.max(1, distance));
-        drag.distance = distance;
+        state.drag = { mode: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y), moved: true };
+        return;
+      }
+      const mode = event.button === 2 || event.button === 1 || event.shiftKey ? 'pan' : event.altKey ? 'roll' : 'rotate';
+      state.drag = { mode, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false };
+    });
+    target.addEventListener('pointermove', (event) => {
+      if (state.pointers.has(event.pointerId)) state.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const drag = state.drag;
+      if (drag) {
+        if (drag.mode === 'pinch' && state.pointers.size >= 2) {
+          const [a, b] = [...state.pointers.values()];
+          const distance = Math.hypot(a.x - b.x, a.y - b.y);
+          zoomCamera(state.camera, drag.distance / Math.max(1, distance));
+          drag.distance = distance;
+          state.fitted = false;
+          requestRender();
+          return;
+        }
+        const dx = event.clientX - drag.x;
+        const dy = event.clientY - drag.y;
+        drag.x = event.clientX;
+        drag.y = event.clientY;
+        if (Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) > 4) drag.moved = true;
+        if (!drag.moved) return;
         state.fitted = false;
+        if (drag.mode === 'pan') panCamera(state.camera, dx, dy, canvas.clientHeight);
+        else if (drag.mode === 'roll') rollCamera(state.camera, dx * 0.006);
+        else orbitCamera(state.camera, dx, dy);
+        tooltip.classList.remove('visible');
         requestRender();
         return;
       }
-      const dx = event.clientX - drag.x;
-      const dy = event.clientY - drag.y;
-      drag.x = event.clientX;
-      drag.y = event.clientY;
-      if (Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) > 4) drag.moved = true;
-      if (!drag.moved) return;
-      state.fitted = false;
-      if (drag.mode === 'pan') panCamera(state.camera, dx, dy, canvas.clientHeight);
-      else if (drag.mode === 'roll') rollCamera(state.camera, dx * 0.006);
-      else orbitCamera(state.camera, dx, dy);
-      tooltip.classList.remove('visible');
-      requestRender();
-      return;
-    }
-    if (state.pickPending || !state.structure) return;
-    state.pickPending = true;
-    const { clientX, clientY } = event;
-    requestAnimationFrame(async () => {
-      const index = await pickAt({ clientX, clientY });
-      state.pickPending = false;
-      setHover(index, clientX, clientY);
+      if (state.pickPending || !state.structure) return;
+      state.pickPending = true;
+      const { clientX, clientY } = event;
+      requestAnimationFrame(async () => {
+        const index = await pickAt({ clientX, clientY });
+        state.pickPending = false;
+        setHover(index, clientX, clientY);
+      });
     });
-  });
-  const release = async (event) => {
-    state.pointers.delete(event.pointerId);
-    const drag = state.drag;
-    if (state.pointers.size === 0) state.drag = null;
-    try {
-      canvas.releasePointerCapture(event.pointerId);
-    } catch {
-      // Already released.
-    }
-    if (drag && !drag.moved && drag.mode !== 'pinch' && event.type === 'pointerup' && event.button !== 2) {
+    const release = async (event) => {
+      state.pointers.delete(event.pointerId);
+      const drag = state.drag;
+      if (state.pointers.size === 0) state.drag = null;
+      try {
+        canvas.releasePointerCapture(event.pointerId);
+      } catch {
+        // Already released.
+      }
+      if (drag && !drag.moved && drag.mode !== 'pinch' && event.type === 'pointerup' && event.button !== 2) {
+        const residue = residueOf(await pickAt(event));
+        options.onPick?.(residue, { additive: event.shiftKey || event.metaKey || event.ctrlKey });
+      }
+    };
+    target.addEventListener('pointerup', release);
+    target.addEventListener('pointercancel', release);
+    target.addEventListener('pointerleave', () => {
+      if (!state.drag) setHover(-1, 0, 0);
+    });
+    target.addEventListener('dblclick', async (event) => {
       const residue = residueOf(await pickAt(event));
-      options.onPick?.(residue, { additive: event.shiftKey || event.metaKey || event.ctrlKey });
-    }
-  };
-  canvas.addEventListener('pointerup', release);
-  canvas.addEventListener('pointercancel', release);
-  canvas.addEventListener('pointerleave', () => {
-    if (!state.drag) setHover(-1, 0, 0);
-  });
-  canvas.addEventListener('dblclick', async (event) => {
-    const residue = residueOf(await pickAt(event));
-    if (residue) {
-      api.focus([residue.key]);
-      options.onFocus?.([residue]);
-    }
-  });
-  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
-  canvas.addEventListener('wheel', (event) => {
-    event.preventDefault();
-    const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
-    zoomCamera(state.camera, Math.exp(delta * 0.0012));
-    state.cameraAnimation = null;
-    state.fitted = false;
-    requestRender();
-  }, { passive: false });
-  canvas.addEventListener('keydown', (event) => {
-    const step = event.shiftKey ? 30 : 10;
-    const turns = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-    if (turns[event.key]) orbitCamera(state.camera, ...turns[event.key]);
-    else if (event.key === '+' || event.key === '=') zoomCamera(state.camera, 1 / 1.2);
-    else if (event.key === '-') zoomCamera(state.camera, 1.2);
-    else if (event.key === 'f' || event.key === 'F') fit();
-    else return;
-    if (event.key !== 'f' && event.key !== 'F') state.fitted = false;
-    event.preventDefault();
-    requestRender();
-  });
+      if (residue) {
+        api.focus([residue.key]);
+        options.onFocus?.([residue]);
+      }
+    });
+    target.addEventListener('contextmenu', (event) => event.preventDefault());
+    target.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+      zoomCamera(state.camera, Math.exp(delta * 0.0012));
+      state.cameraAnimation = null;
+      state.fitted = false;
+      requestRender();
+    }, { passive: false });
+    target.addEventListener('keydown', (event) => {
+      const step = event.shiftKey ? 30 : 10;
+      const turns = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (turns[event.key]) orbitCamera(state.camera, ...turns[event.key]);
+      else if (event.key === '+' || event.key === '=') zoomCamera(state.camera, 1 / 1.2);
+      else if (event.key === '-') zoomCamera(state.camera, 1.2);
+      else if (event.key === 'f' || event.key === 'F') fit();
+      else return;
+      if (event.key !== 'f' && event.key !== 'F') state.fitted = false;
+      event.preventDefault();
+      requestRender();
+    });
+  }
+  bindCanvas(canvas);
   const resize = new ResizeObserver(() => {
     if (state.fitted && state.structure && !state.focus) fit(null, { animate: false });
     requestRender();
@@ -820,10 +845,29 @@ export function createStructureViewer(options = {}) {
     // CSS pixels, `factor` times that size, drawn at its aspect (a figure panel of a saved view: the
     // same image whatever the window and screen).
     async capturePNG(factor = 1, size = null) {
+      // The scene as it is now, though no frame has drawn it yet (a change, a renderer just taken over).
+      if (state.structure && state.renderer) {
+        if (state.dirty.scene) rebuildScene();
+        if (state.dirty.colors) updateColors();
+        if (state.dirty.flags) updateFlags();
+      }
       const width = Math.max(1, Math.round((size ? size.width : canvas.width) * factor));
       const height = Math.max(1, Math.round((size ? size.height : canvas.height) * factor));
       const view = size ? { ...cameraMatrices(state.camera, width / height), orthographic: state.camera.orthographic } : currentView();
-      const image = state.kind === 'webgpu' ? await state.renderer.capture(view, renderSettings(), width, height, 2) : await state.renderer.capture(view, renderSettings(), width, height);
+      let image;
+      const kind = state.kind;
+      try {
+        image = kind === 'webgpu' ? await state.renderer.capture(view, renderSettings(), width, height, 2) : await state.renderer.capture(view, renderSettings(), width, height);
+      } catch (error) {
+        // WebGPU lost under the capture (its device lost meanwhile, the view perhaps already on the
+        // Canvas renderer): drawn again by the Canvas renderer.
+        if (kind !== 'webgpu') throw error;
+        fallBack(`WebGPU failed while drawing the image (${error.message})`);
+        if (state.dirty.scene) rebuildScene();
+        if (state.dirty.colors) updateColors();
+        if (state.dirty.flags) updateFlags();
+        image = await state.renderer.capture(view, renderSettings(), width, height);
+      }
       const out = h('canvas', { width: image.width, height: image.height });
       out.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength), image.width, image.height), 0, 0);
       return new Promise((resolve) => out.toBlob(resolve, 'image/png'));

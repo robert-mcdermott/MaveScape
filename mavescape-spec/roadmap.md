@@ -2491,6 +2491,16 @@ reran all twenty runs of every release's archives in a window, each to its recor
     writing its archive, which asked for the structure's file the library did not hold; so would
     the window's export, until a view was opened. Not asked otherwise, an archive names such
     structures by ID and SHA-256 again, and says so; the export dialog says which files are missing.
+  - **CI's runner lost WebGPU under the Structure view.** The pull request's CI ran wave 5's
+    structure checks on GitHub's runner for the first time (CI runs on pull requests and on main):
+    its Chrome draws WebGPU in software (SwiftShader), and its graphics process died at the first
+    image ("A valid external Instance reference no longer exists"). The viewer only noted the loss
+    and could draw no more. It now goes on with the Canvas renderer on a fresh canvas, saying why,
+    and an image whose drawing loses WebGPU is drawn again; the remote session crashes the GPU
+    process on purpose to check it (`Browser.crashGpuProcess`), and with Chrome's software adapter
+    (`--use-webgpu-adapter=swiftshader`) the runner's failure was reproduced here and passes now.
+    Two more came with it: an image taken before a frame had drawn a change showed the scene as it
+    was, and the legend, wrapped onto two lines in a narrower window, was drawn over the strip.
   - **One Chrome that did not start ended the recapture**: the light screenshots were done when a
     headless Chrome did not open its debugging connection, and the script stopped there, leaving that
     scene's MaveScape running. A Chrome is now started again once, and a scene that still cannot

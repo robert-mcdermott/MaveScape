@@ -715,13 +715,21 @@ try {
     return opened;
   }
   const first = await act('open_structure', { pdb: '2VWF' });
-  // WebGPU where the browser gives the viewer a device (headless Chrome on macOS does); otherwise
-  // the viewer's own reason for the Canvas renderer is reported.
-  const webgpu = first.data.renderer === 'webgpu';
-  const noGPU = webgpu ? '' : await browser.eval(`import('/ui/mode-structure.js').then((m) => m.structureState(window.mavescape).viewer.failure)`);
+  // WebGPU where the browser gives the viewer a device that keeps working (headless Chrome on macOS
+  // does); otherwise the viewer's own reason for the Canvas renderer is reported. A device the
+  // browser loses (on GitHub's runners, which draw in software, the GPU process does not last)
+  // leaves the view on the Canvas renderer, saying why: an image drawn first finds out, and a
+  // device lost later is said where it happens.
+  const viewerNow = () => browser.eval(`import('/ui/mode-structure.js').then((m) => { const v = m.structureState(window.mavescape).viewer; return { kind: v.kind, failure: v.failure }; })`);
+  await browser.eval(drawnShare);
+  let webgpu = (await viewerNow()).kind === 'webgpu';
+  const noGPU = webgpu ? '' : (await viewerNow()).failure;
   check('open_structure: a PDB entry by its ID, from the cache, in the Structure view, described in words (its chains and the UniProt residues each covers)', first.message.slice(0, 220), first.data.name === '2VWF' && first.data.origin.kind === 'pdb' && first.data.chains.find((c) => c.id === 'A')?.uniprot[0]?.from === 159 && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'structure' && /Chain A: Growth Factor Receptor-Bound Protein 2/.test(first.message));
   const everyGPU = await openEveryStructure();
-  check(`every example protein's PDB entry and AlphaFold DB model opened and drawn ${webgpu ? 'with WebGPU' : `by the Canvas renderer (${noGPU})`}, with the atoms and residues Node reads, from the cache; an image of each view not empty`, everyGPU.map((x) => `${x.name} ${x.renderer} ${fmtShare(x.share)}${x.message ? ` ${x.message}` : ''}`).join('; '), everyGPU.length === 2 * EXAMPLE_STRUCTURES.length && everyGPU.every((x) => x.ok && x.renderer === (webgpu ? 'webgpu' : 'canvas')));
+  const afterEvery = await viewerNow();
+  const lostDuring = webgpu && afterEvery.kind === 'canvas';
+  check(`every example protein's PDB entry and AlphaFold DB model opened and drawn ${webgpu ? 'with WebGPU' : `by the Canvas renderer (${noGPU})`}, with the atoms and residues Node reads, from the cache; an image of each view not empty`, `${everyGPU.map((x) => `${x.name} ${x.renderer} ${fmtShare(x.share)}${x.message ? ` ${x.message}` : ''}`).join('; ')}${lostDuring ? `; WebGPU lost on the way (${afterEvery.failure}), the rest drawn by the Canvas renderer` : ''}`, everyGPU.length === 2 * EXAMPLE_STRUCTURES.length && everyGPU.every((x) => x.ok && (x.renderer === (webgpu ? 'webgpu' : 'canvas') || (lostDuring && x.renderer === 'canvas'))));
+  if (lostDuring) webgpu = false;
   if (!webgpu) console.log(`  No WebGPU for the viewer (${noGPU}): the Structure view was checked with the Canvas renderer only.`);
   const target = await act('open_structure', { alphafold: 'target' });
   check('open_structure with alphafold "target": the AlphaFold DB model of the open workspace\'s target (the last example opened), its confidence the color', target.message.slice(0, 160), target.data.origin.kind === 'alphafold' && target.data.predicted && target.data.color === 'plddt');
@@ -730,6 +738,7 @@ try {
   const focused = await act('set_structure', { select: 'chain A and resi 191+220', focus: true });
   check('set_structure: factor IX\'s cysteines (1RFN) selected in words, drawn as sticks and labeled; two focused on, their neighborhood drawn', `${cys.message} | ${focused.message}`, cys.data.selected.count === 14 && Object.values(cys.data.styled).filter((x) => x === 'sticks').length === 14 && cys.data.labels === 14 && focused.data.focused === 2 && focused.data.selected.residues.join() === 'Cys 191 · A,Cys 220 · A');
   const surface = await act('set_structure', { surface: 'ses', focus: false, select: '' });
+  if ((await viewerNow()).kind !== 'webgpu') webgpu = false;
   check(`set_structure surface: the molecular surface ${webgpu ? 'computed in its worker and drawn' : 'refused by the Canvas renderer, saying why'}`, surface.message, webgpu ? surface.data.surface.ready && /triangles/.test(surface.data.surface.status) : /need WebGPU/.test(surface.data.surface.status));
   await act('set_structure', { surface: 'off' });
   await act('open_structure', { pdb: '1HHO' });
@@ -992,6 +1001,24 @@ try {
   const lightNode = mapTargetOnChain(await openCached('pdb', pdbFile('1RFN')), 'B', exampleTarget('factor9'));
   const noChain = await send('map_structure', { chain: 'X' });
   check('map_structure: factor IX on 1RFN\'s light chain (chain B), at 132–188, the entry\'s own record five earlier, as Node maps it; a chain that does not hold it refused, naming those that do', `${lightChain.message.slice(0, 260)} | ${noChain.message}`, lightChain.data.chain === 'B' && lightChain.data.onStructure === lightNode.onStructure && lightChain.data.positions.onStructure.join() === '132–188' && lightChain.data.record.differ.length === 56 && /5 earlier/.test(lightChain.message) && !noChain.ok && /Chains that hold it: A, B/.test(noChain.message));
+
+  // WebGPU lost under the view (the 0.5.0 release; GitHub's runner lost it on its own): the GPU
+  // process crashed (Browser.crashGpuProcess) while factor IX's 1RFN is drawn with WebGPU, the view goes on with
+  // the Canvas renderer on a fresh canvas, its badge and words saying why, the structure drawn again
+  // with its colors. Where WebGPU was lost already, the view is found so.
+  await act('open_structure', { pdb: '1RFN' });
+  await act('set_structure', { color: 'median', select: 'resn CYS', label: true });
+  const beforeCrash = await viewerNow();
+  if (beforeCrash.kind === 'webgpu') await browser.send('Browser.crashGpuProcess').catch(() => { /* not offered: found below */ });
+  let afterCrash = await viewerNow();
+  for (let i = 0; i < 50 && afterCrash.kind === 'webgpu'; i += 1) {
+    await sleep(100);
+    afterCrash = await viewerNow();
+  }
+  const lostShare = await browser.eval(drawnShare).catch(() => 0);
+  const badge = await browser.eval(`document.querySelector('.renderer-badge')?.textContent ?? ''`);
+  const afterLoss = await send('set_structure', { select: 'chain B', show: 'sticks' });
+  check('WebGPU lost under the view (the GPU process crashed): the view goes on with the Canvas renderer, its badge and words saying why, the structure drawn again, still answering', `${beforeCrash.kind === 'webgpu' ? 'crashed under WebGPU' : `already ${beforeCrash.kind}`}; now ${afterCrash.kind} (${afterCrash.failure.slice(0, 120)}); badge ${badge}; ${fmtShare(lostShare)}; then ${afterLoss.ok ? afterLoss.data.renderer : afterLoss.message}`, afterCrash.kind === 'canvas' && /graphics device was lost|WebGPU failed|does not offer WebGPU|No WebGPU|WebGPU did not start/.test(afterCrash.failure) && badge === 'Canvas' && lostShare > 0.03 && afterLoss.ok && afterLoss.data.renderer === 'canvas');
 
   // The Canvas renderer, the page opened again.
   await browser.goto(`${URL}?renderer=canvas`, 1500);

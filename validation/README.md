@@ -125,7 +125,11 @@ returned, GRB2's medians on the residues Node places them on, the residues drawn
 selected and labeled, and the camera where it comes to rest though handed over during a focus, the
 fake asked nothing but its startup answer, the button shown and its click opening the link in a new
 tab; with 0.11.0 the structure alone; a file of the person's embedded in a session file; the fake
-stopped, the button gone and the session file still written. 162 checks; in CI as the `remote` job.
+stopped, the button gone and the session file still written; and (the 0.5.0 release) Chrome's GPU
+process crashed under the Structure view (`Browser.crashGpuProcess`), the view going on with the
+Canvas renderer, saying why, and drawing; where the browser loses WebGPU by itself (GitHub's runners
+draw it in software, and lose it at the first image), the session finds the view on the Canvas
+renderer and checks it so. 163 checks; in CI as the `remote` job.
 
 ## Proteoscope itself (`proteoscope-handoff.mjs`, wave 5 slice 6)
 

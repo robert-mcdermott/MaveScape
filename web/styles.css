@@ -1060,6 +1060,8 @@ dl.kv.annotations dd { white-space: normal; }
 .structure-body .pane + .pane { margin-top: 0; }
 @media (max-width: 1080px) { .structure-body { grid-template-columns: minmax(0, 1fr); height: auto; } .structure-pane { height: 70vh; } }
 .structure-pane { display: flex; flex-direction: column; gap: 8px; min-height: 420px; }
+/* The view gives way, not the legend or the strip: wrapped onto more lines, they keep their height. */
+.structure-pane > :not(.structure-viewport) { flex-shrink: 0; }
 .structure-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .structure-toolbar .spacer { flex: 1; }
 .structure-viewport { position: relative; flex: 1; min-height: 320px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--line); }
