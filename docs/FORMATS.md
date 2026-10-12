@@ -378,6 +378,8 @@ methods.md               the latest run's methods
 references.bib           and their references
 report.md                the workspace's report (MaveScape 0.6; below, The report)
 report.bib               and its references
+certificate.json         in a certificate only (MaveScape 0.6; below, Reproducibility certificates)
+README.txt               and what it is and how to verify it
 ```
 
 Saved, reopened and saved again, an archive has the same bytes. On opening, MaveScape reads only
@@ -584,6 +586,74 @@ its id), `phiPrior` and `dfPrior` (the moderated dispersions' prior; `null` for 
 of freedom). Runs that combined by another method record it, and
 runs made before 0.2 recorded `reml`; they reopen to their hashes. A run's output hash covers each
 score's degrees of freedom when it has them.
+
+## Reproducibility certificates, `*.certificate.msz`
+
+A **certificate** (MaveScape 0.6) is a workspace archive (above) that also holds every number the
+workspace reports, computed again from its files when it was made, so that anyone can compute them
+once more and compare. It is made from the Report view (**Certify…**), with remote control's
+`certify`, or in Node (`web/lib/certificate.js`, `writeCertificate`); `mavescape verify`, the
+Report view's **Verify…** and remote control's `verify_certificate` check one. Opened as a
+workspace, it is the workspace; MaveScape offers to verify it.
+
+Its files are the archive's, every table included or (for data that cannot be shared) each named
+by its SHA-256 only, every annotation's file and figure image always, every structure's file when
+the library holds them all; and two more:
+
+- `certificate.json`, format `mavescape-certificate`, version 1:
+  - `created`, `software` (`name`, `version`, `commit`);
+  - `workspace`: `id`, `name`, `path` (`workspace.json`), `sha256` (of `workspace.json`'s bytes),
+    `modified`;
+  - `inputs`: each file the workspace names, once: `role` (`table`, `annotation`, `image`,
+    `structure`), `name`, `fileName`, `sha256`, `needed` (whether a number is computed from it),
+    `bytes`, `path` (in the archive; `null` when named by its SHA-256 only);
+  - `history`: `entries`, `head` (the last entry's hash), `ok`;
+  - `checkpoints`: `id`, `name`, `created`, `sha256` (of its state);
+  - `numbers` (below) and `total`, how many;
+  - `notChecked`: `{ what, reason }`, what is not computed again (a selection's variants are kept
+    as chosen; a structure view's evidence; a map panel's structure tracks, which need the
+    structure open);
+  - `notes`: what making it found (a run's scores computed now not those recorded when it was
+    scored; an analysis kept in the report not what it computes now: the certificate records what
+    the files give now);
+  - `fingerprint`: the SHA-256 of the canonical JSON (keys sorted) of everything else. Quoted with
+    the analysis (its short form `xxxx-xxxx-xxxx-xxxx` is its first 16 characters), it names
+    exactly what was certified.
+- `README.txt`: the fingerprint, what the certificate proves and does not, how to verify it, what
+  is not computed again.
+
+`numbers`:
+
+| | |
+|---|---|
+| `runs` | each run: `id`, `name`, `recorded` (its output's SHA-256 when scored), `output` (now), `variants` (keys, in order), `conditions` (each `id`, `name`, `score`, `se`, `class`: 0 not scored, 1 like the wild type, 2 lower, 3 higher, as robustness and the diff call them) and `contrasts` (each difference between conditions' `delta`, `se`, `q`, `class`) |
+| `qc` | each run's QC: `digest` (the SHA-256 of every number its QC computed), `findings` (`id`, `status`, `value`, `acknowledged`: the status it was acknowledged at, or null) |
+| `analyses` | each comparison and robustness check kept in the report, computed again: a comparison's `matched`, `statistics`, `discordance` and `classes`; a robustness check's `total`, `skipped` and each target's verdict `counts` |
+| `figures` | each figure's panels: `id`, `letter`, `kind`, `drawing` (the SHA-256 of its marks written as SVG, as the figure's manifest records it), `missing` when it cannot be drawn |
+| `report` | the SHA-256 of the report (`report.md`) and of its references (`report.bib`) as MaveScape writes them, with the certified version and commit |
+
+Numbers are JSON's shortest round-trip text, NaN and infinities as text (`"NaN"`). MaveScape's
+results do not depend on the JavaScript engine (the deterministic `dmath.js`), so the window's
+certificate and Node's are the same bytes, and verifying compares every number bit for bit.
+
+**Verifying** reads the archive (each file against the manifest), checks the fingerprint, the
+workspace's SHA-256, the history's chain and head, each checkpoint's state and each run's id
+(which follows from its recorded inputs), finds every file it names (in the archive, beside it, or
+in the library), computes every number again from them with this MaveScape's code, and compares.
+The verdict: **verified** (exit 0), **differs** (exit 1; each difference listed, with its number's
+place: `Run 1: the score of p.Trp36Ala`), or **incomplete** (exit 2; a file it names is missing,
+and the numbers read from it are not computed rather than said to differ). With another version
+of MaveScape, it says so. The verification as JSON (`mavescape verify --report`, the action's data)
+holds `verdict`, `exit`, `fingerprint`, `software`, `workspace`, `archive`, `history`,
+`checkpoints`, `runs`, `inputs` (each `status`: `ok`, `missing`, `changed`, `absent` when not
+needed; and `from`: `archive`, `supplied`, `library`), `numbers` (`checked`, `same`, `differs`,
+`differ` (the first 200: `label`, `recorded`, `computed`), `missing`), `notChecked`, `notes` and
+`summary`.
+
+What it proves: that these inputs, analyzed as the workspace records, give these numbers (the
+analysis is reproducible), and that the record is the one certified. Not that the scores are
+right: that rests on the experiment's design and the model's assumptions, which the report states.
+A certificate made again by whoever changed its files has another fingerprint.
 
 ## The cache of public data
 

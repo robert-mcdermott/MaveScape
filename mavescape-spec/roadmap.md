@@ -2775,6 +2775,52 @@ and the review report are found. The wave ends with its examples, as waves 2 to 
    - Validation: every example certified and verified; six kinds of tampering caught; a
      certificate made in the window verified in Node and the reverse; each earlier release's
      archives certified.
+   - **Done.** `lib/certificate.js` (after CytoWeave's `certificate.js`): a certificate is the
+     workspace archive (`lib/archive.js` takes `certificate.json` and `README.txt`) with every
+     number computed again from its files: each run's scores, SEs and classes (`callsOf`, as
+     robustness and the diff call them) and each difference between conditions', the SHA-256 of its
+     whole output; its QC findings (status, value, acknowledgement) and the SHA-256 of every number
+     its QC computed; the comparisons and robustness checks kept in the report; each figure panel's
+     drawing by its SHA-256, as the figure's manifest records it; the report's text and references.
+     It names the workspace and every file by their SHA-256 (`needed` when a number is read from
+     it), the history's head and the checkpoints; `notChecked` (a selection's variants, a structure
+     view's evidence, a map panel's structure tracks) and `notes` (a run that no longer gives its
+     recorded output, an analysis kept that no longer computes the same) say what it does not
+     prove. Its fingerprint is the SHA-256 of its canonical JSON. MaveScape's numbers do not depend
+     on the engine, so the certificate compares bit for bit, with no tolerance (CytoWeave allows 12
+     digits between engines); the window's certificate and Node's are the same bytes.
+     - **One computation.** The certificate computes with the code the views use, moved into `lib/`
+       for it: a source's table read from its files (`source-table.js`, as the CSV worker parses
+       them), the engine's input (`score-input.js`), QC subjects (`qc-subjects.js`), a comparison's
+       sides (`compare-pair.js`, from the Compare view), a run's tracks (`run-tracks.js`) and a
+       figure's panels (`figure-data.js`, resolved through a context the window and the certificate
+       each give). In the window it runs in a worker (`workers/certificate-worker.js`).
+     - **Verifying** reads the archive (each file against the manifest), checks the fingerprint, the
+       workspace's SHA-256, the history's chain and head, each checkpoint's state and each run's id
+       (which follows from its recorded inputs), finds every file (the archive, beside it, the
+       library), computes every number again and compares: verified (exit 0), differs (1, each
+       difference by the number it is), incomplete (2: the numbers read from a missing file not
+       computed rather than said to differ). `verify.go` runs it in a headless page
+       (`verify_certificate`); `--data`, `--report`. The Report view's Certificate pane certifies
+       (the tables included or not) and verifies; a certificate opened as a workspace offers to
+       verify itself; remote `certify` and `verify_certificate` (`library: false` verifies as
+       someone without this library).
+     - Exit 2 for not checkable is also the exit of a wrong command line, as `mavescape run`'s
+       "an input is missing" is: 1 is kept for a difference alone.
+     - Validation: `certificate` (7 checks): GRB2's workspace of every operation (a figure of six
+       panels, a checkpoint) certified, each kind of number what is computed apart from the
+       certificate, verified bit for bit, the same bytes again, the fingerprint computed with Node's
+       own SHA-256; another version says so; six kinds of tampering (a count in the table; a score's
+       last bit, with and without the fingerprint made again; a run's pseudocount, a history entry
+       and a checkpoint's state edited with `certificate.json` made to agree) caught and said;
+       without its tables not checkable, then verified; the 14 examples (172,383 numbers) and each
+       earlier release's archive certified and verified. The remote session (191): the window's
+       certificate verified in Node and Node's bytes, its panels their manifests' drawings; Node's
+       verified in the window, a tampered one's difference Node's; not checkable without the
+       library, verified with the table beside. `headless-run` (34): `mavescape verify` 0, 1, 2.
+     - Found while building it: the window's example opens record how its files were assembled
+       (codons read at the protein level, a barcode map), and the validation's examples did not;
+       the certificate suite opens them as the window does (`windowExample`).
 7. **The review report (R7, part 2).** One self-contained HTML file a reviewer opens in any browser
    without MaveScape (CytoWeave's `review-report.js` pattern): the experiment and design, the
    inputs with their checksums, the QC findings with their plots, each run's map and parameters,

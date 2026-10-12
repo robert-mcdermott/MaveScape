@@ -5,7 +5,8 @@
 // references. Copied as Markdown or downloaded with its BibTeX. Beside it, the analyses kept in the
 // report (each can be taken out) and the robustness checks of this session not yet in it; and the
 // checkpoints (wave 6, slice 5): kept here, each compared with now or with another, the changes
-// shown above the report (ui/diff.js).
+// shown above the report (ui/diff.js); and the certificate (wave 6, slice 6: ui/certificate.js),
+// made and verified here.
 
 import { h, icon, clear, downloadBlob } from './dom.js';
 import { toast } from './overlays.js';
@@ -16,6 +17,7 @@ import { askCheckpoint, deleteCheckpoint, diffWith, stateOf } from './diff.js';
 import { pairWords } from '../lib/diff.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { confirmDialog } from './overlays.js';
+import { certificatePane } from './certificate.js';
 
 const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'report';
 
@@ -99,6 +101,7 @@ export function mountReportMode(app, container) {
           doc.querySelector('#report-references')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } }, 'References')) : null)));
     }
+    side.append(certificatePane(app));
     // Checkpoints: each compared with now, or deleted.
     const checkpoints = ws.checkpoints ?? [];
     const shown = app.reportView?.from ?? null;
@@ -212,7 +215,7 @@ export function mountReportMode(app, container) {
         refresh();
         if (topics.has('workspace-loaded')) app.reportView = null;
         renderChanges();
-      } else if (topics.has('robustness')) renderSide();
+      } else if (topics.has('robustness') || topics.has('certificate')) renderSide();
       else if (topics.has('report-view')) {
         renderSide();
         renderChanges();

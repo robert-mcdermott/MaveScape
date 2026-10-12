@@ -89,6 +89,29 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   95% interval, changed class, or were newly filtered or scored, the most moved by name, the QC
   findings whose verdict changed, and a map of the change. Shown above the report; remote `diff`.
   The report names the checkpoints.
+- **Reproducibility certificates** (wave 6, slice 6). A certificate (`web/lib/certificate.js`) is
+  the workspace archive with every number the workspace reports, computed again from its files:
+  each run's scores, SEs and classes (and each difference between conditions'), its QC findings
+  and a digest of every number its QC computed, the comparisons and robustness checks kept in the
+  report, each figure panel's drawing (as the figure's manifest records it) and the report. It
+  names the workspace and every file it reads by their SHA-256, the history's head and the
+  checkpoints; it says what it does not compute again and what making it found; and its
+  fingerprint, the SHA-256 of what it records, names exactly what was certified. The tables can be
+  left out (named by their SHA-256) for data that cannot be shared. Made from the Report view's
+  Certificate pane (in a worker) or remote control's `certify`; the same workspace gives the same
+  bytes in the window and in Node.
+- `mavescape verify` checks a certificate without a window: its fingerprint, its files, the
+  history's chain, each checkpoint's state and each run's id, then every number computed again and
+  compared bit for bit; exit 0 verified, 1 differs (each difference listed by the number it is), 2
+  not checkable (a file missing: `--data` gives it); `--report` writes the verification as JSON.
+  The Report view's **Verify…** and remote control's `verify_certificate` do the same (the
+  library's files found by their SHA-256); a certificate opened as a workspace offers to verify
+  itself. README.txt in the certificate, FORMATS.md and the guide's *Certificates* page say what it
+  proves (the recorded inputs give the recorded numbers) and what it does not (that the scores are
+  right).
+- The window's figures, comparisons, QC subjects and annotation tracks are resolved by shared
+  library code (`web/lib/figure-data.js`, `compare-pair.js`, `qc-subjects.js`, `run-tracks.js`,
+  `source-table.js`, `score-input.js`), so the certificate draws and computes exactly as the views do.
 
 ### Changed
 
@@ -151,6 +174,14 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   checkpoint against the workspace it was kept from unchanged; a checkpoint through the archive;
   the map of the change; the report naming the checkpoint. The remote session: the window's diff
   Node's, from the workspace's archive and between two archives.
+- The `certificate` suite (7 checks; wave 6, slice 6): GRB2's workspace of every operation
+  certified, each kind of number what is computed apart from the certificate, verified bit for bit,
+  the same bytes again; six kinds of tampering caught and said; without its tables not checkable,
+  then verified with them; the 14 examples (172,383 numbers) and each earlier release's archive
+  certified and verified. The remote session (191 checks): the window's certificate verified in
+  Node and the same bytes as Node's, every figure panel the drawing its manifest records; Node's
+  verified in the window, a tampered one's difference Node's. `headless-run` (34): `mavescape
+  verify` exits 0, 1 and 2 as it should.
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
   was lost on CI's runner when the command's exit was seen before its output.
 

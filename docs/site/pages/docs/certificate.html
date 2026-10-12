@@ -1,0 +1,87 @@
+---
+title: Certificates
+description: A reproducibility certificate is the workspace archive with every number the workspace reports, computed again from its files, and a fingerprint that names exactly what was certified. mavescape verify, the Report view and remote control compute them once more and compare them bit for bit. What a certificate proves, what it does not, and how it is checked.
+lede: A certificate lets anyone check that the analysis gives the numbers it reports. It holds the workspace, the files it read and every number, and verifying computes each number again from the files and compares them bit for bit.
+---
+      <h2 id="what">What a certificate is</h2>
+      <p>A <strong>certificate</strong> (<code>.certificate.msz</code>) is a <a href="record.html">workspace archive</a> with two more files. <code>certificate.json</code> records every number the workspace reports, each computed again from its files when the certificate was made:</p>
+      <ul>
+        <li>each run's scores, standard errors and classes (lower than, like or higher than the wild type, as the <a href="robustness.html">robustness check</a> calls them), and each difference between conditions;</li>
+        <li>each run's QC findings, with what each found and its acknowledgement, and a SHA-256 of every number its QC computed;</li>
+        <li>each comparison and robustness check kept in the <a href="report.html">report</a>, computed again;</li>
+        <li>each figure panel's drawing, by its SHA-256, as the <a href="figures.html#provenance">figure's manifest</a> records it;</li>
+        <li>the report and its references.</li>
+      </ul>
+      <p><code>certificate.json</code> also names the workspace, every file it reads, the history's last hash and the checkpoints by their SHA-256. <code>README.txt</code> says what the certificate proves and how to verify it.</p>
+      <p>Its <strong>fingerprint</strong> is the SHA-256 of everything <code>certificate.json</code> records, so it names exactly what was certified. Quote it with the analysis, in a paper or a data deposit. Its short form is its first 16 characters, <code>xxxx-xxxx-xxxx-xxxx</code>.</p>
+
+      <h2 id="make">Making one</h2>
+      <p>In the Report view's <strong>Certificate</strong> pane, <strong>Certify…</strong> computes every number again from the files in the library and writes the certificate. It runs in a worker, so the window stays responsive. Scripts use <code>certify</code> (<a href="scripting.html">Remote control</a>).</p>
+      <p>The count tables are included unless you uncheck them. For data that cannot be shared, leave them out: each table is then named by its SHA-256 only, and whoever verifies the certificate gives the tables beside it. Annotation files and figure images always go in. Structure files go in when the library holds them all.</p>
+      <p>If making a certificate finds that a run's scores computed now are not the ones recorded when it was scored, or that an analysis kept in the report no longer computes the same, it records the numbers the files give now and says so in its notes.</p>
+
+      <h2 id="verify">Verifying one</h2>
+      <shot name="certificate" alt="The Report view with a certificate's verification: GRB2's two runs, every one of the 6,806 numbers computed again from its table and identical, bit for bit, its history's chain unbroken; the table, counts.csv, as certified; the Certificate pane beside the report">GRB2's run and its Enrich2 rescoring certified, then verified: every number computed again from the table, and identical.</shot>
+      <p>Verifying a certificate:</p>
+      <ul>
+        <li>checks its fingerprint;</li>
+        <li>checks the workspace and every file against their SHA-256;</li>
+        <li>checks the history's chain and last hash, each checkpoint's state, and each run's id (which follows from the run's recorded inputs);</li>
+        <li>computes every number again from the files, with this MaveScape's code, and compares them bit for bit.</li>
+      </ul>
+      <p>MaveScape's numbers do not depend on the browser or on Node, so equality is exact.</p>
+      <pre><code>mavescape verify analysis.certificate.msz
+mavescape verify --data tables/ analysis.certificate.msz     # made without its tables
+mavescape verify --report verification.json analysis.certificate.msz</code></pre>
+      <p>The exit status gives the verdict:</p>
+      <ul>
+        <li><strong>0, verified:</strong> every number is identical.</li>
+        <li><strong>1, differs:</strong> each difference is listed with the number it concerns (<em>Run 1: the score of p.Trp36Ala: −0.8123… certified, −0.8124… now</em>).</li>
+        <li><strong>2, not checkable:</strong> a file the certificate names is missing. The numbers read from it are not computed, rather than said to differ. A wrong command line also exits 2.</li>
+      </ul>
+      <p>In the window:</p>
+      <ul>
+        <li><strong>Verify…</strong> in the Certificate pane takes a certificate, and the tables it names if it was made without them.</li>
+        <li>A certificate opened as a workspace offers to verify itself.</li>
+        <li>The library's files are found by their SHA-256.</li>
+      </ul>
+      <p>Another version of MaveScape can verify a certificate too, and says which version certified it and which verified it.</p>
+
+      <h2 id="proves">What it proves, and what it does not</h2>
+      <p>A verified certificate shows that these inputs, analyzed as the workspace records, give these numbers: the analysis is reproducible. It also shows that the record is the one certified. Whoever changed a file would have to make the certificate again, and it would then have another fingerprint than the one quoted.</p>
+      <p>It does not show that the scores are right. That rests on the experiment's design and the model's assumptions, which the report states, and on the QC findings, which the certificate records with their acknowledgements.</p>
+      <p>Some things are recorded but not computed again, and the certificate lists each:</p>
+      <ul>
+        <li>a selection's variants are kept as they were chosen;</li>
+        <li>a structure view's evidence is not computed again (its structure's file is checked by its SHA-256);</li>
+        <li>a map panel that shows the structure's tracks is certified without them, since they need the structure open.</li>
+      </ul>
+
+      <h2 id="validation">How certificates are checked</h2>
+      <p>The validation suite's <code>certificate</code> starts from GRB2's workspace of every operation: two runs, a threshold changed, a finding acknowledged, a selection, a comparison and a robustness check kept in the report, an annotation, a structure view, a checkpoint, and a figure with every kind of panel. Each kind of number in its certificate is what is computed apart from the certificate:</p>
+      <ul>
+        <li>the scores, SEs and classes;</li>
+        <li>the QC and its findings;</li>
+        <li>the comparison and the robustness check as the report keeps them;</li>
+        <li>each panel drawn from the numbers computed apart;</li>
+        <li>the report.</li>
+      </ul>
+      <p>It is then verified bit for bit, and made again it is the same bytes. Then:</p>
+      <ul>
+        <li><strong>Six kinds of tampering</strong> are each caught and said, even with the archive's manifest made to list the change:
+          <ul>
+            <li>a count changed in the table;</li>
+            <li>a score changed in its last bit, with and without the fingerprint made again;</li>
+            <li>a run's pseudocount edited, a history entry's words edited, and a checkpoint's state edited, each with <code>certificate.json</code> made to agree.</li>
+          </ul>
+        </li>
+        <li>A certificate without its tables is not checkable, naming the table, and verified with it given beside.</li>
+        <li>Each of the 14 examples is certified and verified (172,383 numbers), as is each earlier release's workspace archive, from 0.1 to 0.5.</li>
+      </ul>
+      <p>In the window, through remote control:</p>
+      <ul>
+        <li>The window certifies a workspace with three runs, annotations, a robustness check kept in the report and two figures with every kind of panel. Node verifies it, and it is the same bytes as Node certifies from the workspace's archive.</li>
+        <li>Every figure panel's drawing is the one its manifest records.</li>
+        <li>Node's certificate is verified in the window. A tampered one is not verified, and the number that differs is the one Node finds.</li>
+        <li><code>mavescape verify</code> exits 0, 1 and 2 as above.</li>
+      </ul>

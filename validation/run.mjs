@@ -117,6 +117,10 @@ import { qcCharts, qcPanelData } from '../web/lib/qc-plots.js';
 import { writeReport } from '../web/lib/report.js';
 import { checkReferences, contextOf, CROSSREF_EXCEPTIONS, reportWorkspace } from './report-cases.mjs';
 import { movedApart, pairsFor, plantedChanges } from './diff-cases.mjs';
+import { certifiedWorkspace, repack, tamperings, windowExample } from './certificate-cases.mjs';
+import { certificateFingerprint, countNumbers, encodeAll, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
+import { canonicalJSON } from '../web/lib/workspace.js';
+import { panelDigests } from '../web/lib/figure-manifest.js';
 import { analysisState, changeMap, diffStates, pairWords, stateDigest } from '../web/lib/diff.js';
 import { buildManifest, checkManifest, compareDrawings, compareManifest, embedPNG, embedSVG, figureForWorkspace, pdfAttachment, readFigureManifest } from '../web/lib/figure-manifest.js';
 import { comparisonCharts, comparisonPoints, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
@@ -4734,6 +4738,118 @@ const suites = {
     // The report names the checkpoints.
     const rep = writeReport(base, { software: SOFTWARE });
     check('diff', 'the report names each checkpoint with its date and its state\'s SHA-256, and the decision log has its entry', rep.sections.find((x) => x.id === 'log')?.blocks.at(-1).text ?? 'none', /Checkpoints kept with the workspace, each the analysis as it stood: "Before" \(2026-10-12, state SHA-256 [0-9a-f]{12}…\)\./.test(rep.markdown) && rep.markdown.includes('Checkpoint "Before": the analysis as it stood'), 'named');
+  },
+
+  // Wave 6, slice 6 (R7, part 1): reproducibility certificates (lib/certificate.js): the workspace
+  // archive with every number it reports, computed again from its files and compared bit for bit.
+  async certificate() {
+    const SW = { version: '0.6.0', commit: '0123456789abcdef' };
+    const at = '2026-10-12T13:00:00.000Z';
+    const r = await certifiedWorkspace();
+    const file = async (sha) => r.files.get(sha) ?? null;
+    const t0 = performance.now();
+    const made = await writeCertificate(r.ws, file, { software: SW, created: at });
+    const ms = performance.now() - t0;
+    const c = made.certificate;
+    const verified = await verifyCertificate(await readCertificate(made.bytes), { software: SW });
+
+    // Every number, what the analysis gives computed here apart from the certificate: each run's
+    // scores, SEs and classes; its QC (every number, and each finding); the analyses as kept in the
+    // report; each panel drawn from the numbers computed here; the report's text.
+    const ws = r.ws;
+    const thresholds = withDefaultThresholds(ws.qc?.thresholds);
+    const enc = (a) => Array.from(a, (x) => (Number.isNaN(x) ? 'NaN' : x === 0 ? 0 : x));
+    const runRows = ws.runs.map((run) => {
+      const { table, results } = r.scored.get(run.id);
+      const got = c.numbers.runs.find((x) => x.id === run.id);
+      const cls = callsOf(results, run.inputs.design);
+      const qc = computeQC({ ...inputFor(table, run.inputs.design), design: run.inputs.design, results, measures: measuresOf(thresholds) });
+      const findings = findingsFrom(qc, thresholds, { acknowledged: ws.qc?.acknowledged });
+      const q = c.numbers.qc.find((x) => x.run === run.id);
+      return {
+        name: run.name,
+        scores: got.output === run.output.sha256 && results.conditions.every((cond, j) => canonicalJSON(enc(cond.score)) === canonicalJSON(got.conditions[j].score) && canonicalJSON(enc(cond.se)) === canonicalJSON(got.conditions[j].se) && canonicalJSON(Array.from(cls[j].cls)) === canonicalJSON(got.conditions[j].class)),
+        qc: q.digest === createHash('sha256').update(canonicalJSON(encodeAll(qc))).digest('hex') && canonicalJSON(findings.map((f) => [f.id, f.status, f.value, f.acknowledged?.current ? f.acknowledged.status : null])) === canonicalJSON(q.findings.map((f) => [f.id, f.status, f.value, f.acknowledged])),
+        variants: got.variants.length,
+      };
+    });
+    const kept = (kind) => c.numbers.analyses.find((a) => a.kind === kind).values;
+    const comparisonSame = canonicalJSON(kept('comparison')) === canonicalJSON(encodeAll({ matched: r.comparison.matched, statistics: r.comparison.statistics, discordance: r.comparison.discordance, classes: r.comparison.classes }));
+    const robustnessSame = canonicalJSON(kept('robustness')) === canonicalJSON(encodeAll({ total: r.robustness.total, skipped: r.robustness.skipped, targets: r.robustness.targets.map((x) => ({ id: x.id, n: x.n, counts: x.counts })) }));
+    // The figure drawn from what was computed here, panel by panel (lib/view-plots.js, lib/qc-plots.js).
+    const fig = ws.figures[0];
+    const g1 = r.scored.get(r.g.run.id);
+    const g2 = r.scored.get(r.run2.id);
+    const qc1 = computeQC({ ...inputFor(g1.table, r.g.run.inputs.design), design: r.g.run.inputs.design, results: g1.results, measures: measuresOf(thresholds) });
+    const sides = [describeSide(ws, r.g.run, g1.results, { run: r.g.run.id, condition: 0 }), describeSide(ws, r.run2, g2.results, { run: r.run2.id, condition: 0 })];
+    const byKind = { map: { model: buildMapModel(g1.results, r.g.run.inputs.design, { condition: 0 }), results: g1.results, tracks: [] },
+      qc: qcPanelData(findingsFrom(qc1, thresholds, { acknowledged: ws.qc?.acknowledged }).find((f) => f.id === 'excess-variance'), qc1, thresholds, { pair: 0 }),
+      scores: scoreCharts(g1.results, r.g.run, { condition: 0, contrast: 0, plot: 'distribution' }),
+      compare: comparisonCharts({ ...compareSides(sides[0], sides[1]), sides }, 'agreement'),
+      variant: variantCharts(g1.results, r.g.run, 'p.Trp36Ala', { condition: 0, plot: 'evidence' }) };
+    const digests = panelDigests(fig, figureMarks(fig, new Map(fig.panels.filter((p) => byKind[p.kind]).map((p) => [p.id, byKind[p.kind]]))));
+    const panels = c.numbers.figures[0].panels;
+    const samePanels = panels.filter((p) => p.drawing === digests.get(p.id));
+    const report = writeReport(ws, contextOf(ws, r.scored, SW));
+    const reportSame = c.numbers.report.markdown === createHash('sha256').update(report.markdown).digest('hex') && c.numbers.report.bibtex === createHash('sha256').update(report.bibtex).digest('hex');
+    check('certificate', `GRB2's workspace of every operation (two runs, a threshold changed, a finding acknowledged, a selection, a comparison and a robustness check kept in the report, an annotation, a structure view, a figure of six panels, a checkpoint) certified in ${(ms / 1000).toFixed(1)} s: each run's scores, SEs and classes (callsOf) as scoring gives them here, its QC (every number, and each finding's status, value and acknowledgement), the comparison and robustness check as the report keeps them, each panel as drawn here from the numbers computed here, the report as written here; verified, bit for bit`,
+      `${c.total.toLocaleString('en-US')} numbers; ${runRows.map((x) => `${x.name} (${x.variants} variants): scores ${x.scores ? 'as here' : 'differ'}, QC ${x.qc ? 'as here' : 'differs'}`).join('; ')}; comparison ${comparisonSame ? 'as kept' : 'differs'}, robustness ${robustnessSame ? 'as kept' : 'differs'}; panels ${samePanels.map((p) => p.letter).join('')} of ${panels.map((p) => p.letter).join('')} as drawn here; report ${reportSame ? 'as written here' : 'differs'}; ${verified.verdict}`,
+      runRows.every((x) => x.scores && x.qc) && comparisonSame && robustnessSame && samePanels.length === panels.length && panels.length === 6 && reportSame && verified.verdict === 'verified' && verified.numbers.same === c.total && !made.notes.length, 'all, verified');
+
+    // The same bytes again; the fingerprint, the README, what is not computed again.
+    const again = await writeCertificate(r.ws, file, { software: SW, created: at });
+    const { fingerprint, ...rest } = c;
+    const ownFingerprint = createHash('sha256').update(canonicalJSON(rest)).digest('hex');
+    const archived = await readArchive(made.bytes);
+    const readme = new TextDecoder().decode(archived.files.get('README.txt'));
+    const notChecked = c.notChecked.map((x) => x.what);
+    check('certificate', 'certified twice, the same bytes; its fingerprint the SHA-256 of certificate.json\'s canonical JSON without it (computed here), and README.txt names it, what it proves and how to verify it; the selection and the structure view, not computed again, each said; the archive opens as the workspace, its report and scores those certified', `${Buffer.compare(Buffer.from(again.bytes), Buffer.from(made.bytes)) === 0 ? 'the same bytes' : 'different bytes'}; fingerprint ${fingerprint === ownFingerprint ? 'its own' : 'not its own'}; README ${readme.includes(fingerprint) && /mavescape verify/.test(readme) && /It does not prove that\s+the scores are right/.test(readme) ? 'says it' : 'does not say it'}; not computed again: ${notChecked.join('; ')}`,
+      Buffer.compare(Buffer.from(again.bytes), Buffer.from(made.bytes)) === 0 && fingerprint === ownFingerprint && certificateFingerprint(c) === fingerprint && readme.includes(fingerprint) && /mavescape verify/.test(readme) && notChecked.length === 2 && /selection "Core lower"/.test(notChecked[0]) && /structure view "Core"/.test(notChecked[1]) && !archived.problems.length && archived.report.markdown === report.markdown && archived.ws.runs.length === 2, 'the same; said');
+
+    // Verified by another version: said.
+    const later = await verifyCertificate(await readCertificate(made.bytes), { software: { version: '0.7.0', commit: '' } });
+    check('certificate', 'verified by another version of MaveScape: verified, and it says which certified and which verified', later.summary.slice(-160), later.verdict === 'verified' && /Certified with MaveScape 0\.6\.0 and verified with 0\.7\.0\./.test(later.summary), 'said');
+
+    // Tampering, each caught and said.
+    const caught = [];
+    for (const t of tamperings()) {
+      const bytes = await repack(made.bytes, (files) => t.edit(files, c));
+      const rep = await verifyCertificate(await readCertificate(bytes), { software: SW });
+      caught.push({ t, rep, ok: t.expect(rep) && rep.exit === 1 });
+    }
+    check('certificate', 'six kinds of tampering, each caught and said (exit 1), the archive\'s manifest always made to list the change: a count changed in the table it holds; a score in certificate.json changed in its last bit, and the same with its fingerprint made again (the one number listed, by its variant); Run 1\'s pseudocount edited in workspace.json, a history entry\'s words edited, and a checkpoint\'s state edited, each with certificate.json made to agree', caught.map((x) => `${x.t.id}: ${x.ok ? 'caught' : `NOT caught (${x.rep.verdict}: ${x.rep.summary.slice(0, 120)})`}`).join('; '), caught.length === 6 && caught.every((x) => x.ok), 'every one');
+
+    // Without its tables (data that cannot be shared): not checkable, then verified with them.
+    const bare = await writeCertificate(r.ws, file, { software: SW, created: at, tables: false });
+    const bareRead = await readCertificate(bare.bytes);
+    const without = await verifyCertificate(bareRead, { software: SW });
+    const table = bare.certificate.inputs.find((i) => i.role === 'table');
+    const withIt = await verifyCertificate(await readCertificate(bare.bytes), { software: SW, file: async (sha) => (sha === table.sha256 ? r.files.get(sha) : null) });
+    check('certificate', 'a certificate without its tables: the table named by its SHA-256 only (not in the archive); not checkable without it (exit 2), the table named, its numbers not computed and none said to differ; verified with it given beside', `${bareRead.archive.sources.has(table.sha256) ? 'the table is in the archive' : 'the table is not in the archive'}; without it: ${without.verdict} (exit ${without.exit}), ${without.numbers.missing.toLocaleString('en-US')} not computed, ${without.numbers.differs} differ; with it: ${withIt.verdict}`,
+      !bareRead.archive.sources.has(table.sha256) && without.verdict === 'incomplete' && without.exit === 2 && without.numbers.differs === 0 && without.summary.includes(table.fileName) && withIt.verdict === 'verified' && withIt.inputs.find((i) => i.role === 'table').from === 'supplied', 'not checkable; verified');
+
+    // Every example, certified and verified.
+    const rows = [];
+    let total = 0;
+    const e0 = performance.now();
+    for (const e of EXAMPLES) {
+      const { ws: w, files } = windowExample(e.id);
+      const m = await writeCertificate(w, async (sha) => files.get(sha) ?? null, { software: SW, created: at });
+      const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
+      total += m.certificate.total;
+      rows.push({ id: e.id, n: m.certificate.total, verdict: v.verdict, notes: m.notes.length });
+    }
+    check('certificate', `each of the ${EXAMPLES.length} examples opened as the window opens it (its files kept, its source saying how they were assembled), scored and certified (${((performance.now() - e0) / 1000).toFixed(1)} s), and verified bit for bit`, `${total.toLocaleString('en-US')} numbers; ${rows.filter((x) => x.verdict !== 'verified' || x.notes).map((x) => `${x.id}: ${x.verdict}${x.notes ? `, ${x.notes} notes` : ''}`).join('; ') || `every one verified (${rows.map((x) => x.n).join(', ')})`}`, rows.length === EXAMPLES.length && rows.every((x) => x.verdict === 'verified' && !x.notes), 'every one');
+
+    // Each earlier release's archives, opened by this MaveScape, certified and verified.
+    const releases = [];
+    for (const name of readdirSync(new URL('./archives/', import.meta.url)).filter((f) => f.endsWith('.msz')).sort()) {
+      const opened = await readArchive(new Uint8Array(readFileSync(new URL(`./archives/${name}`, import.meta.url))));
+      const m = await writeCertificate(opened.ws, async (sha) => opened.sources.get(sha) ?? null, { software: SW, created: at });
+      const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
+      releases.push({ name, release: opened.manifest.software?.version, n: m.certificate.total, verdict: v.verdict, notes: m.notes });
+    }
+    check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.5), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output', releases.map((x) => `${x.name} (${x.release}): ${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 9 && releases.every((x) => x.verdict === 'verified' && !x.notes.length), 'every one');
   },
 };
 

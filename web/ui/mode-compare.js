@@ -14,12 +14,12 @@
 // workspace keeps (its runs, each with its record; the score sets and predictors beside it).
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
-import { annotationLabel, classesCSV, comparableAnnotations, compareSides, comparisonCSV, comparisonJSON, COMPARABLE_PROVIDERS, describePredictor, describeScoreSet, describeSide, differenceMap, DISCORDANT_Q, filtersApplied, MIN_POSITION_VARIANTS, NO_FILTERS, positionsCSV, possessive, sameSpec, SCALES, sideMap, sideOptions, specKey } from '../lib/compare.js';
+import { annotationLabel, classesCSV, comparableAnnotations, compareSides, comparisonCSV, comparisonJSON, COMPARABLE_PROVIDERS, differenceMap, DISCORDANT_Q, filtersApplied, MIN_POSITION_VARIANTS, NO_FILTERS, positionsCSV, possessive, sameSpec, SCALES, sideMap, sideOptions, specKey } from '../lib/compare.js';
 import { categoricalColor } from '../lib/colormaps.js';
 import { buildMapModel, cellAt, cellName, STATE, STATE_NAMES } from '../lib/map-model.js';
 import { mapSVG } from '../lib/map-svg.js';
-import { annotationTracks, providerById } from '../lib/providers/index.js';
-import { scoreSetResults } from '../lib/scoreset.js';
+import { providerById } from '../lib/providers/index.js';
+import { annotationOf, comparePair, comparisonMapModels, pairCaches, runOf } from '../lib/compare-pair.js';
 import { trackTarget } from '../lib/tracks.js';
 import { KIND } from '../lib/variants.js';
 import { setScoreSetDirection } from '../lib/workspace.js';
@@ -69,8 +69,6 @@ export function compareOptions(ws) {
   ];
 }
 
-const annotationOf = (ws, spec) => (spec?.annotation ? (ws.annotations ?? []).find((a) => a.id === spec.annotation) ?? null : null);
-const runOf = (ws, spec) => (spec?.run ? ws.runs.find((r) => r.id === spec.run) ?? null : null);
 
 // The pair shown for the open workspace (kept while its sides exist), or the default.
 export function currentPair(app) {
@@ -123,8 +121,7 @@ export function setScale(app, scale) {
 // published (by its text and the direction stated), a predictor placed on a measured side (by that
 // side's scores and target).
 const texts = new Map();
-const readSets = new Map();
-const placed = new WeakMap();
+const caches = pairCaches();
 
 // Whether every side of a pair can be described now (its run's scores computed, its annotation's
 // text read).
@@ -163,38 +160,12 @@ async function prepare(app, pair) {
   return null;
 }
 
-// A side of a pair, described (lib/compare.js), once ready. other: the measured side a predictor is
-// placed on.
-function describe(app, spec, other = null) {
-  const ws = app.store.ws;
-  const a = annotationOf(ws, spec);
-  if (!a) {
-    const run = runOf(ws, spec);
-    return describeSide(ws, run, runEntry(app, run).results, spec);
-  }
-  const text = texts.get(a.file.sha256);
-  if (COMPARABLE_PROVIDERS[a.provider] === 'scoreset') {
-    const key = `${a.file.sha256}|${a.record?.scoreSet?.readout?.direction ?? ''}|${a.record?.scoreSet?.urn ?? ''}`;
-    if (!readSets.has(key)) readSets.set(key, scoreSetResults(text, a.record?.scoreSet));
-    const read = readSets.get(key);
-    if (read.error) throw new Error(read.error);
-    return describeScoreSet(a, read);
-  }
-  // A predictor: placed on the measured side's protein, as its track is placed beside that side's map.
-  if (!other) throw new Error(`${a.name} is compared with a run's scores or a score set's: choose one for the other side.`);
-  if (!placed.has(other.results)) placed.set(other.results, new Map());
-  const cache = placed.get(other.results);
-  const key = `${a.id}|${a.file.sha256}|${specKey(other.spec)}`;
-  if (!cache.has(key)) {
-    const map = sideMap(other);
-    if (!map) throw new Error(`${other.label} has no protein changes to place ${possessive(a.name)} substitutions on (nucleotide variants with no coding sequence).`);
-    const model = buildMapModel(map.results, map.design, { condition: map.condition });
-    const read = annotationTracks(a, text, { target: trackTarget(other.target, ws.targets), protein: model.protein, offset: model.target.offset ?? 0, length: model.length });
-    if (!read.tracks.length) throw new Error(`${a.name}: ${read.problem ?? `nothing to place on ${other.target?.name ?? 'the target'}`}`);
-    cache.set(key, describePredictor(a, read.tracks[0], other, read.notes));
-  }
-  return cache.get(key);
-}
+// What the lib's comparison reads (lib/compare-pair.js): the runs' scores computed in this session
+// and the annotations' texts read.
+const sideGetter = (app) => ({
+  results: (run) => runEntry(app, run)?.results ?? null,
+  text: (a) => texts.get(a.file?.sha256) ?? null,
+});
 
 // The comparison of a pair with filters and a scale, its runs' scores recomputed and its
 // annotations read first when they are not yet: the result of compareSides (with its two sides,
@@ -215,48 +186,14 @@ function comparisonOf(app, pair, filters, level = null, scale = 'scored') {
   const key = `${ws.id}||${specKey(pair.a)}||${specKey(pair.b)}||${JSON.stringify(filters)}||${level ?? ''}||${scale}`;
   const hit = memo.get(key);
   if (hit && hit.identity.every((x, i) => x === identity[i])) return hit.value;
-  let value;
-  try {
-    // A predictor is placed on the other side, so that side is described first.
-    const first = annotationOf(ws, pair.a) && COMPARABLE_PROVIDERS[annotationOf(ws, pair.a).provider] === 'predictor';
-    let sides;
-    if (first) {
-      const b = describe(app, pair.b);
-      sides = [describe(app, pair.a, b), b];
-    } else {
-      const a = describe(app, pair.a);
-      sides = [a, describe(app, pair.b, a)];
-    }
-    value = compareSides(sides[0], sides[1], { filters, scale, ...(level ? { level } : {}) });
-    value.sides = sides;
-  } catch (error) {
-    value = { error: error.message };
-  }
+  const value = comparePair(ws, pair, sideGetter(app), { filters, level, scale, caches });
   // Kept for the open workspace's latest few comparisons.
   memo.set(key, { identity, value });
   if (memo.size > 24) memo.delete(memo.keys().next().value);
   return value;
 }
 
-// The map models of a comparison at the protein level: { first, second, difference } (each
-// { model, results } or null), with each side's target offset.
-export function comparisonMapModels(c) {
-  const [sa, sb] = c.sides;
-  const made = (spec, colorBy = 'score') => {
-    if (!spec) return null;
-    try {
-      return { model: buildMapModel(spec.results, spec.design, { condition: spec.condition, contrast: spec.contrast, colorBy }), results: spec.results };
-    } catch {
-      return null;
-    }
-  };
-  return {
-    first: made(sideMap(sa)),
-    second: made(sideMap(sb)),
-    difference: made(differenceMap(c, sa), 'differential'),
-    offsets: [sa.target?.offset ?? 0, sb.target?.offset ?? 0],
-  };
-}
+export { comparisonMapModels };
 
 // A map of a comparison at the protein level as SVG: which 'first', 'second' or 'difference'; null
 // when there is none.

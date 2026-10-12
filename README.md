@@ -164,6 +164,11 @@ guides to every view, with screenshots.
   - A run written as a MaveDB deposit (scores, counts, the experiment and score set, the methods
     and the MAVE minimum information's keywords) that MaveDB's own validators accept, written on
     your computer and never sent.
+  - A reproducibility certificate: the workspace archive with every number it reports (each
+    run's scores, SEs and classes, its QC, the analyses kept in the report, the figures' drawings,
+    the report) computed again from its files, and a fingerprint to quote with the analysis.
+    `mavescape verify` computes them once more and compares them bit for bit, the tables given
+    beside it when they cannot be shared.
   - Every change in a hash-chained history, so an edit after the fact is caught.
   - The workspace as one archive that reopens identically: each run is recomputed from its inputs
     and must match its recorded hash. Archives from every earlier release keep opening.
@@ -327,7 +332,7 @@ every file MaveScape reads and writes, and the start page has blank layouts to f
 | **Compare** | Two replicates, conditions, runs, score sets or a predictor; robustness to analysis choices |
 | **Structure** | The scores on a PDB entry, AlphaFold DB model or file, and the structure as evidence |
 | **Figures** | Pages of panels (any view's plots, maps and text) for a paper or a talk, exported as SVG, PDF or PNG |
-| **Report** | The methods of the whole workspace with their references, written from its record, copied as Markdown or downloaded with its BibTeX; checkpoints, and what changed since one |
+| **Report** | The methods of the whole workspace with their references, written from its record, copied as Markdown or downloaded with its BibTeX; checkpoints, and what changed since one; certificates made and verified |
 
 The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page for each.
 
@@ -351,6 +356,7 @@ The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page 
 | `mavescape export --format mavedb --out DIR W.msz` | Write a saved run as a MaveDB deposit (or `--format tables`); `--details` gives what MaveDB asks for, `--strict` fails while it is missing ([depositing in MaveDB](https://robert-mcdermott.github.io/MaveScape/docs/record.html#mavedb)) |
 | `mavescape export --format figures --out DIR W.msz` | Write a saved workspace's figures as SVG, PDF and PNG, each with its manifest, and `figures.json` ([figures](https://robert-mcdermott.github.io/MaveScape/docs/figures.html#provenance)) |
 | `mavescape export --format report --out DIR W.msz` | Write a saved workspace's report, `report.md` and `report.bib` ([report](https://robert-mcdermott.github.io/MaveScape/docs/report.html)) |
+| `mavescape verify [--data DIR] C.msz` | Verify a reproducibility certificate: every number computed again from its files and compared bit for bit; exit 0 verified, 1 differs, 2 not checkable ([certificates](https://robert-mcdermott.github.io/MaveScape/docs/certificate.html)) |
 
 On macOS, Chrome (and Edge, Brave) keeps running after its last window is closed: quit it with ⌘Q
 to stop MaveScape too. If that browser is already running when MaveScape starts, the window opens
@@ -384,6 +390,7 @@ mavescape run --design design.json --out results/ --time 2026-10-09T12:00:00Z co
 mavescape run --from-workspace results/workspace.msz --out rerun/
 mavescape run --design design.json --out strict/ --strict --acknowledge "coverage=an error-prone PCR library" counts.csv
 mavescape export --format mavedb --details details.json --out deposit/ results/workspace.msz
+mavescape verify --data tables/ analysis.certificate.msz
 ```
 
 ## Validation
@@ -414,6 +421,7 @@ integration on every change.
 | Figures | Nine examples' maps and every view's plots as figure panels (96 QC panels), against the map's own SVG and the results themselves; the PDF's content read back; the window's export against Node's; each file's manifest read back, edited, compared after a rescoring and rebuilt | Every cell the map's own color, every bar and point the results'; the PDF the SVG's rectangles and text, mark for mark; the window's SVG and manifest Node's, byte for byte; an edit caught, exactly the panels a rescoring touches flagged, a rebuilt figure the same bytes |
 | Report | GRB2's workspace built one operation at a time; the 14 examples' runs; every cited DOI against Crossref's record (a recorded fixture); the window's report against Node's | Every operation its sentence, nothing said that was not done; each run's paragraphs its methods word for word; 43 of 43 references agree; the window's text Node's |
 | Checkpoints and changes | Five planted changes from a checkpoint of GRB2's run (a pseudocount, a filter, a replicate left out, a threshold, the readout); the variants each rescoring moved, computed apart; the window's diff against Node's | Each change described exactly and nothing else; the variants moved, crossed and filtered the same; an analysis against itself unchanged |
+| Certificates | GRB2's workspace of every operation, each kind of number computed apart; six kinds of tampering; the 14 examples and every release's archives; the window's certificates against Node's | Every number as computed apart, verified bit for bit; every tampering caught and said; 172,383 numbers of the examples verified; the window's certificate Node's, byte for byte |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |
 | Scale | A million barcodes and their million-line map | Imported in 3.5 s, scored in 1.3 s |
 

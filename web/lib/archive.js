@@ -15,6 +15,9 @@
 //   results/<run>.csv      each run's scores (one file per condition beyond the first)
 //   methods.md, references.bib   the latest run's methods and references
 //   report.md, report.bib  the workspace's report and its references (wave 6, slice 4)
+//   certificate.json, README.txt   in a certificate (wave 6, slice 6; lib/certificate.js): every
+//                          number the workspace reports, its inputs and history, and how to
+//                          verify it
 //
 // Written deterministically: the same workspace gives the same bytes in any time zone (the
 // entries are dated with the workspace's modification time, in UTC). Read defensively: only these names, nothing outside the
@@ -33,19 +36,24 @@ export const ARCHIVE_VERSION = 1;
 export const LIMITS = { entry: 2 ** 31, total: 2 ** 33, entries: 10000 };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const NAME = /^(manifest\.json|workspace\.json|methods\.md|references\.bib|report\.md|report\.bib|sources\/[0-9a-f]{64}(\.[A-Za-z0-9]{1,8}){0,2}|results\/[A-Za-z0-9_.-]{1,120}\.csv)$/;
+const NAME = /^(manifest\.json|workspace\.json|methods\.md|references\.bib|report\.md|report\.bib|certificate\.json|README\.txt|sources\/[0-9a-f]{64}(\.[A-Za-z0-9]{1,8}){0,2}|results\/[A-Za-z0-9_.-]{1,120}\.csv)$/;
 
 const extension = (fileName) => {
   const m = /(\.[A-Za-z0-9]{1,8}(\.gz)?)$/i.exec(fileName ?? '');
   return m ? m[1].toLowerCase() : '';
 };
 
+// Where the archive keeps a file it names by its SHA-256 (a table, an annotation's file, a
+// structure's file): sources/<sha256> and the file's extension.
+export const archivePath = (sha, fileName) => `sources/${sha}${extension(fileName)}`;
+
 // Writes the archive. options: { software: { version, commit }, sources: Map(sha256 → bytes) or
 // null for checksums only, annotations: Map(sha256 → bytes) of the annotations' files, figures:
 // Map(sha256 → bytes) of the figures' images, structures:
 // Map(sha256 → bytes) of the structures' files or null for checksums only, results:
 // Map(run id → results) (runs without results are left out of results/), methods: { markdown,
-// bibtex }, report: { markdown, bibtex } (lib/report.js) }. Returns { bytes, manifest }.
+// bibtex }, report: { markdown, bibtex } (lib/report.js), certificate: { json, readme } (text,
+// lib/certificate.js) }. Returns { bytes, manifest }.
 // The files of a source the library keeps: its tables, and MaveDB's mapped variants beside them
 // (wave 3, slice 3).
 export function sourceFiles(source) {
@@ -86,7 +94,7 @@ export async function writeArchive(ws, options = {}) {
         seen.add(f.sha256);
         const bytes = options.sources.get(f.sha256);
         if (!bytes) throw new Error(`The table ${f.fileName ?? source.name} (SHA-256 ${f.sha256.slice(0, 12)}…) is not in the library: export with checksums only, or open it again.`);
-        files.push({ name: `sources/${f.sha256}${extension(f.fileName ?? source.fileName)}`, data: bytes });
+        files.push({ name: archivePath(f.sha256, f.fileName ?? source.fileName), data: bytes });
       }
     }
   }
@@ -97,7 +105,7 @@ export async function writeArchive(ws, options = {}) {
       seen.add(f.sha256);
       const bytes = options.annotations?.get(f.sha256) ?? options.sources?.get(f.sha256);
       if (!bytes) throw new Error(`The annotation ${f.name} (${f.fileName}) is not in the library: remove it, or add it again.`);
-      files.push({ name: `sources/${f.sha256}${extension(f.fileName)}`, data: bytes });
+      files.push({ name: archivePath(f.sha256, f.fileName), data: bytes });
     }
     // The figures' images (wave 6, slice 2), always: a figure is drawn from them.
     for (const f of figureFiles(ws)) {
@@ -105,7 +113,7 @@ export async function writeArchive(ws, options = {}) {
       seen.add(f.sha256);
       const bytes = options.figures?.get(f.sha256);
       if (!bytes) throw new Error(`The image of ${f.name} is not in the library: draw it again from its saved view.`);
-      files.push({ name: `sources/${f.sha256}.png`, data: bytes });
+      files.push({ name: archivePath(f.sha256, f.fileName), data: bytes });
     }
     // The structures' files (wave 5, slice 5), unless named by their checksums only.
     if (options.structures) {
@@ -114,7 +122,7 @@ export async function writeArchive(ws, options = {}) {
         seen.add(f.sha256);
         const bytes = options.structures.get(f.sha256);
         if (!bytes) throw new Error(`The structure file of ${f.name} (${f.fileName}) is not in the library: export with checksums only, or open the view again.`);
-        files.push({ name: `sources/${f.sha256}${extension(f.fileName)}`, data: bytes });
+        files.push({ name: archivePath(f.sha256, f.fileName), data: bytes });
       }
     }
   }
@@ -132,6 +140,10 @@ export async function writeArchive(ws, options = {}) {
   if (options.report) {
     files.push({ name: 'report.md', data: encoder.encode(options.report.markdown) });
     files.push({ name: 'report.bib', data: encoder.encode(options.report.bibtex) });
+  }
+  if (options.certificate) {
+    files.push({ name: 'certificate.json', data: encoder.encode(options.certificate.json) });
+    files.push({ name: 'README.txt', data: encoder.encode(options.certificate.readme) });
   }
   const manifest = {
     format: ARCHIVE_FORMAT,
@@ -182,7 +194,8 @@ async function readLimited(archive, entry) {
 }
 
 // Reads an archive: { manifest, ws, sources: Map(sha256 → bytes), results: Map(path → text),
-// methods, report, problems: [messages] }. Throws when it is not a MaveScape archive or breaks a limit.
+// methods, report, certificate (certificate.json's text, or null), files: Map(path → bytes),
+// problems: [messages] }. Throws when it is not a MaveScape archive or breaks a limit.
 export async function readArchive(bytes, limits = LIMITS) {
   const entries = listZip(bytes);
   if (entries.length > limits.entries) throw new Error(`The archive holds ${entries.length} files; a MaveScape archive holds at most ${limits.entries}.`);
@@ -239,5 +252,6 @@ export async function readArchive(bytes, limits = LIMITS) {
   const results = new Map([...files].filter(([n]) => n.startsWith('results/')).map(([n, d]) => [n, decoder.decode(d)]));
   const methods = files.has('methods.md') ? { markdown: decoder.decode(files.get('methods.md')), bibtex: files.has('references.bib') ? decoder.decode(files.get('references.bib')) : '' } : null;
   const report = files.has('report.md') ? { markdown: decoder.decode(files.get('report.md')), bibtex: files.has('report.bib') ? decoder.decode(files.get('report.bib')) : '' } : null;
-  return { manifest, ws, sources, results, methods, report, problems };
+  const certificate = files.has('certificate.json') ? decoder.decode(files.get('certificate.json')) : null;
+  return { manifest, ws, sources, results, methods, report, certificate, files, problems };
 }

@@ -67,6 +67,8 @@ import { drawFigure, drawStructureImage, exportFigure, readFigureFile, rebuildFi
 import { comparisonForReport, keepInReport, removeFromReport, reportOf, robustnessForReport } from './report.js';
 import { analysisName } from '../lib/report.js';
 import { archiveState, deleteCheckpoint, diffWith, keepCheckpoint, stateOf } from './diff.js';
+import { makeCertificate, verifyBytes } from './certificate.js';
+import { shortFingerprint } from '../lib/certificate.js';
 import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
@@ -1746,6 +1748,53 @@ export function installRemote(app) {
         await settle();
       }
       return { message: `${message}${data.report ? ' Kept in the report.' : ''}`, data };
+    },
+
+    // Certificates (wave 6, slice 6; ui/certificate.js): the workspace certified, every number
+    // computed again from the files the library keeps, written where the caller asks; tables: false
+    // names the count tables by their SHA-256 only.
+    async certify(args) {
+      if (!ws().runs.length) throw new ActionError('There is no score run to certify: score one first.');
+      const tables = args.tables !== false;
+      let made;
+      try {
+        made = await makeCertificate(app, { tables });
+      } catch (error) {
+        throw new ActionError(`The certificate could not be made: ${error.message}`);
+      }
+      const c = made.certificate;
+      const used = c.inputs.filter((i) => i.needed);
+      return {
+        file: made.bytes,
+        message: `Certified "${ws().name}": ${plural(c.total, 'number')} computed again from ${plural(used.length, 'file')}${tables ? '' : ' (the tables named by their SHA-256 only)'}; fingerprint ${c.fingerprint}.${made.notes.length ? ` Notes: ${made.notes.join(' ')}` : ''}`,
+        data: { name: made.name, fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), created: c.created, software: c.software, total: c.total, tables, workspace: c.workspace, inputs: c.inputs, history: c.history, checkpoints: c.checkpoints, notChecked: c.notChecked, notes: c.notes },
+      };
+    },
+
+    // A certificate verified: paths, the certificate (.msz) and the files it names that it does not
+    // hold (a folder of them, or each), found by their SHA-256; the library's too (library: false,
+    // only those given, as someone without this library verifies it). Every number
+    // computed again and compared bit for bit: verdict verified, differs or incomplete.
+    async verify_certificate(args, event) {
+      const files = event.files ?? [];
+      if (!files.length) throw new ActionError('Give the certificate (.msz) in paths, and after it the tables it names when it was made without them.');
+      const read = [];
+      for (const file of files) {
+        const response = await fetch(file.url);
+        if (!response.ok) throw new ActionError(`${file.name} could not be read (HTTP ${response.status}).`);
+        read.push({ name: file.name, bytes: new Uint8Array(await response.arrayBuffer()) });
+      }
+      const certificates = read.filter((f) => /\.msz$/i.test(f.name));
+      if (certificates.length !== 1) throw new ActionError(`Give one certificate (.msz) in paths${certificates.length ? `, not ${certificates.length}` : ''}.`);
+      let report;
+      try {
+        ({ report } = await verifyBytes(app, certificates[0].bytes, { name: certificates[0].name, beside: read.filter((f) => f !== certificates[0]), library: args.library !== false }));
+      } catch (error) {
+        throw new ActionError(`${certificates[0].name}: ${error.message}`);
+      }
+      if (args.show !== false) await app.setMode('report');
+      await settle();
+      return { message: `${certificates[0].name}: ${report.summary}`, data: report };
     },
 
     // Checkpoints (wave 6, slice 5): name keeps one of the analysis as it stands; remove deletes one

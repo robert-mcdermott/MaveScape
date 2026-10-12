@@ -6,6 +6,7 @@
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
 import { annotationFiles, figureFiles, readArchive, structureFiles, writeArchive, sourceFiles } from '../lib/archive.js';
+import { openedCertificate } from './certificate.js';
 import { writePackage } from '../lib/package.js';
 import { barcodesCSV, countsCSV, differentialCSV, proteinScoresCSV, provenanceJSON, provenanceText, qcFindingsCSV, qcSamplesCSV, qcVariantsCSV, scoresCSV, selectionCSV, selectionJSON } from '../lib/exports.js';
 import { proteinView } from '../lib/collapse.js';
@@ -288,7 +289,8 @@ export async function openArchives(app, items) {
   for (const item of items) {
     const busy = progressToast(`Opening ${item.name}…`);
     try {
-      const { ws, sources, problems } = await readArchive(await app.readBytes(item));
+      const bytes = await app.readBytes(item);
+      const { ws, sources, problems, certificate } = await readArchive(bytes);
       for (const [hash, bytes] of sources) await app.library.putFile(hash, bytes);
       let doc = ws;
       const existing = (await app.library.listWorkspaces().catch(() => [])).some((x) => x.id === ws.id);
@@ -304,6 +306,14 @@ export async function openArchives(app, items) {
       app.log(`Opened the archive ${item.name}: workspace ${ws.name}, ${ws.runs.length} runs, ${sources.size} tables${problems.length ? `; ${problems.length} problems` : ''}.`);
       if (problems.length) {
         showDialog({ title: `${item.name}: problems`, content: [h('p', 'The archive opened, but:'), h('ul', ...problems.map((p) => h('li', p)))] });
+      }
+      // A certificate (wave 6, slice 6): offered to verify.
+      if (certificate) {
+        try {
+          openedCertificate(app, item.name, bytes, JSON.parse(certificate));
+        } catch {
+          app.log(`${item.name}: its certificate.json cannot be read.`);
+        }
       }
     } catch (error) {
       busy.fail(`${item.name} could not be opened: ${error.message}`);

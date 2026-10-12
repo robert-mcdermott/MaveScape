@@ -55,6 +55,8 @@ import { robustnessCSV, robustnessJSON, robustnessPositionsCSV, ROBUSTNESS_SEED 
 import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
+import { readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
+import { repack, tamperings } from './certificate-cases.mjs';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLE_STRUCTURES, cachedBytes, cachedJSON, exampleTarget, modelFile, nodeEvidence, openCached, paeFixture, pdbFile } from './structure-cases.mjs';
 import { clusterTest, effectsByClass, evidenceCSV } from '../web/lib/structure-evidence.js';
@@ -627,6 +629,62 @@ try {
     view: await browser.eval(`Boolean(document.querySelector('.map-query-input')) && /by query/.test(document.querySelector('.map-selection')?.textContent ?? '')`),
   };
   check('select_variants by query, as Node selects on the run it recomputes from the archive: a query, its matches subtracted from the selection (the query composed and saved with it), a saved selection named in a query, the robustness verdicts of the run checked, a mistake named in place; the saved selection\'s file keeps its query; the Map view shows the query', `${q1.data.count} by query, ${q2.data.count} after subtracting, ${q3.data.count} of the saved lower, ${q4.data.count} fragile or uncertain; ${Object.entries(queryParts).map(([k, v]) => `${k} ${v ? 'ok' : 'different'}`).join(', ')}`, Object.values(queryParts).every(Boolean));
+
+  // Certificates (wave 6, slice 6): this workspace (its runs, Run 1's robustness kept in the report,
+  // selections, annotations, two figures with every kind of panel) certified in the window's
+  // worker from the library's files, and verified in Node; the same bytes as Node certifies from the
+  // workspace's archive; its panels the drawings the figures' manifests record. Node's verified in
+  // the window, one tampered and one without its tables too.
+  {
+    const certPath = join(out, 'grb2.certificate.msz');
+    const made = await act('certify', { path: certPath });
+    const bytes = new Uint8Array(readFileSync(certPath));
+    const read = await readCertificate(bytes);
+    const inNode = await verifyCertificate(read, { software: windowSoftware });
+    await act('export', { what: 'archive', path: join(out, 'to-certify.msz') });
+    const toCertify = await readArchive(readFileSync(join(out, 'to-certify.msz')));
+    const nodeMade = await writeCertificate(toCertify.ws, async (sha) => toCertify.sources.get(sha) ?? null, { software: windowSoftware, created: read.certificate.created });
+    const sameBytes = Buffer.compare(Buffer.from(nodeMade.bytes), Buffer.from(bytes)) === 0;
+    // Each figure's panels: the drawings its manifest (export_figure json) records.
+    const panelRows = [];
+    for (const f of read.certificate.numbers.figures) {
+      const path = join(out, `${f.id}.manifest.json`);
+      await act('export_figure', { figure: f.name, format: 'json', path });
+      const manifest = JSON.parse(readFileSync(path, 'utf8'));
+      for (const p of f.panels) panelRows.push({ figure: f.name, letter: p.letter, same: manifest.panels.find((x) => x.id === p.id)?.drawing === p.drawing });
+    }
+    check('certify: the workspace (its runs, a robustness check kept in the report, selections, annotations, two figures of every kind of panel) certified in the window\'s worker from the library\'s files, verified in Node bit for bit; the same bytes as Node certifies from the workspace\'s archive; every figure panel the drawing the figure\'s manifest (export_figure) records',
+      `${made.message.slice(0, 160)}… Node: ${inNode.verdict}, ${inNode.numbers.same.toLocaleString('en-US')} of ${inNode.numbers.checked.toLocaleString('en-US')} identical; ${sameBytes ? 'the same bytes as Node\'s' : 'not Node\'s bytes'}; panels ${panelRows.filter((x) => x.same).length} of ${panelRows.length} as their manifests`,
+      inNode.verdict === 'verified' && inNode.numbers.same === read.certificate.total && sameBytes && panelRows.length > 6 && panelRows.every((x) => x.same) && made.data.fingerprint === read.certificate.fingerprint && read.certificate.inputs.some((i) => i.role === 'annotation'));
+    // Node's certificate verified in the window; tampered (a score's last bit, its fingerprint made
+    // again), the window finds the difference Node finds.
+    const nodePath = join(out, 'node.certificate.msz');
+    writeFileSync(nodePath, nodeMade.bytes);
+    const inWindow = await act('verify_certificate', { paths: [nodePath] });
+    const tamperedPath = join(out, 'tampered.certificate.msz');
+    writeFileSync(tamperedPath, await repack(nodeMade.bytes, (files) => tamperings().find((t) => t.id === 'number-refingerprinted').edit(files, nodeMade.certificate)));
+    const tamperedWindow = await act('verify_certificate', { paths: [tamperedPath], show: true });
+    const tamperedNode = await verifyCertificate(await readCertificate(readFileSync(tamperedPath)), { software: windowSoftware });
+    const paneVerdict = await browser.eval(`document.querySelector('.certificate-pane')?.textContent ?? ''`);
+    check('verify_certificate: Node\'s certificate verified in the window, bit for bit; tampered (a score changed in its last bit, the fingerprint made again to match), not verified, the one number that differs the one Node finds; the Certificate pane says it',
+      `${inWindow.message.slice(0, 120)}… | ${tamperedWindow.message.slice(0, 220)}`,
+      inWindow.data.verdict === 'verified' && inWindow.data.numbers.same === nodeMade.certificate.total && tamperedWindow.data.verdict === 'differs' && tamperedWindow.data.numbers.differs === 1 && JSON.stringify(tamperedWindow.data.numbers.differ) === JSON.stringify(tamperedNode.numbers.differ) && /not verified/.test(paneVerdict));
+    // Without its tables: not checkable in the window, then verified with the table beside it.
+    const barePath = join(out, 'bare.certificate.msz');
+    await act('certify', { path: barePath, tables: false });
+    const bareRead = await readCertificate(readFileSync(barePath));
+    const table = bareRead.certificate.inputs.find((i) => i.role === 'table');
+    const tablePath = join(out, 'counts-beside.csv');
+    writeFileSync(tablePath, readFileSync(join(ROOT, 'web/examples/grb2-sh3/counts.csv')));
+    const fromLibrary = await act('verify_certificate', { paths: [barePath], show: false });
+    const withoutTable = await act('verify_certificate', { paths: [barePath], library: false, show: false });
+    const withTable = await act('verify_certificate', { paths: [barePath, tablePath], library: false, show: false });
+    const notMsz = await send('verify_certificate', { paths: [tablePath] });
+    const notCertificate = await send('verify_certificate', { paths: [join(out, 'to-certify.msz')] });
+    check('certify without the tables: the table named by its SHA-256 only; verify_certificate finds it in the library by its SHA-256, verified; with library false (as a reviewer without this library), not checkable, naming it, then verified with it given beside; a table alone, or an archive that is not a certificate, refused saying why',
+      `${bareRead.archive.sources.has(table.sha256) ? 'the table in it' : 'the table not in it'}; ${fromLibrary.data.verdict} (the table ${fromLibrary.data.inputs.find((i) => i.role === 'table').from}); without the library ${withoutTable.data.verdict}; with the table given ${withTable.data.verdict} | ${notMsz.message} | ${notCertificate.message.slice(0, 120)}`,
+      !bareRead.archive.sources.has(table.sha256) && fromLibrary.data.verdict === 'verified' && fromLibrary.data.inputs.find((i) => i.role === 'table').from === 'library' && withoutTable.data.verdict === 'incomplete' && withoutTable.message.includes(table.fileName) && withTable.data.verdict === 'verified' && !notMsz.ok && /one certificate/.test(notMsz.message) && !notCertificate.ok && /not a certificate/.test(notCertificate.message));
+  }
 
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.
   const noTokenOpen = await send('open_files', { paths: [join(ROOT, 'web/examples/grb2-sh3/counts.csv')] }, { withToken: false });

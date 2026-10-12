@@ -39,6 +39,8 @@ import { readiness } from '../web/lib/readiness.js';
 import { workspaceOf } from './readiness-cases.mjs';
 import { openExampleInNode, recordTarget } from './example-cases.mjs';
 import { exampleById } from '../web/lib/examples.js';
+import { writeCertificate } from '../web/lib/certificate.js';
+import { repack, tamperings } from './certificate-cases.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const verbose = process.argv.includes('--verbose');
@@ -396,6 +398,38 @@ try {
       const refusedReport = await mavescape(['export', '--format', 'report', '--condition', '1', '--out', out('rep3'), windowFigure.archive]);
       check('mavescape export --format report: the workspace\'s report (report.md) and its references (report.bib), twice the same bytes, as the window wrote them into its archive; a run or condition given exits 2', `exit ${p1.code}; ${listed(out('rep1')).join(', ')}; ${sameFiles(out('rep1'), out('rep2')) ? 'twice the same' : 'not the same twice'}; ${md === report?.markdown && bib === report?.bibtex ? 'the archive\'s' : 'not the archive\'s'}; ${md.split('\n')[0]}; exit ${refusedReport.code}`,
         p1.code === 0 && p2.code === 0 && listed(out('rep1')).join() === 'report.bib,report.md' && sameFiles(out('rep1'), out('rep2')) && md === report?.markdown && bib === report?.bibtex && /^# Methods: /.test(md) && /## Figures/.test(md) && refusedReport.code === 2);
+    }
+    // mavescape verify (wave 6, slice 6): a certificate Node writes of the window's workspace, verified
+    // without a window (exit 0); tampered (exit 1, the difference listed); without its tables (exit 2,
+    // then 0 with --data); a wrong command line (exit 2).
+    if (windowFigure) {
+      const archived = await readArchive(readFileSync(windowFigure.archive));
+      const software = { version: archived.manifest.software?.version, commit: archived.manifest.software?.commit ?? '' };
+      const file = async (sha) => archived.sources.get(sha) ?? null;
+      const made = await writeCertificate(archived.ws, file, { software, created: TIME });
+      const bare = await writeCertificate(archived.ws, file, { software, created: TIME, tables: false });
+      mkdirSync(out('cert'), { recursive: true });
+      const certPath = join(out('cert'), 'grb2.certificate.msz');
+      const tamperedPath = join(out('cert'), 'tampered.certificate.msz');
+      const barePath = join(out('cert'), 'bare.certificate.msz');
+      writeFileSync(certPath, made.bytes);
+      writeFileSync(tamperedPath, await repack(made.bytes, (files) => tamperings().find((t) => t.id === 'number-refingerprinted').edit(files, made.certificate)));
+      writeFileSync(barePath, bare.bytes);
+      const table = bare.certificate.inputs.find((i) => i.role === 'table');
+      mkdirSync(out('certdata'), { recursive: true });
+      writeFileSync(join(out('certdata'), 'counts.csv'), archived.sources.get(table.sha256));
+      const ok = await mavescape(['verify', '--report', join(out('cert'), 'verified.json'), certPath]);
+      const verified = JSON.parse(readFileSync(join(out('cert'), 'verified.json'), 'utf8'));
+      const tampered = await mavescape(['verify', tamperedPath]);
+      const missing = await mavescape(['verify', barePath]);
+      const given = await mavescape(['verify', '--data', out('certdata'), barePath]);
+      const wrong = [await mavescape(['verify']), await mavescape(['verify', join(out('certdata'), 'counts.csv')]), await mavescape(['verify', windowFigure.archive])];
+      check('mavescape verify: a certificate of the window\'s workspace (Node\'s) verified without a window, exit 0, every number identical, --report its JSON; tampered (a score\'s last bit, the fingerprint made again), exit 1 and the number listed; without its tables, exit 2 naming the table, then exit 0 with --data; no certificate, a table, an archive that is not a certificate: exit 2 with the reason',
+        `exit ${ok.code}: ${ok.stdout.split('\n')[1]?.slice(0, 90)}; tampered exit ${tampered.code}: ${tampered.stdout.split('\n').find((l) => /certified,/.test(l))?.trim().slice(0, 100)}; without tables exit ${missing.code}, with --data ${given.code}; wrong ${wrong.map((w) => w.code).join(', ')}`,
+        ok.code === 0 && /^Verified: all/m.test(ok.stdout) && verified.verdict === 'verified' && verified.numbers.same === made.certificate.total
+        && tampered.code === 1 && /Not verified: 1 number differs/.test(tampered.stdout) && /: the score of p\.[^:]+: .* certified, .* now/.test(tampered.stdout)
+        && missing.code === 2 && missing.stdout.includes(table.fileName) && /Not checkable/.test(missing.stdout) && given.code === 0
+        && wrong.every((w) => w.code === 2 && (w.stderr.trim() || /not a certificate/.test(w.stderr + w.stdout))));
     }
   }
 } catch (error) {

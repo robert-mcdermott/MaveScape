@@ -731,6 +731,19 @@ const scenes = {
     await act('diff');
     await sleep(1500);
   },
+  // Certificates (wave 6, slice 6): GRB2's run and its Enrich2 rescoring certified, the certificate
+  // verified; the Report view with its Certificate pane and the verification's details.
+  async certificate() {
+    await example('grb2-sh3');
+    await act('score', { preset: 'Enrich2' });
+    const path = join(temp, 'grb2.certificate.msz');
+    await act('certify', { path, overwrite: true });
+    await act('verify_certificate', { paths: [path] });
+    await sleep(1000);
+    await clearToasts();
+    await click('Details');
+    await sleep(600);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');
