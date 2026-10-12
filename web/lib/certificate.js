@@ -45,8 +45,8 @@ import { panelDigests, panelInputs } from './figure-manifest.js';
 import { readsVariants, runTrackList, trackContext } from './run-tracks.js';
 import { designSource } from './qc-subjects.js';
 import { stateDigest } from './diff.js';
-import { now as clockNow } from './clock.js';
 import { possessive } from './words.js';
+import { composeReview } from './review.js';
 
 export const CERTIFICATE_FORMAT = 'mavescape-certificate';
 export const CERTIFICATE_VERSION = 1;
@@ -219,6 +219,9 @@ export async function computeNumbers(ws, file, options = {}) {
   const numbers = { runs: [], qc: [], analyses: [], figures: [], report: null };
   const runs = new Map();
   const findings = new Map();
+  // What the numbers were computed with, for the review report (lib/review.js): each run's QC, each
+  // analysis's comparison or robustness summary, each figure's data and drawing.
+  const detail = { qc: new Map(), analyses: new Map(), figures: new Map() };
   const steps = ws.runs.length * 2 + (ws.analyses ?? []).length + (ws.figures ?? []).length + 1;
   let step = 0;
 
@@ -271,6 +274,7 @@ export async function computeNumbers(ws, file, options = {}) {
     }
     const f = findingsFrom(q.qc, thresholds, { acknowledged: ws.qc?.acknowledged });
     findings.set(run.id, f);
+    detail.qc.set(run.id, { qc: q.qc, findings: f, thresholds });
     numbers.qc.push({ run: run.id, name: run.name, digest: digestOf(q.qc), findings: f.map((x) => ({ id: x.id, status: x.status, value: encodeAll(x.value ?? null), acknowledged: x.acknowledged?.current ? x.acknowledged.status : null })) });
   }
 
@@ -296,6 +300,7 @@ export async function computeNumbers(ws, file, options = {}) {
       }
       const pair = { a: a.a.spec, b: a.b.spec };
       const c = comparePair(ws, pair, get, { filters: a.filters ?? NO_FILTERS, scale: a.scale?.mode ?? 'scored', caches });
+      if (!c.error) detail.analyses.set(a.id, { comparison: c });
       const values = c.error ? { error: c.error } : (({ matched, statistics, discordance, classes }) => ({ matched, statistics, discordance, classes }))(comparisonRecord(c, pair));
       numbers.analyses.push({ id: a.id, kind: a.kind, name: analysisName(a), values: encodeAll(values) });
       if (canonicalJSON(encodeAll(values)) !== canonicalJSON(encodeAll({ matched: a.matched, statistics: a.statistics, discordance: a.discordance, classes: a.classes }))) notes.push(`${analysisName(a).replace(/^./, (x) => x.toUpperCase())}, kept in the report, is not what it computes now; the certificate records what it computes now (add it to the report again to update it).`);
@@ -319,6 +324,7 @@ export async function computeNumbers(ws, file, options = {}) {
         if (summary.error) values = { error: summary.error };
         else {
           const r = robustnessRecord(run, summary, { max: a.max, seed: a.seed });
+          detail.analyses.set(a.id, { robustness: r });
           values = { total: r.total, skipped: r.skipped, targets: r.targets.map((x) => ({ id: x.id, n: x.n, counts: x.counts })) };
         }
       }
@@ -353,6 +359,7 @@ export async function computeNumbers(ws, file, options = {}) {
     await progress(step++ / steps, `Drawing the figure "${fig.name}" again`);
     const resolved = await resolveFigure(ctx, fig);
     const drawn = figureMarks(fig, resolved);
+    detail.figures.set(fig.id, { resolved, drawn });
     const digests = panelDigests(fig, drawn);
     const panels = [];
     for (const p of drawn.panels) {
@@ -385,7 +392,7 @@ export async function computeNumbers(ws, file, options = {}) {
     if (last) methods = writeMethods(ws, last, { findings: findings.get(last.id) ?? null, thresholds, results: runs.get(last.id)?.results ?? null });
   }
   await progress(1, 'Every number computed');
-  return { numbers, blocked, missing: [...missing.values()], notes, results, report, methods };
+  return { numbers, blocked, missing: [...missing.values()], notes, results, report, methods, detail };
 }
 
 // Why a figure panel cannot be drawn for want of a file: null, or the words.
@@ -521,7 +528,8 @@ function readme(certificate, { tables }) {
     '=====================================',
     '',
     `Workspace:    ${certificate.workspace.name}`,
-    `Certified:    ${certificate.created} with MaveScape ${v}${certificate.software.commit ? ` (commit ${certificate.software.commit.slice(0, 12)})` : ''}`,
+    `As of:        ${certificate.workspace.modified} (the workspace's last change)`,
+    `Certified by: MaveScape ${v}${certificate.software.commit ? ` (commit ${certificate.software.commit.slice(0, 12)})` : ''}`,
     `Fingerprint:  ${certificate.fingerprint}`,
     `              (short form ${shortFingerprint(certificate.fingerprint)}; cite it with the analysis)`,
     '',
@@ -567,9 +575,12 @@ function readme(certificate, { tables }) {
 
 // Writes a certificate of the workspace: the archive with every file it reads (the tables only
 // when options.tables is not false), every number computed again, certificate.json and README.txt.
-// file(sha256) → bytes or null. options: { software: { version, commit }, created, tables (default
-// true), structures (default: when at hand), onProgress }. Returns { bytes, certificate, notes,
-// computed }. Throws when a file the numbers need is missing or a run cannot be scored again.
+// file(sha256) → bytes or null. options: { software: { version, commit }, tables (default true),
+// structures (default: when at hand), review (also write the review report, lib/review.js),
+// onProgress }. A certificate has no time of its own: the same workspace, files and MaveScape give
+// the same bytes, whenever and wherever it is made. Returns { bytes, certificate, notes, computed,
+// review (its HTML, when asked) }. Throws when a file the numbers need is missing or a run cannot
+// be scored again.
 export async function writeCertificate(ws, file, options = {}) {
   const software = { version: options.software?.version ?? null, commit: options.software?.commit || null };
   const computed = await computeNumbers(ws, file, { software, onProgress: options.onProgress });
@@ -607,7 +618,6 @@ export async function writeCertificate(ws, file, options = {}) {
   const certificate = {
     format: CERTIFICATE_FORMAT,
     version: CERTIFICATE_VERSION,
-    created: options.created ?? clockNow(),
     software: { name: 'MaveScape', ...software },
     workspace: { id: ws.id, name: ws.name, path: 'workspace.json', sha256: textDigest(workspaceText), modified: ws.modified },
     inputs,
@@ -630,7 +640,7 @@ export async function writeCertificate(ws, file, options = {}) {
     report: computed.report,
     certificate: { json: certificateText(certificate), readme: readme(certificate, { tables: includeTables }) },
   });
-  return { bytes, certificate, notes: computed.notes, computed };
+  return { bytes, certificate, notes: computed.notes, computed, review: options.review ? composeReview(ws, computed, certificate) : null };
 }
 
 // --- Reading and verifying ---------------------------------------------------------------------------
@@ -661,7 +671,8 @@ export const isCertificate = (archive) => archive?.certificate !== null && archi
 // supplied beside it: the library's, a folder's), software: this MaveScape's { version, commit },
 // onProgress }. Returns a report: { verdict ('verified', 'differs' or 'incomplete'), exit,
 // fingerprint, software, workspace, archive, history, checkpoints, inputs, numbers, notChecked,
-// notes, summary }.
+// notes, summary }; with options.review and the verdict verified, also review (not enumerable: the
+// review report's HTML, lib/review.js).
 export async function verifyCertificate(read, options = {}) {
   const { certificate, archive } = read;
   const ws = archive.ws;
@@ -718,6 +729,8 @@ export async function verifyCertificate(read, options = {}) {
   report.verdict = differs ? 'differs' : incomplete ? 'incomplete' : 'verified';
   report.exit = EXIT[report.verdict];
   report.summary = verificationSummary(certificate, report);
+  // The review report of a certificate verified (options.review): the same file its maker writes.
+  if (options.review && report.verdict === 'verified') Object.defineProperty(report, 'review', { value: composeReview(ws, computed, certificate), enumerable: false });
   return report;
 }
 

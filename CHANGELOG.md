@@ -109,6 +109,21 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   itself. README.txt in the certificate, FORMATS.md and the guide's *Certificates* page say what it
   proves (the recorded inputs give the recorded numbers) and what it does not (that the scores are
   right).
+- **The review report** (wave 6, slice 7; `web/lib/review.js`). One self-contained HTML file a
+  reviewer opens in any browser, without MaveScape: the certificate's fingerprint with what it
+  proves and does not and how to verify it; the experiment and design; the inputs with their
+  SHA-256; each run's parameters, its variants by class and its maps; the QC findings with their
+  plots and acknowledgements; the comparisons and robustness checks kept in the report; the
+  selections, structure views and figures; the methods with their references; and the decision
+  log. Every number is traced: clicked, it says where it comes from, with its key and exact value,
+  the certificate's (or the workspace's, for an input). A variant can be looked up; the file checks
+  its numbers against the fingerprint in the browser. It loads nothing. Written from the Report
+  view's Certificate pane (**Review report…**), remote control's `review_report`, `mavescape export
+  --format review`, and, from a certificate verified, `mavescape verify --review` and the
+  verification's dialog: for the same workspace and MaveScape, the same bytes.
+- A certificate has no time of its own: the same workspace, files and MaveScape give the same
+  certificate and fingerprint, whenever they are certified, so a review report made apart names the
+  certificate `certify` writes.
 - The window's figures, comparisons, QC subjects and annotation tracks are resolved by shared
   library code (`web/lib/figure-data.js`, `compare-pair.js`, `qc-subjects.js`, `run-tracks.js`,
   `source-table.js`, `score-input.js`), so the certificate draws and computes exactly as the views do.
@@ -133,6 +148,9 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   MaveDB's validators checked the two such deposits again (`reference/mavedb-export.json`).
 - The methods' BibTeX gave MaveScape and Proteoscope the same key (`mcdermott2026`) when a run's
   methods cited both; a program's key is now its name and year (`mavescape2026`).
+- A figure's SVG named each panel's group (`aria-label`) without a role, which assistive technology
+  may ignore and accessibility checkers flag; it is now a group (`role="group"`). Panel drawings'
+  digests change with it.
 
 ### Validation
 
@@ -182,6 +200,16 @@ Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable recor
   Node and the same bytes as Node's, every figure panel the drawing its manifest records; Node's
   verified in the window, a tampered one's difference Node's. `headless-run` (34): `mavescape
   verify` exits 0, 1 and 2 as it should.
+- The `review` suite (5 checks; wave 6, slice 7): every traced number of GRB2's workspace's review
+  report where it says it comes from (the certificate's value under its key, the workspace's at
+  its path, a count of the certificate's classes); the file loading nothing (an image, a stylesheet
+  and a request planted in it caught); the same bytes again and from the certificate verified, none
+  from a tampered one; every section, the certificate whole, each input, map, QC plot, figure,
+  reference and history entry; the 14 examples' reviews. The remote session: the window's review
+  Node's bytes, opened from its file requesting nothing but itself, no axe-core violation in either
+  theme, a number traced, a variant looked up, the fingerprint checked. `headless-run`: `mavescape
+  verify --review` and `export --format review` Node's bytes. axe-core 4.13.0 joins the validation
+  data (`sources.json`).
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
   was lost on CI's runner when the command's exit was seen before its output.
 

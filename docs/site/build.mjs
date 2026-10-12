@@ -48,7 +48,7 @@ const VERSION = /var version = "([^"]+)"/.exec(readFileSync(join(repo, 'main.go'
 const DOCS = [
   { group: 'Start', pages: [['index', 'Overview'], ['getting-started', 'Getting started'], ['examples', 'Examples'], ['opening-data', 'Opening your data'], ['public-data', 'Public data']] },
   { group: 'Analysis', pages: [['experiment', 'The design'], ['scoring', 'Scoring'], ['qc', 'Quality control'], ['map', 'The map and the inspector'], ['selections', 'Selections'], ['compare', 'Comparisons'], ['robustness', 'Robustness'], ['structure', 'Structures']] },
-  { group: 'Results', pages: [['figures', 'Figures'], ['report', 'Report'], ['certificate', 'Certificates'], ['record', 'Exports and the record']] },
+  { group: 'Results', pages: [['figures', 'Figures'], ['report', 'Report'], ['certificate', 'Certificates and review reports'], ['record', 'Exports and the record']] },
   { group: 'Automate', pages: [['scripting', 'Remote control, headless runs and scripting']] },
   { group: 'Reference', pages: [['troubleshooting', 'Troubleshooting']] },
 ];

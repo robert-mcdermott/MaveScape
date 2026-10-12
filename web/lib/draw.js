@@ -216,7 +216,8 @@ export function marksToSVGSync(marks, width, height, options = {}) {
           defs.push(`<clipPath id="clip${clips}"><rect x="${num(m.clip.x)}" y="${num(m.clip.y)}" width="${num(m.clip.w)}" height="${num(m.clip.h)}"/></clipPath>`);
           open += ` clip-path="url(#clip${clips})"`;
         }
-        if (m.label) open += ` aria-label="${esc(m.label)}"`;
+        // A named group is a group to assistive technology (a bare g may not carry a name).
+        if (m.label) open += ` role="group" aria-label="${esc(m.label)}"`;
         out.push(`${open}>`);
         write(m.marks, out);
         out.push('</g>');

@@ -19,9 +19,10 @@ import (
 // wave 3 slice 4): as a MaveDB deposit (--format mavedb: the scores, counts, column descriptions,
 // experiment and score set as MaveDB takes them, web/lib/mavedb-export.js) or as MaveScape's
 // tables (--format tables: the files mavescape run writes); or the workspace's figures (--format
-// figures, wave 6 slice 3: each as SVG, PDF and PNG carrying its manifest, and figures.json). Like run, it opens the archive in a
-// headless page and performs the actions scripts use (actions.go); export.json in the folder records
-// what was read, done and written. --details sets the MaveDB details first (set_mavedb_details).
+// figures, wave 6 slice 3: each as SVG, PDF and PNG carrying its manifest, and figures.json), its
+// report (--format report) or its review report (--format review, wave 6 slice 7). Like run, it
+// opens the archive in a headless page and performs the actions scripts use (actions.go);
+// export.json in the folder records what was read, done and written. --details sets the MaveDB details first (set_mavedb_details).
 //
 // Exit status: 0 written; 1 not written, or (--strict) a deposit lacking something MaveDB
 // requires; 2 the command line is wrong, an input is missing, outputs are in the way, or no browser
@@ -106,7 +107,7 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 	var opts exportOptions
 	flags := flag.NewFlagSet("mavescape export", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&opts.format, "format", "mavedb", "mavedb (a MaveDB deposit), tables (MaveScape's tables, as mavescape run writes them), figures (the workspace's figures, with their manifests) or report (the workspace's report, Markdown and BibTeX)")
+	flags.StringVar(&opts.format, "format", "mavedb", "mavedb (a MaveDB deposit), tables (MaveScape's tables, as mavescape run writes them), figures (the workspace's figures, with their manifests), report (the workspace's report, Markdown and BibTeX) or review (its review report, one self-contained HTML file)")
 	flags.StringVar(&opts.out, "out", "", "the folder for the files (made if missing; must be empty unless --overwrite)")
 	flags.StringVar(&opts.run, "run", "", "the run by name or id (default: the latest)")
 	flags.StringVar(&opts.condition, "condition", "", "mavedb: the condition, by name or number (default: each, in a folder of its own)")
@@ -124,10 +125,12 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 		fmt.Fprintln(out, "       mavescape export --format tables --out tables/ [flags] analysis.msz")
 		fmt.Fprintln(out, "       mavescape export --format figures --out figures/ [flags] analysis.msz")
 		fmt.Fprintln(out, "       mavescape export --format report --out report/ [flags] analysis.msz")
+		fmt.Fprintln(out, "       mavescape export --format review --out review/ [flags] analysis.msz")
 		fmt.Fprintln(out, "Writes a run of a saved workspace without a window: as a MaveDB deposit (the scores, counts,")
 		fmt.Fprintln(out, "column descriptions, experiment and score set as MaveDB takes them; nothing is sent), or as")
 		fmt.Fprintln(out, "MaveScape's tables; or the workspace's figures (SVG, PDF and PNG, each carrying its manifest, and figures.json);")
-		fmt.Fprintln(out, "or its report (report.md, the methods of the whole workspace, and report.bib).")
+		fmt.Fprintln(out, "or its report (report.md, the methods of the whole workspace, and report.bib); or its review")
+		fmt.Fprintln(out, "report (review.html: every number traced, the certificate's, in one file that loads nothing).")
 		fmt.Fprintln(out, "export.json records what was written. Exit status: 0 written, 1 not written")
 		fmt.Fprintln(out, "(or, with --strict, a deposit lacking what MaveDB requires), 2 a wrong command line, a missing")
 		fmt.Fprintln(out, "input, outputs in the way, or no browser.")
@@ -138,9 +141,9 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 		return opts, err
 	}
 	switch opts.format {
-	case "mavedb", "tables", "figures", "report":
+	case "mavedb", "tables", "figures", "report", "review":
 	default:
-		return opts, fmt.Errorf("--format is mavedb, tables, figures or report, not %q", opts.format)
+		return opts, fmt.Errorf("--format is mavedb, tables, figures, report or review, not %q", opts.format)
 	}
 	if len(rest) != 1 {
 		return opts, errors.New("name one workspace archive (.msz)")
@@ -174,8 +177,8 @@ func parseExportArgs(args []string, stderr io.Writer) (exportOptions, error) {
 	if opts.format == "figures" && (opts.details != "" || opts.condition != "" || opts.strict || opts.run != "") {
 		return opts, errors.New("--run, --details, --condition and --strict are for --format mavedb or tables (the figures name their own runs)")
 	}
-	if opts.format == "report" && (opts.details != "" || opts.condition != "" || opts.strict || opts.run != "") {
-		return opts, errors.New("--run, --details, --condition and --strict are for --format mavedb or tables (the report is the whole workspace's)")
+	if (opts.format == "report" || opts.format == "review") && (opts.details != "" || opts.condition != "" || opts.strict || opts.run != "") {
+		return opts, fmt.Errorf("--run, --details, --condition and --strict are for --format mavedb or tables (the %s is the whole workspace's)", opts.format)
 	}
 	if opts.details != "" {
 		if opts.details, err = existingFile(opts.details); err != nil {
@@ -227,6 +230,12 @@ func executeExport(ctx context.Context, opts exportOptions, browser string, reco
 	}
 	if opts.format == "report" {
 		return exportReport(steps, opts, record)
+	}
+	if opts.format == "review" {
+		if _, ok := steps.do("review_report", map[string]any{"path": filepath.Join(opts.out, "review.html")}); !ok {
+			return exitFailed
+		}
+		return 0
 	}
 	if opts.format == "tables" {
 		args := map[string]any{}

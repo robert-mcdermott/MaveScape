@@ -45,7 +45,7 @@ test('the files it reads: each once, the tables a run reads needed', () => {
 });
 
 test('made, read back and verified bit for bit; the fingerprint the SHA-256 of the rest; the same bytes again', async () => {
-  const made = await writeCertificate(ws, file, { software: SW, created: '2026-10-12T12:00:00.000Z' });
+  const made = await writeCertificate(ws, file, { software: SW });
   const c = made.certificate;
   assert.equal(c.fingerprint, certificateFingerprint(c));
   assert.equal(c.total, countNumbers(c.numbers));
@@ -53,7 +53,7 @@ test('made, read back and verified bit for bit; the fingerprint the SHA-256 of t
   assert.deepEqual(c.numbers.runs[0].variants, names);
   assert.equal(c.numbers.qc[0].run, run.id);
   assert.ok(c.numbers.report.markdown.length === 64);
-  const again = await writeCertificate(ws, file, { software: SW, created: '2026-10-12T12:00:00.000Z' });
+  const again = await writeCertificate(ws, file, { software: SW });
   assert.deepEqual(again.bytes, made.bytes);
   const read = await readCertificate(made.bytes);
   const report = await verifyCertificate(read, { software: SW });
@@ -64,7 +64,7 @@ test('made, read back and verified bit for bit; the fingerprint the SHA-256 of t
 });
 
 test('without its tables: not checkable, then verified with them; a missing file needed refused when making one', async () => {
-  const made = await writeCertificate(ws, file, { software: SW, created: '2026-10-12T12:00:00.000Z', tables: false });
+  const made = await writeCertificate(ws, file, { software: SW, tables: false });
   assert.equal(made.certificate.inputs[0].path, null);
   const without = await verifyCertificate(await readCertificate(made.bytes), { software: SW });
   assert.equal(without.verdict, 'incomplete');

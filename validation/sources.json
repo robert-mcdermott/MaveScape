@@ -294,6 +294,20 @@
      "sha256": "6f2305fc10c76bba16d174e080974e4d91786ebf2e5df506f17d8098eb537f14"
     }
    ]
+  },
+  "axe-core": {
+   "title": "axe-core 4.13.0 (Deque Systems)",
+   "description": "The accessibility rule engine: the review report checked in both themes by the remote session (WCAG 2.1 A and AA rules), and every documentation scene by node docs/capture/capture.mjs --audit.",
+   "source": "https://github.com/dequelabs/axe-core (npm package axe-core, served by jsDelivr)",
+   "license": "MPL-2.0. MaveScape downloads it for testing and does not ship or redistribute it.",
+   "base": "https://cdn.jsdelivr.net/npm/axe-core@4.13.0/",
+   "files": [
+    {
+     "path": "axe.min.js",
+     "size": 580491,
+     "sha256": "c24f097bd2f451d4f933e8bc7d8d539f8672a2ebcb5cc9f9f3eec8ca9470a0c1"
+    }
+   ]
   }
  }
 }

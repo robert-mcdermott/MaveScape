@@ -18,7 +18,8 @@ import (
 // fingerprint, the workspace and every file against their SHA-256 and the history's chain,
 // computes every number again from the files with the same code, and compares them bit for bit
 // (the verify_certificate action). It prints the verdict and, with --report, writes what was found
-// as JSON. After CytoWeave 0.8.0's verify.go.
+// as JSON; with --review, the review report of the certificate verified (wave 6, slice 7), the same
+// file its maker writes. After CytoWeave 0.8.0's verify.go.
 //
 // Exit status: 0 verified; 1 something differs (listed); 2 it could not be checked: a file the
 // certificate names is missing (give it with --data), the command line is wrong, or no browser was
@@ -34,6 +35,7 @@ type verifyOptions struct {
 	certificate string
 	data        []string
 	report      string
+	review      string
 	overwrite   bool
 	chrome      string
 	timeout     time.Duration
@@ -47,13 +49,14 @@ func parseVerifyArgs(args []string, stderr io.Writer) (verifyOptions, error) {
 	flags.SetOutput(stderr)
 	flags.Var(&data, "data", "a folder (or a file) with the tables a certificate written without them names, found by their SHA-256; may be repeated")
 	flags.StringVar(&opts.report, "report", "", "also write what was found as JSON to this file")
-	flags.BoolVar(&opts.overwrite, "overwrite", false, "replace the report file if it exists")
+	flags.StringVar(&opts.review, "review", "", "also write the review report of the certificate, when it is verified, to this file (.html)")
+	flags.BoolVar(&opts.overwrite, "overwrite", false, "replace the report or review file if it exists")
 	flags.StringVar(&opts.chrome, "chrome", "", "the Chrome, Chromium, Edge or Brave to run in (default: CHROME, else one installed)")
 	flags.DurationVar(&opts.timeout, "timeout", 2*time.Hour, "stop a verification that takes longer")
 	flags.BoolVar(&opts.dev, "dev", false, "serve web/ from the working directory instead of the embedded copy")
 	flags.Usage = func() {
 		out := flags.Output()
-		fmt.Fprintln(out, "Usage: mavescape verify [flags] analysis.certificate.msz")
+		fmt.Fprintln(out, "Usage: mavescape verify [--data DIR] [--report verification.json] [--review review.html] analysis.certificate.msz")
 		fmt.Fprintln(out, "Computes every number of a MaveScape reproducibility certificate again from its files and")
 		fmt.Fprintln(out, "compares them bit for bit; checks its fingerprint, files and history.")
 		fmt.Fprintln(out, "Exit status: 0 verified, 1 something differs (listed), 2 it could not be checked (a file")
@@ -83,12 +86,15 @@ func parseVerifyArgs(args []string, stderr io.Writer) (verifyOptions, error) {
 		}
 		opts.data = append(opts.data, path)
 	}
-	if opts.report != "" {
-		if opts.report, err = absPath(opts.report); err != nil {
+	for _, out := range []*string{&opts.report, &opts.review} {
+		if *out == "" {
+			continue
+		}
+		if *out, err = absPath(*out); err != nil {
 			return opts, err
 		}
-		if _, err := os.Stat(opts.report); err == nil && !opts.overwrite {
-			return opts, fmt.Errorf("%s exists; give --overwrite to replace it", opts.report)
+		if _, err := os.Stat(*out); err == nil && !opts.overwrite {
+			return opts, fmt.Errorf("%s exists; give --overwrite to replace it", *out)
 		}
 	}
 	if opts.timeout <= 0 {
@@ -146,7 +152,7 @@ func verifyHeadless(args []string, stdout, stderr io.Writer) int {
 	defer page.stop()
 	fmt.Fprintf(stdout, "MaveScape %s: verifying %s in %s\n", version, filepath.Base(opts.certificate), filepath.Base(browser))
 	began := time.Now()
-	encoded, _ := json.Marshal(map[string]any{"paths": append([]string{opts.certificate}, opts.data...), "show": false})
+	encoded, _ := json.Marshal(map[string]any{"paths": append([]string{opts.certificate}, opts.data...), "show": false, "review": opts.review != ""})
 	files, err := page.hub.openFiles(encoded)
 	if err != nil {
 		fmt.Fprintln(stderr, "mavescape verify:", err)
@@ -187,10 +193,22 @@ func verifyHeadless(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "  %s: %s certified, %s now\n", d.Label, d.Recorded, d.Computed)
 	}
+	var whole map[string]any
+	json.Unmarshal(outcome.Data, &whole)
+	review, _ := whole["review"].(string)
+	delete(whole, "review")
+	if opts.review != "" {
+		if review == "" {
+			fmt.Fprintln(stderr, "mavescape verify: no review report: the certificate is not verified")
+		} else if _, err := writeOutput(opts.review, opts.overwrite, strings.NewReader(review)); err != nil {
+			fmt.Fprintln(stderr, "mavescape verify: could not write the review report:", err)
+			return exitVerifyUnchecked
+		} else {
+			fmt.Fprintf(stdout, "Wrote the review report %s.\n", opts.review)
+		}
+	}
 	if opts.report != "" {
-		var pretty any
-		json.Unmarshal(outcome.Data, &pretty)
-		text, _ := json.MarshalIndent(pretty, "", "  ")
+		text, _ := json.MarshalIndent(whole, "", "  ")
 		if _, err := writeOutput(opts.report, opts.overwrite, strings.NewReader(string(text)+"\n")); err != nil {
 			fmt.Fprintln(stderr, "mavescape verify: could not write the report:", err)
 			return exitVerifyUnchecked

@@ -2829,6 +2829,40 @@ and the review report are found. The wave ends with its examples, as waves 2 to 
    comes from) and carries its key and exact value for checking; the file loads nothing.
    - Validation: every number equal to the certificate's; nothing loaded from outside the file; no
      axe-core violations in either theme; the same bytes twice.
+   - **Done.** `lib/review.js` (after CytoWeave's `review-report.js`) composes the review report
+     from the certificate's own computation (`computeNumbers` keeps each run's QC, each analysis's
+     comparison or robustness summary and each figure's drawing) and the certificate: an overview;
+     the certificate (its fingerprint, what it proves and does not, how to verify it, what is not
+     computed again, its notes); the experiment and design; the inputs with their SHA-256; each run
+     (output recorded and computed, method, every parameter, its variants by class, a map of each
+     condition and difference); each run's QC findings with their plots; the comparisons and
+     robustness checks kept in the report; selections; structure views; figures (each page drawn,
+     each panel's digest); the methods (the report, references linked by DOI); the decision log.
+     - **Traced.** Every number is a button with `data-k` and `data-v`: a certificate's key and
+       value, `ws|<path>` for what the workspace records, `count|<run>|<condition>|<class>` for a
+       count of the certificate's classes; clicked, a panel says where it comes from. A variant is
+       looked up by name; the whole certificate is in the JSON block `mavescape-review`, and the
+       file checks its numbers against the fingerprint with the browser's SHA-256.
+     - **No time of its own, and neither has a certificate** (`created` dropped from
+       `certificate.json`): the same workspace and MaveScape give the same certificate whenever it
+       is made, so a review report made apart names the certificate `certify` writes.
+     - Written from the Certificate pane (**Review report…**), remote `review_report`, `mavescape
+       export --format review`, and from a certificate verified (`verify_certificate` with
+       `review`, `mavescape verify --review`, the verification dialog's **Review report**): the
+       same bytes from each. A certificate that does not verify gives none.
+     - Found while building it: a figure's SVG named each panel's group (`aria-label` on a bare
+       `g`), which axe-core flags; `lib/draw.js` now writes `role="group"` (panel digests change
+       with it, before any release). axe-core 4.13.0 joins `sources.json` (the capture's audit
+       named it; it was missing).
+     - Validation: `review` (5 checks): every traced number of GRB2's workspace of every operation
+       (182) and of the 14 examples (1,164) where it says it comes from; nothing loaded from outside
+       (an image, a stylesheet and a request planted in it caught); the same bytes again and from
+       the certificate verified, none from a tampered one; every section, the certificate whole, each
+       input, map, QC plot, figure, reference and history entry. The remote session (193): the
+       window's review Node's bytes; opened from its file, nothing requested but the file, no
+       axe-core violation (WCAG 2.1 A and AA) in either theme, a number traced, a variant looked
+       up, the fingerprint checked. `headless-run` (35): `mavescape verify --review` and `export
+       --format review` Node's bytes.
 8. **Examples.** The wave's lessons on the examples: GRB2's figure (the map, the structure, the QC
    finding behind its bottleneck), what a choice moves (a checkpoint before and after a change of
    pseudocount on Hsp90), and the BRCA1 RING domain certified, verified and reported.

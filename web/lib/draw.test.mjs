@@ -46,7 +46,7 @@ test('SVG: the page in points, one pattern per hatch, clips, titles and text esc
   assert.match(svg, /<rect x="1" y="2" width="3" height="4" fill="#2166ac"><title>S2A &lt;x&gt;<\/title><\/rect>/);
   assert.match(svg, /<desc>A &amp; B<\/desc>/);
   assert.match(svg, /<metadata>\{&quot;a&quot;:&quot;&lt;1&gt;&quot;\}<\/metadata>/);
-  assert.match(svg, /<g clip-path="url\(#clip1\)" aria-label="Panel A">/);
+  assert.match(svg, /<g clip-path="url\(#clip1\)" role="group" aria-label="Panel A">/);
   assert.match(svg, /stroke-dasharray="2 1"/);
   // The baseline moved down by a third of the size, as the PDF places it.
   assert.match(svg, new RegExp(`<text x="50" y="${25 + baselineShift('middle', 7)}" font-size="7" font-weight="bold" text-anchor="middle" fill="#171b26">Score &amp; SE</text>`));

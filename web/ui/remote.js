@@ -67,7 +67,7 @@ import { drawFigure, drawStructureImage, exportFigure, readFigureFile, rebuildFi
 import { comparisonForReport, keepInReport, removeFromReport, reportOf, robustnessForReport } from './report.js';
 import { analysisName } from '../lib/report.js';
 import { archiveState, deleteCheckpoint, diffWith, keepCheckpoint, stateOf } from './diff.js';
-import { makeCertificate, verifyBytes } from './certificate.js';
+import { certificateState, makeCertificate, reviewName, verifyBytes } from './certificate.js';
 import { shortFingerprint } from '../lib/certificate.js';
 import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
@@ -1771,6 +1771,26 @@ export function installRemote(app) {
       };
     },
 
+    // The review report (wave 6, slice 7; lib/review.js): the certificate's numbers, each traced, as
+    // one self-contained HTML file written where the caller asks; tables: false, the report of the
+    // certificate that names the tables by their SHA-256 only.
+    async review_report(args) {
+      if (!ws().runs.length) throw new ActionError('There is no score run to report: score one first.');
+      const tables = args.tables !== false;
+      let made;
+      try {
+        made = await makeCertificate(app, { tables, review: true });
+      } catch (error) {
+        throw new ActionError(`The review report could not be made: ${error.message}`);
+      }
+      const c = made.certificate;
+      return {
+        file: made.review,
+        message: `The review report of "${ws().name}": the ${c.total.toLocaleString('en-US')} numbers of the certificate ${c.fingerprint} (certify writes it), each traced.`,
+        data: { name: reviewName(made.name), fingerprint: c.fingerprint, short: shortFingerprint(c.fingerprint), total: c.total, tables, bytes: new TextEncoder().encode(made.review).length },
+      };
+    },
+
     // A certificate verified: paths, the certificate (.msz) and the files it names that it does not
     // hold (a folder of them, or each), found by their SHA-256; the library's too (library: false,
     // only those given, as someone without this library verifies it). Every number
@@ -1794,7 +1814,8 @@ export function installRemote(app) {
       }
       if (args.show !== false) await app.setMode('report');
       await settle();
-      return { message: `${certificates[0].name}: ${report.summary}`, data: report };
+      // With review, the review report of a certificate verified (mavescape verify --review).
+      return { message: `${certificates[0].name}: ${report.summary}`, data: args.review === true ? { ...report, review: certificateState(app).verified?.review ?? null } : report };
     },
 
     // Checkpoints (wave 6, slice 5): name keeps one of the analysis as it stands; remove deletes one

@@ -56,7 +56,7 @@ import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
 import { readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
-import { repack, tamperings } from './certificate-cases.mjs';
+import { checkTraced, externalReferences, repack, tamperings } from './certificate-cases.mjs';
 import { sha256 } from '../web/lib/sha256.js';
 import { EXAMPLE_STRUCTURES, cachedBytes, cachedJSON, exampleTarget, modelFile, nodeEvidence, openCached, paeFixture, pdbFile } from './structure-cases.mjs';
 import { clusterTest, effectsByClass, evidenceCSV } from '../web/lib/structure-evidence.js';
@@ -643,7 +643,7 @@ try {
     const inNode = await verifyCertificate(read, { software: windowSoftware });
     await act('export', { what: 'archive', path: join(out, 'to-certify.msz') });
     const toCertify = await readArchive(readFileSync(join(out, 'to-certify.msz')));
-    const nodeMade = await writeCertificate(toCertify.ws, async (sha) => toCertify.sources.get(sha) ?? null, { software: windowSoftware, created: read.certificate.created });
+    const nodeMade = await writeCertificate(toCertify.ws, async (sha) => toCertify.sources.get(sha) ?? null, { software: windowSoftware });
     const sameBytes = Buffer.compare(Buffer.from(nodeMade.bytes), Buffer.from(bytes)) === 0;
     // Each figure's panels: the drawings its manifest (export_figure json) records.
     const panelRows = [];
@@ -684,6 +684,49 @@ try {
     check('certify without the tables: the table named by its SHA-256 only; verify_certificate finds it in the library by its SHA-256, verified; with library false (as a reviewer without this library), not checkable, naming it, then verified with it given beside; a table alone, or an archive that is not a certificate, refused saying why',
       `${bareRead.archive.sources.has(table.sha256) ? 'the table in it' : 'the table not in it'}; ${fromLibrary.data.verdict} (the table ${fromLibrary.data.inputs.find((i) => i.role === 'table').from}); without the library ${withoutTable.data.verdict}; with the table given ${withTable.data.verdict} | ${notMsz.message} | ${notCertificate.message.slice(0, 120)}`,
       !bareRead.archive.sources.has(table.sha256) && fromLibrary.data.verdict === 'verified' && fromLibrary.data.inputs.find((i) => i.role === 'table').from === 'library' && withoutTable.data.verdict === 'incomplete' && withoutTable.message.includes(table.fileName) && withTable.data.verdict === 'verified' && !notMsz.ok && /one certificate/.test(notMsz.message) && !notCertificate.ok && /not a certificate/.test(notCertificate.message));
+    // The review report (wave 6, slice 7): written in the window, the same bytes as Node's of the
+    // workspace's archive, its numbers the certificate's; opened from its file in the browser, it
+    // loads nothing, has no axe-core violations in either theme, and traces a number clicked.
+    const reviewPath = join(out, 'grb2.review.html');
+    const reviewMade = await act('review_report', { path: reviewPath });
+    const reviewHTML = readFileSync(reviewPath, 'utf8');
+    const nodeReview = (await writeCertificate(toCertify.ws, async (sha) => toCertify.sources.get(sha) ?? null, { software: windowSoftware, review: true })).review;
+    const reviewTraced = checkTraced(reviewHTML, read.certificate, toCertify.ws);
+    check('review_report: the review report written in the window\'s worker, the same bytes as Node\'s of the workspace\'s archive; every traced number the certificate\'s (the one certify wrote: the same fingerprint) or the workspace\'s; nothing in it from outside',
+      `${reviewMade.message.slice(0, 120)}… ${reviewHTML === nodeReview ? 'Node\'s bytes' : 'not Node\'s bytes'}; ${reviewTraced.total} traced, ${reviewTraced.bad.length} wrong; ${externalReferences(reviewHTML).length} external`,
+      reviewHTML === nodeReview && reviewMade.data.fingerprint === read.certificate.fingerprint && reviewTraced.total > 100 && !reviewTraced.bad.length && !externalReferences(reviewHTML).length);
+    await browser.eval('window.mavescape.saveNow()');
+    const fileURL = `file://${reviewPath}`;
+    const before = requested.length;
+    await browser.goto(fileURL, 1500);
+    const reviewRequests = requested.splice(before).filter((u) => !/^(data|blob):/.test(u));
+    const axeSource = join(ROOT, 'validation/cache/axe-core/axe.min.js');
+    const audits = [];
+    if (existsSync(axeSource)) {
+      await browser.eval(`(0, eval)(${JSON.stringify(readFileSync(axeSource, 'utf8'))}); true`);
+      for (const dark of [false, true]) {
+        await browser.theme(dark);
+        await sleep(200);
+        audits.push(...await browser.eval(`(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] }, resultTypes: ['violations'] })).violations.map((v) => '${dark ? 'dark' : 'light'} ' + v.id + ' (' + v.nodes.length + ')'))()`));
+      }
+      await browser.theme(false);
+    }
+    const reviewUse = await browser.eval(`(async () => {
+      document.querySelector('#qc button.n').click();
+      const trace = document.getElementById('trace').textContent;
+      document.getElementById('lookup-variant').value = 'Trp36Ala';
+      document.getElementById('lookup-go').click();
+      const lookup = document.getElementById('lookup-result').textContent;
+      document.getElementById('check-fingerprint').click();
+      for (let i = 0; i < 50 && !document.getElementById('fingerprint-result').textContent; i += 1) await new Promise((r) => setTimeout(r, 50));
+      return { trace, lookup, fingerprint: document.getElementById('fingerprint-result').textContent, title: document.title };
+    })()`);
+    check('the review report opened from its file in the browser: nothing requested but the file itself; no axe-core violation (WCAG 2.1 A and AA) in the light theme or the dark; a QC number clicked says what it is, its key and exact value; a variant looked up gives its score, SE and class; the fingerprint checked in the file, the same',
+      `${reviewRequests.length} requests (${reviewRequests.filter((u) => u !== fileURL).slice(0, 2).join(', ') || 'the file alone'}); axe ${existsSync(axeSource) ? (audits.length ? audits.join(', ') : 'no violations') : 'missing (node validation/fetch.mjs axe-core)'}; trace "${reviewUse.trace.slice(0, 80)}…"; lookup "${reviewUse.lookup.slice(0, 60)}"; ${reviewUse.fingerprint.slice(0, 50)}`,
+      reviewRequests.length === 1 && reviewRequests[0] === fileURL && existsSync(axeSource) && !audits.length && /Key: qc\|/.test(reviewUse.trace) && /Exact value:/.test(reviewUse.trace) && /p\.Trp36Ala in Run 1/.test(reviewUse.lookup) && /^The same/.test(reviewUse.fingerprint));
+    await browser.goto(URL, 1500);
+    for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);
+    await sleep(500);
   }
 
   // Files by path, into a new workspace: GRB2's own files, the design set, the same scores.

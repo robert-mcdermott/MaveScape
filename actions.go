@@ -306,9 +306,15 @@ var remoteActions = []remoteAction{
 		"tables":    flagArg("Include the count tables (the default); false names each by its SHA-256 only, for data that cannot be shared (verifying then needs them beside it)."),
 		"overwrite": flagArg("Replace the file if it exists."),
 	}, "path"), long: true, output: true},
+	{Name: "review_report", Description: "Writes the review report of the workspace (.html): one self-contained file a reviewer opens in any browser, without MaveScape (the experiment and design, the inputs with their SHA-256, each run's parameters, classes and maps, the QC findings with their plots, the comparisons and robustness checks kept in the report, the selections, structure views and figures, the methods and the decision log), every number traced to where it comes from with its key and exact value: the numbers of the certificate certify writes, whose fingerprint it names. It loads nothing. Needs the token.", InputSchema: schema(map[string]any{
+		"path":      textArg("The absolute path of the report to write (.html)."),
+		"tables":    flagArg("The report of the certificate with the count tables (the default); false, of the one naming them by their SHA-256 only."),
+		"overwrite": flagArg("Replace the file if it exists."),
+	}, "path"), long: true, output: true},
 	{Name: "verify_certificate", Description: "Verifies a reproducibility certificate: checks its fingerprint, the workspace and every file against their SHA-256 and the history's chain, computes every number again from the files with this MaveScape's code and compares them bit for bit. Verdict verified, differs (each difference listed) or incomplete (a file it names is missing: give it in paths; the library's are found by their SHA-256). Shows the result in the Report view. Needs the token.", InputSchema: schema(map[string]any{
 		"paths":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths: the certificate (.msz), and after it the files it names but does not hold (each, or a folder of them), found by their SHA-256."},
 		"library": flagArg("Look for the files it names in this MaveScape's library too (the default); false uses only the certificate's and those given, as someone without this library would."),
+		"review":  flagArg("Also return the review report of the certificate verified (its HTML, as review), the same file its maker writes."),
 		"show":    flagArg("Show the result in the Report view (the default); false leaves the view shown."),
 	}, "paths"), long: true, reads: true},
 	{Name: "report", Description: "The workspace's report, shown in the Report view: its methods written from the record (each run's data, design, scoring with a table of its parameters, and QC; the comparisons and robustness checks kept in it; selections, annotations, structures, figures; every input's SHA-256; the software; the decision log; the limitations; the research-use statement), with numbered references: each section, the Markdown and the BibTeX, and the analyses kept in it. Written again on every change: the same workspace gives the same text.", InputSchema: schema(map[string]any{

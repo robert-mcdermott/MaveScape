@@ -601,7 +601,9 @@ by its SHA-256 only, every annotation's file and figure image always, every stru
 the library holds them all; and two more:
 
 - `certificate.json`, format `mavescape-certificate`, version 1:
-  - `created`, `software` (`name`, `version`, `commit`);
+  - `software` (`name`, `version`, `commit`). A certificate has no time of its own: the same
+    workspace, files and MaveScape give the same bytes, and so the same fingerprint, whenever and
+    wherever it is made;
   - `workspace`: `id`, `name`, `path` (`workspace.json`), `sha256` (of `workspace.json`'s bytes),
     `modified`;
   - `inputs`: each file the workspace names, once: `role` (`table`, `annotation`, `image`,
@@ -654,6 +656,44 @@ What it proves: that these inputs, analyzed as the workspace records, give these
 analysis is reproducible), and that the record is the one certified. Not that the scores are
 right: that rests on the experiment's design and the model's assumptions, which the report states.
 A certificate made again by whoever changed its files has another fingerprint.
+
+## Review reports, `*.review.html`
+
+A **review report** (MaveScape 0.6) is a certificate's numbers as one self-contained HTML file that
+a reviewer opens in any browser, without MaveScape (`web/lib/review.js`). It is written from the
+Report view's Certificate pane (**Review report…**), with remote control's `review_report`,
+`mavescape export --format review`, or, from a certificate verified, `mavescape verify --review`
+and the verification's **Review report**; for the same workspace and MaveScape, all give the same
+bytes, and the report names the fingerprint of the certificate `certify` writes.
+
+It holds, in sections: an overview; the certificate (its fingerprint, what it proves and does not,
+how to verify it, what is not computed again, its notes); the experiment and design (targets, their
+UniProt check, samples, replicates); the inputs with their SHA-256; each run (its id, table, output
+recorded and computed, method, every parameter, each condition's and difference's variants by
+class, a map of each); the QC findings of each run (verdict, what each found, its threshold, its
+acknowledgement) with their plots; the comparisons (their statistics with 95% intervals, the
+variants that differ beyond their uncertainty, a plot) and robustness checks (each verdict's count)
+kept in the report; the selections; the structure views; the figures (each page drawn, each panel's
+drawing by its SHA-256); the methods (the report, its references linked by DOI); and the decision
+log (every history entry, the chain's state).
+
+**Every number is traced.** Each is a button carrying `data-k`, its key, and `data-v`, its exact
+value as JSON; clicked, it says where the number comes from:
+
+| Key | What it is |
+|---|---|
+| a certificate's key (`run|<id>|<condition>|score|<row>`, `qc|<run>|<finding>|value`, `analysis|<id>|values.statistics.pearson.r`, `figure|<figure>|<panel>`, `report|markdown`…) | a number the certificate records, under that key (above, numbers) |
+| `ws|<path>` (`ws|runs.0.inputs.parameters.pseudocount`) | a value the workspace records (an input, not computed), at that path of `workspace.json` |
+| `count|<run>|<condition>|<class>` (`scored`, or 1–3) | the variants of a class, counted from the certificate's classes |
+
+**Look up a variant** gives its score, SE and class in each condition of a run, traced. The whole
+certificate is in the JSON block `mavescape-review` (with what the trace panel says of runs,
+findings, analyses and figures), and **Check this file's numbers against the fingerprint** computes
+the SHA-256 of its canonical JSON in the browser and compares it with the fingerprint.
+
+The file loads nothing: its styles and script are inline, its maps, plots and figures inline SVG (a
+structure panel's image a `data:` URI), and its only links, DOIs, are followed when clicked. It has
+no time of its own.
 
 ## The cache of public data
 

@@ -1,6 +1,6 @@
 ---
-title: Certificates
-description: A reproducibility certificate is the workspace archive with every number the workspace reports, computed again from its files, and a fingerprint that names exactly what was certified. mavescape verify, the Report view and remote control compute them once more and compare them bit for bit. What a certificate proves, what it does not, and how it is checked.
+title: Certificates and review reports
+description: A reproducibility certificate is the workspace archive with every number the workspace reports, computed again from its files, and a fingerprint that names exactly what was certified. mavescape verify, the Report view and remote control compute them once more and compare them bit for bit. The review report shows those numbers, each traced, in one file a reviewer opens in any browser. What they prove, what they do not, and how they are checked.
 lede: A certificate lets anyone check that the analysis gives the numbers it reports. It holds the workspace, the files it read and every number, and verifying computes each number again from the files and compares them bit for bit.
 ---
       <h2 id="what">What a certificate is</h2>
@@ -14,6 +14,7 @@ lede: A certificate lets anyone check that the analysis gives the numbers it rep
       </ul>
       <p><code>certificate.json</code> also names the workspace, every file it reads, the history's last hash and the checkpoints by their SHA-256. <code>README.txt</code> says what the certificate proves and how to verify it.</p>
       <p>Its <strong>fingerprint</strong> is the SHA-256 of everything <code>certificate.json</code> records, so it names exactly what was certified. Quote it with the analysis, in a paper or a data deposit. Its short form is its first 16 characters, <code>xxxx-xxxx-xxxx-xxxx</code>.</p>
+      <p>A certificate has no time of its own. The same workspace, files and MaveScape always give the same bytes, and so the same fingerprint, whenever and wherever it is made.</p>
 
       <h2 id="make">Making one</h2>
       <p>In the Report view's <strong>Certificate</strong> pane, <strong>Certify…</strong> computes every number again from the files in the library and writes the certificate. It runs in a worker, so the window stays responsive. Scripts use <code>certify</code> (<a href="scripting.html">Remote control</a>).</p>
@@ -46,6 +47,29 @@ mavescape verify --report verification.json analysis.certificate.msz</code></pre
         <li>The library's files are found by their SHA-256.</li>
       </ul>
       <p>Another version of MaveScape can verify a certificate too, and says which version certified it and which verified it.</p>
+
+      <h2 id="review">The review report</h2>
+      <shot name="review" alt="A review report open in a browser: GRB2's score runs, with a variant looked up (p.Trp36Ala: its score, SE and class in Run 1) and its score traced in a panel naming the run, its table and its SHA-256, the number's key and its exact value; each run's parameters, conditions by class and its map below">The review report of GRB2's run and its Enrich2 rescoring: a variant looked up, and its score traced to where it comes from.</shot>
+      <p>The <strong>review report</strong> (<code>.review.html</code>) shows a certificate's numbers in one file a reviewer, a collaborator or a PI opens in any browser, without MaveScape. It holds:</p>
+      <ul>
+        <li>the certificate's fingerprint, with what it proves and does not, and how to verify it;</li>
+        <li>the experiment and design, and the inputs with their checksums;</li>
+        <li>each run's parameters, its variants by class and its maps;</li>
+        <li>the QC findings with their plots and acknowledgements;</li>
+        <li>the comparisons and robustness checks kept in the report;</li>
+        <li>the selections, structure views and figures;</li>
+        <li>the methods with their references, and the decision log.</li>
+      </ul>
+      <p><strong>Every number is traced.</strong> Click it, or press Enter on it, and the report says where it comes from: the run, its table and that table's SHA-256 for a score; the threshold for a QC finding; the two sides for a comparison; what a figure panel shows and was drawn from. It also gives the number's key and its exact value, the certificate's own.</p>
+      <p><strong>Look up a variant</strong> gives its score, SE and class in each condition. <strong>Check this file's numbers against the fingerprint</strong> computes, in the browser, the SHA-256 of the certificate the file holds and compares it with the fingerprint.</p>
+      <p>The file loads nothing: its styles, script, maps, plots and figures are inside it, and its only links, DOIs, are followed when clicked. To make one:</p>
+      <ul>
+        <li><strong>Review report…</strong> in the Certificate pane;</li>
+        <li>remote control's <code>review_report</code>;</li>
+        <li><code>mavescape export --format review</code>;</li>
+        <li>from a certificate you received, <code>mavescape verify --review review.html</code>, or <strong>Review report</strong> in the verification's dialog.</li>
+      </ul>
+      <p>For the same workspace and MaveScape, each gives the same file, naming the fingerprint of the certificate <strong>Certify</strong> writes.</p>
 
       <h2 id="proves">What it proves, and what it does not</h2>
       <p>A verified certificate shows that these inputs, analyzed as the workspace records, give these numbers: the analysis is reproducible. It also shows that the record is the one certified. Whoever changed a file would have to make the certificate again, and it would then have another fingerprint than the one quoted.</p>
@@ -84,4 +108,17 @@ mavescape verify --report verification.json analysis.certificate.msz</code></pre
         <li>Every figure panel's drawing is the one its manifest records.</li>
         <li>Node's certificate is verified in the window. A tampered one is not verified, and the number that differs is the one Node finds.</li>
         <li><code>mavescape verify</code> exits 0, 1 and 2 as above.</li>
+      </ul>
+      <p>The review report (the validation suite's <code>review</code>):</p>
+      <ul>
+        <li>For GRB2's workspace of every operation and each of the 14 examples, every traced number is checked against where it says it comes from: the certificate's value under its key, the workspace's at its path, or a count of the certificate's classes.</li>
+        <li>The file loads nothing, and the check catches an image, a stylesheet and a request planted in it.</li>
+        <li>Made again it is the same bytes, and the review made from the certificate verified is its maker's. A certificate that does not verify gives none.</li>
+      </ul>
+      <p>In the window:</p>
+      <ul>
+        <li>The review report is the same bytes as Node's.</li>
+        <li>Opened from its file in the browser, it requests nothing but itself and has no axe-core violation (WCAG 2.1 A and AA) in the light theme or the dark.</li>
+        <li>A clicked number says where it comes from, a variant looks up, and the fingerprint checks.</li>
+        <li><code>mavescape verify --review</code> and <code>mavescape export --format review</code> each write Node's bytes.</li>
       </ul>

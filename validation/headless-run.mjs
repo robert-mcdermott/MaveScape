@@ -406,8 +406,8 @@ try {
       const archived = await readArchive(readFileSync(windowFigure.archive));
       const software = { version: archived.manifest.software?.version, commit: archived.manifest.software?.commit ?? '' };
       const file = async (sha) => archived.sources.get(sha) ?? null;
-      const made = await writeCertificate(archived.ws, file, { software, created: TIME });
-      const bare = await writeCertificate(archived.ws, file, { software, created: TIME, tables: false });
+      const made = await writeCertificate(archived.ws, file, { software, review: true });
+      const bare = await writeCertificate(archived.ws, file, { software, tables: false });
       mkdirSync(out('cert'), { recursive: true });
       const certPath = join(out('cert'), 'grb2.certificate.msz');
       const tamperedPath = join(out('cert'), 'tampered.certificate.msz');
@@ -430,6 +430,17 @@ try {
         && tampered.code === 1 && /Not verified: 1 number differs/.test(tampered.stdout) && /: the score of p\.[^:]+: .* certified, .* now/.test(tampered.stdout)
         && missing.code === 2 && missing.stdout.includes(table.fileName) && /Not checkable/.test(missing.stdout) && given.code === 0
         && wrong.every((w) => w.code === 2 && (w.stderr.trim() || /not a certificate/.test(w.stderr + w.stdout))));
+      // The review report (wave 6, slice 7): written by mavescape verify --review of the certificate
+      // verified, and by mavescape export --format review of the workspace, each Node's bytes.
+      const reviewPath = join(out('cert'), 'grb2.review.html');
+      const reviewed = await mavescape(['verify', '--review', reviewPath, certPath]);
+      const exported = await mavescape(['export', '--format', 'review', '--out', out('rev'), windowFigure.archive]);
+      const notVerified = await mavescape(['verify', '--review', join(out('cert'), 'tampered.review.html'), tamperedPath]);
+      const fromVerify = existsSync(reviewPath) ? readFileSync(reviewPath, 'utf8') : '';
+      const fromExport = existsSync(join(out('rev'), 'review.html')) ? readFileSync(join(out('rev'), 'review.html'), 'utf8') : '';
+      check('mavescape verify --review writes the review report of the certificate verified, and mavescape export --format review the workspace\'s, each the same bytes as Node\'s; a certificate that does not verify gives none (exit 1)',
+        `exit ${reviewed.code}: ${fromVerify === made.review ? 'Node\'s bytes' : 'not Node\'s'}; export exit ${exported.code}: ${fromExport === made.review ? 'Node\'s bytes' : 'not Node\'s'}; tampered exit ${notVerified.code}, ${existsSync(join(out('cert'), 'tampered.review.html')) ? 'a review written' : 'no review'}`,
+        reviewed.code === 0 && fromVerify === made.review && exported.code === 0 && fromExport === made.review && notVerified.code === 1 && !existsSync(join(out('cert'), 'tampered.review.html')));
     }
   }
 } catch (error) {

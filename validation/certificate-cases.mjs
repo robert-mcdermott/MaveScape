@@ -8,11 +8,12 @@
 import { sha256 } from '../web/lib/sha256.js';
 import { createZip } from '../web/lib/zip.js';
 import { readArchive } from '../web/lib/archive.js';
-import { certificateFingerprint, certificateText } from '../web/lib/certificate.js';
-import { serializeWorkspace } from '../web/lib/workspace.js';
+import { certificateFingerprint, certificateText, numberItems } from '../web/lib/certificate.js';
+import { tracedValues, workspaceValue } from '../web/lib/review.js';
+import { canonicalJSON, serializeWorkspace } from '../web/lib/workspace.js';
 import { addCheckpoint, saveFigure } from '../web/lib/workspace.js';
 import { makeCheckpoint } from '../web/lib/diff.js';
-import { addPanel } from '../web/lib/figures.js';
+import { addPanel, updatePanel } from '../web/lib/figures.js';
 import { reportWorkspace } from './report-cases.mjs';
 import { exampleById } from './compare-cases.mjs';
 import { openExampleInNode } from './example-cases.mjs';
@@ -30,16 +31,17 @@ export async function certifiedWorkspace() {
   const r = await reportWorkspace();
   let ws = r.ws;
   ws = addCheckpoint(ws, makeCheckpoint(ws, 'Before the figure', '2026-10-12T12:40:00.000Z'), '2026-10-12T12:40:00.000Z').ws;
-  let fig = ws.figures[0];
+  // The map on top (in points: the page two columns wide), the other panels below it.
+  let fig = updatePanel(ws.figures[0], ws.figures[0].panels[0].id, { x: 8, y: 8, w: 477, h: 150 });
   const run1 = r.g.run.id;
   for (const panel of [
-    { kind: 'qc', subject: run1, finding: 'excess-variance', findingTitle: 'Variance beyond counting', w: 160, h: 120, x: 8, y: 130 },
-    { kind: 'scores', run: run1, plot: 'distribution', condition: 0, w: 160, h: 120, x: 176, y: 130 },
-    { kind: 'compare', a: { run: run1, condition: 0 }, b: { run: r.run2.id, condition: 0 }, scale: 'scored', filters: { lowConfidence: false, maxSE: null, minReads: null }, plot: 'agreement', w: 160, h: 120, x: 344, y: 130 },
-    { kind: 'variant', run: run1, condition: 0, variant: 'p.Trp36Ala', plot: 'evidence', w: 160, h: 100, x: 8, y: 258 },
-    { kind: 'text', text: 'GRB2 SH3: abundance (aPCA).', w: 160, h: 30, x: 176, y: 258 },
+    { kind: 'qc', subject: run1, finding: 'excess-variance', findingTitle: 'Variance beyond counting', x: 8, y: 166, w: 155, h: 120 },
+    { kind: 'scores', run: run1, plot: 'distribution', condition: 0, x: 169, y: 166, w: 155, h: 120 },
+    { kind: 'compare', a: { run: run1, condition: 0 }, b: { run: r.run2.id, condition: 0 }, scale: 'scored', filters: { lowConfidence: false, maxSE: null, minReads: null }, plot: 'agreement', x: 330, y: 166, w: 155, h: 120 },
+    { kind: 'variant', run: run1, condition: 0, variant: 'p.Trp36Ala', plot: 'evidence', x: 8, y: 294, w: 155, h: 100 },
+    { kind: 'text', text: 'GRB2 SH3: abundance (aPCA).', x: 169, y: 294, w: 155, h: 30 },
   ]) ({ figure: fig } = addPanel(fig, panel));
-  fig = { ...fig, height: Math.max(fig.height, 370) };
+  fig = { ...fig, height: 402 };
   ws = saveFigure(ws, fig, 'Finished the figure "Figure 1": a QC finding, the scores, the comparison, a variant\'s evidence and its caption', '2026-10-12T12:45:00.000Z');
   const files = new Map();
   for (const p of r.g.o.parts) files.set(sha256(p.bytes), p.bytes);
@@ -185,4 +187,48 @@ export function tamperings() {
       expect: (r) => r.verdict === 'differs' && r.fingerprint.ok && r.checkpoints.some((c) => !c.ok) && /a checkpoint is not the one certified/.test(r.summary),
     },
   ];
+}
+
+// --- The review report (wave 6, slice 7) -------------------------------------------------------------
+
+// Each traced value of a review report checked: a certified number against the certificate (its key
+// and exact value), a recorded one against the workspace at its path, a count against the
+// certificate's classes. Returns { total, kinds: { kind: n }, bad: [{ key, value, expected }] }.
+export function checkTraced(html, certificate, ws) {
+  const items = new Map([...numberItems(certificate.numbers)].map(([, k, v]) => [k, v]));
+  const out = { total: 0, kinds: {}, bad: [] };
+  for (const { key, value } of tracedValues(html)) {
+    out.total += 1;
+    const [kind, ...rest] = key.split('|');
+    out.kinds[kind] = (out.kinds[kind] ?? 0) + 1;
+    let expected;
+    if (kind === 'ws') expected = workspaceValue(ws, rest[0]) ?? null;
+    else if (kind === 'count') {
+      const run = certificate.numbers.runs.find((r) => r.id === rest[0]);
+      const contrast = rest[1].startsWith('contrast');
+      const target = run && (contrast ? run.contrasts : run.conditions)[Number(rest[1].replace('contrast', ''))];
+      expected = !target ? undefined : rest[2] === 'scored' ? target.class.filter((c) => c !== 0).length : target.class.filter((c) => c === Number(rest[2])).length;
+    } else expected = items.has(key) ? items.get(key) : undefined;
+    if (expected === undefined || canonicalJSON(expected) !== canonicalJSON(value)) out.bad.push({ key, value, expected });
+  }
+  return out;
+}
+
+// What in a review report's HTML would load something from outside the file: elements that load
+// (scripts, styles, frames, images, media), references in CSS, and addresses outside <a> links (the
+// SVGs' xmlns names a namespace, loads nothing). [] when it loads nothing.
+export function externalReferences(html) {
+  const found = [];
+  for (const m of html.matchAll(/<(script|link|iframe|object|embed|img|video|audio|source|track|frame)\b[^>]*>/gi)) {
+    if (m[1].toLowerCase() === 'script' && !/\ssrc=/i.test(m[0])) continue;
+    found.push(m[0].slice(0, 80));
+  }
+  for (const m of html.matchAll(/@import|url\((?!#)[^)]*\)|srcset=/gi)) found.push(m[0].slice(0, 80));
+  for (const m of html.matchAll(/<(\w+)\b[^>]*\s(?:src|href|xlink:href|action|poster|data)="([^"#][^"]*)"/gi)) {
+    if (m[1].toLowerCase() === 'a' || /^data:image\/png;base64,/.test(m[2])) continue;
+    found.push(`${m[1]} ${m[2].slice(0, 60)}`);
+  }
+  const script = html.slice(html.lastIndexOf('<script>'));
+  for (const m of script.matchAll(/\b(fetch|XMLHttpRequest|import\(|WebSocket|EventSource|sendBeacon|navigator\.serviceWorker)\b/g)) found.push(`script: ${m[0]}`);
+  return found;
 }

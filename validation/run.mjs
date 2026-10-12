@@ -117,7 +117,7 @@ import { qcCharts, qcPanelData } from '../web/lib/qc-plots.js';
 import { writeReport } from '../web/lib/report.js';
 import { checkReferences, contextOf, CROSSREF_EXCEPTIONS, reportWorkspace } from './report-cases.mjs';
 import { movedApart, pairsFor, plantedChanges } from './diff-cases.mjs';
-import { certifiedWorkspace, repack, tamperings, windowExample } from './certificate-cases.mjs';
+import { certifiedWorkspace, checkTraced, externalReferences, repack, tamperings, windowExample } from './certificate-cases.mjs';
 import { certificateFingerprint, countNumbers, encodeAll, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
 import { canonicalJSON } from '../web/lib/workspace.js';
 import { panelDigests } from '../web/lib/figure-manifest.js';
@@ -4744,11 +4744,10 @@ const suites = {
   // archive with every number it reports, computed again from its files and compared bit for bit.
   async certificate() {
     const SW = { version: '0.6.0', commit: '0123456789abcdef' };
-    const at = '2026-10-12T13:00:00.000Z';
     const r = await certifiedWorkspace();
     const file = async (sha) => r.files.get(sha) ?? null;
     const t0 = performance.now();
-    const made = await writeCertificate(r.ws, file, { software: SW, created: at });
+    const made = await writeCertificate(r.ws, file, { software: SW });
     const ms = performance.now() - t0;
     const c = made.certificate;
     const verified = await verifyCertificate(await readCertificate(made.bytes), { software: SW });
@@ -4797,7 +4796,7 @@ const suites = {
       runRows.every((x) => x.scores && x.qc) && comparisonSame && robustnessSame && samePanels.length === panels.length && panels.length === 6 && reportSame && verified.verdict === 'verified' && verified.numbers.same === c.total && !made.notes.length, 'all, verified');
 
     // The same bytes again; the fingerprint, the README, what is not computed again.
-    const again = await writeCertificate(r.ws, file, { software: SW, created: at });
+    const again = await writeCertificate(r.ws, file, { software: SW });
     const { fingerprint, ...rest } = c;
     const ownFingerprint = createHash('sha256').update(canonicalJSON(rest)).digest('hex');
     const archived = await readArchive(made.bytes);
@@ -4820,7 +4819,7 @@ const suites = {
     check('certificate', 'six kinds of tampering, each caught and said (exit 1), the archive\'s manifest always made to list the change: a count changed in the table it holds; a score in certificate.json changed in its last bit, and the same with its fingerprint made again (the one number listed, by its variant); Run 1\'s pseudocount edited in workspace.json, a history entry\'s words edited, and a checkpoint\'s state edited, each with certificate.json made to agree', caught.map((x) => `${x.t.id}: ${x.ok ? 'caught' : `NOT caught (${x.rep.verdict}: ${x.rep.summary.slice(0, 120)})`}`).join('; '), caught.length === 6 && caught.every((x) => x.ok), 'every one');
 
     // Without its tables (data that cannot be shared): not checkable, then verified with them.
-    const bare = await writeCertificate(r.ws, file, { software: SW, created: at, tables: false });
+    const bare = await writeCertificate(r.ws, file, { software: SW, tables: false });
     const bareRead = await readCertificate(bare.bytes);
     const without = await verifyCertificate(bareRead, { software: SW });
     const table = bare.certificate.inputs.find((i) => i.role === 'table');
@@ -4834,7 +4833,7 @@ const suites = {
     const e0 = performance.now();
     for (const e of EXAMPLES) {
       const { ws: w, files } = windowExample(e.id);
-      const m = await writeCertificate(w, async (sha) => files.get(sha) ?? null, { software: SW, created: at });
+      const m = await writeCertificate(w, async (sha) => files.get(sha) ?? null, { software: SW });
       const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
       total += m.certificate.total;
       rows.push({ id: e.id, n: m.certificate.total, verdict: v.verdict, notes: m.notes.length });
@@ -4845,12 +4844,78 @@ const suites = {
     const releases = [];
     for (const name of readdirSync(new URL('./archives/', import.meta.url)).filter((f) => f.endsWith('.msz')).sort()) {
       const opened = await readArchive(new Uint8Array(readFileSync(new URL(`./archives/${name}`, import.meta.url))));
-      const m = await writeCertificate(opened.ws, async (sha) => opened.sources.get(sha) ?? null, { software: SW, created: at });
+      const m = await writeCertificate(opened.ws, async (sha) => opened.sources.get(sha) ?? null, { software: SW });
       const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
       releases.push({ name, release: opened.manifest.software?.version, n: m.certificate.total, verdict: v.verdict, notes: m.notes });
     }
     check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.5), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output', releases.map((x) => `${x.name} (${x.release}): ${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 9 && releases.every((x) => x.verdict === 'verified' && !x.notes.length), 'every one');
   },
+
+  // Wave 6, slice 7 (R7, part 2): the review report (lib/review.js): the certificate's numbers, each
+  // traced, in one self-contained HTML file.
+  async review() {
+    const SW = { version: '0.6.0', commit: '0123456789abcdef' };
+    const r = await certifiedWorkspace();
+    const file = async (sha) => r.files.get(sha) ?? null;
+    const made = await writeCertificate(r.ws, file, { software: SW, review: true });
+    const html = made.review;
+    const c = made.certificate;
+    const t = checkTraced(html, c, r.ws);
+    const needed = ['run', 'count', 'qc', 'analysis', 'figure', 'report', 'ws'];
+    check('review', 'GRB2\'s workspace of every operation, its review report: every traced number, by its key and exact value, the certificate\'s (each run\'s output, each QC finding\'s verdict, measure and acknowledgement and its QC\'s digest, each kept analysis\'s statistics and verdicts, each figure panel\'s drawing, the report), the workspace\'s (each parameter, a recorded output, a replicate, a selection), or counted from the certificate\'s classes; every kind there',
+      `${t.total} traced: ${Object.entries(t.kinds).map(([k, n]) => `${k} ${n}`).join(', ')}; ${t.bad.length ? `wrong: ${t.bad.slice(0, 3).map((b) => `${b.key} ${JSON.stringify(b.value)} (${JSON.stringify(b.expected)})`).join('; ')}` : 'every one as recorded'}`,
+      !t.bad.length && needed.every((k) => t.kinds[k] > 0) && t.total > 150, 'every one');
+
+    // Nothing loaded from outside the file (and the check catches what would be).
+    const external = externalReferences(html);
+    const planted = externalReferences(html.replace('</main>', '<img src="https://example.org/a.png" alt=""><link rel="stylesheet" href="https://example.org/a.css"></main>').replace('<script>', '<script>fetch("https://example.org");'));
+    const dois = [...html.matchAll(/<a href="(https?:[^"]+)"/g)].map((m) => m[1]);
+    check('review', 'the file loads nothing: no script, style, frame, image or media from outside it, nothing in its CSS, no address outside a link (its links, DOIs, followed only when clicked), no request in its script; the check finds an image, a stylesheet and a fetch planted in it',
+      `${external.length ? external.join('; ') : 'nothing from outside'}; ${dois.length} links (${dois.every((d) => d.startsWith('https://doi.org/')) ? 'every one a DOI' : 'not only DOIs'}); planted: ${['img', 'link', 'fetch'].filter((x) => planted.some((p) => p.includes(x))).join(', ')} found`,
+      !external.length && dois.length > 0 && dois.every((d) => d.startsWith('https://doi.org/')) && ['img', 'link', 'fetch'].every((x) => planted.some((p) => p.includes(x))), 'nothing; the planted three');
+
+    // The same bytes again, and from the certificate verified; none from a tampered one.
+    const again = await writeCertificate(r.ws, file, { software: SW, review: true });
+    const verified = await verifyCertificate(await readCertificate(made.bytes), { software: SW, review: true });
+    const tamperedBytes = await repack(made.bytes, (files) => tamperings().find((x) => x.id === 'number-refingerprinted').edit(files, c));
+    const tampered = await verifyCertificate(await readCertificate(tamperedBytes), { software: SW, review: true });
+    check('review', 'made again, the same bytes; made from the certificate verified (mavescape verify --review), the same bytes as its maker\'s; from a certificate that does not verify, none', `${again.review === html ? 'the same' : 'different'} again; from the verification ${verified.review === html ? 'the same' : 'different'}; tampered: ${tampered.verdict}, ${tampered.review ? 'a review' : 'no review'}`, again.review === html && verified.review === html && tampered.verdict === 'differs' && !tampered.review, 'the same; none');
+
+    // What it holds: every section, the certificate whole (its fingerprint its own), each input,
+    // each run's maps, the QC plots, each figure, the report's sections and references, the log.
+    const model = JSON.parse(html.slice(html.indexOf('id="mavescape-review">') + 22, html.indexOf('</script>', html.indexOf('id="mavescape-review">'))));
+    const ids = [...html.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]);
+    const maps = (html.match(/<figure class="map">/g) ?? []).length;
+    const expectedMaps = c.numbers.runs.reduce((n, x) => n + x.conditions.length + x.contrasts.length, 0);
+    const qcPlots = (html.match(/<figure class="plot"><svg[^>]*>\s*<title>[^<]+\(Run \d\)<\/title>/g) ?? []).length;
+    const report = writeReport(r.ws, contextOf(r.ws, r.scored, SW));
+    const reportHeads = report.sections.filter((x) => x.title).every((x) => html.includes(`<h3>${x.title}</h3>`));
+    const refs = (html.slice(html.indexOf('<ol class="refs">')).match(/<li id="ref-/g) ?? []).length;
+    const logged = r.ws.history.every((e) => html.includes(e.time.replace('T', ' ').slice(0, 16)));
+    const parts = {
+      sections: ['overview', 'certificate', 'experiment', 'inputs', 'runs', 'qc', 'comparisons', 'robustness', 'selections', 'structures', 'figures', 'methods', 'log', 'about'].every((x) => ids.includes(x)),
+      certificate: canonicalJSON(model.certificate) === canonicalJSON(c) && certificateFingerprint(model.certificate) === c.fingerprint && html.includes(c.fingerprint),
+      inputs: c.inputs.every((i) => html.includes(i.sha256)),
+      maps: maps === expectedMaps,
+      qc: qcPlots > 5,
+      figure: (html.match(/<figure class="page">/g) ?? []).length === r.ws.figures.length,
+      methods: reportHeads && refs === report.references.length,
+      log: logged,
+    };
+    check('review', 'it holds every section (overview, the certificate with what it proves, the experiment, inputs, runs, QC, comparisons, robustness, selections, structure views, figures, methods, decision log), the certificate whole in its JSON block (its fingerprint its own), each input\'s SHA-256, a map for each condition and difference of each run, the QC findings\' plots, each figure, the report\'s sections and every reference, every history entry',
+      `${Object.entries(parts).map(([k, v]) => `${k} ${v ? 'yes' : 'NO'}`).join(', ')}; ${maps} maps, ${qcPlots} QC plots, ${refs} references, ${(html.length / 1e6).toFixed(2)} MB`, Object.values(parts).every(Boolean), 'all');
+
+    // Every example's review: every traced number as recorded, nothing from outside.
+    const rows = [];
+    for (const e of EXAMPLES) {
+      const { ws, files } = windowExample(e.id);
+      const m = await writeCertificate(ws, async (sha) => files.get(sha) ?? null, { software: SW, review: true });
+      const x = checkTraced(m.review, m.certificate, ws);
+      rows.push({ id: e.id, total: x.total, bad: x.bad.length, external: externalReferences(m.review).length, mb: m.review.length / 1e6 });
+    }
+    check('review', `each of the ${EXAMPLES.length} examples' review report: every traced number as the certificate or the workspace records it, nothing loaded from outside`, `${rows.reduce((n, x) => n + x.total, 0)} traced numbers; ${rows.filter((x) => x.bad || x.external).map((x) => `${x.id}: ${x.bad} wrong, ${x.external} external`).join('; ') || 'every one'}; largest ${Math.max(...rows.map((x) => x.mb)).toFixed(1)} MB`, rows.every((x) => !x.bad && !x.external && x.total > 20), 'every one');
+  },
+
 };
 
 // --- Run ------------------------------------------------------------------------------------------

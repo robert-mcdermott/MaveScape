@@ -744,6 +744,26 @@ const scenes = {
     await click('Details');
     await sleep(600);
   },
+  // The review report (wave 6, slice 7): GRB2's run, its Enrich2 rescoring and their comparison,
+  // written as a review report and opened from its file; a run's numbers, a variant looked up and a
+  // number traced.
+  async review() {
+    await example('grb2-sh3');
+    await act('score', { preset: 'Enrich2' });
+    await act('compare', { a: 'Run 1', b: 'Run 2', report: true });
+    const path = join(temp, 'grb2.review.html');
+    await act('review_report', { path, overwrite: true });
+    await js('window.mavescape.saveNow()');
+    await b.goto(`file://${path}`, 1200);
+    await js(`(() => {
+      document.documentElement.style.scrollBehavior = 'auto';
+      document.getElementById('lookup-variant').value = 'p.Trp36Ala';
+      document.getElementById('lookup-go').click();
+      window.scrollTo(0, document.getElementById('runs').getBoundingClientRect().top + window.scrollY - 12);
+      document.querySelector('#lookup-result button.n').click();
+    })()`);
+    await sleep(500);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');
