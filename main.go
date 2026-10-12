@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-//go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/lib/providers/*.js web/ui/*.js web/workers/*.js web/examples
+//go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/lib/providers/*.js web/lib/structure/*.js web/ui/*.js web/workers/*.js web/examples
 var content embed.FS
 
 var version = "0.4.0"

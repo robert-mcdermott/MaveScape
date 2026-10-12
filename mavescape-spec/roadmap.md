@@ -2111,6 +2111,55 @@ as evidence (slice 4), and through wave 4's comparisons drawn on the protein.
    sticks for selected residues, labels, focus on a neighborhood.
    - Validation: Proteoscope's own tests for the copied modules pass here; every example's
      structure opens in both renderers.
+   - **Done.** Seventeen modules copied into `web/lib/structure/`, each with an origin comment,
+     fifteen unchanged; `chemistry.js` without ligands given as SMILES, `coloring.js` without the
+     color schemes of data MaveScape does not read. The surface worker answers surfaces and areas
+     (`web/workers/surface-worker.js`).
+     - **The program:** `structures.go` asks RCSB for an entry (`/api/fetch/pdb/{id}`) and AlphaFold
+       DB for a protein's entries and a model by its version (`…/prediction`, `…/model/{version}`),
+       sending an ID or an accession only. A structure is kept compressed, as the service sent it,
+       once read to its end and found whole.
+     - **The page:** `ui/structure-viewer.js` drives the renderers for one structure (Proteoscope's
+       scene, colors, selection flags, labels and camera); `ui/mode-structure.js` is the view:
+       opening, styles, colors, surfaces, assemblies, residues selected in words, drawn, labeled
+       and focused on, the structure in words, an image. `lib/structures.js` reads a file however
+       it comes and describes it. Remote control's `open_structure` and `set_structure`.
+     - The factor IX example's sixth step opens 1RFN and draws its cysteines as sticks; two
+       screenshot scenes (`structure`, `structure-alphafold`); the guide page *Structures*.
+     - Validation:
+       - Proteoscope's tests of the copied modules (66) pass, reading the structures the
+         validation keeps as the fetcher's cached answers (`validation/fixtures/public-data/pdb/`,
+         `…/alphafold/`: the examples' proteins, and the entries Proteoscope's tests name).
+       - `structures` (6 checks): each example protein's entry holds its target on the UniProt
+         residues it gives, and draws; each AlphaFold DB model's pLDDT agrees with the entry's own
+         mean (0.05) and bands (0.01); 2VWF as gzipped mmCIF, PDB-format file and BinaryCIF, and
+         GRB2's model as mmCIF and BinaryCIF, give the same atoms; assemblies built with the atoms
+         estimated, hemoglobin's by symmetry; 1RFN's disulfide bonds drawn as its records say;
+         1TUP's residues within 4 Å of DNA selected in words as every distance finds them.
+       - `remote-session.mjs` (133 checks): every example protein's entry and model drawn with
+         WebGPU and with the Canvas renderer, with the atoms Node reads and an image that is not
+         empty; the structure actions, refusals included.
+       - Unit tests: `structures.test.mjs` (6). Go: the structure requests.
+   - Found by slice 1:
+     - **AlphaFold DB names a model's file by its version** (v6 since 2025), which only its entry
+       list gives, and refuses clients that announce themselves as curl (HTTP 403). The program
+       asks for the list, then the model by its version; its User-Agent is answered.
+     - **An entry's own numbering is not UniProt's everywhere.** 1RFN numbers factor IX's protease
+       domain as chymotrypsin is numbered: 16–245, with eight insertions (60A, 95A, 95B, 129A, 129B,
+       184A, 188A, 221A) and three numbers skipped, for UniProt's 227–461. Read linearly, as its
+       record of the UniProt residues it covers gives them, positions drift by up to five. Positions
+       on the structure wait for slice 2's alignment; the selection language's `uniprot` keyword is
+       not offered until then.
+     - **RCSB has revised entries Proteoscope bundles** (7LYB and 3OG7 are larger than its copies).
+       Proteoscope's tests pass on the current files.
+     - **A structure opened by a script was drawn small**: the camera was fitted before the view
+       had its size. The view now fits once it has its size, and again whenever the size changes,
+       until the camera is moved by hand.
+     - **Headless Chrome offers WebGPU when asked** (`--enable-unsafe-webgpu`, on macOS). Where it
+       does not (a Linux runner without a GPU may not), the session checks the Canvas renderer and
+       says so.
+     - Two of Proteoscope's chemistry tests (2HYY, 4HHB) need its `interactions.js`, which comes
+       with slice 4; they are left out until then.
 2. **Target-to-structure mapping (X2).** Structures that cover the target ranked by PDBe SIFTS
    (`best_structures`) and the AlphaFold model; the target aligned to each chain's observed
    residues (`align.js`, BLOSUM62) with the UniProt offset; a mapping report (coverage,

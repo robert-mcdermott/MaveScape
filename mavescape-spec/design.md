@@ -267,7 +267,7 @@ does the talking:
 
 - `go test -race ./...`: host, library, fetch allowlist and limits, cache, offline mode, archive
   extraction, remote control, MCP protocol, handoff relay (against a fake Proteoscope).
-- `node --test "web/lib/*.test.mjs"`: every pure module, against hand-computed, published or
+- `node --test "web/lib/**/*.test.mjs"`: every pure module, against hand-computed, published or
   reference-tool values; property tests for row-order and column-order invariance, pseudocount
   scaling and deterministic serialization.
 - `node validation/run.mjs`: end-to-end suites against committed reference outputs

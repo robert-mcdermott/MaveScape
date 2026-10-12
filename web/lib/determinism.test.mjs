@@ -2,7 +2,8 @@
 // transcendental functions (and the ** operator, which is Math.pow) give different last bits in
 // different engines and versions (dmath.js). Computation uses dmath.js instead; only the color
 // modules and the tracks' drawing, which draw and check contrast and never reach a result, may use
-// them.
+// them. So may the structure viewer (structure/, copied from Proteoscope), which draws: none of its
+// numbers reaches a result yet.
 
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';

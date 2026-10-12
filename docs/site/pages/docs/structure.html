@@ -1,0 +1,65 @@
+---
+title: Structures
+description: The Structure view: a PDB entry, an AlphaFold DB model or a file of your own (PDB, mmCIF, BinaryCIF), drawn with WebGPU or the Canvas renderer; biological assemblies, styles, colors and surfaces; residues selected in words, drawn as sticks, labeled and focused on; an image of the view; remote control; and how the view was validated.
+lede: A variant-effect map is read against the protein's structure. MaveScape draws structures itself, with the viewer it shares with Proteoscope, and needs no other program.
+---
+      <h2 id="open">Opening a structure</h2>
+      <shot name="structure" alt="The Structure view: factor IX's protease domain and second EGF domain (PDB 1RFN) as a cartoon colored by chain, its 14 cysteines drawn as sticks and selected, the two that join the chains labeled Cys 122 · A and Cys 132 · B; beside it the entry in words and the Residues pane with resn CYS in its field">Factor IX (PDB 1RFN): its cysteines selected by <code>resn CYS</code> and drawn as sticks, the pair that joins its two chains labeled.</shot>
+      <p>In <strong>Structure</strong>, open one of:</p>
+      <ul>
+        <li><strong>A PDB entry</strong>, by its ID (<code>2VWF</code>, or the extended form <code>pdb_00002vwf</code>): its coordinates, chains and biological assemblies, from RCSB PDB.</li>
+        <li><strong>An AlphaFold DB model</strong>, by a UniProt accession: the field holds the target's when it has one (Experiment, Target). MaveScape asks AlphaFold DB which model is the latest, then for that model.</li>
+        <li><strong>A file of your own</strong>: PDB, mmCIF or BinaryCIF, gzipped or not (<code>.pdb</code>, <code>.ent</code>, <code>.cif</code>, <code>.mmcif</code>, <code>.bcif</code>, each also with <code>.gz</code>). <strong>Open a file…</strong>, or drop it on the window: a structure dropped opens in this view, whatever view is shown.</li>
+      </ul>
+      <p>A PDB ID or an accession is all that is sent, through the MaveScape program (<a href="public-data.html">Public data</a>); each structure is kept in the cache, compressed as the service sent it, and opens offline after that. One structure is shown at a time. It stays for the session, through the other views, but is not yet saved with the workspace.</p>
+      <p><strong>In words</strong>, beside the view, says what was opened and where from: the entry's title, how it was determined (method and resolution, or that it is a predicted model), its chains with the residues observed in each and the UniProt residues the entry says each covers, and what else it holds (DNA, ligands, ions).</p>
+      <p>The view uses the entry's own numbering. An entry may number its residues otherwise than UniProt does: 1RFN numbers factor IX's protease domain as chymotrypsin is numbered (16–245), where factor IX's own positions are 227–461.</p>
+
+      <h2 id="draw">Drawing it</h2>
+      <ul>
+        <li><strong>Style:</strong> cartoon, ball and stick, sticks, spacefill or a trace of the backbone. Ligands are drawn as balls and sticks with the cartoon; water is hidden.</li>
+        <li><strong>Color by</strong> chain, molecule (entity), position from N to C terminus (rainbow), secondary structure, molecule type, element, residue class, hydropathy (Kyte–Doolittle), nucleotide, B-factor, or a predicted model's confidence (pLDDT). The legend below the view names the colors.</li>
+        <li><strong>Surface:</strong> the molecular surface (SES), the solvent-accessible surface, the van der Waals surface or a Gaussian surface, computed in the background and colored as the atoms under it.</li>
+        <li><strong>Assembly:</strong> an entry's biological assemblies, built from its asymmetric unit by the entry's own operators (hemoglobin's tetramer from the αβ dimer of 1HHO). An assembly of more than 300,000 atoms is listed but cannot be built.</li>
+        <li><strong>Image</strong> saves the view as a PNG at twice its size.</li>
+      </ul>
+      <p>To move it: drag to rotate, drag with <kbd>⇧</kbd> or the right button to move it, the wheel or a pinch to zoom. With the view focused, the arrow keys rotate it, <kbd>+</kbd> and <kbd>−</kbd> zoom, and <kbd>F</kbd> fits the whole structure; <strong>Fit</strong> does too. Point at an atom for its residue, secondary structure and B-factor (a predicted model's pLDDT).</p>
+
+      <h2 id="residues">Residues</h2>
+      <p>Click a residue to select it; with <kbd>⌘</kbd>, <kbd>Ctrl</kbd> or <kbd>⇧</kbd>, add it to the selection or take it away. Double-click one to focus on it. Or type which residues in the field under <strong>Residues</strong>, in the selection language Proteoscope uses (PyMOL's words, ChimeraX's atom specs), and <kbd>Enter</kbd> or <strong>Select</strong>:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Words</th><th>What they select</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><code>chain</code>, <code>resi</code>, <code>resn</code>, <code>name</code>, <code>elem</code></td><td>Chains, residue numbers (ranges and lists), residue names, atom names, elements; values joined by <code>+</code> or <code>,</code></td><td><code>chain A and resi 40-80</code></td></tr>
+            <tr><td><code>/A:315@OG1</code></td><td>An atom spec: chain, residue, atom</td><td><code>/B:248</code></td></tr>
+            <tr><td><code>protein</code>, <code>nucleic</code>, <code>ligand</code>, <code>ion</code>, <code>water</code>, <code>hetatm</code></td><td>Kinds of molecule</td><td><code>ligand</code></td></tr>
+            <tr><td><code>backbone</code>, <code>sidechain</code></td><td>Parts of residues</td><td><code>sidechain and resn ARG</code></td></tr>
+            <tr><td><code>helix</code>, <code>sheet</code>, <code>turn</code>, <code>coil</code></td><td>Secondary structure: the entry's own, or DSSP's where it gives none</td><td><code>helix and chain B</code></td></tr>
+            <tr><td><code>within</code>, <code>around</code>, <code>beyond</code></td><td>Atoms within (or beyond) a distance in Å of others</td><td><code>within 4 of nucleic</code></td></tr>
+            <tr><td><code>byres</code>, <code>bychain</code></td><td>Whole residues or chains of the atoms selected</td><td><code>byres (protein and within 4 of ligand)</code></td></tr>
+            <tr><td><code>b</code>, <code>q</code>, <code>plddt</code></td><td>B-factor, occupancy, a predicted model's confidence, compared with a number</td><td><code>plddt &lt; 70</code></td></tr>
+            <tr><td><code>selected</code>, <code>focus</code></td><td>The residues selected now; those focused on</td><td><code>within 5 of selected</code></td></tr>
+            <tr><td><code>and</code>, <code>or</code>, <code>not</code>, parentheses</td><td>As usual; words side by side are joined by <em>and</em></td><td><code>resn CYS and not chain B</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A selection that does not parse is named where it goes wrong; one that selects nothing says so. Then, for the residues selected:</p>
+      <ul>
+        <li><strong>Draw as…</strong> sticks, ball and stick or spacefill over the rest, hidden, or as the rest again.</li>
+        <li><strong>Label</strong> them (again: take the labels away).</li>
+        <li><strong>Focus</strong>: the camera on them, with their neighbors within 5 Å drawn with their side chains; <strong>Whole structure</strong> goes back.</li>
+      </ul>
+
+      <h2 id="alphafold">AlphaFold DB models</h2>
+      <shot name="structure-alphafold" alt="GRB2's AlphaFold DB model colored by its confidence: its two SH3 domains and SH2 domain dark blue (very high), the linkers yellow and orange; the C-terminal SH3 domain, residues 159 to 214, selected">GRB2's AlphaFold DB model colored by its confidence (pLDDT), the SH3 domain the example measures (UniProt 159–214) selected.</shot>
+      <p>A predicted model opens colored by its confidence, each residue's pLDDT in AlphaFold DB's four bands: very high (above 90), confident (70 to 90), low (50 to 70) and very low (below 50, often a region without a fixed structure). The words say it is a prediction, not an experiment. A model numbers its residues as UniProt does, from 1.</p>
+
+      <h2 id="renderers">WebGPU and the Canvas renderer</h2>
+      <p>The view draws with WebGPU where the browser offers it (Chrome, Edge and Brave; Safari from macOS 26): spheres and cylinders drawn exactly, the cartoon, surfaces, ambient occlusion and picking. Where it does not, or with <code>?renderer=canvas</code> added to the page's address, it draws with the Canvas renderer, without surfaces or ambient occlusion. The badge above the view says which; pointed at, the Canvas badge says why. Both are Proteoscope's, copied into MaveScape with their tests.</p>
+
+      <h2 id="scripts">Scripts</h2>
+      <p>Remote control's <code>open_structure</code> opens a PDB entry (<code>pdb</code>) or an AlphaFold DB model (<code>alphafold</code>: an accession, or <code>"target"</code> for the target's), optionally an <code>assembly</code>, and returns the structure in words. <code>set_structure</code> changes the <code>style</code>, <code>color</code>, <code>surface</code> and <code>assembly</code>, and selects residues (<code>select</code>, in the language above), draws them (<code>show</code>), labels them (<code>label</code>) and focuses on them (<code>focus</code>). <code>open_files</code> opens a structure file. <code>get_state</code> includes the structure shown (<a href="scripting.html">Remote control</a>).</p>
+
+      <h2 id="validation">How it was validated</h2>
+      <p>The viewer's modules are Proteoscope 0.10.0's, copied with their tests, which pass here (66 of them): the parsers (PDB, mmCIF, BinaryCIF), residues and bonds, chemistry, DSSP, the cartoon and scene, surfaces and areas, and the selection language. The validation suite <code>structures</code> reads each example protein's PDB entry and AlphaFold DB model as the page does, from the cache: each chain holds its target on the UniProt residues its entry gives; each model's mean pLDDT is within 0.05 of AlphaFold DB's own and its share of residues in each band within 0.01. 2VWF read as gzipped mmCIF, as RCSB's PDB-format file and as BinaryCIF gives the same atoms to 0.001 Å, and GRB2's model the same as mmCIF and BinaryCIF. Each assembly is built with the atoms it was estimated at; hemoglobin's tetramer is the dimer moved whole by symmetry. On 1RFN, the bonds drawn between cysteines' sulfur atoms are the entry's own disulfide records; on 1TUP, the residues that <code>byres (chain B and protein and within 4 of nucleic)</code> selects are those every distance between atoms finds, R248 and R273 among them. The remote session opens every example protein's entry and model in the page, with WebGPU and then with the Canvas renderer, each with the atoms Node reads and an image that is not empty.</p>

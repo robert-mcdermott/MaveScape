@@ -1,6 +1,6 @@
 # File formats
 
-Every file MaveScape 0.1 to 0.4 read and write. Researchers whose counts come from their own pipeline
+Every file MaveScape 0.1 to 0.5 read and write. Researchers whose counts come from their own pipeline
 need only a count table, the target's sequence, and the design: which column is which sample.
 Blank, annotated layouts of each are on the Start page and in
 [`web/examples/layouts/`](../web/examples/layouts/). The Start page also opens two worked examples.
@@ -19,8 +19,30 @@ Blank, annotated layouts of each are on the Start page and in
 | Remote control | actions as JSON (`/api/remote/action`) | `remote.json` in the data folder: the address and token scripts use |
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
+| Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries and AlphaFold DB models through the program's fetcher | an image of the Structure view (PNG) |
 
-Coming later: Excel workbooks (0.3), structures (0.5).
+Coming later: Excel workbooks, structures kept with the workspace (0.5).
+
+## Structures
+
+The Structure view (MaveScape 0.5) reads a structure from a file or through the program's fetcher
+(a PDB entry by its ID; an AlphaFold DB model by a UniProt accession). The readers are
+Proteoscope's (`web/lib/structure/`):
+
+- **PDB** (`.pdb`, `.ent`): `ATOM` and `HETATM` records, `MODEL`s, `HELIX` and `SHEET`, `SEQRES`,
+  `DBREF` (which UniProt residues a chain covers), `CONECT`, `REMARK 350` (biological
+  assemblies).
+- **mmCIF** (`.cif`, `.mmcif`), as the wwPDB writes it: `atom_site`, `struct_conf` and
+  `struct_sheet_range`, `struct_conn` (disulfide bonds and other links), `struct_ref_seq`
+  (UniProt residues), `pdbx_struct_assembly` and `pdbx_struct_oper_list` (assemblies), the
+  components' `chem_comp_atom` and `chem_comp_bond` (bond orders), and ModelCIF's local pLDDT for
+  predicted models (AlphaFold DB's). A file named `.cif` that holds PDB records is read as PDB.
+- **BinaryCIF** (`.bcif`): MessagePack-encoded mmCIF, every column encoding, read as mmCIF.
+- **Compressed:** any of these gzipped (`.gz`).
+
+The first model of a file is drawn; an assembly is built from the deposited coordinates by its
+operators. The view's image is a PNG at twice the view's size. A structure is shown for the session:
+it is not yet saved with the workspace.
 
 ## Count tables
 
@@ -489,7 +511,15 @@ mavedb-search/<sha256>.json      a search, named by the SHA-256 of its words and
 ncbi/NM_007294.3.gb              a nucleotide record, as GenBank text (named by its accession)
 ensembl/ENST00000460680.json     an Ensembl transcript's sequence (named without its version; the
                                  answer names the version Ensembl serves)
+pdb/2VWF.cif.gz                  a PDB entry's coordinates, gzipped mmCIF as RCSB sends it (0.5)
+alphafold/P62993.prediction.json AlphaFold DB's entries for an accession: each model's version (0.5)
+alphafold/AF-P62993-F1-model_v6.cif
+                                 a predicted model, mmCIF gzipped as AlphaFold DB stores it (0.5)
 ```
+
+A structure is kept as it came, compressed (its record's `contentType` is `application/gzip`), and
+the page decompresses it; the program first reads a compressed answer to its end, which checks its
+length and checksum, and keeps it only if it begins as mmCIF or PDB does.
 
 The **retrieval record** (`*.meta.json`):
 

@@ -46,12 +46,12 @@ var remoteActions = []remoteAction{
 	{Name: "open_example", Description: "Opens a bundled example as a new workspace, scored with MaveScape's defaults, in the view it opens in. Without an id, the error lists the examples.", InputSchema: schema(map[string]any{
 		"id": textArg("The example's id or part of its title: \"grb2-sh3\" (GRB2 SH3, MaveDB counts), \"simulated\" (a simulated experiment with known effects) \"simulated-time-series\" (a simulated time series) or \"simulated-sort-seq\" (simulated sorted bins)."),
 	}, "id"), long: true},
-	{Name: "open_files", Description: "Opens files on this computer, as dropping them on the window does: count or score tables (.csv, .tsv), the target's sequence (.fasta), designs (.design.json) and workspace archives (.msz), or folders of them. Needs the token.", InputSchema: schema(map[string]any{
+	{Name: "open_files", Description: "Opens files on this computer, as dropping them on the window does: count or score tables (.csv, .tsv), the target's sequence (.fasta), designs (.design.json), workspace archives (.msz) and structures (.pdb, .cif, .bcif, gzipped or not: shown in the Structure view), or folders of them. Needs the token.", InputSchema: schema(map[string]any{
 		"paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths of files or folders."},
 		"new_workspace": flagArg("Open them in a new workspace rather than the open one."),
 	}, "paths"), long: true, reads: true},
-	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map or compare.", InputSchema: schema(map[string]any{
-		"mode": textArg("start, experiment, qc, score, map or compare."),
+	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map, compare or structure.", InputSchema: schema(map[string]any{
+		"mode": textArg("start, experiment, qc, score, map, compare or structure."),
 	}, "mode")},
 	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
 		"kind": textArg("table, target, run, selection or variant; found by name across all of them if not given."),
@@ -170,6 +170,22 @@ var remoteActions = []remoteAction{
 	{Name: "remove_track", Description: "Removes an annotation and its tracks (undoable, in the history).", InputSchema: schema(map[string]any{
 		"annotation": textArg("The annotation by id or name (list_tracks)."),
 	}, "annotation")},
+	{Name: "open_structure", Description: "Opens a structure in the Structure view: a PDB entry by its ID, or the AlphaFold DB model of a UniProt accession (\"target\": the target's), fetched through the program (cached, then available offline). A file of your own opens with open_files. Returns the structure in words: its chains, the residues observed, its assemblies and what else it holds.", InputSchema: schema(map[string]any{
+		"pdb":       textArg("A PDB ID, such as 2VWF."),
+		"alphafold": textArg("A UniProt accession, such as P62993, for its AlphaFold DB model; \"target\" for the target's."),
+		"assembly":  textArg("A biological assembly by its id (\"1\"), or \"asym\" for the asymmetric unit; the coordinates as deposited if not given."),
+	}), long: true},
+	{Name: "set_structure", Description: "Draws the structure shown another way (style, color, surface, assembly) and selects residues in Proteoscope's selection language, draws them in a style of their own, labels them and focuses on their neighborhood. Returns the structure's state: what is selected, labeled and focused on, and the renderer (WebGPU, or the Canvas renderer, which draws no surfaces).", InputSchema: schema(map[string]any{
+		"style":    textArg("cartoon, ball-stick, sticks, spacefill or trace."),
+		"color":    textArg("chain, entity, rainbow, secondary, moltype, element, residue, hydrophobicity, nucleotide, bfactor, plddt (a predicted model) or uniform."),
+		"surface":  textArg("off, ses (molecular), sas (solvent-accessible), vdw or gaussian; WebGPU only."),
+		"assembly": textArg("A biological assembly by its id (\"1\"), or \"asym\" for the asymmetric unit; clears the selection."),
+		"select":   textArg("Residues to select: \"resn CYS\", \"chain A and resi 40-80\", \"within 5 of ligand\", \"helix and chain B\"; empty to clear the selection."),
+		"show":     textArg("How the selected residues are drawn: sticks, ball-stick, spacefill, hide or none (as the rest)."),
+		"label":    flagArg("Label the selected residues (false: remove their labels)."),
+		"focus":    flagArg("Focus on the selected residues and their neighbors within 5 Å, side chains drawn (false: the whole structure again)."),
+		"fit":      flagArg("Fit the whole structure in the view."),
+	}), long: true},
 	{Name: "export", Description: "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), the comparison shown (its matched variants, CSV; its report and statistics, JSON; its positions, maps or a predictor's classes), or a run's robustness to analysis choices. Needs the token.", InputSchema: schema(map[string]any{
 		"what":           textArg("scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions."),
 		"path":           textArg("The absolute path of the file to write."),

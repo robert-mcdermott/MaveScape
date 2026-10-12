@@ -601,6 +601,26 @@ const scenes = {
     await scrollTo('.map-pane .map-legend', 'start');
     await sleep(800);
   },
+  // The Structure view (wave 5, slice 1): factor IX's structure (PDB 1RFN) from the cache, its
+  // cysteines selected in words and drawn as sticks, the pair that joins its two chains labeled.
+  async structure() {
+    await example('factor9');
+    await act('open_structure', { pdb: '1RFN' });
+    await act('set_structure', { select: 'resn CYS', show: 'sticks' });
+    await act('set_structure', { select: '(chain A and resi 122) or (chain B and resi 132)', label: true });
+    await act('set_structure', { select: 'resn CYS' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'resn CYS'; })()`);
+    await sleep(1200);
+  },
+  // An AlphaFold DB model: GRB2's, colored by its confidence, the SH3 domain the example measures
+  // (UniProt 159–214) selected.
+  async 'structure-alphafold'() {
+    await example('grb2-sh3');
+    await act('open_structure', { alphafold: 'target' });
+    await act('set_structure', { select: 'resi 159-214' });
+    await js(`(() => { const i = document.querySelector('.structure-query-input'); if (i) i.value = 'resi 159-214'; })()`);
+    await sleep(1200);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

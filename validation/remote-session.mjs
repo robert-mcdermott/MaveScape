@@ -41,6 +41,7 @@ import { combineKeys, queryContext, selectByQuery } from '../web/lib/query.js';
 import { placeTarget, placementPatch, readUniProtEntry, referenceOf } from '../web/lib/uniprot.js';
 import { recordTargetCheck } from '../web/lib/workspace.js';
 import { sha256 } from '../web/lib/sha256.js';
+import { EXAMPLE_STRUCTURES, modelFile, openCached, pdbFile } from './structure-cases.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -55,6 +56,7 @@ const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:0000
 const TP53 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-tp53-screens');
 const TP53_TABLES = [['urn:mavedb:00000068-c-1', 'scores.csv'], ['urn:mavedb:00000068-b-1', 'nutlin.csv'], ['urn:mavedb:00000059-a-1', 'kotler.csv']];
 const results = [];
+const fmtShare = (x) => `${(100 * x).toFixed(0)}% drawn`;
 function check(name, value, ok, required = '') {
   results.push({ name, ok });
   if (verbose || !ok) console.log(`${ok ? 'ok  ' : 'FAIL'} ${name} — ${value}${required ? ` (required ${required})` : ''}`);
@@ -682,6 +684,61 @@ try {
   const gSetJSON = JSON.parse(new TextDecoder().decode(gFiles.get('score_set.json')));
   const gScores = parseTable(gFiles.get('scores.csv'), { fileName: 'scores.csv' });
   check('the deposit of a run rescored from counts: its scores, SEs, intervals and replicates, its counts by sample, the methods as MaveDB\'s method text, the details given', `${gScores.rows} rows; ${gScores.columns.map((c) => c.name).join(', ')}; license ${gSetJSON.licenseId}`, gScores.rows === 1121 && gScores.columns[0].name === 'hgvs_pro' && gScores.columns.some((c) => c.name === 'SE') && gFiles.has('counts.csv') && /^Variant counts were read from/.test(gSetJSON.methodText) && gSetJSON.licenseId === 3 && gSetJSON.abstractText.startsWith('Abundance'));
+
+  // Wave 5, slice 1: the Structure view. Every example protein's PDB entry and AlphaFold DB model
+  // opened by remote control, from the cache, and drawn: with WebGPU where the browser offers it,
+  // then, the page opened again with ?renderer=canvas, with the Canvas renderer; each with the
+  // atoms Node reads, and an image of the view that is not empty.
+  const drawnShare = `(async () => { const m = await import('/ui/mode-structure.js'); const v = m.structureState(window.mavescape).viewer; const blob = await v.capturePNG(0.5); const bitmap = await createImageBitmap(blob); const c = new OffscreenCanvas(bitmap.width, bitmap.height); const g = c.getContext('2d'); g.drawImage(bitmap, 0, 0); const d = g.getImageData(0, 0, bitmap.width, bitmap.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - d[0]) + Math.abs(d[i + 1] - d[1]) + Math.abs(d[i + 2] - d[2]) > 30) n += 1; return n / (d.length / 4); })()`;
+  async function openEveryStructure() {
+    const opened = [];
+    for (const e of EXAMPLE_STRUCTURES) {
+      for (const [args, kind, file] of [[{ pdb: e.pdb }, 'pdb', pdbFile(e.pdb)], [{ alphafold: e.accession }, 'alphafold', modelFile(e.accession, e.model)]]) {
+        const r = await send('open_structure', args);
+        const node = await openCached(kind, file);
+        await sleep(300);
+        const share = r.ok ? await browser.eval(drawnShare) : 0;
+        opened.push({ name: r.data?.name ?? Object.values(args)[0], ok: r.ok && r.data.atoms === node.models[0].atoms.length && r.data.residues === node.models[0].residues.length && r.data.origin?.cache === 'hit' && share > 0.03, renderer: r.data?.renderer, share, message: r.ok ? '' : r.message });
+      }
+    }
+    return opened;
+  }
+  const first = await act('open_structure', { pdb: '2VWF' });
+  // WebGPU where the browser gives the viewer a device (headless Chrome on macOS does); otherwise
+  // the viewer's own reason for the Canvas renderer is reported.
+  const webgpu = first.data.renderer === 'webgpu';
+  const noGPU = webgpu ? '' : await browser.eval(`import('/ui/mode-structure.js').then((m) => m.structureState(window.mavescape).viewer.failure)`);
+  check('open_structure: a PDB entry by its ID, from the cache, in the Structure view, described in words (its chains and the UniProt residues each covers)', first.message.slice(0, 220), first.data.name === '2VWF' && first.data.origin.kind === 'pdb' && first.data.chains.find((c) => c.id === 'A')?.uniprot[0]?.from === 159 && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'structure' && /Chain A: Growth Factor Receptor-Bound Protein 2/.test(first.message));
+  const everyGPU = await openEveryStructure();
+  check(`every example protein's PDB entry and AlphaFold DB model opened and drawn ${webgpu ? 'with WebGPU' : `by the Canvas renderer (${noGPU})`}, with the atoms and residues Node reads, from the cache; an image of each view not empty`, everyGPU.map((x) => `${x.name} ${x.renderer} ${fmtShare(x.share)}${x.message ? ` ${x.message}` : ''}`).join('; '), everyGPU.length === 2 * EXAMPLE_STRUCTURES.length && everyGPU.every((x) => x.ok && x.renderer === (webgpu ? 'webgpu' : 'canvas')));
+  if (!webgpu) console.log(`  No WebGPU for the viewer (${noGPU}): the Structure view was checked with the Canvas renderer only.`);
+  const target = await act('open_structure', { alphafold: 'target' });
+  check('open_structure with alphafold "target": the AlphaFold DB model of the open workspace\'s target (the last example opened), its confidence the color', target.message.slice(0, 160), target.data.origin.kind === 'alphafold' && target.data.predicted && target.data.color === 'plddt');
+  await act('open_structure', { pdb: '1RFN' });
+  const cys = await act('set_structure', { select: 'resn CYS', show: 'sticks', label: true });
+  const focused = await act('set_structure', { select: 'chain A and resi 191+220', focus: true });
+  check('set_structure: factor IX\'s cysteines (1RFN) selected in words, drawn as sticks and labeled; two focused on, their neighborhood drawn', `${cys.message} | ${focused.message}`, cys.data.selected.count === 14 && Object.values(cys.data.styled).filter((x) => x === 'sticks').length === 14 && cys.data.labels === 14 && focused.data.focused === 2 && focused.data.selected.residues.join() === 'Cys 191 · A,Cys 220 · A');
+  const surface = await act('set_structure', { surface: 'ses', focus: false, select: '' });
+  check(`set_structure surface: the molecular surface ${webgpu ? 'computed in its worker and drawn' : 'refused by the Canvas renderer, saying why'}`, surface.message, webgpu ? surface.data.surface.ready && /triangles/.test(surface.data.surface.status) : /need WebGPU/.test(surface.data.surface.status));
+  await act('set_structure', { surface: 'off' });
+  await act('open_structure', { pdb: '1HHO' });
+  const tetramer = await act('set_structure', { assembly: '1' });
+  check('set_structure assembly: hemoglobin (1HHO), its αβ dimer as deposited, built into its tetramer by symmetry', `${tetramer.message} ${tetramer.data.atoms} atoms`, tetramer.data.assembly === '1' && tetramer.data.atoms === 2 * (await openCached('pdb', pdbFile('1HHO'))).models[0].atoms.length);
+  const wrong = await send('set_structure', { select: 'resn FOO' });
+  const badSyntax = await send('set_structure', { select: 'chain A and (resi 40' });
+  const noSuch = await send('open_structure', { pdb: '9ZZZ' });
+  const neither = await send('open_structure', {});
+  check('what cannot be done is refused, saying why: a selection of nothing, a selection that does not parse, an entry not in the cache (offline), no structure named', [wrong.message, badSyntax.message, noSuch.message, neither.message].join(' | ').slice(0, 400), !wrong.ok && /selects no residue/.test(wrong.message) && !badSyntax.ok && !noSuch.ok && /offline/.test(noSuch.message) && !neither.ok);
+  const fromFile = await act('open_files', { paths: [join(ROOT, 'validation/fixtures/structures/2VWF.pdb.gz')] });
+  const withStructure = await act('get_state');
+  check('open_files with a structure file (RCSB\'s PDB-format 2VWF, gzipped): shown in the Structure view, in get_state', `${fromFile.message} get_state: ${withStructure.data.structure?.name}, ${withStructure.data.structure?.atoms} atoms`, /the structure 2VWF\.pdb/.test(fromFile.message) && withStructure.data.structure?.name === '2VWF' && withStructure.data.structure.origin.kind === 'file' && withStructure.data.structure.atoms === first.data.atoms);
+  // The Canvas renderer, the page opened again.
+  await browser.goto(`${URL}?renderer=canvas`, 1500);
+  for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);
+  await sleep(500);
+  const everyCanvas = await openEveryStructure();
+  const canvasSurface = await act('set_structure', { surface: 'ses' });
+  check('the page opened with ?renderer=canvas: every example protein\'s entry and model drawn by the Canvas renderer, with the atoms Node reads; an image of each view not empty; a surface refused, saying it needs WebGPU', `${everyCanvas.map((x) => `${x.name} ${x.renderer} ${fmtShare(x.share)}${x.message ? ` ${x.message}` : ''}`).join('; ')}; surface: ${canvasSurface.data.surface.status}`, everyCanvas.length === 2 * EXAMPLE_STRUCTURES.length && everyCanvas.every((x) => x.ok && x.renderer === 'canvas') && /need WebGPU: the Canvas renderer was asked for/.test(canvasSurface.data.surface.status));
 
   const foreign = requested.filter((u) => !u.startsWith(URL) && !/^(data|blob):/.test(u));
   check('the page asked nothing of any origin but its own, public data through the program\'s /api/fetch/ only', `${requested.length} requests, ${requested.filter((u) => u.includes('/api/fetch/')).length} for public data; beyond the origin: ${foreign.slice(0, 3).join(', ') || 'none'}`, requested.length > 50 && !foreign.length && requested.some((u) => u.includes('/api/fetch/uniprot/P62993')));

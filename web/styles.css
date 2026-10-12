@@ -1053,3 +1053,42 @@ details.track-notes { grid-column: 1 / -1; margin-left: 26px; font-size: 11.5px;
 details.track-notes summary { cursor: pointer; }
 details.track-notes ul { margin: 2px 0 0; padding-left: 16px; }
 dl.kv.annotations dd { white-space: normal; }
+
+/* ---------- MaveScape: the Structure view (ui/mode-structure.js, ui/structure-viewer.js) ---------- */
+
+.structure-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 14px; height: 100%; box-sizing: border-box; }
+.structure-body .pane + .pane { margin-top: 0; }
+@media (max-width: 1080px) { .structure-body { grid-template-columns: minmax(0, 1fr); height: auto; } .structure-pane { height: 70vh; } }
+.structure-pane { display: flex; flex-direction: column; gap: 8px; min-height: 420px; }
+.structure-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.structure-toolbar .spacer { flex: 1; }
+.structure-viewport { position: relative; flex: 1; min-height: 320px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--line); }
+.structure-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; cursor: grab; }
+.structure-canvas:active { cursor: grabbing; }
+.structure-canvas:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.structure-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.structure-label { position: absolute; left: 0; top: 0; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--bg-elev) 88%, transparent); border: 1px solid var(--line-strong); font-size: 11px; color: var(--text); white-space: nowrap; }
+.structure-tooltip { position: absolute; left: 0; top: 0; z-index: 5; display: none; max-width: 240px; padding: 5px 8px; border-radius: var(--radius-sm); background: var(--bg-elev); border: 1px solid var(--line-strong); box-shadow: var(--shadow); font-size: 11.5px; color: var(--text); pointer-events: none; }
+.structure-tooltip.visible { display: grid; gap: 2px; }
+.structure-tooltip span { color: var(--text-2); }
+.structure-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 11.5px; color: var(--text-2); min-height: 18px; }
+.structure-legend .legend-title { font-weight: 600; color: var(--text); }
+.structure-legend .legend-item i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.structure-legend .legend-ramp { width: 120px; height: 10px; border-radius: 3px; display: inline-block; }
+.structure-status { font-size: 11.5px; color: var(--text-3); }
+.renderer-badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); }
+.renderer-badge.fallback { background: var(--warn-soft); color: var(--warn-text); }
+.structure-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; overflow: auto; }
+.structure-side .pane + .pane { margin-top: 0; }
+.structure-side .callout { display: flex; gap: 8px; align-items: flex-start; }
+.structure-open-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) auto; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+.structure-open summary { cursor: pointer; font-weight: 600; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.structure-open[open] summary { margin-bottom: 10px; }
+.structure-words p { margin: 0 0 6px; font-size: 12.5px; color: var(--text-2); }
+.structure-words p.structure-origin { color: var(--text); font-weight: 500; }
+.structure-query { display: flex; gap: 6px; }
+.structure-query .input { flex: 1; min-width: 0; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.structure-residues { margin: 8px 0 0; font-size: 12px; color: var(--text-2); }
+.structure-empty { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 14px; align-items: start; }
+@media (max-width: 1080px) { .structure-empty { grid-template-columns: minmax(0, 1fr); } }
+.structure-empty .planned { padding: 24px; margin: 0; }

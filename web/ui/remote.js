@@ -50,6 +50,11 @@ import { setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 import { possessive } from '../lib/words.js';
+import { openStructure, originText, RESIDUE_STYLES, selectResidues, structureState, targetAccession } from './mode-structure.js';
+import { STYLES, SURFACES } from './structure-viewer.js';
+import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
+import { SelectionError } from '../lib/structure/select.js';
+import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
 
 export class ActionError extends Error {}
 
@@ -58,7 +63,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const ONE_TO_THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter', X: 'Ter' };
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare' };
+const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure' };
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -251,6 +256,52 @@ export function installRemote(app) {
 
   // --- Actions --------------------------------------------------------------------------------
 
+  // The structure shown, for get_state and the structure actions (wave 5, slice 1).
+  function structureSummary(full = true) {
+    const state = structureState(app);
+    const viewer = state.viewer;
+    const structure = viewer?.structure;
+    if (!structure) return null;
+    const model = viewer.model;
+    const selected = [...viewer.selection].map((key) => model.residueMap.get(key)).filter(Boolean);
+    const origin = state.origin ? { kind: state.origin.kind, id: state.origin.id ?? null, version: state.origin.version ?? null, file: state.origin.name ?? null, retrieved: state.origin.retrieval?.retrieved ?? null, cache: state.origin.retrieval?.cache ?? null } : null;
+    const summary = {
+      name: structure.meta.code || structure.label,
+      title: structure.meta.title,
+      origin,
+      predicted: Boolean(structure.meta.isPredicted),
+      assembly: structure.activeAssemblyId ?? ASYMMETRIC_UNIT_ID,
+      atoms: model.atoms.length,
+      residues: model.residues.length,
+      renderer: viewer.kind,
+      style: viewer.style,
+      color: viewer.colorScheme,
+      surface: viewer.surface,
+      selected: { count: selected.length, query: state.query || null, residues: selected.slice(0, 100).map(residueLabel), runs: residueRuns(selected).slice(0, 50) },
+      styled: Object.fromEntries([...viewer.styled].map(([key, how]) => [key, how])),
+      labels: viewer.labels.size,
+      focused: viewer.focused.length,
+    };
+    if (!full) return summary;
+    return { ...summary, chains: chainSummaries(structure), assemblies: assemblyChoices(structure), words: describeStructure(structure) };
+  }
+
+  function setAssembly(id) {
+    const viewer = structureState(app).viewer;
+    const choices = assemblyChoices(viewer.structure);
+    if (!choices.length) throw new ActionError(`${viewer.structure.meta.code || 'The structure'} defines no assembly other than its coordinates as deposited.`);
+    const chosen = choose(String(id) === 'au' ? ASYMMETRIC_UNIT_ID : String(id), choices.map((c) => c.id), 'assembly');
+    const choice = choices.find((c) => c.id === chosen);
+    if (choice.tooLarge) throw new ActionError(`${choice.label} would have ${choice.atoms.toLocaleString('en-US')} atoms, more than MaveScape draws.`);
+    viewer.setAssembly(chosen);
+    structureState(app).query = '';
+  }
+
+  // Waits for the surface asked for (WebGPU), at most 30 seconds.
+  async function surfaceReady(viewer) {
+    for (let i = 0; i < 300 && viewer.surface.kind !== 'off' && viewer.kind === 'webgpu' && !viewer.surface.ready && !/could not/.test(viewer.surface.status); i += 1) await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
   const actions = {
     async get_state() {
       const w = ws();
@@ -270,6 +321,7 @@ export function installRemote(app) {
         selection: sel ? { run: w.runs.find((r) => r.id === sel.run)?.name ?? sel.run, condition: sel.condition, count: sel.keys.length, query: sel.query ?? null, variants: sel.keys.slice(0, 100) } : null,
         steps: steps.map((s) => ({ id: s.id, label: s.label, state: s.state, detail: s.detail })),
         next: next ? { step: next.id, state: next.state, detail: next.detail, action: next.action?.label ?? null } : null,
+        structure: structureSummary(false),
       };
       const message = `${w.name}: ${plural(w.sources.length, 'table')}, ${plural(w.runs.length, 'score run')}${w.design ? `, a ${w.design.model} design` : ', no design'}; showing ${data.mode}.${next ? ` ${next.state === 'optional' ? 'All done' : 'Next'}: ${next.detail}` : ''}`;
       return { message, data };
@@ -308,19 +360,99 @@ export function installRemote(app) {
         if (!response.ok) throw new ActionError(`${file.name} could not be read (HTTP ${response.status}).`);
         items.push(Object.assign(new File([await response.arrayBuffer()], file.name), { folder: file.folder ?? null }));
       }
-      const before = { id: ws().id, sources: ws().sources.length, targets: ws().targets.length };
+      const before = { id: ws().id, sources: ws().sources.length, targets: ws().targets.length, structure: structureState(app).origin };
       const { problems } = await app.importFiles(items, { accept: !args.review });
       await settle();
       const w = ws();
       // A MaveDB package opens as a workspace of its own (wave 3, slice 4).
       const fresh = w.id !== before.id;
       const added = { tables: w.sources.slice(fresh ? 0 : before.sources).map((s) => s.name), targets: w.targets.slice(fresh ? 0 : before.targets).map((t) => t.name) };
-      if (problems.length && !added.tables.length && !added.targets.length && !args.review) throw new ActionError(problems.join(' '));
+      // A structure is shown in the Structure view (wave 5, slice 1).
+      const structure = structureState(app).origin !== before.structure ? structureSummary(false) : null;
+      if (structure) added.structure = structure.name;
+      if (problems.length && !added.tables.length && !added.targets.length && !structure && !args.review) throw new ActionError(problems.join(' '));
       const parts = [];
       if (added.tables.length) parts.push(`the table${added.tables.length > 1 ? 's' : ''} ${added.tables.join(', ')}`);
       if (added.targets.length) parts.push(`the target${added.targets.length > 1 ? 's' : ''} ${added.targets.join(', ')}`);
+      if (structure) parts.push(`the structure ${originText(structureState(app).origin, structureState(app).viewer.structure)}, in the Structure view`);
       const message = `${parts.length ? `Opened ${parts.join(' and ')}` : `Read ${plural(files.length, 'file')}`}${args.review ? '; the import wizard is open for review' : ''}.${problems.length ? ` Problems: ${problems.join(' ')}` : ''}`;
       return { message, data: { ...added, problems } };
+    },
+
+    async open_structure(args) {
+      const given = [args.pdb, args.alphafold].filter((x) => x !== undefined && x !== null && String(x).trim() !== '');
+      if (given.length !== 1) throw new ActionError('Give a PDB ID (pdb: "2VWF") or a UniProt accession for its AlphaFold DB model (alphafold: "P62993", or "target" for the target\'s), one of the two.');
+      let what = args.pdb ? { pdb: String(args.pdb) } : { alphafold: String(args.alphafold) };
+      if (what.alphafold?.toLowerCase() === 'target') {
+        const accession = targetAccession(ws());
+        if (!accession) throw new ActionError('The target has no UniProt accession: give it in Experiment, Target, or name the accession.');
+        what = { alphafold: accession };
+      }
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      const result = await openStructure(app, what);
+      if (!result.ok) throw new ActionError(result.message);
+      if (args.assembly) setAssembly(args.assembly);
+      await surfaceReady(structureState(app).viewer);
+      await settle();
+      return { message: result.message, data: structureSummary() };
+    },
+
+    async set_structure(args) {
+      const state = structureState(app);
+      const viewer = state.viewer;
+      if (!viewer?.structure) throw new ActionError('No structure is open: open one with open_structure (a PDB ID or an AlphaFold DB model), or a file with open_files.');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      if (args.assembly) setAssembly(args.assembly);
+      if (args.style) viewer.setStyle(choose(args.style, Object.keys(STYLES), 'style'));
+      if (args.color) {
+        const schemes = COLOR_SCHEMES.map((c) => c.id).filter((id) => id !== 'plddt' || viewer.structure.meta.isPredicted);
+        viewer.setColor(choose(args.color, schemes, 'color scheme'));
+      }
+      if (args.surface) viewer.setSurface(choose(args.surface, Object.keys(SURFACES), 'surface'));
+      if (args.select !== undefined && args.select !== null) {
+        const text = String(args.select).trim();
+        state.query = text;
+        if (!text) viewer.select([]);
+        else {
+          let found;
+          try {
+            found = selectResidues(app, text);
+          } catch (error) {
+            throw new ActionError(error instanceof SelectionError ? `"${text}": ${error.message}` : error.message);
+          }
+          if (!found.keys.length) throw new ActionError(`"${text}" selects no residue of ${viewer.structure.meta.code || 'the structure'}.`);
+          viewer.select(found.keys);
+        }
+      }
+      const keys = [...viewer.selection];
+      const needs = (what) => {
+        if (!keys.length) throw new ActionError(`Select residues first (select: "resn CYS") to ${what} them.`);
+      };
+      if (args.show) {
+        needs('draw');
+        viewer.styleResidues(keys, choose(args.show, Object.keys(RESIDUE_STYLES), 'residue style'));
+      }
+      if (args.label !== undefined && args.label !== null) {
+        needs('label');
+        viewer.label(keys, Boolean(args.label));
+      }
+      if (args.focus === true) {
+        needs('focus on');
+        viewer.focus(keys);
+      } else if (args.focus === false) {
+        viewer.clearFocus();
+        viewer.fit();
+      }
+      if (args.fit) viewer.fit();
+      await surfaceReady(viewer);
+      await settle();
+      const summary = structureSummary();
+      const parts = [`${summary.name}: ${STYLES[summary.style].label.toLowerCase()}, colored by ${COLOR_SCHEMES.find((c) => c.id === summary.color)?.label.toLowerCase() ?? summary.color}`];
+      if (summary.surface.kind !== 'off') parts.push(summary.surface.ready ? `the ${SURFACES[summary.surface.kind].words}` : summary.surface.status);
+      if (summary.selected.count) parts.push(`${plural(summary.selected.count, 'residue')} selected (${summary.selected.runs.slice(0, 8).join(', ')}${summary.selected.runs.length > 8 ? ', …' : ''})`);
+      if (summary.labels) parts.push(`${plural(summary.labels, 'label')}`);
+      if (summary.focused) parts.push(`focused on ${plural(summary.focused, 'residue')}`);
+      return { message: `${parts.join('; ')}. Drawn with ${viewer.kind === 'webgpu' ? 'WebGPU' : 'the Canvas renderer'}.`, data: summary };
     },
 
     async set_mode(args) {

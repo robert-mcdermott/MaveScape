@@ -1,0 +1,8 @@
+{
+  "contentType": "application/gzip",
+  "service": "AlphaFold DB",
+  "source": "https://alphafold.ebi.ac.uk/files/AF-P04637-F1-model_v6.cif",
+  "retrieved": "2026-10-12T02:39:43Z",
+  "etag": "\"0341294aeea35fac121680bf9eb5e729\"",
+  "lastModified": "Thu, 18 Sep 2025 15:04:56 GMT"
+}

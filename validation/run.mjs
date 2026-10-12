@@ -9,7 +9,7 @@
 // (external data), import (external data), experiment (external data), scoring, qc, map and
 // roundtrip (their last checks need external data), readiness, examples (its last checks need
 // external data), public-data, mavedb-export, annotations, compare and robustness (their last checks
-// need external data), selections; all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
+// need external data), selections, structures; all by default. UPDATE_GOLDEN=1 rewrites the golden files (validation/golden/) instead of
 // comparing with them.
 // Exits with status 1 when a check fails.
 //
@@ -110,6 +110,13 @@ import { addSelection } from '../web/lib/workspace.js';
 import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
+import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, modelFile, openCached, openFixture, pdbFile } from './structure-cases.mjs';
+import { assemblyChoices, chainSummaries, readStructureBytes } from '../web/lib/structures.js';
+import { deriveStructure, materializeAssemblyModels } from '../web/lib/structure/structure.js';
+import { buildCartoon } from '../web/lib/structure/cartoon.js';
+import { buildScene } from '../web/lib/structure/scene.js';
+import { cifTable, parseCIFDocument } from '../web/lib/structure/parse.js';
+import { residueKeysFromMask, selectAtoms } from '../web/lib/structure/select.js';
 
 const args = process.argv.slice(2);
 const verbose = args.includes('--verbose');
@@ -2327,7 +2334,7 @@ const suites = {
       const gaps = o.readiness.gaps.map((g) => g.id);
       const missing = (example.teaches ?? []).filter((g) => !gaps.includes(g));
       check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
-      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
+      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare', 'structure'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
       if (example.mavedb) {
         // Opened from MaveDB: its tables the ones the example was made with (and the validation
         // pins), each record's license the example's (several records, wave 3 slice 6).
@@ -2653,10 +2660,12 @@ const suites = {
       'NCBI E-utilities': /^https:\/\/eutils\.ncbi\.nlm\.nih\.gov\/entrez\/eutils\/(efetch\.fcgi\?db=nuccore&id=(?:[A-Z]{2}_\d+|[A-Z]{1,2}\d{5,8})\.\d+&rettype=gb|esearch\.fcgi\?db=clinvar&term=[^&]+&retmax=10000&retstart=\d+&retmode=json|esummary\.fcgi\?db=clinvar&id=\d+(,\d+)*&retmode=json)/,
       Ensembl: /^https:\/\/rest\.ensembl\.org\/sequence\/id\/ENST\d{11}\?type=cdna&mask_feature=1$/,
       'PDBe-KB': /^https:\/\/www\.ebi\.ac\.uk\/pdbe\/graph-api\/uniprot\/sequence_conservation\/[A-Z0-9]+$/,
-      'AlphaFold DB': /^https:\/\/alphafold\.ebi\.ac\.uk\/files\/AF-[A-Z0-9]+-F1-aa-substitutions\.csv$/,
+      'AlphaFold DB': /^https:\/\/alphafold\.ebi\.ac\.uk\/(files\/AF-[A-Z0-9]+-F1-(aa-substitutions\.csv|model_v\d+\.cif)|api\/prediction\/[A-Z0-9]+)$/,
       gnomAD: /^https:\/\/gnomad\.broadinstitute\.org\/api$/,
+      // Structures (wave 5, slice 1), kept compressed as they came.
+      'RCSB PDB': /^https:\/\/files\.rcsb\.org\/download\/[0-9][A-Z0-9]{3}\.cif\.gz$/,
     };
-    const typeOf = (meta) => (/efetch\.fcgi/.test(meta.source) ? 'text/plain; charset=utf-8' : /\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) || /\/variants\/data\?/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json');
+    const typeOf = (meta) => (/efetch\.fcgi/.test(meta.source) ? 'text/plain; charset=utf-8' : /\.cif(\.gz)?$/.test(meta.source) ? 'application/gzip' : /\.csv$/.test(meta.source) || /\/(scores|counts)$/.test(meta.source) || /\/variants\/data\?/.test(meta.source) ? 'text/csv; charset=utf-8' : 'application/json');
     const complete = records.filter(({ kind, meta }) => hosts[meta.service]?.test(meta.source) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(meta.retrieved) && (meta.service !== 'UniProt' || meta.version) && (kind !== 'mavedb-search' || (meta.method === 'POST' && JSON.parse(meta.request).text)) && (kind !== 'gnomad' || (meta.method === 'POST' && JSON.parse(meta.request).query)) && meta.contentType === typeOf(meta));
     check('public-data', 'each cached response carries its retrieval record: the service, the URL on a listed host, when it was retrieved, UniProt\'s release, a search\'s words, a GraphQL query', `${complete.length} of ${records.length} records complete (${[...new Set(records.map((r) => r.kind))].map((k) => `${k} ${records.filter((r) => r.kind === k).length}`).join(', ')})`, records.length >= 14 && complete.length === records.length, 'all');
     for (const [id, accession] of Object.entries({ 'grb2-sh3': 'P62993', hsp90: 'P02829', factor9: 'P00740' })) {
@@ -3666,6 +3675,114 @@ const suites = {
     const saved = addSelection(g.ws, { name: 'Core', run: g.run.id, condition: 0, keys: A, query }).ws;
     const back = (await readArchive((await writeArchive(saved)).bytes)).ws.selections.find((x) => x.name === 'Core');
     check('selections', 'a selection\'s files and the archive: the JSON keeps its query and names (format mavescape-selection), the CSV a row per variant with its score; a selection saved by query comes back from the archive with its query and its variants', `JSON: ${json.format}, query "${json.query}", ${json.keys.length} variants; CSV: ${csvLines.length - 1} rows (${csvLines[0]}); archive: ${back ? `"${back.query}", ${back.keys.length} variants` : 'missing'}`, json.format === 'mavescape-selection' && json.query === query && same(json.keys, A) && csvLines.length - 1 === A.length && csvLines[0] === 'hgvs_pro,score,SE,status' && back?.query === query && same(back.keys, A), 'kept');
+  },
+  // Wave 5, slice 1 (X1): structures. The examples' proteins' PDB entries and AlphaFold DB models,
+  // read as the page reads them from the fetcher's cache, against what the entries say of
+  // themselves; one structure in three formats; assemblies; and what the example's guide shows
+  // (disulfide bonds, the residues that touch DNA) against an independent account of the atoms.
+  async structures() {
+    const opened = [];
+    for (const e of EXAMPLE_STRUCTURES) {
+      const structure = await openCached('pdb', pdbFile(e.pdb));
+      const chain = chainSummaries(structure).find((c) => c.id === e.chain);
+      const segments = (chain?.uniprot ?? []).filter((u) => u.accession === e.accession);
+      const from = Math.min(...segments.map((u) => u.from));
+      const to = Math.max(...segments.map((u) => u.to));
+      const model = structure.models[0];
+      const protein = model.residues.filter((r) => r.chain === e.chain && r.kind === 'protein');
+      const cartoon = buildCartoon(model, { quality: 3 });
+      const drawn = protein.filter((r) => cartoon.covered.has(r.key)).length;
+      // Ball and stick: every atom drawn but water and hydrogens.
+      const sticks = buildScene(model, structure, { polymer: 'ball-stick', ligand: 'ball-stick', sidechains: 'focus', atomScale: 1, bondScale: 1, cartoonWidth: 1, cartoonQuality: 3 }, {});
+      const heavy = model.atoms.filter((a) => a.kind !== 'water' && !a.isHydrogen).length;
+      opened.push({ e, ok: segments.length > 0 && from === e.covers[0] && to === e.covers[1] && drawn / protein.length >= 0.95 && cartoon.indices.length > 0 && sticks.spheres.count === heavy, text: `${e.pdb} ${e.chain}: ${e.accession} ${from}–${to}, ${drawn} of ${protein.length} residues in the cartoon, ${sticks.spheres.count} of ${heavy} atoms in ball and stick` });
+    }
+    const covered = new Set(EXAMPLE_STRUCTURES.flatMap((x) => x.examples));
+    const withProtein = EXAMPLES.filter((x) => !x.simulated).map((x) => x.id);
+    check('structures', 'each example\'s PDB entry, read as the page reads it from the fetcher\'s cache (gzipped mmCIF): the chain the guide names holds the target, on the UniProt residues the entry gives; its cartoon draws at least 95% of the chain\'s residues observed, and ball and stick every atom but water and hydrogens; every published example has its protein\'s entry', `${opened.map((x) => x.text).join('; ')}; examples without one: ${withProtein.filter((id) => !covered.has(id)).join(', ') || 'none'}`, opened.every((x) => x.ok) && withProtein.every((id) => covered.has(id)), 'all');
+
+    const models = [];
+    for (const e of EXAMPLE_STRUCTURES) {
+      const structure = await openCached('alphafold', modelFile(e.accession, e.model));
+      const entry = cachedJSON('alphafold', `${e.accession}.prediction.json`).find((x) => x.entryId === `AF-${e.accession}-F1`);
+      const residues = structure.models[0].residues.filter((r) => r.kind === 'protein');
+      const values = residues.map((r) => r.confidence);
+      const mean = values.reduce((t, v) => t + v, 0) / values.length;
+      const share = (test) => values.filter(test).length / values.length;
+      const bands = [share((v) => v > 90), share((v) => v > 70 && v <= 90), share((v) => v > 50 && v <= 70), share((v) => v <= 50)];
+      const stated = [entry.fractionPlddtVeryHigh, entry.fractionPlddtConfident, entry.fractionPlddtLow, entry.fractionPlddtVeryLow];
+      const worst = Math.max(...bands.map((b, i) => Math.abs(b - stated[i])));
+      models.push({ e, ok: structure.meta.isPredicted && values.every((v) => Number.isFinite(v) && v >= 0 && v <= 100) && residues.length === entry.uniprotEnd - entry.uniprotStart + 1 && Math.abs(mean - entry.globalMetricValue) <= 0.05 && worst <= 0.01, text: `${e.accession}: ${residues.length} residues, mean pLDDT ${fmt(mean, 2)} (AlphaFold DB ${entry.globalMetricValue}), bands within ${fmt(worst, 3)}` });
+    }
+    check('structures', 'each example protein\'s AlphaFold DB model, from the cache: a predicted model, every residue\'s confidence (pLDDT, 0–100) read; the whole sequence; the mean pLDDT within 0.05 of the entry\'s own, and the share of residues in each of its four confidence bands within 0.01 of the entry\'s', models.map((x) => x.text).join('; '), models.every((x) => x.ok), 'all');
+
+    // One structure, three formats: RCSB's mmCIF (gzipped), PDB-format file and BinaryCIF of 2VWF;
+    // AlphaFold DB's mmCIF and BinaryCIF of GRB2's model.
+    const cif = await openCached('pdb', '2VWF.cif.gz');
+    const pdb = await openFixture('2VWF.pdb.gz');
+    const bcif = await openFixture('2VWF.bcif.gz');
+    const ssOf = (structure) => structure.models[0].residues.map((r) => r.ss).join('');
+    const sameAtoms = (a, b) => atomLines(a.models[0]).join('\n') === atomLines(b.models[0]).join('\n');
+    const afCif = await openCached('alphafold', modelFile('P62993', 6));
+    const afBcif = await openFixture('AF-P62993-F1-model_v6.bcif');
+    const sameConfidence = afCif.models[0].residues.every((r, i) => r.confidence === afBcif.models[0].residues[i]?.confidence);
+    check('structures', 'a structure reads the same however it comes: 2VWF as RCSB\'s gzipped mmCIF, its PDB-format file and its BinaryCIF gives the same atoms (chain, residue, name, element, coordinates to 0.001 Å), residues and secondary structure; GRB2\'s AlphaFold DB model as mmCIF and BinaryCIF, the same atoms and pLDDT', `2VWF: ${cif.models[0].atoms.length}, ${pdb.models[0].atoms.length} and ${bcif.models[0].atoms.length} atoms, ${sameAtoms(cif, pdb) && sameAtoms(cif, bcif) ? 'the same' : 'different'}; secondary structure ${ssOf(cif) === ssOf(pdb) && ssOf(cif) === ssOf(bcif) ? 'the same' : 'different'}; AF-P62993-F1: ${sameAtoms(afCif, afBcif) ? 'the same atoms' : 'different atoms'}, pLDDT ${sameConfidence ? 'the same' : 'different'}`, sameAtoms(cif, pdb) && sameAtoms(cif, bcif) && ssOf(cif) === ssOf(pdb) && ssOf(cif) === ssOf(bcif) && sameAtoms(afCif, afBcif) && sameConfidence, 'the same');
+
+    // Assemblies: each built with the atoms it was estimated at; 3OG7's two are its two chains;
+    // 1HHO's, built by symmetry from hemoglobin's αβ dimer, the tetramer.
+    const built = [];
+    for (const id of [...EXAMPLE_STRUCTURES.map((x) => x.pdb), '3OG7', '1HHO']) {
+      const structure = await openCached('pdb', pdbFile(id));
+      for (const choice of assemblyChoices(structure).filter((c) => c.id !== 'asym')) {
+        structure.activeAssemblyId = choice.id;
+        structure.models = materializeAssemblyModels(structure, choice.id);
+        deriveStructure(structure, { secondaryMode: 'auto' });
+        built.push({ id, assembly: choice.id, atoms: structure.models[0].atoms.length, estimated: choice.atoms, chains: [...new Set(structure.models[0].atoms.map((a) => a.chain))], structure });
+      }
+    }
+    const hemoglobin = built.find((b) => b.id === '1HHO');
+    const original = (await openCached('pdb', pdbFile('1HHO'))).models[0];
+    // The copy keeps the dimer's shape: every distance between two of its CA atoms is the original's.
+    const ca = (atoms) => atoms.filter((a) => a.name === 'CA' && a.kind === 'protein');
+    const first = ca(original.atoms);
+    const copy = ca(hemoglobin.structure.models[0].atoms).slice(first.length);
+    let shape = 0;
+    for (let i = 0; i < first.length; i += 7) for (let j = i + 3; j < first.length; j += 11) shape = Math.max(shape, Math.abs(Math.hypot(first[i].x - first[j].x, first[i].y - first[j].y, first[i].z - first[j].z) - Math.hypot(copy[i].x - copy[j].x, copy[i].y - copy[j].y, copy[i].z - copy[j].z)));
+    const moved = Math.hypot(first[0].x - copy[0].x, first[0].y - copy[0].y, first[0].z - copy[0].z);
+    const og7 = built.filter((b) => b.id === '3OG7');
+    check('structures', 'biological assemblies: each the examples\' entries define, built with the atoms it was estimated at; 3OG7\'s two, each one of its chains; hemoglobin\'s (1HHO) built by symmetry from the αβ dimer of its asymmetric unit, the tetramer: twice the atoms, the copy the dimer moved whole (every distance within it the original\'s, to 0.001 Å)', `${built.map((b) => `${b.id} ${b.assembly}: ${b.atoms} atoms${b.atoms === b.estimated ? '' : ` (estimated ${b.estimated})`}`).join('; ')}; 3OG7: chains ${og7.map((b) => b.chains.join('')).join(' and ')}; 1HHO: ${hemoglobin.atoms} of ${original.atoms.length} atoms, the copy ${fmt(moved, 1)} Å away, distances within ${shape.toExponential(1)} Å`, built.every((b) => b.atoms === b.estimated) && og7.length === 2 && og7.every((b) => b.chains.length === 1) && og7[0].chains[0] !== og7[1].chains[0] && hemoglobin.atoms === 2 * original.atoms.length && shape < 1e-3 && moved > 5, 'all');
+
+    // What factor IX's guide shows: the cysteines drawn as sticks, their bonds the entry's.
+    const factor9 = await openCached('pdb', pdbFile('1RFN'));
+    const fm = factor9.models[0];
+    const pair = (a, b) => [`${a.chain}:${a.resSeq}`, `${b.chain}:${b.resSeq}`].sort().join('–');
+    const drawnBonds = fm.bonds.filter((b) => fm.atoms[b.a].name === 'SG' && fm.atoms[b.b].name === 'SG' && fm.atoms[b.a].resName === 'CYS' && fm.atoms[b.b].resName === 'CYS').map((b) => pair(fm.atoms[b.a], fm.atoms[b.b])).sort();
+    const { text: rfnText } = await readStructureBytes(cachedBytes('pdb', pdbFile('1RFN')), '1RFN.cif.gz');
+    const conn = cifTable(parseCIFDocument(rfnText), 'struct_conn');
+    const recorded = [];
+    for (let row = 0; row < conn.rowCount; row += 1) {
+      if (conn.column('conn_type_id')(row) !== 'disulf') continue;
+      recorded.push(pair({ chain: conn.column('ptnr1_auth_asym_id')(row), resSeq: conn.column('ptnr1_auth_seq_id')(row) }, { chain: conn.column('ptnr2_auth_asym_id')(row), resSeq: conn.column('ptnr2_auth_seq_id')(row) }));
+    }
+    recorded.sort();
+    const target = (structure) => ({ id: 1, index: 1, name: structure.meta.code, model: structure.models[0], structure, context: {} });
+    const selected = (structure, text) => [...residueKeysFromMask(structure.models[0], selectAtoms(text, [target(structure)]).get(1))].sort();
+    const cysteines = selected(factor9, 'resn CYS');
+    const allCys = fm.residues.filter((r) => r.resName === 'CYS').map((r) => r.key).sort();
+    const bonded = new Set(drawnBonds.flatMap((p) => p.split('–')));
+    const guide = exampleById('factor9');
+    const stated = guide.expected.some((t) => t.includes(`${allCys.length} of the cysteines, in seven of the disulfide bonds, one of them joining the two chains`)) && guide.steps.some(([mode, t]) => mode === 'structure' && t.includes('1RFN'));
+    check('structures', 'factor IX\'s guide (1RFN): "resn CYS" selects every cysteine of the entry; the bonds drawn between their sulfur atoms are the entry\'s own disulfide records (struct_conn), the one between the light and heavy chains among them; the guide says so', `${cysteines.length} cysteines selected (${allCys.length} in the entry), ${bonded.size} of them bonded; bonds drawn: ${drawnBonds.join(', ')}; recorded: ${recorded.length}; the guide ${stated ? 'says so' : 'says otherwise'}`, cysteines.join() === allCys.join() && drawnBonds.join() === recorded.join() && drawnBonds.length === 7 && drawnBonds.some((p) => p.includes('A:') && p.includes('B:')) && stated, 'the same; stated');
+
+    // TP53 (1TUP): the residues of chain B within 4 Å of DNA, by the selection language and by
+    // every distance between their atoms and the DNA's.
+    const p53 = await openCached('pdb', pdbFile('1TUP'));
+    const pm = p53.models[0];
+    const byLanguage = selected(p53, 'byres (chain B and protein and within 4 of nucleic)');
+    const dna = pm.atoms.filter((a) => a.kind === 'nucleic');
+    const byDistance = pm.residues.filter((r) => r.chain === 'B' && r.kind === 'protein' && r.atoms.some((a) => dna.some((n) => Math.hypot(a.x - n.x, a.y - n.y, a.z - n.z) <= 4))).map((r) => r.key).sort();
+    const named = (keys) => keys.map((k) => k.split(':').slice(1).reverse().join('')).join(', ');
+    check('structures', 'TP53 bound to DNA (1TUP): the residues of chain B within 4 Å of the DNA, selected in words ("byres (chain B and protein and within 4 of nucleic)"), are those every distance between atoms finds; the hotspot arginines R248 and R273 among them', `${byLanguage.length} by the selection, ${byDistance.length} by distance: ${named(byDistance)}`, byLanguage.join() === byDistance.join() && byDistance.includes('B:248:ARG') && byDistance.includes('B:273:ARG'), 'the same; R248 and R273');
   },
 };
 

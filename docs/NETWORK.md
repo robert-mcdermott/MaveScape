@@ -44,10 +44,10 @@ host, path, port or scheme (HTTPS only) is refused before it is sent.
 | --- | --- | --- | --- |
 | `rest.uniprot.org` | all | UniProt | a target's entry and its features; finding a target by its sequence (MaveScape 0.3) |
 | `api.mavedb.org` | `/api/` | MaveDB | score sets' records, scores, counts, mapped variants and annotations, and the search (MaveScape 0.3) |
-| `files.rcsb.org` | all | RCSB PDB | structures (MaveScape 0.5, to come) |
+| `files.rcsb.org` | all | RCSB PDB | a PDB entry's coordinates, for the Structure view (MaveScape 0.5) |
 | `data.rcsb.org` | all | RCSB PDB | structures' metadata (MaveScape 0.5, to come) |
 | `www.ebi.ac.uk` | `/pdbe/` | PDBe | a protein's conservation profile (PDBe-KB; MaveScape 0.3); structures and their residue mappings (to come) |
-| `alphafold.ebi.ac.uk` | all | AlphaFold DB | AlphaMissense's predictions of a human protein (MaveScape 0.3); predicted structures (to come) |
+| `alphafold.ebi.ac.uk` | all | AlphaFold DB | AlphaMissense's predictions of a human protein (MaveScape 0.3); a protein's predicted structure (MaveScape 0.5) |
 | `eutils.ncbi.nlm.nih.gov` | `/entrez/eutils/` | NCBI E-utilities | RefSeq and GenBank records, for targets named by a transcript; a gene's ClinVar records (MaveScape 0.3) |
 | `rest.ensembl.org` | all | Ensembl | transcripts, for targets named by one (MaveScape 0.3) |
 | `gnomad.broadinstitute.org` | `/api` | gnomAD | a gene's variants and their frequencies (MaveScape 0.3) |
@@ -83,6 +83,9 @@ leaves your computer.
 | `/api/fetch/mavedb/score-sets/{urn}/namespaces` | `https://api.mavedb.org/api/v1/score-sets/{urn}/csv-namespaces` | a MaveDB URN | which annotations MaveDB keeps for the score set's variants (gnomAD, ClinVar's releases) | 7 days; up to 4 MB |
 | `/api/fetch/mavedb/score-sets/{urn}/annotations` with `?clinvar=…` | `https://api.mavedb.org/api/v1/score-sets/{urn}/variants/data?namespaces=gnomad&namespaces=clinvar.{release}` | a MaveDB URN and a ClinVar release (2026_01) | MaveDB's annotations of the score set's variants: gnomAD's frequencies and ClinVar's classifications, by variant (CSV) | 30 days; up to 256 MB |
 | `/api/fetch/mavedb/search` with `?text=…&page=…` | `https://api.mavedb.org/api/v1/score-sets/search` (POST `{"text": …, "published": true, "limit": 100, "offset": …}`) | the words searched for (GRB2, abundance…) and the page of results | the published score sets that match, 100 at a time (Open from MaveDB; `search_mavedb`) | 1 day; up to 32 MB |
+| `/api/fetch/pdb/{id}` | `https://files.rcsb.org/download/{id}.cif.gz` | a PDB ID (2VWF) | the entry's coordinates (mmCIF, compressed as RCSB keeps it), with its chains and biological assemblies, for the Structure view (Structure: **Open a structure**; `open_structure`) | 30 days; up to 512 MB compressed |
+| `/api/fetch/alphafold/{accession}/prediction` | `https://alphafold.ebi.ac.uk/api/prediction/{accession}` | a UniProt accession (P62993, or an isoform's, P62993-2) | the protein's AlphaFold DB entries: each model's version, the residues it covers and its mean confidence, to ask for the latest model | 30 days; up to 4 MB |
+| `/api/fetch/alphafold/{accession}/model/{version}` | `https://alphafold.ebi.ac.uk/files/AF-{accession}-F1-model_v{version}.cif` | a UniProt accession and the model's version (6) | the predicted model (mmCIF, compressed as AlphaFold DB stores it) with each residue's confidence (pLDDT), for the Structure view | 30 days; up to 256 MB compressed |
 
 The program also answers two requests of its own, which contact nothing: `/api/fetch` (the mode,
 the cache's folder, these hosts and requests) and `/api/fetch/cache` (what is in the cache).
@@ -108,7 +111,8 @@ decide to. None of the requests above writes to MaveDB; of MaveDB's, only the se
 ## What every request carries
 
 - `User-Agent: MaveScape/<version> (local research software; docs/NETWORK.md)`
-- `Accept: application/json` (`text/csv` for a table, `text/plain` for a GenBank record), and
+- `Accept: application/json` (`text/csv` for a table, `text/plain` for a GenBank record, `*/*` with
+  `Accept-Encoding: gzip` for a structure, so it comes compressed as the service keeps it), and
   `Content-Type: application/json` with a POST's body (MaveDB's search, gnomAD's GraphQL queries)
 - When a cached copy is being checked: `If-None-Match` (its ETag) and `If-Modified-Since` (its
   date), so an unchanged answer is confirmed (HTTP 304) rather than sent again.
@@ -123,7 +127,9 @@ nothing that names you, your computer or your files.
   expands beyond the limit stops at the limit).
 - **Only JSON**, or a CSV table where the request is for one (a header of comma-separated names,
   not a page), or a GenBank record where the request is for one (beginning with its `LOCUS`
-  line), is accepted from the requests above. NCBI and Ensembl answer an unknown accession with
+  line), or a structure where the request is for one (mmCIF or PDB, compressed or not; a
+  compressed one is read to its end, which checks its length and checksum, and may expand to 2 GB
+  at most), is accepted from the requests above. NCBI and Ensembl answer an unknown accession with
   HTTP 400: it is read as "not found". gnomAD answers an unknown gene or transcript with HTTP 200 and
   an error in its GraphQL answer: also read as "not found"; any other error in it is refused, and
   not cached.
@@ -138,7 +144,10 @@ nothing that names you, your computer or your files.
 Each answer is a file in `<cache dir>/<kind>/`, named by the accession (`uniprot/P62993.json`), by
 a score set's URN without its colons (`mavedb/urn_mavedb_00000835-a-1.json`, `….scores.csv`,
 `….counts.csv`, `….mapped.json`), by a nucleotide accession (`ncbi/NM_007294.3.gb`), by an
-Ensembl transcript without its version (`ensembl/ENST00000460680.json`), by the SHA-256 of a search's words and page (`mavedb-search/<sha256>.json`) or,
+Ensembl transcript without its version (`ensembl/ENST00000460680.json`), by a structure's file
+name upstream (`pdb/2VWF.cif.gz`, `alphafold/AF-P62993-F1-model_v6.cif`, kept compressed as it
+came: the page decompresses it), by the SHA-256 of a search's words and page
+(`mavedb-search/<sha256>.json`) or,
 for a sequence's lookup, by the SHA-256 of the sequence (`uniparc/<sha256>.json`), beside
 `<name>.meta.json`, its retrieval record (docs/FORMATS.md, "The cache of public data"): the
 service, the URL it came from, when it was retrieved and last confirmed, and the ETag, date and
@@ -176,7 +185,9 @@ variant's reference base against the sequence it got.
   revalidation by ETag; stale copies; `--offline` and `--no-fetch`; the sequence sent only once
   confirmed; this page lists every request and host (`TestNetworkDocumentListsEveryRequest`); no
   request sends a deposit to MaveDB or writes to it (`TestNoRequestSendsADepositToMaveDB`); no
-  script in the page names another origin in a request.
+  script in the page names another origin in a request. `structures_test.go`: the structure
+  requests send a PDB ID or an accession only, keep the bytes the service sent (compressed), and
+  refuse a cut-off file or a page that is not a structure, keeping neither.
 - `validation/remote-session.mjs` drives a whole session offline, and records every request the
   page makes: none goes beyond its own origin.
 - `validation/mavedb-live.mjs` opens the feasibility records from MaveDB, live (CI runs it), and

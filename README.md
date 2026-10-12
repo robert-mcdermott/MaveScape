@@ -67,7 +67,10 @@ opening your data, scoring, quality control, the map, the record and scripting, 
 > TP53 that correlate at r −0.78 as published and agree on one scale (Lin's concordance 0.78), and
 > Hsp90's rescoring, correlated with its published scores (r 0.95) but not in agreement (0.48).
 > Wave 5 brings protein structure: the variant-effect map seen on the protein, and the structure used
-> as evidence.
+> as evidence. It has begun with the Structure view, which needs no other program: a PDB entry, an
+> AlphaFold DB model or a file of your own (PDB, mmCIF, BinaryCIF), drawn with WebGPU or a Canvas
+> renderer as a cartoon, sticks, spheres or a surface, its biological assemblies built, residues
+> selected in words, labeled and focused on.
 
 ## What is a MAVE?
 
@@ -181,7 +184,7 @@ mavescape export --format mavedb --details details.json --out deposit/ results/w
 MaveScape listens on 127.0.0.1 only, refuses requests whose Host header is not this computer and
 API calls from other web pages, and serves its page with a strict Content-Security-Policy, so the
 page contacts nothing but the program. Your files never leave your computer. The program fetches
-public data (MaveDB's score sets, a target's UniProt entry and features, the RefSeq or Ensembl transcript a record names, and annotations from ClinVar, gnomAD, AlphaMissense and PDBe-KB now; structures to come) from a
+public data (MaveDB's score sets, a target's UniProt entry and features, the RefSeq or Ensembl transcript a record names, and annotations from ClinVar, gnomAD, AlphaMissense and PDBe-KB, PDB entries and AlphaFold DB models) from a
 fixed list of services, sending public identifiers, and caches each answer with where and when it
 came from; a request that would send a sequence is made only after you confirm it.
 [`docs/NETWORK.md`](docs/NETWORK.md) lists every request. `--offline` uses cached copies only and
@@ -196,7 +199,7 @@ dependencies to install.
 ```sh
 go run . --dev                    # serve web/ from disk, edits show on reload
 go test -race ./...               # the host
-node --test "web/lib/*.test.mjs"  # the browser modules
+node --test "web/lib/**/*.test.mjs"  # the browser modules
 node validation/run.mjs           # the validation suites
 node validation/remote-session.mjs  # every remote action in the program and headless Chrome
 node validation/headless-run.mjs    # mavescape run and validate: the same bytes twice, reruns, failures

@@ -71,14 +71,14 @@ func TestServesTheAppWithSecurityHeaders(t *testing.T) {
 }
 
 // Everything the page loads must be embedded: a module missing from the go:embed list works with
-// --dev and fails in the released program.
+// --dev and fails in the released program. Node's files (tests and their helpers, .mjs) are not.
 func TestEveryWebModuleIsEmbedded(t *testing.T) {
 	err := filepath.WalkDir("web", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}
 		name := filepath.ToSlash(path)
-		if strings.HasSuffix(name, ".test.mjs") || strings.HasSuffix(name, "package.json") {
+		if strings.HasSuffix(name, ".mjs") || strings.HasSuffix(name, "package.json") {
 			if _, err := fs.Stat(content, name); err == nil {
 				t.Errorf("%s is embedded but is not part of the app", name)
 			}

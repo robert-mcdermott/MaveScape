@@ -179,12 +179,19 @@ func (r publicRequest) method() string {
 	return r.Method
 }
 
-func (r publicRequest) contentType() string {
+// contentType: the type an answer is kept and served with. A structure is kept as it came,
+// compressed or not (structures.go).
+func (r publicRequest) contentType(body []byte) string {
 	switch r.Format {
 	case formatCSV:
 		return csvContentType
 	case formatGenBank:
 		return genbankContentType
+	case formatStructure:
+		if isGzip(body) {
+			return gzipContentType
+		}
+		return structureTextType
 	}
 	return jsonContentType
 }
@@ -636,7 +643,7 @@ func (f *fetcher) serve(request publicRequest) http.HandlerFunc {
 			recorded = request.Upstream
 		}
 		entry = cached{body: fresh.body, meta: cacheMeta{
-			ContentType: request.contentType(), Service: request.Service, Source: recorded, Method: request.Method, Request: string(c.body),
+			ContentType: request.contentType(fresh.body), Service: request.Service, Source: recorded, Method: request.Method, Request: string(c.body),
 			Retrieved: now.Format(time.RFC3339), ETag: fresh.etag, LastModified: fresh.lastModified, Version: fresh.version,
 		}}
 		f.cache.store(request.Kind, name, entry)
@@ -780,6 +787,10 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 		req.Header.Set("Accept", "text/csv")
 	case formatGenBank:
 		req.Header.Set("Accept", "text/plain")
+	case formatStructure:
+		// Asked for by name, the compression is not undone on the way: the file is kept as stored.
+		req.Header.Set("Accept", "*/*")
+		req.Header.Set("Accept-Encoding", "gzip")
 	default:
 		req.Header.Set("Accept", jsonContentType)
 	}
@@ -814,9 +825,12 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 	case resp.ContentLength > request.Limit:
 		return fetched{}, -1, tooLarge(request.Service, request.Limit)
 	}
-	body, err := decompressIfGzip(resp.Body)
-	if err != nil {
-		return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent compressed data that could not be read: %v", request.Service, err)
+	var body io.Reader = resp.Body
+	if request.Format != formatStructure {
+		body, err = decompressIfGzip(resp.Body)
+		if err != nil {
+			return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent compressed data that could not be read: %v", request.Service, err)
+		}
 	}
 	data, err := readLimited(body, request.Limit)
 	if errors.Is(err, errTooLarge) {
@@ -833,6 +847,12 @@ func (u *upstream) attempt(ctx context.Context, source string, request publicReq
 	case request.Format == formatGenBank:
 		if !looksLikeGenBank(data) {
 			return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not a GenBank record.", request.Service)
+		}
+	case request.Format == formatStructure:
+		if err := checkStructure(data); errors.Is(err, errTooLarge) {
+			return fetched{}, -1, tooLarge(request.Service, maxStructureText)
+		} else if err != nil {
+			return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not a whole structure file (%v).", request.Service, err)
 		}
 	case !json.Valid(data):
 		return fetched{}, -1, fetchErrorf(http.StatusBadGateway, "%s sent a response that is not JSON.", request.Service)

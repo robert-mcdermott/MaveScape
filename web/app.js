@@ -24,8 +24,8 @@ import { fixClock } from './lib/clock.js';
 const VERSION = '0.4.0';
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
-// show what they are for (mode-planned.js); Structure, Calibrate, Figures and Report join the list
-// in the waves that build them (roadmap.md); Compare joined in wave 4.
+// show what they are for (mode-planned.js); Calibrate, Figures and Report join the list in the
+// waves that build them (roadmap.md); Compare joined in wave 4, Structure in wave 5.
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
   { id: 'experiment', label: 'Experiment', icon: 'experiment', load: () => import('./ui/mode-experiment.js').then((m) => m.mountExperimentMode) },
@@ -34,6 +34,7 @@ const MODES = [
   'sep',
   { id: 'map', label: 'Map', icon: 'heatmap', load: () => import('./ui/mode-map.js').then((m) => m.mountMapMode) },
   { id: 'compare', label: 'Compare', icon: 'compare', load: () => import('./ui/mode-compare.js').then((m) => m.mountCompareMode) },
+  { id: 'structure', label: 'Structure', icon: 'structure', load: () => import('./ui/mode-structure.js').then((m) => m.mountStructureMode) },
 ];
 
 // --- Theme ---------------------------------------------------------------------------------------
@@ -62,7 +63,7 @@ export function fileKind(name) {
   if (has('.gb', '.gbk', '.gbff', '.genbank', '.ape')) return 'genbank';
   if (has('.a3m', '.aln', '.sto', '.stockholm')) return 'alignment';
   if (has('.gff', '.gff3')) return 'annotation';
-  if (has('.pdb', '.ent', '.cif', '.mmcif', '.bcif')) return 'structure';
+  if (has('.pdb', '.ent', '.cif', '.mmcif', '.bcif', '.pdb.gz', '.ent.gz', '.cif.gz', '.mmcif.gz', '.bcif.gz')) return 'structure';
   if (has('.zip')) return 'archive';
   if (has('.json')) return 'json';
   return '';
@@ -112,6 +113,8 @@ async function start() {
   // Alignments and GFF3 files: tracks beside the latest run's map (wave 3, slice 5).
   app.importers.set('alignment', (items) => importTrackFiles(app, items));
   app.importers.set('annotation', (items) => importTrackFiles(app, items));
+  // Structures: shown in the Structure view, one at a time (wave 5, slice 1).
+  app.importers.set('structure', (items) => import('./ui/mode-structure.js').then((m) => m.openStructureFiles(app, items)));
   app.inspector.setSection('example', exampleGuide);
 
   // --- Views -------------------------------------------------------------------------------------

@@ -27,6 +27,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `compare` | Comparisons within a workspace (wave 4, slice 1; `compare-cases.mjs`, `web/lib/compare.js`, `web/lib/agreement.js`): the agreement statistics of seven pairs equal R's (`reference/compare.json`, by `reference/generate_compare.R`: `cor.test`, Spearman with Bonett and Wright's interval, DescTools' `CCC`, BlandAltmanLeh, `lm`) to 10⁻¹⁰; their 95% intervals' coverage in 2,000 simulated pairs of known agreement of each of five kinds (94–96%; Spearman's near r = 1 and Lin's with 30 variants on two scales reported apart, as they are); slice 2: the discordance and disagreement by position of 600 variants equal R's (`pnorm`, `p.adjust`), and in simulated pairs with planted differences the planted found (96%), the false calls within BH's 5%, none called with nothing planted (dispersion about 1); the compatibility report's rules on GRB2 (replicates, a replicate inside its run, one table scored twice, a run moved along UniProt P62993 and matched on its coordinates, the same blocked without an accession, a direction stated the other way) and the files; then BRCA1's counts against its published scores, DHFR's Run 1 against each record, DHFR's two published score sets matched as R's merge matches them, and BRCA1 RING's replicates sharing their input; DHFR's discordance its Run 1's own differential z, its filters, its difference map; GRB2's dispersion where QC finds variance beyond counting; slice 3: two assays on two scales rescaled by their anchors (both rescalings) equal R's with the anchors' SEs and the tests' share, GRB2's published scores against AlphaMissense by class equal R's (pROC's DeLong interval) and an AUC with ties, the anchors' uncertainty keeping false calls to 3.5–4% of null pairs (10–55% without it), DeLong's interval holding the AUC 94–95% of the time, GRB2's Run 1 against its record kept beside the workspace (rescaled, ρc 0.996) and against AlphaMissense, a score set and a predictor through the archive, DHFR's record kept the same as opened, DHFR's published pair stated on one scale, PTEN's abundance against its phosphatase activity and against AlphaMissense. 36 checks | `reference/compare.json`; `fixtures/public-data/` (GRB2's record, AlphaMissense); MaveDB, external (`mavedb-brca1-sge`, `mavedb-dhfr`, `mavedb-brca1-ring`, `mavedb-pten-vampseq`, `mavedb-pten-phosphatase`) for the last checks |
 | `robustness` | Robustness to analysis choices (wave 4, slice 4; `robustness-cases.mjs`, `web/lib/robustness.js`): GRB2's specifications (the declared first, each alternative alone, seeded combinations, none twice); the declared analysis the run to the last bit; the classes against an independent computation (z against the wild type, t on the moderated degrees of freedom, Benjamini–Hochberg); ten simulated experiments with planted fragile results, declared by fixed effects: the fragile variants exactly the replicate-driven ones and those whose effect's size depends on the pseudocount exactly the zero-count ones, every time, the clearly lost robust; under MaveScape's defaults the replicate-driven effect not called and nothing fragile; GRB2's check (fixed effects not tried, the alternatives' rank correlations, the least tolerant positions) and its files the same bytes twice; DHFR's 377 differences (54 in every analysis). 9 checks | bundled; MaveDB, external (`mavedb-dhfr`) for the last check |
 | `selections` | Selections (wave 4, slice 5; `selections-cases.mjs`, `web/lib/query.js`): the roadmap's phrases parsed as written and mistakes named in place; fourteen queries on GRB2's Run 1 against an independent account of each of its map's 1,176 cells read from the run's own arrays, the same variants in the same order; union, intersection and difference by query against the sets' own, De Morgan's laws, a saved selection on a second run (scored as Enrich2 does); each robustness verdict exactly GRB2's check's, and in three planted experiments (seeds 41–43) `fragile` and `size depends on the pseudocount` exactly the planted ones; factor IX's `feature disulfide` the 22 bonded cysteines of UniProt P00740 and the example's numbers; freeform shapes against the rectangle tool and a circle; the selection's files and the archive keeping its query. 8 checks | bundled |
+| `structures` | Structures (wave 5, slice 1; `structure-cases.mjs`, `web/lib/structures.js`, Proteoscope's `web/lib/structure/`): each example protein's PDB entry (2VWF, 1JM7, 2CG9, 1RX2, 1RFN, 1TUP, 1D5R), read as the page reads it from the fetcher's cached answer, holds its target in the chain its guide names on the UniProt residues the entry gives, its cartoon drawing at least 95% of the chain's residues and ball and stick every atom but water and hydrogens; each protein's AlphaFold DB model a predicted model, its mean pLDDT within 0.05 of AlphaFold DB's own and its share in each confidence band within 0.01; 2VWF as gzipped mmCIF, RCSB's PDB-format file and BinaryCIF, and GRB2's model as mmCIF and BinaryCIF, the same atoms (to 0.001 Å); assemblies built with the atoms estimated, 3OG7's two its two chains, hemoglobin's (1HHO) the dimer moved whole by symmetry; on 1RFN the bonds drawn between cysteines' sulfur atoms the entry's own disulfide records, as factor IX's guide says; on 1TUP the residues within 4 Å of the DNA by the selection language those every distance finds, R248 and R273 among them. 6 checks | `fixtures/public-data/` (`pdb/`, `alphafold/`), `fixtures/structures/` |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -94,7 +95,14 @@ other screens compared by URN, as published and rescaled by their anchors, the s
 as Node gives them; and (slice 5) `select_variants` by query, its matches subtracted from the
 selection (the queries composed and saved), a saved selection named in a query and the robustness
 verdicts of the run checked, each as Node selects on the run it recomputes from the archive, a
-mistake named in place, the saved selection's file with its query, the Map view showing it. 124
+mistake named in place, the saved selection's file with its query, the Map view showing it; and
+(wave 5, slice 1) `open_structure` with every example protein's PDB entry and AlphaFold DB model from
+the cache, each drawn with WebGPU (headless Chrome is started with `--enable-unsafe-webgpu`; where
+it offers none, the session says so and checks the Canvas renderer) with the atoms Node reads and an
+image of the view that is not empty, then `set_structure` (factor IX's cysteines selected, drawn as
+sticks, labeled, two focused on; the molecular surface; hemoglobin's assembly built by symmetry),
+refusals saying why, a structure file opened with `open_files`, and, the page opened again with
+`?renderer=canvas`, every entry and model drawn by the Canvas renderer, a surface refused. 133
 checks; in CI as the `remote` job.
 
 ## MaveDB, live (`mavedb-live.mjs`, wave 3 slices 2–3 and 6)
@@ -233,11 +241,25 @@ retrieval record:
 | `clinvar/GRB2.search.1.json`, `F9.search.1.json`, `<sha256>.summary.json` | ClinVar's search for GRB2's and F9's missense, nonsense and synonymous records (10 and 553), and their summaries (one page for GRB2, two for F9; named by the SHA-256 of the record numbers asked) |
 | `gnomad/GRB2.gene.json`, `F9`, `BRCA1`; `ENST00000316804.variants.json`, `ENST00000218099`, `ENST00000357654` | gnomAD's answers for the three genes (their MANE Select transcripts) and the transcripts' variants in gnomAD v4 (each with its GraphQL query in its record) |
 | `mavedb/urn_mavedb_00000097-0-2.namespaces.json`, `.annotations.clinvar_2026_01.csv` | the annotations MaveDB keeps for BRCA1's saturation genome editing score set, and its ClinVar 2026_01 and gnomAD annotations of its variants |
+| `pdb/2VWF.cif.gz`, `1JM7`, `2CG9`, `1RX2`, `1RFN`, `1TUP`, `1D5R` | the examples' proteins' PDB entries as RCSB sends them (gzipped mmCIF), retrieved 2026-10-12 (wave 5, slice 1): GRB2's SH3 domain, BRCA1's RING domain with BARD1's, Hsp90 (Hsp82) with Sba1, DHFR, factor IXa, p53 on DNA, PTEN |
+| `pdb/1M17.cif.gz`, `1YCR`, `3OG7`, `4HHB`, `6VXX`, `7LYB`, `1HHO` | the entries Proteoscope's tests of its structure modules read (copied with them into `web/lib/structure/`), and hemoglobin's 1HHO, whose tetramer is built by symmetry |
+| `alphafold/P62993.prediction.json`, `P38398`, `P02829`, `P0ABQ4`, `P00740`, `P04637`, `P60484`; `AF-<accession>-F1-model_v6.cif` | AlphaFold DB's entries for the seven proteins and their models (version 6, gzipped as AlphaFold DB stores them) |
 
 UniProt's data are under CC BY 4.0; MaveDB's records are CC0 but for BAP1's (CC BY 4.0, its
 authors cited in its record); NCBI's and Ensembl's records, and ClinVar's, have no restriction on
-use; PDBe-KB's and AlphaFold DB's data (AlphaMissense's predictions) are CC BY 4.0; gnomAD's are
-CC0.
+use; PDBe-KB's and AlphaFold DB's data (AlphaMissense's predictions, the models) are CC BY 4.0;
+gnomAD's are CC0, as are the PDB's entries.
+
+## Structures in other formats (`fixtures/structures/`, wave 5 slice 1)
+
+| File | What |
+| --- | --- |
+| `2VWF.pdb.gz` | RCSB's PDB-format file of 2VWF (files.rcsb.org, retrieved 2026-10-12, CC0) |
+| `2VWF.bcif.gz` | RCSB's BinaryCIF of 2VWF (models.rcsb.org, retrieved 2026-10-12, CC0) |
+| `AF-P62993-F1-model_v6.bcif` | AlphaFold DB's BinaryCIF of GRB2's model (retrieved 2026-10-12, CC BY 4.0) |
+
+The suite `structures` reads each as the page does and compares it, atom by atom, with the mmCIF
+of the same entry or model.
 
 ## The tracks' own fixtures (`fixtures/annotations/`, wave 3 slice 5)
 

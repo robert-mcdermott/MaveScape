@@ -76,7 +76,7 @@ mavescape-spec/       requirements, design, roadmap, research, these conventions
 - Errors that a user can fix throw an `Error` with a plain-language message naming the file, row,
   column, sample or variant.
 - No `console.log` in library code.
-- Tests: `node --test "web/lib/*.test.mjs"` must pass; tests are deterministic, run in well under a
+- Tests: `node --test "web/lib/**/*.test.mjs"` must pass; tests are deterministic, run in well under a
   few seconds per file, and check numbers against independently known values (hand-computed,
   published, or reference-tool output), not just "runs".
 

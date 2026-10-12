@@ -74,3 +74,18 @@ InterPro, with the human GRB2 SH3 (P62993 162-207) added as its first sequence; 
 P00740.gff and P02829.gff are UniProt's GFF3 of the three entries (release 2026_03, CC BY 4.0).
 Paysan-Lafosse T, et al. The Pfam protein families database: embracing AI/ML. Nucleic Acids
 Research 2025;53(D1):D523-D534. doi:10.1093/nar/gkae997
+
+RCSB PDB's answers (pdb/), retrieved 2026-10-12 from files.rcsb.org, unchanged (gzipped mmCIF, as
+RCSB sends them): the entries 2VWF, 1JM7, 2CG9, 1RX2, 1RFN, 1TUP and 1D5R (the examples' proteins),
+1M17, 1YCR, 3OG7, 4HHB, 6VXX and 7LYB (the entries Proteoscope's tests read) and 1HHO. The PDB's
+data are in the public domain (CC0 1.0). Berman HM, et al. The Protein Data Bank. Nucleic Acids
+Research 2000;28:235-242. doi:10.1093/nar/28.1.235. Burley SK, et al. RCSB Protein Data Bank.
+Nucleic Acids Research 2023;51(D1):D488-D508. doi:10.1093/nar/gkac1077
+
+AlphaFold DB's answers (alphafold/*.prediction.json, alphafold/AF-*-model_v6.cif), retrieved
+2026-10-12 from alphafold.ebi.ac.uk, unchanged (the models gzipped, as AlphaFold DB stores them): the
+entries and version 6 models of P62993, P38398, P02829, P0ABQ4, P00740, P04637 and P60484. AlphaFold
+DB's data are licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0).
+Jumper J, et al. Highly accurate protein structure prediction with AlphaFold. Nature
+2021;596:583-589. doi:10.1038/s41586-021-03819-2. Varadi M, et al. AlphaFold Protein Structure
+Database in 2024. Nucleic Acids Research 2024;52(D1):D368-D375. doi:10.1093/nar/gkad1011

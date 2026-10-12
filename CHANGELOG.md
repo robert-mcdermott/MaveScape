@@ -1,5 +1,83 @@
 # Changelog
 
+## 0.5.0 (unreleased)
+
+Wave 5 of the [roadmap](mavescape-spec/roadmap.md): variants in 3D. Built slice by slice; this
+section grows with each.
+
+### Added
+
+- **The Structure view (wave 5, slice 1; X1).** A protein's structure in MaveScape, needing no
+  other program; the Structure view follows Compare.
+  - **Opening:** a PDB entry by its ID, an AlphaFold DB model by a UniProt accession (the target's
+    by default), or a file of your own: PDB, mmCIF or BinaryCIF, gzipped or not, opened from the
+    view or dropped on the window. One structure is shown at a time, for the session; it is not
+    yet saved with the workspace.
+  - **The program's new requests** (`structures.go`; docs/NETWORK.md): an entry's coordinates
+    from RCSB PDB (`/api/fetch/pdb/{id}`), and a protein's AlphaFold DB entries and model
+    (`/api/fetch/alphafold/{accession}/prediction`, `…/model/{version}`). Each sends a PDB ID or an
+    accession only; a structure is cached compressed, as the service sent it, once it is read to
+    its end and found whole, and opens offline after that.
+  - **Drawing:** Proteoscope's renderers, copied with their tests (`web/lib/structure/`): WebGPU
+    (impostor spheres and cylinders, the cartoon, surfaces, ambient occlusion, picking), or the
+    Canvas renderer where the browser offers no WebGPU or `?renderer=canvas` asks for it, the badge
+    above the view saying which and why.
+    - Styles: cartoon, ball and stick, sticks, spacefill, trace.
+    - Colors: chain, entity, rainbow, secondary structure, molecule type, element, residue class,
+      hydropathy, nucleotide, B-factor, a predicted model's pLDDT; a legend.
+    - Surfaces (molecular, solvent-accessible, van der Waals, Gaussian), computed in a worker.
+    - Biological assemblies, built by the entry's own operators.
+    - An image of the view (PNG).
+  - **Residues** selected by click or in Proteoscope's selection language (`resn CYS`, `chain A and
+    resi 40-80`, `byres (protein and within 4 of nucleic)`, `plddt < 70`), drawn as sticks, ball
+    and stick or spacefill, hidden, labeled, and focused on (the camera on them, their neighbors
+    within 5 Å with their side chains).
+  - **In words:** the entry's title, method and resolution (or that it is a prediction), its
+    chains with the residues observed and the UniProt residues each covers, and what else it holds.
+  - **Remote control:** `open_structure` (a PDB ID, or an AlphaFold DB model; `"target"` for the
+    target's) and `set_structure` (style, color, surface, assembly; select, show, label, focus);
+    `open_files` opens structure files; `get_state` gives the structure shown.
+  - **The factor IX example's sixth step** opens PDB 1RFN and draws its cysteines as sticks: seven
+    disulfide bonds, one joining its two chains. The guide page *Structures*.
+
+### Changed
+
+- Headless Chrome is started with WebGPU allowed (`docs/capture/cdp.mjs`), for the screenshots and
+  the validation's sessions.
+- Unit tests are run as `node --test "web/lib/**/*.test.mjs"`, the structure viewer's included;
+  `MAVESCAPE_TIME_SCALE` gives its performance tests more time on shared runners (CI sets 5).
+
+### Validation
+
+- `structures` validation suite (6 checks):
+  - **The examples' proteins:** each PDB entry, read as the page reads it from the fetcher's cache,
+    holds its target in the chain its guide names, on the UniProt residues the entry gives; the
+    cartoon draws at least 95% of the chain's residues observed, ball and stick every atom but
+    water and hydrogens. Each AlphaFold DB model: a predicted model with every residue's pLDDT,
+    its mean within 0.05 of AlphaFold DB's own and its share in each confidence band within 0.01.
+  - **One structure in three formats:** 2VWF as gzipped mmCIF, RCSB's PDB-format file and
+    BinaryCIF gives the same atoms (to 0.001 Å), residues and secondary structure; GRB2's model as
+    mmCIF and BinaryCIF the same atoms and pLDDT.
+  - **Assemblies:** each built with the atoms it was estimated at; 3OG7's two each one chain;
+    hemoglobin's tetramer (1HHO) the dimer moved whole by symmetry.
+  - **What the guide shows:** on 1RFN, `resn CYS` selects every cysteine, and the bonds drawn
+    between their sulfur atoms are the entry's own disulfide records, one joining the two chains;
+    on 1TUP, the residues within 4 Å of the DNA selected in words are those every distance between
+    atoms finds, R248 and R273 among them.
+- The remote-control session (133 checks): every example protein's PDB entry and AlphaFold DB model
+  opened and drawn, with WebGPU and then with the Canvas renderer, each with the atoms Node reads
+  and an image that is not empty; `set_structure`'s selections, styles, labels, focus, surface and
+  assembly; refusals, saying why; a structure file opened with `open_files`.
+- Unit tests: Proteoscope's tests of the copied modules (66: parsers, structure, chemistry, DSSP,
+  surfaces, selection language, formats) and `structures.test.mjs` (6).
+- Go tests: the structure requests ask what NETWORK.md says, keep what the service sent, refuse a
+  cut-off file or a page that is not a structure, and refuse anything but a PDB ID or an accession
+  before it is sent.
+- The fixtures (`validation/fixtures/public-data/pdb/`, `…/alphafold/`) are the program's cached
+  answers for the examples' proteins and the structures Proteoscope's tests read, retrieved
+  2026-10-12; `validation/fixtures/structures/` holds 2VWF's PDB-format file and BinaryCIF and GRB2's
+  model's BinaryCIF.
+
 ## 0.4.0 (2026-10-11)
 
 Wave 4 of the [roadmap](mavescape-spec/roadmap.md): compare. Two replicates, conditions or runs of

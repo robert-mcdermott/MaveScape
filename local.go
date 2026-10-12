@@ -70,7 +70,7 @@ func fileKind(name string) string {
 		return "alignment"
 	case has(".gff", ".gff3"):
 		return "annotation"
-	case has(".pdb", ".ent", ".cif", ".mmcif", ".bcif"):
+	case has(".pdb", ".ent", ".cif", ".mmcif", ".bcif", ".pdb.gz", ".ent.gz", ".cif.gz", ".mmcif.gz", ".bcif.gz"):
 		return "structure"
 	case has(".zip"):
 		// A MaveDB package (wave 3, slice 4), or another archive the page names.

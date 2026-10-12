@@ -23,11 +23,13 @@ lede: Started with --remote-control, MaveScape accepts actions from programs on 
         <table>
           <thead><tr><th>Action</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td><code>get_state</code></td><td>The workspace: tables, targets, design, runs, selections, the view, and the analysis steps with the next one</td></tr>
+            <tr><td><code>get_state</code></td><td>The workspace: tables, targets, design, runs, selections, the view, the analysis steps with the next one, and the structure shown</td></tr>
             <tr><td><code>new_workspace</code></td><td>Starts a new workspace (<code>name</code>)</td></tr>
             <tr><td><code>open_example</code></td><td>Opens an example, scored (<code>id</code>)</td></tr>
-            <tr><td><code>open_files</code></td><td>Opens files by path, importing tables with the mapping MaveScape detects (<code>paths</code>, <code>new_workspace</code>; <code>review</code> leaves the import wizard open). Needs the token</td></tr>
-            <tr><td><code>set_mode</code></td><td>Shows a view: start, experiment, qc, score, map or compare</td></tr>
+            <tr><td><code>open_files</code></td><td>Opens files by path, importing tables with the mapping MaveScape detects (<code>paths</code>, <code>new_workspace</code>; <code>review</code> leaves the import wizard open); a structure file opens in the Structure view. Needs the token</td></tr>
+            <tr><td><code>open_structure</code></td><td>Opens a PDB entry (<code>pdb</code>) or an AlphaFold DB model (<code>alphafold</code>: a UniProt accession, or <code>"target"</code> for the target's) in the Structure view, optionally an <code>assembly</code>, and returns it in words: chains, residues observed, the UniProt residues each covers, assemblies (<a href="structure.html">Structures</a>)</td></tr>
+            <tr><td><code>set_structure</code></td><td>Draws the structure shown another way (<code>style</code>, <code>color</code>, <code>surface</code>, <code>assembly</code>) and selects residues in words (<code>select</code>: <code>"resn CYS"</code>, <code>"chain A and resi 40-80"</code>), draws them (<code>show</code>: sticks, ball-stick, spacefill, hide or none), labels them (<code>label</code>) and focuses on them (<code>focus</code>); returns what is selected, labeled and focused on, and the renderer</td></tr>
+            <tr><td><code>set_mode</code></td><td>Shows a view: start, experiment, qc, score, map, compare or structure</td></tr>
             <tr><td><code>focus</code></td><td>Shows a table, target, run, selection or variant in the inspector</td></tr>
             <tr><td><code>draft_design</code></td><td>Drafts the design from the column names and reports its problems</td></tr>
             <tr><td><code>set_design</code></td><td>Sets a <code>mavescape-design</code> document, refused with every problem when it does not fit the table</td></tr>

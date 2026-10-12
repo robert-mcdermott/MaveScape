@@ -79,7 +79,7 @@ func testFetcher(t *testing.T, service *fakeService) (*fetcher, http.Handler) {
 	t.Helper()
 	upstream := newUpstream(permitOnly(service))
 	upstream.retries = []time.Duration{time.Millisecond, time.Millisecond}
-	f := &fetcher{mode: "on", cache: &diskCache{dir: t.TempDir(), maxAge: defaultCacheMaxAge}, remote: upstream, origins: map[string]string{"https://rest.uniprot.org": service.URL, "https://api.mavedb.org": service.URL, "https://eutils.ncbi.nlm.nih.gov": service.URL, "https://rest.ensembl.org": service.URL, "https://www.ebi.ac.uk": service.URL, "https://alphafold.ebi.ac.uk": service.URL, "https://gnomad.broadinstitute.org": service.URL}, now: func() time.Time { return testNow }}
+	f := &fetcher{mode: "on", cache: &diskCache{dir: t.TempDir(), maxAge: defaultCacheMaxAge}, remote: upstream, origins: map[string]string{"https://rest.uniprot.org": service.URL, "https://api.mavedb.org": service.URL, "https://eutils.ncbi.nlm.nih.gov": service.URL, "https://rest.ensembl.org": service.URL, "https://www.ebi.ac.uk": service.URL, "https://alphafold.ebi.ac.uk": service.URL, "https://files.rcsb.org": service.URL, "https://gnomad.broadinstitute.org": service.URL}, now: func() time.Time { return testNow }}
 	return f, fetcherMux(f)
 }
 

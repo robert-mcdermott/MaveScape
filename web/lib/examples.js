@@ -96,6 +96,7 @@ export const EXAMPLES = [
       'The cells per bin are not assessed, and the bins cannot be scored by maximum likelihood: MaveDB records neither the cells sorted nor the gates. What the analysis can do names both, and the sorter\'s report that has them.',
       'With MaveScape\'s defaults (each replicate scaled to nonsense 0 and wild type 1) the scores follow the published ones with r 0.994; with MultiSTEP\'s own scale (the lowest 5% of missense at 0) and the replicates\' mean, r 0.9995, and the nonsense median is 0.47.',
       'Selected by query, with UniProt\'s features beside the map, the substitutions of the 22 cysteines in factor IX\'s 11 disulfide bonds ("missense from C in feature disulfide") are mostly lost: 345 of the 399 scored are lower than the wild type beyond their uncertainty, against 2,124 of the 8,529 missense variants scored in all. A secreted protein needs its disulfide bonds.',
+      'The structure of activated factor IX (PDB 1RFN, X-ray at 2.8 Å) holds its protease domain (chain A) and second EGF domain (chain B): 14 of the cysteines, in seven of the disulfide bonds, one of them joining the two chains.',
     ],
     steps: [
       ['map', 'Look at the map: the protease domain and the second EGF domain hold most of the positions that tolerate nothing, the propeptide and the Gla domain almost none. Click a cell: the inspector shows its distribution over the four bins in each replicate.'],
@@ -103,6 +104,7 @@ export const EXAMPLES = [
       ['experiment', 'In Experiment, read "What the analysis can do": the gates and the cells sorted into each bin are missing, and would unlock maximum likelihood and the cells per bin.'],
       ['score', 'In Score, set the bins\' scale to the lowest 5% and the replicates combined by their mean, and score again: MultiSTEP\'s own settings, close to the published scores.'],
       ['map', 'Back on the map, Tracks, "Add a track": UniProt\'s features. Then type in the query field below the map "missense from C in feature disulfide": the substitutions of the cysteines that make factor IX\'s disulfide bonds. Add "and lower" to keep those lower than the wild type beyond their uncertainty, save the selection as Disulfides, and try "missense and lower and not in Disulfides" for the rest.'],
+      ['structure', 'In Structure, open the PDB entry 1RFN: activated factor IX, its protease domain (chain A) and second EGF domain (chain B). Under Residues, select "resn CYS" and draw them as sticks: its 14 cysteines pair into seven disulfide bonds, one joining the two chains. Double-click a cysteine to focus on its neighborhood. The entry numbers the protease domain as chymotrypsin is numbered (16–245), not as factor IX is (227–461).'],
     ],
   },
   {
