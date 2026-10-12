@@ -2,6 +2,33 @@
 
 ## 0.6.0 (unreleased)
 
+Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable record.
+
+### Added
+
+- **Figures** (wave 6, slice 1). The Figures view holds the workspace's figures: a page at a
+  journal's column width (one column, 85 mm; one and a half, 114 mm; two columns, 174 mm), a 16:9
+  slide or any size, its text set in points at the printed size (7 pt), its panels lettered A, B,
+  C… in reading order. A panel is a run's variant-effect map (a condition, or a difference between
+  conditions; its coloring, row order and palette; a range of positions; the tracks below it, the
+  color bar and the key to its states) or text. Panels are dragged and resized, snapping to the
+  page's margins and to each other's edges, nudged with the arrow keys, placed exactly in
+  millimeters, and every change can be undone; making or deleting a figure and adding or removing a
+  panel are in the workspace's history. A panel says what it shows, so the figure is drawn again
+  from the workspace whenever it is shown and follows a rescoring until it is exported; figures are
+  kept in the workspace and its archive. **Add to figure** in the Map view takes the map as it is
+  shown (the positions in view, the tracks shown). Text under 6 pt at the printed size, positions
+  narrower than 0.6 pt and text that does not fit are said under the page.
+- Figures exported as SVG (vectors, text as text, each map cell named by its variant, the figure
+  in words as its `<desc>`), PDF (one vector page at the printed size, text in Helvetica), PNG at
+  300 or 600 dpi of the printed size (its resolution in the file), or to the clipboard. The same
+  figure is the same bytes when written again. One drawing (`web/lib/draw.js`: marks painted on a
+  canvas, written as SVG, written as PDF) makes the view and every export, in Node as in the page;
+  the PDF writer is CytoWeave's (`web/lib/pdf.js`, `web/lib/png.js`).
+- Remote control: `figures`, `create_figure`, `add_figure_panel`, `set_figure` and
+  `export_figure`. FORMATS.md describes a figure's document and files; the guide's *Figures* page,
+  with a screenshot.
+
 ### Changed
 
 - The README is the project's front page, as CytoWeave's and Proteoscope's are: what MaveScape
@@ -19,6 +46,12 @@
 
 ### Validation
 
+- The `figures` suite (7 checks): nine examples' maps as figure panels with their tracks, every
+  cell the color the map's own SVG gives it; the PDF's content streams read back drawing the SVG's
+  rectangles and text, mark for mark; the same bytes written again; no text under 6 pt; a range of
+  positions exactly its cells; a difference between conditions; a figure through the archive. The
+  remote session (171 checks) drives the figure actions in a window, its SVG the same bytes as Node
+  draws the same figure, its PDF the same marks, its PNG the pixels and resolution asked for.
 - `headless-run.mjs` reads a command's output to its end before checking it: a reason on stderr
   was lost on CI's runner when the command's exit was seen before its output.
 

@@ -11,7 +11,7 @@ import { coversPosition, validateDesign, summarizeDesign } from '../lib/design.j
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
 import { addRun, makeRun, nextRunName, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
-import { acknowledgeFinding, addSelection, addTarget, createWorkspace, rename, setDeposit, setDesign } from '../lib/workspace.js';
+import { acknowledgeFinding, addSelection, addTarget, createWorkspace, removeFigure, rename, saveFigure, setDeposit, setDesign } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
 import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
@@ -62,6 +62,8 @@ import { handOff, sessionFile } from './proteoscope.js';
 import { structureWords, viewWords } from '../lib/structure-record.js';
 import { describeMapping, mappingCSV, stretches } from '../lib/mapping.js';
 import { STYLES, SURFACES } from './structure-viewer.js';
+import { addPanel, checkFigure, createFigure, FIGURE_SIZES, figureSize, mm, panelLetters, panelSummary, PANEL_KINDS, pngSize, removePanel, toMM, updatePanel } from '../lib/figures.js';
+import { drawFigure, exportFigure } from './figure-data.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
 import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
@@ -181,6 +183,129 @@ export function installRemote(app) {
       });
       return { contrast: d.name, method: d.method, compared, lowerAtQ05: lower, higherAtQ05: higher, ...(d.note ? { note: d.note } : {}) };
     });
+  }
+
+  // --- Figures (wave 6, slice 1) ---------------------------------------------------------------
+
+  const figureById = (id) => (ws().figures ?? []).find((f) => f.id === id) ?? null;
+
+  function resolveFigure(ref) {
+    const list = ws().figures ?? [];
+    if (!list.length) throw new ActionError('The workspace has no figures: create_figure makes one.');
+    const byId = list.find((f) => f.id === ref);
+    if (byId) return byId;
+    const name = choose(String(ref), list.map((f) => f.name), 'figure');
+    return list.find((f) => f.name === name);
+  }
+
+  function checked(fig) {
+    try {
+      return checkFigure(fig);
+    } catch (error) {
+      throw new ActionError(error.message);
+    }
+  }
+
+  // A page's size and text from width_mm, height_mm and text; the panels kept on it.
+  function pageOf(fig, args) {
+    let next = fig;
+    for (const [key, field] of [['width_mm', 'width'], ['height_mm', 'height']]) {
+      if (args[key] === undefined) continue;
+      const v = Number(args[key]);
+      if (!(v >= 25 && v <= 700)) throw new ActionError(`${key} is from 25 to 700 mm.`);
+      next = { ...next, size: 'custom', [field]: Math.round(mm(v) * 100) / 100 };
+    }
+    if (args.text !== undefined) {
+      const t = Number(args.text);
+      if (!(t >= 4 && t <= 36)) throw new ActionError('text is from 4 to 36 pt.');
+      next = { ...next, text: t };
+    }
+    if (next !== fig) next = { ...next, panels: next.panels.map((p) => ({ ...p, w: Math.min(p.w, next.width - p.x), h: Math.min(p.h, next.height - p.y) })) };
+    return next;
+  }
+
+  // Where a panel is, from x_mm, y_mm, width_mm and height_mm (points; only those given).
+  function placement(args, fig, panel = null) {
+    const out = {};
+    for (const [key, field] of [['x_mm', 'x'], ['y_mm', 'y'], ['width_mm', 'w'], ['height_mm', 'h']]) {
+      if (args[key] === undefined) continue;
+      const v = Number(args[key]);
+      if (!Number.isFinite(v) || v < 0) throw new ActionError(`${key} is a number of millimeters.`);
+      out[field] = Math.round(mm(v) * 100) / 100;
+    }
+    const at = { x: 8, y: 8, w: fig.width - 16, h: 60, ...(panel ?? {}), ...out };
+    if (at.x + at.w > fig.width + 0.5 || at.y + at.h > fig.height + 0.5) throw new ActionError(`The panel would leave the page (${toMM(fig.width)} × ${toMM(fig.height)} mm).`);
+    return out;
+  }
+
+  // A map panel's fields from an action's arguments (a change to one: only those given).
+  async function mapPanelFrom(args, panel) {
+    const run = args.run !== undefined || !panel ? resolveRun(args.run) : ws().runs.find((r) => r.id === panel.run);
+    if (!run) throw new ActionError(`The panel's run ${panel.run} is no longer in the workspace: give run.`);
+    const { results: own } = await resultsOf(run);
+    const results = proteinView(own) ?? own;
+    const out = panel ? {} : { kind: 'map', rowOrder: 'biochemical', palette: 'rdbu', tracks: [] };
+    if (!panel || args.run !== undefined) out.run = run.id;
+    if (args.contrast !== undefined && args.contrast !== null) {
+      const names = (results.differential ?? []).map((d) => d.name);
+      if (!names.length) throw new ActionError(`${run.name} compares no conditions: it has no difference to draw.`);
+      Object.assign(out, { contrast: names.indexOf(choose(args.contrast, names, 'contrast')), condition: undefined, colorBy: undefined });
+    } else if (args.condition !== undefined || !panel) {
+      Object.assign(out, { condition: resolveCondition(results, args.condition), contrast: undefined, colorBy: panel?.colorBy ?? 'score' });
+    }
+    if (args.color_by !== undefined) out.colorBy = choose(args.color_by, Object.keys(COLOR_BY).filter((k) => k !== 'differential'), 'coloring');
+    if (args.rows !== undefined) out.rowOrder = choose(args.rows, Object.keys(ROW_ORDERS), 'row order');
+    if (args.palette !== undefined) out.palette = choose(args.palette, ['rdbu', 'puor'], 'palette');
+    const length = buildMapModel(results, run.inputs.design, { condition: 0 }).length;
+    for (const key of ['from', 'to']) {
+      if (args[key] === undefined) continue;
+      if (args[key] === null) {
+        out[key] = undefined;
+        continue;
+      }
+      const v = Number(args[key]);
+      if (!Number.isInteger(v) || v < 1 || v > length) throw new ActionError(`${key} is a position from 1 to ${length}.`);
+      out[key] = v;
+    }
+    const from = out.from ?? panel?.from ?? 1;
+    const to = out.to ?? panel?.to ?? length;
+    if (from > to) throw new ActionError(`from (${from}) is after to (${to}).`);
+    if (args.tracks !== undefined) {
+      const condition = out.condition ?? panel?.condition ?? 0;
+      const state = await runTrackState(app, run, { condition: Number.isInteger(condition) ? condition : 0 });
+      const ids = state.arranged.map((t) => t.id);
+      const wanted = args.tracks === 'shown' || (Array.isArray(args.tracks) && args.tracks.length === 1 && args.tracks[0] === 'shown') ? state.arranged.filter((t) => t.shown).map((t) => t.id) : args.tracks;
+      if (!Array.isArray(wanted)) throw new ActionError('tracks is a list of track ids (list_tracks gives them), or "shown".');
+      for (const id of wanted) if (!ids.includes(id)) throw new ActionError(`"${id}" is not a track of ${run.name}: its tracks are ${ids.join(', ')}.`);
+      out.tracks = wanted;
+    }
+    for (const key of ['title']) if (args[key] !== undefined) out[key] = args[key] === null ? undefined : String(args[key]);
+    for (const key of ['medians', 'legend']) if (args[key] !== undefined) out[key] = args[key] === false ? false : undefined;
+    return out;
+  }
+
+  // A figure as figures returns it: in millimeters, its panels lettered, what is wrong with each.
+  async function figureData(fig) {
+    const drawn = await drawFigure(app, fig);
+    const at = (v) => toMM(v);
+    return {
+      id: fig.id, name: fig.name, size: fig.size, widthMm: at(fig.width), heightMm: at(fig.height), text: fig.text, letters: fig.letters,
+      smallestText: drawn.smallest === null ? null : Math.round(drawn.smallest * 10) / 10,
+      panels: fig.panels.map((p) => {
+        const d = drawn.panels.find((x) => x.id === p.id);
+        const { id, kind, x, y, w, h, ...options } = p;
+        return { id, letter: d?.letter ?? null, kind, shows: panelSummary(p, ws()), xMm: at(x), yMm: at(y), widthMm: at(w), heightMm: at(h), options, notes: d?.notes ?? [] };
+      }),
+      notes: drawn.notes,
+      description: drawn.description,
+      // The figure as the workspace keeps it (FORMATS.md, "Figures").
+      document: fig,
+    };
+  }
+
+  async function showFigure(id, panel = null) {
+    app.figuresView = { figure: id, panel };
+    await show('figures');
   }
 
   // Waits for the views to draw what an action changed (the store notifies them synchronously;
@@ -690,6 +815,112 @@ export function installRemote(app) {
       const removed = removeView(app, views.find((v) => v.name === name).id);
       await settle();
       return { message: removed.message, data: { removed: name, views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
+    },
+
+    // --- Figures (wave 6, slice 1) -----------------------------------------------------------------
+
+    async figures(args) {
+      const list = args.figure ? [resolveFigure(args.figure)] : (ws().figures ?? []);
+      const out = [];
+      for (const fig of list) out.push(await figureData(fig));
+      return { message: list.length ? out.map((f) => f.description).join(' ') : 'The workspace has no figures: create_figure makes one.', data: { figures: out } };
+    },
+
+    async create_figure(args) {
+      const size = args.size ? choose(args.size, FIGURE_SIZES.map((x) => x.id), 'page size') : 'double';
+      const fig = pageOf(createFigure(args.name || `Figure ${(ws().figures?.length ?? 0) + 1}`, size), args);
+      if ((ws().figures ?? []).some((f) => f.name === fig.name)) throw new ActionError(`There is a figure "${fig.name}" already: name this one otherwise.`);
+      store.commit(saveFigure(ws(), fig, `Made the figure "${fig.name}" (${toMM(fig.width)} × ${toMM(fig.height)} mm)`), 'New figure');
+      await showFigure(fig.id);
+      return { message: `Made the figure "${fig.name}": ${toMM(fig.width)} × ${toMM(fig.height)} mm, text ${fig.text} pt. Add panels with add_figure_panel.`, data: await figureData(figureById(fig.id)) };
+    },
+
+    async add_figure_panel(args) {
+      const kind = args.kind ? choose(args.kind, Object.keys(PANEL_KINDS), 'kind of panel') : 'map';
+      let panel;
+      if (kind === 'text') {
+        if (typeof args.text !== 'string' || !args.text.trim()) throw new ActionError('A text panel needs its text.');
+        panel = { kind: 'text', text: args.text };
+      } else {
+        panel = await mapPanelFrom(args, null);
+      }
+      const existing = args.figure ? resolveFigure(args.figure) : null;
+      let fig = existing ?? createFigure(`Figure ${(ws().figures?.length ?? 0) + 1}`, 'double');
+      Object.assign(panel, placement(args, fig));
+      const added = addPanel(fig, panel);
+      fig = checked(added.figure);
+      const what = panelSummary(added.panel, ws());
+      store.commit(saveFigure(ws(), fig, existing ? `Added to the figure "${fig.name}" ${what}` : `Made the figure "${fig.name}" with ${what}`), existing ? 'Add to figure' : 'New figure');
+      await showFigure(fig.id, added.panel.id);
+      const data = await figureData(figureById(fig.id));
+      const placed = data.panels.find((p) => p.id === added.panel.id);
+      return { message: `${placed.letter ? `Panel ${placed.letter}` : 'A panel'} of "${fig.name}": ${what}.${placed.notes.length ? ` ${placed.notes.join(' ')}` : ''}`, data: { figure: data.name, panel: placed } };
+    },
+
+    async set_figure(args) {
+      let fig = resolveFigure(args.figure);
+      if (args.delete === true) {
+        store.commit(removeFigure(ws(), fig.id), 'Delete figure');
+        await settle();
+        return { message: `Deleted the figure "${fig.name}".`, data: { deleted: fig.name, figures: (ws().figures ?? []).map((f) => f.name) } };
+      }
+      const before = fig;
+      const words = [];
+      if (args.name !== undefined) {
+        const name = String(args.name).trim();
+        if (!name) throw new ActionError('A figure has a name.');
+        if (name !== fig.name && (ws().figures ?? []).some((f) => f.name === name)) throw new ActionError(`There is a figure "${name}" already.`);
+        if (name !== fig.name) words.push(`renamed "${name}"`);
+        fig = { ...fig, name };
+      }
+      if (args.size) {
+        const s = figureSize(choose(args.size, FIGURE_SIZES.map((x) => x.id), 'page size'));
+        fig = { ...fig, size: s.id, width: Math.round(s.width * 100) / 100, height: Math.round(s.height * 100) / 100 };
+      }
+      fig = pageOf(fig, args);
+      if (args.letters !== undefined) fig = { ...fig, letters: Boolean(args.letters) };
+      const letters = panelLetters(fig);
+      for (const change of args.panels ?? []) {
+        if (!change || typeof change !== 'object') throw new ActionError('Each change of panels is an object naming its panel.');
+        const ref = String(change.panel ?? '');
+        const target = fig.panels.find((p) => p.id === ref) ?? fig.panels.find((p) => letters.get(p.id) === ref.toUpperCase());
+        if (!target) throw new ActionError(`"${ref}" is not a panel of "${fig.name}": its panels are ${fig.panels.map((p) => `${letters.get(p.id) ?? ''} (${p.id})`).join(', ')}.`);
+        if (change.remove === true) {
+          words.push(`removed ${letters.get(target.id) ? `panel ${letters.get(target.id)}` : target.id}: ${panelSummary(target, ws())}`);
+          fig = removePanel(fig, target.id);
+          continue;
+        }
+        const patch = { ...placement(change, fig, target) };
+        if (target.kind === 'map') Object.assign(patch, await mapPanelFrom(change, target));
+        else {
+          if (change.text !== undefined) patch.text = String(change.text);
+          if (change.size !== undefined) patch.size = Number(change.size);
+          if (change.bold !== undefined) patch.bold = Boolean(change.bold) || undefined;
+          if (change.align !== undefined) patch.align = choose(change.align, ['left', 'center', 'right'], 'alignment');
+        }
+        if (change.letter !== undefined) patch.letter = change.letter === false ? false : undefined;
+        fig = updatePanel(fig, target.id, patch);
+      }
+      checked(fig);
+      store.commit(saveFigure(ws(), fig, words.length ? `The figure "${before.name}": ${words.join('; ')}` : null), 'Edit figure');
+      await showFigure(fig.id);
+      const data = await figureData(figureById(fig.id));
+      return { message: data.description, data };
+    },
+
+    async export_figure(args) {
+      const fig = resolveFigure(args.figure);
+      const format = args.format ? choose(args.format, ['svg', 'pdf', 'png'], 'format') : (String(args.path ?? '').match(/\.(svg|pdf|png)$/i)?.[1].toLowerCase() ?? null);
+      if (!format) throw new ActionError('Say the format (svg, pdf or png), or give a path ending in one.');
+      let out;
+      try {
+        out = await exportFigure(app, fig, format, args.dpi === undefined ? {} : { dpi: Number(args.dpi) });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      await showFigure(fig.id);
+      const size = format === 'png' ? `, ${pngSize(fig, out.dpi).width} × ${pngSize(fig, out.dpi).height} pixels at ${out.dpi} dpi` : '';
+      return { file: out.data, message: `"${fig.name}" as ${format.toUpperCase()} (${toMM(fig.width)} × ${toMM(fig.height)} mm${size}).${out.notes.length ? ` ${out.notes.join(' ')}` : ''}` };
     },
 
     // Proteoscope (wave 5, slice 6): the view shown handed to a Proteoscope running on this computer.

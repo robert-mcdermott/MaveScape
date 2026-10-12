@@ -1,0 +1,49 @@
+---
+title: Figures
+description: Figures for a paper or a talk: a page at a journal's column width or a slide, the variant-effect map of a run (a condition or a difference between conditions, a range of positions, its tracks, color bar and key) and text as panels, laid out, lettered and exported as SVG, PDF or PNG at a printed resolution; how the figures are checked.
+lede: A figure is a page of panels at a journal's column width or a slide. Each panel says what it shows, so the figure is drawn again from the analysis whenever you look at it, and follows a rescoring until you export it.
+---
+      <h2 id="what">A figure</h2>
+      <shot name="figures" alt="The Figures view: a page two columns wide holding GRB2's variant-effect map, the target's sequence and each position's median below it, the color bar and the key to its states, and a caption below; panel A selected, its run, condition, coloring, positions and tracks on the right">GRB2's map as panel A of a figure two columns wide, with the sequence and each position's effect below it, and a caption.</shot>
+      <p>The <strong>Figures</strong> view holds the workspace's figures. A figure is a page of a set size: one column (85 mm wide), one and a half (114 mm), two columns (174 mm), or a 16:9 slide; any size in millimeters can be typed instead. Its text is set at a size in points at the printed size (7 pt; 14 on a slide), and its panels are lettered A, B, C… in reading order: rows from the top, each from the left.</p>
+      <p>A panel keeps what it shows, not a picture of it: the map's run, its condition or contrast, what colors it, the positions and tracks shown. Every time the figure is shown or exported it is drawn again from the workspace, so a figure of a run you rescore shows the new scores. Figures are saved with the workspace and go into its archive (<a href="record.html">Exports and the record</a>).</p>
+
+      <h2 id="making">Making a figure</h2>
+      <ul>
+        <li><strong>From the map:</strong> in the Map view, <strong>Add to figure</strong> puts the map as it is shown on a figure, or on a new one: its run, condition or difference between conditions, its coloring, row order and palette, the positions in view when you have zoomed in, and the tracks shown below it.</li>
+        <li><strong>In the Figures view:</strong> <strong>New figure</strong> makes an empty page of a size; <strong>Map</strong> and <strong>Text</strong> (in the page's properties) add a panel, the map of the run in focus.</li>
+      </ul>
+      <p>A new panel goes below those already on the page, as wide as the page.</p>
+
+      <h2 id="layout">Laying out the page</h2>
+      <ul>
+        <li><strong>Drag</strong> a panel to move it and its corner to resize it. It snaps to the page's margins and middle and to the other panels' edges, so panels line up.</li>
+        <li><strong>The keyboard:</strong> with a panel selected, the arrow keys move it by 1 pt (<kbd>⇧</kbd>: 10 pt), <kbd>Delete</kbd> removes it and <kbd>Esc</kbd> selects the page.</li>
+        <li><strong>Exactly:</strong> a panel's place and size in millimeters, and the page's size, name, text size and lettering, are in the properties on the right. A panel can be left without a letter.</li>
+      </ul>
+      <p>Every change can be undone. Making or deleting a figure and adding or removing a panel are written in the workspace's history; moving and resizing are not.</p>
+
+      <h2 id="map">The map as a panel</h2>
+      <p>A map panel draws the run's map as the Map view does: every state its own way (missing, filtered, low confidence, the reference residue), the medians of each position above and of each substitution at the right, the target's numbering above and the reference's below, the color bar with what it measures, and the key to the states. Its properties choose the run, the condition or a difference between conditions, the coloring, row order and palette, the first and last positions shown, the title, whether the medians and the legend are drawn, and which of the run's tracks go below it.</p>
+      <p>The map fits its panel: its cells are as wide as the panel allows for the positions shown, and its text stays at the figure's size. When a panel is too small for what it holds, the figure says so below the page and in the panel's properties: names under 6 pt at the printed size (journals ask for 5–7 pt at least), positions under 0.6 pt wide (factor IX's 461 positions in one column), or text that does not fit. Make the panel larger, or show fewer positions.</p>
+
+      <h2 id="export">Exporting</h2>
+      <p><strong>Export</strong>, in the head of the view:</p>
+      <ul>
+        <li><strong>SVG:</strong> vectors, the text as text, for Illustrator or Inkscape. Each cell of a map is named by its variant, and the figure is described in words in the file.</li>
+        <li><strong>PDF:</strong> one page at the figure's printed size, vectors throughout, the text in Helvetica. A character Helvetica's standard encoding lacks is written as its nearest ASCII: − as -, Δ as delta.</li>
+        <li><strong>PNG</strong> at 300 or 600 dpi of the printed size, the resolution recorded in the file so it opens at its size.</li>
+        <li><strong>Copy to the clipboard:</strong> the PNG at 300 dpi, and the SVG where the browser takes it.</li>
+      </ul>
+      <p>The same figure is the same bytes when it is exported again (the PDF's creation date aside, which <code>mavescape run</code>'s <code>--time</code> fixes). Scripts make, change and export figures with <code>create_figure</code>, <code>add_figure_panel</code>, <code>set_figure</code> and <code>export_figure</code> (<a href="scripting.html">Remote control</a>). <a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md#figures">FORMATS.md</a> describes a figure's document and files.</p>
+
+      <h2 id="validation">How figures are checked</h2>
+      <p>The validation suite draws each example's map as a figure panel with its tracks and checks, for nine examples (<a href="../science.html">Science</a>):</p>
+      <ul>
+        <li>every cell takes the color the map's own SVG gives it, 9,681 of factor IX's included;</li>
+        <li>the PDF draws what the SVG draws: its content read back gives the same rectangles, in the same order and colors, and the same text;</li>
+        <li>a figure written again is the same bytes, and a figure through the workspace archive is the same figure;</li>
+        <li>no text is under 6 pt at a sensible size, a range of positions holds exactly its cells, and a difference between conditions is drawn as the map draws it.</li>
+      </ul>
+      <p>In the window, through remote control, a figure exported as SVG is the same bytes as Node draws it from the same document and the same run scored in Node, its PDF draws the same marks, and its PNG has the pixels and resolution asked for.</p>
+      <p>Coming next (wave 6): the other views' plots as panels (QC, score distributions, comparisons, robustness, a saved structure view, a variant's evidence), and exported figures that carry the analysis behind them, to be checked or rebuilt.</p>

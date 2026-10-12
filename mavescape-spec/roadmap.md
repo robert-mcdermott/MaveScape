@@ -2521,24 +2521,145 @@ reran all twenty runs of every release's archives in a window, each to its recor
 
 ## 0.6.0: figures and a provable record (wave 6)
 
+What a laboratory takes from MaveScape into a paper, and what lets a reader check it. Figures are
+assembled from the live views and carry the analysis behind them. The methods say everything the
+analysis did. A diff says what changed between two states of an analysis. A certificate recomputes
+every number reported, and a review report shows them, each traced to where it comes from.
+CytoWeave built each of these (figures and their provenance, its PDF writer, its diff, certificate
+and review report). MaveScape copies their frameworks with an origin comment in each file, as wave 5
+copied Proteoscope's viewer; what goes in them is MaveScape's.
+
 ### Wave 6
 
-1. **Figure builder (R5).** Multi-panel figures from live views (maps, tracks, QC plots,
-   comparisons, control distributions, structure images, variant evidence, text); SVG,
-   high-resolution PNG, vector PDF, clipboard; embedded analysis metadata and a figure manifest;
-   a reopened figure rebuilt from its inputs with differences reported (CytoWeave's
-   `figure-provenance.js` pattern).
-2. **Methods and citations, complete (R4).** Methods for every model, filter, comparison,
-   annotation and structure mapping, retrieval dates, parameter tables, input checksums, version
-   and commit, the decision log, QC findings, limitations and the research-use statement;
-   regenerated on change.
-3. **Checkpoints and semantic diff (R6).** What changed between two states of an analysis, and
-   which variants it moved.
-4. **Certificate and review report (R7).** A certificate that recomputes every reported number
-   (`mavescape verify`, exit status as the verdict) and a self-contained HTML review report with
-   every number traced. The certificate says what it proves: that the recorded inputs give the
-   recorded outputs. That is reproducibility. Whether the scores are right still rests on the
-   experiment's design and the model's assumptions, which the report states beside it.
+The roadmap first had four items for this wave. Before the wave began they were split into eight
+slices: the figure builder (R5) into three (the view and its drawing, every view's plots, the
+analysis a figure carries), the certificate and review report (R7) into two. The Figures view
+comes with slice 1, and the Report view with slice 4, where methods, checkpoints, the certificate
+and the review report are found. The wave ends with its examples, as waves 2 to 4 did.
+
+1. **Figures: the view, its drawing, and the map (R5, part 1).** A figure is a page of panels
+   (`ws.figures`, in the history and the archive). Each panel says what it shows (a run, its
+   condition or contrast, what colors it, the positions and rows shown, the tracks), never a copy
+   of the numbers, so a figure follows a rescoring until it is exported.
+   - **One drawing, three outputs.** `lib/draw.js` is a list of marks (rectangles, lines, paths,
+     circles, text, images, clipped groups). The same marks are painted on a canvas for the view,
+     written as SVG, and written as PDF through CytoWeave's `pdf.js` (copied with `png.js` and
+     their tests). Node draws them as the page does.
+   - **Panels of this slice:** the variant-effect map (a run, a condition, a difference between
+     conditions or a comparison; a range of positions; cell size), with its tracks, its color bar
+     and the key to its states; text; panel letters (A, B, C…, placed and renumbered as panels
+     move).
+   - **The Figures view** (`ui/mode-figures.js`, after CytoWeave's): the workspace's figures, page
+     sizes of journal columns (85, 114 and 174 mm wide) and a slide, panels dragged and resized
+     with snapping and aligned, nudged from the keyboard, every change undoable. **Add to figure**
+     in the Map view puts the map as it is shown on a figure.
+   - **Exports:** SVG (text as text), PDF (vector, text in Helvetica), PNG at 300 or 600 dpi of the
+     page's printed size, and the clipboard. Remote actions: `figures`, `create_figure`,
+     `add_figure_panel`, `set_figure`, `export_figure`.
+   - Validation: a map panel's cells take the colors `map-svg.js` gives them, cell by cell, in SVG
+     and in PDF; a figure written twice is the same bytes; the PDF read back (its page size in
+     millimeters, its rectangles and its text); Node's marks the page's; figures through the archive.
+   - **Done.** `lib/draw.js` (marks painted on a canvas, written as SVG, written as PDF; paths of
+     absolute commands; marks placed and scaled), CytoWeave's `pdf.js` and `png.js` copied with
+     their tests (MaveScape as creator, the creation date required, more characters written as
+     their nearest ASCII). `lib/figures.js`: the figure document (FORMATS.md, *Figures*), page sizes
+     in points from millimeters, panels placed, lettered in reading order and checked when a figure
+     comes from outside, the page drawn as marks and written as SVG or PDF. `lib/figure-map.js`: the
+     map fitted to its panel at the figure's text size, with the window's encoding, its tracks (drawn
+     at a tenth of the text size per unit, their names whole), the color bar and the states' key
+     laid out before the grid (beside the bar, or below it in a narrow panel); what does not fit is
+     said (names under 6 pt, positions under 0.6 pt, too small to draw).
+     - **The page:** `ui/mode-figures.js` (the figure shown and New figure in the head, the page on
+       a canvas with a box per panel to drag and resize, snapping to the margins, the middle and the
+       other panels' edges; properties of the page or the panel on the right; what is wrong under
+       the page) and `ui/figure-data.js` (a map panel's run recomputed when needed, its model and
+       tracks; SVG, PDF, PNG with its `pHYs`, the clipboard; Add to figure). Making or deleting a
+       figure and adding or removing a panel are in the history (`saveFigure`, `removeFigure`).
+     - **Remote control:** `figures` (with each figure's document), `create_figure`,
+       `add_figure_panel` (a map with `condition` or `contrast`, `color_by`, `rows`, `palette`,
+       `from`, `to`, `tracks` by id or `"shown"`; or text; placed in millimeters), `set_figure`
+       (panels by letter or id, moved, changed or removed; the figure renamed, resized, deleted),
+       `export_figure` (SVG, PDF, PNG at a `dpi`).
+     - The guide's *Figures* page and its screenshot scene (`figures`); FORMATS.md's *Figures*; the
+       scripting page's actions; README's highlights, views and validation.
+     - Validation: the suite `figures` (`figure-cases.mjs` reads an SVG's rectangles, text and cells
+       and a PDF's content streams without MaveScape's drawing code): nine examples' maps every cell
+       `map-svg.js`'s colors, the PDF the SVG's rectangles and text mark for mark, the same bytes
+       again, no text under 6 pt, a range of positions exactly its cells, a difference between
+       conditions, a figure through the archive (7 checks). The remote session: the five actions,
+       the window's SVG the same bytes as Node's of the same document and run, its PDF the same
+       marks, its PNG 2055 × 1417 at 300 dpi with its resolution, refusals, the archive keeping the
+       figure (171 checks). Poppler's `pdftotext` reads the PDF's text, and Quick Look and
+       `pdftoppm` draw it as the PNG; poppler draws Helvetica-Bold in a regular face where its
+       font substitution has no bold, which the file does not decide.
+2. **Every view's plots as panels (R5, part 2).** The QC view's plots (replicate agreement,
+   variance beyond counting, coverage, dropouts, the filter flow, the controls' distributions),
+   the Score view's score distributions by class, Compare's (the scatter, Bland–Altman, the two
+   maps and their difference, a predictor's classes), robustness, a saved structure view (its
+   image at print resolution with its legend, wave 5's figure panel), and a variant's evidence
+   (its score and interval, each replicate, its counts). Each is drawn by a pure function in
+   `lib/` to marks: the window's plots (`ui/plots.js`) move there, so a figure shows what the view
+   shows. **Add to figure** in every view; each panel's own options (ranges, labels, text size).
+   - Validation: each panel's numbers are the view's (a scatter's points, a histogram's bars) on
+     the examples; a structure panel the same pixels as wave 5's; no text under 6 pt at the
+     figure's printed size (checked, and said in the view).
+3. **Figures that carry their analysis (R5, part 3).** An exported figure carries its manifest:
+   each panel with what it shows, its run and the run's output hash, the parameters, the
+   selection, every input's SHA-256, MaveScape's version and commit (SVG `<metadata>`, a PNG
+   `iTXt` chunk, a PDF attachment; CytoWeave's `figure-provenance.js`). A figure dropped on the
+   window says what it shows and where it came from, compares itself with the workspace (the same
+   run, rescored since, the selection changed), and is rebuilt from its inputs with every
+   difference reported, panel by panel. `mavescape export --format figures` writes a saved
+   workspace's figures and their manifest.
+   - Validation: the manifest read back intact from SVG, PNG and PDF; a figure rebuilt is the same
+     bytes; a rescoring flags exactly the panels it changes; a manifest edited after the fact is
+     caught; `mavescape export` the same bytes twice and as the window writes them.
+4. **Methods and citations, complete (R4).** The methods of the workspace, not only of a run: every
+   run's model, parameters (as a table) and filters; comparisons and their statistics; robustness;
+   selections by query; annotations with their sources and retrieval dates; structure mappings and
+   the structural tests; the figures' panels; every input's checksum; MaveScape's version and
+   commit; the decision log (the history's material changes, in words); QC findings and their
+   acknowledgements; limitations (what the readiness finds missing, the model's assumptions); the
+   research-use statement. The **Report** view shows them, written again on every change, with
+   the references in BibTeX; exports and the archive carry them.
+   - Validation: every operation the examples perform has its sentence, and a workspace says
+     nothing of what it did not do; every reference's DOI matches its Crossref record (a recorded
+     fixture); the same text for the same workspace, in Node and the window.
+5. **Checkpoints and semantic diff (R6).** A checkpoint keeps a named state of the analysis (the
+   workspace by its history's hash; tables are already kept by checksum), in the library and the
+   archive. `lib/diff.js` (CytoWeave's framework) says what changed between two states (two
+   checkpoints, a checkpoint and now, two archives): the target, design, parameters, filters, QC
+   thresholds and acknowledgements, runs, selections, annotations, structure views and figures, in
+   words. For each pair of runs it says which variants moved: beyond their uncertainty, across a
+   class, newly filtered or scored, and the QC findings whose verdict changed, with a map of the
+   change. In the Report view and the drawer's history; remote actions `checkpoint` and `diff`.
+   - Validation: planted changes (a pseudocount, a filter, a replicate left out, a threshold, a
+     design edit) each described exactly, and nothing else; the variants moved equal an independent
+     computation; an analysis compared with itself has no change.
+6. **The certificate and `mavescape verify` (R7, part 1).** A certificate (`verify.go`, CytoWeave's
+   `certificate.js` pattern) holds the workspace with its tables (or only their checksums, when the
+   data cannot be shared) and every number reported: each run's scores, SEs and classes, the QC
+   findings' values, the comparisons' statistics, robustness classes, the figures' numbers and the
+   methods. Its fingerprint, the SHA-256 of its canonical JSON, names exactly what was certified.
+   `mavescape verify` checks every checksum and the history's chain, computes every number again
+   with the same code and compares them bit for bit: exit 0 verified, 1 a difference (listed), 2
+   not checkable (a table missing). It says what it proves: the recorded inputs give the recorded
+   outputs. That is reproducibility; whether the scores are right still rests on the experiment's
+   design and the model's assumptions.
+   - Validation: every example certified and verified; six kinds of tampering caught; a
+     certificate made in the window verified in Node and the reverse; each earlier release's
+     archives certified.
+7. **The review report (R7, part 2).** One self-contained HTML file a reviewer opens in any browser
+   without MaveScape (CytoWeave's `review-report.js` pattern): the experiment and design, the
+   inputs with their checksums, the QC findings with their plots, each run's map and parameters,
+   the comparisons, structure views, figures, methods, decision log, and the certificate's
+   fingerprint with what it proves and does not. Every number is traced (clicked, it says where it
+   comes from) and carries its key and exact value for checking; the file loads nothing.
+   - Validation: every number equal to the certificate's; nothing loaded from outside the file; no
+     axe-core violations in either theme; the same bytes twice.
+8. **Examples.** The wave's lessons on the examples: GRB2's figure (the map, the structure, the QC
+   finding behind its bottleneck), what a choice moves (a checkpoint before and after a change of
+   pseudocount on Hsp90), and the BRCA1 RING domain certified, verified and reported.
 
 ## 0.7.0: agents and scripts (wave 7)
 

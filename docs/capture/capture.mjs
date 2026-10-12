@@ -698,6 +698,15 @@ const scenes = {
     await waitFor('Boolean(globalThis.proteoscope?.state?.active?.proteomics?.data)', 90000);
     await sleep(3000);
   },
+  // Figures (wave 6, slice 1): GRB2's map with its sequence and its position effect below it and a
+  // caption, on a page two columns wide; panel A selected, its properties beside the page.
+  async figures() {
+    await example('grb2-sh3');
+    await act('add_figure_panel', { run: 'Run 1', tracks: ['reference', 'effect'], height_mm: 96 });
+    await act('add_figure_panel', { figure: 'Figure 1', kind: 'text', text: 'Abundance of every substitution in the SH3 domain of GRB2, three replicates (Human Domainome; MaveDB urn:mavedb:00000835-a-1). Lower scores: less abundant.', x_mm: 3, y_mm: 101, width_mm: 168, height_mm: 16 });
+    await js(`(() => { window.mavescape.figuresView = { figure: window.mavescape.store.ws.figures[0].id, panel: 'panel-1' }; window.mavescape.store.notify(['ws']); })()`);
+    await sleep(1500);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');

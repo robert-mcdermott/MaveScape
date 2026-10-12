@@ -376,6 +376,12 @@ export function mountVariantMap(options) {
       draw();
     },
     fit,
+    // The whole positions shown: { from, to } (a figure's panel takes the map as it is shown).
+    shownRange() {
+      const g = geometry(model, view);
+      const from = Math.max(1, Math.ceil(view.x0 - 1e-9));
+      return { from, to: Math.max(from, Math.min(model.length, Math.floor(view.x0 + g.visible - 1 + 1e-9))) };
+    },
     focusCell(k) {
       view.focus = k;
       reveal(Math.floor(k / model.rows.length) + 1);

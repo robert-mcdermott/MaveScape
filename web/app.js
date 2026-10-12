@@ -24,8 +24,8 @@ import { fixClock } from './lib/clock.js';
 const VERSION = '0.5.0';
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
-// show what they are for (mode-planned.js); Calibrate, Figures and Report join the list in the
-// waves that build them (roadmap.md); Compare joined in wave 4, Structure in wave 5.
+// show what they are for (mode-planned.js); Calibrate and Report join the list in the waves that
+// build them (roadmap.md); Compare joined in wave 4, Structure in wave 5, Figures in wave 6.
 const MODES = [
   { id: 'welcome', label: 'Start', icon: 'grid', hidden: true, load: () => import('./ui/mode-welcome.js').then((m) => m.mountWelcome) },
   { id: 'experiment', label: 'Experiment', icon: 'experiment', load: () => import('./ui/mode-experiment.js').then((m) => m.mountExperimentMode) },
@@ -35,6 +35,8 @@ const MODES = [
   { id: 'map', label: 'Map', icon: 'heatmap', load: () => import('./ui/mode-map.js').then((m) => m.mountMapMode) },
   { id: 'compare', label: 'Compare', icon: 'compare', load: () => import('./ui/mode-compare.js').then((m) => m.mountCompareMode) },
   { id: 'structure', label: 'Structure', icon: 'structure', load: () => import('./ui/mode-structure.js').then((m) => m.mountStructureMode) },
+  'sep',
+  { id: 'figures', label: 'Figures', icon: 'figure', load: () => import('./ui/mode-figures.js').then((m) => m.mountFiguresMode) },
 ];
 
 // --- Theme ---------------------------------------------------------------------------------------

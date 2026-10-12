@@ -1136,3 +1136,26 @@ dl.kv.annotations dd { white-space: normal; }
 .structure-classes { font-size: 12px; }
 .structure-classes th, .structure-classes td { padding: 4px 5px; }
 .structure-classes td.r, .structure-classes th.r, .structure-classes td:first-child { white-space: nowrap; }
+
+/* --- Figures (wave 6, slice 1) ----------------------------------------------------------------- */
+.figure-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; padding: 14px; overflow: hidden; }
+.figure-side { min-height: 0; overflow: auto; }
+.figure-side .row > .field { flex: 1; }
+.figure-center { min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.figure-stage { flex: 1; min-height: 240px; overflow: auto; padding: 20px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-lg); outline: none; }
+.figure-stage:focus-visible { outline: 2px solid var(--accent-soft); }
+.figure-page { position: relative; margin: 0 auto; background: #ffffff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 6px 20px rgba(0, 0, 0, 0.08); }
+.figure-canvas { position: absolute; inset: 0; }
+.figure-overlay { position: absolute; inset: 0; }
+.figure-box { position: absolute; border: 1px dashed transparent; cursor: move; touch-action: none; }
+.figure-box:hover { border-color: rgba(91, 76, 230, 0.45); }
+.figure-box.selected { border: 1.5px solid var(--accent); }
+.figure-handle { position: absolute; right: -5px; bottom: -5px; width: 10px; height: 10px; background: var(--accent); border: 2px solid #ffffff; border-radius: 2px; cursor: nwse-resize; display: none; }
+.figure-box.selected .figure-handle, .figure-box:hover .figure-handle { display: block; }
+.figure-notes { flex-shrink: 0; }
+.figure-notes .callout { margin-top: 6px; }
+.figure-notes .empty { margin-top: 20px; }
+.figure-tracks { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
+@media (max-width: 1100px) { .figure-layout { grid-template-columns: minmax(0, 1fr) 240px; } }
+.figure-list { margin-left: 12px; }
+.figure-list select { max-width: 260px; }

@@ -35,7 +35,9 @@ import { depositPackages } from './mavedb-export-cases.mjs';
 import { nodeTracks } from './annotation-cases.mjs';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
-import { tracksCSV } from '../web/lib/tracks.js';
+import { builtinTracks, tracksCSV } from '../web/lib/tracks.js';
+import { figureSVG } from '../web/lib/figures.js';
+import { asPDFText, readPDF, readSVG, sameRects } from './figure-cases.mjs';
 import { openExampleInNode } from './example-cases.mjs';
 import { classesCSV, compareSides, comparisonCSV, comparisonJSON, describeSide, differenceMap, positionsCSV, sideMap } from '../web/lib/compare.js';
 import { predictorSide, scoreSetSide } from './compare-cases.mjs';
@@ -270,6 +272,43 @@ try {
   check('render_map: the map in words, by state, with the settings asked', `${map.data.colorBy}, ${map.data.rows}; ${JSON.stringify(map.data.counts)}`, map.data.colorBy === 'se' && map.data.rows === 'hydrophobicity' && total === 56 * 21 && /Variant-effect map/.test(map.message) && (await browser.eval(`Boolean(document.querySelector('.map-pane canvas'))`)));
   await act('render_map', { run: 'Run 1', color_by: 'score', rows: 'biochemical', zoom: 1 });
 
+  // Figures (wave 6, slice 1): a page of panels, drawn in the window as Node draws it.
+  const made = await act('create_figure', { name: 'Figure 1', size: 'double' });
+  check('create_figure: a page two columns wide, shown in the Figures view', made.message, made.data.widthMm === 174 && made.data.heightMm === 120 && made.data.text === 7 && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'figures');
+  const mapPanel = await act('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', tracks: ['reference', 'effect'], height_mm: 90 });
+  const textPanel = await act('add_figure_panel', { figure: 'Figure 1', kind: 'text', text: 'Abundance of every substitution in the SH3 domain of GRB2 (Human Domainome).', x_mm: 95, y_mm: 94, width_mm: 75, height_mm: 20 });
+  const badPanel = await send('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', from: 50, to: 10 });
+  const badTrack = await send('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', tracks: ['no-such-track'] });
+  check('add_figure_panel: a run\'s map with two of its tracks, lettered A, and a text panel B where placed; a range backward and an unknown track refused, saying why', `${mapPanel.message} ${textPanel.message} ${badPanel.message} ${badTrack.message}`, mapPanel.data.panel.letter === 'A' && mapPanel.data.panel.notes.length === 0 && textPanel.data.panel.letter === 'B' && textPanel.data.panel.xMm === 95 && !badPanel.ok && /after/.test(badPanel.message) && !badTrack.ok && /reference, coverage, effect, uncertainty/.test(badTrack.message));
+  const figureDoc = (await act('figures', { figure: 'Figure 1' })).data.figures[0];
+  const run1Node = scoreTable(exampleTable, workspaceDesign, DEFAULT_PARAMETERS).results;
+  const run1Model = buildMapModel(run1Node, workspaceDesign, { condition: 0, colorBy: 'score', rowOrder: 'biochemical' });
+  const run1Tracks = builtinTracks(run1Model);
+  const nodeResolved = new Map([[figureDoc.document.panels[0].id, { model: run1Model, results: run1Node, tracks: ['reference', 'effect'].map((id) => run1Tracks.find((t) => t.id === id)) }]]);
+  await act('export_figure', { figure: 'Figure 1', path: join(out, 'figure-1.svg') });
+  await act('export_figure', { figure: 'Figure 1', format: 'pdf', path: join(out, 'figure-1.pdf') });
+  const png = await act('export_figure', { figure: 'Figure 1', dpi: 300, path: join(out, 'figure-1.png') });
+  const windowSVG = readFileSync(join(out, 'figure-1.svg'), 'utf8');
+  const nodeSVG = await figureSVG(figureDoc.document, nodeResolved);
+  check('export_figure SVG: the same bytes as Node draws the figure from its document and Run 1 scored in Node', `${windowSVG.length} bytes`, windowSVG === nodeSVG, `${nodeSVG.length} bytes`);
+  const windowPDF = readPDF(readFileSync(join(out, 'figure-1.pdf')));
+  const nodeRects = readSVG(nodeSVG);
+  const pdfRects = sameRects(nodeRects.rects, windowPDF.rects);
+  const pdfTexts = windowPDF.texts.map((b) => String.fromCharCode(...b));
+  const svgTexts = asPDFText(nodeRects.texts).map((b) => String.fromCharCode(...b));
+  check('export_figure PDF: a page of 174 × 120 mm drawing Node\'s rectangles and text', `${windowPDF.width} × ${windowPDF.height} pt; ${pdfRects.why}; ${pdfTexts.length} strings`, windowPDF.width === 493.23 && windowPDF.height === 340.16 && pdfRects.ok && pdfTexts.join('|') === svgTexts.join('|'));
+  const pngBytes = readFileSync(join(out, 'figure-1.png'));
+  const pngW = pngBytes.readUInt32BE(16);
+  const pngH = pngBytes.readUInt32BE(20);
+  const phys = pngBytes.indexOf(Buffer.from('pHYs'));
+  check('export_figure PNG at 300 dpi: 2055 × 1417 pixels, its resolution recorded (11811 pixels per meter)', `${png.message} ${pngW} × ${pngH}; pHYs ${phys > 0 ? pngBytes.readUInt32BE(phys + 4) : 'none'}`, pngW === 2055 && pngH === 1417 && phys > 0 && pngBytes.readUInt32BE(phys + 4) === 11811 && pngBytes[phys + 12] === 1);
+  const changedFigure = await act('set_figure', { figure: 'Figure 1', name: 'Figure 2', panels: [{ panel: 'A', from: 20, to: 40, height_mm: 60 }, { panel: 'B', y_mm: 70 }] });
+  const offPage = await send('set_figure', { figure: 'Figure 2', panels: [{ panel: 'B', x_mm: 160 }] });
+  const unknownPanel = await send('set_figure', { figure: 'Figure 2', panels: [{ panel: 'Z', remove: true }] });
+  check('set_figure: renamed, panel A showing positions 20–40 and shorter, B moved; a panel off the page and an unknown one refused, saying why', `${changedFigure.data.name}: ${changedFigure.data.panels.map((p) => `${p.letter} ${p.shows}`).join('; ')}. ${offPage.message} ${unknownPanel.message}`, changedFigure.data.name === 'Figure 2' && changedFigure.data.panels[0].shows === 'the map of Run 1, positions 20–40' && changedFigure.data.panels[0].heightMm === 60 && changedFigure.data.panels[1].yMm === 70 && !offPage.ok && /leave the page/.test(offPage.message) && !unknownPanel.ok && /not a panel/.test(unknownPanel.message));
+  const noTokenFigure = await send('export_figure', { figure: 'Figure 2', path: join(out, 'x.svg') }, { withToken: false });
+  check('export_figure without the token is refused', `${noTokenFigure.status}`, noTokenFigure.status === 401);
+
   // Selection and the inspector.
   const sel = await act('select_variants', { positions: [36], filter: 'scored', save_as: 'Position 36', run: '1' });
   check('select_variants by position, saved by name', sel.message, sel.data.variants.length >= 15 && sel.data.saved === 'Position 36' && (await act('get_state')).data.selections.some((s) => s.name === 'Position 36'));
@@ -314,6 +353,7 @@ try {
   // Every export equals the same file made in Node from the exported archive.
   const archive = await readArchive(readFileSync(join(out, 'grb2.msz')));
   check('the exported archive opens', `${archived.message} ${archive.problems.length} problems`, archive.problems.length === 0 && archive.ws.runs.length === 3 && archive.ws.selections.length === 1);
+  check('the archive keeps the figure as the workspace has it', `${archive.ws.figures?.map((f) => `${f.name}, ${f.panels.length} panels`).join('; ') ?? 'none'}`, archive.ws.figures?.length === 1 && archive.ws.figures[0].name === 'Figure 2' && archive.ws.figures[0].panels.length === 2);
   const { table, scored } = recompute(archive.ws, archive.sources);
   const expected = allExports(archive.ws, table, scored.results);
   for (const name of ['scores.csv', 'counts.csv', 'qc_samples.csv', 'qc_variants.csv', 'qc_findings.csv', 'methods.md', 'references.bib', 'map.svg', 'selection.csv', 'selection.json']) {

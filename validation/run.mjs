@@ -64,7 +64,7 @@ import { annotationTracks, providerById as annotationProvider } from '../web/lib
 import { readProfile } from '../web/lib/providers/pdbe.js';
 import { readClinVarTable } from '../web/lib/providers/clinvar.js';
 import { gnomadRows } from '../web/lib/providers/gnomad.js';
-import { clinvarClass, REVIEW_STARS, tracksCSV } from '../web/lib/tracks.js';
+import { builtinTracks, clinvarClass, REVIEW_STARS, tracksCSV } from '../web/lib/tracks.js';
 import { addAnnotation } from '../web/lib/workspace.js';
 import { createHash } from 'node:crypto';
 import { proteinView } from '../web/lib/collapse.js';
@@ -110,6 +110,8 @@ import { addSelection } from '../web/lib/workspace.js';
 import { circle, circleCells, mapCells } from './selections-cases.mjs';
 import { normalCdf, normalUpper } from '../web/lib/dmath.js';
 import { MAVEDB_KEYWORDS } from '../web/lib/readout.js';
+import { asPDFText, readPDF, readSVG, sameRects } from './figure-cases.mjs';
+import { addPanel, checkFigure, createFigure, figureMarks, figurePDF, figureSVG } from '../web/lib/figures.js';
 import { EXAMPLE_STRUCTURES, atomLines, cachedBytes, cachedJSON, exampleTarget, middle, modelFile, nodeEvidence, openCached, openFixture, paeFixture, pdbFile, positionScores, replayStructureViews, siftsOf, siftsRetrieved } from './structure-cases.mjs';
 import { bhAdjust, clusterTest, CONTACT_DISTANCE, effectsByClass, mannWhitney, MAX_ASA, structureTracks } from '../web/lib/structure-evidence.js';
 import { mappingChanges, mappingSummary } from '../web/lib/structure-record.js';
@@ -4366,6 +4368,82 @@ const suites = {
       }
       check('structures', 'the Proteoscope session of each example\'s run on its PDB entry and its AlphaFold DB model, colored by the median: every value on a residue as Proteoscope\'s reader keys it, the median of the position\'s scored missense substitutions in the run\'s results (read without the map\'s model), every position scored on a residue given one; the range centered on the wild type; the link\'s session read back with zlib as sent', sessions.map((x) => `${x.id} on ${x.structure}: ${x.values} of ${x.scoredOnResidues} values, a link of ${x.length} characters${x.problems.length ? `; ${x.problems.slice(0, 3).join('; ')}` : ''}`).join('; '), sessions.length === 16 && sessions.every((x) => x.ok), 'all');
     }
+  },
+
+  // Wave 6, slice 1 (R5): figures. Each example scored in Node, its map as a figure's panel with its
+  // built-in tracks: every cell the color map-svg.js gives it; the PDF drawing the SVG's rectangles
+  // and text, read back from its content streams; the same bytes when written again; the text at
+  // the figure's size; a range of positions, a difference between conditions, a page too narrow for
+  // a long target; figures through the workspace archive.
+  async figures() {
+    const date = new Date('2026-10-12T00:00:00Z');
+    const ids = ['grb2-sh3', 'hsp90', 'factor9', 'simulated', 'simulated-time-series', 'simulated-sort-seq', 'simulated-barcodes', 'simulated-conditions', 'simulated-problems'];
+    const rows = [];
+    const built = new Map();
+    for (const id of ids) {
+      const g = exampleRun(id);
+      const design = g.run.inputs.design;
+      const model = buildMapModel(g.results, design);
+      const tracks = builtinTracks(model);
+      let fig = createFigure(`Figure of ${id}`, 'double');
+      ({ figure: fig } = addPanel(fig, { kind: 'map', run: g.run.id, tracks: tracks.map((t) => t.id) }));
+      const resolved = new Map([[fig.panels[0].id, { model, results: g.results, tracks }]]);
+      const svg = await figureSVG(fig, resolved);
+      const pdf = await figurePDF(fig, resolved, { date });
+      const ours = readSVG(svg);
+      const theirs = readSVG(mapSVG(model, { results: g.results }));
+      let differ = 0;
+      for (const [title, fill] of theirs.cells) if (ours.cells.get(title) !== fill) differ += 1;
+      const read = readPDF(pdf);
+      const rects = sameRects(ours.rects, read.rects);
+      const svgText = asPDFText(ours.texts).map((b) => String.fromCharCode(...b));
+      const pdfText = read.texts.map((b) => String.fromCharCode(...b));
+      const textSame = svgText.length === pdfText.length && svgText.every((t, i) => t === pdfText[i]);
+      const again = (await figureSVG(fig, resolved)) === svg && Buffer.compare(Buffer.from(await figurePDF(fig, resolved, { date })), Buffer.from(pdf)) === 0;
+      const drawn = figureMarks(fig, resolved);
+      const whole = tracks.every((t) => ours.texts.includes(t.label));
+      rows.push({ id, cells: theirs.cells.size, differ, rects, textSame, texts: pdfText.length, again, smallest: drawn.smallest, notes: drawn.notes, whole, mm: [read.width, read.height] });
+      built.set(id, { g, model, fig, resolved, svg });
+    }
+    check('figures', 'each example\'s map as a figure panel (two columns, 174 × 120 mm), with its built-in tracks: every cell the color map-svg.js gives it (the same title, the same fill or hatch)', rows.map((r) => `${r.id} ${r.cells - r.differ}/${r.cells}`).join(', '), rows.every((r) => r.differ === 0 && r.cells > 0), 'every cell');
+    check('figures', 'the PDF draws what the SVG draws: its content streams read back give the same filled rectangles in the same order (color exact, place within 0.006 pt) and the same text, as WinAnsi', rows.map((r) => `${r.id}: ${r.rects.why}, ${r.texts} strings ${r.textSame ? 'alike' : 'differ'}`).join('; '), rows.every((r) => r.rects.ok && r.textSame), 'the same');
+    check('figures', 'written again, the same bytes (SVG, and PDF with its date fixed); the page 493.23 × 340.16 pt (174 × 120 mm)', rows.map((r) => `${r.id} ${r.again ? 'same' : 'differs'}`).join(', '), rows.every((r) => r.again && r.mm[0] === 493.23 && r.mm[1] === 340.16), 'the same');
+    check('figures', 'the text at the figure\'s size (7 pt), nothing under 6 pt and nothing said wrong at this size; every track\'s name whole', rows.map((r) => `${r.id} ${r.smallest.toFixed(1)} pt${r.notes.length ? ` (${r.notes.join(' ')})` : ''}${r.whole ? '' : ', a name shortened'}`).join(', '), rows.every((r) => r.smallest >= 6 && !r.notes.length && r.whole), '≥ 6 pt, no notes');
+    // A range of positions: exactly its cells.
+    const f9 = built.get('factor9');
+    let ranged = createFigure('Factor IX, 200–260', 'single');
+    ({ figure: ranged } = addPanel(ranged, { kind: 'map', run: f9.g.run.id, from: 200, to: 260 }));
+    const rangedSVG = readSVG(await figureSVG(ranged, new Map([[ranged.panels[0].id, { model: f9.model, results: f9.g.results, tracks: [] }]])));
+    const inRange = [...rangedSVG.cells.keys()].map((t) => Number(t.match(/^[A-Z*](\d+)/)[1]));
+    let designed = 0;
+    for (let p = 200; p <= 260; p += 1) for (let r = 0; r < f9.model.rows.length; r += 1) if (f9.model.state[(p - 1) * f9.model.rows.length + r] !== STATE.NOT_DESIGNED) designed += 1;
+    let whole = createFigure('Factor IX', 'single');
+    ({ figure: whole } = addPanel(whole, { kind: 'map', run: f9.g.run.id }));
+    const narrow = figureMarks(whole, new Map([[whole.panels[0].id, { model: f9.model, results: f9.g.results, tracks: [] }]]));
+    check('figures', 'a range of positions (factor IX 200–260, one column): exactly its designed cells; the whole of its 461 positions in one column (85 mm) said to be too narrow', `${rangedSVG.cells.size} cells of ${designed}, positions ${Math.min(...inRange)}–${Math.max(...inRange)}; whole: ${narrow.notes.join(' ') || 'nothing said'}`, rangedSVG.cells.size === designed && Math.min(...inRange) === 200 && Math.max(...inRange) === 260 && /pt wide: show fewer positions/.test(narrow.notes.join(' ')), 'exact; said');
+    // A difference between conditions.
+    const sc = built.get('simulated-conditions');
+    const diffModel = buildMapModel(sc.g.results, sc.g.run.inputs.design, { contrast: 0, colorBy: 'differential' });
+    let diffFig = createFigure('Difference', 'double');
+    ({ figure: diffFig } = addPanel(diffFig, { kind: 'map', run: sc.g.run.id, contrast: 0 }));
+    const diffSVG = await figureSVG(diffFig, new Map([[diffFig.panels[0].id, { model: diffModel, results: sc.g.results, tracks: [] }]]));
+    const dOurs = readSVG(diffSVG);
+    const dTheirs = readSVG(mapSVG(diffModel, { results: sc.g.results }));
+    const dDiffer = [...dTheirs.cells].filter(([t, f]) => dOurs.cells.get(t) !== f).length;
+    check('figures', 'a difference between conditions (the simulated two conditions\' With ligand vs Without ligand): every cell map-svg.js\'s, the legend saying what it measures', `${dTheirs.cells.size - dDiffer}/${dTheirs.cells.size} cells; ${dOurs.texts.find((t) => t.startsWith('differential score')) ?? 'no legend label'}`, dDiffer === 0 && dOurs.texts.some((t) => t.startsWith('differential score')), 'every cell');
+    // Figures through the archive.
+    const grb2 = built.get('grb2-sh3');
+    let text;
+    let fig = grb2.fig;
+    ({ figure: fig, panel: text } = addPanel(fig, { kind: 'text', text: 'Abundance of every substitution in the SH3 domain of GRB2.', w: 200, h: 30 }));
+    const ws = { ...grb2.g.ws, runs: [grb2.g.run], figures: [fig] };
+    const table = grb2.g.o.parts[0].bytes;
+    const written = await writeArchive(ws, { software: SOFTWARE, sources: new Map([[ws.sources[0].sha256, table]]), results: new Map([[grb2.g.run.id, grb2.g.results]]) });
+    const reopened = await readArchive(written.bytes);
+    const back = reopened.ws.figures?.[0];
+    const backSVG = back ? await figureSVG(checkFigure(back), new Map([[back.panels[0].id, grb2.resolved.get(grb2.fig.panels[0].id)]])) : null;
+    const original = await figureSVG(fig, grb2.resolved);
+    check('figures', 'a figure through the workspace archive: the same document, checked as a figure from outside is, and the same SVG drawn from it', `${back ? `${back.panels.length} panels (${back.panels.map((p) => p.kind).join(', ')})` : 'no figure'}; ${backSVG === original ? 'the same SVG' : 'a different SVG'}`, back && JSON.stringify(back) === JSON.stringify(fig) && backSVG === original && text.kind === 'text', 'the same');
   },
 };
 

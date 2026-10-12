@@ -19,7 +19,8 @@ classes are CytoWeave's. Study these files before writing a view:
 to `container` and returns `{ update(topics), destroy() }`. To build a view, replace its
 `plannedMode(...)` entry in `MODES` (app.js) with
 `load: () => import('./ui/mode-<name>.js').then((m) => m.mount<Name>Mode)`. Views not yet in
-`MODES` (Compare, Structure, Calibrate, Figures, Report) are added in the waves that build them.
+`MODES` (Calibrate, Report) are added in the waves that build them (Compare in wave 4, Structure in
+wave 5, Figures in wave 6).
 
 `update` receives a `Set` of change topics after any state change; re-render only what they
 affect:

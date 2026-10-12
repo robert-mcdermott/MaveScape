@@ -341,3 +341,23 @@ export function removeStructureView(ws, id) {
   const structures = (ws.structures ?? []).filter((s) => shown.has(s.id));
   return change(ws, { structureViews: rest.length ? rest : undefined, structures: structures.length ? structures : undefined }, 'structure-view', `Removed the view "${gone.name}"`);
 }
+
+// --- Figures (wave 6, slice 1) -----------------------------------------------------------------------
+
+// Saves a figure (ws.figures; lib/figures.js), replacing the one with its id. detail: the change in
+// words, for the history (a figure made or deleted, a panel added or removed: what the record
+// reports); null for a change of layout only (a panel moved, resized, its text edited), which is
+// saved and undoable but not in the history.
+export function saveFigure(ws, figure, detail = null, time = clockNow()) {
+  const list = ws.figures ?? [];
+  const next = list.some((f) => f.id === figure.id) ? list.map((f) => (f.id === figure.id ? figure : f)) : [...list, figure];
+  return change(ws, { figures: next }, detail ? 'figure' : null, detail, time);
+}
+
+export function removeFigure(ws, id) {
+  const list = ws.figures ?? [];
+  const gone = list.find((f) => f.id === id);
+  if (!gone) return ws;
+  const rest = list.filter((f) => f.id !== id);
+  return change(ws, { figures: rest.length ? rest : undefined }, 'figure', `Deleted the figure "${gone.name}"`);
+}

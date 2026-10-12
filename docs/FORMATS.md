@@ -1,6 +1,6 @@
 # File formats
 
-Every file MaveScape 0.1 to 0.5 read and write. Researchers whose counts come from their own pipeline
+Every file MaveScape 0.1 to 0.6 read and write. Researchers whose counts come from their own pipeline
 need only a count table, the target's sequence, and the design: which column is which sample.
 Blank, annotated layouts of each are on the Start page and in
 [`web/examples/layouts/`](../web/examples/layouts/). The Start page also opens two worked examples.
@@ -20,6 +20,7 @@ Blank, annotated layouts of each are on the Start page and in
 | Public data (0.3) | UniProt entries, features and sequence lookups, MaveDB, NCBI's RefSeq and GenBank records and ClinVar's records, Ensembl's transcripts, PDBe-KB's conservation profiles, AlphaMissense's predictions, gnomAD's variants, through the program's fetcher ([NETWORK.md](NETWORK.md)) | the cache of public data, each answer with its retrieval record |
 | Tracks (0.3) | alignments (A3M, aligned FASTA, Stockholm, Clustal), predictors' tables (AlphaMissense, EVE, ESM1b-style matrices, any table of protein variants and scores), GFF3 (UniProt's among others), tables of values by position or of stretches (CSV, TSV) | the tracks shown, position by position (CSV); the map with its tracks (SVG, PNG); each annotation's file kept in the workspace's library and archive |
 | Structures (0.5) | PDB, mmCIF and BinaryCIF files, gzipped or not; PDB entries, AlphaFold DB models and the structures that cover a protein (PDBe's SIFTS) through the program's fetcher | an image of the Structure view (PNG); the target on a structure, position by position (CSV); the scores a structure is colored by, with each residue's color (CSV); what a structure says of each position (CSV); a figure panel (PNG); the view as a Proteoscope session (JSON, or a link to a running Proteoscope) |
+| Figures (0.6) | (kept in the workspace and its archive: `figures`) | a figure as SVG (vector, text as text), PDF (vector, one page at its printed size) or PNG (at a resolution of its printed size) |
 
 Coming later: Excel workbooks.
 
@@ -1043,6 +1044,64 @@ target_position,reference_position,target_residue,structure,chain,residue_number
 - `structural_class`: `disordered`, `interface`, `buried` (relative accessibility in its chain below
   0.25) or `exposed`;
 - `median_score`: the position's median score (the map's run and condition), when there is one.
+
+## Figures
+
+A figure (the Figures view; remote actions `create_figure`, `add_figure_panel`, `set_figure`;
+MaveScape 0.6) is a page of panels kept in the workspace document's `figures`, and with it in the
+archive. A panel says what it shows, never a copy of the numbers: the page is drawn again from the
+workspace whenever it is shown or exported, so a figure follows a rescoring until it is exported.
+Lengths are in points (1/72 inch).
+
+```json
+{
+  "id": "figure-…", "name": "Figure 1", "size": "double", "width": 493.23, "height": 340.16,
+  "text": 7, "letters": true,
+  "panels": [
+    { "id": "panel-1", "kind": "map", "x": 8, "y": 8, "w": 477.23, "h": 204.09,
+      "run": "run-b981d1a1b2d769de", "condition": 0, "colorBy": "score", "rowOrder": "biochemical",
+      "palette": "rdbu", "from": 20, "to": 40, "tracks": ["reference", "effect"] },
+    { "id": "panel-2", "kind": "text", "x": 269.29, "y": 226.77, "w": 212.6, "h": 56.69,
+      "text": "Abundance of every substitution…", "size": 7, "bold": false, "align": "left" }
+  ]
+}
+```
+
+- `size`: `single` (85 mm wide), `onehalf` (114 mm), `double` (174 mm), `slide` (960 × 540 pt,
+  16:9) or `custom`; `width` and `height` are the page's. `text`: the text size at the printed
+  size, in points (7; 14 on a slide). `letters`: the panels lettered A, B, C… in reading order
+  (rows from the top, each from the left); a panel with `letter: false` has none.
+- A `map` panel: `run` (its id), and either `condition` (an index of the run's conditions) with
+  `colorBy` (`score`, `se`, `replicates` or `input`), or `contrast` (an index of its differences
+  between conditions); `rowOrder` (`biochemical`, `hydrophobicity` or `alphabetical`), `palette`
+  (`rdbu` or `puor`), `from` and `to` (the positions shown, on the target's numbering; the whole
+  target when absent), `tracks` (the ids of the tracks drawn below it, in order, as `list_tracks`
+  gives them), `title` (absent: the map's own; `""`: none), `medians: false` and `legend: false`
+  leave out the medians and the legend.
+- A `text` panel: `text` (wrapped to the panel's width; `\n` starts a line), `size`, `bold`,
+  `align` (`left`, `center`, `right`).
+
+A figure read from an archive or sent by a script is checked before it is drawn (every field what a
+figure holds, every panel on the page). Making or deleting a figure, and adding or removing a
+panel, are in the workspace's history; moving and resizing panels are not, but can be undone.
+
+### A figure written (`*.svg`, `*.pdf`, `*.png`)
+
+The Figures view's **Export**, or the remote action `export_figure`:
+
+- **SVG**: the page in points (`width="493.23pt"`), its text as text in Helvetica (Arial where the
+  system has no Helvetica), its name as `<title>` and the figure in words as `<desc>`; each cell of a
+  map named by its variant as a `<title>`, as the map's own SVG names them.
+- **PDF**: one page at the figure's printed size, drawn as vectors, its text in the standard fonts
+  Helvetica and Helvetica-Bold (WinAnsi; a character outside it, such as − or Δ, written as its
+  nearest ASCII: - or delta); the figure's name as its title and the figure in words as its
+  subject.
+- **PNG**: at 300 dpi of the printed size by default (72 to 1200), its resolution recorded in the
+  file (`pHYs`), so that it opens at its printed size.
+
+The same figure is the same bytes when written again (the PDF's creation date is the time, which
+`mavescape run`'s `--time` fixes). The clipboard takes the PNG at 300 dpi, and the SVG where the
+browser accepts it.
 
 ## Comparisons
 
