@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Selections · MaveScape</title>
-  <meta name="description" content="Variants selected on the map by click, rectangle, freeform shape or query (&quot;missense at 40-80 with se &lt; 0.2&quot;, &quot;variants whose class depends on the pseudocount&quot;, &quot;from C in feature disulfide&quot;), saved by name with their query, combined (union, intersection, difference), carried to the Score, Robustness and Compare views and back, exported, and scripted; how the query language was validated." />
+  <meta name="description" content="Variants selected on the map by click, rectangle, freeform shape or query (&quot;missense at 40-80 with se &lt; 0.2&quot;, &quot;variants whose class depends on the pseudocount&quot;, &quot;from C in feature disulfide&quot;), saved by name with their query, combined (union, intersection, difference), carried to the Score, Robustness, Compare and Structure views and back, exported, and scripted; how the query language was validated." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/selections.html" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Selections" />
-  <meta property="og:description" content="Variants selected on the map by click, rectangle, freeform shape or query (&quot;missense at 40-80 with se &lt; 0.2&quot;, &quot;variants whose class depends on the pseudocount&quot;, &quot;from C in feature disulfide&quot;), saved by name with their query, combined (union, intersection, difference), carried to the Score, Robustness and Compare views and back, exported, and scripted; how the query language was validated." />
+  <meta property="og:description" content="Variants selected on the map by click, rectangle, freeform shape or query (&quot;missense at 40-80 with se &lt; 0.2&quot;, &quot;variants whose class depends on the pseudocount&quot;, &quot;from C in feature disulfide&quot;), saved by name with their query, combined (union, intersection, difference), carried to the Score, Robustness, Compare and Structure views and back, exported, and scripted; how the query language was validated." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/selections.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -66,6 +66,7 @@
           <li><a href="selections.html" aria-current="page">Selections</a></li>
           <li><a href="compare.html">Comparisons</a></li>
           <li><a href="robustness.html">Robustness</a></li>
+          <li><a href="structure.html">Structures</a></li>
         </ul>
         <h4>Results</h4>
         <ul>
@@ -134,7 +135,8 @@
         <li><strong>Score:</strong> the variants table lists the run's variants selected on the map (<em>Selected on the map</em>), a nucleotide run's by the protein variants they make. Any list it shows (low confidence, filtered, a search) goes to the map with <strong>Select on the map</strong>.</li>
         <li><strong>Robustness:</strong> each verdict's variants go to the map with <strong>Select on the map</strong>, selected by the verdict's word (<code>fragile</code>); a difference's, on that contrast's map.</li>
         <li><strong>Compare:</strong> the maps outline the selection on the side of its run; the variants that differ beyond their uncertainty go to the map with <strong>Select them on the map</strong>.</li>
-        <li><strong>The inspector</strong> shows the selection's first variant, and a saved selection when it is selected in the dataset tree.</li>
+        <li><strong>Structure:</strong> the selection's positions are drawn on their residues, on every chain that holds the target. A residue clicked there selects its position's variants here (<code>at 25</code>), and residues selected in words there select theirs (<a href="structure.html#scores">Scores on the structure</a>).</li>
+        <li><strong>The inspector</strong> shows the selection's first variant, and a saved selection when it is selected in the dataset tree; a residue clicked on the structure, its position.</li>
       </ul>
 
       <h2 id="files">The files and scripts</h2>

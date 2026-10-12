@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Structures · MaveScape</title>
+  <meta name="description" content="The Structure view: a PDB entry, an AlphaFold DB model or a file of your own (PDB, mmCIF, BinaryCIF), drawn with WebGPU or the Canvas renderer; the structures that cover the target, from SIFTS; the target mapped onto the structure, position by position, the entry's own record compared; residues colored by their positions' scores in the map's colors, the selection shared with the map; what the structure says of each position (secondary structure, accessibility, exposure, partners) as tracks beside the map, the scores by structural class and a test of clusters; views saved with the workspace, its archive and methods, and figure panels; the view opened in Proteoscope when it runs on this computer; biological assemblies, styles, colors and surfaces; residues selected in words or by position, drawn as sticks, labeled and focused on; an image of the view; remote control; and how the view was validated." />
+  <link rel="canonical" href="https://robert-mcdermott.github.io/mavescape/docs/structure.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Structures" />
+  <meta property="og:description" content="The Structure view: a PDB entry, an AlphaFold DB model or a file of your own (PDB, mmCIF, BinaryCIF), drawn with WebGPU or the Canvas renderer; the structures that cover the target, from SIFTS; the target mapped onto the structure, position by position, the entry's own record compared; residues colored by their positions' scores in the map's colors, the selection shared with the map; what the structure says of each position (secondary structure, accessibility, exposure, partners) as tracks beside the map, the scores by structural class and a test of clusters; views saved with the workspace, its archive and methods, and figure panels; the view opened in Proteoscope when it runs on this computer; biological assemblies, styles, colors and surfaces; residues selected in words or by position, drawn as sticks, labeled and focused on; an image of the view; remote control; and how the view was validated." />
+  <meta property="og:url" content="https://robert-mcdermott.github.io/mavescape/docs/structure.html" />
+  <meta property="og:image" content="https://robert-mcdermott.github.io/mavescape/assets/img/og-image.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="icon" href="../assets/img/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../assets/css/site.css" />
+  <script>try { const t = localStorage.getItem('mavescape-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script src="../assets/js/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Main">
+        <a href="../#features">Features</a>
+        <a href="../docs/" aria-current="page">Documentation</a>
+        <a href="../install.html">Install</a>
+        <a href="../science.html">Science</a>
+      </nav>
+      <div class="header-actions">
+        <a class="icon-button" href="https://github.com/robert-mcdermott/mavescape" aria-label="MaveScape on GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        </a>
+        <button class="icon-button theme-toggle" type="button" aria-label="Switch between light and dark">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-button nav-toggle" type="button" aria-label="Menu" aria-controls="site-nav" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar" aria-label="Documentation">
+      <button class="btn docs-menu-toggle" type="button" aria-expanded="false">Documentation menu <span aria-hidden="true">▾</span></button>
+      <nav>
+        <h4>Start</h4>
+        <ul>
+          <li><a href="./">Overview</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="examples.html">Examples</a></li>
+          <li><a href="opening-data.html">Opening your data</a></li>
+          <li><a href="public-data.html">Public data</a></li>
+        </ul>
+        <h4>Analysis</h4>
+        <ul>
+          <li><a href="experiment.html">The design</a></li>
+          <li><a href="scoring.html">Scoring</a></li>
+          <li><a href="qc.html">Quality control</a></li>
+          <li><a href="map.html">The map and the inspector</a></li>
+          <li><a href="selections.html">Selections</a></li>
+          <li><a href="compare.html">Comparisons</a></li>
+          <li><a href="robustness.html">Robustness</a></li>
+          <li><a href="structure.html" aria-current="page">Structures</a></li>
+        </ul>
+        <h4>Results</h4>
+        <ul>
+          <li><a href="record.html">Exports and the record</a></li>
+        </ul>
+        <h4>Automate</h4>
+        <ul>
+          <li><a href="scripting.html">Remote control, headless runs and scripting</a></li>
+        </ul>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="troubleshooting.html">Troubleshooting</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main" class="doc">
+      <h1>Structures</h1>
+      <p class="doc-lede">A variant-effect map is read against the protein's structure. MaveScape draws structures itself, with the viewer it shares with Proteoscope, and needs no other program.</p>
+
+      <h2 id="open">Opening a structure</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/structure-dark.webp" width="2000" height="1250" loading="lazy" alt="The Structure view: factor IX's protease domain and second EGF domain (PDB 1RFN) as a cartoon colored by chain, its 14 cysteines drawn as sticks and selected, the two that join the chains labeled Cys 122 · A and Cys 132 · B; beside it the entry in words and the Residues pane with resn CYS in its field" /><img class="shot-light" src="../assets/img/structure-light.webp" width="2000" height="1250" loading="lazy" alt="The Structure view: factor IX's protease domain and second EGF domain (PDB 1RFN) as a cartoon colored by chain, its 14 cysteines drawn as sticks and selected, the two that join the chains labeled Cys 122 · A and Cys 132 · B; beside it the entry in words and the Residues pane with resn CYS in its field" /></div>
+        <figcaption>Factor IX (PDB 1RFN): its cysteines selected by <code>resn CYS</code> and drawn as sticks, the pair that joins its two chains labeled.</figcaption>
+      </figure>
+      <p>In <strong>Structure</strong>, open one of:</p>
+      <ul>
+        <li><strong>A PDB entry</strong>, by its ID (<code>2VWF</code>, or the extended form <code>pdb_00002vwf</code>): its coordinates, chains and biological assemblies, from RCSB PDB.</li>
+        <li><strong>An AlphaFold DB model</strong>, by a UniProt accession: the field holds the target's when it has one (Experiment, Target). MaveScape asks AlphaFold DB which model is the latest, then for that model.</li>
+        <li><strong>A file of your own</strong>: PDB, mmCIF or BinaryCIF, gzipped or not (<code>.pdb</code>, <code>.ent</code>, <code>.cif</code>, <code>.mmcif</code>, <code>.bcif</code>, each also with <code>.gz</code>). <strong>Open a file…</strong>, or drop it on the window: a structure dropped opens in this view, whatever view is shown.</li>
+      </ul>
+      <p>A PDB ID or an accession is all that is sent, through the MaveScape program (<a href="public-data.html">Public data</a>); each structure is kept in the cache, compressed as the service sent it, and opens offline after that. One structure is shown at a time. It stays for the session, through the other views; save a view of it (below, <a href="#views">Saved views</a>) to keep it with the workspace.</p>
+      <p><strong>In words</strong>, beside the view, says what was opened and where from: the entry's title, how it was determined (method and resolution, or that it is a predicted model), its chains with the residues observed in each and the UniProt residues the entry says each covers, and what else it holds (DNA, ligands, ions).</p>
+      <p>The residues keep the entry's own numbering. An entry may number them otherwise than UniProt does: 1RFN numbers factor IX's protease domain as chymotrypsin is numbered (16–245), where factor IX's own positions are 227–461. The mapping, below, places the target's positions on them all the same.</p>
+      <p><strong>Structures of the target</strong>, beside the view, lists what covers the workspace's target when it has its UniProt accession (Experiment, Target): its AlphaFold DB model first, then the PDB entries PDBe's SIFTS places it on, those covering the most of the target first, then the best resolution. Each row gives the method, the chains and the target positions the entry's sequence covers, observed or not; <strong>Open</strong> opens it, with the target mapped on the chain listed. The list comes from PDBe through the MaveScape program (the accession is all that is sent), and is cached.</p>
+
+      <h2 id="mapping">The target on the structure</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/structure-mapping-dark.webp" width="2000" height="1250" loading="lazy" alt="The Structure view of factor IX's 1RFN with the pane The target on the structure: chain B chosen, positions 132–188 on residues, 56 identical, V132M; outside 1–131 and 189–461; the entry's own record of the UniProt residues differs at 56 positions, numbering them 5 earlier than the alignment does" /><img class="shot-light" src="../assets/img/structure-mapping-light.webp" width="2000" height="1250" loading="lazy" alt="The Structure view of factor IX's 1RFN with the pane The target on the structure: chain B chosen, positions 132–188 on residues, 56 identical, V132M; outside 1–131 and 189–461; the entry's own record of the UniProt residues differs at 56 positions, numbering them 5 earlier than the alignment does" /></div>
+        <figcaption>Factor IX mapped onto 1RFN's light chain: positions 132–188, where SIFTS places them too; the entry's own record numbers them five earlier.</figcaption>
+      </figure>
+      <p>When a structure opens, MaveScape aligns the workspace's target to each chain: its protein (a DNA target's translation) against the chain's sequence as the entry gives it (SEQRES), with the residues observed marked, by Proteoscope's overlap alignment (BLOSUM62, affine gaps, no cost for the ends), so a structure of part of the target, or a construct numbered its own way, maps all the same. A chain holds the target when at least five of its residues, and half of those aligned, are identical. The chain that holds the most of the target is chosen; <strong>Chain</strong> chooses another. Each target position is then:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>State</th><th>What it means</th></tr></thead>
+          <tbody>
+            <tr><td>On the structure, identical</td><td>On a residue with coordinates, the target's amino acid</td></tr>
+            <tr><td>On the structure, another residue</td><td>On a residue with coordinates, another amino acid; the entry's reason when it records one (engineered mutation, conflict, expression tag…)</td></tr>
+            <tr><td>Not observed</td><td>In the entry's sequence, without coordinates (a disordered loop, a terminus)</td></tr>
+            <tr><td>Missing from the structure's sequence</td><td>Inside the stretch the chain holds, but not in its sequence: a loop removed from the construct</td></tr>
+            <tr><td>Outside</td><td>Before or after the stretch the chain holds</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A position is <strong>ambiguous</strong> when an alignment that scores the same places it otherwise: a gap that could slide along residues scoring the same on either side. Where PTEN's loop was removed from 1D5R, the construct's valine scores as well against T286 as against A309: both are ambiguous, and SIFTS takes the one, the entry's own record the other.</p>
+      <p>The pane says it in words: the positions on the structure (with the reference's numbering when the target has an offset), the differences, the stretches not observed, missing and outside, the ambiguous positions, and whether the entry's own record of the UniProt residues each chain covers (its <code>DBREF</code> or <code>struct_ref_seq</code>) agrees, residue by residue, with the alignment. On 1RFN's light chain it does not: the record numbers it five earlier than the alignment and SIFTS do. <strong>Select the target</strong>, <strong>the differences</strong> or <strong>the ambiguous</strong> selects their residues; <strong>Mapping</strong> writes the mapping as a table, one row per target position (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md#structure-mappings">FORMATS.md</a>). Pointed at, a residue says its target position.</p>
+      <p>Positions are selected under <strong>Residues</strong> too: <code>pos 30-40</code> (the target's positions) and <code>uniprot 188-198</code> (the reference's: UniProt's, when the target is placed in its entry), on the chain mapped. A selection is kept, position by position, when another structure is opened: the SH3 domain's positions 30–40, selected on 2VWF, are selected again on GRB2's AlphaFold DB model, at its residues 188–198.</p>
+
+      <h2 id="scores">Scores on the structure</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/structure-scores-dark.webp" width="2000" height="1250" loading="lazy" alt="GRB2's SH3 domain on 2VWF colored by the median score of each position's missense substitutions, the core dark blue, the residues that touch the Gab2 peptide pale and drawn as sticks; the legend below the view runs from −5.10 through 0.00 (the wild type) to 5.10, blue less function, filtered and missing gray; the strip of the 56 positions below it, ten selected; beside it, the pane Scores on the structure, and 210 variants selected on the map" /><img class="shot-light" src="../assets/img/structure-scores-light.webp" width="2000" height="1250" loading="lazy" alt="GRB2's SH3 domain on 2VWF colored by the median score of each position's missense substitutions, the core dark blue, the residues that touch the Gab2 peptide pale and drawn as sticks; the legend below the view runs from −5.10 through 0.00 (the wild type) to 5.10, blue less function, filtered and missing gray; the strip of the 56 positions below it, ten selected; beside it, the pane Scores on the structure, and 210 variants selected on the map" /></div>
+        <figcaption>GRB2's SH3 domain on 2VWF, colored by each position's median score: the core is dark blue, the ten residues that touch the Gab2 peptide (sticks) are pale. The assay measured abundance, not binding.</figcaption>
+      </figure>
+      <p>With a score run, each residue of the target can take its position's scores. Under <strong>Scores on the structure</strong> (or <strong>Color by</strong>, above the view), color by:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Coloring</th><th>A residue's value</th></tr></thead>
+          <tbody>
+            <tr><td>Median, mean, lowest or highest score</td><td>Of its position's missense substitutions scored, with low confidence or not (at the first methionine, its start-lost substitutions). A stop truncates the protein wherever it is, so it is left out; choose it as one substitution</td></tr>
+            <tr><td>Fraction abnormal-like</td><td>The share of those substitutions that are abnormal-like: below (or above) a threshold you set, for research; or, for a MaveDB record's scores as published, by one of its calibrations' abnormal classes, as published</td></tr>
+            <tr><td>Substitutions scored</td><td>How many of its missense substitutions are scored</td></tr>
+            <tr><td>One substitution</td><td>The score of its substitution to an amino acid you choose, or to a stop; the wild type's own residue is drawn in the wild type's color</td></tr>
+            <tr><td>Uncertainty</td><td>The median standard error of its substitutions' scores</td></tr>
+            <tr><td>Disagreement</td><td>The median difference of its substitutions between the two sides <a href="compare.html">Compare</a> shows (on one scale), as the map of their difference colors it</td></tr>
+            <tr><td>QC state</td><td>How much of it was measured: every substitution scored, some with low confidence, some filtered or missing, fewer than half scored</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The colors are the map's: its palette (blue–red or purple–orange, chosen here or on the map) and its scale, centered on the wild type, so a residue is the color of a cell with its score. The other values run through viridis. As on the map, what was not measured is never drawn as no effect: a position whose substitutions were all filtered is dark gray, one with none measured mid gray, neither a color of the scale, and a value from scores of low confidence only is drawn paler. Residues that are not the target's (other chains, ligands' neighbors, a tag) and positions not designed are light gray. The legend below the view names each, with how many of the target's positions on the structure are in it; every chain that holds the target is colored.</p>
+      <p>The scores are those the map shows: its run, and its condition or contrast. Choose another under Scores on the structure, or on the map, and both follow. The disagreement is Compare's pair, with its filters and scale.</p>
+      <p>Below the view, a <strong>strip</strong> lays the target's positions out in order: their colors, which are on the structure (a darker band) or in its sequence but not observed, and, on an AlphaFold DB model, each residue's confidence (pLDDT) in its four bands, beside its scores. Point at the strip for a position in words; click one, or drag over a stretch, to select its residues.</p>
+      <p>One selection serves the map and the structure. Click a residue (or a position of the strip) and its position's variants are selected on the map, as <code>at 25</code> selects them, and the inspector shows the position: its substitutions' scores, how many were scored, filtered or missing, and its residue on each chain. A selection made on the map, by a click, a shape or a query, is drawn on the structure when you come back to it; residues selected in words here are selected on the map too. With the residues colored by scores, a selection is shown by its side chains, in their own colors, rather than by a tint that would change what the colors say.</p>
+      <p>In the GRB2 example, colored by the median score on 2VWF, the least tolerant residues (A163, G196, G203, I183) pack the domain's core, while the ten residues within 4 Å of the Gab2 peptide (<code>byres (chain A and protein and within 4 of (chain B and protein))</code>; <code>protein</code> keeps the waters each chain is given out of it) score nearer the wild type than the rest: an abundance assay does not see binding. <strong>Colors</strong> writes each position's value, state and color, with its residue (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md#scores-on-a-structure">FORMATS.md</a>).</p>
+
+      <h2 id="evidence">Structure as evidence</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/structure-evidence-dark.webp" width="2000" height="1250" loading="lazy" alt="PTEN's phosphatase and C2 domains (PDB 1D5R) colored by structural class, buried positions blue and exposed ones green; beside it the pane Structure as evidence: 172 buried and 135 exposed positions, a table of the median score of each class, buried positions lower than the rest 80% of the time, and the cluster test: the 55 least tolerant positions make 117 pairs within 8 Å against 88.0 expected among positions as buried" /><img class="shot-light" src="../assets/img/structure-evidence-light.webp" width="2000" height="1250" loading="lazy" alt="PTEN's phosphatase and C2 domains (PDB 1D5R) colored by structural class, buried positions blue and exposed ones green; beside it the pane Structure as evidence: 172 buried and 135 exposed positions, a table of the median score of each class, buried positions lower than the rest 80% of the time, and the cluster test: the 55 least tolerant positions make 117 pairs within 8 Å against 88.0 expected among positions as buried" /></div>
+        <figcaption>PTEN (PDB 1D5R) by structural class. Buried positions score lower; beyond their burial, the least tolerant cluster, one compact group joining the two domains.</figcaption>
+      </figure>
+      <p>Once the target is mapped, MaveScape reads what the structure says of each of its positions on the chain mapped, and shows it under <strong>Structure as evidence</strong>:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Measure</th><th>How</th></tr></thead>
+          <tbody>
+            <tr><td>Secondary structure</td><td>DSSP's eight states (Kabsch &amp; Sander 1983), by Proteoscope's DSSP</td></tr>
+            <tr><td>Accessibility</td><td>Each residue's water-accessible area, by Shrake and Rupley's method with DSSP's atom radii and a 1.4 Å probe (1,000 points a sphere), in its chain alone and among every protein chain of the structure; relative to the residue's largest (Tien et al. 2013)</td></tr>
+            <tr><td>Exposure and disorder</td><td>StructureMap's part-sphere exposure (pPSE: the Cα atoms within 12 Å in a 70° cone of the side chain) and its smoothed full sphere, 34.27 or less a disordered region (Bludau et al. 2022); for an AlphaFold DB model, read with its aligned error (PAE), fetched with it</td></tr>
+            <tr><td>Confidence</td><td>A predicted model's pLDDT</td></tr>
+            <tr><td>Partners</td><td>The nearest heavy atom of another chain, a ligand or an ion; within 4 Å, the residue is at that partner's interface, and its contacts are typed (hydrogen bonds, salt bridges, π-stacking, hydrophobic and others, by Proteoscope's port of PLIP's rules). Water is never a partner, and common crystallization additives (sulfate, glycerol, tartrate and others) only when chosen under <strong>Partners</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Each position then has one <strong>structural class</strong>: <em>disordered</em> (in a predicted model's disordered region), <em>interface</em>, <em>buried</em> (relative accessibility in its chain alone below 0.25) or <em>exposed</em>. A position the structure does not hold has none. Color the structure by them (<strong>Color by</strong>, Structural class), read them in the strip below the view, or point at a residue: it says its class, accessibility and secondary structure, and the inspector, for a residue picked, its partner and contacts.</p>
+      <p><strong>Beside the map.</strong> The same become tracks of the run's map (<a href="map.html">Map</a>, Tracks): the structural classes and DSSP's secondary structure, shown, and the relative accessibility, exposure, distance to a partner and a model's pLDDT, to show. They are the structure shown's, for the session. The query language reads the classes and the secondary structure as features: <code>missense and in feature buried and lower</code>, <code>in feature helix</code> (<a href="selections.html">Selections</a>).</p>
+      <p><strong>The scores by class.</strong> With a score run (the run and condition the map shows), each class's positions are read by their median score: how many, their median, and how often a position of the class scores lower than one of the rest (where higher is less function, higher), by Mann–Whitney's test, with Benjamini and Hochberg's adjustment across the classes. The positions are the units: a position's substitutions are not counted apart. <strong>Select</strong> selects a class's residues, and so its variants on the map.</p>
+      <p><strong>Are the least tolerant clustered?</strong> The least tolerant positions (the lowest 20% of medians, or 10% or 30%) are buried more often than the rest, and buried positions lie close together, so they would cluster whatever their scores. The test asks whether they lie closer together than positions <em>of the same burial</em>: it counts their pairs within 8 Å of each other (Cβ, Cα for glycine) and draws as many positions at random, as many from each stratum of relative accessibility (about twelve positions a stratum, 4 to 16 strata), 1,000 times with a seed you can change. The p-value is the share of draws with as many pairs. The same drawn from every position, burial ignored, is given beside it, to show how much burial alone explains. Compact groups of them (every two within 12 Å) can be selected.</p>
+      <p>In GRB2's SH3 domain (2VWF) the least tolerant are the core: 26 pairs, against 8.7 from any positions but 21.5 from positions as buried (p 0.11). In PTEN (1D5R), 117 pairs against 88.0 as buried (p 0.001): one group joins its phosphatase and C2 domains. <strong>Evidence</strong> writes each position's measures and class, with its median score (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/FORMATS.md#what-a-structure-says-of-each-position">FORMATS.md</a>).</p>
+
+      <h2 id="views">Saved views and figure panels</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/structure-views-dark.webp" width="2000" height="1250" loading="lazy" alt="The Structure view of 2VWF colored by GRB2's median scores, residues 20 to 26 drawn as sticks and two labeled; beside it the pane Saved views with the view Core and Save the view…; the dataset tree lists Core under Structure views, and the inspector describes it: the structure, its file and SHA-256, the mapping, when it was saved" /><img class="shot-light" src="../assets/img/structure-views-light.webp" width="2000" height="1250" loading="lazy" alt="The Structure view of 2VWF colored by GRB2's median scores, residues 20 to 26 drawn as sticks and two labeled; beside it the pane Saved views with the view Core and Save the view…; the dataset tree lists Core under Structure views, and the inspector describes it: the structure, its file and SHA-256, the mapping, when it was saved" /></div>
+        <figcaption>A view of 2VWF saved as Core: in the dataset tree, the inspector and the pane Saved views.</figcaption>
+      </figure>
+      <p><strong>Save the view…</strong>, under <strong>Saved views</strong>, keeps the view shown with the workspace, under a name. It keeps the structure's file in the library by its SHA-256, as it came (RCSB's compressed mmCIF, AlphaFold DB's file and the model's aligned error, or your file), and records the assembly, the chain and the target's mapping onto it, the camera and the view's size, the style, the colors and the run and condition (or contrast) they are of, the surface, the residues selected, drawn, hidden, labeled and focused on, and the partners and settings of <a href="#evidence">Structure as evidence</a>. A view saved under a name already used is saved again. Saving and removing views are in the workspace's history.</p>
+      <p>Saved views are listed in the pane and in the dataset tree, under <strong>Structure views</strong>; the inspector describes one, and <strong>Open</strong> reopens it as it was saved: the structure from the library, offline. The target is mapped again, and if the mapping is not the one the view was saved with, the view says what differs. A view of a run no longer in the workspace is colored by the run the map shows, and says so. The structure stays with the workspace while a view shows it.</p>
+      <p>The <strong>workspace archive</strong> (.msz) carries each saved view's structure, by its SHA-256, unless you name the structures by their checksums only (Export, Workspace archive): then a PDB entry or AlphaFold DB model is fetched again by its ID when its view opens, and its SHA-256 compared with the one saved; if the service has revised the file, the view is drawn on today's and says so. A file of your own must be opened again. The <a href="record.html#run-files">methods</a> name each structure, when it was retrieved and its file's SHA-256, the target's mapping onto it (the alignment, the chain, the positions on residues, the identity and the differences), each saved view and what it is colored by, and how what the structure says of each position was read, each method cited.</p>
+      <p><strong>Image</strong>, <em>Figure panel</em>, writes a PNG of the view four times its size, the legend of its colors drawn below it, and what it shows written into it (a text chunk, <code>mavescape-figure-panel</code>): the structure and its file's SHA-256, the view, the coloring and the run it is of (by its output's SHA-256), the legend and the image's size. A saved view's panel is drawn at the size it was saved at, so the same view gives the same image on any screen, pixel for pixel. Wave 6's figures are built from these panels.</p>
+
+      <h2 id="proteoscope">Open in Proteoscope</h2>
+      <figure class="hero-shot">
+        <div class="shot shot-window" data-url="127.0.0.1:8820"><img class="shot-dark" src="../assets/img/structure-proteoscope-dark.webp" width="2000" height="1250" loading="lazy" alt="Proteoscope's window showing 2VWF as MaveScape handed it over: chain A colored by GRB2's median scores on Proteoscope's blue–white–red scale from −5.1 to 5.1, its legend titled Median score, Run 1, the peptide gray; residues 20 to 26 drawn as sticks, Arg 21 and Ile 25 selected and labeled" /><img class="shot-light" src="../assets/img/structure-proteoscope-light.webp" width="2000" height="1250" loading="lazy" alt="Proteoscope's window showing 2VWF as MaveScape handed it over: chain A colored by GRB2's median scores on Proteoscope's blue–white–red scale from −5.1 to 5.1, its legend titled Median score, Run 1, the peptide gray; residues 20 to 26 drawn as sticks, Arg 21 and Ile 25 selected and labeled" /></div>
+        <figcaption>2VWF in Proteoscope, as MaveScape handed it over: the median scores as its custom residue data, the residues drawn, selected and labeled, from the same angle.</figcaption>
+      </figure>
+      <p>MaveScape needs no other program. For what Proteoscope does beyond it (wwPDB validation reports, density maps, superposition, ligands and their interactions, predictions ranked), the Structure view hands the view over to <a href="https://github.com/robert-mcdermott/proteoscope">Proteoscope</a> when it runs on this computer: a <strong>Proteoscope</strong> button appears beside <strong>Image</strong>. MaveScape looks for it on the ports Proteoscope takes (8765 to 8814) and asks only which version it is; when it is not running, nothing is offered and nothing else changes (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/NETWORK.md">NETWORK.md</a>).</p>
+      <p>What it hands over is Proteoscope's own session, in a link opened in a new tab: the PDB entry or AlphaFold DB model, which Proteoscope fetches by its ID; the scores the structure is colored by as Proteoscope's <em>Custom residue data</em>, titled as the legend is ("Median score, Run 1"), on its blue–white–red scale over the map's range, centered on the wild type (filtered and missing positions without a value, gray); the style, the residues drawn as sticks, hidden, selected, labeled and focused on; and the camera. Colored by the QC state or the structural classes, the residues keep MaveScape's colors. Nothing goes to Proteoscope but the link, which stays on this computer.</p>
+      <ul>
+        <li><strong>Proteoscope 0.10</strong>, the version MaveScape was tested with, opens all of it. Another version gets the structure alone in the link, and the rest as a session file (<code>2VWF.proteoscope.json</code>) to open in it.</li>
+        <li><strong>A file of your own</strong> cannot travel in a link: MaveScape writes the session file, the file embedded in it, and you open it in Proteoscope (<strong>Open local file</strong>, or drop it on its window).</li>
+        <li><code>mavescape --proteoscope off</code> stops the looking; <code>--proteoscope 9000-9010</code> looks on other ports, for a Proteoscope started on one.</li>
+      </ul>
+      <p>Try it with the GRB2 example, Proteoscope running:</p>
+      <ol>
+        <li>In Structure, open 2VWF and color it by the <strong>Median score</strong>; select <code>pos 20-26</code> and draw it as <strong>Sticks</strong>.</li>
+        <li>Click <strong>Proteoscope</strong>. Proteoscope opens 2VWF with the 56 median scores on chain A, the Gab2 peptide gray, the residues drawn as they were, from the same angle.</li>
+        <li>In Proteoscope, <code>interface A B</code> lists the contacts between the SH3 domain and the peptide, the residues whose scores sit near the wild type; <code>validate</code> loads the entry's wwPDB validation report, to see whether a residue you read is well modeled.</li>
+      </ol>
+
+      <h2 id="draw">Drawing it</h2>
+      <ul>
+        <li><strong>Style:</strong> cartoon, ball and stick, sticks, spacefill or a trace of the backbone. Ligands are drawn as balls and sticks with the cartoon; water is hidden.</li>
+        <li><strong>Color by</strong> the scores (above), or by chain, molecule (entity), position from N to C terminus (rainbow), secondary structure, molecule type, element, residue class, hydropathy (Kyte–Doolittle), nucleotide, B-factor, or a predicted model's confidence (pLDDT). The legend below the view names the colors.</li>
+        <li><strong>Surface:</strong> the molecular surface (SES), the solvent-accessible surface, the van der Waals surface or a Gaussian surface, computed in the background and colored as the atoms under it.</li>
+        <li><strong>Assembly:</strong> an entry's biological assemblies, built from its asymmetric unit by the entry's own operators (hemoglobin's tetramer from the αβ dimer of 1HHO). An assembly of more than 300,000 atoms is listed but cannot be built.</li>
+        <li><strong>Image</strong> saves the view as a PNG at twice its size.</li>
+      </ul>
+      <p>To move it: drag to rotate, drag with <kbd>⇧</kbd> or the right button to move it, the wheel or a pinch to zoom. With the view focused, the arrow keys rotate it, <kbd>+</kbd> and <kbd>−</kbd> zoom, and <kbd>F</kbd> fits the whole structure; <strong>Fit</strong> does too. Point at an atom for its residue, secondary structure and B-factor (a predicted model's pLDDT).</p>
+
+      <h2 id="residues">Residues</h2>
+      <p>Click a residue to select it; with <kbd>⌘</kbd>, <kbd>Ctrl</kbd> or <kbd>⇧</kbd>, add it to the selection or take it away. Double-click one to focus on it. Or type which residues in the field under <strong>Residues</strong>, in the selection language Proteoscope uses (PyMOL's words, ChimeraX's atom specs), and <kbd>Enter</kbd> or <strong>Select</strong>:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Words</th><th>What they select</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><code>chain</code>, <code>resi</code>, <code>resn</code>, <code>name</code>, <code>elem</code></td><td>Chains, residue numbers (ranges and lists), residue names, atom names, elements; values joined by <code>+</code> or <code>,</code></td><td><code>chain A and resi 40-80</code></td></tr>
+            <tr><td><code>/A:315@OG1</code></td><td>An atom spec: chain, residue, atom</td><td><code>/B:248</code></td></tr>
+            <tr><td><code>protein</code>, <code>nucleic</code>, <code>ligand</code>, <code>ion</code>, <code>water</code>, <code>hetatm</code></td><td>Kinds of molecule</td><td><code>ligand</code></td></tr>
+            <tr><td><code>backbone</code>, <code>sidechain</code></td><td>Parts of residues</td><td><code>sidechain and resn ARG</code></td></tr>
+            <tr><td><code>helix</code>, <code>sheet</code>, <code>turn</code>, <code>coil</code></td><td>Secondary structure: the entry's own, or DSSP's where it gives none</td><td><code>helix and chain B</code></td></tr>
+            <tr><td><code>within</code>, <code>around</code>, <code>beyond</code></td><td>Atoms within (or beyond) a distance in Å of others</td><td><code>within 4 of nucleic</code></td></tr>
+            <tr><td><code>byres</code>, <code>bychain</code></td><td>Whole residues or chains of the atoms selected</td><td><code>byres (protein and within 4 of ligand)</code></td></tr>
+            <tr><td><code>b</code>, <code>q</code>, <code>plddt</code></td><td>B-factor, occupancy, a predicted model's confidence, compared with a number</td><td><code>plddt &lt; 70</code></td></tr>
+            <tr><td><code>pos</code>, <code>uniprot</code></td><td>The target's positions, or the reference's, placed by the mapping on the chain mapped</td><td><code>pos 30-40</code></td></tr>
+            <tr><td><code>selected</code>, <code>focus</code></td><td>The residues selected now; those focused on</td><td><code>within 5 of selected</code></td></tr>
+            <tr><td><code>and</code>, <code>or</code>, <code>not</code>, parentheses</td><td>As usual; words side by side are joined by <em>and</em></td><td><code>resn CYS and not chain B</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>A selection that does not parse is named where it goes wrong; one that selects nothing says so. Then, for the residues selected:</p>
+      <ul>
+        <li><strong>Draw as…</strong> sticks, ball and stick or spacefill over the rest, hidden, or as the rest again.</li>
+        <li><strong>Label</strong> them (again: take the labels away).</li>
+        <li><strong>Focus</strong>: the camera on them, with their neighbors within 5 Å drawn with their side chains; <strong>Whole structure</strong> goes back.</li>
+      </ul>
+
+      <h2 id="alphafold">AlphaFold DB models</h2>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/structure-alphafold-dark.webp" width="2000" height="1250" loading="lazy" alt="GRB2's AlphaFold DB model colored by its confidence: its two SH3 domains and SH2 domain dark blue (very high), the linkers yellow and orange; the C-terminal SH3 domain, residues 159 to 214, selected" /><img class="shot-light" src="../assets/img/structure-alphafold-light.webp" width="2000" height="1250" loading="lazy" alt="GRB2's AlphaFold DB model colored by its confidence: its two SH3 domains and SH2 domain dark blue (very high), the linkers yellow and orange; the C-terminal SH3 domain, residues 159 to 214, selected" /></div>
+        <figcaption>GRB2's AlphaFold DB model colored by its confidence (pLDDT), the SH3 domain the example measures (UniProt 159–214) selected.</figcaption>
+      </figure>
+      <p>A predicted model opens colored by its confidence, each residue's pLDDT in AlphaFold DB's four bands: very high (above 90), confident (70 to 90), low (50 to 70) and very low (below 50, often a region without a fixed structure). The words say it is a prediction, not an experiment. A model numbers its residues as UniProt does, from 1.</p>
+
+      <h2 id="renderers">WebGPU and the Canvas renderer</h2>
+      <p>The view draws with WebGPU where the browser offers it (Chrome, Edge and Brave; Safari from macOS 26): spheres and cylinders drawn exactly, the cartoon, surfaces, ambient occlusion and picking. Where it does not, or with <code>?renderer=canvas</code> added to the page's address, it draws with the Canvas renderer, without surfaces or ambient occlusion. The badge above the view says which; pointed at, the Canvas badge says why. If the browser loses WebGPU while the view is open (its graphics process crashed or was reset, as after a driver update), the view goes on with the Canvas renderer and says so; reloading the page tries WebGPU again. Both renderers are Proteoscope's, copied into MaveScape with their tests.</p>
+
+      <h2 id="scripts">Scripts</h2>
+      <p>Remote control's <code>open_structure</code> opens a PDB entry (<code>pdb</code>) or an AlphaFold DB model (<code>alphafold</code>: an accession, or <code>"target"</code> for the target's), optionally an <code>assembly</code>, and returns the structure in words. <code>set_structure</code> changes the <code>style</code>, <code>color</code>, <code>surface</code> and <code>assembly</code>, and selects residues (<code>select</code>, in the language above), draws them (<code>show</code>), labels them (<code>label</code>) and focuses on them (<code>focus</code>). <code>open_files</code> opens a structure file. <code>find_structures</code> lists the structures that cover the target; <code>map_structure</code> maps it (on a <code>chain</code>) and returns the mapping in words and by position; <code>open_structure</code> takes the <code>chain</code> to map it on; <code>export</code> with <code>what: "structure-mapping"</code> writes the mapping. <code>set_structure</code>'s <code>color</code> takes the scores' colorings too (<code>median</code>, <code>mean</code>, <code>minimum</code>, <code>maximum</code>, <code>fraction</code> with a <code>threshold</code> and <code>side</code> or a <code>calibration</code>, <code>count</code>, <code>substitution</code> with the <code>substitution</code>, <code>uncertainty</code>, <code>disagreement</code>, <code>qc</code>), and <code>pick</code> picks a residue as a click does (<code>"A 183"</code>); <code>export</code> with <code>what: "structure-scores"</code> writes the coloring. <code>structure_evidence</code> returns the structural classes (with a <code>partner</code>), the scores by class and the cluster test (a <code>fraction</code>, a <code>seed</code>); <code>set_structure</code>'s <code>color: "class"</code> colors by class, <code>export</code> with <code>what: "structure-evidence"</code> writes each position's measures. <code>save_structure_view</code>, <code>open_structure_view</code> and <code>remove_structure_view</code> keep, reopen and remove views by name; <code>export</code> with <code>what: "structure-image"</code> writes a figure panel (a <code>scale</code>, the <code>legend</code>), and the archive's <code>include_structures</code> names the structures by their checksums. <code>proteoscope_link</code> hands the view to a Proteoscope running on this computer (the link to open, or the session for a file of yours), and <code>export</code> with <code>what: "proteoscope-session"</code> writes the session file whether Proteoscope runs or not. <code>get_state</code> includes the structure shown, the mapping and the scores it is colored by (<a href="scripting.html">Remote control</a>).</p>
+
+      <h2 id="validation">How it was validated</h2>
+      <p>The viewer's modules are Proteoscope 0.10.0's, copied with their tests, which pass here (66 of them): the parsers (PDB, mmCIF, BinaryCIF), residues and bonds, chemistry, DSSP, the cartoon and scene, surfaces and areas, and the selection language. The validation suite <code>structures</code> reads each example protein's PDB entry and AlphaFold DB model as the page does, from the cache: each chain holds its target on the UniProt residues its entry gives; each model's mean pLDDT is within 0.05 of AlphaFold DB's own and its share of residues in each band within 0.01. 2VWF read as gzipped mmCIF, as RCSB's PDB-format file and as BinaryCIF gives the same atoms to 0.001 Å, and GRB2's model the same as mmCIF and BinaryCIF. Each assembly is built with the atoms it was estimated at; hemoglobin's tetramer is the dimer moved whole by symmetry. On 1RFN, the bonds drawn between cysteines' sulfur atoms are the entry's own disulfide records; on 1TUP, the residues that <code>byres (chain B and protein and within 4 of nucleic)</code> selects are those every distance between atoms finds, R248 and R273 among them. The remote session opens every example protein's entry and model in the page, with WebGPU and then with the Canvas renderer, each with the atoms Node reads and an image that is not empty.</p>
+      <p>The mapping (wave 5, slice 2): each example's target aligned to its PDB entry places every residue where SIFTS does, by PDBe's residue-level mapping read from its updated mmCIF with gemmi (an mmCIF reader independent of MaveScape's), and calls not observed the residues SIFTS does; the one place they part, PTEN's join in 1D5R, is an ambiguous one, where SIFTS takes the other alignment as good. On each AlphaFold DB model every position is on the residue numbered as its reference position, with another residue exactly where the target differs from the model's sequence. 2VWF's engineered mutation, 1RFN's light chain and its record five off, and PTEN's removed loop are reported as the entries record them. The structures that cover each target are ranked from PDBe's answers in the cache, and the remote session maps, lists, keeps a selection across structures and writes the mapping as Node does.</p>
+      <p>The scores on the structure (wave 5, slice 3): each example's run, scored in Node, is colored on its PDB entry by every coloring, and every residue of every chain that holds the target has the value its position's missense substitutions have in the run's results, read without the map's model, and the map's color for it; every position with nothing scored is gray, at least 100 (in RGB) from the wild type's color. Each example's ten least tolerant positions, selected on the map, are drawn on the residues SIFTS places them on, and picked there select the same positions again. PTEN's fraction abnormal-like by two of its published calibrations is the share of scores in the abnormal ranges as the record's own JSON gives them. The GRB2 example's account (the core packed, the peptide's neighbors tolerant) is computed from the atoms. The remote session colors 2VWF in the page, each residue as Node colors it, picks a residue, draws a map query's selection and writes the coloring as Node does.</p>
+      <p>Structure as evidence (wave 5, slice 4): for each example's entry, DSSP's own output (the DSSP databank, DSSP 4.6.1, read with gemmi) gives every residue the code Proteoscope's DSSP gives it but five in 1D5R, where DSSP 4 calls a π-helix (its polyproline helices, which Proteoscope's does not assign, aside); the accessible area is within 0.6–0.9 Å² of DSSP's on average, with no bias. Proteoscope's tests of its exposure (half-sphere exposure as Biopython's) and of its interactions (PLIP's) pass here. Each residue's nearest partner is as every pair of atoms gives it. Mann–Whitney's test and Benjamini–Hochberg's adjustment equal SciPy's to 10⁻¹². On AlphaFold DB models read with their aligned error, PTEN's C-terminal tail and p53's terminal regions are disordered and their folded domains not. The cluster test was calibrated on simulated maps on 1D5R and 1TUP: with scores that depend on burial alone, p ≤ 0.05 in 3–6% of maps (in every map, burial ignored), and a planted patch found in 62–71%. The remote session reads 2VWF's evidence in the page as Node does.</p>
+      <p>Structures in the record (wave 5, slice 5): a saved view of each example protein's PDB entry and AlphaFold DB model goes through the workspace archive with its structure's file, the same bytes, and the mapping made again from each file is the one its view was saved with; named by checksum only, each structure fetched again by its ID is the file recorded. The methods of the GRB2 example's run with a view of 2VWF name the entry, its file's SHA-256 and the mapping as made again. In the page, a view of 2VWF saved, changed and opened again gives the same figure panel, pixel for pixel, as when it was saved; so does the view opened from the workspace's archive, and a view whose file is fetched again by its ID finds the SHA-256 it was saved with.</p>
+      <p>Open in Proteoscope (wave 5, slice 6): for each example's run on its PDB entry and its AlphaFold DB model, the session MaveScape hands over carries each position's median score, as the run's results give it, on the residue Proteoscope's reader keys it on, every scored position on a residue with one; the link's session reads back as sent. The program's tests find Proteoscope by its startup answer, the version tested and others, and nothing where another program, MaveScape itself or no program answers. The remote session, against a stand-in for Proteoscope, checks the link, the residues, the camera, the button and its new tab, another version, a file of your own and Proteoscope stopped. With Proteoscope 0.10.0 itself (<code>validation/proteoscope-handoff.mjs</code>, run where it is installed): it opens the link of 2VWF and of GRB2's AlphaFold DB model, and the session file of a file of your own, with every value on a residue it reads, the residues drawn, hidden, focused on, selected and labeled, and the camera as MaveScape had them.</p>
+
+      <nav class="doc-pager" aria-label="Pages">
+        <a class="prev" href="robustness.html"><span>Previous</span>Robustness</a>
+        <a class="next" href="record.html"><span>Next</span>Exports and the record</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <h4>On this page</h4>
+      <ul></ul>
+    </aside>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="../"><img src="../assets/img/logo.svg" alt="" width="30" height="30" /><span>Mave<b>Scape</b></span></a>
+          <p>A workbench for multiplexed assays of variant effect: from variant counts to checked scores, quality control and variant-effect maps. Free and open source under the Apache License 2.0.</p>
+        </div>
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../#features">Features</a></li>
+            <li><a href="../install.html">Install</a></li>
+            <li><a href="../science.html">Science</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/blob/main/CHANGELOG.md">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="../docs/getting-started.html">Getting started</a></li>
+            <li><a href="../docs/scoring.html">Scoring</a></li>
+            <li><a href="../docs/qc.html">Quality control</a></li>
+            <li><a href="../docs/scripting.html">Scripting</a></li>
+            <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <ul>
+            <li><a href="https://github.com/robert-mcdermott/mavescape">GitHub</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/releases">Releases</a></li>
+            <li><a href="https://github.com/robert-mcdermott/mavescape/issues">Issues</a></li>
+            <li><a href="../science.html#cite">Cite MaveScape</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">MaveScape is licensed under the Apache License 2.0. It reports experimental functional effects for research use; it does not classify variants as pathogenic or benign. See <a href="../science.html#credits">credits</a>.</div>
+    </div>
+  </footer>
+</body>
+</html>
