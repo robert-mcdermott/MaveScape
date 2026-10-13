@@ -3323,6 +3323,13 @@ Hsp90 archive with `mavescape run --from-workspace`, the proposal kept.
     with the request. The call now waits for the goroutine, and a tick that comes with the end is
     dropped; the test checks that no progress follows the reply (with the old code, 50 of 300 runs
     under load sent one, and 2 raced; with the new, none of 300).
+- **CI once for each commit** (asked for at the release): a commit was tested four times, pushed
+  to its branch, again for its pull request, again as the merge to `main` (the same files), and
+  again by the release workflow. CI now runs on a push to any branch; a pull request shows its
+  branch's checks and is tested itself only from a fork; a first job, *Anything new to test*,
+  skips the rest for a merge whose files are its branch's; a newer push cancels an unfinished
+  run; and the release checks that a CI run, every job of it run, passed on the tagged files
+  instead of testing them again.
 - After the release, the website is published from the release's checkout (`node
   docs/site/build.mjs --publish`, then the `gh-pages` checkout committed and pushed).
 

@@ -568,7 +568,9 @@ node validation/headless-run.mjs      # mavescape run and validate: the same byt
 checksums. GitHub Actions run gofmt, `go vet`, the Go tests with the race detector, the
 cross-compilation, the JavaScript tests, the validation suites, the performance budgets, the
 remote-control session, the agent session, the R and Python clients, headless runs and the
-website build on every pull request and every push to `main`.
+website build once for each commit pushed, on any branch: a pull request shows its branch's
+checks (one from a fork is tested itself), and a merge whose files are its branch's is not
+tested again.
 
 ### Documentation
 
@@ -582,8 +584,9 @@ node docs/site/build.mjs /tmp/site    # the website, with every link, anchor and
 The version is `version` in `main.go`; `web/app.js`, `web/index.html` and `CITATION.cff` repeat
 it, and `node clients/generate.mjs` gives the R and Python clients the same version. To release,
 set them, add the release to `CHANGELOG.md`, merge to `main` and push a tag such
-as `v0.7.0`. The release workflow (`.github/workflows/release.yml`) checks that the tag matches,
-runs the tests, builds the six binaries and attaches them with `SHA256SUMS` to a draft release.
+as `v0.7.0`. The release workflow (`.github/workflows/release.yml`) checks that the tag matches
+and that CI passed on the tagged files, builds the six binaries and attaches them with `SHA256SUMS`
+to a draft release.
 Review the draft and publish it.
 
 ### Code layout

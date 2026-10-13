@@ -1,13 +1,16 @@
 name: CI
 
-# Not for a change of documentation alone: no check reads the Markdown files, the spec, the
-# license or the citation (the site's pages and screenshots are checked, so docs/site and
-# docs/images still run it). A push or pull request that changes anything else runs it all;
-# Actions' "Run workflow" button runs it by hand.
+# Once for each commit pushed, on any branch. A pull request shows its branch's checks, so it is
+# tested again only when it comes from a fork; a merge whose files are its branch's, tested when the
+# branch was pushed, tests nothing again (job `changed` decides both); and the release checks that
+# CI passed on the files it tags instead of testing them a fourth time (release.yml). A newer push
+# to the same branch cancels a run not yet finished. Not for a change of documentation alone: no
+# check reads the Markdown files, the spec, the license or the citation (the site's pages and
+# screenshots are checked, so docs/site and docs/images still run it). Actions' "Run workflow"
+# button runs it all by hand.
 on:
   push:
-    # A wave's branch too, so each slice meets the runner as it is built, not at the release.
-    branches: [main, 'wave*']
+    branches: ['**']
     paths-ignore:
       - '**.md'
       - 'mavescape-spec/**'
@@ -21,12 +24,42 @@ on:
       - 'CITATION.cff'
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
+  changed:
+    name: Anything new to test
+    runs-on: ubuntu-latest
+    outputs:
+      test: ${{ steps.decide.outputs.test }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          test=true
+          if [ "$EVENT" = pull_request ] && [ "$FORK" != true ]; then
+            echo "A branch of this repository: tested when it was pushed, its checks shown on the pull request."
+            test=false
+          elif [ "$EVENT" = push ] && git rev-parse -q --verify 'HEAD^2' > /dev/null && [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'HEAD^2^{tree}')" ]; then
+            echo "A merge whose files are those of $(git rev-parse --short 'HEAD^2'), tested when it was pushed."
+            test=false
+          fi
+          echo "test=$test" >> "$GITHUB_OUTPUT"
+
   go:
     name: Go host
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +89,8 @@ jobs:
 
   web:
     name: Browser modules
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -89,6 +124,8 @@ jobs:
 
   remote:
     name: Remote control
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -129,6 +166,8 @@ jobs:
 
   agents:
     name: AI agents (MCP)
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -145,6 +184,8 @@ jobs:
 
   clients:
     name: R and Python clients
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -185,6 +226,8 @@ jobs:
 
   installers:
     name: Installer syntax
+    needs: changed
+    if: needs.changed.outputs.test == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,13 +1,16 @@
 name: Release
 
 # Pushing a tag such as v0.1.0 builds the binaries and attaches them, with their checksums and the
-# CHANGELOG.md section of that version, to a draft release. Review the draft and publish it.
+# CHANGELOG.md section of that version, to a draft release. Review the draft and publish it. The
+# tests are not run again: the tagged files must be ones a CI run passed on, every job of it run
+# (ci.yml), which is usually the merged branch's last push.
 on:
   push:
     tags: ['v*']
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
@@ -15,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Every commit, so that the commits CI ran on can be compared with the tag's files.
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           # Release binaries are built with a Go release that still gets security fixes; CI tests
@@ -43,15 +49,23 @@ jobs:
           # The R and Python clients: their functions the actions', their version this one.
           node clients/generate.mjs --check
           echo "VERSION=$version" >> "$GITHUB_ENV"
-      - name: Tests
+      - name: CI passed on the tagged files
         env:
-          MAVESCAPE_TIME_SCALE: 5
+          GH_TOKEN: ${{ github.token }}
         run: |
-          go vet ./...
-          go test ./...
-          node --test "web/lib/**/*.test.mjs"
-          node validation/fetch.mjs
-          node validation/run.mjs --require-data
+          # A successful CI run whose commit has exactly these files, and none of whose jobs was
+          # skipped (a merge's run that skipped them, its branch tested before, does not count).
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          gh run list --workflow ci.yml --status success --limit 200 --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"' > runs.txt
+          while read -r id sha; do
+            [ "$(git rev-parse -q --verify "$sha^{tree}" 2> /dev/null)" = "$tree" ] || continue
+            if [ "$(gh run view "$id" --json jobs --jq '[.jobs[] | select(.conclusion != "success")] | length')" = 0 ]; then
+              echo "CI run $id passed on these files (commit $sha)."
+              exit 0
+            fi
+          done < runs.txt
+          echo "No CI run has passed on the tagged files (tree $tree): push them to a branch, let CI pass, then tag."
+          exit 1
       - name: Build
         env:
           CGO_ENABLED: '0'
