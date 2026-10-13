@@ -357,6 +357,10 @@ func TestMCPCancellationAndProgress(t *testing.T) {
 	if !strings.Contains(text, `"id":2`) || !strings.Contains(text, `"method":"notifications/progress"`) || !strings.Contains(text, `"progressToken":"p2"`) {
 		t.Fatalf("no answer or no progress: %s", text)
 	}
+	// Progress ends with the call: none after its reply.
+	if strings.LastIndex(text, `"progressToken":"p2"`) > strings.Index(text, `"id":2`) {
+		t.Fatalf("progress after the reply: %s", text)
+	}
 }
 
 // The real command: the protocol alone on stdout, the banner on stderr; it stops when stdin ends.

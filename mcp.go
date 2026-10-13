@@ -314,13 +314,17 @@ func (s *mcpServer) handle(ctx context.Context, request mcpMessage) {
 }
 
 // reportProgress sends a progress notification every few seconds while a call with a progress
-// token runs (scoring, a robustness check or a certificate can take minutes).
+// token runs (scoring, a robustness check or a certificate can take minutes). The function it
+// returns stops them and waits until the last one is written, so that none follows the call's
+// reply (MCP: progress ends with the request).
 func (s *mcpServer) reportProgress(token json.RawMessage) func() {
 	if len(token) == 0 || string(token) == "null" {
 		return func() {}
 	}
 	done := make(chan struct{})
+	finished := make(chan struct{})
 	go func() {
+		defer close(finished)
 		tick := s.progressTick
 		if tick <= 0 {
 			tick = mcpProgressTick
@@ -332,11 +336,20 @@ func (s *mcpServer) reportProgress(token json.RawMessage) func() {
 			case <-done:
 				return
 			case <-ticker.C:
+				// A tick and the end can come together: the end wins.
+				select {
+				case <-done:
+					return
+				default:
+				}
 				s.notify("notifications/progress", map[string]any{"progressToken": token, "progress": step, "message": "MaveScape is working in the window"})
 			}
 		}
 	}()
-	return func() { close(done) }
+	return func() {
+		close(done)
+		<-finished
+	}
 }
 
 func negotiateVersion(requested string) string {

@@ -3316,6 +3316,13 @@ Hsp90 archive with `mavescape run --from-workspace`, the proposal kept.
     agent's action runs counts as the agent's, and that the packages come from the repository. Its
     opening list names agents and scripts.
   - The screenshots' audit (axe-core, WCAG 2.1 A and AA): 142 captures of 73 scenes, no violation.
+  - **A progress notification could follow its call's reply** (the release's pull request, the Go
+    tests under the race detector on CI): ending a call told the progress goroutine to stop
+    without waiting for it, so a tick at the same moment was written after the reply, or after
+    the server had returned (the data race CI found, on the test's buffer). MCP ends progress
+    with the request. The call now waits for the goroutine, and a tick that comes with the end is
+    dropped; the test checks that no progress follows the reply (with the old code, 50 of 300 runs
+    under load sent one, and 2 raced; with the new, none of 300).
 - After the release, the website is published from the release's checkout (`node
   docs/site/build.mjs --publish`, then the `gh-pages` checkout committed and pushed).
 
