@@ -178,6 +178,9 @@ guides to every view, with screenshots.
 - **Fourteen examples.** Three published experiments bundled with their counts, five opened from
   MaveDB, and six simulated with every true effect known, one with problems planted. Each has its
   question, guided steps and what to expect.
+- **AI agents.** `mavescape mcp` is a Model Context Protocol server: an agent such as Claude Code
+  opens data, scores, reads the QC, compares, makes figures and certifies in the window you watch,
+  each change recorded with the agent's name and undoable ([`docs/MCP.md`](docs/MCP.md)).
 - **Scripting and headless runs.** With `--remote-control`, scripts on your computer drive the
   open window, each step visible and undoable. `mavescape run` does a whole analysis without a
   window and writes the same bytes every time.
@@ -361,6 +364,7 @@ The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page 
 | `mavescape export --format report --out DIR W.msz` | Write a saved workspace's report, `report.md` and `report.bib` ([report](https://robert-mcdermott.github.io/MaveScape/docs/report.html)) |
 | `mavescape export --format review --out DIR W.msz` | Write a saved workspace's review report, `review.html`: every number traced, in one file that loads nothing ([review reports](https://robert-mcdermott.github.io/MaveScape/docs/certificate.html#review)) |
 | `mavescape verify [--data DIR] [--review R.html] C.msz` | Verify a reproducibility certificate: every number computed again from its files and compared bit for bit; exit 0 verified, 1 differs, 2 not checkable; `--review` writes its review report ([certificates](https://robert-mcdermott.github.io/MaveScape/docs/certificate.html)) |
+| `mavescape mcp [options]` | A Model Context Protocol server for AI agents on stdin and stdout; the window opens when a tool needs it ([`docs/MCP.md`](docs/MCP.md)) |
 
 On macOS, Chrome (and Edge, Brave) keeps running after its last window is closed: quit it with ⌘Q
 to stop MaveScape too. If that browser is already running when MaveScape starts, the window opens
@@ -380,7 +384,9 @@ curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "qc_findings"}'
 ```
 
 `GET /api/remote/tools` lists the actions with their arguments. The documentation's screenshots
-are made this way (`docs/capture/capture.mjs`).
+are made this way (`docs/capture/capture.mjs`). An AI agent calls the same actions as tools
+through `mavescape mcp` (for Claude Code, `claude mcp add mavescape -- ~/.local/bin/mavescape mcp`;
+[`docs/MCP.md`](docs/MCP.md)).
 
 For pipelines, `mavescape run` does the whole analysis without a window (in a headless Chrome)
 and writes the scores, counts, QC, map, methods, provenance, the workspace archive and `run.json`
@@ -427,6 +433,7 @@ integration on every change.
 | Checkpoints and changes | Five planted changes from a checkpoint of GRB2's run (a pseudocount, a filter, a replicate left out, a threshold, the readout); the variants each rescoring moved, computed apart; a change of units (Hsp90 over its whole time course); the window's diff against Node's | Each change described exactly and nothing else; the variants moved, crossed and filtered the same; a change of units moving nothing; an analysis against itself unchanged |
 | Certificates | GRB2's workspace of every operation, each kind of number computed apart; six kinds of tampering; the 14 examples and every release's archives; the window's certificates against Node's | Every number as computed apart, verified bit for bit; every tampering caught and said; 172,383 numbers of the examples verified; the window's certificate Node's, byte for byte |
 | Review reports | Every traced number of GRB2's workspace and the 14 examples against the certificate and the workspace; the file in Chrome (requests, axe-core in both themes); the window's against Node's | Every number where it says it comes from; nothing loaded from outside the file; no axe-core violation in either theme; the same bytes from the window, `mavescape verify --review` and `export --format review` |
+| AI agents (MCP) | Every tool through `mavescape mcp` on stdio, as an agent's client calls them, in headless Chrome | Results the remote actions' and Node's; read-only tools change nothing; every change carries the agent's name |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |
 | Scale | A million barcodes and their million-line map | Imported in 3.5 s, scored in 1.3 s |
 
@@ -449,8 +456,9 @@ check, its tolerance and how the reference outputs were made are in
   copies only, and `--no-fetch` switches public data off.
 - To offer opening a structure in Proteoscope, the program asks this computer's Proteoscope
   ports for its startup answer, and nothing else (`--proteoscope off` stops it).
-- Remote control is off unless `--remote-control` is given, and then answers only programs on
-  this computer; reading or writing files needs a token only you can read.
+- Remote control is off unless `--remote-control` is given (or `mavescape mcp`, which starts it for
+  the agent on its stdio), and then answers only programs on this computer; reading or writing
+  files needs a token only you can read.
 
 ## Limitations
 
@@ -516,14 +524,15 @@ node --test "web/lib/**/*.test.mjs"   # the browser modules
 node validation/run.mjs               # the validation suites
 node validation/coverage.mjs          # coverage of 95% intervals
 node validation/remote-session.mjs    # every remote action, in the program and headless Chrome
+node validation/agent-session.mjs     # every tool through mavescape mcp, as an agent's client calls them
 node validation/headless-run.mjs      # mavescape run and validate: the same bytes twice, reruns, failures
 ```
 
 `node validation/fetch.mjs` downloads the public data the suites compare with and checks their
 checksums. GitHub Actions run gofmt, `go vet`, the Go tests with the race detector, the
 cross-compilation, the JavaScript tests, the validation suites, the performance budgets, the
-remote-control session, headless runs and the website build on every pull request and every push
-to `main`.
+remote-control session, the agent session, headless runs and the website build on every pull
+request and every push to `main`.
 
 ### Documentation
 
@@ -547,6 +556,7 @@ Review the draft and publish it.
 | `main.go`, `security.go`, `local.go`, `store.go`, `records.go`, `window.go` | The Go host: local server, request hardening, files named on the command line, the workspace library, the window |
 | `fetch.go`, `cache.go`, `annotations.go`, `structures.go` | Public data: the fixed list of services, the cache, annotations and structures |
 | `remote.go`, `actions.go`, `connection.go`, `output.go` | Remote control |
+| `mcp.go` | `mavescape mcp`, the MCP server for AI agents |
 | `run.go`, `export.go` | `mavescape run`, `validate` and `export` |
 | `handoff.go` | Finding a running Proteoscope |
 | `web/index.html`, `web/styles.css`, `web/app.js` | The app shell |

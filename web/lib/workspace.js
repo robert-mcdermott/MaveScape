@@ -39,11 +39,20 @@ function chained(previous, entry) {
   return { ...entry, hash: historyEntryHash(previous, entry) };
 }
 
+// Who makes the changes being made now, when it is not the person at the window: an AI agent
+// through "mavescape mcp" (wave 7), by the name its client gives. Each history entry appended
+// meanwhile records it as by, which its hash covers as it covers every field (remote.js sets it
+// for the length of an agent's action; the page performs one action at a time).
+let historyActor = null;
+export function setHistoryActor(name) {
+  historyActor = name || null;
+}
+
 // The history fields of ws with an entry appended: { history, historyAnchor? }.
 export function appendHistory(ws, action, detail, time = clockNow()) {
   const history = ws.history ?? [];
   const previous = history.length ? history[history.length - 1].hash : ws.historyAnchor ?? '';
-  const all = [...history, chained(previous, { time, action, detail })];
+  const all = [...history, chained(previous, { time, action, detail, ...(historyActor ? { by: historyActor } : {}) })];
   if (all.length <= HISTORY_LIMIT) return { history: all };
   return { history: all.slice(-HISTORY_LIMIT), historyAnchor: all[all.length - HISTORY_LIMIT - 1].hash };
 }
@@ -91,7 +100,7 @@ export function createWorkspace(name = 'Untitled workspace', options = {}) {
     // Named sets of variants or positions.
     selections: [],
     // The hash-chained log of material changes: [{ time, action, detail, hash }].
-    history: [chained('', { time: now, action: 'create', detail: `Created the workspace "${name}"` })],
+    history: [chained('', { time: now, action: 'create', detail: `Created the workspace "${name}"`, ...(historyActor ? { by: historyActor } : {}) })],
   };
 }
 

@@ -127,6 +127,22 @@ jobs:
         env:
           CHROME: /usr/bin/google-chrome
 
+  agents:
+    name: AI agents (MCP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Every tool through mavescape mcp on stdio, as an agent's client calls them, in headless Chrome
+        run: node validation/agent-session.mjs --verbose
+        env:
+          CHROME: /usr/bin/google-chrome
+
   installers:
     name: Installer syntax
     runs-on: ubuntu-latest

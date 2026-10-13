@@ -56,13 +56,16 @@ type remoteClient struct {
 }
 
 // An event carries an action for the page: { id, action, args }, the files it reads, where it
-// uploads a file it writes (output.go), and who sent it (what a script calls itself).
+// uploads a file it writes (output.go), who sent it (what a script calls itself, or the AI
+// agent's client), and whether that is an AI agent (mavescape mcp, mcp.go), whose changes the
+// history records with its name.
 type remoteEvent struct {
 	ID     string          `json:"id"`
 	Action string          `json:"action"`
 	Args   json.RawMessage `json:"args,omitempty"`
 	Files  []localFile     `json:"files,omitempty"`
 	Client string          `json:"client,omitempty"`
+	Agent  bool            `json:"agent,omitempty"`
 	Output string          `json:"output,omitempty"`
 }
 
@@ -257,24 +260,37 @@ func (h *remoteHub) serveAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, what+" needs the "+remoteTokenHeader+" header with the token MaveScape printed when it started (also in remote.json).")
 		return
 	}
-	if action.output {
-		output, release, err := h.prepareOutput(request.Args)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		defer release()
-		event.Output = output
+	event, release, err := h.prepare(event, action)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	if reads {
-		files, err := h.openFiles(request.Args)
+	defer release()
+	h.respond(w, r, event)
+}
+
+// prepare completes an event for its action: where the page uploads the file it writes (an upload
+// slot, released by the returned function once the action is done) and the files it reads,
+// registered for the page. A caller that may read and write files (one with the token, or the
+// agent on mcp's stdio) prepares before dispatching.
+func (h *remoteHub) prepare(event remoteEvent, action remoteAction) (remoteEvent, func(), error) {
+	release := func() {}
+	if action.output {
+		output, free, err := h.prepareOutput(event.Args)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+			return event, release, err
+		}
+		event.Output, release = output, free
+	}
+	if action.readsFiles(event.Args) {
+		files, err := h.openFiles(event.Args)
+		if err != nil {
+			release()
+			return event, func() {}, err
 		}
 		event.Files = files
 	}
-	h.respond(w, r, event)
+	return event, release, nil
 }
 
 // openFiles registers the files of {"paths": [...]} for the page to read.

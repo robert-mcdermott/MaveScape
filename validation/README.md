@@ -192,6 +192,31 @@ slowed (`Emulation.setCPUThrottlingRate`, 4 times unless a rate is given). Every
 release met only in CI failed this way here first; run it before a release, and after any change to
 the Structure view or to what runs in the background.
 
+## The agent session (`agent-session.mjs`, wave 7 slice 1)
+
+`node validation/agent-session.mjs [--verbose] [--like-ci [rate]]` builds MaveScape and starts
+`mavescape mcp` (`--window none`, an empty library, `--offline` on the fetcher's cached answers in
+`fixtures/public-data/`, `--proteoscope off`), then speaks MCP to it over stdin and stdout as an AI
+agent's client does, with no model, and opens the window it would show in headless Chrome. It
+checks the protocol (initialize: the version asked, the server named, instructions saying where to
+start and that scores are never a clinical classification; `tools/list` the remote actions in
+order, each with its title, description, schema and MCP's hints, as `GET /api/remote/tools` gives
+them; an unknown tool, a missing argument and an unknown method answered with errors that say so),
+then calls every one of the 49 tools on the examples: GRB2's example opened, checked, reproduced,
+its QC read and a finding acknowledged, scored with the Enrich2-compatible preset (both runs'
+output hashes Node's), a variant inspected (its score Node's), variants selected by a query (Node's
+variants), the map rendered, two runs compared (the result the remote action's, field for field),
+a robustness check with a progress token; tracks added, filtered and removed; the target checked
+against UniProt, MaveDB's details set, the design drafted and set back; GRB2's structure found,
+opened, mapped, colored, read as evidence, saved and reopened as a view, Proteoscope asked for and
+refused; a figure made, exported (its manifest read back) and checked; a checkpoint and what
+changed since; the report, a certificate (verified in the window and in Node), the review report,
+files exported (an existing one not replaced); the archive opened again by path, MaveDB searched and
+a score set opened from the cache, a new workspace. Every tool said to read only must leave the
+workspace's history as it was; every change the agent made must carry its name in the history
+(`by`); stdout must carry nothing but JSON-RPC; closing stdin must stop MaveScape and remove its
+connection file. 18 checks; in CI as the `agents` job.
+
 ## Proteoscope itself (`proteoscope-handoff.mjs`, wave 5 slice 6)
 
 `node validation/proteoscope-handoff.mjs [--verbose] [--require]` checks that Proteoscope opens what

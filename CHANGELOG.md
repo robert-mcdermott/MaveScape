@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (unreleased)
+
+Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
+
+### Added
+
+- **`mavescape mcp`, an MCP server for AI agents** (wave 7, slice 1; `mcp.go`, after CytoWeave's).
+  It starts MaveScape with remote control on and speaks the Model Context Protocol on stdin and
+  stdout (JSON-RPC, protocol versions 2024-11-05 to 2025-11-25), its banner and logs on stderr; the
+  window opens when a tool first needs it (`--window`), and MaveScape stops when the agent closes
+  stdin. Its tools are the 49 remote actions under their names, each with a title and MCP's hints
+  (read only; replaces or removes something; may ask a public service), and its instructions say
+  where to start and that scores are never a clinical classification. A call reports progress
+  while it runs long and may be cancelled; files are read and written by absolute path, an
+  existing one never replaced unless asked. Each change an agent makes is recorded in the
+  workspace's history with the agent's name (`by`, covered by the entry's hash), shown in the
+  history and the report's decision log. `docs/MCP.md` gives the setup for Claude Code and other
+  clients, the tools by area and the product requirements' names for them.
+- `GET /api/remote/tools` gives each action's title and hints too.
 
 ### Changed
 
@@ -13,6 +31,19 @@
 - A figure exported as PNG left its last row (or column) of pixels partly transparent: its size in
   points rarely makes whole pixels (a page 178 mm tall is 1,401.6 pixels at 200 dpi), and only the
   page's own background was painted. The whole image is white now before the figure is drawn.
+
+### Validation
+
+- `validation/agent-session.mjs` (18 checks; CI job `agents`): `mavescape mcp` driven over stdio as
+  an agent's client drives it, with no model, every one of the 49 tools called on the examples in
+  headless Chrome: initialize and the tools' list (the remote actions with their titles and
+  hints), errors, the runs' output hashes, a variant's score and a query's variants Node's, a
+  comparison the remote action's field for field, the record through the agent (a figure and its
+  manifest, a checkpoint, a certificate verified in Node), every tool said to read only leaving the
+  history as it was, every change the agent made carrying its name, stdout nothing but JSON-RPC,
+  and MaveScape stopped when stdin closes. Go tests of the protocol (`mcp_test.go`): versions, the
+  tools, a call reaching the page under the agent's name, required arguments, files by path,
+  cancellation and progress, the real command's stdout, and `docs/MCP.md` naming every tool.
 
 ## 0.6.0 (2026-10-12)
 

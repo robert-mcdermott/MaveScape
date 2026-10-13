@@ -395,7 +395,9 @@ name, SHA-256, size, rows, encoding, layout, mapping and import summary), `targe
 `acknowledged`, by id: `{ reason, status, value, time }`, the status and value when acknowledged),
 `example`, and `history`: every
 material change, `{ time, action, detail, hash }`, each hash the SHA-256 of the one before and the
-entry, so that a change made later breaks the chain.
+entry, so that a change made later breaks the chain. From MaveScape 0.7, a change an AI agent made
+through `mavescape mcp` also has `by`, the agent's name as its client gives it ("Claude Code"),
+which the entry's hash covers as it covers the rest.
 
 A table opened from MaveDB (MaveScape 0.3) keeps where it came from, as its source's `origin`:
 `{ database: "MaveDB", urn, file: "scores" | "counts", url, retrieved, license, hasCounts,

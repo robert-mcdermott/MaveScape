@@ -1,7 +1,7 @@
 // Remote control (wave 2, slice 1): actions sent by programs on this computer (scripts, the
-// documentation's screenshot capture, later AI agents through the MCP server) are performed here,
-// in the open window, where the user sees them, they go into the history like any edit, and can be
-// undone. Each action returns { ok, message, data }. The program lists the same actions with
+// documentation's screenshot capture, and AI agents through the MCP server, mavescape mcp, wave 7)
+// are performed here, in the open window, where the user sees them, they go into the history like
+// any edit (an agent's carrying its name), and can be undone. Each action returns { ok, message, data }. The program lists the same actions with
 // their arguments (actions.go, GET /api/remote/tools); a Go test checks the two lists agree.
 // The connection and the export upload follow CytoWeave 0.8.0's web/ui/remote.js.
 
@@ -46,7 +46,7 @@ import { checkRobustness, robustnessFiles } from './robustness.js';
 import { combineSelections, OPERATIONS, QueryError } from '../lib/query.js';
 import { runQuery } from './selections.js';
 import { normalizeUrn } from '../lib/mavedb.js';
-import { setScoreSetDirection } from '../lib/workspace.js';
+import { setHistoryActor, setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 import { possessive } from '../lib/words.js';
@@ -2082,6 +2082,8 @@ export function installRemote(app) {
       const args = typeof event.args === 'object' && event.args ? event.args : {};
       author = event.client || 'a program on this computer';
       app.log(`${author}: ${event.action}${Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 200)}` : ''}`);
+      // An AI agent's changes (mavescape mcp) carry its name in the history (by).
+      setHistoryActor(event.agent ? author : null);
       const result = await handler(args, event);
       let message = result.message ?? 'Done.';
       // An export: the file goes to the program, which writes it where the caller asked.
@@ -2096,6 +2098,8 @@ export function installRemote(app) {
     } catch (error) {
       outcome = { ok: false, message: error.message ?? String(error) };
       if (!(error instanceof ActionError)) console.error(error);
+    } finally {
+      setHistoryActor(null);
     }
     await fetch(`api/remote/result/${encodeURIComponent(event.id)}`, { method: 'POST', body: JSON.stringify(outcome), headers: { 'Content-Type': 'application/json' } }).catch(() => {});
   }

@@ -55,6 +55,8 @@ type config struct {
 	files  []string
 	// Where to look for a running Proteoscope (handoff.go): "" its own ports, "off", or ports.
 	proteoscope string
+	// mcp: started by "mavescape mcp" (mcp.go): the protocol on stdin and stdout, the rest on stderr.
+	mcp bool
 }
 
 type app struct {
@@ -72,6 +74,8 @@ type app struct {
 	records *startupRecords
 	// proteoscope: a running Proteoscope found on this computer (handoff.go).
 	proteoscope *proteoscopeFinder
+	// mcp: serving an AI agent on stdio (mcp.go).
+	mcp bool
 }
 
 func init() {
@@ -84,7 +88,7 @@ func init() {
 }
 
 func main() {
-	// Headless commands (run.go, export.go, verify.go).
+	// Headless commands (run.go, export.go, verify.go), and the MCP server for AI agents (mcp.go).
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "run":
@@ -95,6 +99,8 @@ func main() {
 			os.Exit(exportHeadless(os.Args[2:], os.Stdout, os.Stderr))
 		case "verify":
 			os.Exit(verifyHeadless(os.Args[2:], os.Stdout, os.Stderr))
+		case "mcp":
+			os.Exit(runMCP(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 		}
 	}
 	cfg, err := parseConfig(os.Args[1:])
@@ -303,6 +309,7 @@ func parseConfig(args []string) (config, error) {
 		fmt.Fprintln(flags.Output(), "       mavescape validate [--design design.json] [tables...]         (checks them as scoring would; mavescape validate -h)")
 		fmt.Fprintln(flags.Output(), "       mavescape export --format mavedb --out deposit/ analysis.msz  (a run as a MaveDB deposit, or tables; mavescape export -h)")
 		fmt.Fprintln(flags.Output(), "       mavescape verify analysis.certificate.msz                     (computes a certificate's numbers again; mavescape verify -h)")
+		fmt.Fprintln(flags.Output(), "       mavescape mcp [flags]                                         (a Model Context Protocol server for AI agents, on stdin and stdout; docs/MCP.md)")
 		flags.PrintDefaults()
 	}
 	files, err := parseArgs(flags, args)
@@ -364,6 +371,7 @@ func newApp(cfg config) (*app, error) {
 		files:   newLocalFiles(),
 		fetch:   newFetcher(cfg),
 		records: &startupRecords{},
+		mcp:     cfg.mcp,
 	}
 	finder, err := newProteoscopeFinder(cfg.proteoscope)
 	if err != nil {
@@ -428,6 +436,10 @@ func (a *app) printBanner(out io.Writer, url, connection string) {
 		if connection != "" {
 			fmt.Fprintln(out, connectionNotice(connection))
 		}
+	}
+	if a.mcp {
+		fmt.Fprintln(out, "MCP: answering on stdin and stdout; the MaveScape window opens when a tool needs it, and MaveScape stops when the agent closes stdin.")
+		return
 	}
 	fmt.Fprintln(out, "Press Ctrl+C to stop.")
 }

@@ -3021,6 +3021,42 @@ Decisions taken in planning (confirmed before slice 1):
      `validation/agent-session.mjs` drives `mavescape mcp` over stdio as an MCP client does, with no
      model: every tool called on the examples, each result Node's where the remote session checks
      it. A CI job `agents`.
+   - **Done.** `mcp.go` (after CytoWeave 0.8.0's, itself after Proteoscope's): `mavescape mcp`
+     starts MaveScape with remote control on (its banner on stderr) and answers JSON-RPC on stdio,
+     one message per line; MaveScape stops when stdin closes.
+     - **Tools** are `actions.go`'s list, served as it is to `tools/list` and to `GET
+       /api/remote/tools`: each action gained a title and MCP's hints from a table beside it
+       (`actionHints`: read, edit or file; destructive; public), 21 read only, 7 destructive, 9
+       reaching public data. A Go test keeps the table complete, and another `docs/MCP.md` naming
+       every tool.
+     - **Calls** go through the hub as a script's do: the files an action reads and the upload slot
+       of one it writes are prepared by one function now shared with remote control (`prepare`),
+       without the token, since the agent on stdio is the person's; the window opens when a tool
+       first needs one and again if it was closed (`--window`); progress every 5 s for a call with
+       a progress token; cancellation; a refusal a tool error with its reason. The result is the
+       page's sentence with its data as text and as structured content.
+     - **The agent in the history.** An agent's event says so (`agent`), and every history entry
+       appended while the page performs it, the workspace's first among them, has `by`: the
+       agent's name as its client gives it (`clientInfo`'s title, else its name; "an AI agent"
+       without one). The entry's hash covers it, as it covers every field, and entries without it
+       hash as before. The history, the report's decision log and the review report name the
+       agent. Scripts are unchanged.
+     - `docs/MCP.md` (the setup for Claude Code and other clients, the tools by area with the
+       requirements' names beside them, files, privacy, how it works); the README (a highlight,
+       the command, the code layout, the tests); the site's scripting page, *AI agents*.
+     - Found by slice 1:
+       - **The structured content reordered the page's data**: decoded into Go's maps and encoded
+         again, its fields came out sorted, so an agent's result was not the remote action's field
+         for field. It is passed through as the page wrote it, its numbers exactly.
+       - **The workspace's first entry did not name the agent** that opened it: `createWorkspace`
+         writes it without `appendHistory`. It does now.
+       - GRB2's calls take less than the 5 s between progress notifications, so the session sees
+         none; the Go test shortens the interval and hears them.
+     - Validation: `validation/agent-session.mjs` (18 checks, as above; with `--like-ci` too) in the
+       CI job `agents`; `mcp_test.go` (versions, the tools and their hints, a call reaching a fake
+       page under the agent's name, required arguments, a missing page, refusals, files by path,
+       cancellation and progress, the real command's stdout, the guide); a unit test of `by` in
+       the history and its hash.
 2. **Proposals (M4, part 2).** An agent's changes wait for the person (`lib/proposals.js`, after
    CytoWeave's).
    - **Made at once, marked proposed, usable:** runs it scores, selections, figures and their

@@ -39,7 +39,7 @@ export function mountDrawer(app) {
     const keep = h('button.btn.small', { type: 'button', title: 'Keep the analysis as it stands, to see later what changed since', onclick: () => import('./diff.js').then((m) => m.askCheckpoint(app)) }, 'Keep a checkpoint');
     return h('div', h('div.row', { style: { alignItems: 'center', gap: '8px' } }, status, h('span.spacer'), keep), h('ol.history-list', ...history.slice().reverse().map((entry) => h(`li${entry.action === 'checkpoint' ? '.checkpoint' : ''}`,
       h('time', { title: entry.time }, new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
-      h('span', entry.detail || entry.action, changesSince(entry))))));
+      h('span', entry.detail || entry.action, entry.by ? h('span.muted', ` (by ${entry.by})`) : null, changesSince(entry))))));
   }
 
   function renderLog() {

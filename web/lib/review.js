@@ -413,7 +413,7 @@ function logSection(ws, history) {
   const entries = ws.history ?? [];
   return section('log', 'Decision log', [
     `<p class="callout ${history.ok ? 'ok' : 'danger'}">${history.ok ? `Hash-chained and intact: ${plural(history.entries, 'entry', 'entries')}, each covering the one before it; the last <span class="mono wrap">${esc(history.head ?? '')}</span>.` : `The chain is broken at ${plural(history.broken.length, 'entry', 'entries')}: the history was changed outside MaveScape.`}</p>`,
-    table('Decision log', ['When (UTC)', 'Action', 'What was done'], entries.map((e) => row([{ html: `<span class="mono">${esc(String(e.time).replace('T', ' ').slice(0, 16))}</span>` }, e.action, e.detail ?? '']))),
+    table('Decision log', ['When (UTC)', 'Action', 'What was done'], entries.map((e) => row([{ html: `<span class="mono">${esc(String(e.time).replace('T', ' ').slice(0, 16))}</span>` }, e.action, `${e.detail ?? ''}${e.by ? ` (by ${e.by})` : ''}`]))),
   ].join(''));
 }
 

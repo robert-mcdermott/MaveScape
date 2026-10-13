@@ -3,14 +3,19 @@ package main
 // The remote-control actions (remote.go): what a program on this computer can ask the open
 // MaveScape page to do. The page performs them (web/ui/remote.js, whose action table must name
 // exactly these; TestEveryActionHasAPageHandler checks it). GET /api/remote/tools lists them with
-// their arguments, and the MCP server (roadmap wave 7) will offer the same list to agents.
+// their arguments, and the MCP server (mcp.go, wave 7) offers the same list to agents as its
+// tools, each with a title and hints (actionHints, below).
 
 import "encoding/json"
 
 type remoteAction struct {
 	Name        string         `json:"name"`
+	Title       string         `json:"title,omitempty"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
+	// MCP's hints to an agent's client (readOnlyHint, destructiveHint, openWorldHint), from
+	// actionHints.
+	Annotations map[string]any `json:"annotations,omitempty"`
 	// long: may run for minutes (scoring a large table, QC, an archive with its tables).
 	long bool
 	// output: writes a file at args.path (output.go), so it needs the token.
@@ -336,6 +341,92 @@ var remoteActions = []remoteAction{
 		"selection":          textArg("selection: a saved selection by name; the current selection if not given."),
 		"map":                textArg("comparison-map: first, second or difference (the default)."),
 	}, "what", "path"), long: true, output: true},
+}
+
+// What MCP's tools/list says of each action besides its description: a title, and how it acts.
+// read: changes nothing in the workspace (it may show something in the window); edit: changes the
+// workspace, in its history, and destructive when it replaces or removes something the person
+// made; file: writes a file at the absolute path given, never replacing one unless asked. public:
+// may ask a public service (MaveDB, UniProt, PDBe, the PDB, AlphaFold DB…) through the program's
+// fetcher. TestEveryActionHasATitleAndHints keeps the table complete.
+type actionHint struct {
+	title       string
+	kind        string
+	destructive bool
+	public      bool
+}
+
+var actionHints = map[string]actionHint{
+	"get_state":             {title: "Describe the workspace", kind: "read"},
+	"new_workspace":         {title: "Start a new workspace", kind: "edit"},
+	"open_example":          {title: "Open an example", kind: "edit", public: true},
+	"open_files":            {title: "Open files", kind: "edit"},
+	"set_mode":              {title: "Show a view", kind: "read"},
+	"focus":                 {title: "Show an item in the inspector", kind: "read"},
+	"draft_design":          {title: "Draft the design from the column names", kind: "edit", destructive: true},
+	"set_design":            {title: "Set the design", kind: "edit", destructive: true},
+	"search_mavedb":         {title: "Search MaveDB", kind: "read", public: true},
+	"open_mavedb":           {title: "Open a MaveDB score set", kind: "edit", public: true},
+	"check_target":          {title: "Check the target against UniProt", kind: "edit", public: true},
+	"mavedb_deposit":        {title: "What a MaveDB deposit would hold", kind: "read"},
+	"set_mavedb_details":    {title: "Set the MaveDB details", kind: "edit"},
+	"check":                 {title: "Check a table, its design and parameters", kind: "read"},
+	"reproduce_run":         {title: "Reproduce a run", kind: "read"},
+	"score":                 {title: "Score the counts", kind: "edit"},
+	"qc_findings":           {title: "Quality-control findings", kind: "read"},
+	"acknowledge_finding":   {title: "Acknowledge a QC finding", kind: "edit"},
+	"select_variants":       {title: "Select variants", kind: "edit"},
+	"inspect_variant":       {title: "A variant's evidence", kind: "read"},
+	"render_map":            {title: "The variant-effect map in words", kind: "read"},
+	"compare":               {title: "Compare two sets of scores", kind: "edit", public: true},
+	"check_robustness":      {title: "Check a run's robustness to analysis choices", kind: "edit"},
+	"list_tracks":           {title: "The tracks beside the map", kind: "read"},
+	"add_track":             {title: "Add a track beside the map", kind: "edit", public: true},
+	"set_track":             {title: "Show, move or filter a track", kind: "edit"},
+	"remove_track":          {title: "Remove an annotation and its tracks", kind: "edit", destructive: true},
+	"open_structure":        {title: "Open a structure", kind: "read", public: true},
+	"find_structures":       {title: "Find structures of the target", kind: "read", public: true},
+	"map_structure":         {title: "Map the target onto the structure", kind: "read"},
+	"set_structure":         {title: "Draw, color and select on the structure", kind: "read"},
+	"structure_evidence":    {title: "The structure as evidence", kind: "read"},
+	"save_structure_view":   {title: "Save the structure view", kind: "edit"},
+	"open_structure_view":   {title: "Open a saved structure view", kind: "read", public: true},
+	"remove_structure_view": {title: "Remove a saved structure view", kind: "edit", destructive: true},
+	"figures":               {title: "The workspace's figures", kind: "read"},
+	"create_figure":         {title: "Make a figure", kind: "edit"},
+	"add_figure_panel":      {title: "Add a panel to a figure", kind: "edit"},
+	"set_figure":            {title: "Change or delete a figure", kind: "edit", destructive: true},
+	"export_figure":         {title: "Export a figure", kind: "file"},
+	"check_figure":          {title: "Check an exported figure", kind: "edit"},
+	"checkpoint":            {title: "Keep or delete a checkpoint", kind: "edit", destructive: true},
+	"diff":                  {title: "What changed", kind: "read"},
+	"certify":               {title: "Certify the workspace", kind: "file"},
+	"review_report":         {title: "Write the review report", kind: "file"},
+	"verify_certificate":    {title: "Verify a certificate", kind: "read"},
+	"report":                {title: "The report and its methods", kind: "edit", destructive: true},
+	"proteoscope_link":      {title: "Open the structure in Proteoscope", kind: "read"},
+	"export":                {title: "Export a file", kind: "file"},
+}
+
+// MCP's annotations from a hint.
+func (hint actionHint) annotations() map[string]any {
+	out := map[string]any{"readOnlyHint": hint.kind == "read", "openWorldHint": hint.public}
+	if hint.kind != "read" {
+		out["destructiveHint"] = hint.destructive
+	}
+	if hint.kind == "file" {
+		out["idempotentHint"] = false
+	}
+	return out
+}
+
+func init() {
+	for index, action := range remoteActions {
+		if hint, ok := actionHints[action.Name]; ok {
+			remoteActions[index].Title = hint.title
+			remoteActions[index].Annotations = hint.annotations()
+		}
+	}
 }
 
 func findAction(name string) (remoteAction, bool) {
