@@ -1313,7 +1313,7 @@
   {
     "name": "calibrate",
     "title": "Calibrate a run against a control set",
-    "description": "Calibrates a run's scores against a control set, for research: how far the scores separate its P controls from its B controls, and the functional classes thresholds make (abnormal-like, intermediate, WT-like: classes in this assay, never a classification of a variant). Returns the ROC curve's AUC with DeLong's interval, the precision-recall curve's area, both with a seeded stratified bootstrap's intervals; the thresholds, set by the controls (rule error: at most `error` of either side's controls in the other side's class; youden: one threshold of the largest sensitivity + specificity) or given (abnormal and normal); each side's controls and the run's variants in each class; sensitivity (P abnormal-like) and specificity (B WT-like) with Wilson's intervals; how far the bootstrap moves the thresholds; and the evidence strength each class would give, for research: its OddsPath as Brnich et al. 2019 define it (one control of the other side added) with the strength their Table 3 makes of it (PS3 for the abnormal-like class, BS3 for the WT-like), the bootstrap's interval and strengths with the thresholds kept, and what limits it (thresholds set on the same controls, few controls in a class, circularity). Kept with the workspace and shown in the Calibrate view; nothing calibrates by itself.",
+    "description": "Calibrates a run's scores against a control set, for research: how far the scores separate its P controls from its B controls, and the functional classes thresholds make (abnormal-like, intermediate, WT-like: classes in this assay, never a classification of a variant). Returns the ROC curve's AUC with DeLong's interval, the precision-recall curve's area, both with a seeded stratified bootstrap's intervals; the thresholds, set by the controls (rule error: at most `error` of either side's controls in the other side's class; youden: one threshold of the largest sensitivity + specificity) or given (abnormal and normal); each side's controls and the run's variants in each class; sensitivity (P abnormal-like) and specificity (B WT-like) with Wilson's intervals; how far the bootstrap moves the thresholds; score-level likelihood ratios as acmgscaler computes them (each score's ratio of the P controls' density to the B controls', with its interval, the evidence strength it gives, Tavtigian et al.'s thresholds from a prior or Pejaver et al. 2022's, and the score where each strength begins); and the evidence strength each class would give, for research: its OddsPath as Brnich et al. 2019 define it (one control of the other side added) with the strength their Table 3 makes of it (PS3 for the abnormal-like class, BS3 for the WT-like), the bootstrap's interval and strengths with the thresholds kept, and what limits it (thresholds set on the same controls, few controls in a class, circularity). Kept with the workspace and shown in the Calibrate view; nothing calibrates by itself.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1331,7 +1331,7 @@
           "type": "string"
         },
         "curves": {
-          "description": "The ROC and precision-recall curves' points and bands too.",
+          "description": "The ROC and precision-recall curves' points and bands too, and the likelihood ratio curve and each variant's ratio.",
           "type": "boolean"
         },
         "error": {
@@ -1347,6 +1347,20 @@
         "normal": {
           "description": "rule given: the normal threshold (a score short of it is WT-like); the abnormal threshold again for one threshold.",
           "type": "number"
+        },
+        "pejaver": {
+          "description": "The likelihood ratios' evidence thresholds of Pejaver et al. 2022's Table 1 instead (prior 0.0441, c = 1,124).",
+          "type": "boolean"
+        },
+        "prior": {
+          "description": "The prior of pathogenicity the likelihood ratios' evidence thresholds come from (0.1 if not given: c = 350, as acmgscaler's search finds it).",
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "published": {
+          "description": "A published calibration of the run's MaveDB record, by its title: its abnormal and normal ranges as the thresholds (for a run of the record's own scores), MaveScape's OddsPath on the control set beside the one it states.",
+          "type": "string"
         },
         "rule": {
           "description": "How the thresholds are set: error (the default), youden or given.",
@@ -1382,7 +1396,7 @@
   {
     "name": "calibrations",
     "title": "The calibrations",
-    "description": "The workspace's calibrations (research use): each one's run, control set, side, rule, thresholds and bootstrap; its AUC and precision-recall area with their intervals, the controls and the run's variants in each class, sensitivity and specificity with Wilson's intervals, and how far the bootstrap moves the thresholds, and each class's OddsPath and evidence strength (research use) with what limits it. With curves, the ROC and precision-recall curves' points and bands.",
+    "description": "The workspace's calibrations (research use): each one's run, control set, side, rule, thresholds and bootstrap; its AUC and precision-recall area with their intervals, the controls and the run's variants in each class, sensitivity and specificity with Wilson's intervals, and how far the bootstrap moves the thresholds, each class's OddsPath and evidence strength (research use) with what limits it, and the score-level likelihood ratios (where each strength begins, the variants at each). With curves, the ROC and precision-recall curves' points and bands, the likelihood ratio curve and each variant's ratio.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {

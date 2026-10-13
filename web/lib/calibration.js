@@ -545,3 +545,54 @@ export function calibrationWords(cal, { set = null, run = null, metrics = null }
 }
 
 export { pct as percentText, g3 as threeFigures };
+
+// --- Published calibrations (wave 8, slice 4) --------------------------------------------------------
+
+// Whether a score is in a published class's range (lib/mavedb.js's calibrationOf: { range: [lo,
+// hi] (null open), inclusive: [lower, upper] }), as MaveDB counts its variants.
+export function inPublishedRange(k, x) {
+  if (!Array.isArray(k.range) || !Number.isFinite(x)) return false;
+  const [lo, hi] = k.range;
+  const [li, ui] = k.inclusive ?? [true, true];
+  return (lo === null || (li ? x >= lo : x > lo)) && (hi === null || (ui ? x <= hi : x < hi));
+}
+
+// The scores in each of a published calibration's classes with a range: [{ label, class, range, n,
+// published (MaveDB's variant count) }].
+export function publishedClassCounts(calibration, scores) {
+  return calibration.classes.filter((k) => Array.isArray(k.range)).map((k) => {
+    let n = 0;
+    for (const x of scores) if (inPublishedRange(k, x)) n += 1;
+    return { label: k.label, class: k.class, range: k.range, n, published: k.variants };
+  });
+}
+
+// A published calibration's classes as MaveScape's two thresholds: { side, abnormal, normal } where
+// its abnormal ranges all lie on one side of its normal ones (abnormal-like at or beyond the bound
+// of the abnormal ranges nearest the normal, WT-like beyond the normal ranges' nearest); null
+// without a ranged class of each, or where they interleave.
+export function publishedThresholds(calibration) {
+  const A = calibration.classes.filter((k) => k.class === 'abnormal' && Array.isArray(k.range));
+  const N = calibration.classes.filter((k) => k.class === 'normal' && Array.isArray(k.range));
+  if (!A.length || !N.length) return null;
+  const lo = (k) => k.range[0] ?? -Infinity;
+  const hi = (k) => k.range[1] ?? Infinity;
+  const aHi = Math.max(...A.map(hi));
+  const nLo = Math.min(...N.map(lo));
+  if (aHi <= nLo && Number.isFinite(aHi) && Number.isFinite(nLo)) return { side: 'below', abnormal: aHi, normal: nLo };
+  const aLo = Math.min(...A.map(lo));
+  const nHi = Math.max(...N.map(hi));
+  if (aLo >= nHi && Number.isFinite(aLo) && Number.isFinite(nHi)) return { side: 'above', abnormal: aLo, normal: nHi };
+  return null;
+}
+
+// A published calibration's OddsPath and evidence for its abnormal and its normal classes, as it
+// states them (a calibration of one OddsPath a class: Fayer's, IGVF's), { abnormal: { oddsPath,
+// criterion, strength } | null, normal: … }.
+export function publishedEvidence(calibration) {
+  const of = (cls) => {
+    const k = calibration.classes.find((x) => x.class === cls && x.oddsPath !== null);
+    return k ? { oddsPath: k.oddsPath, criterion: k.evidence?.criterion ?? null, strength: k.evidence?.strength ?? null } : null;
+  };
+  return { abnormal: of('abnormal'), normal: of('normal') };
+}

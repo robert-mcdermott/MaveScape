@@ -943,12 +943,15 @@ ms_remove_control_set <- function(name, ms = ms_default()) {
 #' youden: one threshold of the largest sensitivity + specificity) or given (abnormal and
 #' normal); each side's controls and the run's variants in each class; sensitivity (P
 #' abnormal-like) and specificity (B WT-like) with Wilson's intervals; how far the bootstrap
-#' moves the thresholds; and the evidence strength each class would give, for research: its
-#' OddsPath as Brnich et al. 2019 define it (one control of the other side added) with the
-#' strength their Table 3 makes of it (PS3 for the abnormal-like class, BS3 for the WT-like),
-#' the bootstrap's interval and strengths with the thresholds kept, and what limits it
-#' (thresholds set on the same controls, few controls in a class, circularity). Kept with the
-#' workspace and shown in the Calibrate view; nothing calibrates by itself.
+#' moves the thresholds; score-level likelihood ratios as acmgscaler computes them (each
+#' score's ratio of the P controls' density to the B controls', with its interval, the evidence
+#' strength it gives, Tavtigian et al.'s thresholds from a prior or Pejaver et al. 2022's, and
+#' the score where each strength begins); and the evidence strength each class would give, for
+#' research: its OddsPath as Brnich et al. 2019 define it (one control of the other side added)
+#' with the strength their Table 3 makes of it (PS3 for the abnormal-like class, BS3 for the
+#' WT-like), the bootstrap's interval and strengths with the thresholds kept, and what limits
+#' it (thresholds set on the same controls, few controls in a class, circularity). Kept with
+#' the workspace and shown in the Calibrate view; nothing calibrates by itself.
 #'
 #' @param abnormal rule given: the abnormal threshold (a score at or beyond it, on the abnormal
 #' side, is abnormal-like). Optional; a number.
@@ -956,14 +959,21 @@ ms_remove_control_set <- function(name, ms = ms_default()) {
 #' number.
 #' @param control_set The control set by name; the one focused, else the latest, if not given.
 #' Optional; a string.
-#' @param curves The ROC and precision-recall curves' points and bands too. Optional; TRUE or
-#' FALSE (Python: True or False).
+#' @param curves The ROC and precision-recall curves' points and bands too, and the likelihood
+#' ratio curve and each variant's ratio. Optional; TRUE or FALSE (Python: True or False).
 #' @param error rule error: the share of either side's controls allowed in the other side's
 #' class (0.05 if not given). Optional; a number.
 #' @param name The calibration's name; the run's and the set's if not given. Optional; a
 #' string.
 #' @param normal rule given: the normal threshold (a score short of it is WT-like); the
 #' abnormal threshold again for one threshold. Optional; a number.
+#' @param pejaver The likelihood ratios' evidence thresholds of Pejaver et al. 2022's Table 1
+#' instead (prior 0.0441, c = 1,124). Optional; TRUE or FALSE (Python: True or False).
+#' @param prior The prior of pathogenicity the likelihood ratios' evidence thresholds come from
+#' (0.1 if not given: c = 350, as acmgscaler's search finds it). Optional; a number.
+#' @param published A published calibration of the run's MaveDB record, by its title: its
+#' abnormal and normal ranges as the thresholds (for a run of the record's own scores),
+#' MaveScape's OddsPath on the control set beside the one it states. Optional; a string.
 #' @param rule How the thresholds are set: error (the default), youden or given. Optional; a
 #' string.
 #' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
@@ -977,8 +987,8 @@ ms_remove_control_set <- function(name, ms = ms_default()) {
 #' @param ms A connection from ms_connect() (default: the last one made).
 #' @return A mavescape_result: the message and the data MaveScape answered with.
 #' @export
-ms_calibrate <- function(abnormal = NULL, condition = NULL, control_set = NULL, curves = NULL, error = NULL, name = NULL, normal = NULL, rule = NULL, run = NULL, samples = NULL, seed = NULL, side = NULL, ms = ms_default()) {
-  ms_call("calibrate", abnormal = abnormal, condition = condition, control_set = control_set, curves = curves, error = error, name = name, normal = normal, rule = rule, run = run, samples = samples, seed = seed, side = side, ms = ms)
+ms_calibrate <- function(abnormal = NULL, condition = NULL, control_set = NULL, curves = NULL, error = NULL, name = NULL, normal = NULL, pejaver = NULL, prior = NULL, published = NULL, rule = NULL, run = NULL, samples = NULL, seed = NULL, side = NULL, ms = ms_default()) {
+  ms_call("calibrate", abnormal = abnormal, condition = condition, control_set = control_set, curves = curves, error = error, name = name, normal = normal, pejaver = pejaver, prior = prior, published = published, rule = rule, run = run, samples = samples, seed = seed, side = side, ms = ms)
 }
 
 #' The calibrations
@@ -986,9 +996,11 @@ ms_calibrate <- function(abnormal = NULL, condition = NULL, control_set = NULL, 
 #' The workspace's calibrations (research use): each one's run, control set, side, rule,
 #' thresholds and bootstrap; its AUC and precision-recall area with their intervals, the
 #' controls and the run's variants in each class, sensitivity and specificity with Wilson's
-#' intervals, and how far the bootstrap moves the thresholds, and each class's OddsPath and
-#' evidence strength (research use) with what limits it. With curves, the ROC and
-#' precision-recall curves' points and bands.
+#' intervals, and how far the bootstrap moves the thresholds, each class's OddsPath and
+#' evidence strength (research use) with what limits it, and the score-level likelihood ratios
+#' (where each strength begins, the variants at each). With curves, the ROC and
+#' precision-recall curves' points and bands, the likelihood ratio curve and each variant's
+#' ratio.
 #'
 #' @param curves The curves' points and bands too. Optional; TRUE or FALSE (Python: True or
 #' False).

@@ -142,10 +142,13 @@ import { CLINVAR } from '../web/lib/providers/clinvar.js';
 import { scoresTable } from '../web/lib/exports.js';
 import { addControlSet } from '../web/lib/workspace.js';
 import { addCalibration, removeControlSet } from '../web/lib/workspace.js';
-import { calibrationMetrics, evidenceLimitations, thresholdWords } from '../web/lib/calibration.js';
+import { calibrationMetrics, classOf, evidenceLimitations, thresholdWords } from '../web/lib/calibration.js';
 import { classOddsPath, evidenceStrength } from '../web/lib/oddspath.js';
 import { bootstrapAgreement, exactAgreement, readCalibrationReference } from './calibration-cases.mjs';
-import { FACTOR9_CONTROLS, factor9Controls } from './fixtures/make-calibration.mjs';
+import { FACTOR9_CONTROLS, FACTOR9_SCORES, factor9Controls, factor9Scores } from './fixtures/make-calibration.mjs';
+import { acmgscalerAgreement, csvColumns, fayerOddsPath, numericsAgreement, publishedAgreement, readLikelihoodReference, thresholdAgreement } from './likelihood-cases.mjs';
+import { calibrateScores } from '../web/lib/likelihood.js';
+import { inPublishedRange, publishedThresholds as publishedThresholdsOf } from '../web/lib/calibration.js';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
 import { describeMapping, mapTarget, mapTargetOnChain, rankStructures } from '../web/lib/mapping.js';
 import { assemblyChoices, chainSummaries, openStructureText, readStructureBytes } from '../web/lib/structures.js';
@@ -5230,6 +5233,76 @@ const suites = {
     const gone = removeControlSet(back.ws, 'Controls');
     check('calibration', 'calibrations kept with the workspace: through its archive the same, the history\'s chain unbroken; a checkpoint\'s diff names each one made; deleting its control set deletes it, and the history says so', `${(back.ws.calibrations ?? []).map((c) => `${c.name}: ${thresholdWords(c.side, c.thresholds)}`).join(', ')}; ${words.join(' ')} Then: ${gone.history.at(-1).detail}`,
       JSON.stringify(back.ws.calibrations) === JSON.stringify(ws.calibrations) && verifyHistory(back.ws).ok && words.length === 1 && /^The calibration "Run 1 · Controls" was made \(Run 1 against "Controls", 164 P and 22 B controls scored; abnormal-like ≤ 0\.781; intermediate 0\.781 to 1\.58; WT-like > 1\.58\)\.$/.test(words[0]) && gone.calibrations === undefined && /and the calibration "Run 1 · Controls" made with it$/.test(gone.history.at(-1).detail), 'the same; named; gone with its set');
+  },
+
+
+  // Wave 8, slice 4 (K3): score-level likelihood ratios (lib/likelihood.js, acmgscaler's method) and
+  // the R numerics they rest on (lib/rcompat.js), against R and acmgscaler (reference/likelihood.json,
+  // generate_likelihood.R); Pejaver et al. 2022's Table 1; MaveDB's published calibrations read as
+  // MaveDB means them; Fayer et al. 2021's BRCA1 OddsPath from their data.
+  async likelihood() {
+    const ref = readLikelihoodReference();
+    const n = numericsAgreement(ref);
+    check('likelihood', 'R\'s random numbers as set.seed(kind = "Mersenne-Twister", sample.kind = "Rejection") and sample(replace = TRUE) make them, written from Matsumoto and Nishimura with R\'s conventions found by experiment: four seeds\' 624 words of state, their first uniforms, 80 draws each from 7, 186, 1,000 and 65,537 values', `${n.seeds.filter(Boolean).length} of ${n.seeds.length} seeds the same${n.differ.length ? `; differ: ${n.differ.join(', ')}` : ''}`, n.seeds.every(Boolean), 'every number the same');
+    check('likelihood', 'R\'s numerics written from their publications: the Gaussian kernel density by linear binning and the FFT (density, R 4.4\'s grid), biased cross-validation\'s bandwidth (bw.bcv) by Brent\'s minimizer, isotonic regression, optimize, approx (ties mean, rules 1 and 2), seq, mad, qbinom, Spearman', `density ${n.density.toExponential(1)} of its peak; bandwidth ${n.bandwidth.toExponential(1)}; isoreg ${n.isoreg.toExponential(1)}; optimize ${n.optimize.toExponential(1)}; seq ${n.seq ? 'the same' : 'differs'}; approx ${n.approx ? 'the same' : 'differs'}; mad ${n.mad.toExponential(1)}; qbinom ${n.qbinom ? 'the same' : 'differs'}; Spearman ${n.spearman.toExponential(1)}`,
+      n.density < 1e-13 && n.bandwidth < 1e-11 && n.isoreg < 1e-14 && n.optimize < 1e-14 && n.seq && n.approx && n.mad < 1e-14 && n.qbinom && n.spearman < 1e-14, 'within 1e-11');
+    // acmgscaler itself.
+    const f9Text = readFileSync(FACTOR9_SCORES, 'utf8');
+    const f9Cols = csvColumns(f9Text);
+    const f9Rows = f9Cols.score.map((v, i) => ({ score: Number(v), class: f9Cols.side[i] || 'U' }));
+    const cases = acmgscalerAgreement(ref, f9Rows);
+    const said = (x) => `${x.name}: c ${x.pvst}, ratios ${x.lr.toExponential(1)}, thresholds ${Number.isFinite(x.thresholds) ? x.thresholds.toExponential(1) : 'differ'}${x.evidence ? `, ${x.evidence} evidence differ` : ''}${x.counts ? '' : ', counts differ'}`;
+    const ok = (x) => x.lr < 1e-11 && x.thresholds < 1e-11 && !x.evidence && x.counts;
+    const example = cases.slice(0, 2);
+    check('likelihood', 'acmgscaler 1.0.0 on its own example (variant_data by gene, calibrate(group = "gene"), prior 0.1, seed 42, one generator for both): every variant\'s likelihood ratio and its interval, its evidence, and the score where each strength begins with its interval', example.map(said).join('; '), example.length === 2 && example.every(ok), 'within 1e-11, the evidence the same');
+    const others = cases.slice(2);
+    const fixture = `variant,score,side\n${(await factor9Scores()).map(([k, x, side]) => `${k},${x},${side}`).join('\n')}\n`;
+    check('likelihood', 'acmgscaler on three more: BRCA1 at Pejaver et al.\'s prior, 0.0441; TP53 with its scores negated (lower scores the benign); factor IX\'s Run 1, its 164 P and 22 B ClinVar controls and its 8,827 other scored variants unlabeled, with MaveScape\'s seed (fixtures/controls/factor9-run1-scores.csv, still what the example makes)', `${others.map(said).join('; ')}; fixture ${fixture === f9Text ? 'current' : 'differs: node validation/fixtures/make-calibration.mjs'}`,
+      others.length === 3 && others.every(ok) && fixture === f9Text, 'within 1e-11, the evidence the same');
+    const t = thresholdAgreement(ref);
+    check('likelihood', 'c from the prior as acmgscaler finds it (350 at 0.1, Tavtigian et al. 2018\'s), and Pejaver et al. 2022\'s Table 1 at its c = 1,124: every likelihood ratio and posterior as the table prints them; acmgscaler\'s search at Pejaver\'s prior finds 1,131, so MaveScape offers the table\'s as its own choice', `c ${t.pvst.join(' and ')} (acmgscaler ${t.expected.join(' and ')}); thresholds ${Math.max(...t.thresholds).toExponential(1)}; Table 1 ratios ${t.table.lr ? 'as printed' : 'differ'}, posteriors ${t.table.posterior ? 'as printed' : 'differ'} (supporting ${t.computed.pathogenic[0].toFixed(4)}, moderate ${t.computed.pathogenic[1].toFixed(3)}, strong ${t.computed.pathogenic[2].toFixed(2)})`,
+      t.pvst.join() === t.expected.join() && t.pvst.join() === '350,1131' && Math.max(...t.thresholds) < 1e-14 && t.table.lr && t.table.posterior, 'the same');
+
+    // MaveDB's published calibrations, read as MaveDB means them.
+    const published = publishedAgreement((name, file) => dataset(name).text(file));
+    const differ = published.filter((x) => x.differ.length);
+    const table3 = published.flatMap((x) => x.table3);
+    const mapped = published.filter((x) => x.mapped);
+    const mismatch = mapped.filter((x) => x.mapped.abnormal !== x.mapped.published.abnormal || x.mapped.normal !== x.mapped.published.normal);
+    check('likelihood', `MaveDB's published calibrations of ${new Set(published.map((x) => x.urn)).size} records (BRCA1's saturation genome editing, PTEN's abundance and phosphatase activity, TP53's nutlin screen and DNA-binding domain, factor IX): every class with a range counts the record's scores as MaveDB counts its variants; every OddsPath a calibration states has the strength it states by Brnich et al.'s Table 3; and each calibration with an abnormal and a normal class on two sides, as MaveScape's two thresholds (Calibrate with its thresholds), classes the scores as its classes do`,
+      `${published.length} calibrations, ${published.reduce((m, x) => m + x.ranged, 0)} ranged classes${differ.length ? `; differ: ${differ.map((x) => x.title).join(', ')}` : ', every count MaveDB\'s'}; ${table3.filter((x) => x.same).length} of ${table3.length} stated strengths Table 3's; ${mapped.length - mismatch.length} of ${mapped.length} as thresholds the same${mismatch.length ? `; differ: ${mismatch.map((x) => x.title).join(', ')}` : ''}`,
+      published.length === 22 && !differ.length && table3.length === 12 && table3.every((x) => x.same) && mapped.length === 17 && !mismatch.length, 'every one');
+    // Fayer et al. 2021's BRCA1 calibration, from their published data.
+    const fayer = fayerOddsPath(dataset('fayer-brca1').text('BRCA1_SGE_data.csv'));
+    const brca1 = readScoreSet(JSON.parse(readFileSync(new URL('./fixtures/public-data/mavedb/urn_mavedb_00000097-0-2.json', import.meta.url), 'utf8'))).calibrations.find((c) => c.title === 'Fayer calibration');
+    const statedA = brca1.classes.find((k) => k.class === 'abnormal').oddsPath;
+    const statedN = brca1.classes.find((k) => k.class === 'normal').oddsPath;
+    check('likelihood', 'Fayer et al. 2021\'s BRCA1 calibration, from their published data (Findlay\'s classes against their ClinVar labels, their repository at a pinned commit): 198 of 209 P controls abnormal, 159 of 166 B normal, and the OddsPath as observed (MaveScape\'s `observed`, P1 over every control) as the paper and MaveDB\'s "Fayer calibration" give it, 52.4 and 0.02, PS3 and BS3 strong; with Brnich et al.\'s one control added, as MaveScape gives it by default, lower', `P ${JSON.stringify(fayer.counts.P)}, B ${JSON.stringify(fayer.counts.B)}; observed ${fayer.observed.abnormal.toFixed(2)} and ${fayer.observed.normal.toFixed(4)} (MaveDB ${statedA}, ${statedN}); with the added control ${fayer.brnich.abnormal.toFixed(2)} and ${fayer.brnich.normal.toFixed(4)}`,
+      fayer.counts.P.LOF === 198 && fayer.nP === 209 && fayer.counts.B.FUNC === 159 && fayer.nB === 166 && fayer.observed.abnormal.toFixed(1) === String(statedA) && fayer.observed.normal.toFixed(2) === String(statedN) && evidenceStrength(fayer.observed.abnormal).code === 'PS3' && evidenceStrength(fayer.observed.normal).code === 'BS3', '52.4 and 0.02, as MaveDB has them');
+    // Factor IX's published scores against its ClinVar controls: MaveScape's calibration with the
+    // investigators' thresholds and acmgscaler's ratios, beside the record's ExCALIBR calibration.
+    const record = readScoreSet(JSON.parse(readFileSync(new URL('./fixtures/public-data/mavedb/urn_mavedb_00001200-a-1.json', import.meta.url), 'utf8')));
+    const investigators = record.calibrations.find((c) => c.title === 'Investigator-provided functional classes');
+    const excalibr = record.calibrations.find((c) => c.title === 'ExCALIBR calibration');
+    const pubCols = csvColumns(dataset('mavedb-factor9').text('scores.csv'));
+    const f9 = openExampleInNode(exampleById('factor9'));
+    const f9Target = { ...f9.design.targets[0], identifiers: { ...(f9.design.targets[0].identifiers ?? {}), gene: 'F9' } };
+    const labels = new Map(clinvarControls((await CLINVAR.fetch(f9Target, {}, cachedGet())).text, f9Target).labels.map((l) => [l.key, l.side]));
+    const rows = [];
+    pubCols.hgvs_pro.forEach((key, i) => {
+      const x = pubCols.score[i] === '' || pubCols.score[i] === 'NA' ? Number.NaN : Number(pubCols.score[i]);
+      if (Number.isFinite(x) && /^p\.[A-Z][a-z]{2}\d+[A-Z][a-z]{2}$|^p\.[A-Z][a-z]{2}\d+(=|Ter)$/.test(key)) rows.push({ key, score: x, class: labels.get(key) ?? 'U' });
+    });
+    const thr = publishedThresholdsOf(investigators);
+    const P = rows.filter((r) => r.class === 'P').map((r) => r.score);
+    const B = rows.filter((r) => r.class === 'B').map((r) => r.score);
+    const metrics = calibrationMetrics(P, B, { side: thr.side, rule: 'given', abnormal: thr.abnormal, normal: thr.normal, samples: 0 });
+    const disagree = rows.filter((r) => r.class !== 'U').filter((r) => (classOf(r.score, thr.side, thr) === 'abnormal-like') !== inPublishedRange(investigators.classes.find((k) => k.class === 'abnormal'), r.score) || (classOf(r.score, thr.side, thr) === 'WT-like') !== inPublishedRange(investigators.classes.find((k) => k.class === 'normal'), r.score));
+    const lr = calibrateScores(rows, { prior: 0.1, seed: 20261009 });
+    const ours = lr.thresholds.filter((x) => !x.boundary.startsWith('Benign') && x.score !== null).map((x) => `${x.boundary.split('|')[1]} below ${x.score.toFixed(3)}`);
+    const theirs = excalibr.classes.filter((k) => Array.isArray(k.range)).map((k) => `${k.label} ${k.range[0] === null ? '' : k.range[0].toFixed(3)}–${k.range[1] === null ? '' : k.range[1].toFixed(3)}`);
+    check('likelihood', 'factor IX\'s published scores (urn:mavedb:00001200-a-1) against its ClinVar controls: the investigators\' published classes as MaveScape\'s thresholds give every control the class its published range gives it, and MaveScape\'s OddsPath on them; acmgscaler\'s score thresholds beside the record\'s ExCALIBR calibration (another method, other controls: compared, not equal)', `${P.length} P and ${B.length} B scored; ${disagree.length ? `${disagree.length} controls classed otherwise` : 'every control classed as published'}; OddsPath ${metrics.evidence.abnormal.oddsPath.toFixed(2)} (${metrics.evidence.abnormal.strength.code}) and ${metrics.evidence.normal.oddsPath.toFixed(3)} (${metrics.evidence.normal.strength.code}); acmgscaler: ${ours.join(', ') || 'none'}; ExCALIBR: ${theirs.join(', ')}`,
+      P.length > 100 && B.length >= 10 && !disagree.length && metrics.evidence.abnormal.strength && lr.thresholds.length === 8, 'every control as published');
   },
 
 };

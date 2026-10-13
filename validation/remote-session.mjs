@@ -70,7 +70,9 @@ import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/
 import { cellsAtPositions, coloringCSV, coloringLegend, coloringPalette, placeOnTarget, POSITION, positionValues, residueColors, thresholdClasses } from '../web/lib/structure-scores.js';
 import { cellAt, cellName } from '../web/lib/map-model.js';
 import { circularity, clinvarControls, matchControls, tableControls } from '../web/lib/controls.js';
-import { calibrationMetrics, classCounts, controlScores } from '../web/lib/calibration.js';
+import { calibrationMetrics, classCounts, controlScores, publishedThresholds } from '../web/lib/calibration.js';
+import { calibrateScores } from '../web/lib/likelihood.js';
+import { readScoreSet } from '../web/lib/mavedb.js';
 import { KIND } from '../web/lib/variants.js';
 import { CLINVAR } from '../web/lib/providers/clinvar.js';
 import { cachedGet } from './cached-fetch.mjs';
@@ -96,6 +98,10 @@ const TP53_TABLES = [['urn:mavedb:00000068-c-1', 'scores.csv'], ['urn:mavedb:000
 // mavedb-brca1-ring keeps them: the example opened offline, then certified.
 const RING = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-brca1-ring', 'aa');
 const RING_URN = 'urn:mavedb:00000003-a-2';
+// Factor IX's published scores and counts (wave 8, slice 4), as node validation/fetch.mjs
+// mavedb-factor9 keeps them: the record opened offline, its published calibrations' thresholds.
+const F9 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-factor9');
+const F9_URN = 'urn:mavedb:00001200-a-1';
 const results = [];
 const fmtShare = (x) => `${(100 * x).toFixed(0)}% drawn`;
 function check(name, value, ok, required = '') {
@@ -140,6 +146,13 @@ async function startMaveScape() {
       const name = `${urn.replaceAll(':', '_')}.scores.csv`;
       cpSync(join(TP53, file), join(cache, 'mavedb', name));
       writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/scores`, retrieved: '2026-10-12T01:15:25Z' }, null, 2)}\n`);
+    }
+  }
+  if (existsSync(join(F9, 'counts.csv'))) {
+    for (const table of ['scores', 'counts']) {
+      const name = `${F9_URN.replaceAll(':', '_')}.${table}.csv`;
+      cpSync(join(F9, `${table}.csv`), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${F9_URN}/${table}`, retrieved: '2026-10-13T08:00:00Z' }, null, 2)}\n`);
     }
   }
   const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache, '--proteoscope', String(PROTEOSCOPE_PORT)], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -1502,16 +1515,21 @@ try {
       && d.roc.points.length === nm.roc.points.length && d.roc.band.every((b, i) => near(b.low, nm.roc.band[i].low) && near(b.high, nm.roc.band[i].high)) && d.prCurve.points.length === nm.pr.points.filter((p) => !p.between).length
       // Evidence strength (slice 3): each class's OddsPath, strength and bootstrap.
       && ['abnormal', 'normal'].every((w) => near(d.evidence[w].oddsPath, nm.evidence[w].oddsPath) && d.evidence[w].strength === nm.evidence[w].strength.code && near(d.evidence[w].bootstrap.low, nm.evidence[w].boot.low) && d.evidence[w].bootstrap.noControl === nm.evidence[w].boot.empty);
+    // Score-level likelihood ratios (slice 4): acmgscaler's in Node on the window's own rows.
+    const nodeLr = calibrateScores(d.likelihood.variants.map((v) => ({ score: v.score, class: v.class })), { prior: 0.1, seed: 20261009 });
+    const sameLr = d.likelihood.c === 350 && d.likelihood.thresholds.every((t, k) => near(t.score, nodeLr.thresholds[k].score) && near(t.lower, nodeLr.thresholds[k].lower)) && d.likelihood.variants.every((v, i) => near(v.lr, nodeLr.rows[i].lr) && v.evidence === nodeLr.rows[i].evidence)
+      && d.likelihood.variants.length === 9013 && d.likelihood.variants.filter((v) => v.class === 'P').length === 164;
     const shown = JSON.parse(await browser.eval(`JSON.stringify({ mode: document.getElementById('app').dataset.mode, plots: document.querySelectorAll('.view-body svg.plot').length, curves: document.querySelectorAll('.view-body svg.calibration-curve').length, text: document.querySelector('.view-body')?.textContent ?? '', evidence: document.querySelector('#calibration-evidence')?.textContent ?? '' })`));
-    check('calibrate on factor IX (Run 1 against the ClinVar set, the defaults): every metric as Node computes it from the same scored controls (the AUC and DeLong\'s interval, the precision-recall area, the thresholds, each side in each class, Wilson\'s intervals, the seeded bootstrap\'s intervals and bands, the curves\' points, each class\'s OddsPath and evidence strength); shown in Calibrate, the scores of each side and both curves drawn, the evidence strength with what limits it', `${cal.message.slice(0, 230)}…; ${shown.plots} plots; OddsPath ${d.evidence.abnormal.oddsPath.toFixed(2)} ${d.evidence.abnormal.strength}, ${d.evidence.normal.oddsPath.toFixed(3)} ${d.evidence.normal.strength}; ${d.limitations.length} limitations`,
-      same && d.side === 'below' && d.sideFrom === 'readout' && d.scored.P === 164 && d.scored.B === 22 && shown.mode === 'calibrate' && shown.plots === 3 && shown.curves === 2 && /Sensitivity/.test(shown.text) && /How far the bootstrap moves the thresholds/.test(shown.text)
-      && /PS3_moderate \(moderate\)/.test(shown.evidence) && /What it rests on/.test(shown.text) && d.limitations.map((l) => l.id).join() === 'same-controls,few-normal,unstable-normal,circular-evaluated-since' && /OddsPath, Brnich et al\. 2019/.test(cal.message));
-    const given = await act('calibrate', { rule: 'given', abnormal: 0.3, normal: 0.7, samples: 0, name: 'Given' });
+    check('calibrate on factor IX (Run 1 against the ClinVar set, the defaults): every metric as Node computes it from the same scored controls (the AUC and DeLong\'s interval, the precision-recall area, the thresholds, each side in each class, Wilson\'s intervals, the seeded bootstrap\'s intervals and bands, the curves\' points, each class\'s OddsPath and evidence strength); its score-level likelihood ratios as acmgscaler computes them in Node from the window\'s own rows (every variant\'s ratio and evidence, the score where each strength begins); shown in Calibrate, the scores of each side and both curves drawn, the evidence strength with what limits it', `${cal.message.slice(0, 230)}…; ${shown.plots} plots; ${sameLr ? 'the likelihood ratios Node\'s' : 'the likelihood ratios differ'}; OddsPath ${d.evidence.abnormal.oddsPath.toFixed(2)} ${d.evidence.abnormal.strength}, ${d.evidence.normal.oddsPath.toFixed(3)} ${d.evidence.normal.strength}; ${d.limitations.length} limitations`,
+      same && d.side === 'below' && d.sideFrom === 'readout' && d.scored.P === 164 && d.scored.B === 22 && shown.mode === 'calibrate' && shown.plots === 4 && shown.curves === 2 && /Sensitivity/.test(shown.text) && /How far the bootstrap moves the thresholds/.test(shown.text)
+      && /PS3_moderate \(moderate\)/.test(shown.evidence) && /What it rests on/.test(shown.text) && d.limitations.map((l) => l.id).join() === 'same-controls,few-normal,unstable-normal,circular-evaluated-since' && /OddsPath, Brnich et al\. 2019/.test(cal.message)
+      && sameLr && /Pathogenic-Strong below 0\.505/.test(cal.message));
+    const given = await act('calibrate', { run: 'Run 1', rule: 'given', abnormal: 0.3, normal: 0.7, samples: 0, name: 'Given' });
     const missense = proteinView(f9.scored.results) ?? f9.scored.results;
     const values = [];
     for (let i = 0; i < missense.rows; i += 1) if (missense.variants.kind[i] === KIND.MISSENSE && Number.isFinite(missense.conditions[0].score[i])) values.push(missense.conditions[0].score[i]);
     const nodeGiven = classCounts(values, 'below', { abnormal: 0.3, normal: 0.7 });
-    const wrongOrder = await send('calibrate', { rule: 'given', abnormal: 0.9, normal: 0.7 });
+    const wrongOrder = await send('calibrate', { run: 'Run 1', rule: 'given', abnormal: 0.9, normal: 0.7 });
     check('calibrate with given thresholds: the controls and the run\'s missense variants in each class as Node counts them; thresholds in the wrong order refused, saying why', `${given.message.slice(0, 160)}…; missense ${JSON.stringify(given.data.classes.missense)}; ${wrongOrder.message}`,
       ['abnormal-like', 'intermediate', 'WT-like'].every((k) => given.data.classes.missense[k] === nodeGiven[k] && given.data.classes.P[k] === classCounts(nodeScores.P.scores, 'below', { abnormal: 0.3, normal: 0.7 })[k]) && !given.data.stability && !wrongOrder.ok && /0\.9 is above 0\.7/.test(wrongOrder.message));
     const listedCal = await act('calibrations', {});
@@ -1523,6 +1541,31 @@ try {
     check('calibrations lists them; focus shows one in the inspector; remove_calibration deletes one; deleting the control set deletes those made with it, the history saying so', `${listedCal.message.slice(0, 120)}… ${focusedCal.message} ${removedCal.message} ${afterCal.history.at(-1).detail}`,
       listedCal.data.calibrations.length === 2 && /Given thresholds|given thresholds/.test(calInspector) && /Open in Calibrate/.test(calInspector) && removedCal.ok && afterCal.calibrations === undefined && afterCal.controlSets === undefined
       && /^Deleted the control set "ClinVar, ★ or more", and the calibration "Run 1 · ClinVar, ★ or more" made with it$/.test(afterCal.history.at(-1).detail) && afterCal.history.filter((e) => e.action === 'calibrate').length === 3);
+
+    // A record's published calibration (slice 4): factor IX's published scores opened offline (a
+    // workspace of their own), the investigators' classes as the thresholds, every number as Node
+    // computes it from the window's rows.
+    if (existsSync(join(F9, 'counts.csv'))) {
+      await act('open_mavedb', { urn: F9_URN });
+      await act('check_target', { accession: 'P00740', apply: true });
+      await act('add_track', { provider: 'clinvar' });
+      await act('make_control_set', {});
+      const refused = await send('calibrate', { run: 'Published scores', published: 'ExCALIBR calibration' });
+      const pub = await act('calibrate', { run: 'Published scores', published: 'Investigator-provided functional classes', curves: true });
+      const record = readScoreSet(JSON.parse(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00001200-a-1.json'), 'utf8')));
+      const thr = publishedThresholds(record.calibrations.find((c) => c.title === 'Investigator-provided functional classes'));
+      const rows = pub.data.likelihood.variants;
+      const nP = rows.filter((v) => v.class === 'P').map((v) => v.score);
+      const nB = rows.filter((v) => v.class === 'B').map((v) => v.score);
+      const nodePub = calibrationMetrics(nP, nB, { side: thr.side, rule: 'given', abnormal: thr.abnormal, normal: thr.normal });
+      const pane = await browser.eval(`[...document.querySelectorAll('.view-body .pane h3')].map((h) => h.textContent).join(' | ')`);
+      check('calibrate with a published calibration\'s thresholds: factor IX\'s published scores (urn:mavedb:00001200-a-1, opened offline) against the ClinVar set, the investigators\' classes as MaveScape\'s thresholds, the OddsPath as Node computes it from the window\'s rows; listed in Calibrate; a calibration with no normal class to take a threshold from (ExCALIBR\'s here) refused, saying why', `${pub.message.slice(0, 200)}…; ${refused.message}`,
+        pub.data.published?.title === 'Investigator-provided functional classes' && pub.data.thresholds.abnormal === thr.abnormal && pub.data.thresholds.normal === thr.normal && pub.data.side === thr.side
+        && ['abnormal', 'normal'].every((w) => near(pub.data.evidence[w].oddsPath, nodePub.evidence[w].oddsPath) && pub.data.evidence[w].strength === nodePub.evidence[w].strength.code) && pub.data.scored.P === 164 && pub.data.scored.B === 22
+        && !refused.ok && /no abnormal and normal ranges/.test(refused.message) && /Published calibrations/.test(pane));
+      // The example again, as the session goes on with it.
+      await act('open_example', { id: 'factor9' });
+    }
   }
 
   // WebGPU lost under the view (the 0.5.0 release; GitHub's runner lost it on its own): the GPU

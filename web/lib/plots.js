@@ -700,3 +700,67 @@ export function prChart(spec, frame) {
     },
   });
 }
+
+// Score-level likelihood ratios (wave 8, slice 4): the ratio against the score on a log axis, the
+// interval of its bootstrap's median as a band, the evidence thresholds as dashed lines (the
+// pathogenic side in the danger color, the benign in the ok color, each named at its right), 1 as a
+// line, and each side's controls as ticks along the bottom. spec: { grid (scores), llr, lo, hi
+// (natural logs), thresholds (the eight likelihood ratios, benign very strong first), P, B, label }.
+export function likelihoodChart(spec, frame) {
+  const { grid, llr, lo, hi, thresholds, P = [], B = [], label = '' } = spec;
+  const f = frameOf(frame);
+  const t = f.text;
+  const k = t / 10;
+  const theme = f.theme;
+  const colors = sideColors(theme);
+  const W = f.width ?? 560;
+  const H = f.height ?? 260 * k;
+  const marks = [];
+  const L10 = Math.LN10;
+  const toLog10 = (v) => v / L10;
+  const all = [...Array.from(lo, toLog10), ...Array.from(hi, toLog10)].filter(finite);
+  const tl = thresholds.map((v) => log10(v));
+  const yl = Math.max(-5, Math.min(...all, tl[0]) - 0.3);
+  const yh = Math.min(5, Math.max(...all, tl[7]) + 0.3);
+  const names = ['very strong', 'strong', 'moderate', 'supporting', 'supporting', 'moderate', 'strong', 'very strong'];
+  const labelW = Math.max(...names.map((n) => textWidth(n, t * 0.85))) + 0.8 * t;
+  // Below the axis: its tick labels, two rows of the controls' ticks, then its name.
+  const area = { left: f.x + 5.2 * t, right: f.x + W - labelW - 0.6 * t, top: f.y + 0.8 * t, bottom: f.y + H - 5.6 * t };
+  const yTicks = [];
+  for (let e = Math.ceil(yl); e <= Math.floor(yh); e += 1) yTicks.push(e);
+  const xs = Array.from(grid);
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  const { sx, sy } = axes(marks, area, { x: { lo: x0, hi: x1 }, y: { lo: yl, hi: yh, ticks: [] }, xLabel: 'score', yLabel: 'likelihood ratio (P : B)', t, theme, grid: false, frame: { ...f, width: W, height: H } });
+  for (const e of yTicks) {
+    marks.push({ type: 'line', x1: area.left, y1: sy(e), x2: area.right, y2: sy(e), stroke: theme.grid, width: k, dash: [2 * k, 3 * k] });
+    // A power of ten as written ("1e3" read exactly), no engine's pow.
+    marks.push({ type: 'text', x: area.left - 0.4 * t, y: sy(e), text: e >= 0 ? String(Number(`1e${e}`)) : `1/${Number(`1e${-e}`)}`, size: t, fill: theme.muted, anchor: 'end', baseline: 'middle' });
+  }
+  // The thresholds, each side's color, named at the right.
+  tl.forEach((v, i) => {
+    if (v < yl || v > yh) return;
+    const color = i < 4 ? theme.ok : theme.danger;
+    marks.push({ type: 'line', x1: area.left, y1: sy(v), x2: area.right, y2: sy(v), stroke: color, width: k, dash: [4 * k, 3 * k], opacity: 0.8 });
+    marks.push({ type: 'text', x: area.right + 0.4 * t, y: sy(v), text: names[i], size: t * 0.85, fill: color, baseline: 'middle' });
+  });
+  marks.push({ type: 'line', x1: area.left, y1: sy(0), x2: area.right, y2: sy(0), stroke: theme.muted, width: k });
+  const clampY = (v) => Math.max(yl, Math.min(yh, v));
+  const band = [];
+  for (let i = 0; i < xs.length; i += 1) if (finite(lo[i]) && finite(hi[i])) band.push(i);
+  if (band.length > 1) {
+    const up = band.map((i) => `${sx(xs[i])} ${sy(clampY(toLog10(hi[i])))}`);
+    const down = band.slice().reverse().map((i) => `${sx(xs[i])} ${sy(clampY(toLog10(lo[i])))}`);
+    marks.push({ type: 'path', d: `M${up.join('L')}L${down.join('L')}Z`, fill: theme.accent, opacity: 0.16, title: 'the interval of the bootstrap\'s median' });
+  }
+  marks.push({ type: 'path', d: xs.map((x, i) => `${i ? 'L' : 'M'}${sx(x)} ${sy(clampY(toLog10(llr[i])))}`).join(''), fill: 'none', stroke: theme.accent, width: 2 * k, title: label });
+  // The controls along the bottom, B above P.
+  const rug = (values, row, color) => {
+    const y0 = area.bottom + 2.1 * t + row * 0.9 * t;
+    for (const v of values) if (finite(v) && v >= x0 && v <= x1) marks.push({ type: 'line', x1: sx(v), y1: y0, x2: sx(v), y2: y0 + 0.6 * t, stroke: color, width: k, opacity: 0.7 });
+  };
+  rug(B, 0, colors.B);
+  rug(P, 1, colors.P);
+  const legend = [{ label: 'likelihood ratio', color: theme.accent, mark: 'line' }, { label: 'pathogenic thresholds', color: theme.danger, dash: true }, { label: 'benign thresholds', color: theme.ok, dash: true }, { label: `B controls (${B.length})`, color: colors.B }, { label: `P controls (${P.length})`, color: colors.P }];
+  return { marks, width: W, height: H, description: label, legend };
+}

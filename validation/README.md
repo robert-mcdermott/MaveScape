@@ -35,6 +35,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `review` | The review report (wave 6, slice 7; `certificate-cases.mjs`'s `checkTraced` and `externalReferences`, `web/lib/review.js`): GRB2's workspace of every operation, its review report's every traced number (182: each run's output, each QC finding's verdict, measure and acknowledgement and its QC's digest, each kept analysis's statistics and verdicts, each figure panel's drawing, the report; each parameter and recorded value; the counts by class) where it says it comes from: the certificate's value under its key, the workspace's at its path, a count of the certificate's classes; the file loading nothing (no element, CSS or address that loads, its only links DOIs; an image, a stylesheet and a request planted in it caught); made again, the same bytes, and from the certificate verified the same as its maker's, none from a tampered one; every section, the certificate whole in its JSON block (its fingerprint its own), each input's SHA-256, a map for each condition and difference, the QC findings' plots, each figure, the report's sections and references, every history entry; the 14 examples' reviews, every traced number as recorded (1,164) and nothing from outside. 5 checks | bundled |
 | `controls` | Control sets, for calibration (wave 8, slice 1; `control-cases.mjs`, `web/lib/controls.js`): factor IX's ClinVar controls under four rules (the default, at least one star and missense; any review and every kind; two stars; three stars), every control, its side, stars, records, latest evaluation and kind as an account read straight from NCBI's cached answers gives them, with a reader of its own (169 P and 22 B by default); matched to the example's Run 1, each scored, not scored or not in the run as its scores export has it; a table of invented labels for GRB2 (`fixtures/controls/`) with every case a reader meets planted; each kind of circularity planted (scale anchors, the design's named controls, the assay's own publication, ClinVar classifications evaluated since the assay, as many as the account dates, few controls, a predictor set with ClinVar) and none for a clean set; the sets through the workspace archive and a checkpoint's diff. 5 checks | `fixtures/public-data/` (ClinVar's answers for F9), `fixtures/controls/` |
 | `calibration` | Calibration's metrics (wave 8, slice 2; `calibration-cases.mjs`, `web/lib/calibration.js`) against R (`reference/calibration.json`, below): on seven cases, the ROC curve's points, the AUC and DeLong's interval as pROC 1.19 computes them; the precision–recall curve's points and area (Keilwagen et al. 2014's interpolation) as PRROC 1.4's; each rule's thresholds (the rule error at 5% and 10%, Youden's J, given), each side's controls in each class and Wilson's intervals as binom 1.1's, all to 13 digits; the stratified bootstrap (2000 samples) as distributions: every quantile of R's (2.5%, 50%, 97.5%; the AUC, the sensitivity at 21 specificities, the precision–recall area, the precision at 20 recalls, each rule's thresholds) where it falls among MaveScape's samples, within four standard errors (1,092); factor IX's scored controls (`fixtures/controls/factor9-run1-controls.csv`) still what the example makes; calibrations through the workspace archive and a checkpoint's diff, deleted with their control set. Slice 3 (`web/lib/oddspath.js`): OddsPath against Brnich et al. 2019's own spreadsheet (`reference/brnich-oddspath.json`, below), every row of its Tables S1 and S2 but one whose counts cannot be (Table S2's row 63), both readouts', to 15 digits; Table 3 at and around each threshold; 11 controls the fewest with which both readouts reach moderate (Table S2), as the paper says; Figure 1's example, 0.24 for a normal readout, BS3_supporting by Table 3; factor IX's calibration's evidence (each class's OddsPath on its counts, the seeded bootstrap the same twice) and its limitations. 9 checks | `reference/calibration.json`, `reference/brnich-oddspath.json`, `fixtures/controls/factor9-run1-controls.csv` |
+| `likelihood` | Score-level likelihood ratios (wave 8, slice 4; `likelihood-cases.mjs`, `web/lib/likelihood.js`, `web/lib/rcompat.js`) against R and acmgscaler (`reference/likelihood.json`, below): R's random numbers (four seeds' 624 words of state, first uniforms and 80 draws from sample()) the same; R's kernel density, bw.bcv bandwidth, isoreg, optimize, approx, seq, mad, qbinom and Spearman within 1e-11; acmgscaler 1.0.0 on its own example by gene, at Pejaver et al.'s prior, on negated scores and on factor IX's Run 1 with its 8,827 unlabeled variants (`fixtures/controls/factor9-run1-scores.csv`, still what the example makes): every ratio, interval and evidence, every threshold, to 1e-12; c from the prior (350 at 0.1, 1,131 at 0.0441) and Pejaver et al. 2022's Table 1 at c = 1,124 as printed; MaveDB's published calibrations of six records read as MaveDB means them (105 ranged classes counted as MaveDB counts them, 12 stated strengths Table 3's, 17 calibrations' thresholds classing the scores as published); Fayer et al. 2021's BRCA1 OddsPath from their data (`fayer-brca1`), 52.4 and 0.02 as published; factor IX's published scores with the investigators' thresholds, every control classed as published, beside the record's ExCALIBR calibration. 8 checks | `reference/likelihood.json`, `fixtures/controls/factor9-run1-scores.csv`, `fixtures/public-data/mavedb/`, cache: `fayer-brca1`, `mavedb-brca1-sge`, `mavedb-pten-vampseq`, `mavedb-pten-phosphatase`, `mavedb-tp53-screens`, `mavedb-tp53-dbd`, `mavedb-factor9` |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -199,7 +200,10 @@ slice 2): Run 1 against the ClinVar set calibrated in the window, every number a
 from the same scored controls (the seeded bootstrap's included, and each class's OddsPath and
 evidence strength, slice 3), drawn in Calibrate with the evidence and its limitations; given
 thresholds counted as Node counts them, thresholds in the wrong order refused; listed, focused,
-deleted, and deleted with their set. 209 checks; in CI as the `remote` job.
+deleted, and deleted with their set. Slice 4: the calibration's likelihood ratios acmgscaler's in
+Node on the window's own rows; factor IX's published scores (`mavedb-factor9` copied into the
+fetcher's cache) opened offline and calibrated with the investigators' published thresholds, the
+OddsPath Node's, a calibration with no normal class refused. 210 checks; in CI as the `remote` job.
 
 `--like-ci` runs the session as GitHub's runners do: WebGPU drawn in software (Chrome's
 `--use-webgpu-adapter=swiftshader`, whose graphics process does not last) and the page's processor
@@ -779,6 +783,25 @@ pathogenic controls and the normal ones benign, so the suite gives MaveScape eac
 (the indeterminate control the one left over) and compares both readouts' OddsPath. Table S2's row
 63 cannot be read so (9 pathogenic and 1 benign control, yet 8 normal readouts and one
 indeterminate) and is left out, the check saying so.
+
+## Likelihood ratios and R's numerics (`reference/likelihood.json`, wave 8 slice 4)
+
+`reference/generate_likelihood.R` (R 4.6.1, acmgscaler 1.0.0, jsonlite; run from the repository root
+after `node validation/fixtures/make-calibration.mjs`) records R as a black box for `web/lib/rcompat.js`
+(which ports none of R, GPL, but writes each numeric from its publication and finds R's conventions
+by experiment): set.seed's state and the first uniforms and sample.int draws of four seeds; seq;
+density (every eighth point) and bw.bcv on four sets of scores; isoreg; optimize on two functions;
+approx with ties and both rules; mad; qbinom; Spearman. Then acmgscaler itself (`web/lib/likelihood.js`
+ports it, MIT): its example variant_data by gene as its documentation calls it (prior 0.1, seed 42);
+BRCA1 alone at the prior 0.0441 (seed 7); TP53 with its scores negated (seed 11); factor IX's Run 1
+(`fixtures/controls/factor9-run1-scores.csv`: the 164 P and 22 B ClinVar controls and every other
+variant, seed 20261009), its controls' rows and every tenth other with the evidence of every row
+counted; find_pvst at 0.1 and 0.0441; and Pejaver et al. 2022's Table 1, typed from the paper (CC BY).
+Numbers with 17 significant digits.
+
+`fayer-brca1` (sources.json) is Fayer et al. 2021's published data from their repository at a pinned
+commit, which states no license: fetched into the cache for the check of their BRCA1 OddsPath, never
+copied into MaveScape or its repository.
 
 ## Robustness to analysis choices (`robustness-cases.mjs`, wave 4 slice 4)
 

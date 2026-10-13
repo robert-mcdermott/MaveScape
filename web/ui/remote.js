@@ -79,8 +79,10 @@ import { SelectionError } from '../lib/structure/select.js';
 import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
 import { KINDS as CONTROL_KINDS, SIDES, composition as controlComposition, controlSetWords } from '../lib/controls.js';
 import { controlsForRun, deleteControlSet, makeClinVarControls, makeTableControls } from './controls.js';
-import { calibrationReport, deleteCalibration, makeCalibration, variantClasses } from './calibration.js';
-import { RULES as CALIBRATION_RULES, calibrationWords, evidenceLimitations, percentText, ruleWords } from '../lib/calibration.js';
+import { calibrationReport, deleteCalibration, likelihoodReport, makeCalibration, publishedCalibrationsOf, variantClasses } from './calibration.js';
+import { likelihoodWords } from '../lib/likelihood.js';
+import { exp as dexp } from '../lib/dmath.js';
+import { RULES as CALIBRATION_RULES, calibrationWords, evidenceLimitations, percentText, publishedEvidence, ruleWords } from '../lib/calibration.js';
 import { strengthWords } from '../lib/oddspath.js';
 
 export class ActionError extends Error {}
@@ -611,11 +613,45 @@ export function installRemote(app) {
     };
   }
 
+  // The likelihood ratios in a sentence: where the strongest pathogenic and benign strengths begin.
+  const likelihoodSentence = (x) => {
+    if (x.problem) return `No score-level likelihood ratios: ${x.problem}`;
+    const reached = x.thresholds.filter((t) => t.score !== null);
+    // A pathogenic strength holds beyond its score toward the pathogenic end, a benign one toward
+    // the other.
+    const words = (t) => {
+      const benign = t.boundary.startsWith('Benign');
+      return `${t.boundary.split('|')[benign ? 0 : 1]} ${benign === x.inverse ? 'above' : 'below'} ${t.score.toPrecision(3)}`;
+    };
+    const p = reached.filter((t) => !t.boundary.startsWith('Benign')).at(-1);
+    const b = reached.filter((t) => t.boundary.startsWith('Benign'))[0];
+    return `Score-level likelihood ratios (acmgscaler; ${likelihoodWords(x)}): ${[p && words(p), b && words(b)].filter(Boolean).join('; ') || 'no strength reached'} (data.likelihood).`;
+  };
+
   // Each class's OddsPath and strength in words.
   const evidenceWords = (m) => ['abnormal', 'normal'].map((w) => {
     const x = m.evidence[w];
     return `${x.class} ${x.oddsPath === null ? 'none (no control in the class)' : `${x.oddsPath.toPrecision(3)}, ${strengthWords(x.strength)}`}`;
   }).join('; ');
+
+  // A calibration's score-level likelihood ratios as data (slice 4): the settings, where each
+  // strength begins, the variants at each strength; with curves, the curve and each variant's ratio.
+  async function likelihoodData(cal, withCurves) {
+    const lr = await likelihoodReport(app, cal);
+    const settings = { from: lr.settings.from, prior: lr.settings.prior, c: lr.settings.c, seed: cal.bootstrap.seed, method: 'acmgscaler 1.0.0 (Badonyi 2025), ported' };
+    if (lr.problem) return { ...settings, problem: lr.problem };
+    const res = lr.result;
+    return {
+      ...settings,
+      inverse: res.curve.inverse,
+      thresholds: res.thresholds.map((t) => ({ boundary: t.boundary, lr: t.lr, score: t.score, lower: t.lower, upper: t.upper })),
+      counts: lr.counts,
+      ...(withCurves ? {
+        curve: { score: Array.from(res.curve.grid), lr: Array.from(res.curve.llr, (v) => dexp(v)), lower: Array.from(res.curve.lo, (v) => dexp(v)), upper: Array.from(res.curve.hi, (v) => dexp(v)) },
+        variants: lr.rows.map((row, i) => ({ variant: row.key, score: row.score, class: row.class, lr: res.rows[i].lr, lower: res.rows[i].lrLower, upper: res.rows[i].lrUpper, evidence: res.rows[i].evidence })),
+      } : {}),
+    };
+  }
 
   // A calibration as data (wave 8, slice 2): what it was made with and its metrics; with curves,
   // the ROC and precision–recall curves' points and the bootstrap's bands.
@@ -642,6 +678,10 @@ export function installRemote(app) {
         return [which, { class: x.class, P: x.P, B: x.B, prior: x.prior, posterior: x.posterior, oddsPath: x.oddsPath, observed: x.observed, strength: x.strength?.code ?? null, contrary: x.contrary, ...(x.boot ? { bootstrap: { low: x.boot.low, median: x.boot.median, high: x.boot.high, noControl: x.boot.empty, strengths: x.boot.strengths } } : {}) }];
       })),
       limitations: evidenceLimitations({ rule: cal.rule, metrics: m, warnings: (await controlsForRun(app, r.set, r.run)).warnings, where: r.where }).map((l) => ({ id: l.id, text: l.text })),
+      // Score-level likelihood ratios, for research (slice 4): acmgscaler's.
+      likelihood: await likelihoodData(cal, withCurves),
+      // The published calibration whose thresholds these are, and what it states of its classes.
+      ...(cal.published ? { published: { ...cal.published, states: publishedEvidence(publishedCalibrationsOf(ws(), r.run).find((x) => x.calibration.title === cal.published.title)?.calibration ?? { classes: [] }) } } : {}),
       ...(r.where.against ? { against: { medianP: r.where.against.P, medianB: r.where.against.B } } : {}),
       ...(r.differs ? { differs: m.thresholds } : {}),
       ...(withCurves ? {
@@ -1068,7 +1108,8 @@ export function installRemote(app) {
       if (args.side !== undefined && args.side !== null) choose(String(args.side), ['auto', 'below', 'above'], 'side');
       let made;
       try {
-        made = await makeCalibration(app, { set, run, name: args.name ?? null, side: args.side ?? 'auto', rule: args.rule ?? undefined, error: args.error, abnormal: args.abnormal, normal: args.normal, samples: args.samples, seed: args.seed, condition: args.condition });
+        const published = args.published ? choose(String(args.published), publishedCalibrationsOf(ws(), run).map((c) => c.calibration.title), 'published calibration') : null;
+        made = await makeCalibration(app, { set, run, name: args.name ?? null, published, side: args.side ?? 'auto', rule: args.rule ?? undefined, error: args.error, abnormal: args.abnormal, normal: args.normal, samples: args.samples, seed: args.seed, condition: args.condition, prior: args.prior, pejaver: args.pejaver === true });
       } catch (error) {
         throw new ActionError(error.message);
       }
@@ -1080,7 +1121,7 @@ export function installRemote(app) {
       const m = made.metrics;
       const warn = made.where.against ? ` The P controls' median (${m.distributions.P.median.toPrecision(3)}) is on the other side of the B controls' (${m.distributions.B.median.toPrecision(3)}): the side may be the other way (side: ${cal.side === 'below' ? 'above' : 'below'}).` : '';
       return {
-        message: `Calibrated ${calibrationWords(cal, { set, run, metrics: m })}. Sensitivity (P abnormal-like) ${percentText(m.sensitivity.p)}, specificity (B WT-like) ${percentText(m.specificity.p)}; thresholds: ${ruleWords(cal.rule, cal.error)}. Evidence strength, for research (OddsPath, Brnich et al. 2019): ${evidenceWords(m)}.${warn} ${data.limitations.length ? `Limitations: ${data.limitations.length} (data.limitations). ` : ''}For research: functional classes in this assay and the evidence they would give, not a classification of any variant.`,
+        message: `Calibrated ${calibrationWords(cal, { set, run, metrics: m })}. Sensitivity (P abnormal-like) ${percentText(m.sensitivity.p)}, specificity (B WT-like) ${percentText(m.specificity.p)}; thresholds: ${cal.published ? `those of "${cal.published.title}", published with ${cal.published.urn}` : ruleWords(cal.rule, cal.error)}. Evidence strength, for research (OddsPath, Brnich et al. 2019): ${evidenceWords(m)}. ${likelihoodSentence(data.likelihood)}${warn} ${data.limitations.length ? `Limitations: ${data.limitations.length} (data.limitations). ` : ''}For research: functional classes in this assay and the evidence they would give, not a classification of any variant.`,
         data,
       };
     },

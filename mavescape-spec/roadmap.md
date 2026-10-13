@@ -3549,6 +3549,63 @@ Decisions taken in planning (confirmed before slice 1):
 4. **Score-level likelihood ratios (K3, part 2).** acmgscaler's method, ported; Pejaver et al.
    2022's evidence strengths; equal to acmgscaler on its examples; Fayer et al. 2021's calibrations
    of BRCA1, TP53 and PTEN reproduced; MaveDB's published calibrations compared.
+   - **Done.** `web/lib/likelihood.js` ports acmgscaler 1.0.0 (Badonyi 2025, MIT, its notice kept):
+     c from the prior (find_pvst), the evidence thresholds (Tavtigian et al. 2018), each side's
+     density in 1,000 bootstrap samples, the regularized log ratio made monotone with its
+     order-statistic interval, each variant's strength from its interval's conservative end, and the
+     score where each strength begins. `web/lib/rcompat.js` gives what R gives without R's code (GPL):
+     R's Mersenne Twister as set.seed seeds it and sample()'s rejection sampling, the Gaussian kernel
+     density by linear binning and the FFT, the biased cross-validation bandwidth by Brent's
+     minimizer, isotonic regression, approx, mad, the binomial quantile, Spearman; each written from
+     its publication and every convention found against R 4.6.1 as a black box, as limma's were.
+     - **A calibration's likelihood ratios**: every variant the run scores, the controls labeled,
+       with the calibration's seed; its `likelihood` setting a prior (0.1 by default, c = 350) or
+       Pejaver et al. 2022's Table 1 (prior 0.0441, c = 1,124). Computed apart (about a second), when
+       shown; in Calibrate a plot of the ratio against the score (log scale, the thresholds, the
+       controls), where each strength begins with its interval, the controls and the run's missense
+       variants at each strength. `calibrate`'s `prior`, `pejaver`, and with `curves` the curve and
+       each variant's ratio.
+     - **Published calibrations**: a MaveDB record's calibrations of its scores listed in Calibrate
+       (each class's range, OddsPath and strength as stated); for a run of the record's published
+       scores, a calibration with a published calibration's thresholds (an abnormal and a normal
+       class on two sides; `calibrate`'s `published`), MaveScape's OddsPath on the person's controls
+       beside the one it states; refused, saying why, for a run that rescored the counts or a
+       calibration with no normal class.
+     - On factor IX's Run 1 (the defaults): Pathogenic-Supporting below 0.637, Moderate below 0.585,
+       Strong below 0.505; no benign strength reached; 2,210 of the run's missense variants strong.
+       On its published scores with the investigators' classes: OddsPath 9.0 (PS3_moderate) and 0.52
+       (indeterminate; 72 P controls score as functional); acmgscaler's supporting threshold 0.793,
+       the record's ExCALIBR calibration's 0.654 (another method, other controls).
+     - Found by slice 4:
+       - **Fayer et al. 2021 calibrated by OddsPath, not by score-level ratios**: BRCA1 by Findlay's
+         classes against ClinVar (52.4 and 0.02, as observed, with no control added: reproduced from
+         their repository's data, which holds 166 B/LB controls where the text says 163); TP53 by a
+         naive Bayes classifier over four assays, outside MaveScape; PTEN no OddsPath, two benign
+         controls. So the reproduction is of slice 3's OddsPath (`observed`), and MaveDB's "Fayer
+         calibration" holds the same numbers.
+       - **acmgscaler's c at Pejaver et al.'s prior is 1,131, not the paper's 1,124**: both are
+         offered, the table's as printed.
+       - **R 4.4 changed density()** (the kernel at the binning grid's spacing, PR#18337): the grid
+         was found by experiment, the old one 4 × 10⁻⁴ of the peak off. acmgscaler's results depend on
+         the R version that runs it.
+       - The IGVF Coding Variant Focus Group's calibrations of BRCA1 (74.6 and 0.017; 39.5 and 0.020)
+         could not be reproduced from Fayer's or MaveDB's own ClinVar annotation: their controls are
+         not published with them. Compared, not reproduced.
+     - Validation: the suite `likelihood` (8: R's generator, four seeds' states and draws, the same;
+       R's density, bandwidth, isoreg, optimize, approx, seq, mad, qbinom and Spearman within 1e-11;
+       acmgscaler 1.0.0 on its own example by gene (seed 42, one generator for both genes), at
+       Pejaver's prior, on negated scores, and on factor IX's Run 1 with 8,827 unlabeled variants
+       (`fixtures/controls/factor9-run1-scores.csv`), every ratio, interval, evidence and threshold
+       to 1e-12; c and Pejaver et al.'s Table 1; MaveDB's published calibrations of six records,
+       105 classes counted as MaveDB counts them, 12 stated strengths Table 3's, 17 calibrations'
+       thresholds classing the scores as published; Fayer et al.'s BRCA1 OddsPath from their data,
+       `fayer-brca1` in sources.json at a pinned commit; factor IX's published scores with the
+       investigators' thresholds, every control classed as published, beside ExCALIBR's);
+       `reference/likelihood.json` (`generate_likelihood.R`); `likelihood.test.mjs` (5); the remote
+       session (210, +1: the window's likelihood ratios acmgscaler's in Node on its own rows; factor
+       IX's published scores opened offline and calibrated with the investigators' thresholds, the
+       OddsPath Node's, ExCALIBR's refused for want of a normal class); axe-core on the scene
+       `calibrate-likelihood`; the site's page *Calibration*.
 5. **The record (K4).** Calibration in the report and methods (its controls' composition and
    limitations), figure panels (distributions, ROC and precision–recall, the calibration curve),
    the certificate's numbers, the checkpoint diff, and a MaveDB deposit's calibrations in its

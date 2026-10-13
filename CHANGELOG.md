@@ -43,6 +43,19 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   separate the controls, a variant's functional class, the evidence strength a class would give,
   and a clinical classification, which MaveScape does not make. In `calibrate`'s and
   `calibrations`' data.
+- **Score-level likelihood ratios, for research** (wave 8, slice 4): each calibration's likelihood
+  ratio at every score, as acmgscaler computes it (Badonyi 2025; ported from its R package 1.0.0,
+  MIT, and equal to it): each side's kernel density in 1,000 bootstrap samples, their regularized
+  log ratio made monotone, the samples' median with its interval; each variant's evidence strength
+  from its interval's conservative end, and the score where each strength begins. The thresholds
+  are Tavtigian et al.'s from a prior (0.1 by default, c = 350) or Pejaver et al. 2022's Table 1
+  (prior 0.0441, c = 1,124). A plot of the ratio against the score, the thresholds, the controls;
+  `calibrate`'s `prior` and `pejaver`, and with `curves` each variant's ratio. R's numerics it rests
+  on are MaveScape's own (`rcompat.js`), written from their publications.
+- **Published calibrations** (wave 8, slice 4): a MaveDB record's calibrations of its scores listed
+  in Calibrate, and, for a run of the record's published scores, a calibration with a published
+  calibration's thresholds (`calibrate`'s `published`), MaveScape's OddsPath on your controls beside
+  the one it states.
 
 ### Fixed
 
@@ -73,6 +86,16 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   the fewest with which both readouts reach moderate, as the paper says. Figure 1's example gives
   0.24 for a normal readout, BS3_supporting by Table 3, where its caption says BS3_moderate:
   MaveScape applies Table 3 as printed.
+- Suite `likelihood`: R's random numbers, kernel density, bandwidth, isotonic regression, Brent's
+  minimizer, interpolation and quantiles against R 4.6.1 as a black box (`reference/likelihood.json`,
+  `generate_likelihood.R`); acmgscaler 1.0.0 itself on its own example (by gene), at Pejaver et
+  al.'s prior, on negated scores and on factor IX's Run 1 with its 8,827 unlabeled variants: every
+  ratio, interval and evidence, and every threshold, to 1e-12; c from the prior and Pejaver et al.
+  2022's Table 1 as printed; MaveDB's published calibrations of six records read as MaveDB means
+  them (105 classes counted as MaveDB counts them, 12 stated strengths Table 3's, 17 calibrations'
+  thresholds classing the scores as published); Fayer et al. 2021's BRCA1 OddsPath, 52.4 and 0.02,
+  from their published data (fetched, pinned). The remote session calibrates factor IX's published
+  scores with the investigators' thresholds.
 
 ## 0.7.0 (2026-10-12)
 

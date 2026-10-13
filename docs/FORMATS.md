@@ -589,7 +589,7 @@ deletes the calibrations made with it.
 
 `calibrations` (MaveScape 0.8, absent until the first) keeps the **calibrations**, for research:
 a run's scores against a control set, made when asked. Each is `{ id, name, created, controlSet,
-run, condition, side, sideFrom, rule, error, thresholds, bootstrap, n }`:
+run, condition, side, sideFrom, rule, error, thresholds, bootstrap, likelihood, published, n }`:
 - `controlSet` and `run`: the ids of the set and the run; `condition`: the run's condition, from 0;
 - `side`: where abnormal-like scores are, `below` or `above` the others; `sideFrom`: `readout` (the
   design's readout's direction), `controls` (the P controls' median, the readout not saying) or
@@ -602,10 +602,16 @@ run, condition, side, sideFrom, rule, error, thresholds, bootstrap, n }`:
   one between intermediate (above: the mirror image); equal, no score is intermediate;
 - `bootstrap`: `{ samples, seed }` of its stratified bootstrap (each side's controls drawn again
   with replacement, as many as it has);
+- `likelihood` (MaveScape 0.8, slice 4; absent: the default): the score-level likelihood ratios'
+  evidence thresholds, `{ from: "prior", prior, c }` (c as acmgscaler finds it from the prior: 350
+  at 0.1, the default) or `{ from: "pejaver2022", prior: 0.0441, c: 1124 }` (Pejaver et al. 2022's
+  Table 1); the ratios themselves are acmgscaler's, drawn with the bootstrap's seed;
+- `published` (absent unless): the record's published calibration the thresholds were taken from,
+  `{ urn, title }`;
 - `n`: `{ P, B }`, the controls the run scored.
 
-Its metrics are not stored, its evidence strength (each class's OddsPath, from MaveScape 0.8) with
-them: the run, the set and the seeded bootstrap make them again the same (the view says so if the
+Its metrics are not stored, its evidence strength (each class's OddsPath) and score-level
+likelihood ratios with them: the run, the set and the seeded bootstrap make them again the same (the view says so if the
 thresholds made again differ from those kept). Making and deleting one are in
 the history (action `calibrate`); deleting its run or its control set deletes it.
 

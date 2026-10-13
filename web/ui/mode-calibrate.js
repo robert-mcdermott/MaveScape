@@ -13,11 +13,12 @@ import { toast, confirmDialog } from './overlays.js';
 import { activeRun } from './selections.js';
 import { addPublicTrack } from './tracks.js';
 import { attributed, clinvarAnnotation, controlsForRun, deleteControlSet, makeClinVarControls, makeTableControls } from './controls.js';
-import { calibrationReport, deleteCalibration, makeCalibration, variantClasses } from './calibration.js';
+import { calibrationReport, deleteCalibration, likelihoodReport, makeCalibration, publishedCalibrationsOf, variantClasses } from './calibration.js';
 import { cssVar, legend, plotSVG, viewTheme } from './plots.js';
-import { controlStrips, prChart, rocChart } from '../lib/plots.js';
+import { controlStrips, likelihoodChart, prChart, rocChart } from '../lib/plots.js';
+import { EVIDENCE, likelihoodSettings, likelihoodWords } from '../lib/likelihood.js';
 import { KINDS, SIDES, composition, controlSetWords } from '../lib/controls.js';
-import { CALIBRATION_DEFAULTS, CLASSES, MAX_SAMPLES, calibrationWords, evidenceLimitations, percentText, ruleWords, threeFigures, thresholdWords } from '../lib/calibration.js';
+import { CALIBRATION_DEFAULTS, CLASSES, MAX_SAMPLES, calibrationWords, evidenceLimitations, percentText, publishedEvidence, ruleWords, threeFigures, thresholdWords } from '../lib/calibration.js';
 import { STRENGTH_CODES, strengthWords } from '../lib/oddspath.js';
 import { lossSide, readoutOf } from '../lib/readout.js';
 import { heldRemoval, proposalOfItem } from '../lib/proposals.js';
@@ -36,7 +37,7 @@ export function mountCalibrateMode(app, container) {
   container.append(root);
   // The forms' choices, kept while the view is open.
   const form = { minStars: 1, kinds: new Set(['missense']), citation: '' };
-  const calibrate = { side: 'auto', rule: CALIBRATION_DEFAULTS.rule, error: String(CALIBRATION_DEFAULTS.error), abnormal: '', normal: '', samples: String(CALIBRATION_DEFAULTS.samples), seed: String(CALIBRATION_DEFAULTS.seed), condition: 0 };
+  const calibrate = { side: 'auto', rule: CALIBRATION_DEFAULTS.rule, error: String(CALIBRATION_DEFAULTS.error), abnormal: '', normal: '', samples: String(CALIBRATION_DEFAULTS.samples), seed: String(CALIBRATION_DEFAULTS.seed), condition: 0, likelihood: 'prior', prior: '0.1' };
 
   const calibrations = () => store.ws.calibrations ?? [];
   // The calibration shown: the one focused, else the latest of the set and run shown.
@@ -197,9 +198,14 @@ export function mountCalibrateMode(app, container) {
       h('div.calibration-fields',
         field('Bootstrap samples', input('samples', { type: 'number', min: '0', max: String(MAX_SAMPLES), step: '1', 'aria-label': 'Bootstrap samples' })),
         field('Seed', input('seed', { type: 'number', step: '1', 'aria-label': 'Bootstrap seed' }))),
+      h('div.calibration-fields',
+        field('Likelihood ratios\' thresholds', h('select.select', { 'aria-label': 'The likelihood ratios\' evidence thresholds', onchange: (e) => { calibrate.likelihood = e.target.value; render(); } },
+          h('option', { value: 'prior', selected: calibrate.likelihood === 'prior' }, 'from a prior (acmgscaler)'),
+          h('option', { value: 'pejaver', selected: calibrate.likelihood === 'pejaver' }, 'Pejaver et al. 2022 (prior 0.0441)'))),
+        calibrate.likelihood === 'prior' ? field('Prior of pathogenicity', input('prior', { type: 'number', min: '0.001', max: '0.97', step: 'any', 'aria-label': 'Prior of pathogenicity' })) : h('div')),
       h('button.btn.primary', { type: 'button', disabled: !ready, title: ready ? null : 'Both sides need scored controls', onclick: async () => {
         try {
-          const made = await makeCalibration(app, { set, run, side: calibrate.side, rule: calibrate.rule, error: calibrate.error, abnormal: calibrate.abnormal, normal: calibrate.normal, samples: calibrate.samples, seed: calibrate.seed, condition: calibrate.condition });
+          const made = await makeCalibration(app, { set, run, side: calibrate.side, rule: calibrate.rule, error: calibrate.error, abnormal: calibrate.abnormal, normal: calibrate.normal, samples: calibrate.samples, seed: calibrate.seed, condition: calibrate.condition, ...(calibrate.likelihood === 'pejaver' ? { pejaver: true } : { prior: calibrate.prior }) });
           app.focusItem({ kind: 'calibration', id: made.id });
           toast(`Calibrated ${calibrationWords(made.calibration, { set, run, metrics: made.metrics })}.`, { kind: 'ok' });
         } catch (error) {
@@ -207,6 +213,32 @@ export function mountCalibrateMode(app, container) {
         }
       } }, icon('gauge'), 'Calibrate'),
       ready ? null : h('p.muted.small', 'Both sides need controls the run scores.'));
+  }
+
+  // The published calibrations of the run's record (slice 4): each one's classes and what it says of
+  // them, and, for a run of the record's own scores, a calibration with its thresholds, so that
+  // MaveScape's OddsPath on these controls stands beside its.
+  function publishedPane(set, run, report) {
+    const list = publishedCalibrationsOf(store.ws, run);
+    if (!list.length) return null;
+    const range = (k) => `${k.range[0] === null ? '' : `${k.inclusive[0] ? '≥' : '>'} ${g3(k.range[0])}`}${k.range[0] !== null && k.range[1] !== null ? ' and ' : ''}${k.range[1] === null ? '' : `${k.inclusive[1] ? '≤' : '<'} ${g3(k.range[1])}`}`;
+    const ready = report.match.counts.P.scored > 0 && report.match.counts.B.scored > 0;
+    return h('div.pane', h('h3', icon('library'), `Published calibrations (${list[0].record.urn})`),
+      h('p.muted.small', { style: { marginTop: 0 } }, list[0].applies
+        ? `Calibrations of these scores as MaveDB publishes them, each class as its source gives it. Calibrating with one's thresholds puts MaveScape's OddsPath on "${set.name}" beside its own.`
+        : `Calibrations of the record's scores as published. ${run.name} scored the counts again, on a scale of its own, so their ranges do not apply to its scores.`),
+      ...list.map(({ calibration: c, thresholds }) => h('div', { style: { borderTop: '1px solid var(--line)', padding: '6px 0' } },
+        h('div.small', h('b', c.title), c.researchUseOnly ? h('span.badge', { style: { marginLeft: '6px' } }, 'research use') : null, c.investigatorProvided ? h('span.muted', ' · the investigators\'') : null),
+        h('div.muted.small', c.classes.filter((k) => Array.isArray(k.range)).map((k) => `${k.label} (${k.className}) ${range(k)}${k.oddsPath !== null ? `, OddsPath ${g3(k.oddsPath)}` : ''}${k.evidence?.strength ? `, ${k.evidence.criterion ?? ''} ${k.evidence.strength}` : ''}`).join('; ') || 'Its classes are given by a column of the scores, not by ranges.'),
+        list[0].applies && thresholds ? h('button.btn.small', { type: 'button', disabled: !ready, style: { marginTop: '4px' }, onclick: async () => {
+          try {
+            const made = await makeCalibration(app, { set, run, published: c.title, samples: calibrate.samples, seed: calibrate.seed, condition: calibrate.condition, ...(calibrate.likelihood === 'pejaver' ? { pejaver: true } : { prior: calibrate.prior }) });
+            app.focusItem({ kind: 'calibration', id: made.id });
+            toast(`Calibrated with the thresholds of "${c.title}": ${calibrationWords(made.calibration, { set, run, metrics: made.metrics })}.`, { kind: 'ok' });
+          } catch (error) {
+            toast(error.message, { kind: 'error' });
+          }
+        } }, icon('gauge'), 'Calibrate with its thresholds') : null)));
   }
 
   // A calibration's metrics (slice 2): what it was made with, the scores of each side against the
@@ -231,7 +263,7 @@ export function mountCalibrateMode(app, container) {
         if (!(await confirmDialog({ title: `Delete the calibration "${cal.name}"?`, message: 'It goes from the workspace; the history keeps that it was made and deleted.', confirm: 'Delete', danger: true }))) return;
         deleteCalibration(app, cal.id);
       } }, icon('trash'), 'Delete')),
-      h('p.small', { style: { marginTop: 0 } }, `${run.name}${scored.condition ? ` (${scored.condition})` : ''} against "${set.name}": ${m.n.P} P and ${m.n.B} B controls scored. Abnormal-like scores are ${cal.side} the others, ${sideFrom}. Thresholds: ${ruleWords(cal.rule, cal.error)}. ${m.bootstrap ? `Intervals from ${count(m.bootstrap.samples)} stratified bootstrap samples (seed ${m.bootstrap.seed}).` : 'No bootstrap.'} Made ${cal.created.slice(0, 10)}.`),
+      h('p.small', { style: { marginTop: 0 } }, `${run.name}${scored.condition ? ` (${scored.condition})` : ''} against "${set.name}": ${m.n.P} P and ${m.n.B} B controls scored. Abnormal-like scores are ${cal.side} the others, ${sideFrom}. Thresholds: ${cal.published ? `those of "${cal.published.title}", published with ${cal.published.urn}` : ruleWords(cal.rule, cal.error)}. ${m.bootstrap ? `Intervals from ${count(m.bootstrap.samples)} stratified bootstrap samples (seed ${m.bootstrap.seed}).` : 'No bootstrap.'} Made ${cal.created.slice(0, 10)}.`),
       r.where.against ? h('div.callout.warn', { style: { margin: '0 0 8px' } }, icon('warning'), h('span', `The P controls' median (${g3(r.where.against.P)}) is ${cal.side === 'below' ? 'above' : 'below'} the B controls' (${g3(r.where.against.B)}), though abnormal-like scores are taken to be ${cal.side} the others: the P variants may change function the other way, or the scale may run the other way. Calibrate again with the side chosen if so.`)) : null,
       r.differs ? h('div.callout.danger', { style: { margin: '0 0 8px' } }, icon('warning'), h('span', `Computed again, the thresholds are ${thresholdWords(cal.side, t)}, not the ${thresholdWords(cal.side, cal.thresholds)} kept: MaveScape's computation changed since it was made.`)) : null,
       m.n.P < 10 || m.n.B < 10 ? h('div.callout.warn', { style: { margin: '0 0 8px' } }, icon('warning'), h('span', `With ${Math.min(m.n.P, m.n.B)} controls on a side, every number here is too uncertain to rely on: see the intervals.`)) : null);
@@ -282,7 +314,52 @@ export function mountCalibrateMode(app, container) {
               h('tbody', ...(cal.rule === 'youden' ? [stabilityRow('the threshold', t.abnormal, s.abnormal, s.empty.abnormal)] : [stabilityRow('abnormal', t.abnormal, s.abnormal, s.empty.abnormal), stabilityRow('normal', t.normal, s.normal, s.empty.normal)])))),
             cal.rule === 'error' ? h('p.small', `In ${percentText(s.withoutZone)} of the ${count(m.bootstrap.samples)} samples the sides met with no intermediate zone${t.crossed ? ', as they do here' : ''}.`) : null,
             h('p.muted.small', `Each sample draws each side's controls again with replacement (seed ${m.bootstrap.seed}) and sets the thresholds by the same rule. A class some samples leave empty (no control far enough) is counted apart; the interval is of the others.`)));
-    return h('div', head, distributions, curves, h('div.calibration-grid', classesPane, stabilityPane), evidencePanes(cal, r, range, warnings));
+    return h('div', head, distributions, curves, h('div.calibration-grid', classesPane, stabilityPane), evidencePanes(cal, r, range, warnings), likelihoodPane(cal, r));
+  }
+
+  // Score-level likelihood ratios, for research (slice 4): acmgscaler's method, computed apart (a
+  // second), the pane filled when done.
+  function likelihoodPane(cal, r) {
+    const settings = likelihoodSettings(cal.likelihood ?? {});
+    const pane = h('div.pane#calibration-likelihood', { style: { marginTop: '14px' } }, h('h3', icon('gauge'), 'Score-level likelihood ratios, for research (acmgscaler)'),
+      h('p.muted', `Computing the likelihood ratios (${likelihoodWords(settings)}, seed ${cal.bootstrap.seed})…`));
+    const mine = token;
+    likelihoodReport(app, cal).then((lr) => {
+      if (mine !== token) return;
+      pane.replaceChildren(...likelihoodContent(cal, r, lr));
+    }).catch((error) => {
+      if (mine !== token) return;
+      pane.replaceChildren(h('h3', icon('gauge'), 'Score-level likelihood ratios'), h('div.callout.danger', icon('warning'), h('span', error.message)));
+    });
+    return pane;
+  }
+
+  function likelihoodContent(cal, r, lr) {
+    const head = h('h3', icon('gauge'), 'Score-level likelihood ratios, for research (acmgscaler)');
+    const note = h('div.callout.accent', { style: { margin: '0 0 10px' } }, icon('info'), h('span', 'For research use only: how much more likely each score is among the P controls than among the B controls, and the evidence strength that would make for a variant with that score. It is not a classification of any variant.'));
+    if (lr.problem) return [head, note, h('p.callout.warn', icon('warning'), h('span', lr.problem))];
+    const theme = { ...viewTheme(), P: cssVar('--track-pathogenic'), B: cssVar('--track-benign') };
+    const res = lr.result;
+    const chart = likelihoodChart({ grid: res.curve.grid, llr: res.curve.llr, lo: res.curve.lo, hi: res.curve.hi, thresholds: res.thresholds.map((t) => t.lr), P: r.scored.P, B: r.scored.B, label: `The likelihood ratio of a score (P : B), on a log scale, with the interval of its bootstrap's median and the evidence thresholds` }, { width: 900, height: 280, text: 10, theme });
+    const fmtLr = (v) => (v >= 1 ? g3(v) : `1/${g3(1 / v)}`);
+    // Each strength from its boundary on: the pathogenic ones beyond their score, the benign below.
+    const rows = [7, 6, 5, 4, 3, 2, 1, 0].map((k) => {
+      const t = res.thresholds[k];
+      const reached = k >= 4 ? EVIDENCE[k + 1] : EVIDENCE[k];
+      return h('tr', h('td', reached), h('td.r', fmtLr(t.lr)), h('td.r', t.score === null ? 'not reached' : g3(t.score)), h('td.r', t.lower === null || t.upper === null ? '—' : `${g3(t.lower)} to ${g3(t.upper)}`));
+    });
+    const counts = EVIDENCE.slice().reverse().map((e) => h('tr', h('td', e), h('td.r', String(lr.counts.P[e])), h('td.r', String(lr.counts.B[e])), h('td.r', lr.counts.missense[e].toLocaleString('en-US'))));
+    const unreached = res.thresholds.filter((t) => t.score === null);
+    return [head, note,
+      legend(chart.legend), plotSVG(chart, chart.description),
+      h('div.calibration-grid',
+        h('div', h('div.section-title', 'Where each strength begins'),
+          h('div.table-scroll', h('table.data.compact', h('thead', h('tr', h('th', 'Strength'), h('th.r', 'Ratio'), h('th.r', 'Score'), h('th.r', 'Interval'))), h('tbody', ...rows))),
+          h('p.muted.small', `The score where the curve crosses each ratio, and where its interval's ends do; "not reached": no score gives that strength. ${unreached.length ? `${unreached.length} of the 8 are not reached.` : ''}`)),
+        h('div', h('div.section-title', 'Variants at each strength'),
+          h('div.table-scroll', h('table.data.compact', h('thead', h('tr', h('th', 'Strength'), h('th.r', 'P controls'), h('th.r', 'B controls'), h('th.r', `${r.run.name}'s missense`))), h('tbody', ...counts))),
+          h('p.muted.small', 'A variant\'s strength is read from the conservative end of its ratio\'s interval, as acmgscaler reads it. The controls\' own strengths rest on themselves: they estimated the ratios.'))),
+      h('p.muted.small', `acmgscaler's method (Badonyi, Bioinformatics 2025; ported from its R package 1.0.0, MIT, and equal to it): each side's density, a Gaussian kernel of its biased cross-validation bandwidth, in 1,000 bootstrap samples (seed ${cal.bootstrap.seed}); their log ratio, regularized and made monotone, the samples' median with an order-statistic interval. Thresholds: ${likelihoodWords(lr.settings)}; a single line of very strong evidence a ratio of c, strong √c, moderate c^¼, supporting c^⅛ (Tavtigian et al. 2018), benign the reciprocals. ${res.curve.inverse ? 'Lower scores are the more pathogenic here.' : 'Higher scores are the more pathogenic here.'}`)];
   }
 
   // Evidence strength, for research (slice 3): each class's OddsPath (Brnich et al. 2019) and its
@@ -298,12 +375,17 @@ export function mountCalibrateMode(app, container) {
       if (x.boot.empty) shares.push(`no control ${percentText(x.boot.empty / x.boot.samples)}`);
       return `${x.boot.n ? `${g3(x.boot.low)} to ${g3(x.boot.high)}; ` : ''}${shares.join(', ')}`;
     };
+    // The published calibration whose thresholds these are, and what it states of each class.
+    const pub = cal.published ? publishedCalibrationsOf(store.ws, run).find((x) => x.calibration.title === cal.published.title) : null;
+    const pubEvidence = pub ? publishedEvidence(pub.calibration) : null;
     const row = (which) => {
       const x = ev[which];
+      const stated = pubEvidence?.[which];
       return h('tr', h('td', `${x.class} (${range[x.class]})`), h('td.r', String(x.P)), h('td.r', String(x.B)),
         h('td.r', x.oddsPath === null ? '—' : g3(x.oddsPath)),
         h('td', x.strength ? h('b', strengthWords(x.strength)) : 'no control'),
-        h('td.small', bootText(x)));
+        h('td.small', bootText(x)),
+        pub ? h('td.small', stated ? `${g3(stated.oddsPath)}${stated.strength ? ` (${stated.criterion ?? ''} ${stated.strength})` : ''}; as observed here ${x.observed === null ? '—' : g3(x.observed)}` : '—') : null);
     };
     const c = composition(set);
     const words = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${n}`).join(', ');
@@ -311,7 +393,7 @@ export function mountCalibrateMode(app, container) {
     const strength = h('div.pane#calibration-evidence', h('h3', icon('gauge'), 'Evidence strength, for research (OddsPath)'),
       h('div.callout.accent', { style: { margin: '0 0 10px' } }, icon('info'), h('span', 'For research use only: what each class would contribute as functional evidence (PS3 for the abnormal-like class, BS3 for the WT-like), by Brnich et al. (2019)\'s OddsPath and their Table 3. It is not a classification of any variant.')),
       h('div.table-scroll', h('table.data.compact',
-        h('thead', h('tr', h('th', 'Class (scores)'), h('th.r', 'P'), h('th.r', 'B'), h('th.r', 'OddsPath'), h('th', 'Evidence strength'), h('th', `${m.bootstrap ? `Bootstrap (${m.bootstrap.samples.toLocaleString('en-US')}, thresholds kept)` : 'Bootstrap'}`))),
+        h('thead', h('tr', h('th', 'Class (scores)'), h('th.r', 'P'), h('th.r', 'B'), h('th.r', 'OddsPath'), h('th', 'Evidence strength'), h('th', `${m.bootstrap ? `Bootstrap (${m.bootstrap.samples.toLocaleString('en-US')}, thresholds kept)` : 'Bootstrap'}`), pub ? h('th', `"${pub.calibration.title}" states`) : null)),
         h('tbody', row('abnormal'), row('normal')))),
       h('p.muted.small', `P1, the P controls' share, is ${m.n.P} of ${m.n.P + m.n.B} (${g3(ev.abnormal.prior)}); P2 is the P share in the class with one control of the other side added, as Brnich et al. add "exactly one misclassified variant to each set"; OddsPath = P2 (1 − P1) / ((1 − P2) P1). Strengths: beyond 2.1 PS3_supporting, 4.3 moderate, 18.7 strong (PS3), 350 very strong; below 0.48 BS3_supporting, 0.23 moderate, 0.053 strong (BS3); between, indeterminate.`));
     // Four things said apart (K3).
@@ -371,7 +453,7 @@ export function mountCalibrateMode(app, container) {
       const report = await controlsForRun(app, set, run);
       if (mine !== token) return;
       clear(right);
-      right.append(compositionPane(set, run, report), warningsPane(run, report), calibratePane(set, run, report));
+      right.append(compositionPane(set, run, report), warningsPane(run, report), calibratePane(set, run, report), publishedPane(set, run, report));
       if (cal) {
         const waiting = h('p.muted', `Computing "${cal.name}"…`);
         below.append(waiting);

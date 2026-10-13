@@ -944,6 +944,18 @@ const scenes = {
     await scrollTo('#calibration-evidence');
     await sleep(500);
   },
+  // Score-level likelihood ratios, for research (wave 8, slice 4): the same calibration's, as
+  // acmgscaler computes them, with where each strength begins.
+  async 'calibrate-likelihood'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await clearToasts();
+    await waitFor(`Boolean(document.querySelector('#calibration-likelihood svg.plot'))`);
+    await scrollTo('#calibration-likelihood');
+    await sleep(500);
+  },
   // The guide's session on Hsp90: the design the agent proposed, in Experiment beside the person's,
   // and the strip reviewed.
   async 'agent-hsp90'() {

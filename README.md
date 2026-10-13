@@ -146,6 +146,9 @@ guides to every view, with screenshots.
     bootstrap moves the thresholds.
   - Each class's evidence strength, for research: Brnich et al.'s OddsPath and their Table 3, with
     what it rests on and what limits it.
+  - Score-level likelihood ratios as acmgscaler computes them (equal to it), with Tavtigian et
+    al.'s or Pejaver et al.'s thresholds; a MaveDB record's published calibrations beside
+    MaveScape's own.
 - **Figures.** A page at a journal's column width (85, 114 or 174 mm) or a slide, its panels any
   view's plots, added with **Add to figure**: the variant-effect map of a run (a range of
   positions, its tracks, color bar and key), a QC finding's charts, the scores by class, a
@@ -532,8 +535,8 @@ check, its tolerance and how the reference outputs were made are in
   at once under the name it gives. What you change in the window while an agent's action runs
   counts as the agent's.
 - The R and Python packages are installed from this repository, not from CRAN or PyPI.
-- Calibration has its control sets, how far the scores separate them and each class's OddsPath;
-  score-level likelihood ratios are planned; see the [roadmap](mavescape-spec/roadmap.md).
+- Calibration is not yet in the report, figures, certificates or MaveDB deposits; see the
+  [roadmap](mavescape-spec/roadmap.md).
 
 ## Development
 
@@ -655,4 +658,7 @@ Data and code from others:
   AlphaFold DB (CC BY 4.0).
 - `web/lib/dmath.js` is fdlibm 5.3's logarithm and exponential (Sun Microsystems, 1993), whose
   notice it keeps.
+- `web/lib/likelihood.js` ports acmgscaler 1.0.0's score-level likelihood ratios (Badonyi 2025,
+  MIT), whose notice it keeps; the R numerics it rests on (`web/lib/rcompat.js`) are MaveScape's,
+  written from their publications and matched to R as a black box.
 - MaveScape's program, window and site come from CytoWeave, noted in each file.

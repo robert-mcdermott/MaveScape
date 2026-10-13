@@ -308,6 +308,20 @@
      "sha256": "c24f097bd2f451d4f933e8bc7d8d539f8672a2ebcb5cc9f9f3eec8ca9470a0c1"
     }
    ]
+  },
+  "fayer-brca1": {
+   "title": "Fayer et al. 2021's BRCA1 data: Findlay's functional classes and ClinVar's labels",
+   "description": "Findlay et al. 2018's saturation genome editing of BRCA1 (3,893 single-nucleotide variants, their scores and functional classes FUNC, INT and LOF) with the ClinVar classification of each as Fayer et al. had it (columns clinvar and clinvar_simple), as their repository publishes it. The validation suite `likelihood` computes their BRCA1 OddsPath from it (198 of 209 pathogenic or likely pathogenic controls LOF, 159 of 166 benign or likely benign FUNC: 52.4 and 0.02, as the paper and MaveDB's \"Fayer calibration\" give them).",
+   "source": "https://github.com/bbi-lab/VUS-reinterpretation-with-MAVE (Fayer et al., AJHG 2021, doi:10.1016/j.ajhg.2021.11.001), at commit 1f0eb68b14ed84d4f0484cf1e6810fb835e3d4b1",
+   "license": "None stated by the repository: read here as published data for a check, never copied into MaveScape or its repository",
+   "base": "https://raw.githubusercontent.com/bbi-lab/VUS-reinterpretation-with-MAVE/1f0eb68b14ed84d4f0484cf1e6810fb835e3d4b1/Figure_files/",
+   "files": [
+    {
+     "path": "BRCA1_SGE_data.csv",
+     "size": 1848109,
+     "sha256": "1b9ef58e92a5915eb6ac01550169d6c7d006e492dd5dcbe8b6e3006d7ce20ba4"
+    }
+   ]
   }
  }
 }
