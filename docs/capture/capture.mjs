@@ -94,7 +94,7 @@ let token = '';
 
 // An AI agent's scenes (wave 7, slice 5) start "mavescape mcp" instead and drive it over its stdin
 // and stdout as Claude Code does (an agent's client): their changes are proposals.
-const AGENT_SCENES = new Set(['agent-proposal', 'agent-accepted']);
+const AGENT_SCENES = new Set(['agent-proposal', 'agent-accepted', 'agent-hsp90']);
 let rpc = null;
 
 function connectAgent(server) {
@@ -233,6 +233,26 @@ async function agentOnGRB2() {
   await agent('select_variants', { run: 'Run 1', query: 'lower and position 30-40', save_as: 'Core, lower' });
   await agent('acknowledge_finding', { run: 'Run 1', finding: 'excess-variance', reason: 'The input bottleneck the Domainome\'s own analysis found; DiMSum\'s error model (Run 2) carries it' });
   await agent('qc_findings', { run: 'Run 1', finding: 'variance' });
+  await waitFor(`Boolean(document.querySelector('.proposal-strip'))`);
+  await sleep(800);
+}
+
+// The guide's session on Hsp90 (wave 7, slice 6) to its second answer, as validation/agent-session.mjs
+// makes it: compared with the record's published scores (their score set kept beside the map), a
+// checkpoint kept, and a design fitting the first three samples proposed (generations 9 to 21 not
+// used); the Experiment view shows it beside the person's.
+async function agentOnHsp90() {
+  await agent('open_example', { id: 'hsp90' });
+  await agent('qc_findings', { run: 'Run 1' });
+  await agent('compare', { a: 'Run 1', b: 'urn:mavedb:00000011-a-1', scale: 'stated', direction: 'higher-more' });
+  await agent('checkpoint', { name: 'All eight samples' });
+  const design = structuredClone((await agent('provenance', { run: 'Run 1' })).structuredContent.data.inputs.design);
+  const later = design.samples.slice(3);
+  design.samples = design.samples.slice(0, 3);
+  design.replicates[0].timepoints = design.replicates[0].timepoints.slice(0, 3);
+  design.ignoredColumns = later.flatMap((x) => x.columns).map((column) => ({ column, reason: 'later time points: the authors fit their null-like variants on the first three' }));
+  await agent('set_design', { design });
+  await agent('set_mode', { mode: 'experiment' });
   await waitFor(`Boolean(document.querySelector('.proposal-strip'))`);
   await sleep(800);
 }
@@ -890,6 +910,13 @@ const scenes = {
   // for the person (the acknowledgement, which the QC view also shows).
   async 'agent-proposal'() {
     await agentOnGRB2();
+    await click('Review', '.proposal-strip button');
+    await sleep(600);
+  },
+  // The guide's session on Hsp90: the design the agent proposed, in Experiment beside the person's,
+  // and the strip reviewed.
+  async 'agent-hsp90'() {
+    await agentOnHsp90();
     await click('Review', '.proposal-strip button');
     await sleep(600);
   },

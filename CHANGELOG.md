@@ -58,6 +58,15 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   headless runs and scripting*, at the same address), agents first; the README's section *AI agents
   and scripts*. The documentation's capture has two scenes of an agent working through `mavescape
   mcp`, as Claude Code's client does.
+- **Examples for scripts and agents** (wave 7, slice 6): a Python notebook on GRB2
+  (`clients/examples/grb2-sh3.ipynb`, kept with its outputs: the example opened and checked, its
+  QC as a data frame, scored again with the DiMSum-compatible preset, both runs against the
+  record's published scores, a figure exported as PDF and PNG) and an R script on DHFR's two
+  conditions (`clients/examples/dhfr-lon.R`: the fast growers of each, the authors' unweighted
+  regression against the published scores, the 377 differences called and the residues they
+  replace, a plot and MaveScape's map). The guide's *A session on Hsp90*: an agent's prompts, tool
+  calls and answers, from comparing the published scores to a design proposed, accepted and scored,
+  with a screenshot of the proposal reviewed.
 
 ### Changed
 
@@ -69,6 +78,12 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
 
 ### Fixed
 
+- `compare` said "Kept in the report." after every comparison, kept or not: it read the
+  comparison's own report of compatibility as the analysis kept. It says so only when `report` is
+  given, and the kept analysis's id is in `inReport`, beside the comparison's `report`.
+- `open_example`'s description named four of the fourteen examples (none of those from MaveDB, nor
+  Hsp90 or factor IX), so neither an agent nor the clients' help knew their ids. It names every
+  one, and a Go test keeps it so.
 - The drawer's tabs and its close button were in one tab list, which may hold only tabs (axe-core's
   aria-required-children, found by the new scene with the drawer open): the tabs have a list of
   their own.
@@ -114,6 +129,12 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   as the client's), a figure, the map and the Structure view written as files, exports needing the
   token and never replacing a file, errors carrying MaveScape's reason, results equal to the HTTP
   API's for the same actions, and the connection found through `remote.json`.
+- The examples run in the same job (`--require`): the notebook executed with nbclient and the R
+  script run with Rscript against the same MaveScape, offline (DHFR's tables from the validation's
+  cache), each failing when one of its checks does. The agent session (34 checks) replays the
+  guide's session on Hsp90 and checks every number its answers quote, and that `score` refuses
+  while a design the agent proposed waits, with a design already in place. Hsp90's published
+  scores (urn:mavedb:00000011-a-1, 43 kB) join the fetcher's cached answers the sessions run on.
 
 ## 0.6.0 (2026-10-12)
 

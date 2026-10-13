@@ -434,7 +434,7 @@ try {
   const reps = nodeRuns[0].results.replicates.map((r) => r.id);
   const repCompare = await act('compare', { a: 'Run 1: Replicate 1', b: 'Run 1: Replicate 2' });
   const repNode = nodeCompare([0, { run: nodeRuns[0].run.id, replicate: reps[0] }], [0, { run: nodeRuns[0].run.id, replicate: reps[1] }]);
-  check('compare: GRB2\'s replicates 1 and 2 in the Compare view, the report and every statistic as Node compares them', repCompare.message.slice(0, 200), JSON.stringify(repCompare.data) === withoutSoftware(comparisonJSON(repNode)) && repCompare.data.report.status === 'ok' && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'compare' && (await browser.eval(`Boolean(document.querySelector('.compare-report'))`)));
+  check('compare: GRB2\'s replicates 1 and 2 in the Compare view, the report and every statistic as Node compares them, and not kept in the report', repCompare.message.slice(0, 200), JSON.stringify(repCompare.data) === withoutSoftware(comparisonJSON(repNode)) && repCompare.data.report.status === 'ok' && !/Kept in the report/.test(repCompare.message) && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'compare' && (await browser.eval(`Boolean(document.querySelector('.compare-report'))`)));
   // Every view's plots as panels (wave 6, slice 2): drawn in the window as Node draws them from the
   // runs it recomputes from the archive.
   await act('create_figure', { name: 'Every view', height_mm: 200 });
@@ -634,8 +634,8 @@ try {
     const pairNode = { a: { run: nodeRuns[0].run.id, condition: 0 }, b: { run: nodeRuns[1].run.id, condition: 0 } };
     const comparisonNode = comparisonRecord(nodeCompare([0, pairNode.a], [1, pairNode.b]), pairNode);
     const robustnessNode = robustnessRecord(r1, nodeCheck.summary, { max: 24, seed: ROBUSTNESS_SEED });
-    check('compare and check_robustness with report: the comparison of Run 1 and Run 2 and Run 1\'s robustness kept in the workspace, in its history, as Node computes them from the archive (sides, scale, report, statistics; choices, analyses, verdicts)', `${keptCompare.data.report} and ${keptRobust.data.report}; ${withReport.ws.history.slice(-2).map((e) => e.detail).join(' | ')}`,
-      JSON.stringify(strip(comparisonKept)) === JSON.stringify(strip(comparisonNode)) && JSON.stringify(strip(robustnessKept)) === JSON.stringify(strip(robustnessNode)) && withReport.ws.history.slice(-2).every((e) => e.action === 'report' && e.detail.startsWith('Added to the report')));
+    check('compare and check_robustness with report: the comparison of Run 1 and Run 2 and Run 1\'s robustness kept in the workspace, in its history, as Node computes them from the archive (sides, scale, report, statistics; choices, analyses, verdicts)', `${keptCompare.data.inReport} and ${keptRobust.data.report}; ${withReport.ws.history.slice(-2).map((e) => e.detail).join(' | ')}`,
+      keptCompare.data.inReport === comparisonKept?.id && /Kept in the report\.$/.test(keptCompare.message) && Boolean(keptCompare.data.report?.items) && JSON.stringify(strip(comparisonKept)) === JSON.stringify(strip(comparisonNode)) && JSON.stringify(strip(robustnessKept)) === JSON.stringify(strip(robustnessNode)) && withReport.ws.history.slice(-2).every((e) => e.action === 'report' && e.detail.startsWith('Added to the report')));
     const nodeReport = writeReport(withReport.ws, contextOf(withReport.ws, recomputedRuns(withReport.ws, withReport.sources), windowSoftware));
     const sections = shown.data.sections.filter((x) => x.title).map((x) => x.title);
     const view = await browser.eval(`(() => { const d = document.querySelector('.report-doc'); return d ? { headings: d.querySelectorAll('h3').length, references: d.querySelectorAll('.report-references li').length, kept: document.querySelectorAll('.report-kept li').length } : null; })()`);

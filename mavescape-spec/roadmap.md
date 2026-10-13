@@ -3226,6 +3226,62 @@ Decisions taken in planning (confirmed before slice 1):
    GRB2 opened, scored and checked, its scores against its record's published ones, a figure
    exported; DHFR's two conditions from R. An agent's session on Hsp90, its prompts and what it
    proposes, in the guide.
+   - **Done.** `clients/examples/`, run by `clients/test-clients.mjs` after each client's tests,
+     against the same MaveScape (offline), in the CI job `clients` with `--require`:
+     - **`grb2-sh3.ipynb`**, a Python notebook kept with its outputs (`--update` writes them):
+       GRB2 opened, `check`ed (its readiness as a data frame), its QC findings as a data frame and
+       the bottleneck acknowledged (a script's change, at once), the scores by class and each
+       position's median missense score plotted (the four least tolerant A163, G196, G203, I183),
+       scored again with the DiMSum-compatible preset (its input terms 20–38× counting, outputs
+       1.7–5.2×), both runs against the record's published scores fetched by URN and rescaled by
+       their anchors (r 0.997 and 0.994, Lin's 0.996 and 0.994), the variants compared from the
+       comparison's export plotted, and a figure of three panels (the map, the agreement, the
+       bottleneck) checked by `figures` and exported as PDF and PNG. Executed with nbclient in
+       about 4 s; each `assert` a check.
+     - **`dhfr-lon.R`**, an R script: DHFR's two score sets opened from MaveDB with their counts;
+       the fast growers of each condition (877 and 391 in Run 1, 736 and 384 published); the
+       authors' unweighted regression (`model: ols`, Run 2) against the published scores (r 0.96
+       and 0.98, against 0.90 and 0.96 weighted); the differences +Lon − −Lon: 2,904 estimated,
+       377 called at q < 0.05, 347 negative, 55% of those at a hydrophobic residue against 33% of
+       all; a plot by position and MaveScape's map of the difference; the differential scores
+       exported. About 2 s; each `stopifnot()` a check. Its minus signs are escapes, so it runs in
+       any locale.
+     - **The guide's *A session on Hsp90*** (the website's *Agents and scripts*): three prompts,
+       the agent's tool calls and answers, from the comparison with the record's published scores
+       (r 0.95, Lin's 0.48, the difference growing with the effect) and the time courses' fit
+       failing, through a checkpoint and a design fitting the first three samples proposed and
+       accepted, to Run 2 read as a sensitivity analysis (148 of 188 variants moved, 102 changed
+       class; the stops −0.41 per generation against −0.32; against the published scores r 0.82,
+       Lin's 0.44, since the authors fitted only their null-like variants on three samples). The
+       calls are real and replayed in CI; the answers were written by Claude from their results,
+       against `mavescape mcp` directly rather than recorded from a Claude Code session. A scene,
+       `agent-hsp90`: the proposal reviewed above the Experiment view, the design beside the
+       person's.
+     - Found by slice 6:
+       - **`score` waited for an agent's design only when there was none**: with a design in
+         place and the agent's change to it waiting, it scored the person's design, the run made
+         and proposed as if it were the agent's. The documentation, the MCP instructions and the
+         CHANGELOG said `score` waits for a design the agent proposed; it does now, saying why.
+       - **`compare` said "Kept in the report." after every comparison**, kept or not (since wave 6,
+         slice 4): it took the comparison's report of compatibility for the analysis kept. The kept
+         analysis's id is `inReport` now, and the sentence says it only then.
+       - **`open_example` named four of the fourteen examples**, none from MaveDB, nor Hsp90 or
+         factor IX: an agent or a client's help could not know their ids. It names every one; a Go
+         test reads `web/lib/examples.js` and keeps it so.
+       - **Hsp90's published scores were not in the fetcher's cached answers**, so an offline
+         session could not compare with them; they are now (43 kB, CC0, the file `sources.json`
+         pins).
+       - A design's summary puts a count before each reason a column is not used ("5 …"), so a
+         reason reads best as a noun phrase; the session's is "later time points: …".
+       - Figures: a panel added without a place goes to the top of a page that has no room left,
+         over the panels there, and `figures` does not say so. The notebook places its panels; the
+         rest is in the parking lot.
+     - Validation: `clients/test-clients.mjs` (the Python and R tests, then the notebook and the
+       script, each failing when a check does); the agent session (34 checks: +1 the refusal on
+       GRB2, +3 the guide's three answers, every number they quote); the remote session (the
+       compare sentence, kept and not); `TestOpenExampleNamesEveryExample`; axe-core on
+       `agent-hsp90` in both themes, no violation; the site builds (23 pages, 73 screenshots).
+     - Wave 7 is complete with slice 6.
 
 ## 0.8.0: calibration, for research (wave 8)
 
@@ -3282,6 +3338,9 @@ report is taken in when it comes, and may reorder the waves.
 
 - **WebMCP**, for the same reason CytoWeave parked it.
 - **Publishing the clients** to PyPI and r-universe, until there are users (as CytoWeave).
+- **Overlapping figure panels** (found by wave 7, slice 6): a panel added without a place, to a page
+  with no room left below its panels, is put at the top, over them, in the window and through
+  `add_figure_panel` alike; `figures` should say when panels overlap, and perhaps the page grow.
 
 ## Ideas (unscheduled; the PRD's "future")
 

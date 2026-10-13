@@ -126,6 +126,13 @@ The agent starts with `get_state` and works in the window as you would. For exam
 > Write the methods, keep a checkpoint, and certify the workspace once I have accepted your
 > proposals.
 
+The website's [session on Hsp90](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html#session)
+shows one through: an agent compares the example's scores with the published ones, finds the time
+courses' fit failing, keeps a checkpoint and proposes a design that fits the first three samples,
+waits for it to be accepted, scores, and reads what moved as a sensitivity analysis rather than a
+fix. Its tool calls are real, and `validation/agent-session.mjs` checks every number its answers
+quote.
+
 ## Tools
 
 The tools are MaveScape's remote-control actions, under the same names, with the same arguments

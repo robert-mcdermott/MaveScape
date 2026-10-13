@@ -181,11 +181,13 @@ guides to every view, with screenshots.
 - **AI agents.** `mavescape mcp` is a Model Context Protocol server: an agent such as Claude Code
   opens data, scores, reads the QC and the scores as tables, looks at the map, structures and
   figures as pictures, compares and certifies in the window you watch. Its changes are proposals
-  you accept or reject there, each recorded with the agent's name ([`docs/MCP.md`](docs/MCP.md)).
+  you accept or reject there, each recorded with the agent's name ([`docs/MCP.md`](docs/MCP.md); a
+  [session on Hsp90](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html#session)).
 - **Scripting and headless runs.** With `--remote-control`, scripts on your computer drive the
   open window, each step visible and undoable, from R or Python with a function for each action
-  (tables as data frames, pictures as files). `mavescape run` does a whole analysis without a
-  window and writes the same bytes every time.
+  (tables as data frames, pictures as files; a [notebook on GRB2](clients/examples/grb2-sh3.ipynb)
+  and an [R script on DHFR](clients/examples/dhfr-lon.R)). `mavescape run` does a whole analysis
+  without a window and writes the same bytes every time.
 - **Accessible.** Color-vision-friendly colors as a setting, WCAG AA contrast in both themes,
   keyboard operation of the map with each cell announced.
 - **Validated.** A validation suite checks the pipelines against the tools the methods come from,
@@ -458,8 +460,8 @@ integration on every change.
 | Checkpoints and changes | Five planted changes from a checkpoint of GRB2's run (a pseudocount, a filter, a replicate left out, a threshold, the readout); the variants each rescoring moved, computed apart; a change of units (Hsp90 over its whole time course); the window's diff against Node's | Each change described exactly and nothing else; the variants moved, crossed and filtered the same; a change of units moving nothing; an analysis against itself unchanged |
 | Certificates | GRB2's workspace of every operation, each kind of number computed apart; six kinds of tampering; the 14 examples and every release's archives; the window's certificates against Node's | Every number as computed apart, verified bit for bit; every tampering caught and said; 172,383 numbers of the examples verified; the window's certificate Node's, byte for byte |
 | Review reports | Every traced number of GRB2's workspace and the 14 examples against the certificate and the workspace; the file in Chrome (requests, axe-core in both themes); the window's against Node's | Every number where it says it comes from; nothing loaded from outside the file; no axe-core violation in either theme; the same bytes from the window, `mavescape verify --review` and `export --format review` |
-| AI agents (MCP) | Every tool through `mavescape mcp` on stdio, as an agent's client calls them, in headless Chrome; the agent's proposals accepted and rejected in the window | Results the remote actions' and Node's; read-only tools change nothing; every change carries the agent's name; each kind of change waits, applies or goes as it should |
-| R and Python clients | Both packages against a running MaveScape in headless Chrome (`clients/test-clients.mjs`); `R CMD check` | GRB2 scored through each, its scores table every number of Node's, files written, errors with MaveScape's reason, results the HTTP API's |
+| AI agents (MCP) | Every tool through `mavescape mcp` on stdio, as an agent's client calls them, in headless Chrome; the agent's proposals accepted and rejected in the window; the guide's session on Hsp90 | Results the remote actions' and Node's; read-only tools change nothing; every change carries the agent's name; each kind of change waits, applies or goes as it should; every number the guide's answers quote |
+| R and Python clients | Both packages against a running MaveScape in headless Chrome (`clients/test-clients.mjs`); `R CMD check`; the examples, the GRB2 notebook executed and the DHFR script run | GRB2 scored through each, its scores table every number of Node's, files written, errors with MaveScape's reason, results the HTTP API's; each example's checks |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |
 | Scale | A million barcodes and their million-line map | Imported in 3.5 s, scored in 1.3 s |
 
@@ -551,7 +553,7 @@ node validation/run.mjs               # the validation suites
 node validation/coverage.mjs          # coverage of 95% intervals
 node validation/remote-session.mjs    # every remote action, in the program and headless Chrome
 node validation/agent-session.mjs     # every tool through mavescape mcp, as an agent's client calls them
-node clients/test-clients.mjs         # the R and Python clients against a running MaveScape
+node clients/test-clients.mjs         # the R and Python clients against a running MaveScape, then the examples
 node validation/headless-run.mjs      # mavescape run and validate: the same bytes twice, reruns, failures
 ```
 

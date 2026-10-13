@@ -680,6 +680,16 @@
   "violations": []
  },
  {
+  "scene": "agent-hsp90",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "agent-hsp90",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "agent-accepted",
   "theme": "dark",
   "violations": []

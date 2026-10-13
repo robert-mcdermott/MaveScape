@@ -6,14 +6,23 @@
 // files, an error carrying MaveScape's reason, and results equal to the HTTP API's for the same
 // actions. After CytoWeave 0.8.0's clients/test-clients.mjs.
 //
-//   node clients/test-clients.mjs [--python] [--r]     (both when neither is named)
+// Then the examples (wave 7, slice 6), each in a folder of its own: the Python notebook
+// clients/examples/grb2-sh3.ipynb executed (nbclient), and the R script clients/examples/dhfr-lon.R
+// run on DHFR's two score sets, its MaveDB tables as node validation/fetch.mjs mavedb-dhfr keeps
+// them. Each fails when one of its checks does.
+//
+//   node clients/test-clients.mjs [--python] [--r] [--require] [--update]
+//
+// --python, --r: that client alone (both when neither is named). --require: fail, rather than skip
+// an example, when what it needs is missing (as CI runs it). --update: write the executed notebook,
+// with its outputs, over clients/examples/grb2-sh3.ipynb.
 //
 // Needs Go, Chrome (CHROME=path), Python 3 for the Python client (pandas for its data frames, else
-// those tests are skipped) and R with curl, jsonlite and testthat for the R client. Exits with
-// status 1 when a test fails.
+// those tests are skipped; nbclient, ipykernel and matplotlib too for the notebook) and R with curl,
+// jsonlite and testthat for the R client. Exits with status 1 when a test or an example fails.
 
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,12 +35,54 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8857;
 const only = ['--python', '--r'].filter((flag) => process.argv.includes(flag));
 const run = (name) => !only.length || only.includes(`--${name}`);
+const strict = process.argv.includes('--require');
+const update = process.argv.includes('--update');
+const NOTEBOOK = join(ROOT, 'clients/examples/grb2-sh3.ipynb');
+// DHFR's MaveDB tables (wave 3, slice 6), copied into the fetcher's cache so that the R example
+// opens them offline.
+const DHFR = join(ROOT, 'validation/cache/mavedb-dhfr');
+const DHFR_TABLES = [['urn:mavedb:00000063-b-1', 'minus-lon'], ['urn:mavedb:00000063-a-1', 'plus-lon']];
 const temp = mkdtempSync(join(tmpdir(), 'mavescape-clients-'));
 const library = join(temp, 'library');
 const cache = join(temp, 'cache');
 const out = join(temp, 'out');
 mkdirSync(out);
 cpSync(join(ROOT, 'validation/fixtures/public-data'), cache, { recursive: true });
+const dhfr = existsSync(join(DHFR, 'plus-lon', 'counts.csv'));
+if (dhfr) {
+  for (const [urn, dir] of DHFR_TABLES) {
+    for (const table of ['scores', 'counts']) {
+      const name = `${urn.replaceAll(':', '_')}.${table}.csv`;
+      cpSync(join(DHFR, dir, `${table}.csv`), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
+    }
+  }
+}
+
+// Executes a notebook with nbclient in a folder, then writes it with its outputs (each cell's
+// timings and the kernel's details left out, so that it changes only when its outputs do). Exits
+// with status 3 when nbclient, ipykernel, pandas or matplotlib is missing.
+const EXECUTE = `
+import sys
+try:
+    import ipykernel, matplotlib, nbformat, pandas
+    from nbclient import NotebookClient
+except ImportError as error:
+    print(f"The notebook needs nbclient, ipykernel, pandas and matplotlib: {error}.")
+    sys.exit(3)
+source, folder, executed = sys.argv[1:4]
+nb = nbformat.read(source, as_version=4)
+NotebookClient(nb, timeout=900, kernel_name="python3", resources={"metadata": {"path": folder}}).execute()
+for cell in nb.cells:
+    cell.metadata.pop("execution", None)
+nb.metadata["language_info"] = {"name": "python"}
+nbformat.write(nb, executed)
+`;
+// An example that cannot run here: skipped, or a failure with --require.
+function cannot(what, why) {
+  console.log(`${strict ? 'FAIL' : 'Skipped'}: ${what}: ${why}`);
+  return strict ? 1 : 0;
+}
 
 const exec = (command, args, options = {}) => new Promise((done) => {
   const child = spawn(command, args, { cwd: ROOT, stdio: 'inherit', ...options });
@@ -76,8 +127,23 @@ try {
   if (run('python')) {
     console.log('\n--- Python client ---');
     const python = process.env.PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3');
-    const code = await exec(python, ['-m', 'unittest', 'discover', '-s', 'clients/python/tests', '-v'], { env: { ...env, PYTHONPATH: join(ROOT, 'clients/python/src') } });
+    const pythonEnv = { ...env, PYTHONPATH: join(ROOT, 'clients/python/src') };
+    const code = await exec(python, ['-m', 'unittest', 'discover', '-s', 'clients/python/tests', '-v'], { env: pythonEnv });
     if (code) failed += 1;
+    console.log('\n--- The Python notebook (clients/examples/grb2-sh3.ipynb) ---');
+    const folder = join(out, 'notebook');
+    mkdirSync(folder);
+    const executed = join(folder, 'grb2-sh3.ipynb');
+    let notebook = await exec(python, ['-c', EXECUTE, NOTEBOOK, folder, executed], { env: pythonEnv });
+    if (notebook === 3) notebook = cannot('the notebook', 'install nbclient, ipykernel, pandas and matplotlib');
+    else if (!notebook) {
+      console.log('The notebook ran to its end, every check passing.');
+      if (update) {
+        copyFileSync(executed, NOTEBOOK);
+        console.log('Wrote it, with its outputs, to clients/examples/grb2-sh3.ipynb.');
+      }
+    }
+    if (notebook) failed += 1;
   }
   if (run('r')) {
     console.log('\n--- R client ---');
@@ -89,6 +155,17 @@ try {
       code = await exec('Rscript', ['-e', script], { env });
     }
     if (code) failed += 1;
+    console.log('\n--- The R script (clients/examples/dhfr-lon.R) ---');
+    let example;
+    if (!dhfr) example = cannot('the R script', 'DHFR\'s MaveDB tables are not in validation/cache (node validation/fetch.mjs mavedb-dhfr)');
+    else if (!existsSync(join(rlib, 'mavescape'))) example = cannot('the R script', 'the R client did not install');
+    else {
+      const folder = join(out, 'r-example');
+      mkdirSync(folder);
+      example = await exec('Rscript', [join(ROOT, 'clients/examples/dhfr-lon.R')], { cwd: folder, env: { ...env, R_LIBS: rlib } });
+      if (!example) console.log('The R script ran to its end, every check passing.');
+    }
+    if (example) failed += 1;
   }
 } catch (error) {
   console.error(error);
@@ -98,5 +175,5 @@ try {
   server.stop();
   rmSync(temp, { recursive: true, force: true });
 }
-console.log(failed ? `\n${failed} client test suite(s) failed.` : '\nThe clients\' tests passed.');
+console.log(failed ? `\n${failed} of the clients' test suites and examples failed.` : '\nThe clients\' tests and examples passed.');
 process.exit(failed ? 1 : 0);

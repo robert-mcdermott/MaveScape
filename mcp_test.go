@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -393,6 +394,30 @@ func TestTheMCPGuideNamesEveryTool(t *testing.T) {
 	for _, action := range remoteActions {
 		if !strings.Contains(string(guide), "`"+action.Name+"`") {
 			t.Errorf("docs/MCP.md does not name the tool %s", action.Name)
+		}
+	}
+}
+
+// open_example names every example (web/lib/examples.js), so an agent and the clients' help know
+// their ids.
+func TestOpenExampleNamesEveryExample(t *testing.T) {
+	source, err := os.ReadFile("web/lib/examples.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var description string
+	for _, action := range remoteActions {
+		if action.Name == "open_example" {
+			description = action.InputSchema["properties"].(map[string]any)["id"].(map[string]any)["description"].(string)
+		}
+	}
+	ids := regexp.MustCompile(`(?m)^    id: '([^']+)',$`).FindAllStringSubmatch(string(source), -1)
+	if len(ids) < 10 {
+		t.Fatalf("found %d examples in web/lib/examples.js", len(ids))
+	}
+	for _, id := range ids {
+		if !strings.Contains(description, `"`+id[1]+`"`) {
+			t.Errorf("open_example's description does not name the example %s", id[1])
 		}
 	}
 }

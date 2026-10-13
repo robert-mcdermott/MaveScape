@@ -1340,7 +1340,9 @@ export function installRemote(app) {
     async score(args) {
       const source = resolveSource();
       const design = ws().design;
-      if (!design && heldDesign()) throw new ActionError('The design you proposed waits for the person to accept it: score once they have (proposals says when).');
+      // Scoring waits for the design the agent proposed, not only for a first one: a run made
+      // meanwhile would have the person's design, not the one the agent means.
+      if (heldDesign()) throw new ActionError(`The design you proposed waits for the person to accept it: score once they have (proposals says when).${design ? ' Until then the workspace keeps the person\'s design, which a run now would score.' : ''}`);
       if (!design) throw new ActionError('There is no design yet: draft it (draft_design) or set it (set_design) first.');
       const presetId = choose(args.preset ?? 'mavescape', Object.keys(PRESETS), 'preset');
       const base = defaultParameters(design, source, presetId);
@@ -2039,13 +2041,14 @@ export function installRemote(app) {
         ? `${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared${c.matched.compared !== c.matched.n ? ` of ${c.matched.n} scored on both sides` : ''}${c.scale?.applied ? ` (${c.scale.anchors ? 'rescaled by their anchors' : 'stated to be on one scale'})` : ''}. ${agreement}.${discordance}${classes}${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
         : `${c.a.label} and ${c.b.label} cannot be compared: ${flagged.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`;
       const { software, ...data } = JSON.parse(comparisonJSON(c));
-      // Kept in the workspace's report (wave 6, slice 4).
+      // Kept in the workspace's report (wave 6, slice 4): the analysis's id, beside the comparison's
+      // own report of compatibility.
       if (args.report === true) {
         if (!s) throw new ActionError(`${c.a.label} and ${c.b.label} cannot be compared, so there is nothing to keep in the report.`);
-        data.report = keepInReport(app, comparisonForReport(c, pair));
+        data.inReport = keepInReport(app, comparisonForReport(c, pair));
         await settle();
       }
-      return { message: `${message}${data.report ? ' Kept in the report.' : ''}`, data };
+      return { message: `${message}${data.inReport ? ' Kept in the report.' : ''}`, data };
     },
 
     // Certificates (wave 6, slice 6; ui/certificate.js): the workspace certified, every number

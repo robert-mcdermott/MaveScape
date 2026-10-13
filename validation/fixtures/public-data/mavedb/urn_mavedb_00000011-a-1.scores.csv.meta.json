@@ -1,0 +1,6 @@
+{
+  "contentType": "text/csv; charset=utf-8",
+  "service": "MaveDB",
+  "source": "https://api.mavedb.org/api/v1/score-sets/urn:mavedb:00000011-a-1/scores",
+  "retrieved": "2026-10-10T16:00:00Z"
+}

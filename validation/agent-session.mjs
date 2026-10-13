@@ -203,6 +203,10 @@ try {
 
   // --- What waits for the person, and what is made at once (wave 7, slice 2) ----------------
   const designNow = (await workspace()).design;
+  const enrich2 = await tool('score', { preset: 'enrich2' }, { progressToken: 'score' });
+  const nodeEnrich2 = scoreTable(node.table, node.design, withDefaults(defaultParameters(node.design, node.ws.sources[0], 'enrich2')));
+  const run2 = (await tool('get_state')).data.runs.find((r) => r.name === 'Run 2');
+  check('score with the Enrich2-compatible preset: Run 2, Node\'s output hash, made at once and marked proposed, the result saying so', `${enrich2.message.slice(-120)}; ${run2?.outputSha256.slice(0, 12)}…`, run2?.outputSha256 === outputDigest(nodeEnrich2.results) && /Proposed to the person/.test(enrich2.message) && enrich2.data.proposal?.made.includes('Run 2 scored') && (await workspace()).runs[1].proposed?.by === AGENT);
   const acked = await tool('acknowledge_finding', { finding: 'excess-variance', reason: 'The input bottleneck the Domainome\'s own analysis found' });
   const thresholds = await tool('set_qc_thresholds', { thresholds: { agreement: { review: 0.75 } } });
   const targetCheck = await tool('check_target', { apply: true });
@@ -213,10 +217,8 @@ try {
   check('an agent\'s acknowledgement, QC thresholds, target check, MaveDB details and design wait for the person: the workspace unchanged, each tool saying so', [acked, thresholds, targetCheck, details, designed].map((r) => r.message.slice(0, 50)).join(' | '),
     [acked, thresholds, targetCheck, details, designed].every((r) => r.data.waiting || r.data.proposed) && !held.qc?.acknowledged && !held.qc?.thresholds && !held.targets[0].reference && !held.deposit?.abstract && held.design.name === designNow.name
     && held.history.filter((e) => e.action === 'propose').length >= 5 && held.history.filter((e) => e.action === 'propose').every((e) => e.by === AGENT));
-  const enrich2 = await tool('score', { preset: 'enrich2' }, { progressToken: 'score' });
-  const nodeEnrich2 = scoreTable(node.table, node.design, withDefaults(defaultParameters(node.design, node.ws.sources[0], 'enrich2')));
-  const run2 = (await tool('get_state')).data.runs.find((r) => r.name === 'Run 2');
-  check('score with the Enrich2-compatible preset: Run 2, Node\'s output hash, made at once and marked proposed, the result saying so', `${enrich2.message.slice(-120)}; ${run2?.outputSha256.slice(0, 12)}…`, run2?.outputSha256 === outputDigest(nodeEnrich2.results) && /Proposed to the person/.test(enrich2.message) && enrich2.data.proposal?.made.includes('Run 2 scored') && (await workspace()).runs[1].proposed?.by === AGENT);
+  const meanwhile = await call('score', { parameters: { pseudocount: 1 } });
+  check('score while the design the agent proposed waits for the person: refused, saying so, and nothing scored with the design as it is', meanwhile.text.slice(0, 120), meanwhile.isError && /The design you proposed waits for the person/.test(meanwhile.text) && (await workspace()).runs.length === 2);
   const variant = await tool('inspect_variant', { variant: 'p.Trp36Ala', run: 'Run 1' });
   const row = node.scored.results.variants.key.indexOf('p.Trp36Ala');
   const nodeScore = node.scored.results.conditions[0].score[row];
@@ -426,6 +428,50 @@ try {
   const blankNow = await workspace();
   check('tables and a target opened into the agent\'s workspace are proposed; its draft design waits, and so does scoring with it, until the person accepts it', `${files.data.proposal?.made.join('; ')}; ${drafted.message.slice(0, 50)}…; ${tooSoon.text.slice(0, 70)}; ${scored.message.slice(0, 40)}`,
     files.data.proposal?.made.length === 2 && drafted.data.waiting && tooSoon.isError && /waits for the person to accept it/.test(tooSoon.text) && blankNow.design && blankNow.sources[0].proposed?.accepted && blankNow.runs[0]?.proposed?.proposal);
+
+  // --- The guide's session on Hsp90 (wave 7, slice 6) ---------------------------------------
+  // The tool calls the guide's page Agents and scripts shows (docs/site/pages/docs/scripting.html,
+  // A session on Hsp90), in its order, and every number its answers quote.
+  {
+    const r2 = (x) => x.toFixed(2);
+    const median = (xs) => { const v = [...xs].sort((a, b) => a - b); const n = v.length; return n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2; };
+    const stops = async (run) => median((await tool('scores', { run, kinds: ['nonsense'], limit: 0 })).data.variants.map((v) => v.score));
+    // "How well do its scores agree with the published fitness, and what does quality control say?"
+    await tool('open_example', { id: 'hsp90' });
+    const qc = await tool('qc_findings', { run: 'Run 1' });
+    const fit = qc.data.findings.find((f) => f.id === 'time-fit');
+    const unassessed = qc.data.findings.filter((f) => f.status === 'na').map((f) => f.id);
+    const before = await tool('compare', { a: 'Run 1', b: 'urn:mavedb:00000011-a-1', scale: 'stated', direction: 'higher-more' });
+    const s1 = before.data.statistics;
+    const core = before.data.positions.list.filter((p) => p.reference >= 585 && p.reference <= 587).map((p) => p.mean);
+    const stops1 = await stops('Run 1');
+    check('the guide\'s Hsp90 session, first answer: the time courses\' fit failing at 44× counting, agreement and the variance beyond counting not assessed; against the published scores r 0.95, Lin\'s concordance 0.48, a bias of 0.22 growing with the effect (−0.91), 0.34 to 0.39 at 585–587; the stops −0.32 per generation', `${fit.value}; not assessed: ${unassessed.join(', ')}; r ${r2(s1.pearson.r)}, ${r2(s1.concordance.ccc)}, ${r2(s1.blandAltman.bias)}, ${r2(s1.blandAltman.trend.slope)}, ${core.map(r2).join(', ')}; ${r2(stops1)}`,
+      fit.status === 'fail' && /^median 43\.8×/.test(fit.value) && ['agreement', 'excess-variance'].every((id) => unassessed.includes(id)) && s1.n === 187 && r2(s1.pearson.r) === '0.95' && r2(s1.concordance.ccc) === '0.48' && r2(s1.blandAltman.bias) === '0.22' && r2(s1.blandAltman.trend.slope) === '-0.91' && core.length === 3 && core.every((x) => x >= 0.335 && x < 0.395) && r2(stops1) === '-0.32');
+    // "Do that": a checkpoint, the design read from Run 1's provenance with generations 9 to 21 not
+    // used, proposed; scoring refused until the person accepts it.
+    await tool('checkpoint', { name: 'All eight samples' });
+    const design = structuredClone((await tool('provenance', { run: 'Run 1' })).data.inputs.design);
+    const later = design.samples.slice(3);
+    design.samples = design.samples.slice(0, 3);
+    design.replicates[0].timepoints = design.replicates[0].timepoints.slice(0, 3);
+    design.ignoredColumns = later.flatMap((x) => x.columns).map((column) => ({ column, reason: 'later time points: the authors fit their null-like variants on the first three' }));
+    const proposed = await tool('set_design', { design });
+    const tooSoon = await call('score', { parameters: { timeScale: 'unit' } });
+    const waiting = (await tool('proposals')).data.yours;
+    check('the guide\'s Hsp90 session, second answer: the checkpoint made, the design fitting generations 0, 3 and 6 waiting for the person, and scoring refused until it is accepted', `${waiting.made.join('; ')} | waiting: ${waiting.waiting.join('; ')} | ${tooSoon.text.slice(0, 70)}…`,
+      Boolean(proposed.data.waiting) && waiting.made.some((m) => /checkpoint "All eight samples"/.test(m)) && waiting.waiting.length === 1 && tooSoon.isError && /waits for the person/.test(tooSoon.text));
+    // The person accepts; "Score it and tell me what changed."
+    await decide('Accept all');
+    const run2 = await tool('score', { parameters: { timeScale: 'unit' } });
+    const moved = (await tool('diff', { from: 'All eight samples' })).data.pairs[0].targets[0];
+    const stops2 = await stops('Run 2');
+    const trp4 = (await tool('inspect_variant', { variant: 'p.Trp4Ter', run: 'Run 2' })).data;
+    const published = trp4.annotations.find((a) => /00000011-a-1/.test(a.track)).text.split('; ').map(Number);
+    const after = (await tool('compare', { a: 'Run 2', b: 'urn:mavedb:00000011-a-1', scale: 'stated' })).data.statistics;
+    const lowerToLike = moved.crossings.find((c) => c.from === 'lower than the wild type' && c.to === 'like the wild type')?.n;
+    check('the guide\'s Hsp90 session, third answer: Run 2 per generation; 148 of 188 variants moved beyond their interval, 102 changed class, 93 from lower than the wild type to like it; the stops −0.41; p.Trp4Ter −0.51 against −0.73 to −0.79 published; against the published r 0.82 and Lin\'s concordance 0.44; Run 2 proposed', `${run2.data.name}; ${moved.moved} of ${moved.both}, ${moved.crossed} (${lowerToLike}); ${r2(stops2)}; ${r2(trp4.score)} against ${published.map(r2).join(', ')}; r ${r2(after.pearson.r)}, ${r2(after.concordance.ccc)}`,
+      run2.data.name === 'Run 2' && moved.both === 188 && moved.moved === 148 && moved.crossed === 102 && lowerToLike === 93 && r2(stops2) === '-0.41' && r2(trp4.score) === '-0.51' && r2(Math.max(...published)) === '-0.73' && r2(Math.min(...published)) === '-0.79' && r2(after.pearson.r) === '0.82' && r2(after.concordance.ccc) === '0.44' && run2.data.proposal?.made.includes('Run 2 scored'));
+  }
 
   // --- What the session as a whole shows ---------------------------------------------------
   const never = listed.map((t) => t.name).filter((n) => !called.has(n));

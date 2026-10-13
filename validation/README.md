@@ -198,7 +198,7 @@ slowed (`Emulation.setCPUThrottlingRate`, 4 times unless a rate is given). Every
 release met only in CI failed this way here first; run it before a release, and after any change to
 the Structure view or to what runs in the background.
 
-## The agent session (`agent-session.mjs`, wave 7 slices 1 to 3)
+## The agent session (`agent-session.mjs`, wave 7 slices 1 to 3 and 6)
 
 `node validation/agent-session.mjs [--verbose] [--like-ci [rate]]` builds MaveScape and starts
 `mavescape mcp` (`--window none`, an empty library, `--offline` on the fetcher's cached answers in
@@ -243,12 +243,20 @@ one of the 54 tools on the examples:
   not replaced).
 - The archive opened again by path, MaveDB searched and a score set opened from the cache, a new
   workspace (none of them proposals); a table and its target opened into it (proposed), a design
-  drafted (waiting), scoring refused until the person accepted it.
+  drafted (waiting), scoring refused until the person accepted it; on GRB2 before that, scoring
+  refused too while a change to the design in place waited.
+- The guide's session on Hsp90 (slice 6; the website's *Agents and scripts*, *A session on Hsp90*),
+  its tool calls in its order: the time courses' fit failing, the comparison with the record's
+  published scores and the stops' median per generation; a checkpoint, the design from Run 1's
+  provenance with generations 9 to 21 not used, proposed, and scoring refused while it waits; the
+  person accepting it; Run 2 scored per generation, the diff from the checkpoint, the stops again,
+  p.Trp4Ter beside its published scores, the comparison again. Every number the guide's answers
+  quote, at the precision they quote it.
 
 Every tool said to read only must leave the workspace's history as it was; every change the agent
 made must carry its name in the history (`by`), the other entries being the person's decisions and
 the person's own changes; stdout must carry nothing but JSON-RPC; closing stdin must stop MaveScape
-and remove its connection file. 30 checks; in CI as the `agents` job.
+and remove its connection file. 34 checks; in CI as the `agents` job.
 
 ## Proteoscope itself (`proteoscope-handoff.mjs`, wave 5 slice 6)
 
@@ -401,6 +409,7 @@ retrieval record:
 | `uniparc/da732b5e….json` | the lookup of GRB2's whole sequence: 120 active UniProtKB entries with exactly that sequence (named by the sequence's SHA-256) |
 | `mavedb/urn_mavedb_00000835-a-1.json`, `.scores.csv`, `.counts.csv` | GRB2 SH3's MaveDB record and tables, retrieved 2026-10-11 (the tables byte for byte those `sources.json` pins) |
 | `mavedb/urn_mavedb_00000003-a-1.json`, `-a-2`, `00001200-a-1`, `00000011-a-1` | the records of BRCA1 RING (two score sets), factor IX and Hsp90 |
+| `mavedb/urn_mavedb_00000011-a-1.scores.csv` | Hsp90's published scores, retrieved 2026-10-10 (byte for byte the table `sources.json` pins as `mavedb-hsp90`): compared without opening them in the agent session's Hsp90 part and the capture's scene of it (wave 7, slice 6) |
 | `mavedb/urn_mavedb_00000013-a-1.json` | PTEN VAMP-seq's record (the example; its table is external data, `mavedb-pten-vampseq`) |
 | `mavedb/urn_mavedb_00000054-a-1.json` | PTEN's lipid phosphatase record (Mighell et al. 2018), compared with the PTEN example without opening it (wave 4, slice 3; its table is external data, `mavedb-pten-phosphatase`) |
 | `mavedb/urn_mavedb_00000068-c-1.json`, `00000068-b-1`, `00000059-a-1`; `uniprot/P04637.json` | the TP53 example's records, retrieved 2026-10-12: Giacomelli et al.'s etoposide screen (opened) and nutlin-3 screen, and Kotler et al.'s screen of the DNA-binding domain (kept beside); and p53's UniProt entry (release 2026_03), which the example's target is checked against (wave 4, slice 6; their tables are external data, `mavedb-tp53-screens`) |

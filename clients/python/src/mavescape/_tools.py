@@ -38,10 +38,14 @@ class Tools:
         opens in. Without an id, the error lists the examples.
 
         Args:
-            id: The example's id or part of its title: "grb2-sh3" (GRB2 SH3, MaveDB counts),
-                "simulated" (a simulated experiment with known effects) "simulated-time-series" (a
-                simulated time series) or "simulated-sort-seq" (simulated sorted bins). Required; a
-                string.
+            id: The example's id or part of its title. Published: "grb2-sh3" (GRB2's SH3 domain, an
+                input and an output), "hsp90" (Hsp90, a time series), "factor9" (factor IX, sorted
+                bins), "dhfr-lon" (DHFR with and without Lon, two conditions), "brca1-ring" (BRCA1's
+                RING domain, from MaveDB and back), "pten-mavedb" (PTEN, published scores), "brca1-sge"
+                (BRCA1, nucleotide variants), "tp53-screens" (TP53, two screens). Simulated, with known
+                effects: "simulated", "simulated-time-series", "simulated-sort-seq",
+                "simulated-barcodes", "simulated-conditions", "simulated-problems". The examples from
+                MaveDB download their tables when opened. Required; a string.
 
         Returns:
             A Result: the message and the data MaveScape answered with.

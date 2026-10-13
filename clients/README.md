@@ -70,6 +70,25 @@ has the action's `message` (a sentence) and `data`:
 - **Errors.** An action MaveScape refuses is an error carrying its reason, the HTTP status and the
   action (`mavescape_error` in R, `MaveScapeError` in Python).
 
+## Examples
+
+Two examples in [`examples/`](examples/), each run in CI against a build of MaveScape, its checks
+(`assert`, `stopifnot()`) part of the tests:
+
+- [`grb2-sh3.ipynb`](examples/grb2-sh3.ipynb), a Python notebook (pandas and matplotlib): the GRB2
+  example opened and checked, its QC findings as a data frame and the bottleneck acknowledged, the
+  scores by position, scored again with the DiMSum-compatible preset, both runs against the
+  record's published scores (fetched from MaveDB by their URN) with a plot of the variants compared,
+  and a figure of three panels exported as PDF and PNG. It is kept with its outputs, so GitHub shows
+  them.
+- [`dhfr-lon.R`](examples/dhfr-lon.R), an R script: DHFR's two score sets opened from MaveDB with
+  their counts, scored together as two conditions; the fast growers of each, the authors'
+  unweighted regression against the published scores, the 377 differences +Lon − −Lon called and
+  the residues they replace, a plot by position and MaveScape's map of the difference.
+
+Start MaveScape with `--remote-control`, then run them where they may write their folder of results
+(`grb2-sh3/`, `dhfr-lon/`): open the notebook in Jupyter, and `Rscript dhfr-lon.R`.
+
 ## For developers
 
 The functions are generated from [`tools.json`](tools.json), the program's actions, which a Go
@@ -83,11 +102,16 @@ node clients/generate.mjs
 `generate.mjs` also sets both packages' versions to `main.go`'s; `--check` fails when anything is
 out of date (CI runs it). The tests run each client against MaveScape in headless Chrome: GRB2
 opened and scored through the client, its scores table every number of Node's, a figure and the
-map written as files, errors carrying MaveScape's reason, results equal to the HTTP API's:
+map written as files, errors carrying MaveScape's reason, results equal to the HTTP API's. Then
+the examples run, the notebook executed with nbclient:
 
 ```bash
 node clients/test-clients.mjs            # both; --python or --r for one
+node clients/test-clients.mjs --update   # and write the notebook's new outputs into it
 ```
 
 They need Go, Chrome (`CHROME=path`), Python 3 (with pandas for the data frames, else that test is
-skipped) and R with curl, jsonlite and testthat. The R package also passes `R CMD check`.
+skipped; nbclient, ipykernel and matplotlib for the notebook) and R with curl, jsonlite and
+testthat. The R example needs DHFR's MaveDB tables (`node validation/fetch.mjs mavedb-dhfr`). An
+example that cannot run is skipped, saying why; `--require` makes it a failure, as CI runs it. The
+R package also passes `R CMD check`.

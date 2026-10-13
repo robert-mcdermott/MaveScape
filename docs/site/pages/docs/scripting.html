@@ -25,6 +25,48 @@ lede: An AI agent such as Claude Code, or a script of yours, can do in MaveScape
       <p>Each result is the action's sentence and its data. <code>scores</code> gives a run's variants as a table with the columns of its scores export (filtered by position, kind, a selection or a query, sorted, 100 rows at a time), and <code>provenance</code> a run's provenance. The agent looks at pictures: the map (<code>render_map</code> with <code>image</code>, the whole target or a stretch of positions), the Structure view (<code>render_structure</code>) and the figures' pages (<code>figures</code> with <code>image</code>), which a script gets as data URLs. Each tool carries MCP's hints: whether it only reads, whether it replaces or removes something, and whether it may ask a public service. Files are read and written by absolute path, an existing file never replaced unless the call says so. An action MaveScape refuses comes back with its reason, which the agent can act on.</p>
       <p>Everything runs on this computer: MaveScape answers only requests from it, and your tables never leave it. The agent acts through the window you use, nothing out of sight.</p>
 
+      <h2 id="session">A session on Hsp90</h2>
+      <p>What working with an agent looks like, on the Hsp90 example: nine positions of yeast Hsp90, every codon, grown for 21 generations in one replicate (Hietpas et al. 2011). Each tool call below is real: <code>validation/agent-session.mjs</code> makes them through <code>mavescape mcp</code> in CI and checks every number the answers quote. The answers were written by Claude from those results; another agent's wording will differ, its numbers not.</p>
+      <div class="session">
+        <p class="ask"><span class="who">You</span>Open the Hsp90 example. How well do its scores agree with the published fitness, and what does quality control say about them?</p>
+        <ul class="calls">
+          <li><code>open_example</code> <code>{"id": "hsp90"}</code></li>
+          <li><code>qc_findings</code> <code>{"run": "Run 1"}</code></li>
+          <li><code>compare</code> <code>{"a": "Run 1", "b": "urn:mavedb:00000011-a-1", "scale": "stated", "direction": "higher-more"}</code></li>
+          <li><code>scores</code> <code>{"run": "Run 1", "kinds": ["nonsense"], "limit": 0}</code></li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>Run 1, scored with MaveScape's defaults per generation, ranks the 187 variants it shares with the record's published scores much as they do (r 0.95). Stated to be on one scale, though, they agree poorly: Lin's concordance is 0.48, Run 1 is higher by 0.22 on average, and the difference grows with the effect (a Bland–Altman slope of −0.91), most at W585, S586 and A587 (0.34 to 0.39).</p>
+          <p>Quality control fails the fit of the time courses: they scatter about 44 times more than counting predicts. With one replicate, the agreement between replicates and the variance beyond counting are not assessed. The stops fall to the floor within a few generations, so a line through all eight samples flattens them (a median of −0.32 per generation). The authors fitted their null-like variants on the first three samples only. I can fit those three, keeping the present analysis in a checkpoint to compare with.</p>
+        </div>
+        <p class="ask"><span class="who">You</span>Do that.</p>
+        <ul class="calls">
+          <li><code>checkpoint</code> <code>{"name": "All eight samples"}</code></li>
+          <li><code>provenance</code> <code>{"run": "Run 1"}</code>, for the design it was scored with</li>
+          <li><code>set_design</code> with that design, generations 9 to 21 not used (<code>ignoredColumns</code>, the reason "later time points: the authors fit their null-like variants on the first three")</li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>I kept the checkpoint "All eight samples" and proposed a design that fits generations 0, 3 and 6: the columns Gen_9 to Gen_21 not used, with the reason. The design waits for you; Experiment shows it beside yours. Accept it, and I'll score with it.</p>
+        </div>
+      </div>
+      <shot name="agent-hsp90" alt="Claude Code's proposal on the Hsp90 example, reviewed above the Experiment view: the annotation of the record's published scores and the checkpoint All eight samples made, the design waiting; below, the proposed design (one replicate of three time points, 0 to 6 generations, five columns not used) and how it differs from the person's">The proposal reviewed: the published scores' annotation and the checkpoint made, the design waiting, shown beside yours with what it changes.</shot>
+      <p>Had the agent scored now, MaveScape would have refused: a run scored meanwhile would have your design, not the one it means. You accept in the strip, then ask on.</p>
+      <div class="session">
+        <p class="ask"><span class="who">You</span>Accepted. Score it and tell me what changed.</p>
+        <ul class="calls">
+          <li><code>score</code> <code>{"parameters": {"timeScale": "unit"}}</code>, per generation as Run 1</li>
+          <li><code>diff</code> <code>{"from": "All eight samples"}</code></li>
+          <li><code>scores</code> <code>{"run": "Run 2", "kinds": ["nonsense"], "limit": 0}</code></li>
+          <li><code>inspect_variant</code> <code>{"variant": "p.Trp4Ter", "run": "Run 2"}</code></li>
+          <li><code>compare</code> <code>{"a": "Run 2", "b": "urn:mavedb:00000011-a-1", "scale": "stated"}</code></li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>Run 2 fits the first three samples, per generation like Run 1. Since the checkpoint, 148 of the 188 variants moved beyond their earlier 95% interval and 102 changed class, 93 of them from lower than the wild type to like it: over six generations, most substitutions have barely begun to fall. The stops fall faster at first, a median of −0.41 per generation against −0.32, but still not as fast as published: p.Trp4Ter scores −0.51 here and −0.73 to −0.79 in the record, one score per codon.</p>
+          <p>Against the published scores Run 2 agrees less, not more (r 0.82, Lin's concordance 0.44): the authors fitted only their null-like variants on three samples and the rest on all eight, which one design for every variant cannot do. Run 2 is a sensitivity analysis, then, not a replacement: the choice of time points moves most of the scores. It is proposed; keep it, or reject it and it goes.</p>
+        </div>
+      </div>
+      <p>Run 2 waits in the strip, made and marked proposed: <strong>Accept all</strong> keeps it, <strong>Reject all</strong> removes it with what you built on it since. The checkpoint, the design and your decisions stay in the history, each change of the agent's under its name, and Report's diff from the checkpoint shows what moved, on a map of the change.</p>
+
       <h2 id="python">From R and Python</h2>
       <p>The R and Python packages make each action a function, with its arguments and help: they find the running MaveScape through <code>remote.json</code>, give tables as data frames and pictures as files, and raise an error carrying MaveScape's reason when an action is refused. They are installed from the repository, and their version is MaveScape's.</p>
       <div class="code wrap"><pre><code><span class="prompt">$ </span>pip install "git+https://github.com/robert-mcdermott/MaveScape#subdirectory=clients/python"</code></pre></div>
@@ -45,6 +87,7 @@ ms_open_example("grb2-sh3")
 scores <- as.data.frame(ms_scores(run = "Run 1", limit = 0))
 lowest <- as.data.frame(ms_scores(run = "Run 1", kinds = "missense", sort = "score", limit = 10))
 ms_render_map(run = "Run 1", file = "grb2-map.png")</code></pre></div>
+      <p>Two examples go further, and CI runs both against a build of MaveScape: a Python notebook on GRB2 (<a href="{{github}}/blob/main/clients/examples/grb2-sh3.ipynb">clients/examples/grb2-sh3.ipynb</a>: the example opened, checked and its QC read into data frames, scored again with the DiMSum-compatible preset, both runs against the record's published scores, and a figure exported as PDF and PNG) and an R script on DHFR's two conditions (<a href="{{github}}/blob/main/clients/examples/dhfr-lon.R">clients/examples/dhfr-lon.R</a>: each condition's fast growers, the authors' unweighted regression against the published scores, the differences +Lon − −Lon called, which residues they replace, and where, as a plot and as MaveScape's map).</p>
       <p><code>help(ms.scores)</code> and <code>?ms_scores</code> describe each action; <a href="{{github}}/tree/main/clients">clients/README.md</a> says how the connection is found, and how tables, pictures and errors come back. A script's <code>client</code> name (<code>"Python"</code>, <code>"R"</code>, or yours) appears in the window's log beside each action. Without a package, the HTTP API needs nothing but JSON: the standard library's <code>urllib.request</code> posts <code>{"action": …, "args": …}</code> to <code>/api/remote/action</code> with the token from <code>remote.json</code> (on macOS in <code>~/Library/Application Support/MaveScape</code>, on Linux <code>~/.config/MaveScape</code>, on Windows <code>%AppData%\MaveScape</code>, unless MaveScape was started with <code>--data-dir</code>).</p>
 
       <h2 id="start">Remote control</h2>
@@ -188,4 +231,4 @@ Done in 1.2 s: 9 files written to results (run.json lists them).</code></pre></d
       <p><code>mavescape verify</code> verifies a reproducibility certificate without a window, in a headless page as <code>mavescape run</code> uses. It checks the certificate's fingerprint, its files and its history, then computes every number again from its files and compares them bit for bit (<a href="certificate.html">Certificates</a>). <code>--data</code> names a folder, or a file, with the tables a certificate made without them names; they are found by their SHA-256. <code>--report verification.json</code> writes what was found as JSON, and <code>--review review.html</code> the review report of the certificate verified (<a href="certificate.html#review">The review report</a>). Exit status: 0 verified; 1 something differs, each difference listed; 2 it could not be checked (a file missing, a wrong command line, no browser).</p>
 
       <h2 id="later">Coming</h2>
-      <p>The guide to agents and scripts on one page, and examples in a Python notebook and an R script (<a href="{{github}}/blob/main/mavescape-spec/roadmap.md">roadmap</a>, wave 7).</p>
+      <p>An agent benchmark: graded tasks on the examples, for agents and for MaveScape's tools (<a href="{{github}}/blob/main/mavescape-spec/roadmap.md">roadmap</a>, wave 9).</p>
