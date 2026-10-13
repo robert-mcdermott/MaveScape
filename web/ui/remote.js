@@ -2677,8 +2677,12 @@ export function installRemote(app) {
 
   let source = null;
   let announced = false;
+  // Only the run of MaveScape this page was opened from takes it as its window: when the
+  // connection drops and another run answers (MaveScape started again, maybe another version or
+  // library), the page stops taking remote control and asks to be reloaded.
+  const session = app.info?.session ?? '';
   const connect = () => {
-    source = new EventSource('api/remote/events');
+    source = new EventSource(`api/remote/events?session=${encodeURIComponent(session)}`);
     source.addEventListener('open', () => {
       if (!announced) app.log('Remote control is on: programs on this computer can drive this window (mavescape --remote-control).');
       announced = true;
@@ -2692,8 +2696,15 @@ export function installRemote(app) {
       }
       perform(event);
     });
-    source.onerror = () => {
+    source.onerror = async () => {
       source.close();
+      const now = await fetch('api/info', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (now?.session && now.session !== session) {
+        const words = `MaveScape was started again (${now.version}): this page no longer takes remote control. Reload it to work with that run.`;
+        app.log(words);
+        toast(words, { kind: 'error', timeout: 0 });
+        return;
+      }
       setTimeout(connect, 2000);
     };
   };

@@ -1,8 +1,20 @@
 # Changelog
 
-## 0.8.0 (unreleased)
+## 0.8.0 (2026-10-13)
 
-Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
+Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research. A new view,
+Calibrate, measures how far a run's scores separate variants whose effect is known: control sets
+from ClinVar's records of the gene or a table of labels, each label in its source's words, with what
+may make them circular; ROC and precision–recall curves with a seeded bootstrap, thresholds and the
+functional classes they make, each checked against R; each class's evidence strength as Brnich et
+al.'s OddsPath, and score-level likelihood ratios as acmgscaler computes them, always marked for
+research and kept apart from a clinical classification, which MaveScape never makes. Nothing
+calibrates by itself. A calibration is part of the record: the report and methods, figure panels,
+the certificate (format 2), the checkpoint diff and a MaveDB deposit's score calibrations. Four
+examples teach it: BRCA1, TP53 and PTEN calibrated against ClinVar, which shows how much of a strong
+agreement may rest on classifications made since the assay, and a simulated calibration whose
+circular labels overstate its evidence against the truth. 0.8.0 keeps two archives and a
+certificate of its own, a calibrated workspace and one with an agent's calibration waiting.
 
 ### Added
 
@@ -110,6 +122,10 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
 
 - A count of 0 given as a table cell's or label's only content was left out, in every view: the
   page's element helper took a bare 0 for missing properties. Zeros show now.
+- A page left open while MaveScape was started again took the new run's remote control when it
+  reconnected, whatever its version or library (found by the release's headless runs, whose
+  window's actions a test browser left from an earlier run answered with 0.7.0's code). Remote
+  control takes only a page opened from the run; another says so and asks to be reloaded.
 
 ### Validation
 
@@ -166,6 +182,18 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   controls last evaluated before 2025 as the account gives them, and a table dated as ClinVar's
   tabular download dates it. The remote session (213) follows the simulated and PTEN guides in the
   window, every number as Node makes it.
+- 0.8.0's own archives (`validation/archives/make-0.8.0.mjs`, which drives the window as the
+  person and `mavescape mcp` as an agent): factor IX with two ClinVar control sets (the second of
+  classifications last evaluated before 2025), three calibrations (by the defaults, of the earlier
+  set, and with given thresholds and Pejaver et al.'s), a figure of a calibration's plots and a
+  checkpoint, and its certificate (format 2, 29,642 numbers); and the simulated calibration with the
+  person's set and calibration and the agent's, saved waiting. Every later version reopens them,
+  reads each ClinVar set again from the annotation's file in the archive and computes each
+  calibration again with the thresholds it keeps (`roundtrip`); certifies each earlier release's
+  archive, those with a proposal open refused until it is accepted, and verifies 0.6.0's, 0.7.0's
+  and 0.8.0's certificates (`certificate`); and verifies 0.8.0's certificate and reruns its factor IX
+  archive with `mavescape run --from-workspace`, its control sets, calibrations and figure kept
+  (`headless-run`). The Go test `TestOnlyThisRunsPageIsTheWindow` refuses a page of another run.
 
 ## 0.7.0 (2026-10-12)
 

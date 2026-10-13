@@ -65,7 +65,7 @@ import { annotationTracks, providerById as annotationProvider } from '../web/lib
 import { readProfile } from '../web/lib/providers/pdbe.js';
 import { readClinVarTable } from '../web/lib/providers/clinvar.js';
 import { gnomadRows } from '../web/lib/providers/gnomad.js';
-import { builtinTracks, clinvarClass, REVIEW_STARS, tracksCSV } from '../web/lib/tracks.js';
+import { builtinTracks, clinvarClass, REVIEW_STARS, trackTarget, tracksCSV } from '../web/lib/tracks.js';
 import { addAnnotation } from '../web/lib/workspace.js';
 import { createHash } from 'node:crypto';
 import { proteinView } from '../web/lib/collapse.js';
@@ -157,7 +157,7 @@ import { removeCalibration, saveFigure } from '../web/lib/workspace.js';
 import { mavedbDeposit } from '../web/lib/mavedb-export.js';
 import { editCertificate, nudge } from './certificate-cases.mjs';
 import { numberItems } from '../web/lib/certificate.js';
-import { computeCalibration, metricsOf, scoredControls as scoredControlsOf, strengthsSentence } from '../web/lib/calibration-record.js';
+import { computeCalibration, metricsOf, scoredControls as scoredControlsOf, strengthsSentence, thresholdsDiffer } from '../web/lib/calibration-record.js';
 import { CLINVAR_SNAPSHOTS, calibrationExample, calibrationOf, clinvarSnapshot, controlSetOf } from './guide-cases.mjs';
 import { calibrationTruth, losesFunction } from '../web/lib/examples.js';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
@@ -2334,6 +2334,28 @@ const suites = {
         });
         check('roundtrip', `${file}: the AI agent's work kept: its changes in the history under its name, what it made marked proposed (accepted or open), and a proposal saved open as it was, accepted in Node (what waited applied) or rejected (what it made removed, the design as it was), each decision one entry of an unbroken history`, `${agents.join(', ') || 'no agent'}: ${opened.ws.history.filter((e) => e.by).length} of ${opened.ws.history.length} entries; marked: ${marked.join(', ') || 'none'}; open: ${open.map((o) => `${o.author}'s, ${o.items} changes, accepted ${o.accepted ? 'as it should' : 'WRONGLY'}, rejected ${o.rejected ? 'as it should' : 'WRONGLY'}`).join('; ') || 'none'}`,
           marked.length > 0 && open.every((o) => o.accepted && o.rejected), 'kept, and decided as 0.7 decides');
+      }
+      // What 0.8 keeps (calibration, for research): each control set read again from its source as it
+      // was made (a ClinVar set from the annotation's own file in the archive, by its rules: the same
+      // labels; a table's are its own), and each calibration computed again from the run's scores
+      // made now: its controls scored as it records and the thresholds it keeps, every number the
+      // certificate would compare.
+      if (opened.ws.controlSets?.length || opened.ws.calibrations?.length) {
+        const sets = (opened.ws.controlSets ?? []).map((set) => {
+          if (set.source.kind !== 'clinvar') return { name: set.name, ok: set.labels.length > 0, why: `a table's ${set.labels.length} labels` };
+          const annotation = (opened.ws.annotations ?? []).find((a) => a.id === set.source.annotation);
+          const bytes = annotation && opened.sources.get(annotation.file.sha256);
+          if (!bytes) return { name: set.name, ok: false, why: 'its annotation\'s file is not in the archive' };
+          const read = clinvarControls(new TextDecoder().decode(bytes), trackTarget(opened.ws.design.targets[0], opened.ws.targets), set.rules);
+          return { name: set.name, ok: JSON.stringify(read.labels) === JSON.stringify(set.labels), why: `${read.labels.length} labels read again` };
+        });
+        const cals = (opened.ws.calibrations ?? []).map((cal) => {
+          const r = byRun.get(cal.run);
+          if (!r) return { name: cal.name, ok: false, why: 'its run not recomputed' };
+          const o = computeCalibration(opened.ws, cal, r.results, { likelihood: false });
+          return { name: cal.name, ok: !thresholdsDiffer(o.metrics.thresholds, cal.thresholds) && o.metrics.n.P === cal.n.P && o.metrics.n.B === cal.n.B, why: `${o.metrics.n.P} P and ${o.metrics.n.B} B, AUC ${o.metrics.auc.auc.toPrecision(3)}` };
+        });
+        check('roundtrip', `${file}: its control sets read again from their sources as they were made (a ClinVar set from the annotation's file in the archive, by its rules), and each calibration computed again from the run's scores made now, its controls and thresholds as kept`, [...sets, ...cals].map((x) => `${x.name}: ${x.why}${x.ok ? '' : ' (DIFFERS)'}`).join('; '), [...sets, ...cals].every((x) => x.ok), 'as kept');
       }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment', 'calibrate'].includes(e.opens)), 'all');
@@ -5158,7 +5180,7 @@ const suites = {
     check('certificate', `each of the ${EXAMPLES.length} examples opened as the window opens it (its files kept, its source saying how they were assembled), scored and certified (${((performance.now() - e0) / 1000).toFixed(1)} s), and verified bit for bit`, `${total.toLocaleString('en-US')} numbers; ${rows.filter((x) => x.verdict !== 'verified' || x.notes).map((x) => `${x.id}: ${x.verdict}${x.notes ? `, ${x.notes} notes` : ''}`).join('; ') || `every one verified (${rows.map((x) => x.n).join(', ')})`}`, rows.length === EXAMPLES.length && rows.every((x) => x.verdict === 'verified' && !x.notes), 'every one');
 
     // Each earlier release's archives, opened by this MaveScape, certified and verified. One saved
-    // with an AI agent's proposal open (0.7.0's Hsp90) is refused, saying so, then certified once
+    // with an AI agent's proposal open (0.7.0's Hsp90, 0.8.0's simulated labels) is refused, saying so, then certified once
     // the proposal is accepted, as the person would accept it.
     const releases = [];
     for (const name of readdirSync(new URL('./archives/', import.meta.url)).filter((f) => f.endsWith('.msz')).sort()) {
@@ -5174,7 +5196,7 @@ const suites = {
       const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
       releases.push({ name, release: opened.manifest.software?.version, n: m.certificate.total, verdict: v.verdict, notes: m.notes, refused });
     }
-    check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.7), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output; one with a proposal open refused until it is accepted', releases.map((x) => `${x.name} (${x.release}): ${x.refused ? `refused (${x.refused.slice(0, 60)}…), then ` : ''}${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 12 && releases.every((x) => x.verdict === 'verified' && !x.notes.length && (x.refused === null || /has a proposal open/.test(x.refused))) && releases.some((x) => x.refused), 'every one');
+    check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.8), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output; those with a proposal open (0.7.0\'s Hsp90, 0.8.0\'s simulated labels) refused until it is accepted', releases.map((x) => `${x.name} (${x.release}): ${x.refused ? `refused (${x.refused.slice(0, 60)}…), then ` : ''}${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 12 && releases.every((x) => x.verdict === 'verified' && !x.notes.length && (x.refused === null || /has a proposal open/.test(x.refused))) && releases.some((x) => x.refused), 'every one');
     // Each release's own certificate (from 0.6.0: validation/archives/*.certificate.msz), verified by
     // this MaveScape: its fingerprint, files, history and checkpoints as certified, and every number
     // computed again and compared bit for bit with the one that release computed.

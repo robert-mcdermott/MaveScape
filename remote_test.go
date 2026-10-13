@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -152,6 +153,32 @@ func TestAPageThatDoesNotAnswerOrLeaves(t *testing.T) {
 	// Long actions get an hour, others the hub's timeout.
 	if a, _ := findAction("score"); !a.long {
 		t.Fatal("score should be a long action")
+	}
+}
+
+// Only a page opened from this run of the program takes its actions: a tab left open while
+// MaveScape was started again (another version, another library) is refused when it reconnects.
+func TestOnlyThisRunsPageIsTheWindow(t *testing.T) {
+	hub := newRemoteHub()
+	hub.session = "run-1"
+	mux := hubMux(hub)
+	events := func(query string) (int, string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		req := httptest.NewRequest(http.MethodGet, "/api/remote/events"+query, nil).WithContext(ctx)
+		req.Host = "127.0.0.1:8820"
+		req.RemoteAddr = "127.0.0.1:50000"
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+	for _, query := range []string{"", "?session=run-0"} {
+		if code, body := events(query); code != http.StatusConflict || !strings.Contains(body, "another run of MaveScape") {
+			t.Fatalf("a page of another run (%q): %d %s", query, code, body)
+		}
+	}
+	if code, body := events("?session=run-1"); code != http.StatusOK || !strings.Contains(body, ": connected") {
+		t.Fatalf("this run's page: %d %s", code, body)
 	}
 }
 

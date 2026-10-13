@@ -5,7 +5,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
 ---
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> AI agents and scripts: an agent works in your window, its changes proposals you accept, and R and Python call every action</a>
+        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Calibration, for research: how far the scores separate variants of known effect, the evidence each class would give, and what it rests on</a>
         <h1>Variant-effect scores <span class="accent">you can check</span></h1>
         <p class="lede">MaveScape turns the variant count tables of a deep mutational scan into functional scores with standard errors, quality control that says when not to trust them, and an interactive variant-effect map, and keeps every analysis decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R. Files are analyzed in your browser and never leave your machine.</p>
         <shot name="map" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from less abundant (blue) to more (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" window eager>The GRB2 SH3 domain from the Human Domainome (MaveDB, CC0), one of the bundled examples, with one variant's evidence in the inspector.</shot>
@@ -226,6 +226,22 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
           </div>
           <shot name="agent-proposal" alt="Claude Code's proposal in the QC view of the GRB2 example: the strip above the view lists the run and the selection it made, marked proposed in the dataset tree, and the acknowledgement of the variance beyond counting, waiting">Claude Code worked on GRB2: a run scored again and a selection made, marked proposed; an acknowledgement waiting for you.</shot>
         </article>
+
+        <article class="feature reverse">
+          <div class="feature-text">
+            <span class="kicker">Calibration, for research</span>
+            <h3>How far the scores separate known variants, and what that rests on</h3>
+            <p>In the Calibrate view, a control set holds variants whose effect is known, from ClinVar's records of the gene or a table of labels, each label in its source's words. Calibrated against it when you ask, a run's scores give ROC and precision–recall curves with a seeded bootstrap, thresholds and the functional classes they make, and each class's evidence strength: Brnich et al.'s OddsPath and score-level likelihood ratios as acmgscaler computes them. MaveScape names what may make the labels circular, such as classifications made since the assay was published, and can set those aside. It never classifies a variant.</p>
+            <ul class="checklist">
+              <li>Every metric equal to pROC, PRROC and binom; every OddsPath to Brnich et al.'s own spreadsheet; likelihood ratios to acmgscaler's</li>
+              <li>In the report, figures, the certificate and a MaveDB deposit's score calibrations</li>
+              <li>BRCA1, TP53 and PTEN against ClinVar as examples, and a simulated calibration with circular labels</li>
+              <li>The assay, a variant's functional class, evidence strength and a clinical classification kept apart</li>
+            </ul>
+            <a class="more-link" href="docs/calibrate.html">Calibration</a>
+          </div>
+          <shot name="calibrate-brca1" alt="The Calibrate view of the BRCA1 calibration example: the evidence strength of Findlay et al.'s published function scores against ClinVar's missense controls, the abnormal-like class with OddsPath 36.4, PS3 (strong), and the WT-like class with 0.0208, BS3 (strong); what it rests on: thresholds set on the same controls, and 552 controls last evaluated since 2018, when the assay was published">BRCA1's saturation genome editing against ClinVar: strong evidence for both classes, and 552 controls classified since the assay was published.</shot>
+        </article>
       </div>
     </section>
 
@@ -282,13 +298,15 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
               <tr><td><strong>Quality control</strong></td><td>Simulated experiments with one planted problem each</td><td class="agree">exactly their findings, three seeds</td></tr>
               <tr><td><strong>The map</strong></td><td>BRCA1's RING domain</td><td class="agree">the zinc ligands least tolerant</td></tr>
               <tr><td><strong>The record</strong></td><td>Workspaces saved, reopened and saved again</td><td class="agree">the same bytes; every export identical</td></tr>
-              <tr><td><strong>MaveDB deposits</strong></td><td>MaveDB's own validators (its <code>mavedb</code> package, mavehgvs, biocommons hgvs) on 19 deposits of every kind of run and target; each read back and written again</td><td class="agree">all accepted; the same bytes</td></tr>
+              <tr><td><strong>MaveDB deposits</strong></td><td>MaveDB's own validators (its <code>mavedb</code> package, mavehgvs, biocommons hgvs) on 21 deposits of every kind of run and target; each read back and written again</td><td class="agree">all accepted; the same bytes</td></tr>
               <tr><td><strong>Structures</strong></td><td>PDBe's residue-level SIFTS mapping of each example's entry, read with gemmi</td><td class="agree">every residue where SIFTS places it</td></tr>
               <tr><td><strong>Structure as evidence</strong></td><td>DSSP 4.6.1's own output; SciPy 1.18.1's Mann–Whitney test and Benjamini–Hochberg</td><td class="agree">every code but five π-helix residues; area within 1 Å²; tests within 10⁻¹²</td></tr>
               <tr><td><strong>Figures</strong></td><td>Every example's map and every view's plots as panels, read back from the SVG and the PDF; the window's against Node's</td><td class="agree">every cell and mark; the same bytes</td></tr>
-              <tr><td><strong>Methods</strong></td><td>Every reference with a DOI (43) against Crossref's record; the 18 examples' runs</td><td class="agree">every field; the report the methods word for word</td></tr>
+              <tr><td><strong>Methods</strong></td><td>Every reference with a DOI (50) against Crossref's record; the 18 examples' runs</td><td class="agree">every field; the report the methods word for word</td></tr>
               <tr><td><strong>Certificates</strong></td><td>Every number of a workspace of every operation computed apart; six kinds of tampering; the 18 examples and every release's archives</td><td class="agree">identical, bit for bit; every tampering caught</td></tr>
               <tr><td><strong>Remote control</strong></td><td>Every action in the browser against the same analysis in Node</td><td class="agree">identical scores and exports</td></tr>
+              <tr><td><strong>Calibration</strong></td><td>pROC 1.19, PRROC 1.4 and binom 1.1 on seven cases; Brnich et al.'s own spreadsheet (OddsPath); acmgscaler 1.0.0 and R 4.6.1's numerics; MaveDB's published calibrations of six records</td><td class="agree">every metric to 13 digits; every OddsPath to 15; every likelihood ratio to 10⁻¹²</td></tr>
+              <tr><td><strong>Calibration examples</strong></td><td>BRCA1, TP53 and PTEN against ClinVar's records as the examples bring them, and an account read straight from NCBI's answers; a simulated calibration against its truth</td><td class="agree">every number each guide states; the controls the account's</td></tr>
               <tr><td><strong>AI agents</strong></td><td>Every tool through <code>mavescape mcp</code> as an agent's client calls it; proposals accepted and rejected in the window; the guide's session on Hsp90</td><td class="agree">the remote actions' results; every change under the agent's name</td></tr>
               <tr><td><strong>R and Python</strong></td><td>Both packages against a running MaveScape; a notebook and an R script on the examples</td><td class="agree">every number Node computes; each example's checks</td></tr>
             </tbody>

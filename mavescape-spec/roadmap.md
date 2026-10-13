@@ -3769,6 +3769,48 @@ Decisions taken in planning (confirmed before slice 1):
        `calibrate-truth` in both themes, no violation.
      - Wave 8 is complete with slice 6.
 
+**Released 0.8.0 on 2026-10-13.** Calibration is part of the workspace (control sets with their
+rules and labels, calibrations with what makes them again) and of the certificate (format 2), so
+0.8 leaves two archives and a certificate (`validation/archives/release-0.8.0-*.msz`, 3.5 MB
+together), saved by 0.8.0 itself: `make-0.8.0.mjs` starts it as an agent's client does (`mavescape
+mcp`), offline, and drives the window through remote control as the person and over MCP as an
+agent:
+- factor IX, opened by the person: ClinVar's records of F9 beside the map; two control sets from
+  them (at least one star, missense: 169 P and 22 B; and those last evaluated before 2025: 108 P and
+  13 B); Run 1 calibrated against each by the defaults, and against the first with given thresholds
+  and Pejaver et al.'s likelihood thresholds; a figure of the first calibration's four plots; and a
+  checkpoint;
+- that workspace's certificate, format 2, 29,642 numbers;
+- the simulated calibration: the person's control set of its labels and its calibration, then an
+  agent's set of those last evaluated before 2024 and its calibration with Pejaver et al.'s
+  thresholds, made at once and marked proposed, saved with the proposal open.
+
+Every later version must reopen them, recompute their runs to their recorded hashes, read each
+ClinVar set again from the annotation's file in the archive by its rules and get the same labels,
+compute each calibration again with the thresholds it keeps (and every number of it the
+certificate compares), accept or reject the open proposal as 0.8 does (what the agent made kept or
+removed), refuse to certify that workspace until the proposal is decided, verify 0.8.0's
+certificate, and rerun the factor IX archive with `mavescape run --from-workspace`, its control
+sets, calibrations, figure and checkpoint kept.
+- Found by the release:
+  - **A page left open while MaveScape was started again took the new run's remote control**: the
+    page reconnected its remote-control channel to whatever program answered on its origin. The
+    release's headless runs failed three checks for it: a test browser left running from an earlier
+    run held a 0.7.0 page on the port the window check uses, and answered the window's actions with
+    0.7.0's code. Remote control now takes only a page opened from the run (the page names the
+    program's session; `TestOnlyThisRunsPageIsTheWindow`); a page of another run says MaveScape
+    was started again and asks to be reloaded. The leftover browsers (four, from runs whose parent
+    was stopped) were closed.
+  - The factor IX archive first held a second run, scored with fixed effects and calibrated, for
+    the diff: its results' table doubled the archive (2.7 MB, and 3.1 MB for the certificate). The
+    diff of calibrations is checked by the suite `record`; the archive keeps one run.
+  - **The home page described 0.7**: its line under the title is 0.8's, it has an article on
+    calibration, and its validation table rows for calibration and its examples; the counts of
+    references checked against Crossref (50) and of MaveDB deposits (21) were brought up to date.
+  - The README's limitations say what a calibration rests on and that the examples' ClinVar records
+    are of 13 October 2026.
+  - The screenshots' audit (axe-core, WCAG 2.1 A and AA): 156 captures of 80 scenes, no violation.
+
 ## 0.9.0: ready for others (wave 9)
 
 The 1.0 candidate: what the PRD's phase 3 asks for beyond features.

@@ -22,7 +22,7 @@ import { importTrackFiles } from './ui/tracks.js';
 import { mountProposals } from './ui/proposals.js';
 import { fixClock } from './lib/clock.js';
 
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 
 // The views, in the PRD's order. Each loads its module when first shown. Views still to be built
 // show what they are for (mode-planned.js); Compare joined in wave 4, Structure in wave 5, Figures

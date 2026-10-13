@@ -481,7 +481,7 @@ integration on every change.
 | Examples | All eighteen, against MaveDB's files and the published comparisons; GRB2's figure, Hsp90's checkpoint and BRCA1 RING's certificate as their guides make them | Each raises exactly the QC findings it teaches; published counts byte for byte; each guide's numbers as it states them |
 | The record | Archives saved by every release since 0.1.0, reopened | Every run recomputed to its recorded hash |
 | Figures | Nine examples' maps and every view's plots as figure panels (96 QC panels), against the map's own SVG and the results themselves; the PDF's content read back; the window's export against Node's; each file's manifest read back, edited, compared after a rescoring and rebuilt | Every cell the map's own color, every bar and point the results'; the PDF the SVG's rectangles and text, mark for mark; the window's SVG and manifest Node's, byte for byte; an edit caught, exactly the panels a rescoring touches flagged, a rebuilt figure the same bytes |
-| Report | GRB2's workspace built one operation at a time; the 18 examples' runs; every cited DOI against Crossref's record (a recorded fixture); the window's report against Node's | Every operation its sentence, nothing said that was not done; each run's paragraphs its methods word for word; 43 of 43 references agree; the window's text Node's |
+| Report | GRB2's workspace built one operation at a time; the 18 examples' runs; every cited DOI against Crossref's record (a recorded fixture); the window's report against Node's | Every operation its sentence, nothing said that was not done; each run's paragraphs its methods word for word; 50 of 50 references agree; the window's text Node's |
 | Checkpoints and changes | Five planted changes from a checkpoint of GRB2's run (a pseudocount, a filter, a replicate left out, a threshold, the readout); the variants each rescoring moved, computed apart; a change of units (Hsp90 over its whole time course); the window's diff against Node's | Each change described exactly and nothing else; the variants moved, crossed and filtered the same; a change of units moving nothing; an analysis against itself unchanged |
 | Certificates | GRB2's workspace of every operation, each kind of number computed apart; six kinds of tampering; the 18 examples and every release's archives; the window's certificates against Node's | Every number as computed apart, verified bit for bit; every tampering caught and said; 224,792 numbers of the examples verified; the window's certificate Node's, byte for byte |
 | Review reports | Every traced number of GRB2's workspace and the 18 examples against the certificate and the workspace; the file in Chrome (requests, axe-core in both themes); the window's against Node's | Every number where it says it comes from; nothing loaded from outside the file; no axe-core violation in either theme; the same bytes from the window, `mavescape verify --review` and `export --format review` |
@@ -520,8 +520,12 @@ check, its tolerance and how the reference outputs were made are in
 - Published scores without their counts can be explored, compared and drawn on a structure, but
   not rescored or checked by count-based quality control.
 - MaveScape reports experimental functional effects for research. It does not classify variants
-  as pathogenic or benign, and its scores are not clinical evidence on their own; published
-  calibrations are shown for research use.
+  as pathogenic or benign, and its scores are not clinical evidence on their own. Its calibrations
+  (OddsPath, likelihood ratios) and published ones are for research use: a calibration is only as
+  good as its controls, and ClinVar's labels may rest on the assay itself, which MaveScape can
+  name but not rule out.
+- The calibration examples bring ClinVar's records as NCBI gave them on 13 October 2026, so that
+  their numbers hold; ClinVar fetched today gives other controls.
 - A MaveDB score set of several targets opens one target at a time.
 - Excel workbooks are not read: save the sheet as CSV.
 - Sorted bins are scored by maximum likelihood only when the bins' gates and the cells sorted
@@ -607,7 +611,7 @@ node docs/site/build.mjs /tmp/site    # the website, with every link, anchor and
 The version is `version` in `main.go`; `web/app.js`, `web/index.html` and `CITATION.cff` repeat
 it, and `node clients/generate.mjs` gives the R and Python clients the same version. To release,
 set them, add the release to `CHANGELOG.md`, merge to `main` and push a tag such
-as `v0.7.0`. The release workflow (`.github/workflows/release.yml`) checks that the tag matches
+as `v0.8.0`. The release workflow (`.github/workflows/release.yml`) checks that the tag matches
 and that CI passed on the tagged files, builds the six binaries and attaches them with `SHA256SUMS`
 to a draft release.
 Review the draft and publish it.

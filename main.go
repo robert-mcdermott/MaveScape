@@ -26,7 +26,7 @@ import (
 //go:embed web/index.html web/styles.css web/app.js web/favicon.svg web/lib/*.js web/lib/providers/*.js web/lib/structure/*.js web/ui/*.js web/workers/*.js web/examples
 var content embed.FS
 
-var version = "0.7.0"
+var version = "0.8.0"
 
 // commit is the source revision the program was built from. Release builds set it with
 // -ldflags "-X main.commit=..."; otherwise it comes from the version-control stamp Go records
@@ -389,6 +389,7 @@ func newApp(cfg config) (*app, error) {
 	if cfg.remote {
 		a.control = newRemoteHub()
 		a.control.open = a.files.register
+		a.control.session = a.session
 	}
 	if !cfg.noStore {
 		s, err := openStore(cfg.dataDir)
