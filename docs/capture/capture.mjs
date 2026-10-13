@@ -52,7 +52,7 @@ if (wanted.length === 0 || wanted.includes('pten-mavedb') || wanted.includes('co
 }
 // BRCA1's saturation genome editing (wave 3, slice 3): its scores and counts.
 const BRCA1_SGE = join(ROOT, 'validation/cache/mavedb-brca1-sge');
-if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant', 'compare-published'].includes(w))) {
+if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant', 'compare-published', 'calibrate-brca1'].includes(w))) {
   if (!existsSync(join(BRCA1_SGE, 'counts.csv'))) throw new Error('The BRCA1 example\'s scenes need MaveDB\'s tables: run node validation/fetch.mjs mavedb-brca1-sge');
 }
 // The examples opened from MaveDB with their counts (wave 3, slice 6): DHFR's two score sets, BRCA1
@@ -954,6 +954,31 @@ const scenes = {
     await clearToasts();
     await waitFor(`Boolean(document.querySelector('#calibration-likelihood svg.plot'))`);
     await scrollTo('#calibration-likelihood');
+    await sleep(500);
+  },
+  // The calibration examples (wave 8, slice 6). BRCA1's published scores against the ClinVar records
+  // the example brings, calibrated by the defaults: each side's scores, the curves, and the
+  // evidence strength with what it rests on.
+  async 'calibrate-brca1'() {
+    await example('brca1-calibration');
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await clearToasts();
+    await scrollTo('#calibration-evidence');
+    await sleep(500);
+  },
+  // The simulated calibration: its labels made a control set, then those last evaluated before 2024,
+  // each calibrated; the first shown, with its warning, and the guide in the inspector comparing
+  // each with the truth.
+  async 'calibrate-truth'() {
+    await example('simulated-calibration');
+    await act('make_control_set', { source: 'example' });
+    await act('calibrate', {});
+    await act('make_control_set', { source: 'example', evaluated_before: 2024 });
+    await act('calibrate', {});
+    await act('focus', { kind: 'calibration', name: 'Run 1 · simulated-labels' });
+    await clearToasts();
+    await scrollTo('.example-guide');
     await sleep(500);
   },
   // Calibration in the record (wave 8, slice 5): a figure of the same calibration's four plots (each

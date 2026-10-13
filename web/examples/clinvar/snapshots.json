@@ -1,0 +1,56 @@
+{
+  "BRCA1": {
+    "fileName": "clinvar_BRCA1.csv",
+    "sha256": "428ab3d9c2c8ef521edcf7e7cc0aa3d72f8e1aad4f50facaef780cc54412193c",
+    "size": 1947196,
+    "record": {
+      "service": "ClinVar (NCBI E-utilities)",
+      "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar&term=BRCA1%5Bgene%5D+AND+%28%22missense+variant%22%5Bmolecular+consequence%5D+OR+%22nonsense%22%5Bmolecular+consequence%5D+OR+%22synonymous+variant%22%5Bmolecular+consequence%5D%29&retmax=10000&retstart=0&retmode=json&tool=mavescape",
+      "retrieved": "2026-10-13T15:39:51Z",
+      "release": null,
+      "requests": 20,
+      "gene": "BRCA1",
+      "records": 9385,
+      "kept": 9384,
+      "unnamed": 1,
+      "license": "public domain (NCBI)",
+      "citation": "Landrum MJ, et al. Nucleic Acids Res. 2018;46:D1062–D1067"
+    }
+  },
+  "TP53": {
+    "fileName": "clinvar_TP53.csv",
+    "sha256": "dc283fe90eb10702a3d9bab19c89eaa0c9c6ed53ff315c0b90246a685626dcc4",
+    "size": 445626,
+    "record": {
+      "service": "ClinVar (NCBI E-utilities)",
+      "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar&term=TP53%5Bgene%5D+AND+%28%22missense+variant%22%5Bmolecular+consequence%5D+OR+%22nonsense%22%5Bmolecular+consequence%5D+OR+%22synonymous+variant%22%5Bmolecular+consequence%5D%29&retmax=10000&retstart=0&retmode=json&tool=mavescape",
+      "retrieved": "2026-10-13T15:41:49Z",
+      "release": null,
+      "requests": 6,
+      "gene": "TP53",
+      "records": 2171,
+      "kept": 2166,
+      "unnamed": 5,
+      "license": "public domain (NCBI)",
+      "citation": "Landrum MJ, et al. Nucleic Acids Res. 2018;46:D1062–D1067"
+    }
+  },
+  "PTEN": {
+    "fileName": "clinvar_PTEN.csv",
+    "sha256": "ede805376ecc42b1428f6c997ccc08b6e88cc78713b82a667cec9b62285e7db8",
+    "size": 409071,
+    "record": {
+      "service": "ClinVar (NCBI E-utilities)",
+      "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar&term=PTEN%5Bgene%5D+AND+%28%22missense+variant%22%5Bmolecular+consequence%5D+OR+%22nonsense%22%5Bmolecular+consequence%5D+OR+%22synonymous+variant%22%5Bmolecular+consequence%5D%29&retmax=10000&retstart=0&retmode=json&tool=mavescape",
+      "retrieved": "2026-10-13T15:42:16Z",
+      "release": null,
+      "requests": 6,
+      "gene": "PTEN",
+      "records": 2071,
+      "kept": 2065,
+      "unnamed": 6,
+      "license": "public domain (NCBI)",
+      "citation": "Landrum MJ, et al. Nucleic Acids Res. 2018;46:D1062–D1067"
+    }
+  }
+}

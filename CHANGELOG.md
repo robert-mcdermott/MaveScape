@@ -75,11 +75,36 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
     MaveScape classes a score at a threshold, its OddsPath and strength, research use only; a
     package's calibrations listed as its published calibrations when it is opened, and passed
     through when its scores are deposited again.
+- **Classifications made before the assay** (wave 8, slice 6): a control set can keep only the
+  classifications last evaluated before a year (**Last evaluated before** in Calibrate,
+  `make_control_set`'s `evaluated_before`), ClinVar's by each record's date or a table's by its own
+  column of dates (`last_evaluated`; ClinVar's tabular download is read as it is, its words such as
+  "Benign; association" by their first term). Those made before the assay was published cannot rest
+  on it; a dated table's made since are named as ClinVar's are. Nonsense or synonymous controls on
+  published scores are named too: how the authors set their scale is not recorded.
+- **Four examples of calibration** (wave 8, slice 6), each opening in Calibrate with its guide, every
+  number in it checked:
+  - BRCA1, TP53 and PTEN: published scores from MaveDB (Findlay et al.'s saturation genome
+    editing, Giacomelli et al.'s etoposide screen, Matreyek et al.'s VAMP-seq) with ClinVar's
+    records of the gene as NCBI gave them on 13 October 2026, bundled as the ClinVar track keeps
+    them (`web/examples/clinvar/`) so that the numbers hold. BRCA1's evidence is strong for both
+    classes, but rests on classifications made since the assay (made before it, moderate); TP53's
+    is moderate and the bootstrap does not hold it; PTEN's abundance misses pathogenic variants that
+    fold, with too few benign controls to say more;
+  - a simulated calibration with circular labels: 100 dated classifications of a noisy simulated
+    assay's missense variants, half made from the truth before the assay was "published", half
+    made since from its own scores. The guide compares each calibration's classes with the truth:
+    the circular labels lift the abnormal-like class to strong where the truth is moderate.
+  `make_control_set`'s `source` `example` makes the open example's labels a set; `open_example`
+  names the four.
 
 ### Changed
 
 - The likelihood-ratio plot's threshold names are a little larger (9/10 of the text) and move apart
   where they would overlap, so a figure's smallest text stays at 6 pt or more.
+- A table of labels' column names are matched without case and with spaces as underscores, so
+  "Germline classification" or "Protein change" are found as `germline_classification` and
+  `protein_change` are.
 
 ### Fixed
 
@@ -132,6 +157,15 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   of a range counts every deposited score in MaveScape's class. The remote session's window
   certificate of a calibrated workspace is Node's, byte for byte. Every reference is checked
   against Crossref's record of it (seven more recorded).
+- Suite `examples` (+16): the four examples opened and checked as every example is; their ClinVar
+  records the ones `snapshots.json` names, and, where NCBI's answers they were made from are kept,
+  the same table and every control by three rules as an account read straight from them; each
+  guide's numbers as computed (BRCA1's, TP53's, PTEN's, the simulated calibration's against its
+  truth). Suites `certificate`, `review` and `report` cover the eighteen examples (224,792 numbers
+  verified). Suite `controls` (+1): factor IX's
+  controls last evaluated before 2025 as the account gives them, and a table dated as ClinVar's
+  tabular download dates it. The remote session (213) follows the simulated and PTEN guides in the
+  window, every number as Node makes it.
 
 ## 0.7.0 (2026-10-12)
 

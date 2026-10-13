@@ -25,7 +25,7 @@ import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { KIND_NAMES } from '../lib/variants.js';
-import { openExample } from './examples.js';
+import { exampleLabelControls, openExample } from './examples.js';
 import { readCodonsFor } from './import.js';
 import { draftFromColumns } from './design-draft.js';
 import { ensureResults, forgetResults } from './run-results.js';
@@ -1053,15 +1053,23 @@ export function installRemote(app) {
     // kept with the workspace and shown in Calibrate. An agent's is made at once, marked proposed.
     async make_control_set(args) {
       const run = ws().runs.length ? resolveRun(args.run) : null;
-      const from = choose(args.source ?? 'clinvar', ['clinvar', 'table'], 'source');
+      const from = choose(args.source ?? 'clinvar', ['clinvar', 'table', 'example'], 'source');
       const kinds = args.kinds === undefined || args.kinds === null ? undefined : (Array.isArray(args.kinds) ? args.kinds : [args.kinds]).map((k) => choose(k, CONTROL_KINDS, 'kind'));
       if (kinds && !kinds.length) throw new ActionError(`kinds names at least one of ${CONTROL_KINDS.join(', ')}.`);
+      const evaluatedBefore = args.evaluated_before ?? null;
       let made;
       if (from === 'clinvar') {
         const minStars = args.min_stars === undefined || args.min_stars === null ? 1 : Number(args.min_stars);
         if (!Number.isInteger(minStars) || minStars < 0 || minStars > 4) throw new ActionError('min_stars is a whole number from 0 to 4.');
         try {
-          made = await makeClinVarControls(app, { name: args.name ?? null, minStars, kinds: kinds ?? ['missense'], run });
+          made = await makeClinVarControls(app, { name: args.name ?? null, minStars, kinds: kinds ?? ['missense'], evaluatedBefore, run });
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+      } else if (from === 'example') {
+        // The open example's own labels (the simulated calibration's; wave 8, slice 6).
+        try {
+          made = exampleLabelControls(app, { evaluatedBefore, name: args.name ?? null });
         } catch (error) {
           throw new ActionError(error.message);
         }
@@ -1069,7 +1077,7 @@ export function installRemote(app) {
         if (!args.file_name || args.text === undefined || args.text === null) throw new ActionError('A table is given by its file_name and text.');
         const numbering = args.numbering ? choose(args.numbering, ['reference', 'target'], 'numbering') : null;
         try {
-          made = makeTableControls(app, { name: args.name ?? null, fileName: String(args.file_name), text: String(args.text), citation: args.citation ?? null, numbering, kinds, run });
+          made = makeTableControls(app, { name: args.name ?? null, fileName: String(args.file_name), text: String(args.text), citation: args.citation ?? null, numbering, kinds, evaluatedBefore, run });
         } catch (error) {
           throw new ActionError(error.message);
         }

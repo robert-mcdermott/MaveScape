@@ -137,8 +137,9 @@ guides to every view, with screenshots.
   - Opened in Proteoscope as its own session, when it runs on your computer.
 - **Calibration, for research.** Control sets of variants whose effect is known, from ClinVar's
   records of the gene or a table of labels, each label shown with its source, matched to a run's
-  scores, with what may make them circular (labels that set the run's scale, ClinVar
-  classifications evaluated since the assay was published). MaveScape never classifies a variant.
+  scores, with what may make them circular (labels that set the run's scale, classifications
+  evaluated since the assay was published), and only those made before it when asked. MaveScape
+  never classifies a variant.
   - How far a run's scores separate them, when asked: ROC and precision–recall curves with
     DeLong's and a seeded bootstrap's intervals, as pROC and PRROC compute them.
   - Thresholds set by the controls or given, the functional classes they make (abnormal-like,
@@ -194,9 +195,10 @@ guides to every view, with screenshots.
   - Every change in a hash-chained history, so an edit after the fact is caught.
   - The workspace as one archive that reopens identically: each run is recomputed from its inputs
     and must match its recorded hash. Archives from every earlier release keep opening.
-- **Fourteen examples.** Three published experiments bundled with their counts, five opened from
-  MaveDB, and six simulated with every true effect known, one with problems planted. Each has its
-  question, guided steps and what to expect.
+- **Eighteen examples.** Three published experiments bundled with their counts, five opened from
+  MaveDB, three calibrated against ClinVar, and seven simulated with every true effect known, one
+  with problems planted and one with circular labels. Each has its question, guided steps and what
+  to expect.
 - **AI agents.** `mavescape mcp` is a Model Context Protocol server: an agent such as Claude Code
   opens data, scores, reads the QC and the scores as tables, looks at the map, structures and
   figures as pictures, compares and certifies in the window you watch. Its changes are proposals
@@ -296,12 +298,14 @@ guided steps of a few minutes and what to expect in the inspector:
 | DHFR with and without Lon | Two MaveDB score sets opened together as two conditions: which substitutions the Lon protease penalizes, and how sure each difference is. |
 | BRCA1 RING domain | Counts rescored to the published scores (opened from MaveDB), written as a MaveDB deposit and opened again, unchanged. |
 | TP53, two screens | Two laboratories' screens on different scales with opposite signs, compared in the Compare view and put on one scale by their anchors. |
+| BRCA1, TP53, PTEN against ClinVar | Published scores calibrated against ClinVar's records of the gene, which each example brings: evidence strength for research, a published calibration measured on today's controls, and how much rests on classifications made since the assay. |
 | Simulated experiment | A two-population selection with every true effect known: how close the scores come, and how often their intervals hold the truth. |
 | Simulated time series | Five time points over eight generations: what a regression on every time point adds over the ratio of the ends. |
 | Simulated sort-seq | Four gated bins: the weighted average against the maximum-likelihood fit, and whether the cells or the reads limit the measurement. |
 | Simulated barcoded library | About five barcodes per variant, some off from their variant: outlier barcodes, and scoring each barcode before combining them. |
 | Simulated two conditions | One input selected without and with a ligand: the binding site found by limma, and why a shared input matters. |
 | Simulated experiment with problems | A bottleneck and a failing replicate planted for QC to find. |
+| Simulated calibration | Dated labels, half made from the assay's own scores: the circularity MaveScape names, and how far it overstates the evidence against the truth. |
 
 The bundled and simulated examples work anywhere; those opened from MaveDB need the program
 (they are fetched once, then cached). See [Examples](https://robert-mcdermott.github.io/MaveScape/docs/examples.html)
@@ -474,13 +478,13 @@ integration on every change.
 | Calibration | pROC, PRROC and binom; Brnich et al.'s own spreadsheet; acmgscaler 1.0.0 and R 4.6.1; MaveDB's published calibrations | Every metric to 13 digits, every OddsPath row to 15, every likelihood ratio to 10⁻¹²; in the report, figures and certificate as computed, the window's Node's |
 | Comparisons | R (cor.test, DescTools, BlandAltmanLeh, pROC); simulated pairs of known agreement | Every statistic equal to R's to 10⁻¹⁰; 95% intervals hold the truth 94–96% |
 | Structures | PDBe's SIFTS; DSSP 4.6.1; SciPy 1.18.1's Mann–Whitney test | Every residue placed where SIFTS places it; every secondary-structure code but five π-helix residues; tests to 10⁻¹² |
-| Examples | All fourteen, against MaveDB's files and the published comparisons; GRB2's figure, Hsp90's checkpoint and BRCA1 RING's certificate as their guides make them | Each raises exactly the QC findings it teaches; published counts byte for byte; each guide's numbers as it states them |
+| Examples | All eighteen, against MaveDB's files and the published comparisons; GRB2's figure, Hsp90's checkpoint and BRCA1 RING's certificate as their guides make them | Each raises exactly the QC findings it teaches; published counts byte for byte; each guide's numbers as it states them |
 | The record | Archives saved by every release since 0.1.0, reopened | Every run recomputed to its recorded hash |
 | Figures | Nine examples' maps and every view's plots as figure panels (96 QC panels), against the map's own SVG and the results themselves; the PDF's content read back; the window's export against Node's; each file's manifest read back, edited, compared after a rescoring and rebuilt | Every cell the map's own color, every bar and point the results'; the PDF the SVG's rectangles and text, mark for mark; the window's SVG and manifest Node's, byte for byte; an edit caught, exactly the panels a rescoring touches flagged, a rebuilt figure the same bytes |
-| Report | GRB2's workspace built one operation at a time; the 14 examples' runs; every cited DOI against Crossref's record (a recorded fixture); the window's report against Node's | Every operation its sentence, nothing said that was not done; each run's paragraphs its methods word for word; 43 of 43 references agree; the window's text Node's |
+| Report | GRB2's workspace built one operation at a time; the 18 examples' runs; every cited DOI against Crossref's record (a recorded fixture); the window's report against Node's | Every operation its sentence, nothing said that was not done; each run's paragraphs its methods word for word; 43 of 43 references agree; the window's text Node's |
 | Checkpoints and changes | Five planted changes from a checkpoint of GRB2's run (a pseudocount, a filter, a replicate left out, a threshold, the readout); the variants each rescoring moved, computed apart; a change of units (Hsp90 over its whole time course); the window's diff against Node's | Each change described exactly and nothing else; the variants moved, crossed and filtered the same; a change of units moving nothing; an analysis against itself unchanged |
-| Certificates | GRB2's workspace of every operation, each kind of number computed apart; six kinds of tampering; the 14 examples and every release's archives; the window's certificates against Node's | Every number as computed apart, verified bit for bit; every tampering caught and said; 172,383 numbers of the examples verified; the window's certificate Node's, byte for byte |
-| Review reports | Every traced number of GRB2's workspace and the 14 examples against the certificate and the workspace; the file in Chrome (requests, axe-core in both themes); the window's against Node's | Every number where it says it comes from; nothing loaded from outside the file; no axe-core violation in either theme; the same bytes from the window, `mavescape verify --review` and `export --format review` |
+| Certificates | GRB2's workspace of every operation, each kind of number computed apart; six kinds of tampering; the 18 examples and every release's archives; the window's certificates against Node's | Every number as computed apart, verified bit for bit; every tampering caught and said; 224,792 numbers of the examples verified; the window's certificate Node's, byte for byte |
+| Review reports | Every traced number of GRB2's workspace and the 18 examples against the certificate and the workspace; the file in Chrome (requests, axe-core in both themes); the window's against Node's | Every number where it says it comes from; nothing loaded from outside the file; no axe-core violation in either theme; the same bytes from the window, `mavescape verify --review` and `export --format review` |
 | AI agents (MCP) | Every tool through `mavescape mcp` on stdio, as an agent's client calls them, in headless Chrome; the agent's proposals accepted and rejected in the window; the guide's session on Hsp90 | Results the remote actions' and Node's; read-only tools change nothing; every change carries the agent's name; each kind of change waits, applies or goes as it should; every number the guide's answers quote |
 | R and Python clients | Both packages against a running MaveScape in headless Chrome (`clients/test-clients.mjs`); `R CMD check`; the examples, the GRB2 notebook executed and the DHFR script run | GRB2 scored through each, its scores table every number of Node's, files written, errors with MaveScape's reason, results the HTTP API's; each example's checks |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |

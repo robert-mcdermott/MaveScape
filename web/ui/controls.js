@@ -23,32 +23,45 @@ export function controlTarget(ws, run = null) {
 
 export const clinvarAnnotation = (ws) => (ws.annotations ?? []).find((a) => a.provider === 'clinvar') ?? null;
 
-// A control set made from the ClinVar annotation's records. options: { name, minStars, kinds, run }.
-// Returns { id, set, read } (read: clinvarControls's, with what was left out and why).
-export async function makeClinVarControls(app, { name = null, minStars = 1, kinds = ['missense'], run = null } = {}) {
+// The year a set's classifications must have been last evaluated before: a whole number, or null.
+export function evaluatedBeforeOf(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const year = Number(value);
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) throw new Error(`"Last evaluated before" is a year, such as 2018, not "${value}".`);
+  return year;
+}
+
+// A control set made from the ClinVar annotation's records. options: { name, minStars, kinds,
+// evaluatedBefore (a year), run }. Returns { id, set, read } (read: clinvarControls's, with what was
+// left out and why).
+export async function makeClinVarControls(app, { name = null, minStars = 1, kinds = ['missense'], evaluatedBefore = null, run = null } = {}) {
   const ws = app.store.ws;
   const annotation = clinvarAnnotation(ws);
   if (!annotation) throw new Error('ClinVar\'s records of the gene are not beside the map: add the ClinVar track first (Map, Tracks).');
-  const read = clinvarControls(await annotationText(app, annotation), controlTarget(ws, run), { minStars, kinds });
+  const before = evaluatedBeforeOf(evaluatedBefore);
+  const rules = { minStars, kinds, ...(before ? { evaluatedBefore: before } : {}) };
+  const read = clinvarControls(await annotationText(app, annotation), controlTarget(ws, run), rules);
   if (read.problem) throw new Error(read.problem);
-  if (!read.labels.length) throw new Error(`None of ClinVar's ${read.records} records of the gene is a control with these rules (at least ${minStars} review star${minStars === 1 ? '' : 's'}; ${kinds.join(', ')}): ${Object.entries(read.excluded).map(([why, n]) => `${n} ${why}`).join(', ')}.`);
+  if (!read.labels.length) throw new Error(`None of ClinVar's ${read.records} records of the gene is a control with these rules (at least ${minStars} review star${minStars === 1 ? '' : 's'}; ${kinds.join(', ')}${before ? `; last evaluated before ${before}` : ''}): ${Object.entries(read.excluded).map(([why, n]) => `${n} ${why}`).join(', ')}.`);
   const source = { kind: 'clinvar', annotation: annotation.id, file: { sha256: annotation.file.sha256 }, retrieved: annotation.record?.retrieved ?? null, transcript: read.transcript };
-  const set = makeControlSet({ name: name || `ClinVar, ${minStars === 0 ? 'any review' : `${'★'.repeat(minStars)} or more`}`, source, rules: { minStars, kinds }, read });
+  const set = makeControlSet({ name: name || `ClinVar, ${minStars === 0 ? 'any review' : `${'★'.repeat(minStars)} or more`}${before ? `, before ${before}` : ''}`, source, rules, read });
   const made = addControlSet(app.store.ws, set);
   app.store.commit(made.ws, 'Make a control set');
   return { id: made.id, set: made.ws.controlSets.find((c) => c.id === made.id), read };
 }
 
 // A control set made from a table of labels. options: { name, fileName, text, citation, numbering,
-// kinds, run }.
-export function makeTableControls(app, { name = null, fileName, text, citation = null, numbering = null, kinds = undefined, run = null }) {
+// kinds, evaluatedBefore (a year: the table's dates), run }.
+export function makeTableControls(app, { name = null, fileName, text, citation = null, numbering = null, kinds = undefined, evaluatedBefore = null, run = null }) {
   const ws = app.store.ws;
   const bytes = encoder.encode(String(text));
-  const read = tableControls(text, controlTarget(ws, run), { numbering, kinds });
+  const before = evaluatedBeforeOf(evaluatedBefore);
+  const read = tableControls(text, controlTarget(ws, run), { numbering, kinds, ...(before ? { evaluatedBefore: before } : {}) });
   if (read.problem) throw new Error(`${fileName}: ${read.problem}`);
+  if (before && !read.dated) throw new Error(`${fileName} has no column of the dates its labels were last evaluated (last_evaluated): "Last evaluated before" needs one.`);
   if (!read.labels.length) throw new Error(`${fileName}: none of its ${read.rows} rows is a control on the target: ${Object.entries(read.excluded).map(([why, n]) => `${n} ${why}`).join(', ') || 'no labels'}.`);
   const source = { kind: 'table', file: { fileName, sha256: sha256(bytes), size: bytes.length }, ...(citation ? { citation } : {}), numbering: read.numbering };
-  const set = makeControlSet({ name: name || fileName.replace(/\.[^.]+$/, ''), source, rules: { kinds: kinds ?? ['missense', 'nonsense', 'synonymous'] }, read });
+  const set = makeControlSet({ name: name || `${fileName.replace(/\.[^.]+$/, '')}${before ? `, before ${before}` : ''}`, source, rules: { kinds: kinds ?? ['missense', 'nonsense', 'synonymous'], ...(before ? { evaluatedBefore: before } : {}) }, read });
   const made = addControlSet(app.store.ws, set);
   app.store.commit(made.ws, 'Make a control set');
   return { id: made.id, set: made.ws.controlSets.find((c) => c.id === made.id), read };

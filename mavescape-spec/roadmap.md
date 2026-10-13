@@ -3697,6 +3697,77 @@ Decisions taken in planning (confirmed before slice 1):
        `calibrate-figure`; the site's page *Calibration*.
 6. **Guide and examples.** The site's Calibration page; BRCA1, TP53 and PTEN calibrated against
    ClinVar; a simulated example with known labels and a planted circularity.
+   - **Done.** Four examples (eighteen in all), each opening in Calibrate with a guide of four to six
+     steps, every number in it checked by the suite `examples`.
+     - **ClinVar's records, bundled.** The three of published data bring ClinVar's records of their
+       gene as the ClinVar track keeps them, made by `fixtures/make-clinvar-snapshots.mjs` through
+       MaveScape's own fetcher on 2026-10-13 (BRCA1 9,385 records, TP53 2,171, PTEN 2,071; 344 kB
+       gzipped in `web/examples/clinvar/`, each table's SHA-256 and retrieval record in
+       `snapshots.json`) and added as the workspace's ClinVar annotation when the example opens:
+       ClinVar changes every week, and a guide's numbers must hold. NCBI's raw answers (36 MB) are
+       kept out of the repository; where they are kept, the suite makes the tables again from them
+       and reads every control with the account of its own.
+     - **Classifications made before the assay** (`controls.js`): a set's rule `evaluatedBefore` (a
+       year; Calibrate's **Last evaluated before**, `make_control_set`'s `evaluated_before`) keeps
+       only the classifications last evaluated before it, each ClinVar record by its own date
+       before the records of a change merge, or a table's rows by its own column of dates
+       (`last_evaluated`, `germline_date_last_evaluated`, …; read as 2024-03-01, 2024/03/01 or
+       "Mar 1, 2024"); those without a date are left out and counted. A dated table's
+       classifications since the assay are named as ClinVar's are, and a set made of those before
+       has none. A table's column names are matched with spaces as underscores and ClinVar's words
+       ("Benign; association") by their first term, so ClinVar's tabular download is read as it is.
+     - **Controls on published scores** (`anchor-published`): nonsense or synonymous controls on a
+       run of published scores are named, since how the authors set their scale is not recorded.
+     - **BRCA1** (`brca1-calibration`, Findlay et al.'s published scores): 212 P and 447 B missense
+       controls by the defaults, 196 and 111 in the 13 edited exons; AUC 0.993, the thresholds
+       meeting at −0.997; OddsPath 36.4 (PS3) and 0.0208 (BS3). The record's Fayer calibration's
+       thresholds give 53.5 and 0.0157 on today's controls (107 and 0.0105 as observed), beside the
+       52.4 and 0.02 it states from ClinVar in 2020. 552 controls were last evaluated since 2018;
+       before it, 28 P and 87 B (25 and 12 scored) are separated as well (AUC 0.980) but give the
+       abnormal-like class 9.12, moderate: the strong evidence rests on classifications made since
+       the assay.
+     - **TP53** (`tp53-calibration`, Giacomelli et al.'s etoposide screen): 227 P and 146 B, all in
+       the screen (the 17 records at proline 72 left out, the screen's TP53 having arginine there);
+       AUC 0.984; OddsPath 17.0 and 0.0572, moderate, strong in 44% and 43% of the bootstrap's
+       samples; 370 of 373 evaluated since 2018, 5 before it. ExCALIBR's thresholds, set elsewhere,
+       give the abnormal-like class 64.3 (200 P, 1 B).
+     - **PTEN** (`pten-calibration`, Matreyek et al.'s VAMP-seq): 255 P but 9 B (152 and 8 scored);
+       AUC 0.698; 2.89 (PS3_supporting), the WT-like class on one B control, no likelihood ratios;
+       ExCALIBR's thresholds leave 44 P controls WT-like (stable but inactive). With nonsense and
+       synonymous controls the AUC is 0.857 and 411 of them are named on a published scale.
+     - **The simulated calibration** (`simulated-calibration`, seed 20261017): a noisy selection of a
+       40-residue protein (neutral effects within ±0.1, losses from 0.4 to 3) and 100 dated labels of
+       its missense variants (`simulatedLabels`): 25 a side from the truth before 2024, the year its
+       assay is taken to be published (the design's citation), 25 a side since from its own log
+       ratios (6 wrong by the truth). With every label the abnormal-like class's OddsPath is 20.0
+       (PS3) where the truth at its thresholds is 11.2 (moderate); with those before 2024, 10.5
+       against 13.6. The guide's buttons make the labels a set (`make_control_set`'s source
+       `example`) and compare each calibration with the truth (`calibrationTruth`).
+     - The site's *Calibration* page: the new rule and warning, and *Four examples* in place of
+       *Coming*, two new scenes (`calibrate-brca1`, `calibrate-truth`); *Examples*, the README,
+       *Methods and validation*.
+     - Found by slice 6:
+       - **Nearly every ClinVar control of these genes was evaluated after its assay** (BRCA1 552 of
+         659, TP53 370 of 373, PTEN 251 of 264): the warning held for every set and nothing could be
+         done about it. The rule `evaluatedBefore` acts on it, and shows how much of BRCA1's
+         evidence rests on those classifications.
+       - **Published scores hid their anchors**: PTEN's VAMP-seq scale sets nonsense at 0, so its
+         nonsense controls looked like evidence (AUC 0.70 to 0.86) with no warning, since only a
+         run's own rescaling was checked.
+       - **ClinVar's tabular download was not read as a table of labels**: its column names have
+         spaces and its classifications compound words ("Benign; association").
+       - The simulated labels' log ratios used the engine's logarithm; the determinism test caught
+         it, and they use `dmath.js`'s, so the labels are the same in every browser.
+     - Validation: the suite `examples` (73, +16: the four opened and checked as every example is;
+       the bundled ClinVar records the ones named, and as NCBI's answers make them where those are
+       kept; each guide's numbers as computed; the simulated calibration against its truth);
+       `roundtrip` (+1: the simulated calibration the same from its seed); `certificate`, `review`
+       and `report` over the eighteen examples (224,792 numbers verified); `controls` (6, +1: factor IX's controls before 2025
+       as the account gives them, a table dated as ClinVar's download dates it); `controls.test.mjs`
+       (8, +2); the remote session (213, +2: the simulated guide followed in the window, PTEN's
+       example opened offline, every number Node's); axe-core on the scenes `calibrate-brca1` and
+       `calibrate-truth` in both themes, no violation.
+     - Wave 8 is complete with slice 6.
 
 ## 0.9.0: ready for others (wave 9)
 

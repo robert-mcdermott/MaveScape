@@ -564,13 +564,16 @@ name, created, source, rules, labels, excluded, notes }`:
 - `source`: `{ kind: "clinvar", annotation (the ClinVar annotation's id), file: { sha256 },
   retrieved, transcript }`, or `{ kind: "table", file: { fileName, sha256, size }, citation,
   numbering ("reference" or "target") }`;
-- `rules`: `minStars` (ClinVar: the fewest review stars kept) and `kinds` (`missense`, `nonsense`,
-  `synonymous`);
+- `rules`: `minStars` (ClinVar: the fewest review stars kept), `kinds` (`missense`, `nonsense`,
+  `synonymous`) and, from MaveScape 0.8 when given, `evaluatedBefore` (a year: only the
+  classifications last evaluated before its first day, each ClinVar record or table row by its own
+  date; one without a date left out);
 - `labels`: one per protein change on the target, `{ key (p.Trp36Ala, numbered on the target),
   side ("P" or "B"), label (the source's words: "Likely pathogenic"), kind, variant (as the source
   wrote it), ids (ClinVar's accessions, or the table's rows: "row 7"), stars (ClinVar: 0–4),
-  evaluated (ClinVar: the latest last-evaluated date) }`. P is pathogenic or likely pathogenic, or
-  abnormal in another assay; B is benign or likely benign, or normal. Records of one change on one
+  evaluated (the latest last-evaluated date, YYYY-MM-DD: ClinVar's, or the table's own) }`. P is
+  pathogenic or likely pathogenic, or abnormal in another assay; B is benign or likely benign, or
+  normal. Records of one change on one
   side are one label (their ids together); a change on both sides is left out;
 - `excluded`: what was left out when the set was made, and why: `{ reason: n }` ("uncertain
   significance", "fewer than 1 review star", label not read: "VUS", "outside the target", …);
@@ -582,8 +585,14 @@ Tracks) or from a **table of labels**: CSV or TSV with a column of variants (nam
 one-letter changes such as `W36A`, or ClinVar's titles, `NM_002086.5(GRB2):c.587G>A (p.Gly196Glu)`)
 and a column of labels (`label`, `class`, `classification`, `clinical_significance`,
 `germline_classification`, `significance` or `side`: pathogenic, likely pathogenic, P, LP, P/LP,
-abnormal; benign, likely benign, B, LB, B/LB, normal), numbered on the reference (the target's
-offset) or on the target, whichever its residues agree with. Making and deleting one are in the
+abnormal; benign, likely benign, B, LB, B/LB, normal; ClinVar's words, such as "Benign;
+association", by their first term), and optionally a column of the date each label was last
+evaluated (`last_evaluated`, `date_last_evaluated`, `germline_date_last_evaluated`, `evaluated`,
+`date_evaluated`, `last_reviewed` or `date`; written 2024-03-01, 2024/03/01, Mar 1, 2024 or
+1 Mar 2024; `-` or empty for none), numbered on the reference (the target's offset) or on the
+target, whichever its residues agree with. Column names are matched without case, spaces as
+underscores, so ClinVar's tabular download ("Name", "Germline classification", "Germline date
+last evaluated") is read as it is. Making and deleting one are in the
 history (action `controls`). MaveScape reports functional evidence and does not classify variants:
 a label is its source's, and the views and exports always name the source beside it. Deleting a set
 deletes the calibrations made with it.
@@ -885,6 +894,9 @@ variant_id,hgvsc,hgvsp,consequence,ac,an,filters,flags
 ClinVar's: each record of the gene's missense, nonsense and synonymous variants (its title's
 transcript and names), its germline classification, review status (as ClinVar's gold stars, 0–4)
 and the date it was last evaluated; the records on the transcript most of them name are placed.
+The calibration examples (MaveScape 0.8) bring this table for their gene as it was made on 13
+October 2026 (`web/examples/clinvar/`, gzipped, each table's SHA-256 and retrieval record in
+`snapshots.json`), added as the workspace's ClinVar annotation as if fetched that day.
 gnomAD's: each variant of the gene's MANE Select transcript with a protein change, its allele
 count and number with exomes and genomes joined, and gnomAD's filters (a variant failing them, or
 with no allele seen, is left out); a protein change's frequency is its variants' frequencies

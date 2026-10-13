@@ -136,6 +136,7 @@ export function mountInspector(app) {
         set.source.citation ? [h('dt', 'Citation'), h('dd', set.source.citation)] : null,
         set.source.kind === 'clinvar' ? [h('dt', 'Review status'), h('dd', `at least ${set.rules.minStars} star${set.rules.minStars === 1 ? '' : 's'}`)] : null,
         h('dt', 'Kinds'), h('dd', set.rules.kinds.join(', ')),
+        Number.isInteger(set.rules.evaluatedBefore) ? [h('dt', 'Evaluated'), h('dd', `before ${set.rules.evaluatedBefore}`)] : null,
         h('dt', 'P controls'), h('dd', formatCount(c.P.total)),
         h('dt', 'B controls'), h('dd', formatCount(c.B.total)),
         h('dt', 'Made'), h('dd', relativeTime(set.created))),

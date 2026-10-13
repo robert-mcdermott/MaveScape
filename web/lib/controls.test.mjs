@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assayYear, circularity, clinvarControls, composition, labelSide, matchControls, tableControls, variantKind } from './controls.js';
+import { assayYear, beforeWords, circularity, clinvarControls, composition, controlSetWords, labelSide, matchControls, readDate, tableControls, variantKind } from './controls.js';
 import { clinvarCSV } from './providers/clinvar.js';
 import { addControlSet, createWorkspace, removeControlSet, verifyHistory } from './workspace.js';
 import { analysisState, diffStates } from './diff.js';
@@ -36,7 +36,9 @@ const clinvar = clinvarCSV([
 test('a label\'s side in a table\'s words: P, B, or not read', () => {
   for (const w of ['Pathogenic', 'likely pathogenic', 'P', 'LP', 'P/LP', 'Pathogenic/Likely pathogenic', 'abnormal', 'functionally_abnormal']) assert.equal(labelSide(w), 'P', w);
   for (const w of ['Benign', 'likely benign', 'B', 'LB', 'B/LB', 'normal', 'Functionally normal']) assert.equal(labelSide(w), 'B', w);
-  for (const w of ['VUS', 'Uncertain significance', 'conflicting', '', null, 'pathogenic?']) assert.equal(labelSide(w), null, String(w));
+  for (const w of ['VUS', 'Uncertain significance', 'conflicting', '', null, 'pathogenic?', 'Uncertain significance; risk factor', 'Conflicting classifications of pathogenicity; other']) assert.equal(labelSide(w), null, String(w));
+  // ClinVar's words in a table (its tabular download), by their first term.
+  assert.deepEqual(['Benign; association', 'Likely pathogenic, low penetrance', 'Pathogenic/Likely pathogenic; drug response'].map(labelSide), ['B', 'P', 'P']);
   assert.deepEqual([variantKind('S', 'A'), variantKind('S', '*'), variantKind('S', 'S')], ['missense', 'nonsense', 'synonymous']);
 });
 
@@ -112,8 +114,9 @@ test('circularity: scale anchors, the design\'s controls, ClinVar evaluated sinc
   assert.deepEqual(ids, ['anchor-nonsense 1', 'anchor-synonymous 1', 'design-controls 1', 'evaluated-since 2', 'few-P 4', 'few-B 3', 'predictor null']);
   assert.equal(assayYear(ws, design), 2024);
   assert.equal(assayYear({ records: [{ publication: { year: 2019 } }] }, design), 2019, 'a MaveDB record\'s year first');
-  // The default scale anchors nothing; a table citing the assay's own DOI is circular.
-  const table = { name: 'Paper', source: { kind: 'table', citation: 'doi:10.1000/toy.1' }, labels: all.labels };
+  // The default scale anchors nothing; a table citing the assay's own DOI is circular (without
+  // dates, nothing says when its labels were made).
+  const table = { name: 'Paper', source: { kind: 'table', citation: 'doi:10.1000/toy.1' }, labels: all.labels.map(({ evaluated, ...l }) => l) };
   const plain = { inputs: { design: { source: { citation: design.source.citation } }, parameters: { normalization: 'wt', rescale: 'none' } } };
   assert.deepEqual(circularity(table, { ws: {}, run: plain }).map((w) => w.id), ['same-publication', 'few-P', 'few-B']);
   // Unknown publication: ClinVar's sets say so.
@@ -142,4 +145,47 @@ test('kept with the workspace: in the history, in a checkpoint\'s diff, proposed
   const id = absorbed.proposals[0].id;
   assert.equal(rejectProposal(absorbed, id).controlSets, undefined);
   assert.ok(acceptProposal(absorbed, id).controlSets[0].proposed.accepted, 'accepted: stamped with its time');
+});
+
+test('dates as tables write them; only classifications last evaluated before a year, from ClinVar or a table (wave 8, slice 6)', () => {
+  assert.deepEqual(['2015-03-01', '2016/4/2', 'Mar 1, 2024', 'September 30, 2019', '1 Feb 2020', '2024-03-01T10:00', '', '-', 'soon', '2024-13-01'].map(readDate), ['2015-03-01', '2016-04-02', '2024-03-01', '2019-09-30', '2020-02-01', '2024-03-01', null, null, null, null]);
+  // ClinVar: each record by its own date, before the records of a change merge.
+  const before = clinvarControls(clinvar, target, { evaluatedBefore: 2021 });
+  assert.deepEqual(before.labels.map((l) => [l.key, l.side, l.ids.join(' '), l.evaluated]), [
+    ['p.Ser2Ala', 'P', 'VCV000000001', '2020-05-01'],
+    ['p.Gly4Asp', 'B', 'VCV000000003', '2020-05-01'],
+    ['p.Gly10Ser', 'P', 'VCV000000009', '2020-05-01'],
+  ]);
+  assert.equal(before.excluded['last evaluated in or after 2021'], 2);
+  // A table's column of dates (ClinVar's tabular download names it so).
+  const text = ['Name,Germline classification,Germline date last evaluated', 'p.Ser12Ala,Pathogenic,"Mar 1, 2015"', 'p.Lys13Arg,Likely pathogenic,2024-05-02', 'p.Gly14Asp,Benign,-', 'p.Glu15Lys,Likely benign,soon', 'p.Glu16Gly,Benign,2016/01/31'].join('\n');
+  const all = tableControls(text, target);
+  assert.equal(all.dated, true);
+  assert.deepEqual(all.labels.map((l) => [l.key, l.evaluated ?? null]), [['p.Ser2Ala', '2015-03-01'], ['p.Lys3Arg', '2024-05-02'], ['p.Gly4Asp', null], ['p.Glu5Lys', null], ['p.Glu6Gly', '2016-01-31']]);
+  assert.match(all.notes.join(' '), /1 date in "Germline date last evaluated" not read/);
+  const early = tableControls(text, target, { evaluatedBefore: 2024 });
+  assert.deepEqual(early.labels.map((l) => l.key), ['p.Ser2Ala', 'p.Glu6Gly']);
+  assert.deepEqual(early.excluded, { 'last evaluated in or after 2024': 1, 'no date last evaluated': 2 });
+  assert.equal(tableControls('variant,label\np.Ser12Ala,P\n', target).dated, false);
+  // The table's dates against the assay's year, and none once the set is of those before it.
+  const design = { source: { citation: 'Someone A, et al. A toy assay. Journal 2024. doi:10.1000/toy.1' } };
+  const run = { inputs: { design, parameters: { normalization: 'wt', rescale: 'none' } } };
+  const dated = { name: 'Dated', source: { kind: 'table' }, rules: {}, labels: all.labels };
+  assert.deepEqual(circularity(dated, { ws: {}, run }).filter((w) => w.id === 'evaluated-since').map((w) => [w.n, w.text]), [[1, '1 control was last evaluated in or after 2024, when this assay was published: its classification may rest on it (functional evidence, PS3 or BS3).']]);
+  const kept = { name: 'Dated, before 2024', source: { kind: 'table', file: { fileName: 'labels.csv' } }, rules: { evaluatedBefore: 2024 }, labels: early.labels };
+  assert.deepEqual(circularity(kept, { ws: {}, run }).map((w) => w.id), ['few-P', 'few-B']);
+  assert.deepEqual(circularity(kept, { ws: {}, run: { inputs: { design: {}, parameters: {} } } }).map((w) => w.id), ['few-P', 'few-B'], 'the year unknown: a set made of those before a year says nothing of it');
+  assert.equal(beforeWords(kept), 'last evaluated before 2024');
+  assert.equal(controlSetWords(kept), '"Dated, before 2024", from the table labels.csv, last evaluated before 2024: 1 P control and 1 B control');
+});
+
+test('nonsense and synonymous controls on published scores: their scale is the authors\' (wave 8, slice 6)', () => {
+  const all = clinvarControls(clinvar, target, { minStars: 0, kinds: ['missense', 'nonsense', 'synonymous'] });
+  const set = { name: 'All', source: { kind: 'clinvar' }, rules: {}, labels: all.labels };
+  const published = { inputs: { design: { source: { citation: 'Journal 2024' } }, parameters: { model: 'published' } } };
+  const w = circularity(set, { ws: {}, run: published }).find((x) => x.id === 'anchor-published');
+  assert.deepEqual([w.n, w.text], [2, '1 nonsense control and 1 synonymous control on published scores: how their scale was set is not recorded here. Where the authors normalized or rescaled them by such variants, as most do, they score where the scale puts them, not as evidence.']);
+  const missense = { ...set, labels: all.labels.filter((l) => l.kind === 'missense') };
+  assert.equal(circularity(missense, { ws: {}, run: published }).some((x) => x.id === 'anchor-published'), false);
+  assert.equal(circularity(set, { ws: {}, run: { inputs: { design: {}, parameters: { model: 'ratio' } } } }).some((x) => x.id === 'anchor-published'), false, 'a run of counts says its own anchors');
 });

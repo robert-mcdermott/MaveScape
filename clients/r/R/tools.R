@@ -34,10 +34,12 @@ ms_new_workspace <- function(name = NULL, ms = ms_default()) {
 #' an input and an output), "hsp90" (Hsp90, a time series), "factor9" (factor IX, sorted bins),
 #' "dhfr-lon" (DHFR with and without Lon, two conditions), "brca1-ring" (BRCA1's RING domain,
 #' from MaveDB and back), "pten-mavedb" (PTEN, published scores), "brca1-sge" (BRCA1,
-#' nucleotide variants), "tp53-screens" (TP53, two screens). Simulated, with known effects:
-#' "simulated", "simulated-time-series", "simulated-sort-seq", "simulated-barcodes",
-#' "simulated-conditions", "simulated-problems". The examples from MaveDB download their tables
-#' when opened. Required; a string.
+#' nucleotide variants), "tp53-screens" (TP53, two screens); calibrated against ClinVar's
+#' records of the gene, which they bring: "brca1-calibration", "tp53-calibration",
+#' "pten-calibration". Simulated, with known effects: "simulated", "simulated-time-series",
+#' "simulated-sort-seq", "simulated-barcodes", "simulated-conditions", "simulated-problems",
+#' "simulated-calibration" (labels, half of them circular). The examples from MaveDB download
+#' their tables when opened. Required; a string.
 #' @param ms A connection from ms_connect() (default: the last one made).
 #' @return A mavescape_result: the message and the data MaveScape answered with.
 #' @export
@@ -874,13 +876,18 @@ ms_remove_structure_view <- function(name, ms = ms_default()) {
 #' ClinVar (the ClinVar track's records of the gene: add_track clinvar first), pathogenic and
 #' likely pathogenic records as P, benign and likely benign as B, conflicting and uncertain
 #' ones left out, with at least min_stars review stars; or from a table of labels (file_name
-#' and text: a column of variants, such as p.Trp36Ala or W36A, and one of labels: pathogenic,
-#' likely pathogenic, benign, likely benign, or abnormal and normal from another assay),
-#' numbered on the reference or the target. Placed on the target as the tracks place ClinVar's;
-#' says what was left out and why. MaveScape reports functional evidence and never classifies a
-#' variant.
+#' and text: a column of variants, such as p.Trp36Ala or W36A, one of labels: pathogenic,
+#' likely pathogenic, benign, likely benign, or abnormal and normal from another assay, and
+#' optionally last_evaluated, the date of each), numbered on the reference or the target; or
+#' the open example's own labels (example). With evaluated_before, only classifications last
+#' evaluated before that year (those made before the assay was published cannot rest on it).
+#' Placed on the target as the tracks place ClinVar's; says what was left out and why.
+#' MaveScape reports functional evidence and never classifies a variant.
 #'
 #' @param citation table: where the labels were published, with its DOI. Optional; a string.
+#' @param evaluated_before Only classifications last evaluated before this year (ClinVar's
+#' dates, or the table's last_evaluated column); those with no date are left out. None if not
+#' given. Optional; a whole number.
 #' @param file_name table: the file's name (labels.csv). Optional; a string.
 #' @param kinds The kinds of variant kept: missense, nonsense, synonymous (clinvar: missense if
 #' not given; table: all three). Optional; a vector of strings (Python: a list).
@@ -891,13 +898,14 @@ ms_remove_structure_view <- function(name, ms = ms_default()) {
 #' Optional; a string.
 #' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
 #' given. Optional; a string.
-#' @param source clinvar (the default) or table. Optional; a string.
+#' @param source clinvar (the default), table, or example (the open example's own labels: the
+#' simulated calibration's). Optional; a string.
 #' @param text table: the file's text (CSV or TSV). Optional; a string.
 #' @param ms A connection from ms_connect() (default: the last one made).
 #' @return A mavescape_result: the message and the data MaveScape answered with.
 #' @export
-ms_make_control_set <- function(citation = NULL, file_name = NULL, kinds = NULL, min_stars = NULL, name = NULL, numbering = NULL, run = NULL, source = NULL, text = NULL, ms = ms_default()) {
-  ms_call("make_control_set", citation = citation, file_name = file_name, kinds = .ms_array(kinds), min_stars = min_stars, name = name, numbering = numbering, run = run, source = source, text = text, ms = ms)
+ms_make_control_set <- function(citation = NULL, evaluated_before = NULL, file_name = NULL, kinds = NULL, min_stars = NULL, name = NULL, numbering = NULL, run = NULL, source = NULL, text = NULL, ms = ms_default()) {
+  ms_call("make_control_set", citation = citation, evaluated_before = evaluated_before, file_name = file_name, kinds = .ms_array(kinds), min_stars = min_stars, name = name, numbering = numbering, run = run, source = source, text = text, ms = ms)
 }
 
 #' The control sets

@@ -17,7 +17,7 @@ import { calibrationReport, deleteCalibration, likelihoodReport, makeCalibration
 import { cssVar, legend, plotSVG, viewTheme } from './plots.js';
 import { controlStrips, likelihoodChart, prChart, rocChart } from '../lib/plots.js';
 import { EVIDENCE, likelihoodSettings, likelihoodWords } from '../lib/likelihood.js';
-import { KINDS, SIDES, composition, controlSetWords } from '../lib/controls.js';
+import { KINDS, SIDES, assayYear, beforeWords, composition, controlSetWords } from '../lib/controls.js';
 import { CALIBRATION_DEFAULTS, CLASSES, MAX_SAMPLES, calibrationWords, evidenceLimitations, percentText, publishedEvidence, ruleWords, threeFigures, thresholdWords } from '../lib/calibration.js';
 import { STRENGTH_CODES, strengthWords } from '../lib/oddspath.js';
 import { lossSide, readoutOf } from '../lib/readout.js';
@@ -38,7 +38,7 @@ export function mountCalibrateMode(app, container) {
   const root = h('div.view', h('div.workbench-head', h('h1', icon('calibrate'), 'Calibrate'), title), body);
   container.append(root);
   // The forms' choices, kept while the view is open.
-  const form = { minStars: 1, kinds: new Set(['missense']), citation: '' };
+  const form = { minStars: 1, kinds: new Set(['missense']), citation: '', before: '' };
   const calibrate = { side: 'auto', rule: CALIBRATION_DEFAULTS.rule, error: String(CALIBRATION_DEFAULTS.error), abnormal: '', normal: '', samples: String(CALIBRATION_DEFAULTS.samples), seed: String(CALIBRATION_DEFAULTS.seed), condition: 0, likelihood: 'prior', prior: '0.1' };
 
   const calibrations = () => store.ws.calibrations ?? [];
@@ -105,7 +105,7 @@ export function mountCalibrateMode(app, container) {
         h('p.muted.small', 'Pathogenic and likely pathogenic records are P, benign and likely benign B; conflicting and uncertain ones are left out. Nonsense and synonymous variants anchor most runs\' scales: include them knowingly.'),
         h('button.btn.primary', { type: 'button', onclick: async () => {
           try {
-            const made = await makeClinVarControls(app, { minStars: form.minStars, kinds: KINDS.filter((k) => form.kinds.has(k)), run });
+            const made = await makeClinVarControls(app, { minStars: form.minStars, kinds: KINDS.filter((k) => form.kinds.has(k)), evaluatedBefore: form.before.trim() || null, run });
             app.focusItem({ kind: 'controls', id: made.id });
             toast(`Made ${controlSetWords(made.set)}.`, { kind: 'ok' });
           } catch (error) {
@@ -123,17 +123,22 @@ export function mountCalibrateMode(app, container) {
       const chosen = e.target.files?.[0];
       if (!chosen) return;
       try {
-        const made = makeTableControls(app, { fileName: chosen.name, text: await chosen.text(), citation: form.citation.trim() || null, run });
+        const made = makeTableControls(app, { fileName: chosen.name, text: await chosen.text(), citation: form.citation.trim() || null, evaluatedBefore: form.before.trim() || null, run });
         app.focusItem({ kind: 'controls', id: made.id });
         toast(`Made ${controlSetWords(made.set)}.`, { kind: 'ok' });
       } catch (error) {
         toast(error.message, { kind: 'error' });
       }
     } });
+    // Classifications made before the assay cannot rest on it (wave 8, slice 6).
+    const year = assayYear(store.ws, run?.inputs.design ?? store.ws.design);
+    const before = h('input.input', { type: 'text', inputMode: 'numeric', placeholder: year ? String(year) : 'such as 2018', value: form.before, 'aria-label': 'Only classifications last evaluated before this year', style: { maxWidth: '220px' }, oninput: (e) => { form.before = e.target.value; } });
     return h('div.pane', h('h3', icon('plus'), 'New control set'),
+      h('label.field', h('span', 'Last evaluated before'), before),
+      h('p.muted.small', { style: { marginTop: 0 } }, `Optional: only classifications last evaluated before this year (ClinVar's dates, or a table's last_evaluated column). Those made before the assay was published${year ? ` (${year})` : ''} cannot rest on it; those left out are counted.`),
       h('div.section-title', 'From ClinVar'), clinvar,
       h('div.section-title', { style: { marginTop: '14px' } }, 'From a table'),
-      h('p.muted.small', 'A column of variants (p.Trp36Ala, W36A, or ClinVar\'s names) and one of labels (pathogenic, likely pathogenic, benign, likely benign; or abnormal and normal from another assay), numbered on the reference or the target.'),
+      h('p.muted.small', 'A column of variants (p.Trp36Ala, W36A, or ClinVar\'s names) and one of labels (pathogenic, likely pathogenic, benign, likely benign; or abnormal and normal from another assay), numbered on the reference or the target; optionally the date each was last evaluated (last_evaluated).'),
       h('label.field', h('span', 'Citation'), citation),
       file,
       h('button.btn', { type: 'button', onclick: () => file.click() }, icon('upload'), 'Open a table…'));
@@ -149,7 +154,7 @@ export function mountCalibrateMode(app, container) {
         if (!(await confirmDialog({ title: `Delete the control set "${set.name}"?`, message: `It goes from the workspace${made ? `, with the ${made === 1 ? 'calibration' : `${made} calibrations`} made with it` : ''}; the history keeps that it was made and deleted.`, confirm: 'Delete', danger: true }))) return;
         deleteControlSet(app, set.id);
       } }, icon('trash'), 'Delete')),
-      h('p.muted.small', { style: { marginTop: 0 } }, `From ${set.source.kind === 'clinvar' ? `ClinVar's records on ${set.source.transcript}${set.source.retrieved ? `, retrieved ${set.source.retrieved.slice(0, 10)}` : ''}; at least ${set.rules.minStars} review star${set.rules.minStars === 1 ? '' : 's'}` : `${set.source.file.fileName} (SHA-256 ${set.source.file.sha256.slice(0, 12)}…)${set.source.citation ? `, ${set.source.citation}` : ''}; numbered on the ${set.source.numbering}`}; ${set.rules.kinds.join(', ')}. Made ${set.created.slice(0, 10)}.`),
+      h('p.muted.small', { style: { marginTop: 0 } }, `From ${set.source.kind === 'clinvar' ? `ClinVar's records on ${set.source.transcript}${set.source.retrieved ? `, retrieved ${set.source.retrieved.slice(0, 10)}` : ''}; at least ${set.rules.minStars} review star${set.rules.minStars === 1 ? '' : 's'}` : `${set.source.file.fileName} (SHA-256 ${set.source.file.sha256.slice(0, 12)}…)${set.source.citation ? `, ${set.source.citation}` : ''}; numbered on the ${set.source.numbering}`}; ${set.rules.kinds.join(', ')}${beforeWords(set) ? `; ${beforeWords(set)}` : ''}. Made ${set.created.slice(0, 10)}.`),
       h('div.table-scroll', h('table.data.compact',
         h('thead', h('tr', h('th', 'Side'), h('th.r', 'Controls'), h('th.r', `Scored in ${run.name}`), h('th.r', 'Not scored'), h('th.r', 'Not in the run'))),
         h('tbody', ...SIDES.map((side) => h('tr', { title: SIDE_WORDS[side] }, h('td', h('b', side)), h('td.r', String(c[side].total)), h('td.r', String(match.counts[side].scored)), h('td.r', String(match.counts[side]['not scored'])), h('td.r', String(match.counts[side]['not in the run']))))))),
@@ -402,7 +407,7 @@ export function mountCalibrateMode(app, container) {
       h('p.small', h('b', 'Evidence strength: '), 'what a class would contribute as functional evidence (PS3 or BS3), for research.'),
       h('p.small', h('b', 'Clinical classification: '), 'not made by MaveScape. Functional evidence is one input among many to a classification made elsewhere, by those qualified to make it.'));
     const rests = h('div.pane', h('h3', icon('warning'), 'What it rests on'),
-      h('p.small', { style: { marginTop: 0 } }, `${m.n.P} P and ${m.n.B} B controls of "${set.name}" scored in ${run.name}${set.source.kind === 'clinvar' ? `: ClinVar's records on ${set.source.transcript}, at least ${set.rules.minStars} review star${set.rules.minStars === 1 ? '' : 's'}` : `: ${set.source.file.fileName}${set.source.citation ? `, ${set.source.citation}` : ''}`}; ${set.rules.kinds.join(', ')}.`),
+      h('p.small', { style: { marginTop: 0 } }, `${m.n.P} P and ${m.n.B} B controls of "${set.name}" scored in ${run.name}${set.source.kind === 'clinvar' ? `: ClinVar's records on ${set.source.transcript}, at least ${set.rules.minStars} review star${set.rules.minStars === 1 ? '' : 's'}` : `: ${set.source.file.fileName}${set.source.citation ? `, ${set.source.citation}` : ''}`}; ${set.rules.kinds.join(', ')}${beforeWords(set) ? `; ${beforeWords(set)}` : ''}.`),
       h('p.small', h('b', 'P'), ` in the set (${c.P.total}): `, words(c.P.labels)), h('p.small', h('b', 'B'), ` in the set (${c.B.total}): `, words(c.B.labels)),
       limits.length
         ? h('div', ...limits.map((l) => h('div.callout.warn', { style: { margin: '0 0 6px' } }, icon('warning'), h('span', l.text))))

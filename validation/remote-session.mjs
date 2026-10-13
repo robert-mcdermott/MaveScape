@@ -73,6 +73,8 @@ import { circularity, clinvarControls, matchControls, tableControls } from '../w
 import { calibrationMetrics, classCounts, controlScores, publishedThresholds } from '../web/lib/calibration.js';
 import { calibrateScores } from '../web/lib/likelihood.js';
 import { readScoreSet } from '../web/lib/mavedb.js';
+import { calibrationExample, calibrationOf, controlSetOf } from './guide-cases.mjs';
+import { calibrationTruth } from '../web/lib/examples.js';
 import { KIND } from '../web/lib/variants.js';
 import { CLINVAR } from '../web/lib/providers/clinvar.js';
 import { cachedGet } from './cached-fetch.mjs';
@@ -102,6 +104,11 @@ const RING_URN = 'urn:mavedb:00000003-a-2';
 // mavedb-factor9 keeps them: the record opened offline, its published calibrations' thresholds.
 const F9 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-factor9');
 const F9_URN = 'urn:mavedb:00001200-a-1';
+// PTEN's published abundance scores (wave 8, slice 6), as node validation/fetch.mjs
+// mavedb-pten-vampseq keeps them: put in the fetcher's cache once the session has found its record
+// refused for want of them, then its calibration example opened offline.
+const PTEN = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-pten-vampseq');
+const PTEN_URN = 'urn:mavedb:00000013-a-1';
 const results = [];
 const fmtShare = (x) => `${(100 * x).toFixed(0)}% drawn`;
 function check(name, value, ok, required = '') {
@@ -1601,6 +1608,62 @@ try {
       // The example again, as the session goes on with it.
       await act('open_example', { id: 'factor9' });
     }
+  }
+
+  // Wave 8, slice 6: the calibration examples' guides followed in the window, every number as Node
+  // makes it on the same data (guide-cases.mjs). The simulated calibration: its labels made a
+  // control set (all, then those before the assay), each calibrated, the guide comparing each with
+  // the truth.
+  {
+    const near = (a, b) => (a === null && b === null) || Math.abs(a - b) <= 1e-12 * Math.max(1, Math.abs(b));
+    const sameAs = (d, o) => near(d.auc.auc, o.metrics.auc.auc) && near(d.thresholds.abnormal, o.metrics.thresholds.abnormal) && near(d.thresholds.normal, o.metrics.thresholds.normal)
+      && ['P', 'B'].every((side) => ['abnormal-like', 'intermediate', 'WT-like'].every((k) => d.classes[side][k] === o.metrics.classes[side][k]))
+      && ['abnormal', 'normal'].every((w) => near(d.evidence[w].oddsPath, o.metrics.evidence[w].oddsPath) && d.evidence[w].strength === o.metrics.evidence[w].strength.code && near(d.evidence[w].bootstrap.low, o.metrics.evidence[w].boot.low));
+    await act('open_example', { id: 'simulated-calibration' });
+    const allSet = await act('make_control_set', { source: 'example' });
+    const allCal = await act('calibrate', {});
+    const early = await act('make_control_set', { source: 'example', evaluated_before: 2024 });
+    const earlyCal = await act('calibrate', {});
+    const st = calibrationExample('simulated-calibration');
+    const nAll = controlSetOf(st, {}, { table: true });
+    const nAllCal = calibrationOf(nAll.state, nAll.set);
+    const nEarly = controlSetOf(nAllCal.state, { evaluatedBefore: 2024 }, { table: true, minute: 3 });
+    const nEarlyCal = calibrationOf(nEarly.state, nEarly.set, { minute: 4 });
+    const t1 = calibrationTruth(st.results, nAllCal.cal, st.truth, st.example.simulation);
+    const t2 = calibrationTruth(st.results, nEarlyCal.cal, st.truth, st.example.simulation);
+    const guide = await browser.eval(`document.querySelector('.example-guide')?.textContent ?? ''`);
+    const labelsSame = (await browser.eval('JSON.stringify(window.mavescape.store.ws.controlSets.map((c) => c.labels.map((l) => [l.key, l.side, l.label, l.evaluated])))')) === JSON.stringify([nAll.set, nEarly.set].map((c) => c.labels.map((l) => [l.key, l.side, l.label, l.evaluated])));
+    check('the simulated calibration\'s guide in the window: its labels made a control set from the example (make_control_set\'s source example), the 50 made since 2024 named; calibrated, every number as Node makes it; those last evaluated before 2024 (evaluated_before), none named since, calibrated as Node; the guide comparing each calibration with the truth as Node does',
+      `${allSet.message.slice(0, 120)}…; ${early.message.slice(0, 90)}…; OddsPath ${allCal.data.evidence.abnormal.oddsPath.toFixed(1)} and ${earlyCal.data.evidence.abnormal.oddsPath.toFixed(1)}; the guide says ${(guide.match(/a likelihood ratio of [\d.]+/g) ?? []).join(', ')}`,
+      labelsSame && allSet.data.circularity.some((w) => w.id === 'evaluated-since' && w.n === 50) && !early.data.circularity.some((w) => w.id === 'evaluated-since') && early.data.rules.evaluatedBefore === 2024
+        && sameAs(allCal.data, nAllCal.outcome) && sameAs(earlyCal.data, nEarlyCal.outcome)
+        && guide.includes(`a likelihood ratio of ${t1.ratio.abnormal.toPrecision(3)}`) && guide.includes(`a likelihood ratio of ${t2.ratio.abnormal.toPrecision(3)}`) && /Make a control set of the labels/.test(guide));
+    // PTEN's calibration example, opened offline: ClinVar's records it brings beside the map, its
+    // control sets and calibrations as Node makes them.
+    if (existsSync(join(PTEN, 'scores.csv'))) {
+      const cached = `${PTEN_URN.replaceAll(':', '_')}.scores.csv`;
+      cpSync(join(PTEN, 'scores.csv'), join(cache, 'mavedb', cached));
+      writeFileSync(join(cache, 'mavedb', `${cached}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${PTEN_URN}/scores`, retrieved: '2026-10-11T00:00:00Z' }, null, 2)}\n`);
+      await act('open_example', { id: 'pten-calibration' });
+      const annotations = await browser.eval('JSON.stringify(window.mavescape.store.ws.annotations.map((a) => [a.provider, a.name, a.file.sha256, a.record.retrieved]))');
+      const set = await act('make_control_set', {});
+      const cal = await act('calibrate', {});
+      const ex = await act('calibrate', { run: 'Published scores', published: 'ExCALIBR calibration' });
+      const every = await act('make_control_set', { kinds: ['missense', 'nonsense', 'synonymous'] });
+      const pst = calibrationExample('pten-calibration');
+      const a = controlSetOf(pst);
+      const def = calibrationOf(a.state, a.set);
+      const nEx = calibrationOf(def.state, a.set, { published: 'ExCALIBR calibration', minute: 3 });
+      check('PTEN\'s calibration example opened offline: ClinVar\'s records of PTEN as the example brings them (2026-10-13), beside the map; its ClinVar set (255 P, 9 B), the calibration by the defaults and with the ExCALIBR calibration\'s thresholds, every number as Node makes them; with every kind of variant, the warning of controls on a published scale',
+        `${annotations}; ${set.message.slice(0, 100)}…; AUC ${cal.data.auc.auc.toFixed(3)}, ExCALIBR's ${ex.data.evidence.abnormal.oddsPath.toFixed(2)}; ${every.data.circularity.map((w) => `${w.id} ${w.n}`).join(', ')}`,
+        JSON.parse(annotations).length === 1 && JSON.parse(annotations)[0][1] === 'ClinVar: PTEN' && JSON.parse(annotations)[0][3].startsWith('2026-10-13') && set.data.P.controls === 255 && set.data.B.controls === 9
+          && sameAs(cal.data, def.outcome) && sameAs(ex.data, nEx.outcome) && ex.data.published?.title === 'ExCALIBR calibration' && every.data.circularity.some((w) => w.id === 'anchor-published' && w.n === 411));
+    } else {
+      console.log('  PTEN\'s MaveDB table is not in validation/cache: node validation/fetch.mjs mavedb-pten-vampseq (its calibration example\'s checks skipped)');
+      if (requireData) check('PTEN\'s MaveDB table present', 'not in validation/cache', false, 'present (--require-data)');
+    }
+    // The example again, as the session goes on with it.
+    await act('open_example', { id: 'factor9' });
   }
 
   // WebGPU lost under the view (the 0.5.0 release; GitHub's runner lost it on its own): the GPU

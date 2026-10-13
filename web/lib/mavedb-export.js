@@ -531,7 +531,7 @@ export function depositCalibration(o, details, software = {}) {
     methodSources: [BRNICH],
     calibrationMetadata: {
       software: { name: 'MaveScape', version: software.version ?? null },
-      controls: { name: set.name, source: set.source?.kind === 'clinvar' ? { database: 'ClinVar', transcript: set.source.transcript ?? null, sha256: set.source.file?.sha256 ?? null, retrieved: set.source.retrieved ?? null, minStars: set.rules?.minStars ?? null, kinds: set.rules?.kinds ?? null } : { file: set.source?.file?.fileName ?? null, sha256: set.source?.file?.sha256 ?? null, citation: set.source?.citation ?? null }, scored: m.n },
+      controls: { name: set.name, source: set.source?.kind === 'clinvar' ? { database: 'ClinVar', transcript: set.source.transcript ?? null, sha256: set.source.file?.sha256 ?? null, retrieved: set.source.retrieved ?? null, minStars: set.rules?.minStars ?? null, kinds: set.rules?.kinds ?? null } : { file: set.source?.file?.fileName ?? null, sha256: set.source?.file?.sha256 ?? null, citation: set.source?.citation ?? null }, ...(Number.isInteger(set.rules?.evaluatedBefore) ? { evaluatedBefore: set.rules.evaluatedBefore } : {}), scored: m.n },
       side: cal.side,
       rule: cal.rule,
       ...(cal.rule === 'error' ? { error: cal.error } : {}),

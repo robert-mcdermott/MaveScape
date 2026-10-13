@@ -720,6 +720,26 @@
   "violations": []
  },
  {
+  "scene": "calibrate-brca1",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-brca1",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-truth",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-truth",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "calibrate-figure",
   "theme": "dark",
   "violations": []

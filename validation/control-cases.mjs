@@ -16,13 +16,13 @@ const STARS = new Map([
   ['criteria provided, single submitter', 1], ['criteria provided, conflicting classifications', 1], ['criteria provided, conflicting interpretations', 1],
 ]);
 
-// Every record of a gene in the cached answers: { accession, transcript, ref, position, alt (one
-// letter; '*' a stop; ref for '='), classification, review, evaluated }, or null for a title that
-// is no single protein substitution.
-export function clinvarRecords(gene) {
+// Every record of a gene in the cached answers (root: a cache's clinvar/ folder, the fixtures' by
+// default): { accession, transcript, ref, position, alt (one letter; '*' a stop; ref for '='),
+// classification, review, evaluated }, or null for a title that is no single protein substitution.
+export function clinvarRecords(gene, root = CLINVAR) {
   const out = [];
-  for (const file of readdirSync(CLINVAR).filter((f) => f.endsWith('.summary.json'))) {
-    const result = JSON.parse(readFileSync(new URL(file, CLINVAR), 'utf8')).result;
+  for (const file of readdirSync(root).filter((f) => f.endsWith('.summary.json'))) {
+    const result = JSON.parse(readFileSync(new URL(file, root), 'utf8')).result;
     for (const uid of result.uids) {
       const r = result[uid];
       const m = /^(N[MR]_\d+\.\d+)\(([^)]+)\):c\.\S+(?: \(p\.([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|=)\))?$/.exec(r.title ?? '');
@@ -43,10 +43,11 @@ export function clinvarRecords(gene) {
 
 // The controls those records make on a target: the most named transcript; P for pathogenic or likely
 // pathogenic (alone, or as "Pathogenic/Likely pathogenic"), B for benign or likely benign; at least
-// minStars; of the kinds given; the residue the target's at position − offset. Returns a Map(key →
-// { side, ids, stars, evaluated, kind }), keys as MAVE-HGVS on the target (p.Arg3Cys).
-export function clinvarAccount(gene, target, { minStars = 1, kinds = ['missense'] } = {}) {
-  const records = clinvarRecords(gene);
+// minStars; of the kinds given; last evaluated before evaluatedBefore (a year), when given; the
+// residue the target's at position − offset. Returns a Map(key → { side, ids, stars, evaluated,
+// kind }), keys as MAVE-HGVS on the target (p.Arg3Cys).
+export function clinvarAccount(gene, target, { minStars = 1, kinds = ['missense'], evaluatedBefore = null } = {}, root = CLINVAR) {
+  const records = clinvarRecords(gene, root);
   const tally = new Map();
   for (const r of records) tally.set(r.transcript, (tally.get(r.transcript) ?? 0) + 1);
   const transcript = [...tally].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0][0];
@@ -65,6 +66,7 @@ export function clinvarAccount(gene, target, { minStars = 1, kinds = ['missense'
     const stars = STARS.get(r.review) ?? 0;
     const kind = r.alt === r.ref ? 'synonymous' : r.alt === '*' ? 'nonsense' : 'missense';
     if (stars < minStars || !kinds.includes(kind)) continue;
+    if (evaluatedBefore !== null && !(r.evaluated && r.evaluated < `${evaluatedBefore}-01-01`)) continue;
     const key = `p.${name[r.ref]}${at}${r.alt === r.ref ? '=' : name[r.alt]}`;
     const had = out.get(key);
     if (!had) out.set(key, { side, ids: [r.accession], stars, evaluated: r.evaluated, kind });

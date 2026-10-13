@@ -8,12 +8,13 @@
 //
 //   { id, name, created, source: { kind: 'clinvar', annotation, file: { sha256 }, retrieved,
 //       transcript } | { kind: 'table', file: { fileName, sha256, size }, citation, numbering },
-//     rules: { minStars, kinds: ['missense', …] }, labels: [label], excluded: { reason: n },
+//     rules: { minStars, kinds: ['missense', …], evaluatedBefore (a year: only classifications
+//       last evaluated before it; wave 8, slice 6) }, labels: [label], excluded: { reason: n },
 //     notes: [text] }
 //   label: { key (the protein change on the target: p.Trp36Ala), side ('P' | 'B'), label (the
 //     source's words), kind ('missense' | 'nonsense' | 'synonymous'), variant (as the source
 //     writes it), ids ([ClinVar accession, …] or [the table's row]), stars (ClinVar: 0–4),
-//     evaluated (ClinVar: the latest last-evaluated date, YYYY-MM-DD) }
+//     evaluated (the latest last-evaluated date, YYYY-MM-DD: ClinVar's, or a table's own column) }
 //
 // A set is matched to a run's variants at the protein level (matchControls), and says what may make
 // it circular (circularity): labels that anchor the run's scale, labels that are the design's own
@@ -34,9 +35,10 @@ export const KINDS = ['missense', 'nonsense', 'synonymous'];
 export const FEW_CONTROLS = 10;
 
 // The side of a label in a table's words: P, B, or null (uncertain, conflicting, or not read).
-// ClinVar's own classification goes through tracks.js's clinvarClass.
+// ClinVar's own classification goes through tracks.js's clinvarClass; a table of ClinVar's words
+// ("Benign; association", "Likely pathogenic, low penetrance") is read by its first term.
 export function labelSide(text) {
-  const t = String(text ?? '').trim().toLowerCase().replace(/[_\s]+/g, ' ');
+  const t = String(text ?? '').trim().toLowerCase().replace(/[_\s]+/g, ' ').split(/[;,]/)[0].trim();
   if (!t) return null;
   if (/^(pathogenic|likely pathogenic|pathogenic\/likely pathogenic|p|lp|p\/lp|plp|abnormal|functionally abnormal)$/.test(t)) return 'P';
   if (/^(benign|likely benign|benign\/likely benign|b|lb|b\/lb|blb|normal|functionally normal)$/.test(t)) return 'B';
@@ -92,12 +94,47 @@ const count = (excluded, reason, n = 1) => {
   if (n) excluded[reason] = (excluded[reason] ?? 0) + n;
 };
 
+// A classification's date as YYYY-MM-DD, from the ways tables write it: 2024-03-01, 2024/03/01,
+// "Mar 1, 2024" (ClinVar's tabular download), "1 Mar 2024"; null when it reads none.
+const NO_DATE = /^(|-|—|na|n\/a|none|not provided)$/i;
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+export function readDate(text) {
+  const s = String(text ?? '').trim();
+  if (NO_DATE.test(s)) return null;
+  const two = (n) => String(n).padStart(2, '0');
+  const valid = (y, m, d) => (y >= 1900 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31 ? `${y}-${two(m)}-${two(d)}` : null);
+  let m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?!\d)/.exec(s);
+  if (m) return valid(Number(m[1]), Number(m[2]), Number(m[3]));
+  m = /^([A-Za-z]{3})[a-z]*\.? (\d{1,2}),? (\d{4})$/.exec(s);
+  if (m && MONTHS.includes(m[1].toLowerCase())) return valid(Number(m[3]), MONTHS.indexOf(m[1].toLowerCase()) + 1, Number(m[2]));
+  m = /^(\d{1,2}) ([A-Za-z]{3})[a-z]*\.? (\d{4})$/.exec(s);
+  if (m && MONTHS.includes(m[2].toLowerCase())) return valid(Number(m[3]), MONTHS.indexOf(m[2].toLowerCase()) + 1, Number(m[1]));
+  return null;
+}
+
+// Whether a classification is kept by rules.evaluatedBefore (a year): last evaluated before its
+// first day; one with no date is left out, since it may be of any year. Counts what it leaves out.
+function evaluatedInTime(evaluated, rules, excluded) {
+  const year = rules.evaluatedBefore;
+  if (!Number.isInteger(year)) return true;
+  if (!evaluated) {
+    count(excluded, 'no date last evaluated');
+    return false;
+  }
+  if (evaluated >= `${year}-01-01`) {
+    count(excluded, `last evaluated in or after ${year}`);
+    return false;
+  }
+  return true;
+}
+
 // Controls from ClinVar's records of the gene (the ClinVar annotation's table: providers/clinvar.js),
 // placed on the target as ClinVar's track places them (the transcript most records name, numbered
 // by the target's offset where the residues agree). rules: { minStars (1: criteria provided),
-// kinds (['missense']) }. Pathogenic and likely pathogenic records are P, benign and likely benign B;
-// conflicting, uncertain and other classifications are left out. Returns { labels, excluded:
-// { reason: n }, transcript, records, notes, problem }.
+// kinds (['missense']), evaluatedBefore (a year; none if not given) }. Pathogenic and likely
+// pathogenic records are P, benign and likely benign B; conflicting, uncertain and other
+// classifications are left out. Returns { labels, excluded: { reason: n }, transcript, records,
+// notes, problem }.
 export function clinvarControls(text, target, rules = {}) {
   const minStars = rules.minStars ?? 1;
   const kinds = rules.kinds ?? ['missense'];
@@ -141,6 +178,7 @@ export function clinvarControls(text, target, rules = {}) {
       count(excluded, `${kind} (not chosen)`);
       continue;
     }
+    if (!evaluatedInTime(row.last_evaluated, rules, excluded)) continue;
     labels.push({ key: substitutionKey(ref, position, alt), position, side, label: row.classification, kind, variant: row.hgvs_p, ids: [row.accession], stars, ...(row.last_evaluated ? { evaluated: row.last_evaluated } : {}) });
   }
   return { labels: merged(labels, excluded), excluded, transcript, records: rows.length, notes: [], problem: null };
@@ -148,24 +186,31 @@ export function clinvarControls(text, target, rules = {}) {
 
 const VARIANT_COLUMNS = ['variant', 'hgvs_pro', 'hgvs_p', 'protein_change', 'hgvs', 'name', 'title'];
 const LABEL_COLUMNS = ['label', 'class', 'classification', 'clinical_significance', 'germline_classification', 'significance', 'side'];
+// When each label was last evaluated (optional; ClinVar's tabular download calls it "Germline date
+// last evaluated"), read as the ClinVar annotation's dates are (wave 8, slice 6).
+const DATE_COLUMNS = ['last_evaluated', 'date_last_evaluated', 'germline_date_last_evaluated', 'evaluated', 'date_evaluated', 'last_reviewed', 'date'];
+const columnKey = (name) => name.trim().toLowerCase().replace(/[\s()]+/g, '_').replace(/_+$/, '');
 
 // Controls from a table of labels: a column of variants (MAVE-HGVS protein changes, one-letter
-// changes such as W36A, or ClinVar's titles) and a column of labels (pathogenic, likely pathogenic,
-// benign, likely benign, abnormal, normal, or P, LP, B, LB). Numbered on the reference (the
-// target's offset) or on the target, whichever the residues agree with (rules.numbering:
-// 'reference' or 'target' to say). rules.kinds: all three if not given. Returns { labels, excluded,
-// numbering, rows, notes, problem }.
+// changes such as W36A, or ClinVar's titles), a column of labels (pathogenic, likely pathogenic,
+// benign, likely benign, abnormal, normal, or P, LP, B, LB) and, optionally, one of the date each
+// was last evaluated. Numbered on the reference (the target's offset) or on the target, whichever
+// the residues agree with (rules.numbering: 'reference' or 'target' to say). rules.kinds: all three
+// if not given; rules.evaluatedBefore as ClinVar's. Returns { labels, excluded, numbering, rows,
+// dated (whether it has a column of dates), notes, problem }.
 export function tableControls(text, target, rules = {}) {
   const kinds = rules.kinds ?? KINDS;
   const table = parseTable(String(text), {});
-  const find = (names) => table.columns.find((c) => names.includes(c.name.trim().toLowerCase())) ?? null;
+  const find = (names) => table.columns.find((c) => names.includes(columnKey(c.name))) ?? null;
   const variantCol = find(VARIANT_COLUMNS);
   const labelCol = find(LABEL_COLUMNS);
+  const dateCol = find(DATE_COLUMNS);
   if (!variantCol || !labelCol) {
     return { labels: [], excluded: {}, numbering: null, rows: table.rows, notes: [], problem: `The table needs a column of variants (${VARIANT_COLUMNS.slice(0, 4).join(', ')}) and one of labels (${LABEL_COLUMNS.slice(0, 4).join(', ')}); it has ${table.columns.map((c) => `"${c.name}"`).join(', ') || 'none'}.` };
   }
   const variants = columnText(variantCol);
   const words = columnText(labelCol);
+  const dates = dateCol ? columnText(dateCol) : [];
   const excluded = {};
   const unread = new Map();
   const items = [];
@@ -181,7 +226,7 @@ export function tableControls(text, target, rules = {}) {
       count(excluded, 'not a single protein substitution');
       continue;
     }
-    items.push({ refPosition: s.position, ref: s.ref, alt: s.alt, side, label: String(words[r]).trim(), variant: String(variants[r]).trim(), row: r + 2 });
+    items.push({ refPosition: s.position, ref: s.ref, alt: s.alt, side, label: String(words[r]).trim(), variant: String(variants[r]).trim(), row: r + 2, evaluated: dateCol ? readDate(dates[r]) : null });
   }
   for (const [w, n] of unread) count(excluded, `label not read: "${w}"`, n);
   const offset = target.offset ?? 0;
@@ -192,20 +237,25 @@ export function tableControls(text, target, rules = {}) {
     const score = placed.placed.length - placed.disagree.length;
     if (!placed.problem && (!best || score > best.score)) best = { numbering, placed, score };
   }
-  if (!best) return { labels: [], excluded, numbering: null, rows: table.rows, notes: [], problem: `Over a tenth of the table's residues disagree with the target, numbered on the reference or on the target: its variants are of another protein, or another numbering.` };
+  if (!best) return { labels: [], excluded, numbering: null, rows: table.rows, dated: Boolean(dateCol), notes: [], problem: `Over a tenth of the table's residues disagree with the target, numbered on the reference or on the target: its variants are of another protein, or another numbering.` };
   count(excluded, 'outside the target', best.placed.outside);
   count(excluded, 'another residue on the target', best.placed.disagree.length);
   const labels = [];
-  for (const { position, ref, alt, side, label, variant, row } of best.placed.placed) {
+  for (const { position, ref, alt, side, label, variant, row, evaluated } of best.placed.placed) {
     const kind = variantKind(ref, alt);
     if (!kinds.includes(kind)) {
       count(excluded, `${kind} (not chosen)`);
       continue;
     }
-    labels.push({ key: substitutionKey(ref, position, alt), position, side, label, kind, variant, ids: [`row ${row}`] });
+    if (!evaluatedInTime(evaluated, rules, excluded)) continue;
+    labels.push({ key: substitutionKey(ref, position, alt), position, side, label, kind, variant, ids: [`row ${row}`], ...(evaluated ? { evaluated } : {}) });
   }
   const notes = offset && tries.length > 1 ? [`Numbered on the ${best.numbering === 'reference' ? `reference (the target's offset, ${offset})` : 'target itself'}: its residues agree there.`] : [];
-  return { labels: merged(labels, excluded), excluded, numbering: best.numbering, rows: table.rows, notes, problem: null };
+  if (dateCol) {
+    const unreadDates = best.placed.placed.filter((x) => !x.evaluated && !NO_DATE.test(String(dates[x.row - 2] ?? '').trim())).length;
+    if (unreadDates) notes.push(`${plural(unreadDates, 'date')} in "${dateCol.name}" not read (written as 2024-03-01, 2024/03/01 or Mar 1, 2024).`);
+  }
+  return { labels: merged(labels, excluded), excluded, numbering: best.numbering, rows: table.rows, dated: Boolean(dateCol), notes, problem: null };
 }
 
 // A control set from what clinvarControls or tableControls read: { name, source, rules, labels,
@@ -274,17 +324,27 @@ export function circularity(set, { ws, run, matched }) {
   const synonymous = ofKind('synonymous');
   const synonymousAnchor = p.normalization === 'synonymous' || /synonymous/.test(p.rescale ?? '');
   if (synonymous.length && synonymousAnchor) out.push({ id: 'anchor-synonymous', n: synonymous.length, text: `${plural(synonymous.length, 'synonymous control')}: the run's scores are set relative to the synonymous variants (${p.normalization === 'synonymous' ? 'its normalization' : 'its rescaling'}), so they score where the scale puts them, not as evidence.` });
+  // Published scores: how their scale was set is the authors' (wave 8, slice 6).
+  if (p.model === 'published' && (nonsense.length || synonymous.length)) {
+    const n = nonsense.length + synonymous.length;
+    const which = [nonsense.length ? plural(nonsense.length, 'nonsense control') : null, synonymous.length ? plural(synonymous.length, 'synonymous control') : null].filter(Boolean).join(' and ');
+    out.push({ id: 'anchor-published', n, text: `${which} on published scores: how their scale was set is not recorded here. Where the authors normalized or rescaled them by such variants, as most do, ${n === 1 ? 'it scores' : 'they score'} where the scale puts ${n === 1 ? 'it' : 'them'}, not as evidence.` });
+  }
   // Labels that are the design's own controls, named.
   const named = new Set([...(Array.isArray(design?.controls?.synonymous) ? design.controls.synonymous : []), ...(Array.isArray(design?.controls?.nonsense) ? design.controls.nonsense : [])]);
   const own = set.labels.filter((l) => named.has(l.key) || named.has(l.variant));
   if (own.length) out.push({ id: 'design-controls', n: own.length, text: `${plural(own.length, 'control')} ${own.length === 1 ? 'is' : 'are'} among the design's own named controls.` });
-  // ClinVar classifications that may rest on this assay (ACMG/AMP's functional evidence, PS3/BS3).
-  if (set.source?.kind === 'clinvar') {
+  // Classifications that may rest on this assay (ACMG/AMP's functional evidence, PS3/BS3): ClinVar's,
+  // or a table's whose dates it gives (wave 8, slice 6). A set made of those evaluated before the
+  // assay (rules.evaluatedBefore) has none.
+  const clinvar = set.source?.kind === 'clinvar';
+  if (clinvar || set.labels.some((l) => l.evaluated)) {
     const year = assayYear(ws, design);
+    const whose = clinvar ? 'by ClinVar\'s submitters ' : '';
     if (year) {
       const since = set.labels.filter((l) => l.evaluated && l.evaluated >= `${year}-01-01`);
-      if (since.length) out.push({ id: 'evaluated-since', n: since.length, text: `${plural(since.length, 'control')} ${since.length === 1 ? 'was' : 'were'} last evaluated by ClinVar's submitters in or after ${year}, when this assay was published: ${since.length === 1 ? 'its classification' : 'their classifications'} may rest on it (functional evidence, PS3 or BS3).` });
-    } else out.push({ id: 'evaluated-since', n: null, text: 'When this assay was published is not recorded: ClinVar\'s classifications evaluated since then may rest on it (functional evidence, PS3 or BS3).' });
+      if (since.length) out.push({ id: 'evaluated-since', n: since.length, text: `${plural(since.length, 'control')} ${since.length === 1 ? 'was' : 'were'} last evaluated ${whose}in or after ${year}, when this assay was published: ${since.length === 1 ? 'its classification' : 'their classifications'} may rest on it (functional evidence, PS3 or BS3).` });
+    } else if (!Number.isInteger(set.rules?.evaluatedBefore)) out.push({ id: 'evaluated-since', n: null, text: `When this assay was published is not recorded: ${clinvar ? 'ClinVar\'s classifications' : 'classifications'} evaluated since then may rest on it (functional evidence, PS3 or BS3).` });
   }
   // The same publication as the assay's.
   const doi = (text) => /\b10\.\d{4,9}\/\S+?(?=[\s;,]|\.?$)/i.exec(String(text ?? ''))?.[0]?.toLowerCase() ?? null;
@@ -303,6 +363,10 @@ export function circularity(set, { ws, run, matched }) {
 // A set in a sentence: its name, source and sides.
 export function controlSetWords(set) {
   const c = composition(set);
-  const from = set.source?.kind === 'clinvar' ? `ClinVar (${set.source.transcript ?? 'its records'}, at least ${plural(set.rules?.minStars ?? 1, 'review star')}; ${(set.rules?.kinds ?? ['missense']).join(', ')})` : `the table ${set.source?.file?.fileName ?? ''}${set.source?.citation ? ` (${set.source.citation})` : ''}`;
+  const before = beforeWords(set);
+  const from = set.source?.kind === 'clinvar' ? `ClinVar (${set.source.transcript ?? 'its records'}, at least ${plural(set.rules?.minStars ?? 1, 'review star')}; ${(set.rules?.kinds ?? ['missense']).join(', ')}${before ? `; ${before}` : ''})` : `the table ${set.source?.file?.fileName ?? ''}${set.source?.citation ? ` (${set.source.citation})` : ''}${before ? `, ${before}` : ''}`;
   return `"${set.name}", from ${from}: ${plural(c.P.total, 'P control')} and ${plural(c.B.total, 'B control')}`;
 }
+
+// A set's date rule in words ("last evaluated before 2018"), or '' without one.
+export const beforeWords = (set) => (Number.isInteger(set?.rules?.evaluatedBefore) ? `last evaluated before ${set.rules.evaluatedBefore}` : '');

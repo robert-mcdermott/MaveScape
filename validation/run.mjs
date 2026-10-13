@@ -158,6 +158,8 @@ import { mavedbDeposit } from '../web/lib/mavedb-export.js';
 import { editCertificate, nudge } from './certificate-cases.mjs';
 import { numberItems } from '../web/lib/certificate.js';
 import { computeCalibration, metricsOf, scoredControls as scoredControlsOf, strengthsSentence } from '../web/lib/calibration-record.js';
+import { CLINVAR_SNAPSHOTS, calibrationExample, calibrationOf, clinvarSnapshot, controlSetOf } from './guide-cases.mjs';
+import { calibrationTruth, losesFunction } from '../web/lib/examples.js';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
 import { describeMapping, mapTarget, mapTargetOnChain, rankStructures } from '../web/lib/mapping.js';
 import { assemblyChoices, chainSummaries, openStructureText, readStructureBytes } from '../web/lib/structures.js';
@@ -2334,7 +2336,7 @@ const suites = {
           marked.length > 0 && open.every((o) => o.accepted && o.rejected), 'kept, and decided as 0.7 decides');
       }
     }
-    check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
+    check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment', 'calibrate'].includes(e.opens)), 'all');
     // The blank layouts: filled in as they say, they make a valid design.
     const layoutTable = parseTable(new Uint8Array(readFileSync(new URL('../web/examples/layouts/count-table.csv', import.meta.url))));
     const sheet = parseTable(new Uint8Array(readFileSync(new URL('../web/examples/layouts/sample-sheet.csv', import.meta.url))));
@@ -2423,7 +2425,7 @@ const suites = {
       const gaps = o.readiness.gaps.map((g) => g.id);
       const missing = (example.teaches ?? []).filter((g) => !gaps.includes(g));
       check('examples', `${example.title}: opens as the window opens it, its design fitting its ${o.assembled.kind === 'codons' ? 'codon variants read at the protein level' : 'table'}, scored with its parameters; QC raises exactly the findings it teaches`, `${o.table.rows} rows; ${o.scored.ok ? `${o.scored.results.conditions[0].scored} scored (${o.parameters.model === 'ratio' && o.design.model !== 'time-series' ? 'log ratio' : MODELS[o.parameters.model]}${o.parameters.timeScale === 'unit' ? ', per generation' : ''})` : o.scored.errors[0]}; QC ${Object.entries(raised).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`, valid.ok && o.scored.ok && JSON.stringify(raised) === JSON.stringify(expected), `valid; scored; ${Object.entries(expected).map(([k, v]) => `${k}: ${v}`).join(', ') || 'all pass'}`);
-      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare', 'structure', 'figures', 'report'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
+      check('examples', `${example.title}: its readout and direction stated, its readiness naming what its guide points to, and a guided workflow of at most six steps`, `${o.design.readout?.direction ?? 'no direction'}; ${o.readiness.counts.ready + o.readiness.counts.partial} of ${o.readiness.analyses.length} analyses possible; missing ${gaps.join(', ') || 'nothing'}; ${example.steps.length} steps`, Boolean(o.design.readout?.direction && o.design.readout?.phenotype) && !missing.length && example.steps.length <= 6 && example.steps.every(([mode]) => ['qc', 'score', 'map', 'experiment', 'compare', 'structure', 'figures', 'report', 'calibrate'].includes(mode)) && Boolean(example.question && example.source && example.license && example.expected.length), `stated; ${(example.teaches ?? []).join(', ') || 'nothing in particular'} named; ≤ 6`);
       if (example.mavedb) {
         // Opened from MaveDB: its tables the ones the example was made with (and the validation
         // pins), each record's license the example's (several records, wave 3 slice 6).
@@ -2795,6 +2797,155 @@ const suites = {
       check('examples', 'BRCA1 RING certified without its tables, as its guide says: the two tables named by the SHA-256 of MaveDB\'s files (the example\'s), not checkable alone, verified with the two files downloaded from the record', `named ${named.map((x) => `${x.slice(0, 12)}…`).join(', ')}; alone: ${r.missing.verdict} (exit ${r.missing.exit}, ${r.missing.inputs.filter((x) => x.status !== 'ok').length} missing); with MaveDB's files: ${r.supplied.verdict}`,
         named.join() === r.tables.map((x) => x.sha256).sort().join() && r.tables.every((x) => x.held) && r.bare.certificate.inputs.every((x) => x.path === null) && r.missing.verdict === 'incomplete' && r.missing.exit === 2 && r.supplied.verdict === 'verified' && r.supplied.numbers.same === c.total
           && said('brca1-ring', 'it names them by the SHA-256 of MaveDB\'s files', 'with the two files downloaded from the record it is verified'), 'MaveDB\'s; incomplete (exit 2); verified');
+    }
+
+    // Wave 8, slice 6: the calibration examples, made as their guides make them (guide-cases.mjs).
+    const g3 = (x) => x.toPrecision(3);
+    const share = (x) => `${Math.round(100 * x)}%`;
+    // ClinVar's records of BRCA1, TP53 and PTEN as the examples bring them: what the ClinVar track
+    // makes of NCBI's answers, and, where those answers are kept (validation/cache/clinvar-snapshots,
+    // written by fixtures/make-clinvar-snapshots.mjs; ClinVar changes weekly, so they cannot be
+    // fetched again), the same table, and the controls an account read straight from them gives.
+    {
+      const genes = ['BRCA1', 'TP53', 'PTEN'];
+      const snaps = genes.map((g) => ({ gene: g, ...clinvarSnapshot(g) }));
+      const root = new URL('./cache/clinvar-snapshots/', import.meta.url);
+      const raw = existsSync(new URL('clinvar/', root));
+      const against = [];
+      if (raw) {
+        for (const x of snaps) {
+          const remade = await CLINVAR.fetch({ identifiers: { gene: x.gene } }, {}, cachedGet(root));
+          const target = recordTarget(cachedRecord(exampleById(['brca1-calibration', 'tp53-calibration', 'pten-calibration'][genes.indexOf(x.gene)]).mavedb.urn));
+          const rules = [{ minStars: 1, kinds: ['missense'] }, { minStars: 1, kinds: ['missense'], evaluatedBefore: 2018 }, { minStars: 0, kinds: ['missense', 'nonsense', 'synonymous'] }];
+          const agree = rules.every((r) => {
+            const mine = clinvarControls(x.text, target, r).labels;
+            const account = clinvarAccount(x.gene, target, r, new URL('clinvar/', root)).controls;
+            return mine.length === account.size && mine.every((l) => { const a = account.get(l.key); return a && a.side === l.side && a.stars === l.stars && a.ids.slice().sort().join() === l.ids.slice().sort().join() && (a.evaluated ?? undefined) === l.evaluated && a.kind === l.kind; });
+          });
+          against.push({ gene: x.gene, same: remade.text === x.text, agree });
+        }
+      } else console.log('  ClinVar\'s answers the examples\' records were made from are not in validation/cache/clinvar-snapshots (made once by fixtures/make-clinvar-snapshots.mjs): the check of the tables against them skipped');
+      check('examples', 'the calibration examples\' ClinVar records (web/examples/clinvar/): each gene\'s table the one snapshots.json names (its SHA-256 and size, retrieved 2026-10-13 from NCBI); where NCBI\'s answers are kept, the table providers/clinvar.js makes of them, and every control by three rules (the defaults, those last evaluated before 2018, any review and every kind) as an account read straight from them gives',
+        `${snaps.map((x) => `${x.gene} ${x.entry.record.records.toLocaleString('en-US')} records, ${x.sha256 === x.entry.sha256 && x.bytes.length === x.entry.size ? 'the same' : 'changed'}`).join('; ')}${raw ? `; against NCBI's answers: ${against.map((a) => `${a.gene} ${a.same ? 'the same table' : 'another table'}, controls ${a.agree ? 'as the account' : 'differ'}`).join('; ')}` : '; NCBI\'s answers not kept here'}`,
+        snaps.every((x) => x.sha256 === x.entry.sha256 && x.bytes.length === x.entry.size && x.entry.record.retrieved.startsWith('2026-10-13')) && against.every((a) => a.same && a.agree), 'the same; the account\'s');
+    }
+
+    // BRCA1 against ClinVar: the defaults, the Fayer calibration's thresholds, and the classifications
+    // last evaluated before 2018.
+    if (opened.has('brca1-calibration')) {
+      let st = calibrationExample('brca1-calibration');
+      const a = controlSetOf(st);
+      const c = composition(a.set);
+      const def = calibrationOf(a.state, a.set);
+      const fayer = calibrationOf(def.state, a.set, { published: 'Fayer calibration', minute: 3 });
+      const b = controlSetOf(fayer.state, { evaluatedBefore: 2018 }, { minute: 4 });
+      const early = calibrationOf(b.state, b.set, { minute: 5 });
+      const earlyFayer = calibrationOf(early.state, b.set, { published: 'Fayer calibration', minute: 6 });
+      st = earlyFayer.state;
+      const m = def.outcome.metrics;
+      const ev = (x) => x.outcome.metrics.evidence;
+      const since = def.outcome.warnings.find((w) => w.id === 'evaluated-since')?.n;
+      const lr = (x, boundary) => x.outcome.likelihood.result.thresholds.find((t) => t.boundary === boundary)?.score;
+      const fm = fayer.outcome.metrics;
+      const em = early.outcome.metrics;
+      check('examples', 'BRCA1 against ClinVar, as its guide says: 212 P and 447 B missense controls (196 and 111 scored), 552 evaluated since 2018; AUC 0.993, the thresholds meeting at −0.997; OddsPath 36.4 (PS3, 95%) and 0.0208 (BS3); with the Fayer calibration\'s thresholds 53.5 and 0.0157 beside its 52.4 and 0.02; before 2018, 28 P and 87 B (25 and 12 scored), AUC 0.980, 9.12 (5.76 with Fayer\'s) and 0.0436',
+        `${c.P.total} P, ${c.B.total} B; scored ${m.n.P}/${m.n.B}; since 2018 ${since}; AUC ${g3(m.auc.auc)} (${g3(m.auc.low)}–${g3(m.auc.high)}), ${m.thresholds.crossed ? 'crossed at' : 'thresholds'} ${g3(m.thresholds.abnormal)}; ${g3(ev(def).abnormal.oddsPath)} ${ev(def).abnormal.strength.code} (${share(ev(def).abnormal.boot.strengths.PS3)}), ${g3(ev(def).normal.oddsPath)} ${ev(def).normal.strength.code}; Fayer's ${g3(ev(fayer).abnormal.oddsPath)} and ${g3(ev(fayer).normal.oddsPath)} (${fm.classes.P['abnormal-like']} P and ${fm.classes.B['abnormal-like']} B abnormal-like; observed ${g3(ev(fayer).abnormal.observed)} and ${g3(ev(fayer).normal.observed)}); before 2018 ${composition(b.set).P.total} P, ${composition(b.set).B.total} B, scored ${em.n.P}/${em.n.B}, AUC ${g3(em.auc.auc)}, ${g3(ev(early).abnormal.oddsPath)} ${ev(early).abnormal.strength.code} (${g3(ev(earlyFayer).abnormal.oddsPath)}), ${g3(ev(early).normal.oddsPath)}; Strong below ${g3(lr(def, 'Pathogenic-Moderate|Pathogenic-Strong'))}, Benign-Strong above ${g3(lr(def, 'Benign-Strong|Benign-Moderate'))}`,
+        c.P.total === 212 && c.B.total === 447 && m.n.P === 196 && m.n.B === 111 && since === 552 && g3(m.auc.auc) === '0.993' && m.thresholds.crossed && g3(m.thresholds.abnormal) === '-0.997'
+          && m.classes.P['abnormal-like'] === 193 && m.classes.B['WT-like'] === 109 && g3(ev(def).abnormal.oddsPath) === '36.4' && ev(def).abnormal.strength.code === 'PS3' && share(ev(def).abnormal.boot.strengths.PS3) === '95%' && g3(ev(def).normal.oddsPath) === '0.0208' && ev(def).normal.strength.code === 'BS3'
+          && g3(ev(fayer).abnormal.oddsPath) === '53.5' && g3(ev(fayer).normal.oddsPath) === '0.0157' && fm.classes.P['abnormal-like'] === 189 && fm.classes.B['abnormal-like'] === 1 && fm.classes.P['WT-like'] === 2 && fm.classes.B['WT-like'] === 108 && g3(ev(fayer).abnormal.observed) === '107' && g3(ev(fayer).normal.observed) === '0.0105'
+          && composition(b.set).P.total === 28 && composition(b.set).B.total === 87 && em.n.P === 25 && em.n.B === 12 && g3(em.auc.auc) === '0.980' && g3(ev(early).abnormal.oddsPath) === '9.12' && ev(early).abnormal.strength.code === 'PS3_moderate' && g3(ev(earlyFayer).abnormal.oddsPath) === '5.76' && g3(ev(early).normal.oddsPath) === '0.0436'
+          && !early.outcome.warnings.some((w) => w.id === 'evaluated-since') && g3(lr(def, 'Pathogenic-Moderate|Pathogenic-Strong')) === '-1.34' && g3(lr(def, 'Benign-Strong|Benign-Moderate')) === '-0.652'
+          && said('brca1-calibration', '212 P controls and 447 B', '196 and 111', '552', 'AUC 0.993', '−0.997', '193 of the 196', '109 of the 111', '36.4', '95%', '0.0208', '53.5 and 0.0157', '52.4 and 0.02', '107 and 0.0105', '28 P and 87 B', '25 and 12', 'AUC 0.980', '9.12', '5.76', '0.0436', '−1.34', '−0.652'),
+        'as the guide says');
+    }
+
+    // TP53 against ClinVar: the defaults, before 2018 and 2021, and ExCALIBR's thresholds.
+    if (opened.has('tp53-calibration')) {
+      const st = calibrationExample('tp53-calibration');
+      const a = controlSetOf(st);
+      const c = composition(a.set);
+      const def = calibrationOf(a.state, a.set);
+      const ex = calibrationOf(def.state, a.set, { published: 'ExCALIBR calibration', minute: 3 });
+      const b18 = controlSetOf(ex.state, { evaluatedBefore: 2018 }, { minute: 4 });
+      const b21 = controlSetOf(b18.state, { evaluatedBefore: 2021 }, { minute: 5 });
+      const m = def.outcome.metrics;
+      const e = m.evidence;
+      const s = m.thresholds.stability;
+      const xm = ex.outcome.metrics;
+      const lr = (boundary) => def.outcome.likelihood.result.thresholds.find((t) => t.boundary === boundary)?.score;
+      const three = c.P.stars[3] + c.B.stars[3];
+      check('examples', 'TP53 against ClinVar, as its guide says: 227 P and 146 B missense controls, all scored, the 17 records at proline 72 left out, 370 evaluated since 2018; AUC 0.984, thresholds 0.0150 and 0.0554; OddsPath 17.0 and 0.0572, moderate, strong in 44% and 43% of the samples, not held; before 2018, 2 P and 3 B; before 2021, 9 and 10; ExCALIBR\'s thresholds 64.3 (PS3, every sample) and 0.0867; where each likelihood-ratio strength begins',
+        `${c.P.total} P, ${c.B.total} B (${three} by an expert panel); scored ${m.n.P}/${m.n.B}; at another residue ${a.read.excluded['another residue on the target']}; since 2018 ${def.outcome.warnings.find((w) => w.id === 'evaluated-since')?.n}; AUC ${g3(m.auc.auc)} (${g3(m.auc.low)}–${g3(m.auc.high)}); thresholds ${g3(m.thresholds.abnormal)}, ${g3(m.thresholds.normal)} (intervals ${g3(s.abnormal.low)}–${g3(s.abnormal.high)}, ${g3(s.normal.low)}–${g3(s.normal.high)}); ${g3(e.abnormal.oddsPath)} ${e.abnormal.strength.code} (strong ${share(e.abnormal.boot.strengths.PS3)}), ${g3(e.normal.oddsPath)} ${e.normal.strength.code} (strong ${share(e.normal.boot.strengths.BS3)}); limits ${def.outcome.limitations.map((l) => l.id).join(', ')}; before 2018 ${composition(b18.set).P.total} P and ${composition(b18.set).B.total} B, before 2021 ${composition(b21.set).P.total} and ${composition(b21.set).B.total}; ExCALIBR ${g3(ex.cal.thresholds.abnormal)} and ${g3(ex.cal.thresholds.normal)}: ${xm.classes.P['abnormal-like']} P and ${xm.classes.B['abnormal-like']} B abnormal-like, ${g3(xm.evidence.abnormal.oddsPath)} (${share(xm.evidence.abnormal.boot.strengths.PS3 ?? 0)} PS3), ${xm.classes.B['WT-like']} B and ${xm.classes.P['WT-like']} P WT-like, ${g3(xm.evidence.normal.oddsPath)}; supporting below ${g3(lr('Indeterminate|Pathogenic-Supporting'))}, very strong below ${g3(lr('Pathogenic-Strong|Pathogenic-VeryStrong'))}; benign supporting above ${g3(lr('Benign-Supporting|Indeterminate'))}, very strong above ${g3(lr('Benign-VeryStrong|Benign-Strong'))}`,
+        c.P.total === 227 && c.B.total === 146 && m.n.P === 227 && m.n.B === 146 && a.read.excluded['another residue on the target'] === 17 && three === 133 && def.outcome.warnings.find((w) => w.id === 'evaluated-since')?.n === 370
+          && g3(m.auc.auc) === '0.984' && g3(m.auc.low) === '0.974' && g3(m.auc.high) === '0.995' && g3(m.thresholds.abnormal) === '0.0150' && g3(m.thresholds.normal) === '0.0554'
+          && m.classes.P['abnormal-like'] === 211 && m.classes.B['abnormal-like'] === 7 && m.classes.B['WT-like'] === 135 && m.classes.P['WT-like'] === 11
+          && g3(e.abnormal.oddsPath) === '17.0' && e.abnormal.strength.code === 'PS3_moderate' && share(e.abnormal.boot.strengths.PS3) === '44%' && g3(e.normal.oddsPath) === '0.0572' && e.normal.strength.code === 'BS3_moderate' && share(e.normal.boot.strengths.BS3) === '43%'
+          && def.outcome.limitations.some((l) => l.id === 'unstable-abnormal') && def.outcome.limitations.some((l) => l.id === 'unstable-normal') && g3(s.abnormal.low) === '-0.159' && g3(s.abnormal.high) === '0.0716' && g3(s.normal.low) === '-0.0337' && g3(s.normal.high) === '0.260'
+          && composition(b18.set).P.total === 2 && composition(b18.set).B.total === 3 && composition(b21.set).P.total === 9 && composition(b21.set).B.total === 10
+          && g3(ex.cal.thresholds.abnormal) === '-0.318' && g3(ex.cal.thresholds.normal) === '-0.0467' && xm.classes.P['abnormal-like'] === 200 && xm.classes.B['abnormal-like'] === 1 && g3(xm.evidence.abnormal.oddsPath) === '64.3' && xm.evidence.abnormal.boot.strengths.PS3 === 1 && xm.classes.B['WT-like'] === 141 && xm.classes.P['WT-like'] === 18 && g3(xm.evidence.normal.oddsPath) === '0.0867' && xm.evidence.normal.strength.code === 'BS3_moderate'
+          && !ex.outcome.limitations.some((l) => l.id === 'same-controls')
+          && g3(lr('Indeterminate|Pathogenic-Supporting')) === '-0.222' && g3(lr('Pathogenic-Strong|Pathogenic-VeryStrong')) === '-0.621' && g3(lr('Benign-Supporting|Indeterminate')) === '-0.0184' && g3(lr('Benign-VeryStrong|Benign-Strong')) === '1.23'
+          && said('tp53-calibration', '227 P and 146 B', 'proline 72', '17 records', '370 of the 373', 'AUC 0.984 (0.974 to 0.995)', '0.0150 and 0.0554', '211 P controls and 7 B', '135 B and 11 P', '17.0', '0.0572', '44% and 43%', '−0.159 to 0.0716 and −0.0337 to 0.260', '2 P and 3 B', '9 P and 10 B', '133 of the controls', '−0.318 and −0.0467', '200 P controls and 1 B', '64.3', '141 B and 18 P', '0.0867', '−0.222', '−0.621', '−0.0184', '1.23'),
+        'as the guide says');
+    }
+
+    // PTEN against ClinVar: the defaults, ExCALIBR's thresholds, and every kind of variant.
+    if (opened.has('pten-calibration')) {
+      const st = calibrationExample('pten-calibration');
+      const a = controlSetOf(st);
+      const c = composition(a.set);
+      const def = calibrationOf(a.state, a.set);
+      const ex = calibrationOf(def.state, a.set, { published: 'ExCALIBR calibration', minute: 3 });
+      const all = controlSetOf(ex.state, { kinds: ['missense', 'nonsense', 'synonymous'] }, { minute: 4 });
+      const allCal = calibrationOf(all.state, all.set, { minute: 5 });
+      const m = def.outcome.metrics;
+      const e = m.evidence;
+      const xm = ex.outcome.metrics;
+      const am = allCal.outcome.metrics;
+      const ca = composition(all.set);
+      const anchored = allCal.outcome.warnings.find((w) => w.id === 'anchor-published');
+      check('examples', 'PTEN against ClinVar, as its guide says: 255 P but 9 B missense controls (152 and 8 scored), too few B, 251 evaluated since 2018; AUC 0.698, the normal threshold 1.19 above all B but one, 94 P and 7 B intermediate, 55 P abnormal-like below 0.341; OddsPath 2.89 (supporting) and 0.211 on one B, no normal threshold in 37% of the samples, no likelihood ratios; ExCALIBR\'s thresholds: 44 P WT-like, 1.39 and 0.592; with nonsense and synonymous controls, AUC 0.857, 12.5 and 411 on a published scale',
+        `${c.P.total} P, ${c.B.total} B; scored ${m.n.P}/${m.n.B}; warnings ${def.outcome.warnings.map((w) => `${w.id} ${w.n}`).join(', ')}; AUC ${g3(m.auc.auc)} (${g3(m.auc.low)}–${g3(m.auc.high)}); thresholds ${g3(m.thresholds.abnormal)} and ${g3(m.thresholds.normal)}; P ${JSON.stringify(m.classes.P)}, B ${JSON.stringify(m.classes.B)}; ${g3(e.abnormal.oddsPath)} ${e.abnormal.strength.code}, ${g3(e.normal.oddsPath)} (${e.normal.P} P, ${e.normal.B} B); no normal threshold in ${share(m.thresholds.stability.empty.normal / 2000)}; likelihood: ${def.outcome.likelihood?.problem ? 'refused' : 'computed'}; ExCALIBR ${g3(ex.cal.thresholds.abnormal)}/${g3(ex.cal.thresholds.normal)}: ${xm.classes.P['WT-like']} P WT-like, ${g3(xm.evidence.abnormal.oddsPath)} ${xm.evidence.abnormal.strength.code}, ${g3(xm.evidence.normal.oddsPath)} ${xm.evidence.normal.strength.code}; every kind ${ca.P.total} P and ${ca.B.total} B (${am.n.P}/${am.n.B} scored), AUC ${g3(am.auc.auc)}, ${g3(am.evidence.abnormal.oddsPath)} ${am.evidence.abnormal.strength.code}, ${anchored?.id} ${anchored?.n}`,
+        c.P.total === 255 && c.B.total === 9 && m.n.P === 152 && m.n.B === 8 && def.outcome.warnings.some((w) => w.id === 'few-B' && w.n === 8) && def.outcome.warnings.find((w) => w.id === 'evaluated-since')?.n === 251
+          && g3(m.auc.auc) === '0.698' && g3(m.auc.low) === '0.548' && g3(m.auc.high) === '0.848' && g3(m.thresholds.abnormal) === '0.341' && g3(m.thresholds.normal) === '1.19'
+          && m.classes.P.intermediate === 94 && m.classes.B.intermediate === 7 && m.classes.P['abnormal-like'] === 55 && m.classes.B['abnormal-like'] === 0 && m.classes.B['WT-like'] === 1 && m.classes.P['WT-like'] === 3
+          && g3(e.abnormal.oddsPath) === '2.89' && e.abnormal.strength.code === 'PS3_supporting' && g3(e.normal.oddsPath) === '0.211' && share(m.thresholds.stability.empty.normal / 2000) === '37%' && /at least 10 P and 10 B/.test(def.outcome.likelihood?.problem ?? '')
+          && g3(ex.cal.thresholds.abnormal) === '0.551' && g3(ex.cal.thresholds.normal) === '0.818' && xm.classes.P['WT-like'] === 44 && g3(xm.evidence.abnormal.oddsPath) === '1.39' && xm.evidence.abnormal.strength.code === 'Indeterminate' && g3(xm.evidence.normal.oddsPath) === '0.592' && xm.evidence.normal.strength.code === 'Indeterminate'
+          && ca.P.total === 375 && ca.B.total === 300 && am.n.P === 198 && am.n.B === 127 && g3(am.auc.auc) === '0.857' && g3(am.evidence.abnormal.oddsPath) === '12.5' && am.evidence.abnormal.strength.code === 'PS3_moderate' && anchored?.n === 411
+          && said('pten-calibration', '255 P missense controls but only 9 B', '152 and 8', '251', 'AUC 0.698 (0.548 to 0.848)', '(1.19)', '94 P controls and 7 B', '55 P and no B', '0.341', '2.89', '0.211', '37%', '0.551 and 0.818', '44 of the 152', '1.39 and 0.592', '375 P and 300 B', '198 and 127', '0.857', '12.5', '411'),
+        'as the guide says');
+    }
+
+    // The simulated calibration: its labels, a warning for those made since the assay, and each
+    // calibration against the truth.
+    {
+      const st = calibrationExample('simulated-calibration');
+      const ex = st.example;
+      const rows = st.labels.rows;
+      const lose = (k) => losesFunction(st.truth[k], ex.simulation);
+      const wrong = rows.filter((r) => r.from === 'assay' && (r.classification === 'Likely pathogenic') !== lose(r.variant));
+      const truthWrong = rows.filter((r) => r.from === 'truth' && /athogenic/.test(r.classification) !== lose(r.variant));
+      const dated = rows.filter((r) => r.evaluated >= `${ex.labels.published}-01-01`);
+      const allSet = controlSetOf(st, {}, { table: true });
+      const allCal = calibrationOf(allSet.state, allSet.set);
+      const early = controlSetOf(allCal.state, { evaluatedBefore: ex.labels.published }, { table: true, minute: 3 });
+      const earlyCal = calibrationOf(early.state, early.set, { minute: 4 });
+      const view = st.results;
+      const t1 = calibrationTruth(view, allCal.cal, st.truth, ex.simulation);
+      const t2 = calibrationTruth(view, earlyCal.cal, st.truth, ex.simulation);
+      const e1 = allCal.outcome.metrics.evidence;
+      const e2 = earlyCal.outcome.metrics.evidence;
+      const since = allCal.outcome.warnings.find((w) => w.id === 'evaluated-since');
+      check('examples', 'the simulated calibration, as its guide says: 100 missense classifications, 50 a side, the 50 made since 2024 from the assay\'s scores (6 wrong by the truth), those before from the truth (none wrong); the set warns of the 50; with every label AUC 0.964, OddsPath 20.0 (PS3) and 0.0769, against a truth of 11.2 (262 of 319, 31 of 422); before 2024, AUC 0.933, 10.5 and 0.0833, against 13.6 and 0.0584',
+        `${rows.length} labels (${rows.filter((r) => /athogenic/.test(r.classification)).length} P), ${dated.length} since ${ex.labels.published}, ${wrong.length} of them wrong, ${truthWrong.length} of the others; warning ${since?.n}; all: AUC ${g3(allCal.outcome.metrics.auc.auc)}, ${g3(e1.abnormal.oddsPath)} ${e1.abnormal.strength.code}, ${g3(e1.normal.oddsPath)} ${e1.normal.strength.code}; truth ${t1.loss['abnormal-like']} of ${t1.loss.n} and ${t1.kept['abnormal-like']} of ${t1.kept.n}: ${g3(t1.ratio.abnormal)}, ${g3(t1.ratio.normal)}; before ${ex.labels.published}: ${composition(early.set).P.total}/${composition(early.set).B.total}, AUC ${g3(earlyCal.outcome.metrics.auc.auc)}, ${g3(e2.abnormal.oddsPath)} ${e2.abnormal.strength.code}, ${g3(e2.normal.oddsPath)} ${e2.normal.strength.code}; truth ${g3(t2.ratio.abnormal)} ${evidenceStrength(t2.ratio.abnormal).code}, ${g3(t2.ratio.normal)} ${evidenceStrength(t2.ratio.normal).code}`,
+        rows.length === 100 && rows.filter((r) => /athogenic/.test(r.classification)).length === 50 && dated.length === 50 && dated.every((r) => r.from === 'assay') && wrong.length === 6 && !truthWrong.length && since?.n === 50
+          && g3(allCal.outcome.metrics.auc.auc) === '0.964' && g3(e1.abnormal.oddsPath) === '20.0' && e1.abnormal.strength.code === 'PS3' && g3(e1.normal.oddsPath) === '0.0769' && e1.normal.strength.code === 'BS3_moderate'
+          && t1.loss.n === 319 && t1.kept.n === 422 && t1.loss['abnormal-like'] === 262 && t1.kept['abnormal-like'] === 31 && g3(t1.ratio.abnormal) === '11.2' && evidenceStrength(t1.ratio.abnormal).code === 'PS3_moderate'
+          && composition(early.set).P.total === 25 && composition(early.set).B.total === 25 && !earlyCal.outcome.warnings.some((w) => w.id === 'evaluated-since')
+          && g3(earlyCal.outcome.metrics.auc.auc) === '0.933' && g3(e2.abnormal.oddsPath) === '10.5' && e2.abnormal.strength.code === 'PS3_moderate' && g3(e2.normal.oddsPath) === '0.0833' && e2.normal.strength.code === 'BS3_moderate'
+          && g3(t2.ratio.abnormal) === '13.6' && g3(t2.ratio.normal) === '0.0584' && evidenceStrength(t2.ratio.abnormal).code === 'PS3_moderate' && evidenceStrength(t2.ratio.normal).code === 'BS3_moderate'
+          && said('simulated-calibration', '741 missense', '319 lose function', '422 do not', '50 P and 50 B', '50 were last evaluated', '6 of them are wrong', 'AUC 0.964', '20.0 (PS3, strong)', '0.0769', '262 of the 319', '31 of the 422', '11.2', 'AUC 0.933', '10.5', '0.0833', '13.6 and 0.0584'),
+        'as the guide says');
     }
   },
 
@@ -3882,7 +4033,10 @@ const suites = {
       opened.push({ e, ok: segments.length > 0 && from === e.covers[0] && to === e.covers[1] && drawn / protein.length >= 0.95 && cartoon.indices.length > 0 && sticks.spheres.count === heavy, text: `${e.pdb} ${e.chain}: ${e.accession} ${from}–${to}, ${drawn} of ${protein.length} residues in the cartoon, ${sticks.spheres.count} of ${heavy} atoms in ball and stick` });
     }
     const covered = new Set(EXAMPLE_STRUCTURES.flatMap((x) => x.examples));
-    const withProtein = EXAMPLES.filter((x) => !x.simulated).map((x) => x.id);
+    // An example opening another's record (a calibration example, wave 8 slice 6) has its protein's
+    // entry through that one.
+    const coveredRecords = new Set(EXAMPLES.filter((x) => covered.has(x.id) && x.mavedb?.urn).map((x) => x.mavedb.urn));
+    const withProtein = EXAMPLES.filter((x) => !x.simulated && !(x.mavedb?.urn && !covered.has(x.id) && coveredRecords.has(x.mavedb.urn))).map((x) => x.id);
     check('structures', 'each example\'s PDB entry, read as the page reads it from the fetcher\'s cache (gzipped mmCIF): the chain the guide names holds the target, on the UniProt residues the entry gives; its cartoon draws at least 95% of the chain\'s residues observed, and ball and stick every atom but water and hydrogens; every published example has its protein\'s entry', `${opened.map((x) => x.text).join('; ')}; examples without one: ${withProtein.filter((id) => !covered.has(id)).join(', ') || 'none'}`, opened.every((x) => x.ok) && withProtein.every((id) => covered.has(id)), 'all');
 
     const models = [];
@@ -4817,7 +4971,7 @@ const suites = {
       const same = p('data') === m.paragraphs[0] && m.paragraphs[1].startsWith(`Design: ${p('design')}`) && p('scoring') === m.paragraphs[2] && `Quality control: ${p('qc').charAt(0).toLowerCase()}${p('qc').slice(1)}` === m.paragraphs[3];
       rows.push({ id: e.id, same, refs: rep.references.map((z) => z.key).join() === m.references.map((z) => z.key).join() });
     }
-    check('report', 'each of the 14 examples opened and scored: the report\'s data, design, scoring and QC are its run\'s methods word for word, its references the same in the same order', rows.filter((x) => !x.same || !x.refs).map((x) => `${x.id}: ${x.same ? '' : 'text differs '}${x.refs ? '' : 'references differ'}`).join('; ') || `${rows.length} the same`, rows.every((x) => x.same && x.refs), 'every one');
+    check('report', `each of the ${EXAMPLES.length} examples opened and scored: the report\'s data, design, scoring and QC are its run\'s methods word for word, its references the same in the same order`, rows.filter((x) => !x.same || !x.refs).map((x) => `${x.id}: ${x.same ? '' : 'text differs '}${x.refs ? '' : 'references differ'}`).join('; ') || `${rows.length} the same`, rows.every((x) => x.same && x.refs), 'every one');
 
     // The references.
     const refs = checkReferences();
@@ -5172,6 +5326,29 @@ const suites = {
       && planted['normalized to the synonymous variants'].join() === 'anchor-synonymous 1,same-publication 11,few-P 4,few-B 7'
       && planted['the design names a control'].join() === 'design-controls 1,same-publication 11,few-P 4,few-B 7'
       && withPredictor.join() === `evaluated-since ${since},predictor` && since === 70 && clean.labels.length === 191 && !none.length, 'each where planted, none elsewhere');
+
+    // Wave 8, slice 6: only the classifications last evaluated before a year, from ClinVar and from a
+    // table dated as ClinVar's tabular download dates it.
+    {
+      const rules = { evaluatedBefore: 2025 };
+      const mod = clinvarControls(text, target, rules);
+      const acc = clinvarAccount('F9', target, rules);
+      const a = new Map(mod.labels.map((l) => [l.key, describe(l)]));
+      const differ = [...new Set([...a.keys(), ...acc.controls.keys()])].filter((k) => a.get(k) !== (acc.controls.has(k) ? describe(acc.controls.get(k)) : undefined));
+      const early = { name: 'ClinVar, before 2025', source: { kind: 'clinvar' }, rules: { minStars: 1, kinds: ['missense'], ...rules }, labels: mod.labels };
+      const earlyWarnings = ids(circularity(early, { ws: {}, run: run1, matched: matchControls(early, f9.scored.results) }));
+      const month = (d) => `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8))}, ${d.slice(0, 4)}`;
+      const tabular = `Name\tGermline classification\tGermline date last evaluated\n${set.labels.map((l) => `NM_000133.4(F9):c.1A>G (${l.key})\t${l.label}\t${l.evaluated ? month(l.evaluated) : '-'}`).join('\n')}\n`;
+      const read = tableControls(tabular, f9.design.targets[0], { numbering: 'target' });
+      const dated = { name: 'Tabular', source: { kind: 'table' }, rules: {}, labels: read.labels };
+      const tableSince = circularity(dated, { ws: {}, run: run1 }).find((w) => w.id === 'evaluated-since')?.n;
+      const tableEarly = tableControls(tabular, f9.design.targets[0], { numbering: 'target', ...rules });
+      const expectedEarly = set.labels.filter((l) => l.evaluated && l.evaluated < '2025-01-01').map((l) => l.key).join();
+      check('controls', 'only the classifications last evaluated before a year (wave 8, slice 6): factor IX\'s ClinVar controls before 2025, when MultiSTEP was published, each record by its own date, as the account read straight from NCBI\'s answers gives them, and none then evaluated since; the same labels as a table dated as ClinVar\'s tabular download dates them ("Mar 1, 2024"), every date read, as many evaluated since 2025 as ClinVar\'s set, and before 2025 the labels whose latest date is',
+        `before 2025: ${mod.labels.length} (${composition({ labels: mod.labels }).P.total} P, ${composition({ labels: mod.labels }).B.total} B), ${differ.length ? `differ: ${differ.slice(0, 3).join(', ')}` : 'as the account'}; left out ${mod.excluded['last evaluated in or after 2025'] ?? 0} evaluated since, ${mod.excluded['no date last evaluated'] ?? 0} undated; warnings ${earlyWarnings.join(', ') || 'none'}; the table: ${read.labels.filter((l) => l.evaluated).length} of ${read.labels.length} dated, ${tableSince} since 2025; before 2025 ${tableEarly.labels.length}`,
+        !differ.length && mod.labels.length > 0 && !earlyWarnings.some((w) => w.startsWith('evaluated-since')) && read.dated && read.labels.length === set.labels.length && read.labels.every((l, k) => l.evaluated === set.labels[k].evaluated) && tableSince === 70 && tableEarly.labels.map((l) => l.key).join() === expectedEarly,
+        'as the account; none since; every date read; 70; the same');
+    }
 
     // The record: through the workspace archive, and in a checkpoint's diff.
     let ws = f9.ws;

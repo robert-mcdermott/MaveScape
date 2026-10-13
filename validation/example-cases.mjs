@@ -21,7 +21,7 @@ const web = (path) => new URL(`../web/${path}`, import.meta.url);
 const encoder = new TextEncoder();
 
 // The data set of validation/sources.json each published example's counts come from.
-export const EXAMPLE_DATASETS = { 'grb2-sh3': 'mavedb-grb2-sh3', hsp90: 'mavedb-hsp90', factor9: 'mavedb-factor9', 'pten-mavedb': 'mavedb-pten-vampseq', 'brca1-sge': 'mavedb-brca1-sge', 'dhfr-lon': 'mavedb-dhfr', 'brca1-ring': 'mavedb-brca1-ring', 'tp53-screens': 'mavedb-tp53-screens' };
+export const EXAMPLE_DATASETS = { 'grb2-sh3': 'mavedb-grb2-sh3', hsp90: 'mavedb-hsp90', factor9: 'mavedb-factor9', 'pten-mavedb': 'mavedb-pten-vampseq', 'brca1-sge': 'mavedb-brca1-sge', 'dhfr-lon': 'mavedb-dhfr', 'brca1-ring': 'mavedb-brca1-ring', 'tp53-screens': 'mavedb-tp53-screens', 'brca1-calibration': 'mavedb-brca1-sge', 'tp53-calibration': 'mavedb-tp53-screens', 'pten-calibration': 'mavedb-pten-vampseq' };
 // Where in its data set each record's tables are (wave 3, slice 6).
 const RECORD_DIRS = { 'urn:mavedb:00000003-a-2': 'aa/', 'urn:mavedb:00000063-b-1': 'minus-lon/', 'urn:mavedb:00000063-a-1': 'plus-lon/' };
 

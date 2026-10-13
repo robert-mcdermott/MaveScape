@@ -3,17 +3,18 @@
 \alias{ms_make_control_set}
 \title{Make a control set}
 \usage{
-ms_make_control_set(citation = NULL, file_name = NULL, kinds = NULL, min_stars = NULL, name = NULL, numbering = NULL, run = NULL, source = NULL, text = NULL, ms = ms_default())
+ms_make_control_set(citation = NULL, evaluated_before = NULL, file_name = NULL, kinds = NULL, min_stars = NULL, name = NULL, numbering = NULL, run = NULL, source = NULL, text = NULL, ms = ms_default())
 }
 \arguments{
 \item{citation}{table: where the labels were published, with its DOI. Optional; a string.}
+\item{evaluated_before}{Only classifications last evaluated before this year (ClinVar's dates, or the table's last_evaluated column); those with no date are left out. None if not given. Optional; a whole number.}
 \item{file_name}{table: the file's name (labels.csv). Optional; a string.}
 \item{kinds}{The kinds of variant kept: missense, nonsense, synonymous (clinvar: missense if not given; table: all three). Optional; a vector of strings (Python: a list).}
 \item{min_stars}{clinvar: the fewest review stars a record may have (1, criteria provided, if not given). Optional; a whole number.}
 \item{name}{The set's name; one is made from its source if not given. Optional; a string.}
 \item{numbering}{table: reference or target; whichever the residues agree with if not given. Optional; a string.}
 \item{run}{A score run by name ("Run 2") or id; the latest run of the current design if not given. Optional; a string.}
-\item{source}{clinvar (the default) or table. Optional; a string.}
+\item{source}{clinvar (the default), table, or example (the open example's own labels: the simulated calibration's). Optional; a string.}
 \item{text}{table: the file's text (CSV or TSV). Optional; a string.}
 \item{ms}{A connection from \code{\link{ms_connect}} (default: the last one made).}
 }
@@ -21,6 +22,6 @@ ms_make_control_set(citation = NULL, file_name = NULL, kinds = NULL, min_stars =
 A \code{mavescape_result}: the \code{message} and the \code{data} MaveScape answered with.
 }
 \description{
-Makes a control set, for calibration (research use): variants whose effect is known, each label as its source gives it, kept with the workspace and shown in the Calibrate view. From ClinVar (the ClinVar track's records of the gene: add_track clinvar first), pathogenic and likely pathogenic records as P, benign and likely benign as B, conflicting and uncertain ones left out, with at least min_stars review stars; or from a table of labels (file_name and text: a column of variants, such as p.Trp36Ala or W36A, and one of labels: pathogenic, likely pathogenic, benign, likely benign, or abnormal and normal from another assay), numbered on the reference or the target. Placed on the target as the tracks place ClinVar's; says what was left out and why. MaveScape reports functional evidence and never classifies a variant.
+Makes a control set, for calibration (research use): variants whose effect is known, each label as its source gives it, kept with the workspace and shown in the Calibrate view. From ClinVar (the ClinVar track's records of the gene: add_track clinvar first), pathogenic and likely pathogenic records as P, benign and likely benign as B, conflicting and uncertain ones left out, with at least min_stars review stars; or from a table of labels (file_name and text: a column of variants, such as p.Trp36Ala or W36A, one of labels: pathogenic, likely pathogenic, benign, likely benign, or abnormal and normal from another assay, and optionally last_evaluated, the date of each), numbered on the reference or the target; or the open example's own labels (example). With evaluated_before, only classifications last evaluated before that year (those made before the assay was published cannot rest on it). Placed on the target as the tracks place ClinVar's; says what was left out and why. MaveScape reports functional evidence and never classifies a variant.
 }
 \seealso{\code{\link{ms_call}}, which sends any action by its name (here \code{"make_control_set"}).}
