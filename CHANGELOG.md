@@ -1,18 +1,159 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (2026-10-12)
+
+Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts. `mavescape mcp` makes
+MaveScape a Model Context Protocol server, so an AI agent such as Claude Code calls its 54 actions
+as tools in the window you watch: it opens data, scores, reads the quality control and the scores
+as tables, looks at the map, the structure and figures as pictures, compares, makes figures and
+certifies. Its changes are proposals: what it makes is marked proposed and usable at once, while a
+design, QC thresholds, an acknowledgement, a target's check, MaveDB details or a removal waits; you
+accept or reject them above the view, and every change carries the agent's name in the workspace's
+hash-chained history. R and Python packages make each action a function, tables coming back as data
+frames and pictures as files, with a notebook on GRB2 and a script on DHFR's two conditions as
+examples; the guide *Agents and scripts* follows an agent through a session on Hsp90. 0.7.0 keeps
+two archives and a certificate of its own, one archive saved with an agent's proposal open, which
+every later version must reopen as 0.7 decides it.
+
+### Added
+
+- **`mavescape mcp`, an MCP server for AI agents** (wave 7, slice 1; `mcp.go`, after CytoWeave's).
+  It starts MaveScape with remote control on and speaks the Model Context Protocol on stdin and
+  stdout (JSON-RPC, protocol versions 2024-11-05 to 2025-11-25), its banner and logs on stderr; the
+  window opens when a tool first needs it (`--window`), and MaveScape stops when the agent closes
+  stdin. Its tools are the 54 remote actions under their names, each with a title and MCP's hints
+  (read only; replaces or removes something; may ask a public service), and its instructions say
+  where to start and that scores are never a clinical classification. A call reports progress
+  while it runs long and may be cancelled; files are read and written by absolute path, an
+  existing one never replaced unless asked. Each change an agent makes is recorded in the
+  workspace's history with the agent's name (`by`, covered by the entry's hash), shown in the
+  history and the report's decision log. `docs/MCP.md` gives the setup for Claude Code and other
+  clients, the tools by area and the product requirements' names for them.
+- `GET /api/remote/tools` gives each action's title and hints too.
+- **An agent's changes are proposals** (wave 7, slice 2; `web/lib/proposals.js`, after
+  CytoWeave's). What an agent makes (tables and targets it opens into your workspace, runs,
+  selections, tracks, structure views, figures and the panels it adds to yours, analyses kept in
+  the report, checkpoints) is made at once and marked *proposed*, so that it and you can use it
+  meanwhile; a design it sets or drafts, QC thresholds and acknowledgements, a target's check, the
+  MaveDB details and every removal wait until you accept them. A strip above the view says who
+  proposes how many changes, lists them, and has **Accept all** and **Reject all**; rejecting
+  removes what the agent made with what was built on it since (MaveScape asks first), and puts back
+  the items of yours it changed. Each decision is one entry of the history, yours, and can be
+  undone; what was held is applied under the agent's name. The views mark what is proposed: the
+  dataset tree, the design proposed beside yours with how they differ, the QC view, the figures'
+  panels, the report's kept analyses and checkpoints. Nothing is certified while a proposal is
+  open. The report has an *AI agents* section (what agents proposed and you accepted), and a
+  checkpoint's diff names who proposed what was added. Scripts' changes are not proposals.
+- Two actions: `set_qc_thresholds` (a script's apply at once, an agent's wait) and `proposals` (what
+  waits for the person, and the latest decisions).
+- **Results as data and pictures** (wave 7, slice 3). `scores` gives a run's variants as a table
+  with the columns of its scores export (or a contrast's differential scores, or a nucleotide run's
+  at the protein level), numbers as numbers: those at positions, of kinds, in a saved selection or
+  matching a query, sorted by a column, a page at a time. `provenance` gives a run's provenance
+  inline. `render_map` with `image` gives the map as a picture (its SVG export drawn as a PNG, at a
+  scale, of the whole target or a stretch of positions), `render_structure` the Structure view with
+  its legend, and `figures` with `image` each page as exported. `mavescape mcp` sends the pictures
+  to an agent as images it can look at; a script gets them as data URLs.
+- **R and Python clients** (wave 7, slice 4; `clients/`, after CytoWeave's): the packages
+  `mavescape` for R (curl and jsonlite) and Python (the standard library; pandas for data frames)
+  make each of the 54 actions a function with its arguments and help (`ms_scores()`,
+  `ms.scores()`), generated from `clients/tools.json`, which a Go test keeps equal to the actions.
+  They find the running MaveScape through `remote.json`; tables come back as data frames, pictures
+  as files (`file =` on `render_map`, `render_structure` and `figures`), and an action refused is
+  an error carrying MaveScape's reason. Installed from the repository; their version is
+  MaveScape's.
+- **The guide to agents and scripts** (wave 7, slice 5): `docs/MCP.md` with the setup for Claude
+  Code, Claude Desktop, Cursor, VS Code and Codex, the options, a check that MaveScape answers,
+  what to ask, proposals with two screenshots (Claude Code's proposal reviewed, and accepted in the
+  history) and troubleshooting; the website's page *Agents and scripts* (formerly *Remote control,
+  headless runs and scripting*, at the same address), agents first; the README's section *AI agents
+  and scripts*. The documentation's capture has two scenes of an agent working through `mavescape
+  mcp`, as Claude Code's client does.
+- **Examples for scripts and agents** (wave 7, slice 6): a Python notebook on GRB2
+  (`clients/examples/grb2-sh3.ipynb`, kept with its outputs: the example opened and checked, its
+  QC as a data frame, scored again with the DiMSum-compatible preset, both runs against the
+  record's published scores, a figure exported as PDF and PNG) and an R script on DHFR's two
+  conditions (`clients/examples/dhfr-lon.R`: the fast growers of each, the authors' unweighted
+  regression against the published scores, the 377 differences called and the residues they
+  replace, a plot and MaveScape's map). The guide's *A session on Hsp90*: an agent's prompts, tool
+  calls and answers, from comparing the published scores to a design proposed, accepted and scored,
+  with a screenshot of the proposal reviewed.
 
 ### Changed
 
+- An agent's tool results say when what it did waits for the person, and `score` waits for a design
+  the agent proposed. The MCP server's instructions say how proposals work.
 - The website's Figures page shows the figure of its screenshot as MaveScape exports it: a PNG at
   200 dpi with its manifest inside, to download and drop on the window (the capture's figures scene
   writes it, `docs/images/figure-export.png`; the site's build takes such a file as `<artwork>`).
 
 ### Fixed
 
+- `compare` said "Kept in the report." after every comparison, kept or not: it read the
+  comparison's own report of compatibility as the analysis kept. It says so only when `report` is
+  given, and the kept analysis's id is in `inReport`, beside the comparison's `report`.
+- `open_example`'s description named four of the fourteen examples (none of those from MaveDB, nor
+  Hsp90 or factor IX), so neither an agent nor the clients' help knew their ids. It names every
+  one, and a Go test keeps it so.
+- The drawer's tabs and its close button were in one tab list, which may hold only tabs (axe-core's
+  aria-required-children, found by the new scene with the drawer open): the tabs have a list of
+  their own.
+- The map's SVG and PNG export of a short target cut its key to the states (and could cut its
+  title): the page was only as wide as the cells. It is at least as wide as both now.
+- A run focused in the dataset tree that is no longer in the workspace (undone, or an agent's
+  rejected) left the Structure view without scores to color by, saying the workspace had no run;
+  it is passed over now.
 - A figure exported as PNG left its last row (or column) of pixels partly transparent: its size in
   points rarely makes whole pixels (a page 178 mm tall is 1,401.6 pixels at 200 dpi), and only the
   page's own background was painted. The whole image is white now before the figure is drawn.
+
+### Validation
+
+- `validation/agent-session.mjs` (CI job `agents`): `mavescape mcp` driven over stdio as
+  an agent's client drives it, with no model, every one of the 54 tools called on the examples in
+  headless Chrome: initialize and the tools' list (the remote actions with their titles and
+  hints), errors, the runs' output hashes, a variant's score and a query's variants Node's, a
+  comparison the remote action's field for field, the record through the agent (a figure and its
+  manifest, a checkpoint, a certificate verified in Node), every tool said to read only leaving the
+  history as it was, every change the agent made carrying its name, stdout nothing but JSON-RPC,
+  and MaveScape stopped when stdin closes. Go tests of the protocol (`mcp_test.go`): versions, the
+  tools, a call reaching the page under the agent's name, required arguments, files by path,
+  cancellation and progress, the real command's stdout, and `docs/MCP.md` naming every tool.
+- The agent session (26 checks) also acts as the person, in the window: each kind of change held or
+  made at once as it should be, said in the tool's result and in the views; accepted (applied under
+  the agent's name, the decision the person's, the history's chain intact) and rejected (with the
+  figure panel the person had made of the agent's run since); the agent's removals of the person's
+  items waiting until accepted; certify refused while a proposal is open; the diff from a
+  checkpoint naming the proposer; tables opened into the agent's own workspace proposed, and
+  scoring waiting for its proposed design. `web/lib/proposals.test.mjs` (11 tests). The remote
+  session checks that a script's QC thresholds apply at once and that a script proposes nothing.
+- Results as data and pictures, through the agent (30 checks in all) and the script session (203):
+  each table holds every number of the export it mirrors (scores, a contrast's differential scores,
+  the protein level), a query's variants are Node's, and provenance is its file's JSON; the map's
+  picture, decoded, has the SVG export's size at its scale and every cell the color `map-svg.js`
+  gives it (the whole map, a stretch at 3×, and with tracks); the Structure view's picture is pixel
+  for pixel the panel `structure-image` exports; a figure's picture is the page at the dpi asked,
+  its manifest inside. A Go test of pictures as MCP image content.
+- The R and Python clients (`clients/test-clients.mjs`; CI job `clients`, with `generate.mjs
+  --check` and `R CMD check`): each against MaveScape in headless Chrome, GRB2 opened and scored
+  through the client, its scores table every number of Node's (in R read by the same exact parser
+  as the client's), a figure, the map and the Structure view written as files, exports needing the
+  token and never replacing a file, errors carrying MaveScape's reason, results equal to the HTTP
+  API's for the same actions, and the connection found through `remote.json`.
+- The examples run in the same job (`--require`): the notebook executed with nbclient and the R
+  script run with Rscript against the same MaveScape, offline (DHFR's tables from the validation's
+  cache), each failing when one of its checks does. The agent session (34 checks) replays the
+  guide's session on Hsp90 and checks every number its answers quote, and that `score` refuses
+  while a design the agent proposed waits, with a design already in place. Hsp90's published
+  scores (urn:mavedb:00000011-a-1, 43 kB) join the fetcher's cached answers the sessions run on.
+- 0.7.0's own archives (`validation/archives/make-0.7.0.mjs`, which drives `mavescape mcp` as an
+  agent and the window as the person): GRB2 with an agent's proposal accepted and another rejected,
+  and its certificate; Hsp90 saved with an agent's proposal open. Every later version reopens them
+  with the agent's entries in an unbroken history, what it made marked proposed, and the open
+  proposal accepted or rejected as 0.7 decides it (`roundtrip`); certifies each earlier release's
+  archive, the one with a proposal open refused until it is accepted, and verifies 0.6.0's and
+  0.7.0's certificates (`certificate`); and reruns the Hsp90 archive with `mavescape run
+  --from-workspace`, the proposal kept (`headless-run`).
 
 ## 0.6.0 (2026-10-12)
 

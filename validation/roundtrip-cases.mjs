@@ -107,3 +107,44 @@ export function recompute(ws, sources, which = 0) {
   const table = assembled.table;
   return { table, scored: scoreTable(table, recorded.design, recorded.parameters, recorded.mapping.mode) };
 }
+
+// Whether rows as the remote action scores gives them ([{ column: value }], wave 7 slice 3) hold
+// every value of an export's CSV: the same rows in order, every column of the table among the
+// CSV's (rename: a CSV column's name as the table names it; the CSV's other columns, another
+// contrast's, left aside), each number the same double, NA as null, "Inf" as "Inf", text as
+// written. Returns { ok, numbers (compared), differ: [text] }.
+export function tableMatchesCSV(rows, columns, text, rename = (c) => c) {
+  const split = (line) => {
+    const out = [];
+    let cell = '';
+    let quoted = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      if (quoted) {
+        if (ch === '"' && line[i + 1] === '"') { cell += '"'; i += 1; } else if (ch === '"') quoted = false; else cell += ch;
+      } else if (ch === '"') quoted = true;
+      else if (ch === ',') { out.push(cell); cell = ''; } else cell += ch;
+    }
+    out.push(cell);
+    return out;
+  };
+  const lines = text.replace(/\n$/, '').split('\n').map(split);
+  const header = lines[0].map(rename);
+  const differ = [];
+  let numbers = 0;
+  const missing = columns.filter((c) => !header.includes(c));
+  if (missing.length) differ.push(`columns not in the export: ${missing.join(', ')}`);
+  if (lines.length - 1 !== rows.length) differ.push(`${rows.length} rows against ${lines.length - 1}`);
+  for (let r = 0; r < Math.min(rows.length, lines.length - 1) && differ.length < 10; r += 1) {
+    header.forEach((column, j) => {
+      if (!columns.includes(column)) return;
+      const written = lines[r + 1][j];
+      const value = rows[r][column];
+      const numeric = written !== '' && written !== 'NA' && written !== 'Inf' && Number.isFinite(Number(written)) && typeof value === 'number';
+      if (numeric) numbers += 1;
+      const same = written === 'NA' ? value === null : numeric ? Number(written) === value : written === String(value);
+      if (!same && differ.length < 10) differ.push(`row ${r + 1}, ${column}: ${JSON.stringify(value)} against ${written}`);
+    });
+  }
+  return { ok: !differ.length, numbers, differ };
+}

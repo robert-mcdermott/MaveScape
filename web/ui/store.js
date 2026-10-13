@@ -36,6 +36,9 @@ export function createStore(initialWorkspace) {
     generation: 0,
   };
 
+  // While an AI agent's action runs, what it commits passes through this (ui/remote.js): its
+  // changes become proposals (lib/proposals.js).
+  let filter = null;
   let pending = new Set();
   let scheduled = false;
   const notify = (topics) => {
@@ -69,11 +72,14 @@ export function createStore(initialWorkspace) {
       return () => listeners.delete(listener);
     },
     notify,
-    // Replaces the workspace with an edited one, recording it for undo.
-    commit(next, label = 'Edit', topics = ['ws']) {
+    // Replaces the workspace with an edited one, recording it for undo. options.decision: the
+    // person's decision on an agent's proposal, which the filter leaves as it is.
+    commit(next, label = 'Edit', topics = ['ws'], options = {}) {
       if (!next || next === state.ws) return;
       // A workspace built from another one (captured before that one was replaced).
       if (next.id !== state.ws.id) throw new WorkspaceChangedError();
+      if (filter && !options.decision) next = filter(state.ws, next);
+      if (!next || next === state.ws) return;
       state.past.push(state.ws);
       state.labels.past.push(label);
       if (state.past.length > MAX_HISTORY) {
@@ -84,6 +90,9 @@ export function createStore(initialWorkspace) {
       state.labels.future = [];
       state.ws = next;
       notify(['ws', 'history', ...topics]);
+    },
+    setCommitFilter(fn) {
+      filter = fn;
     },
     // Replaces the workspace without an undo step (loading, background results).
     replace(next, topics = ['ws']) {

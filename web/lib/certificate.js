@@ -498,6 +498,12 @@ export function compareNumbers(recorded, computed, blocked = new Map(), { limit 
 
 // --- Writing ---------------------------------------------------------------------------------------
 
+// Why a workspace with proposals open is not certified, in a sentence.
+export function openProposalsText(open) {
+  const n = open.reduce((sum, p) => sum + p.changes.length, 0);
+  return `${open.map((p) => p.author).join(' and ')} ${open.length === 1 ? 'has' : 'have'} a proposal open (${n} change${n === 1 ? '' : 's'}): accept or reject it first, above the view. Nothing is certified while a proposal waits.`;
+}
+
 export function certificateFingerprint(certificate) {
   const { fingerprint, ...rest } = certificate;
   return sha256(encoder.encode(canonicalJSON(rest)));
@@ -582,6 +588,9 @@ function readme(certificate, { tables }) {
 // review (its HTML, when asked) }. Throws when a file the numbers need is missing or a run cannot
 // be scored again.
 export async function writeCertificate(ws, file, options = {}) {
+  // Nothing is certified while an AI agent's proposal waits for the person (wave 7, slice 2).
+  const open = ws.proposals ?? [];
+  if (open.length) throw new Error(openProposalsText(open));
   const software = { version: options.software?.version ?? null, commit: options.software?.commit || null };
   const computed = await computeNumbers(ws, file, { software, onProgress: options.onProgress });
   const needed = new Set(certificateInputs(ws).filter((i) => i.needed).map((i) => i.sha256));

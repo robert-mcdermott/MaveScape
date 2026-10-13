@@ -1,0 +1,22 @@
+Package: mavescape
+Type: Package
+Title: Remote Control of a Running 'MaveScape'
+Version: 0.7.0
+Authors@R: person("Robert", "McDermott", email = "robert.c.mcdermott@gmail.com", role = c("aut", "cre"))
+Description: Drives 'MaveScape', a workbench for multiplexed assays of variant
+    effect (deep mutational scans), from R: every action an AI agent can take
+    in 'MaveScape' (open count and score tables, describe the experiment's
+    design, score, read the quality control, select variants, compare runs and
+    score sets, make figures, export files) is an R function that the open
+    'MaveScape' window performs, so the analysis stays visible and recorded.
+    Tables come back as data frames and pictures as files.
+License: Apache License (== 2.0)
+URL: https://github.com/robert-mcdermott/MaveScape
+BugReports: https://github.com/robert-mcdermott/MaveScape/issues
+Encoding: UTF-8
+Imports:
+    curl,
+    jsonlite
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

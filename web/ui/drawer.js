@@ -39,7 +39,7 @@ export function mountDrawer(app) {
     const keep = h('button.btn.small', { type: 'button', title: 'Keep the analysis as it stands, to see later what changed since', onclick: () => import('./diff.js').then((m) => m.askCheckpoint(app)) }, 'Keep a checkpoint');
     return h('div', h('div.row', { style: { alignItems: 'center', gap: '8px' } }, status, h('span.spacer'), keep), h('ol.history-list', ...history.slice().reverse().map((entry) => h(`li${entry.action === 'checkpoint' ? '.checkpoint' : ''}`,
       h('time', { title: entry.time }, new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
-      h('span', entry.detail || entry.action, changesSince(entry))))));
+      h('span', entry.detail || entry.action, entry.by ? h('span.muted', ` (by ${entry.by})`) : null, changesSince(entry))))));
   }
 
   function renderLog() {
@@ -70,11 +70,13 @@ export function mountDrawer(app) {
       resize.addEventListener('pointermove', move);
       resize.addEventListener('pointerup', up, { once: true });
     });
-    const head = h('div.drawer-head', { role: 'tablist', 'aria-label': 'Drawer' },
-      ...[...tabs].map(([id, tab]) => h(`button.drawer-tab${id === active ? '.active' : ''}`, {
-        type: 'button', role: 'tab', 'aria-selected': id === active ? 'true' : 'false',
-        onclick: () => app.store.setUI({ drawer: { open: true, tab: id } }, ['drawer']),
-      }, tab.label)),
+    // The tabs in a tab list of their own: a tab list holds only tabs (the close button beside it).
+    const head = h('div.drawer-head',
+      h('div.drawer-tabs', { role: 'tablist', 'aria-label': 'Drawer' },
+        ...[...tabs].map(([id, tab]) => h(`button.drawer-tab${id === active ? '.active' : ''}`, {
+          type: 'button', role: 'tab', 'aria-selected': id === active ? 'true' : 'false',
+          onclick: () => app.store.setUI({ drawer: { open: true, tab: id } }, ['drawer']),
+        }, tab.label))),
       h('span.spacer'),
       iconButton('close', 'Close the drawer (⌘J)', () => app.toggleDrawer(false), { class: 'small' }));
     root.append(resize, head, h('div.drawer-body', { role: 'tabpanel' }, tabs.get(active).render(app)));

@@ -30,7 +30,8 @@ export function activeRun(app) {
   const ws = app.store.ws;
   const focus = app.store.ui.focus;
   const byId = (id) => ws.runs.find((r) => r.id === id) ?? null;
-  if (focus?.kind === 'run') return byId(focus.id);
+  // A run focused that is no longer in the workspace (undone, or an agent's rejected) is passed over.
+  if (focus?.kind === 'run' && byId(focus.id)) return byId(focus.id);
   if ((focus?.kind === 'variant' || focus?.kind === 'position') && focus.run) return byId(focus.run) ?? ws.runs.at(-1) ?? null;
   if (focus?.kind === 'selection') {
     const saved = ws.selections.find((s) => s.id === focus.id);

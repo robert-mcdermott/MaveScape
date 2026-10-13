@@ -7,6 +7,7 @@
 // After CytoWeave 0.8.0's Figures view (web/ui/mode-figures.js).
 
 import { h, icon, clear, downloadBlob } from './dom.js';
+import { editOf, heldPanelRemovals, heldRemoval, proposalOfItem } from '../lib/proposals.js';
 import { confirmDialog, showMenu, toast } from './overlays.js';
 import { paintMarks } from '../lib/draw.js';
 import { addPanel, createFigure, FIGURE_SIZES, figureSize, mm, PANEL_KINDS, PANEL_PLOTS, panelSummary, removePanel, toMM, updatePanel } from '../lib/figures.js';
@@ -97,7 +98,7 @@ export function mountFiguresMode(app, container) {
           state.panel = null;
           renderAll();
         },
-      }, ...all.map((fig) => h('option', { value: fig.id, selected: fig.id === figure()?.id }, `${fig.name} (${fig.panels.length} panel${fig.panels.length === 1 ? '' : 's'})`))));
+      }, ...all.map((fig) => h('option', { value: fig.id, selected: fig.id === figure()?.id }, `${fig.name} (${fig.panels.length} panel${fig.panels.length === 1 ? '' : 's'})${proposalOfItem(store.ws, fig) ? ', proposed' : heldRemoval(store.ws, 'figures', fig.id) ? ', proposed for deletion' : ''}`))));
     }
     listEl.append(h('button.btn.small', { type: 'button', onclick: (event) => sizeMenu(event.currentTarget) }, icon('plus'), 'New figure'));
   }
@@ -185,6 +186,18 @@ export function mountFiguresMode(app, container) {
     // A figure just rebuilt from its file (wave 6, slice 3): how each panel compares with the file's.
     const report = app.figuresView?.figure === fig.id ? app.figuresView.report : null;
     if (report?.length) notesEl.append(h('div.callout.accent', icon('info'), h('div', h('strong', 'Rebuilt from its file'), h('ul', { style: { margin: '4px 0 0', paddingLeft: '18px' } }, ...report.map((line) => h('li', line))))));
+    // An AI agent's proposal concerning it (wave 7, slice 2), decided in the strip above the view.
+    const proposal = proposalOfItem(store.ws, fig);
+    const edit = editOf(store.ws, 'figures', fig.id);
+    const deletion = heldRemoval(store.ws, 'figures', fig.id);
+    const panels = heldPanelRemovals(store.ws, fig.id);
+    const said = [
+      proposal ? `${proposal.author} made this figure: it is proposed, and goes if you reject the proposal.` : null,
+      edit ? `${edit.proposal.author} changed this figure (outlined: the panels it added); rejecting the proposal puts it back as it was.` : null,
+      deletion ? `${deletion.proposal.author} proposes deleting this figure.` : null,
+      panels.length ? `${panels[0].proposal.author} proposes removing ${panels.length === 1 ? 'a panel' : `${panels.length} panels`} (hatched in red).` : null,
+    ].filter(Boolean);
+    if (said.length) notesEl.append(h('div.callout.accent', icon('sparkles'), h('span', said.join(' '))));
     const lines = [];
     lines.push(h('span', `${toMM(fig.width)} × ${toMM(fig.height)} mm · text ${fig.text} pt${drawn?.smallest ? ` · smallest ${drawn.smallest.toFixed(1)} pt` : ''}`));
     notesEl.append(h('p.muted', { style: { margin: '6px 0 0', fontSize: '11.5px' } }, ...lines));
@@ -195,8 +208,12 @@ export function mountFiguresMode(app, container) {
   function renderBoxes(fig) {
     clear(overlay);
     const letters = new Map((drawn?.panels ?? []).map((p) => [p.id, p.letter]));
+    // An agent's: the panels it added to the person's figure, and those it proposes to remove.
+    const before = editOf(store.ws, 'figures', fig.id)?.change.before;
+    const added = new Set(before ? fig.panels.filter((p) => !before.panels.some((q) => q.id === p.id)).map((p) => p.id) : []);
+    const going = new Set(heldPanelRemovals(store.ws, fig.id).map((x) => x.change.panel));
     for (const p of fig.panels) {
-      const box = h(`div.figure-box${p.id === state.panel ? '.selected' : ''}`, {
+      const box = h(`div.figure-box${p.id === state.panel ? '.selected' : ''}${added.has(p.id) ? '.proposed-box' : ''}${going.has(p.id) ? '.removal-box' : ''}`, {
         style: { left: `${p.x * zoom}px`, top: `${p.y * zoom}px`, width: `${p.w * zoom}px`, height: `${p.h * zoom}px` },
         title: `${letters.get(p.id) ? `Panel ${letters.get(p.id)}: ` : ''}${panelSummary(p, store.ws)}`,
         dataset: { id: p.id },

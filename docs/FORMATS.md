@@ -395,7 +395,35 @@ name, SHA-256, size, rows, encoding, layout, mapping and import summary), `targe
 `acknowledged`, by id: `{ reason, status, value, time }`, the status and value when acknowledged),
 `example`, and `history`: every
 material change, `{ time, action, detail, hash }`, each hash the SHA-256 of the one before and the
-entry, so that a change made later breaks the chain.
+entry, so that a change made later breaks the chain. From MaveScape 0.7, a change an AI agent made
+through `mavescape mcp` also has `by`, the agent's name as its client gives it ("Claude Code"),
+which the entry's hash covers as it covers the rest.
+
+**Proposals** (MaveScape 0.7). An AI agent's changes are proposals the person accepts or rejects
+([MCP.md](MCP.md)). `proposals`, absent when none is open, holds them, one per agent: `{ id,
+author, opened, changes }`, each change one of
+
+| `kind` | What | Fields |
+| --- | --- | --- |
+| `add` | an item the agent made: a table, target, run, selection, annotation, structure view, figure, analysis kept in the report or checkpoint, made at once | `collection` (the workspace's field: `sources`, `targets`, `runs`, `selections`, `annotations`, `structureViews`, `figures`, `analyses`, `checkpoints`), `id`, `name` |
+| `edit` | a change of the person's item, made at once (a figure's panels; what a higher score of a score set means) | `collection`, `id`, `name`, `before` (the item as it was) |
+| `design` | a design set or drafted, held | `design` (`null`: cleared), `source` (the table it describes), `detail` |
+| `qc-thresholds` | QC thresholds, held | `thresholds` (`null`: MaveScape's defaults), `detail` |
+| `acknowledge` | a QC finding acknowledged, or its acknowledgement withdrawn, held | `finding` (its id), `entry` (as `qc.acknowledged` keeps it; `null`: withdrawn), `detail` |
+| `target` | a change of a target (its check against UniProt applied), held | `id`, `name`, `patch` (the fields changed, with `reference`), `detail` |
+| `deposit` | MaveDB details, held | `patch` (each field's new value; `null` removes it), `detail` |
+| `remove` | a removal of the person's item, held | `collection`, `id`, `name`, `detail` |
+| `remove-panel` | a panel of the person's figure removed, held | `collection` (`figures`), `id` (the figure), `panel`, `name`, `detail` |
+
+`detail` is what the history says when the change is applied. An item an agent made carries
+`proposed`: `{ by, proposal }` while the proposal is open, `{ by, accepted }` (the time) once the
+person accepted it. Its history entries carry the agent's name (`by`); a held change is an entry
+`propose` ("Proposed: …") until it is applied. Accepting applies what was held (its entries under
+the agent's name) and is one entry `proposal` ("Accepted the proposal of …: …"), the person's;
+rejecting removes what the agent made, with what was built on it since (a run's selections, the
+structure views colored by it, the figure panels showing it, the analyses reading it), puts back the
+person's items it changed, and is one entry `proposal` ("Rejected the proposal of …: …"). Older
+versions of MaveScape open the workspace and keep both fields as they are.
 
 A table opened from MaveDB (MaveScape 0.3) keeps where it came from, as its source's `origin`:
 `{ database: "MaveDB", urn, file: "scores" | "counts", url, retrieved, license, hasCounts,
@@ -538,7 +566,9 @@ and deleting one are in the history (action `checkpoint`). A **diff** compares t
 checkpoint and now, two checkpoints, or two archives' workspaces; the Report view, remote control's
 `diff`) and says, in words, each change of the tables, targets, design, runs (scored, removed), QC
 thresholds and acknowledgements, selections, annotations, structure views, figures (made, deleted,
-a panel added, removed, changed or moved), the report's analyses and the MaveDB details. For each
+a panel added, removed, changed or moved), the report's analyses and the MaveDB details; from
+MaveScape 0.7, who proposed what an AI agent made ("Run 2 was scored (proposed by Claude Code)"),
+what the person accepted since, and what waits for the person (kind `proposal`). For each
 table scored in both states it pairs the latest run of each and says how its parameters, filters and
 design changed, and, both runs' scores recomputed, for each condition (and difference between
 conditions): the variants scored in both (`both`), those whose effect (the score less the wild
@@ -598,7 +628,9 @@ workspace reports, computed again from its files when it was made, so that anyon
 once more and compare. It is made from the Report view (**Certify…**), with remote control's
 `certify`, or in Node (`web/lib/certificate.js`, `writeCertificate`); `mavescape verify`, the
 Report view's **Verify…** and remote control's `verify_certificate` check one. Opened as a
-workspace, it is the workspace; MaveScape offers to verify it.
+workspace, it is the workspace; MaveScape offers to verify it. A workspace with an AI agent's
+proposal open (MaveScape 0.7, above) is not certified, nor its review report written: the person
+accepts or rejects the proposal first.
 
 Its files are the archive's, every table included or (for data that cannot be shared) each named
 by its SHA-256 only, every annotation's file and figure image always, every structure's file when
@@ -833,6 +865,12 @@ MaveDB's score layout, one row per variant of the table, in the table's order:
 | `variant_as_written`, `variant_class` | the name as in the table, and its class |
 | `score_<replicate>`, `SE_<replicate>` | each replicate's score and SE (kept for filtered variants too) |
 
+The remote action `scores` (MaveScape 0.7; [MCP.md](MCP.md)) gives the same columns as data: one
+object per variant, each number as a JSON number (the same double), `null` where the file has `NA`,
+`df` `"Inf"` where the file has `Inf`, text as written; with a contrast, the columns of
+`differential.csv` for that contrast without their suffix; with `protein`, those of
+`protein_scores.csv`. `provenance` gives the provenance file's JSON.
+
 For sorted bins (MaveScape 0.2), a score is the weighted average of the bins' values, or the
 maximum-likelihood mean of the variant's log fluorescence, scaled per replicate (by default so that
 nonsense scores 0 and the wild type 1); the run's methods say which.
@@ -981,6 +1019,7 @@ present only when the workspace did what it says:
 | Figures | each figure: its size and its panels by letter, with what each shows |
 | Inputs | every file read, by SHA-256: tables, MaveDB's mapped variants, annotations' files, structures' files, figures' images |
 | Software | the MaveScape that wrote the report; each run's MaveScape, scoring version and output SHA-256 |
+| AI agents | from MaveScape 0.7, when an agent worked in the workspace: what agents proposed and the person accepted, each decision, and what is still proposed |
 | Decision log | the history, entry by entry with its time (UTC), and whether its chain holds |
 | Limitations | what the counts did not record (and what that meant), what each run's model assumes, the QC findings not acknowledged, a predicted structure standing in for one |
 | Use | the research-use statement |
@@ -1099,7 +1138,10 @@ The whole map at a fixed cell size on a light background, with the position and 
 numberings, the color scale and a key to the states; the SVG carries the map's description as its
 `<desc>`, and each cell its variant as a `<title>`. The PNG is the SVG drawn at three times its
 size. With tracks shown (MaveScape 0.3), they are below the grid as in the window, their names in
-the margin, and their descriptions in the `<desc>`.
+the margin, and their descriptions in the `<desc>`. From MaveScape 0.7 the page is at least as wide
+as its title and its key to the states (a short target's was cut), and remote control's
+`render_map` with `image` draws the same SVG as a PNG, at a scale, of the whole target or a stretch
+of positions (`from`, `to`; then the title says which).
 
 ### The tracks (`*_tracks_*.csv`)
 
@@ -1328,7 +1370,7 @@ with the keyword `mavescape-figure`, and in the PDF as an attached file, `mavesc
 ```json
 {
   "format": "mavescape-figure-manifest", "version": 1, "created": "2026-10-12T12:00:00.000Z",
-  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.7.0", "commit": "…" },
   "workspace": { "id": "ws-…", "name": "GRB2 SH3 domain (published)" },
   "figure": { "id": "figure-…", "name": "Figure 1", "…": "the figure's document, as above" },
   "description": "Figure 1. A: …",
@@ -1422,7 +1464,7 @@ legend saying so; a variant scored on one side only, or left out by the filters,
 {
   "format": "mavescape-comparison",
   "version": 1,
-  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.7.0", "commit": "…" },
   "a": { "label": "Run 1: Replicate 1", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep1" },
   "b": { "label": "Run 1: Replicate 2", "source": "run", "run": "run-…", "runName": "Run 1", "output": "<SHA-256>", "replicate": "rep2" },
   "level": "protein",
@@ -1513,7 +1555,7 @@ many `analyses` it is among the least tolerant tenth (`least_tolerant_in`).
 {
   "format": "mavescape-robustness",
   "version": 1,
-  "software": { "name": "MaveScape", "version": "0.6.0", "commit": "…" },
+  "software": { "name": "MaveScape", "version": "0.7.0", "commit": "…" },
   "run": { "id": "run-…", "name": "Run 1", "output": "<SHA-256>" },
   "q": 0.05,
   "choices": [{ "id": "pseudocount", "label": "Pseudocount", "options": [{ "id": "declared", "label": "0.5" }, { "id": "pc-0.1", "label": "0.1", "parameters": { "pseudocount": 0.1 } }] }],
@@ -1581,7 +1623,7 @@ it stops:
 {
   "url": "http://127.0.0.1:8820",
   "token": "…",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "pid": 41237
 }
 ```

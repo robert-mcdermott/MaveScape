@@ -5,7 +5,7 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
 ---
     <section class="hero">
       <div class="container hero-grid">
-        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> Figures and a provable record: figures that carry their analysis, and certificates that recompute every number</a>
+        <a class="eyebrow" href="{{github}}/releases/tag/v{{version}}"><span class="pill">v{{version}}</span> AI agents and scripts: an agent works in your window, its changes proposals you accept, and R and Python call every action</a>
         <h1>Variant-effect scores <span class="accent">you can check</span></h1>
         <p class="lede">MaveScape turns the variant count tables of a deep mutational scan into functional scores with standard errors, quality control that says when not to trust them, and an interactive variant-effect map, and keeps every analysis decision on record. It runs on your own computer as one self-contained program, installed with a single command: no account, Python or R. Files are analyzed in your browser and never leave your machine.</p>
         <shot name="map" alt="The Map view of MaveScape: the variant-effect map of the GRB2 SH3 domain, 56 positions by 21 substitutions colored from less abundant (blue) to more (red), with the evidence for p.Trp36Ala in the inspector: its score with SE and 95% interval and each replicate's counts" window eager>The GRB2 SH3 domain from the Human Domainome (MaveDB, CC0), one of the bundled examples, with one variant's evidence in the inspector.</shot>
@@ -210,6 +210,22 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
           </div>
           <shot name="certificate" alt="The Report view with a certificate's verification: GRB2's two runs, every one of their numbers computed again from its table and identical, bit for bit, its history's chain unbroken; the Certificate pane beside the report">GRB2's runs certified, then verified: every number computed again from the table, and identical.</shot>
         </article>
+
+        <article class="feature">
+          <div class="feature-text">
+            <span class="kicker">AI agents and scripts</span>
+            <h3>An agent in your window, and you deciding</h3>
+            <p>Claude Code, or any client of the Model Context Protocol, calls MaveScape's actions as its tools: it opens data, scores, reads the quality control and the scores as tables, looks at the map, structures and figures, compares and makes figures, in the window you watch. What it makes is marked proposed; a design, an acknowledgement, a threshold or a removal waits for you. You accept or reject it above the view, and the history keeps the agent's name beside each change. R and Python call the same actions as functions, tables coming back as data frames.</p>
+            <ul class="checklist">
+              <li><code>claude mcp add mavescape -- mavescape mcp</code>; Claude Desktop, Cursor, VS Code and Codex alike</li>
+              <li>Nothing certified while a proposal waits</li>
+              <li>54 actions, one name each for agents, scripts and the R and Python packages</li>
+              <li>A notebook on GRB2 and an R script on DHFR, run against every build</li>
+            </ul>
+            <a class="more-link" href="docs/scripting.html">Agents and scripts</a>
+          </div>
+          <shot name="agent-proposal" alt="Claude Code's proposal in the QC view of the GRB2 example: the strip above the view lists the run and the selection it made, marked proposed in the dataset tree, and the acknowledgement of the variance beyond counting, waiting">Claude Code worked on GRB2: a run scored again and a selection made, marked proposed; an acknowledgement waiting for you.</shot>
+        </article>
       </div>
     </section>
 
@@ -225,10 +241,10 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
             <h3>Examples with known answers</h3>
             <p>Fourteen: three published experiments from MaveDB (two populations, a growth time series, sorted bins), five opened from it (published scores; a saturation genome editing screen; two conditions; a round trip; two laboratories' screens of one protein) and six simulated ones whose true effects are known, one with problems to find; each with its question, guided steps and what to expect, from a figure to a certificate.</p>
           </a>
-          <a class="card" href="docs/scripting.html">
+          <a class="card" href="docs/scripting.html#headless">
             <span class="icon-badge"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>
-            <h3>Remote control and headless runs</h3>
-            <p>Scripts on your computer drive the open window, each step visible and undoable; <code>mavescape run</code> does a whole analysis without one, the same bytes every time.</p>
+            <h3>Pipelines without a window</h3>
+            <p><code>mavescape run</code> scores a table with its design and writes the scores, QC, map, methods and workspace, the same bytes every time; <code>mavescape validate</code> checks the files first, and <code>mavescape verify</code> a certificate.</p>
           </a>
           <a class="card" href="docs/map.html#accessible">
             <span class="icon-badge pink"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></span>
@@ -273,6 +289,8 @@ description: A workbench for multiplexed assays of variant effect (deep mutation
               <tr><td><strong>Methods</strong></td><td>Every reference with a DOI (43) against Crossref's record; the 14 examples' runs</td><td class="agree">every field; the report the methods word for word</td></tr>
               <tr><td><strong>Certificates</strong></td><td>Every number of a workspace of every operation computed apart; six kinds of tampering; the 14 examples and every release's archives</td><td class="agree">identical, bit for bit; every tampering caught</td></tr>
               <tr><td><strong>Remote control</strong></td><td>Every action in the browser against the same analysis in Node</td><td class="agree">identical scores and exports</td></tr>
+              <tr><td><strong>AI agents</strong></td><td>Every tool through <code>mavescape mcp</code> as an agent's client calls it; proposals accepted and rejected in the window; the guide's session on Hsp90</td><td class="agree">the remote actions' results; every change under the agent's name</td></tr>
+              <tr><td><strong>R and Python</strong></td><td>Both packages against a running MaveScape; a notebook and an R script on the examples</td><td class="agree">every number Node computes; each example's checks</td></tr>
             </tbody>
           </table>
         </div>

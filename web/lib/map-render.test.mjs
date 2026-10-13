@@ -83,3 +83,18 @@ test('a freeform shape selects the cells whose centers it encloses (wave 4, slic
   assert.ok(!inL.includes(R + 4), 'position 2, row 4, is not designed');
   assert.deepEqual(cellsInPolygon(m, view, [[0, 0], [1, 1]]), []);
 });
+
+test('the map\'s SVG of a stretch of positions: only those drawn, numbered as on the whole map, wide enough for its title and key', () => {
+  const whole = mapSVG(model());
+  const part = mapSVG(model(), { from: 2, to: 3 });
+  const titles = (svg) => [...svg.matchAll(/<title>([A-Z*]\d+[A-Z*])[^<]*<\/title>/g)].map((m) => m[1]);
+  assert.ok(titles(whole).some((t) => /^M1/.test(t)));
+  assert.ok(!titles(part).some((t) => /^M1/.test(t)) && titles(part).some((t) => /^S2/.test(t)) && titles(part).some((t) => /^K3/.test(t)));
+  assert.match(part, /<title>Variant-effect map: Toy · positions 2–3<\/title>/);
+  // The key to the states (low confidence … reference residue) fits: wider than the cells alone.
+  const width = (svg) => Number(/width="(\d+)"/.exec(svg)[1]);
+  assert.ok(width(part) > 34 + 2 * 8 + 30 && width(part) >= width(whole) - 8);
+  // A cell of position 2 is drawn where position 1's is on the whole map.
+  const firstCell = (svg) => /<rect x="(\d+)" y="(\d+)" width="7" height="9" fill="#[0-9a-f]{6}"><title>/.exec(svg).slice(1, 3).join(',');
+  assert.equal(firstCell(part), firstCell(whole));
+});

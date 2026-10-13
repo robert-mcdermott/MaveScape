@@ -20,6 +20,7 @@ import { annotationFiles, figureFiles, sourceFiles, structureFiles } from './arc
 import { comparisonJSON, DISCORDANT_Q, filtersApplied, SCALES } from './compare.js';
 import { ROBUSTNESS_Q } from './robustness.js';
 import { possessive } from './words.js';
+import { decisions, describeProposal, openProposals } from './proposals.js';
 
 export const REPORT_FORMAT = 'mavescape-report';
 export const REPORT_VERSION = 1;
@@ -320,12 +321,30 @@ export function writeReport(ws, context = {}) {
     ...(runs.length ? [{ kind: 'table', columns: ['Run', 'Made (UTC)', 'MaveScape', 'Scoring version', 'Output SHA-256'], rows: runs.map((r) => [r.name, String(r.created ?? '').slice(0, 16).replace('T', ' '), `${r.software.version}${r.software.commit ? ` (${String(r.software.commit).slice(0, 7)})` : ''}`, String(r.software.scoring ?? '—'), r.output.sha256]) }] : []),
   ]);
 
+  // AI agents (wave 7, slice 2): the work an agent proposed through MaveScape's MCP server, with the
+  // person's decisions on it, and what is still proposed.
+  const decided = decisions(ws, Infinity).reverse();
+  const open = openProposals(ws);
+  const madeBy = new Map();
+  for (const [what, items] of [['the table', ws.sources], ['the target', ws.targets], ['', runs], ['the selection', ws.selections], ['the annotation', ws.annotations ?? []], ['the structure view', ws.structureViews ?? []], ['the figure', ws.figures ?? []], ['the checkpoint', ws.checkpoints ?? []]]) {
+    for (const x of items) {
+      if (!x.proposed?.accepted) continue;
+      if (!madeBy.has(x.proposed.by)) madeBy.set(x.proposed.by, []);
+      madeBy.get(x.proposed.by).push(what ? `${what} ${what === 'the table' || what === 'the target' ? x.name : `"${x.name}"`}` : x.name);
+    }
+  }
+  section('agents', 'AI agents', decided.length || open.length ? [
+    paragraph(`AI agents worked in this workspace through MaveScape's MCP server, in the window the person used. Their changes were proposals: what they made was marked proposed until the person accepted or rejected it, and their other changes (the design, QC thresholds and acknowledgements, a target's check, the MaveDB details, removals) applied only once accepted.${madeBy.size ? ` Proposed and accepted: ${[...madeBy].map(([by, items]) => `by ${by}, ${list(items)}`).join('; ')}.` : ''}`),
+    ...(decided.length ? [{ kind: 'list', items: decided.map((e) => `${String(e.time).slice(0, 10)} ${String(e.time).slice(11, 16)}: ${e.detail}.`) }] : []),
+    ...open.map((p) => paragraph(`Still proposed by ${p.author}, not yet accepted: ${describeProposal(ws, p).map((i) => i.text).join('; ') || 'nothing'}.`)),
+  ] : []);
+
   // The decision log: the history, in words.
   const history = ws.history ?? [];
   const chain = verifyHistory(ws);
   section('log', 'Decision log', history.length ? [
     paragraph(`The workspace's history: ${history.length === 1 ? `1 entry (its SHA-256 ${short(history[0].hash)})` : `${plural(history.length, 'entry', 'entries')}, each chained to the one before by SHA-256 (the last ${short(history.at(-1)?.hash)})`}, ${chain.ok ? 'intact' : `broken at entry ${chain.broken[0].index + 1}`}. Times are UTC.`),
-    { kind: 'list', items: history.map((e) => `${String(e.time).slice(0, 10)} ${String(e.time).slice(11, 16)}: ${e.detail}`) },
+    { kind: 'list', items: history.map((e) => `${String(e.time).slice(0, 10)} ${String(e.time).slice(11, 16)}: ${e.detail}${e.by ? ` (by ${e.by})` : ''}`) },
     // Checkpoints (wave 6, slice 5): named states of the analysis, each by its state's SHA-256.
     ...((ws.checkpoints ?? []).length ? [paragraph(`Checkpoints kept with the workspace, each the analysis as it stood: ${list(ws.checkpoints.map((c) => `"${c.name}" (${String(c.created).slice(0, 10)}, state SHA-256 ${short(c.sha256)})`))}.`)] : []),
   ] : []);

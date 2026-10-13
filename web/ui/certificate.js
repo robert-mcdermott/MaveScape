@@ -6,7 +6,7 @@
 // certificate or from one verified. The Report view's Certificate pane and remote control's
 // certify, review_report and verify_certificate use it; opening a certificate offers to verify it.
 
-import { certificateInputs, readCertificate, shortFingerprint } from '../lib/certificate.js';
+import { certificateInputs, openProposalsText, readCertificate, shortFingerprint } from '../lib/certificate.js';
 import { sha256 } from '../lib/sha256.js';
 import { h, icon, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
@@ -34,6 +34,7 @@ export function certificateState(app) {
 // report too), onProgress }.
 export async function makeCertificate(app, { tables = true, review = false, onProgress } = {}) {
   const ws = app.store.ws;
+  if ((ws.proposals ?? []).length) throw new Error(openProposalsText(ws.proposals));
   const files = [];
   for (const input of certificateInputs(ws)) {
     const bytes = await libraryBytes(app, input.sha256);
@@ -205,11 +206,14 @@ export function certificatePane(app) {
   const opened = state.opened?.workspace === ws.id ? state.opened : null;
   const verified = state.verified;
   const made = state.made;
+  // Nothing is certified while an AI agent's proposal waits (wave 7, slice 2).
+  const waiting = (ws.proposals ?? []).length > 0;
   return h('div.pane.certificate-pane', h('h3', icon('seal'), 'Certificate'),
     h('p.muted', { style: { margin: '0 0 8px' } }, 'Every number the workspace reports, computed again from its files and kept with them, so that anyone can check them bit for bit.'),
+    waiting ? h('p.warn-text', { style: { margin: '0 0 8px', fontSize: '12px' } }, openProposalsText(ws.proposals)) : null,
     h('div.btn-row',
-      h('button.btn.small', { type: 'button', disabled: !ws.runs.length, title: ws.runs.length ? 'Make a certificate of the workspace (.msz)' : 'Score a run first', onclick: () => chooseCertify(app) }, icon('seal'), 'Certify…'),
-      h('button.btn.small', { type: 'button', disabled: !ws.runs.length, title: ws.runs.length ? 'Write the review report (.html): the certificate\'s numbers, each traced, in one file a reviewer opens in any browser' : 'Score a run first', onclick: () => chooseReview(app) }, icon('report'), 'Review report…'),
+      h('button.btn.small', { type: 'button', disabled: !ws.runs.length || waiting, title: waiting ? 'Accept or reject the proposals above the view first' : ws.runs.length ? 'Make a certificate of the workspace (.msz)' : 'Score a run first', onclick: () => chooseCertify(app) }, icon('seal'), 'Certify…'),
+      h('button.btn.small', { type: 'button', disabled: !ws.runs.length || waiting, title: waiting ? 'Accept or reject the proposals above the view first' : ws.runs.length ? 'Write the review report (.html): the certificate\'s numbers, each traced, in one file a reviewer opens in any browser' : 'Score a run first', onclick: () => chooseReview(app) }, icon('report'), 'Review report…'),
       h('button.btn.small', { type: 'button', title: 'Verify a certificate (.msz), with the tables it names if it was made without them', onclick: () => pickAndVerify(app) }, icon('check'), 'Verify…'),
       opened ? h('button.btn.small', { type: 'button', title: `Verify ${opened.name}, which this workspace was opened from`, onclick: () => verifyAndShow(app, opened.bytes, { name: opened.name }) }, 'Verify this one') : null),
     made ? h('p.certificate-line', h('b', 'Made: '), `${made.name}, ${plural(made.total, 'number')}, fingerprint `, h('code', shortFingerprint(made.fingerprint)), made.notes.length ? h('span.muted', ` (${plural(made.notes.length, 'note')})`) : null) : null,

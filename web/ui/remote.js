@@ -1,8 +1,10 @@
 // Remote control (wave 2, slice 1): actions sent by programs on this computer (scripts, the
-// documentation's screenshot capture, later AI agents through the MCP server) are performed here,
-// in the open window, where the user sees them, they go into the history like any edit, and can be
-// undone. Each action returns { ok, message, data }. The program lists the same actions with
-// their arguments (actions.go, GET /api/remote/tools); a Go test checks the two lists agree.
+// documentation's screenshot capture, and AI agents through the MCP server, mavescape mcp, wave 7)
+// are performed here, in the open window, where the user sees them, they go into the history like
+// any edit (an agent's carrying its name, as proposals the person accepts or rejects: lib/
+// proposals.js), and can be undone. Each action returns { ok, message, data }. The program lists
+// the same actions with their arguments (actions.go, GET /api/remote/tools); a Go test checks the
+// two lists agree.
 // The connection and the export upload follow CytoWeave 0.8.0's web/ui/remote.js.
 
 import { toast } from './overlays.js';
@@ -11,10 +13,11 @@ import { coversPosition, validateDesign, summarizeDesign } from '../lib/design.j
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
 import { addRun, makeRun, nextRunName, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
-import { acknowledgeFinding, addSelection, addTarget, createWorkspace, removeFigure, rename, saveFigure, setDeposit, setDesign } from '../lib/workspace.js';
+import { acknowledgeFinding, addSelection, addTarget, canonicalJSON, createWorkspace, removeFigure, rename, saveFigure, setDeposit, setDesign, setQcThresholds } from '../lib/workspace.js';
+import { absorb, decisions, describeProposal, heldOfKind, openProposals, proposalOf, ProposalError, proposalSummary, proposeChange, proposeRemoval } from '../lib/proposals.js';
 import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
-import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
+import { checkThresholds, findingsFrom, overall, THRESHOLDS, withDefaultThresholds } from '../lib/findings.js';
 import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
 import { proteinView } from '../lib/collapse.js';
 import { mappedFor } from './mapped.js';
@@ -29,7 +32,8 @@ import { ensureResults, forgetResults } from './run-results.js';
 import { runScore, workerInput } from './score-input.js';
 import { computeQc, markQcSeen, qcInputsOf, qcSubjects } from './mode-qc.js';
 import { archiveFile, packageFile, RUN_FILES, runFile, selectionFile } from './record.js';
-import { intervalOf } from '../lib/exports.js';
+import { cellValue, differentialTable, intervalOf, proteinScoresTable, scoresTable } from '../lib/exports.js';
+import { dataURL, svgToPNG } from './images.js';
 import { anchorUncertainty } from '../lib/anchors.js';
 import { readiness, readinessText } from '../lib/readiness.js';
 import { applyCheck, checkTarget, fetchPublic, placementText } from './public-data.js';
@@ -46,7 +50,7 @@ import { checkRobustness, robustnessFiles } from './robustness.js';
 import { combineSelections, OPERATIONS, QueryError } from '../lib/query.js';
 import { runQuery } from './selections.js';
 import { normalizeUrn } from '../lib/mavedb.js';
-import { setScoreSetDirection } from '../lib/workspace.js';
+import { setHistoryActor, setScoreSetDirection } from '../lib/workspace.js';
 import { addCompared, compareOptions, comparisonFiles, comparisonMapSVG, computeComparison, currentFilters, currentPair, currentScale, setFilters, setPair, setScale } from './mode-compare.js';
 import { PROVIDERS } from '../lib/providers/index.js';
 import { possessive } from '../lib/words.js';
@@ -113,8 +117,30 @@ const shapeOf = (d) => (d.model === 'scores' ? `published scores in "${d.scoreCo
 export function installRemote(app) {
   const { store } = app;
   const ws = () => store.ws;
-  // Who sent the action being performed (what the script calls itself).
+  // Who sent the action being performed (what the script calls itself), and whether it is an AI
+  // agent (mavescape mcp, wave 7), whose changes are proposals (lib/proposals.js).
   let author = 'a program on this computer';
+  let agent = false;
+
+  // --- Proposals (wave 7, slice 2) --------------------------------------------------------------
+
+  const mine = () => (agent ? proposalOf(ws(), author) : null);
+  // An item the agent proposed itself, still open: changing or removing it applies at once.
+  const own = (item) => Boolean(agent && item?.proposed?.proposal && item.proposed.proposal === mine()?.id);
+  // The design the agent proposed, waiting for the person.
+  const heldDesign = () => (agent ? heldOfKind(ws(), 'design').find((x) => x.proposal.author === author)?.change ?? null : null);
+  const waits = ' It waits for the person to accept it (proposals says when it is decided).';
+
+  // A removal: an agent's proposed, unless it removes what the agent proposed itself. Returns
+  // whether it waits.
+  function removing(item, collection, name, detail, remove, label) {
+    if (agent && !own(item)) {
+      store.commit(proposeRemoval(ws(), author, { collection, id: item.id, name, detail }), label);
+      return true;
+    }
+    remove();
+    return false;
+  }
 
   // --- Resolution of names --------------------------------------------------------------------
 
@@ -189,6 +215,22 @@ export function installRemote(app) {
       });
       return { contrast: d.name, method: d.method, compared, lowerAtQ05: lower, higherAtQ05: higher, ...(d.note ? { note: d.note } : {}) };
     });
+  }
+
+  // A query of the selection language on a run's map ({ model, results, own }): { keys, query }. One
+  // that needs the run's robustness checks it first (seeded: the same each time).
+  async function queryOn(run, text, map) {
+    try {
+      return await runQuery(app, run, text, map).catch(async (error) => {
+        if (!(error instanceof QueryError) || error.need !== 'robustness') throw error;
+        const state = await checkRobustness(app, run);
+        if (state.status !== 'done') throw new ActionError(`The query needs ${possessive(run.name)} robustness checked, and it could not be: ${state.error}`);
+        return runQuery(app, run, text, map);
+      });
+    } catch (error) {
+      if (error instanceof QueryError) throw new ActionError(`${error.message}${error.position >= 0 ? ` (at character ${error.position + 1} of the query)` : ''}`);
+      throw error;
+    }
   }
 
   // --- Figures (wave 6, slice 1) ---------------------------------------------------------------
@@ -857,6 +899,8 @@ export function installRemote(app) {
     async save_structure_view(args) {
       if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure, then save the view of it.');
       if (!args.name || !String(args.name).trim()) throw new ActionError('Give the view a name.');
+      const taken = agent ? (ws().structureViews ?? []).find((v) => v.name === String(args.name).trim()) : null;
+      if (taken && !own(taken)) throw new ActionError(`The person has a view "${taken.name}": name yours otherwise (saving it again would replace theirs).`);
       const saved = await saveView(app, String(args.name));
       if (!saved.ok) throw new ActionError(saved.message);
       await settle();
@@ -878,17 +922,36 @@ export function installRemote(app) {
     async remove_structure_view(args) {
       const views = ws().structureViews ?? [];
       const name = choose(String(args.name ?? ''), views.map((v) => v.name), 'saved view');
-      const removed = removeView(app, views.find((v) => v.name === name).id);
+      const view = views.find((v) => v.name === name);
+      let removed = null;
+      const held = removing(view, 'structureViews', `the structure view "${name}"`, `Removed the view "${name}"`, () => { removed = removeView(app, view.id); }, `Propose removing the view "${name}"`);
       await settle();
-      return { message: removed.message, data: { removed: name, views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
+      return { message: held ? `Proposed removing the view "${name}".${waits}` : removed.message, data: { removed: name, ...(held ? { waiting: true } : {}), views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
     },
 
     // --- Figures (wave 6, slice 1) -----------------------------------------------------------------
 
+    // image: each page as exported, a PNG at dpi (150 by default), for an agent to look at (wave 7,
+    // slice 3).
     async figures(args) {
       const list = args.figure ? [resolveFigure(args.figure)] : (ws().figures ?? []);
+      const dpi = args.dpi === undefined || args.dpi === null ? 150 : Number(args.dpi);
+      if (args.image === true && !(dpi >= 72 && dpi <= 600)) throw new ActionError('dpi is from 72 to 600.');
       const out = [];
-      for (const fig of list) out.push(await figureData(fig));
+      for (const fig of list) {
+        const data = await figureData(fig);
+        if (args.image === true) {
+          let png;
+          try {
+            png = await exportFigure(app, fig, 'png', { dpi });
+          } catch (error) {
+            throw new ActionError(error.message);
+          }
+          const size = pngSize(fig, dpi);
+          Object.assign(data, { caption: `The figure "${fig.name}" as exported, at ${dpi} dpi`, image: await dataURL(png.data), width: size.width, height: size.height, dpi });
+        }
+        out.push(data);
+      }
       return { message: list.length ? out.map((f) => f.description).join(' ') : 'The workspace has no figures: create_figure makes one.', data: { figures: out } };
     },
 
@@ -928,12 +991,16 @@ export function installRemote(app) {
     async set_figure(args) {
       let fig = resolveFigure(args.figure);
       if (args.delete === true) {
-        store.commit(removeFigure(ws(), fig.id), 'Delete figure');
+        const held = removing(fig, 'figures', `the figure "${fig.name}"`, `Deleted the figure "${fig.name}"`, () => store.commit(removeFigure(ws(), fig.id), 'Delete figure'), `Propose deleting the figure "${fig.name}"`);
         await settle();
-        return { message: `Deleted the figure "${fig.name}".`, data: { deleted: fig.name, figures: (ws().figures ?? []).map((f) => f.name) } };
+        return { message: held ? `Proposed deleting the figure "${fig.name}".${waits}` : `Deleted the figure "${fig.name}".`, data: { deleted: fig.name, ...(held ? { waiting: true } : {}), figures: (ws().figures ?? []).map((f) => f.name) } };
       }
       const before = fig;
       const words = [];
+      // An agent's removal of a panel of the person's figure waits for the person; those of the
+      // panels it added itself do not.
+      const original = agent && !own(fig) ? mine()?.changes.find((c) => c.kind === 'edit' && c.collection === 'figures' && c.id === fig.id)?.before ?? fig : null;
+      const heldPanels = [];
       if (args.name !== undefined) {
         const name = String(args.name).trim();
         if (!name) throw new ActionError('A figure has a name.');
@@ -954,7 +1021,12 @@ export function installRemote(app) {
         const target = fig.panels.find((p) => p.id === ref) ?? fig.panels.find((p) => letters.get(p.id) === ref.toUpperCase());
         if (!target) throw new ActionError(`"${ref}" is not a panel of "${fig.name}": its panels are ${fig.panels.map((p) => `${letters.get(p.id) ?? ''} (${p.id})`).join(', ')}.`);
         if (change.remove === true) {
-          words.push(`removed ${letters.get(target.id) ? `panel ${letters.get(target.id)}` : target.id}: ${panelSummary(target, ws())}`);
+          const which = `${letters.get(target.id) ? `panel ${letters.get(target.id)}` : target.id}: ${panelSummary(target, ws())}`;
+          if (original?.panels.some((p) => p.id === target.id)) {
+            heldPanels.push({ panel: target, which });
+            continue;
+          }
+          words.push(`removed ${which}`);
           fig = removePanel(fig, target.id);
           continue;
         }
@@ -975,9 +1047,10 @@ export function installRemote(app) {
       }
       checked(fig);
       store.commit(saveFigure(ws(), fig, words.length ? `The figure "${before.name}": ${words.join('; ')}` : null), 'Edit figure');
+      for (const { panel, which } of heldPanels) store.commit(proposeRemoval(ws(), author, { collection: 'figures', id: fig.id, panel: panel.id, name: panelSummary(panel, ws()), detail: `The figure "${fig.name}": removed ${which}` }), 'Propose removing a panel');
       await showFigure(fig.id);
       const data = await figureData(figureById(fig.id));
-      return { message: data.description, data };
+      return { message: `${data.description}${heldPanels.length ? ` Proposed removing ${heldPanels.map((x) => x.which).join('; ')}.${waits}` : ''}`, data };
     },
 
     async export_figure(args) {
@@ -1062,9 +1135,11 @@ export function installRemote(app) {
       if (!(source.mapping?.countColumns?.length)) throw new ActionError(`${source.name} has no columns of counts to draft a design from.`);
       await draftFromColumns(app, source);
       await settle();
-      const design = ws().design;
+      // An agent's draft is proposed: it waits for the person.
+      const held = heldDesign()?.design ?? null;
+      const design = held ?? ws().design;
       const summary = designSummary(design, source);
-      return { message: `Drafted the design of ${source.name}: ${shapeOf(summary)}. ${summary.valid ? 'It is valid.' : `${plural(summary.problems.length, 'problem')}: ${summary.problems.join(' ')}`}`, data: { design, ...summary } };
+      return { message: `${held ? 'Proposed a design' : 'Drafted the design'} of ${source.name}${held ? ', drafted from its column names' : ''}: ${shapeOf(summary)}. ${summary.valid ? 'It is valid.' : `${plural(summary.problems.length, 'problem')}: ${summary.problems.join(' ')}`}${held ? waits : ''}`, data: { design, ...summary, ...(held ? { waiting: true } : {}) } };
     },
 
     async set_design(args) {
@@ -1089,7 +1164,8 @@ export function installRemote(app) {
       store.commit(setDesign(w, next, `The design set by ${author}`, source.id), `Set the design (${author})`);
       await settle();
       const summary = designSummary(next, source);
-      return { message: `Set the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')}.${summary.warnings.length ? ` Warnings: ${summary.warnings.join(' ')}` : ''}`, data: summary };
+      const held = Boolean(heldDesign());
+      return { message: `${held ? 'Proposed' : 'Set'} the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')}.${summary.warnings.length ? ` Warnings: ${summary.warnings.join(' ')}` : ''}${held ? waits : ''}`, data: { ...summary, ...(held ? { waiting: true } : {}) } };
     },
 
     // MaveDB (wave 3, slice 2): a search, and a score set opened as a workspace.
@@ -1150,7 +1226,8 @@ export function installRemote(app) {
       const next = setDeposit(ws(), patch, `MaveDB details set by ${author}: ${Object.keys(patch).join(', ')}`);
       const changed = next !== ws();
       if (changed) store.commit(next, 'Change the MaveDB details');
-      return { message: changed ? `Set the MaveDB details: ${Object.keys(patch).join(', ')}.` : 'The MaveDB details are as they were.', data: { details: ws().deposit ?? {} } };
+      const held = agent ? heldOfKind(ws(), 'deposit').find((x) => x.proposal.author === author)?.change.patch ?? null : null;
+      return { message: changed ? `${held ? 'Proposed' : 'Set'} the MaveDB details: ${Object.keys(patch).join(', ')}.${held ? waits : ''}` : 'The MaveDB details are as they were.', data: { details: ws().deposit ?? {}, ...(held ? { proposed: held } : {}) } };
     },
 
     async check_target(args) {
@@ -1163,6 +1240,8 @@ export function installRemote(app) {
       if (!check.ok) throw new ActionError(check.message);
       const changes = Object.keys(check.patch);
       if (args.apply) applyCheck(app, target, check);
+      // An agent's check applied waits for the person.
+      const held = Boolean(args.apply && agent && heldOfKind(ws(), 'target').some((x) => x.proposal.author === author && x.change.id === target.id));
       const p = check.placement;
       const data = {
         target: target.name,
@@ -1170,9 +1249,12 @@ export function installRemote(app) {
         retrieval: check.retrieval,
         placement: { offset: p.offset, start: p.start, end: p.end, identical: p.identical, differences: p.differences, outside: p.outside, places: p.places },
         changes: check.patch,
-        applied: Boolean(args.apply),
+        applied: Boolean(args.apply) && !held,
+        ...(held ? { waiting: true } : {}),
       };
-      const what = changes.length ? (args.apply ? ` Set ${changes.join(', ')}, and recorded the check.` : ` It would change ${changes.join(', ')} (apply: true to use them).`) : (args.apply ? ' Nothing to change; recorded the check.' : ' Nothing to change.');
+      const what = held
+        ? ` Proposed ${changes.length ? `${changes.join(', ')} and ` : ''}the record of the check.${waits}`
+        : changes.length ? (args.apply ? ` Set ${changes.join(', ')}, and recorded the check.` : ` It would change ${changes.join(', ')} (apply: true to use them).`) : (args.apply ? ' Nothing to change; recorded the check.' : ' Nothing to change.');
       return { message: `${placementText(target, check)}${what} (UniProt ${retrievalText(check.retrieval) || 'entry'}.)`, data };
     },
 
@@ -1258,6 +1340,9 @@ export function installRemote(app) {
     async score(args) {
       const source = resolveSource();
       const design = ws().design;
+      // Scoring waits for the design the agent proposed, not only for a first one: a run made
+      // meanwhile would have the person's design, not the one the agent means.
+      if (heldDesign()) throw new ActionError(`The design you proposed waits for the person to accept it: score once they have (proposals says when).${design ? ' Until then the workspace keeps the person\'s design, which a run now would score.' : ''}`);
       if (!design) throw new ActionError('There is no design yet: draft it (draft_design) or set it (set_design) first.');
       const presetId = choose(args.preset ?? 'mavescape', Object.keys(PRESETS), 'preset');
       const base = defaultParameters(design, source, presetId);
@@ -1339,10 +1424,74 @@ export function installRemote(app) {
       } catch (error) {
         throw new ActionError(error.message);
       }
+      // An agent's acknowledgement (or withdrawal) waits for the person; withdrawing one it
+      // proposed takes that back.
+      if (agent) {
+        const earlier = heldOfKind(ws(), 'acknowledge').find((x) => x.proposal.author === author && x.change.finding === finding.id)?.change ?? null;
+        const current = ws().qc?.acknowledged?.[finding.id] ?? null;
+        if (!reason && !earlier && !current) return { message: `"${finding.title}" was not acknowledged; nothing to withdraw.`, data: findingSummary(finding) };
+        const entry = reason ? next.qc.acknowledged[finding.id] : earlier ? current : null;
+        store.commit(proposeChange(ws(), author, { kind: 'acknowledge', finding: finding.id, entry, detail: reason ? `Acknowledged "${finding.title}" (${finding.status}): ${reason}` : `Withdrew the acknowledgement of "${finding.title}"` }), reason ? `Propose acknowledging "${finding.title}"` : `Propose withdrawing the acknowledgement of "${finding.title}"`);
+        const again = (await qcOfSubject(args.run)).findings.find((f) => f.id === finding.id);
+        const message = reason ? `Proposed acknowledging "${finding.title}" (${finding.status}): ${reason}.${waits}` : earlier ? `Took back your proposed change of the acknowledgement of "${finding.title}".` : `Proposed withdrawing the acknowledgement of "${finding.title}".${waits}`;
+        return { message, data: { ...findingSummary(again), ...(reason || !earlier ? { waiting: true } : {}) } };
+      }
       if (next === ws()) return { message: `"${finding.title}" was not acknowledged; nothing to withdraw.`, data: findingSummary(finding) };
       app.store.commit(next, reason ? `Acknowledge "${finding.title}"` : `Withdraw the acknowledgement of "${finding.title}"`);
       const again = (await qcOfSubject(args.run)).findings.find((f) => f.id === finding.id);
       return { message: reason ? `Acknowledged "${finding.title}" (${finding.status}): ${reason}. Its status is unchanged; the reason goes into the history, the methods and the QC exports.` : `Withdrew the acknowledgement of "${finding.title}".`, data: findingSummary(again) };
+    },
+
+    // Sets the QC thresholds (wave 7, slice 2): those given (by their keys: a { review, fail } pair,
+    // either of them, or a number for a measure), the others as they are; reset: MaveScape's
+    // defaults. An agent's, built on those it proposed before, wait for the person.
+    async set_qc_thresholds(args) {
+      const given = args.thresholds && typeof args.thresholds === 'object' ? args.thresholds : null;
+      if (!given && args.reset !== true) throw new ActionError(`Give "thresholds" (by key: ${THRESHOLDS.map((t) => t.key).join(', ')}), or reset: true for MaveScape's defaults.`);
+      const earlier = agent ? heldOfKind(ws(), 'qc-thresholds').find((x) => x.proposal.author === author)?.change ?? null : null;
+      const from = withDefaultThresholds(earlier ? earlier.thresholds : ws().qc?.thresholds);
+      let next = args.reset === true ? null : { ...from };
+      const words = [];
+      for (const [key, value] of Object.entries(given ?? {})) {
+        const t = THRESHOLDS.find((x) => x.key === key) ?? THRESHOLDS.find((x) => x.label === choose(key, THRESHOLDS.map((y) => y.label), 'threshold'));
+        if (!next) next = { ...withDefaultThresholds(null) };
+        if (t.measure) {
+          next[t.key] = Number(value);
+          words.push(`"${t.label}" ${from[t.key]} → ${next[t.key]}`);
+        } else {
+          const patch = typeof value === 'object' && value ? value : { review: value };
+          next[t.key] = { ...next[t.key], ...Object.fromEntries(['review', 'fail'].filter((k) => patch[k] !== undefined).map((k) => [k, Number(patch[k])])) };
+          const levels = ['review', 'fail'].filter((k) => next[t.key][k] !== from[t.key][k]).map((k) => `${k} ${from[t.key][k]} → ${next[t.key][k]}`);
+          words.push(`"${t.label}" ${levels.join(', ') || 'as it was'}`);
+        }
+      }
+      const problems = next ? checkThresholds(next) : [];
+      if (problems.length) throw new ActionError(problems.join(' '));
+      const detail = next ? `QC thresholds set by ${author}: ${words.join('; ')}` : 'QC thresholds reset to MaveScape\'s defaults';
+      if (agent) store.commit(proposeChange(ws(), author, { kind: 'qc-thresholds', thresholds: next, detail }), 'Propose QC thresholds');
+      else store.commit(setQcThresholds(ws(), next, detail), 'Change QC thresholds');
+      const held = agent ? heldOfKind(ws(), 'qc-thresholds').find((x) => x.proposal.author === author)?.change ?? null : null;
+      const changed = Object.fromEntries(THRESHOLDS.filter((t) => canonicalJSON(withDefaultThresholds(next)[t.key]) !== canonicalJSON(withDefaultThresholds(null)[t.key])).map((t) => [t.key, withDefaultThresholds(next)[t.key]]));
+      const what = next ? `the QC thresholds: ${words.join('; ') || 'as they were'}` : 'MaveScape\'s default QC thresholds';
+      let message = `Set ${what}. The QC findings are read with them.`;
+      if (held) message = `Proposed ${what}.${waits}`;
+      else if (agent) message = earlier ? 'Took back the QC thresholds you proposed: the workspace\'s are as they were.' : 'The QC thresholds are already these: nothing to propose.';
+      return { message, data: { thresholds: changed, defaults: !Object.keys(changed).length, ...(held ? { waiting: true } : {}) } };
+    },
+
+    // The proposals open (an agent's changes the person has yet to accept or reject) and the
+    // latest decisions (wave 7, slice 2).
+    async proposals() {
+      const w = ws();
+      const yours = proposalSummary(w, proposalOf(w, author));
+      const others = openProposals(w).filter((p) => p.author !== author).map((p) => proposalSummary(w, p));
+      const decided = decisions(w, 10).map((e) => ({ time: e.time, decision: /^Accepted/.test(e.detail) ? 'accepted' : 'rejected', detail: e.detail }));
+      const last = decided[0];
+      const count = yours ? yours.made.length + yours.waiting.length : 0;
+      return {
+        message: `${yours ? `Your proposal (${plural(count, 'change')}) waits for the person: ${[...yours.made, ...yours.waiting].join('; ')}.` : 'You have no proposal open.'}${others.length ? ` Open from others: ${others.map((p) => `${p.author} (${plural(p.made.length + p.waiting.length, 'change')})`).join(', ')}.` : ''}${last ? ` The latest decision (${last.time}): ${last.detail}` : ''}`,
+        data: { yours, others, decisions: decided },
+      };
     },
 
     async select_variants(args) {
@@ -1387,19 +1536,7 @@ export function installRemote(app) {
       // A query; one that needs the run's robustness checks it first (seeded: the same each time).
       let query = null;
       if (args.query) {
-        const map = { model, results, own };
-        let found;
-        try {
-          found = await runQuery(app, run, String(args.query), map).catch(async (error) => {
-            if (!(error instanceof QueryError) || error.need !== 'robustness') throw error;
-            const state = await checkRobustness(app, run);
-            if (state.status !== 'done') throw new ActionError(`The query needs ${possessive(run.name)} robustness checked, and it could not be: ${state.error}`);
-            return runQuery(app, run, String(args.query), map);
-          });
-        } catch (error) {
-          if (error instanceof QueryError) throw new ActionError(`${error.message}${error.position >= 0 ? ` (at character ${error.position + 1} of the query)` : ''}`);
-          throw error;
-        }
+        const found = await queryOn(run, String(args.query), { model, results, own });
         cells.push(...found.keys.map((k) => byName.get(k)));
         query = found.query;
       }
@@ -1550,7 +1687,170 @@ export function installRemote(app) {
       const model = modelOf(run, results, condition, view);
       const counts = Object.fromEntries(STATE_NAMES.map((name, i) => [name, model.counts[i]]));
       const lines = describeMap(model, proteinView(results) ?? results);
-      return { message: lines.join(' '), data: { run: run.name, condition: model.contrast ? null : results.conditions[condition].name, ...(model.contrast ? { contrast: model.contrast.name } : {}), colorBy: model.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines } };
+      const data = { run: run.name, condition: model.contrast ? null : results.conditions[condition].name, ...(model.contrast ? { contrast: model.contrast.name } : {}), colorBy: model.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines };
+      // The map as a picture (wave 7, slice 3): as its SVG export draws it (on white, with the
+      // tracks shown), at scale times its size, positions from to to.
+      if (args.image === true) {
+        const scale = args.scale === undefined || args.scale === null ? 2 : Number(args.scale);
+        if (!(scale >= 0.5 && scale <= 4)) throw new ActionError('scale is from 0.5 to 4: the picture\'s size against the map\'s export.');
+        const range = {};
+        for (const key of ['from', 'to']) {
+          if (args[key] === undefined || args[key] === null) continue;
+          const p = Number(args[key]);
+          if (!Number.isInteger(p) || p < 1 || p > model.length) throw new ActionError(`${key} is a position from 1 to ${model.length}.`);
+          range[key] = p;
+        }
+        if ((range.from ?? 1) > (range.to ?? model.length)) throw new ActionError(`from (${range.from}) is after to (${range.to}).`);
+        const shown = (await runTrackState(app, run, { condition })).arranged.filter((t) => t.shown);
+        const tracks = shown.length && shown.every((t) => t.length === model.length) ? shown : [];
+        const svg = mapSVG(model, { palette: view.palette ?? 'rdbu', results: proteinView(results) ?? results, tracks, ...range });
+        const width = Number(/width="(\d+(?:\.\d+)?)"/.exec(svg)[1]) * scale;
+        if (width > 8000) throw new ActionError(`The map is ${Math.round(width).toLocaleString('en-US')} pixels wide at this scale: give from and to (a stretch of positions), or a smaller scale.`);
+        const png = await svgToPNG(svg, scale);
+        const stretch = range.from || range.to ? `, positions ${range.from ?? 1}–${range.to ?? model.length}` : '';
+        Object.assign(data, { caption: `The variant-effect map of ${run.name}${data.contrast ? `, ${data.contrast}` : results.conditions.length > 1 ? `, ${data.condition}` : ''}${stretch}`, image: await dataURL(png.blob), width: png.width, height: png.height, scale, from: range.from ?? 1, to: range.to ?? model.length, tracks: tracks.map((t) => t.label) });
+      }
+      return { message: lines.join(' '), data };
+    },
+
+    // A run's variants as a table (wave 7, slice 3): the columns of its scores export (scores.csv),
+    // or with a contrast its differential scores' (differential.csv, that contrast's), or with
+    // protein a nucleotide run's scores at the protein level (protein_scores.csv); numbers as
+    // numbers, null where the export has NA. Those at positions, of kinds, in a saved selection or
+    // matching a query; sorted by a column; columns chosen; a page (limit, 0 for all; offset).
+    async scores(args) {
+      const run = resolveRun(args.run);
+      const { results: own } = await resultsOf(run);
+      const view = proteinView(own);
+      const protein = args.protein === true;
+      if (protein && !view) throw new ActionError(`${run.name} names protein variants: its scores are at the protein level already.`);
+      let contrast = null;
+      if (args.contrast !== undefined && args.contrast !== null && args.contrast !== '') {
+        const names = (own.differential ?? []).map((d) => d.name);
+        if (!names.length) throw new ActionError(`${run.name} compares no conditions: score it with two conditions and a contrast first.`);
+        contrast = /^\d+$/.test(String(args.contrast)) ? Number(args.contrast) - 1 : names.indexOf(choose(args.contrast, names, 'contrast'));
+        if (contrast < 0 || contrast >= names.length) throw new ActionError(`There ${names.length === 1 ? 'is 1 contrast' : `are ${names.length} contrasts`}: ${names.join(', ')}.`);
+        if (protein) throw new ActionError('A contrast\'s differences are of the run\'s own variants: give contrast or protein, not both.');
+      }
+      const results = protein ? view : own;
+      const condition = contrast === null ? resolveCondition(own, args.condition) : own.conditions.findIndex((c) => c.id === own.differential[contrast].condition);
+      const table = contrast !== null ? differentialTable(own, run, contrast) : protein ? proteinScoresTable(view, condition) : scoresTable(own, run, condition);
+      const v = results.variants;
+      let keep = Array.from({ length: results.rows }, (_, i) => i);
+      const filters = [];
+      // Positions: numbers, or stretches as "30-40".
+      if (args.positions !== undefined && args.positions !== null) {
+        const wanted = new Set();
+        for (const item of Array.isArray(args.positions) ? args.positions : [args.positions]) {
+          const m = /^\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*$/.exec(String(item));
+          if (!m) throw new ActionError(`"${item}" is not a position (a number, or a stretch as "30-40").`);
+          for (let p = Number(m[1]); p <= Number(m[2] ?? m[1]); p += 1) wanted.add(p);
+        }
+        keep = keep.filter((i) => wanted.has(v.position[i]));
+        filters.push('at the positions given');
+      }
+      if (args.kinds !== undefined && args.kinds !== null) {
+        const names = [...new Set(Object.values(KIND_NAMES))];
+        const wanted = new Set((Array.isArray(args.kinds) ? args.kinds : [args.kinds]).map((k) => choose(k, names, 'kind of variant')));
+        keep = keep.filter((i) => wanted.has(KIND_NAMES[v.kind[i]]));
+        filters.push([...wanted].join(' or '));
+      }
+      // A saved selection's variants, or a query's, by their names on the run's map.
+      let named = null;
+      if (args.selection !== undefined && args.selection !== null) {
+        const list = ws().selections;
+        if (!list.length) throw new ActionError('There is no saved selection: select_variants with save_as saves one.');
+        const saved = list.find((x) => x.name === choose(args.selection, list.map((y) => y.name), 'saved selection'));
+        named = new Set(saved.keys);
+        filters.push(`in "${saved.name}"`);
+      }
+      if (args.query) {
+        const mapResults = view ?? own;
+        const mapCondition = contrast === null ? resolveCondition(own, args.condition) : condition;
+        const model = buildMapModel(mapResults, run.inputs.design, contrast === null ? { condition: mapCondition } : { contrast, colorBy: 'differential' });
+        const found = await queryOn(run, String(args.query), { model, results: mapResults, own });
+        named = named ? new Set(found.keys.filter((k) => named.has(k))) : new Set(found.keys);
+        filters.push(`matching "${found.query}"`);
+      }
+      if (named) keep = keep.filter((i) => named.has(view && !protein ? v.proKey[i] : v.key[i]));
+      const header = table.header;
+      // Sorted by a column (descending with "-" before it), what has no value last.
+      let sortedBy = null;
+      if (args.sort) {
+        const text = String(args.sort).trim();
+        const descending = text.startsWith('-');
+        const column = header.indexOf(choose(text.replace(/^[-+]/, ''), header, 'column'));
+        const value = (i) => table.rows[i][column];
+        const missing = (x) => x === null || x === undefined || (typeof x === 'number' && Number.isNaN(x)) || x === 'NA';
+        keep = keep.slice().sort((a, b) => {
+          const x = value(a);
+          const y = value(b);
+          if (missing(x) || missing(y)) return missing(x) - missing(y);
+          const order = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
+          return descending ? -order : order;
+        });
+        sortedBy = `${header[column]}${descending ? ', the highest first' : ''}`;
+      }
+      const columns = args.columns ? (Array.isArray(args.columns) ? args.columns : [args.columns]).map((c) => header.indexOf(choose(c, header, 'column'))) : header.map((_, j) => j);
+      const limit = args.limit === undefined || args.limit === null ? 100 : Number(args.limit);
+      const offset = args.offset === undefined || args.offset === null ? 0 : Number(args.offset);
+      if (!Number.isInteger(limit) || limit < 0) throw new ActionError('limit is a whole number of rows (0 for all of them).');
+      if (!Number.isInteger(offset) || offset < 0) throw new ActionError('offset is a whole number of rows to pass over.');
+      const page = keep.slice(offset, limit ? offset + limit : undefined);
+      const variants = page.map((i) => Object.fromEntries(columns.map((j) => [header[j], cellValue(table.rows[i][j], header[j])])));
+      const of = contrast !== null ? own.differential[contrast].name : own.conditions.length > 1 ? results.conditions[condition].name : null;
+      const export_ = contrast !== null ? 'differential.csv' : protein ? 'protein_scores.csv' : 'scores.csv';
+      const count = (n) => n.toLocaleString('en-US');
+      const rest = offset + page.length < keep.length ? ` (offset ${offset + page.length} for the next)` : '';
+      return {
+        message: `${run.name}${of ? `, ${of}` : ''}${protein ? ' at the protein level' : ''}: ${keep.length === results.rows ? `${count(results.rows)} variants` : `${count(keep.length)} of ${count(results.rows)} variants (${filters.join(', ')})`}${sortedBy ? `, sorted by ${sortedBy}` : ''}; ${page.length ? `rows ${count(offset + 1)}–${count(offset + page.length)} here${rest}` : 'none here'}. The columns are those of its ${export_} export; null where it has NA.`,
+        data: { run: run.name, ...(contrast !== null ? { contrast: own.differential[contrast].name } : { condition: results.conditions[condition].name }), level: protein ? 'protein' : 'variants', export: export_, columns: columns.map((j) => header[j]), total: keep.length, of: results.rows, offset, returned: page.length, ...(sortedBy ? { sortedBy } : {}), variants },
+      };
+    },
+
+    // A run's provenance (wave 7, slice 3), as its export (provenance.json) holds it: the table and
+    // its mapping by SHA-256, the design, the parameters, the software, the output's SHA-256, the
+    // QC and the workspace's history head.
+    async provenance(args) {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      let file;
+      try {
+        file = await runFile(app, run, 'provenance', resolveCondition(results, args.condition));
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const doc = JSON.parse(file.text);
+      const qc = doc.qc?.findings ?? [];
+      return {
+        message: `${possessive(run.name)} provenance: the table ${doc.inputs.table.name} (SHA-256 ${doc.inputs.table.sha256.slice(0, 12)}…), its design (SHA-256 ${doc.inputs.designSha256.slice(0, 12)}…), ${doc.run.description}; scored by MaveScape ${doc.run.software.version}, output SHA-256 ${doc.run.output.sha256.slice(0, 12)}…${qc.length ? `; QC ${qc.filter((f) => f.status === 'fail').length} fail, ${qc.filter((f) => f.status === 'review').length} to review` : ''}.`,
+        data: doc,
+      };
+    },
+
+    // The Structure view as a picture (wave 7, slice 3): as a figure panel of it is drawn, at scale
+    // times the view's size (2 by default), its legend below it (legend: false, the view alone).
+    async render_structure(args) {
+      const state = structureState(app);
+      if (!state.viewer?.structure) throw new ActionError('No structure is open: open one with open_structure (a PDB ID or an AlphaFold DB model), or a file with open_files.');
+      const scale = args.scale === undefined || args.scale === null ? 2 : Number(args.scale);
+      if (!(scale >= 0.5 && scale <= 4)) throw new ActionError('scale is from 0.5 to 4: the picture\'s size against the view\'s.');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      await surfaceReady(state.viewer);
+      await settle();
+      let panel;
+      try {
+        panel = await figurePanel(app, { scale, legend: args.legend !== false, light: args.light === true });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const summary = structureSummary(false);
+      const { width, height } = panel.metadata.image;
+      const coloring = summary.scores && !summary.scores.error ? `${summary.scores.label.toLowerCase()} (${summary.scores.source})` : COLOR_SCHEMES.find((c) => c.id === summary.color)?.label.toLowerCase() ?? summary.color;
+      return {
+        message: `${summary.name}, as the Structure view shows it: ${STYLES[summary.style].label.toLowerCase()}, colored by ${coloring}${summary.selected.count ? `, ${plural(summary.selected.count, 'residue')} selected` : ''}; ${width} × ${height} pixels${panel.metadata.image.legend ? ', its legend below' : ''}, drawn with ${state.viewer.kind === 'webgpu' ? 'WebGPU' : 'the Canvas renderer'}.`,
+        data: { caption: `${summary.name} in the Structure view, colored by ${coloring}`, image: await dataURL(panel.bytes), width, height, scale, legend: panel.metadata.legend, structure: summary },
+      };
     },
 
     // --- Tracks (wave 3, slice 5) -------------------------------------------------------------------
@@ -1641,9 +1941,9 @@ export function installRemote(app) {
       if (!list.length) throw new ActionError('The workspace has no annotation to remove.');
       const ref = String(args.annotation ?? args.track ?? '').replace(/:.*$/, '');
       const a = list.find((x) => x.id === ref) ?? list.find((x) => x.name === choose(ref, list.map((y) => y.name), 'annotation'));
-      removeTrack(app, a.id);
+      const held = removing(a, 'annotations', `the annotation "${a.name}"`, `Removed the annotation "${a.name}" and its tracks`, () => removeTrack(app, a.id), `Propose removing the track ${a.name}`);
       await settle();
-      return { message: `Removed ${a.name} and its tracks.`, data: { removed: a.id } };
+      return { message: held ? `Proposed removing ${a.name} and its tracks.${waits}` : `Removed ${a.name} and its tracks.`, data: { removed: a.id, ...(held ? { waiting: true } : {}) } };
     },
 
     // Checks a run's robustness to other analysis choices (wave 4, slice 4): scored again across
@@ -1741,13 +2041,14 @@ export function installRemote(app) {
         ? `${c.a.label} and ${c.b.label}: ${c.matched.compared} variants compared${c.matched.compared !== c.matched.n ? ` of ${c.matched.n} scored on both sides` : ''}${c.scale?.applied ? ` (${c.scale.anchors ? 'rescaled by their anchors' : 'stated to be on one scale'})` : ''}. ${agreement}.${discordance}${classes}${flagged.length ? ` ${flagged.map((i) => `${i.label}: ${i.text}`).join(' ')}` : ''}`
         : `${c.a.label} and ${c.b.label} cannot be compared: ${flagged.filter((i) => i.status === 'blocked').map((i) => i.text).join(' ')}`;
       const { software, ...data } = JSON.parse(comparisonJSON(c));
-      // Kept in the workspace's report (wave 6, slice 4).
+      // Kept in the workspace's report (wave 6, slice 4): the analysis's id, beside the comparison's
+      // own report of compatibility.
       if (args.report === true) {
         if (!s) throw new ActionError(`${c.a.label} and ${c.b.label} cannot be compared, so there is nothing to keep in the report.`);
-        data.report = keepInReport(app, comparisonForReport(c, pair));
+        data.inReport = keepInReport(app, comparisonForReport(c, pair));
         await settle();
       }
-      return { message: `${message}${data.report ? ' Kept in the report.' : ''}`, data };
+      return { message: `${message}${data.inReport ? ' Kept in the report.' : ''}`, data };
     },
 
     // Certificates (wave 6, slice 6; ui/certificate.js): the workspace certified, every number
@@ -1831,8 +2132,8 @@ export function installRemote(app) {
       if (args.remove !== undefined && args.remove !== null) {
         if (!(ws().checkpoints ?? []).length) throw new ActionError('No checkpoint is kept.');
         const gone = find(args.remove);
-        deleteCheckpoint(app, gone.id);
-        message = `Deleted the checkpoint "${gone.name}".`;
+        const held = removing(gone, 'checkpoints', `the checkpoint "${gone.name}"`, `Deleted the checkpoint "${gone.name}"`, () => deleteCheckpoint(app, gone.id), `Propose deleting the checkpoint "${gone.name}"`);
+        message = held ? `Proposed deleting the checkpoint "${gone.name}".${waits}` : `Deleted the checkpoint "${gone.name}".`;
       } else if (args.name !== undefined && args.name !== null) {
         const id = keepCheckpoint(app, args.name);
         const c = ws().checkpoints.find((x) => x.id === id);
@@ -1903,6 +2204,7 @@ export function installRemote(app) {
     // view shows them (Markdown, BibTeX, and each section). remove: an analysis kept in it, by id
     // or by its words ("the comparison of Run 1 and Run 2"), taken out first.
     async report(args) {
+      let heldOut = null;
       if (args.remove !== undefined && args.remove !== null) {
         const kept = ws().analyses ?? [];
         if (!kept.length) throw new ActionError('Nothing is kept in the report.');
@@ -1910,13 +2212,13 @@ export function installRemote(app) {
         const text = String(args.remove).trim().toLowerCase();
         const at = [(a, i) => a.id === args.remove, (a, i) => names[i].toLowerCase() === text, (a, i) => names[i].toLowerCase().includes(text)].reduce((found, test) => (found >= 0 ? found : kept.findIndex(test)), -1);
         if (at < 0) throw new ActionError(`No analysis "${args.remove}" is kept in the report. Kept: ${kept.map((a, i) => `${names[i]} (${a.id})`).join('; ')}.`);
-        removeFromReport(app, kept[at].id);
+        heldOut = removing(kept[at], 'analyses', names[at], `Took ${names[at]} out of the report`, () => removeFromReport(app, kept[at].id), `Propose taking ${names[at]} out of the report`) ? names[at] : null;
       }
       if (args.show !== false) await app.setMode('report');
       const report = await reportOf(app);
       await settle();
       return {
-        message: `${report.title}: ${report.sections.filter((x) => x.title).map((x) => x.title).join(', ')}; ${report.references.length} references. Kept in it: ${(ws().analyses ?? []).map((a) => analysisName(a)).join('; ') || 'nothing'}.`,
+        message: `${heldOut ? `Proposed taking ${heldOut} out of the report.${waits} ` : ''}${report.title}: ${report.sections.filter((x) => x.title).map((x) => x.title).join(', ')}; ${report.references.length} references. Kept in it: ${(ws().analyses ?? []).map((a) => analysisName(a)).join('; ') || 'nothing'}.`,
         data: {
           title: report.title,
           sections: report.sections.map((x) => ({ id: x.id, title: x.title, blocks: x.blocks })),
@@ -2076,14 +2378,40 @@ export function installRemote(app) {
 
   async function perform(event) {
     let outcome;
+    // The workspace open when the action began, and the agent's proposal in it then.
+    const start = { id: store.ws.id, proposal: null };
     try {
       const handler = Object.hasOwn(actions, event.action) ? actions[event.action] : null;
       if (!handler) throw new ActionError(`Unknown action "${event.action}". Actions: ${Object.keys(actions).join(', ')}.`);
       const args = typeof event.args === 'object' && event.args ? event.args : {};
       author = event.client || 'a program on this computer';
+      agent = Boolean(event.agent);
       app.log(`${author}: ${event.action}${Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 200)}` : ''}`);
+      // An AI agent's changes (mavescape mcp) carry its name in the history (by) and are proposals:
+      // what it commits to the workspace open when it began passes through absorb (lib/
+      // proposals.js); a workspace it opens meanwhile is its own. What is committed in the window
+      // while the action runs counts as the agent's: the page performs one action at a time, and
+      // the strip above the view says that the agent is working.
+      setHistoryActor(agent ? author : null);
+      if (agent) {
+        start.proposal = proposalOf(store.ws, author);
+        store.setCommitFilter((before, next) => (next.id === start.id ? absorb(before, next, author).ws : next));
+        app.agentAction = { author, action: event.action };
+        store.notify(['agent']);
+      }
       const result = await handler(args, event);
       let message = result.message ?? 'Done.';
+      let data = result.data ?? null;
+      // What the agent made, marked proposed: said, so that it knows the person decides.
+      if (agent && store.ws.id === start.id) {
+        const now = proposalOf(store.ws, author);
+        const fresh = (now?.changes ?? []).filter((c) => !(start.proposal?.changes ?? []).some((x) => canonicalJSON(x) === canonicalJSON(c)));
+        if (fresh.length) {
+          const made = describeProposal(store.ws, { ...now, changes: fresh }).filter((i) => !i.held).map((i) => i.text);
+          if (made.length) message = `${message} Proposed to the person, who accepts or rejects it (meanwhile you can use it): ${made.join('; ')}.`;
+          data = { ...(data ?? {}), proposal: proposalSummary(store.ws, now) };
+        }
+      }
       // An export: the file goes to the program, which writes it where the caller asked.
       if (result.file !== undefined) {
         if (!event.output) throw new ActionError('Writing files needs the MaveScape program.');
@@ -2092,10 +2420,18 @@ export function installRemote(app) {
         if (!response.ok) throw new ActionError(`The file could not be written: ${written.error ?? `HTTP ${response.status}`}`);
         message = `Wrote ${written.path} (${written.bytes} bytes). ${message}`;
       }
-      outcome = { ok: true, message, data: result.data ?? null };
+      outcome = { ok: true, message, data };
     } catch (error) {
       outcome = { ok: false, message: error.message ?? String(error) };
-      if (!(error instanceof ActionError)) console.error(error);
+      if (!(error instanceof ActionError) && !(error instanceof ProposalError)) console.error(error);
+    } finally {
+      setHistoryActor(null);
+      store.setCommitFilter(null);
+      if (agent) {
+        app.agentAction = null;
+        store.notify(['agent']);
+      }
+      agent = false;
     }
     await fetch(`api/remote/result/${encodeURIComponent(event.id)}`, { method: 'POST', body: JSON.stringify(outcome), headers: { 'Content-Type': 'application/json' } }).catch(() => {});
   }

@@ -30,6 +30,8 @@ It covers the path from a count table to a result you can defend, and checks eac
   validators accept;
 - figures for a paper or a talk, drawn from the analysis and exported as SVG, PDF or PNG, each
   carrying what it was drawn from, so it can be checked and rebuilt;
+- AI agents and scripts in the same window: an agent's changes wait for you to accept them, and R
+  and Python call every action;
 - a record a reviewer can repeat: the methods of the whole workspace with their references,
   provenance, and a workspace archive that reopens identically on another computer.
 
@@ -46,7 +48,7 @@ guides to every view, with screenshots.
 - [Opening data](#opening-data)
 - [The views](#the-views)
 - [Command-line options](#command-line-options)
-- [Scripting and headless runs](#scripting-and-headless-runs)
+- [AI agents and scripts](#ai-agents-and-scripts)
 - [Validation](#validation)
 - [Privacy and security](#privacy-and-security)
 - [Limitations](#limitations)
@@ -178,9 +180,16 @@ guides to every view, with screenshots.
 - **Fourteen examples.** Three published experiments bundled with their counts, five opened from
   MaveDB, and six simulated with every true effect known, one with problems planted. Each has its
   question, guided steps and what to expect.
+- **AI agents.** `mavescape mcp` is a Model Context Protocol server: an agent such as Claude Code
+  opens data, scores, reads the QC and the scores as tables, looks at the map, structures and
+  figures as pictures, compares and certifies in the window you watch. Its changes are proposals
+  you accept or reject there, each recorded with the agent's name ([`docs/MCP.md`](docs/MCP.md); a
+  [session on Hsp90](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html#session)).
 - **Scripting and headless runs.** With `--remote-control`, scripts on your computer drive the
-  open window, each step visible and undoable. `mavescape run` does a whole analysis without a
-  window and writes the same bytes every time.
+  open window, each step visible and undoable, from R or Python with a function for each action
+  (tables as data frames, pictures as files; a [notebook on GRB2](clients/examples/grb2-sh3.ipynb)
+  and an [R script on DHFR](clients/examples/dhfr-lon.R)). `mavescape run` does a whole analysis
+  without a window and writes the same bytes every time.
 - **Accessible.** Color-vision-friendly colors as a setting, WCAG AA contrast in both themes,
   keyboard operation of the map with each cell announced.
 - **Validated.** A validation suite checks the pipelines against the tools the methods come from,
@@ -351,7 +360,7 @@ The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page 
 | `--keep-running` | Keep serving after the window is closed |
 | `mavescape urn:mavedb:…`, `--mavedb URN` | Open a MaveDB score set: its record, published scores and counts ([public data](https://robert-mcdermott.github.io/MaveScape/docs/public-data.html)) |
 | `--offline`, `--no-fetch`, `--cache-dir DIR` | Public data from the cache only, or none; where the cache is ([`docs/NETWORK.md`](docs/NETWORK.md)) |
-| `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html)) |
+| `--remote-control` | Let programs on this computer drive the window ([agents and scripts](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html)) |
 | `--proteoscope off\|PORTS` | Do not look for a running Proteoscope, or look on other ports than its own 8765–8814 ([open in Proteoscope](https://robert-mcdermott.github.io/MaveScape/docs/structure.html#proteoscope)) |
 | `--version` | Print the version |
 | `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html#headless)) |
@@ -361,17 +370,28 @@ The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page 
 | `mavescape export --format report --out DIR W.msz` | Write a saved workspace's report, `report.md` and `report.bib` ([report](https://robert-mcdermott.github.io/MaveScape/docs/report.html)) |
 | `mavescape export --format review --out DIR W.msz` | Write a saved workspace's review report, `review.html`: every number traced, in one file that loads nothing ([review reports](https://robert-mcdermott.github.io/MaveScape/docs/certificate.html#review)) |
 | `mavescape verify [--data DIR] [--review R.html] C.msz` | Verify a reproducibility certificate: every number computed again from its files and compared bit for bit; exit 0 verified, 1 differs, 2 not checkable; `--review` writes its review report ([certificates](https://robert-mcdermott.github.io/MaveScape/docs/certificate.html)) |
+| `mavescape mcp [options]` | A Model Context Protocol server for AI agents on stdin and stdout; the window opens when a tool needs it ([`docs/MCP.md`](docs/MCP.md)) |
 
 On macOS, Chrome (and Edge, Brave) keeps running after its last window is closed: quit it with ⌘Q
 to stop MaveScape too. If that browser is already running when MaveScape starts, the window opens
 in it and MaveScape keeps serving until Ctrl+C.
 
-## Scripting and headless runs
+## AI agents and scripts
 
-With `--remote-control`, programs on this computer can drive the open window: open an example or
-files, draft the design, score, read the QC findings, select variants, render the map and export,
-each step visible in the window and undoable. MaveScape writes its address and a token (needed to
-read or write files) to `remote.json` in its data folder:
+`mavescape mcp` is a Model Context Protocol server: an AI agent such as Claude Code opens data,
+scores, reads the QC and the scores, looks at the map and structures as pictures, compares, makes
+figures and certifies in the window you watch. Its changes are proposals you accept or reject in a
+strip above the view; each is recorded with the agent's name ([`docs/MCP.md`](docs/MCP.md): Claude
+Code, Claude Desktop and other clients, the tools, proposals, troubleshooting):
+
+```sh
+claude mcp add mavescape -- ~/.local/bin/mavescape mcp
+```
+
+With `--remote-control`, programs on this computer drive the open window the same way: open an
+example or files, draft the design, score, read the QC findings, select variants, render the map
+and export, each step visible in the window and undoable. MaveScape writes its address and a token
+(needed to read or write files) to `remote.json` in its data folder:
 
 ```sh
 mavescape --remote-control
@@ -379,8 +399,23 @@ curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "open_example", "
 curl -s http://127.0.0.1:8820/api/remote/action -d '{"action": "qc_findings"}'
 ```
 
-`GET /api/remote/tools` lists the actions with their arguments. The documentation's screenshots
-are made this way (`docs/capture/capture.mjs`).
+`GET /api/remote/tools` lists the actions with their arguments. The R and Python packages in
+[`clients/`](clients/) make each action a function, installed from this repository:
+
+```r
+library(mavescape)        # remotes::install_github("robert-mcdermott/MaveScape", subdir = "clients/r")
+ms_connect()
+ms_open_example("grb2-sh3")
+scores <- as.data.frame(ms_scores(run = "Run 1", limit = 0))
+```
+
+```python
+import mavescape          # pip install "git+https://github.com/robert-mcdermott/MaveScape#subdirectory=clients/python"
+ms = mavescape.connect()
+ms.render_map(run="Run 1", file="grb2-map.png")
+```
+
+The documentation's screenshots are made this way (`docs/capture/capture.mjs`).
 
 For pipelines, `mavescape run` does the whole analysis without a window (in a headless Chrome)
 and writes the scores, counts, QC, map, methods, provenance, the workspace archive and `run.json`
@@ -427,6 +462,8 @@ integration on every change.
 | Checkpoints and changes | Five planted changes from a checkpoint of GRB2's run (a pseudocount, a filter, a replicate left out, a threshold, the readout); the variants each rescoring moved, computed apart; a change of units (Hsp90 over its whole time course); the window's diff against Node's | Each change described exactly and nothing else; the variants moved, crossed and filtered the same; a change of units moving nothing; an analysis against itself unchanged |
 | Certificates | GRB2's workspace of every operation, each kind of number computed apart; six kinds of tampering; the 14 examples and every release's archives; the window's certificates against Node's | Every number as computed apart, verified bit for bit; every tampering caught and said; 172,383 numbers of the examples verified; the window's certificate Node's, byte for byte |
 | Review reports | Every traced number of GRB2's workspace and the 14 examples against the certificate and the workspace; the file in Chrome (requests, axe-core in both themes); the window's against Node's | Every number where it says it comes from; nothing loaded from outside the file; no axe-core violation in either theme; the same bytes from the window, `mavescape verify --review` and `export --format review` |
+| AI agents (MCP) | Every tool through `mavescape mcp` on stdio, as an agent's client calls them, in headless Chrome; the agent's proposals accepted and rejected in the window; the guide's session on Hsp90 | Results the remote actions' and Node's; read-only tools change nothing; every change carries the agent's name; each kind of change waits, applies or goes as it should; every number the guide's answers quote |
+| R and Python clients | Both packages against a running MaveScape in headless Chrome (`clients/test-clients.mjs`); `R CMD check`; the examples, the GRB2 notebook executed and the DHFR script run | GRB2 scored through each, its scores table every number of Node's, files written, errors with MaveScape's reason, results the HTTP API's; each example's checks |
 | Determinism | The same inputs reordered, in Chrome and in Node; `mavescape run` twice, from its own archive, and in a window | The same bits; every file the same bytes |
 | Scale | A million barcodes and their million-line map | Imported in 3.5 s, scored in 1.3 s |
 
@@ -449,8 +486,9 @@ check, its tolerance and how the reference outputs were made are in
   copies only, and `--no-fetch` switches public data off.
 - To offer opening a structure in Proteoscope, the program asks this computer's Proteoscope
   ports for its startup answer, and nothing else (`--proteoscope off` stops it).
-- Remote control is off unless `--remote-control` is given, and then answers only programs on
-  this computer; reading or writing files needs a token only you can read.
+- Remote control is off unless `--remote-control` is given (or `mavescape mcp`, which starts it for
+  the agent on its stdio), and then answers only programs on this computer; reading or writing
+  files needs a token only you can read.
 
 ## Limitations
 
@@ -477,6 +515,11 @@ check, its tolerance and how the reference outputs were made are in
   draw it again. Its legend is part of the image, so it shrinks with the panel and is not counted
   when the figure says its smallest text. A PDF's text is in Helvetica's standard encoding, so a
   character outside it (− or Δ) is written as its nearest ASCII (- or delta).
+- An AI agent's proposals are a review, not a fence: an agent that can run programs on your
+  computer can call the remote-control API directly, as a script does, and its changes then apply
+  at once under the name it gives. What you change in the window while an agent's action runs
+  counts as the agent's.
+- The R and Python packages are installed from this repository, not from CRAN or PyPI.
 - Calibration is planned for a later release; see the [roadmap](mavescape-spec/roadmap.md).
 
 ## Development
@@ -516,14 +559,16 @@ node --test "web/lib/**/*.test.mjs"   # the browser modules
 node validation/run.mjs               # the validation suites
 node validation/coverage.mjs          # coverage of 95% intervals
 node validation/remote-session.mjs    # every remote action, in the program and headless Chrome
+node validation/agent-session.mjs     # every tool through mavescape mcp, as an agent's client calls them
+node clients/test-clients.mjs         # the R and Python clients against a running MaveScape, then the examples
 node validation/headless-run.mjs      # mavescape run and validate: the same bytes twice, reruns, failures
 ```
 
 `node validation/fetch.mjs` downloads the public data the suites compare with and checks their
 checksums. GitHub Actions run gofmt, `go vet`, the Go tests with the race detector, the
 cross-compilation, the JavaScript tests, the validation suites, the performance budgets, the
-remote-control session, headless runs and the website build on every pull request and every push
-to `main`.
+remote-control session, the agent session, the R and Python clients, headless runs and the
+website build on every pull request and every push to `main`.
 
 ### Documentation
 
@@ -535,8 +580,9 @@ node docs/site/build.mjs /tmp/site    # the website, with every link, anchor and
 ### Release
 
 The version is `version` in `main.go`; `web/app.js`, `web/index.html` and `CITATION.cff` repeat
-it. To release, set them, add the release to `CHANGELOG.md`, merge to `main` and push a tag such
-as `v0.6.0`. The release workflow (`.github/workflows/release.yml`) checks that the tag matches,
+it, and `node clients/generate.mjs` gives the R and Python clients the same version. To release,
+set them, add the release to `CHANGELOG.md`, merge to `main` and push a tag such
+as `v0.7.0`. The release workflow (`.github/workflows/release.yml`) checks that the tag matches,
 runs the tests, builds the six binaries and attaches them with `SHA256SUMS` to a draft release.
 Review the draft and publish it.
 
@@ -547,6 +593,8 @@ Review the draft and publish it.
 | `main.go`, `security.go`, `local.go`, `store.go`, `records.go`, `window.go` | The Go host: local server, request hardening, files named on the command line, the workspace library, the window |
 | `fetch.go`, `cache.go`, `annotations.go`, `structures.go` | Public data: the fixed list of services, the cache, annotations and structures |
 | `remote.go`, `actions.go`, `connection.go`, `output.go` | Remote control |
+| `mcp.go` | `mavescape mcp`, the MCP server for AI agents |
+| `clients/` | The R and Python packages, a function for each action, generated from `clients/tools.json` |
 | `run.go`, `export.go` | `mavescape run`, `validate` and `export` |
 | `handoff.go` | Finding a running Proteoscope |
 | `web/index.html`, `web/styles.css`, `web/app.js` | The app shell |

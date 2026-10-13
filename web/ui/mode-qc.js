@@ -14,6 +14,7 @@ import { CAUSE_KINDS, NEXT_KINDS } from '../lib/advice.js';
 import { STAGE_BY_ID } from '../lib/filters.js';
 import { barChart, classHistogram, coverageGrid, flowBars, legend, lineChart, scatter, viewTheme } from './plots.js';
 import { qcCharts } from '../lib/qc-plots.js';
+import { heldOfKind } from '../lib/proposals.js';
 import { figureButton } from './figure-data.js';
 import { workerInput } from './score-input.js';
 
@@ -383,6 +384,9 @@ export function mountQcMode(app, container) {
       right.append(detailPane(findings.find((f) => f.id === view.finding), cached.qc, t, sub));
     }
     left.append(thresholdsPane());
+    // What an AI agent proposes of QC (wave 7, slice 2): applied only if the person accepts.
+    const held = [...heldOfKind(store.ws, 'qc-thresholds'), ...heldOfKind(store.ws, 'acknowledge')];
+    if (held.length) left.prepend(h('div.callout.warn', { style: { marginBottom: '10px' } }, icon('sparkles'), h('div', h('strong', `Proposed by ${[...new Set(held.map((x) => x.proposal.author))].join(' and ')}, read here only once you accept:`), h('ul', { style: { margin: '4px 0 0', paddingLeft: '18px' } }, ...held.map((x) => h('li', x.change.detail))))));
     root.append(h('div.view-body', h('div.split.qc-split', left, right)));
     renderProgress();
   }

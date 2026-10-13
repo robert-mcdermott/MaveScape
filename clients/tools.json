@@ -1,0 +1,1804 @@
+[
+  {
+    "name": "get_state",
+    "title": "Describe the workspace",
+    "description": "The open workspace: its tables, targets, design, score runs, saved selections, the view shown, the focused item and the selection, and the analysis steps (counts, target, design, score, QC, map, record) with the next one to take.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "new_workspace",
+    "title": "Start a new workspace",
+    "description": "Starts a new, empty workspace (the open one is saved in the library first).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "A name for it.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "open_example",
+    "title": "Open an example",
+    "description": "Opens a bundled example as a new workspace, scored with MaveScape's defaults, in the view it opens in. Without an id, the error lists the examples.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The example's id or part of its title. Published: \"grb2-sh3\" (GRB2's SH3 domain, an input and an output), \"hsp90\" (Hsp90, a time series), \"factor9\" (factor IX, sorted bins), \"dhfr-lon\" (DHFR with and without Lon, two conditions), \"brca1-ring\" (BRCA1's RING domain, from MaveDB and back), \"pten-mavedb\" (PTEN, published scores), \"brca1-sge\" (BRCA1, nucleotide variants), \"tp53-screens\" (TP53, two screens). Simulated, with known effects: \"simulated\", \"simulated-time-series\", \"simulated-sort-seq\", \"simulated-barcodes\", \"simulated-conditions\", \"simulated-problems\". The examples from MaveDB download their tables when opened.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "open_files",
+    "title": "Open files",
+    "description": "Opens files on this computer, as dropping them on the window does: count or score tables (.csv, .tsv), the target's sequence (.fasta), designs (.design.json), workspace archives (.msz) and structures (.pdb, .cif, .bcif, gzipped or not: shown in the Structure view), or folders of them. Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "new_workspace": {
+          "description": "Open them in a new workspace rather than the open one.",
+          "type": "boolean"
+        },
+        "paths": {
+          "description": "Absolute paths of files or folders.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "paths"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "set_mode",
+    "title": "Show a view",
+    "description": "Shows a view: start, experiment, qc, score, map, compare, structure, figures or report.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "start, experiment, qc, score, map, compare, structure, figures or report.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "focus",
+    "title": "Show an item in the inspector",
+    "description": "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view or variant, by name. With no name, clears the focus.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "table, target, run, selection, structure view or variant; found by name across all of them if not given.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala).",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "draft_design",
+    "title": "Draft the design from the column names",
+    "description": "Drafts the design from the table's column names (which column is which sample, replicate and time point), as the workflow's \"Draft the design\" does, and reports its problems. Replaces the current design.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "table": {
+          "description": "The table by name; the one the design describes, or the first, if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "set_design",
+    "title": "Set the design",
+    "description": "Sets the design (a mavescape-design document, as docs/FORMATS.md describes) for a table, after checking it against the table's columns. Refused, with every problem listed, when it is not valid.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "design": {
+          "description": "The design document.",
+          "type": "object"
+        },
+        "table": {
+          "description": "The table by name; the one the design describes, or the first, if not given.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "design"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "search_mavedb",
+    "title": "Search MaveDB",
+    "description": "Searches MaveDB's published score sets (through MaveScape's list of public services; cached for a day, and from the cache only with --offline): each match's URN, title, targets, organism, license, variants and publication, 100 a page. Only the words searched for are sent.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "description": "The page of 100 results (the first if not given).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "text": {
+          "description": "The words to search for: a gene, a protein, an assay, an author.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "open_mavedb",
+    "title": "Open a MaveDB score set",
+    "description": "Opens a published MaveDB score set as a new workspace: its record (license and terms, citation, target, the assay's keywords, calibrations), its published scores read as published as the run \"Published scores\" on the map, and its counts, when deposited, with a design drafted from their column names to check and score. A target named by a transcript (NM_007294.3, ENST00000460680.5) is fetched from NCBI or Ensembl; nucleotide variants are read at the protein level too. Several score sets of one target (urn holding several URNs) open together: each one's published scores a run, and their counts joined into one table with a design drafted as a condition each, the first the reference, to compare. Cached for offline use.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "counts": {
+          "description": "Also open its counts, when it has them (the default).",
+          "type": "boolean"
+        },
+        "mapped": {
+          "description": "Also keep MaveDB's mapping of the variants to the human reference (VRS identifiers), when it has one.",
+          "type": "boolean"
+        },
+        "target": {
+          "description": "Of a score set of several targets, the one to open (its label, as the variants name it).",
+          "type": "string"
+        },
+        "urn": {
+          "description": "The score set's URN (urn:mavedb:00000835-a-1), or a MaveDB address that holds it; several URNs, separated by spaces or commas, open together.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "urn"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "check_target",
+    "title": "Check the target against UniProt",
+    "description": "Checks the target against its UniProt entry, fetched through MaveScape's list of public services (docs/NETWORK.md; cached, and from the cache only with --offline): where the target sits, the differences, and the fields the entry would change (offset, identifiers, organism). With apply, uses them and records the check with the workspace, for its history and methods. Only the accession is sent, never a sequence.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "accession": {
+          "description": "A UniProt accession (P62993); the target's own if not given.",
+          "type": "string"
+        },
+        "apply": {
+          "description": "Use what the entry gives and record the check.",
+          "type": "boolean"
+        },
+        "target": {
+          "description": "A target by name; the design's if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "mavedb_deposit",
+    "title": "What a MaveDB deposit would hold",
+    "description": "What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and those left out, with why), the target (its sequence, or the transcript that names it), the columns of scores and counts, the experiment's keywords from the design's readout, and what MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id). Writes nothing: export with what mavedb writes the package.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "set_mavedb_details",
+    "title": "Set the MaveDB details",
+    "description": "Sets what a MaveDB deposit says that the workspace does not hold (title, shortDescription, abstract, method, experiment, license, publications, dois, rawReads, contributors, experimentUrn, supersedes, taxonomyId, category, keywords): the fields given replace the workspace's, an empty one removes it. Undoable, and in the history.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "details": {
+          "description": "The details to set: license one of CC0, CC BY 4.0, CC BY-SA 4.0; publications as \"PubMed 29785012\" or a DOI (the first the primary one); rawReads and contributors (ORCID iDs) as lists; keywords as [{key, label, description}] in MaveDB's vocabulary.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "details"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "check",
+    "title": "Check a table, its design and parameters",
+    "description": "Checks a table as scoring would, without scoring: its variant names against the design's target, its problems, the design against its columns, and the parameters against the design. Returns valid (nothing blocks scoring), what blocks it, and the warnings. mavescape validate and mavescape run use it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "design": {
+          "description": "A design to check against the table (a mavescape-design document); the workspace's own if not given.",
+          "type": "object"
+        },
+        "parameters": {
+          "description": "Parameters to change from the preset, checked against the design (as for score).",
+          "type": "object"
+        },
+        "preset": {
+          "description": "The preset whose parameters are checked: mavescape (the default), enrich2, dimsum or vampseq.",
+          "type": "string"
+        },
+        "table": {
+          "description": "The table by name; the one the design describes, or the first, if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "reproduce_run",
+    "title": "Reproduce a run",
+    "description": "Recomputes a saved run's scores from its recorded inputs (its table, design and parameters) and checks them against its recorded output hash: refused, saying why, when they differ. mavescape run --from-workspace uses it.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "score",
+    "title": "Score the counts",
+    "description": "Scores the counts with the current design: functional scores with standard errors, a new immutable run (or the existing one, when a run already has the same table, design and parameters). Shows it in the Score view.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "parameters": {
+          "description": "Parameters to change from the preset: model (ratio, wls, ols: a time series starts from wls; dimsum), regressionSE (counting-floor, residual), normalization (wt, complete, full, synonymous), combination (reml, fixed, enrich2), rescale, pseudocount, dimsumNormalise, dimsumErrorModel, dimsumDropout, differential (with two or more conditions: limma, paired, independent or null), filters {minInputCount, minTimePoints, …}.",
+          "type": "object"
+        },
+        "preset": {
+          "description": "mavescape (the default), enrich2 (Enrich2 2.0.2's ratios, for comparison) or dimsum (DiMSum's fitness and error model, for an input and an output; the run's fitted terms are returned).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "qc_findings",
+    "title": "Quality-control findings",
+    "description": "Quality control of a score run (or of the counts alone, before scoring): each finding's status (pass, review, fail or not assessed), what was found, its threshold and why it matters, and the overall status. Shows them in the QC view.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "finding": {
+          "description": "A finding to show in full in the QC view, by id or title.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name or id, or \"counts\" for the counts with the current design; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "acknowledge_finding",
+    "title": "Acknowledge a QC finding",
+    "description": "Acknowledges a quality-control finding that is to review or failing, with the reason it is expected (\"the library was made by error-prone PCR\"); an empty reason withdraws it. The finding keeps its status; the reason goes into the history, the methods and the QC exports, and holds while the finding is no worse. A blocking finding cannot be acknowledged.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "finding": {
+          "description": "The finding, by id (coverage, separation…) or title.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why the finding is expected here; empty to withdraw the acknowledgement.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name or id, or \"counts\"; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "finding"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "set_qc_thresholds",
+    "title": "Set the QC thresholds",
+    "description": "Sets the quality-control thresholds by their keys: a finding's review and fail levels (\"agreement\": {\"review\": 0.7, \"fail\": 0.4}, either level alone), or a measure's value (\"lowCount\": 5); the others stay as they are. reset: true goes back to MaveScape's defaults. The findings are read with them; the change goes into the history and the methods.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "reset": {
+          "description": "Go back to MaveScape's default thresholds.",
+          "type": "boolean"
+        },
+        "thresholds": {
+          "description": "By key: readsPerVariant, lowCount, lowFraction, missingExcess, coverage, agreementInput, agreement, excessVariance, outlierReplicate, separation, resolution, scoredFraction, fewerPoints, timeFit, binShare, cellsPerVariant, unmappedReads, singleBarcode, barcodeExcess, splitHalf, outlierBarcodes (qc_findings names each finding's threshold).",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "proposals",
+    "title": "Proposals waiting for the person",
+    "description": "An AI agent's proposals: what it made and marked proposed, and what waits for the person to accept (the design, QC thresholds and acknowledgements, a target's check, the MaveDB details, removals), with the latest decisions, accepted or rejected. The person decides in the window.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "select_variants",
+    "title": "Select variants",
+    "description": "Selects variants on the map: by a query (such as \"missense at 40-80 with se \u003c 0.2\", \"lower and not robust\", \"from C in feature disulfide\", \"in Core and not in Surface\"), by name or by position; replaces the selection or adds to, intersects or subtracts from it; optionally saves it by name (with its query). A query that needs the run's robustness checks it first. Shows the Map view with the selection.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "contrast": {
+          "description": "A contrast between conditions (its name, or its number from 1): select on its differential map.",
+          "type": "string"
+        },
+        "filter": {
+          "description": "Only these of them: scored, low (low confidence), filtered or missing.",
+          "type": "string"
+        },
+        "operation": {
+          "description": "What to do with the selection there is: replace (the default), add, intersect or subtract.",
+          "type": "string"
+        },
+        "positions": {
+          "description": "Positions on the target (numbered from 1): every substitution there.",
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "query": {
+          "description": "A query of MaveScape's selection language: kinds (missense, nonsense, synonymous), states (scored, low, filtered, missing), at/pos/refpos with positions, from/to with residues or groups, score/se/q/replicates/input compared with a number, lower/higher/neutral, robustness verdicts (robust, fragile, uncertain, borderline, size-dependent, sometimes-scored, \"class depends on the pseudocount\"), feature with a name, in with a saved selection's name, selected, and, or, not, parentheses.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "save_as": {
+          "description": "Save the selection under this name.",
+          "type": "string"
+        },
+        "variants": {
+          "description": "MAVE-HGVS names, such as p.Trp36Ala.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "inspect_variant",
+    "title": "A variant's evidence",
+    "description": "A variant's evidence: its score with SE and 95% interval (or why it has none), flags, each replicate's counts and score, every sample's counts, and with conditions compared each difference with its SE, interval and adjusted p. Shows it in the inspector.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "variant": {
+          "description": "Its MAVE-HGVS name, such as p.Trp36Ala.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variant"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "render_map",
+    "title": "The variant-effect map, in words and as a picture",
+    "description": "Shows a run's variant-effect map with the given settings and returns the map described in words, with the number of cells in each state; with image, the map as a picture too (a PNG as its SVG export draws it: on white, the position and row medians, the color scale, the tracks shown), for an agent to look at or a script to save.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "color_by": {
+          "description": "score, se, replicates or input; differential for a run that compares conditions.",
+          "type": "string"
+        },
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "contrast": {
+          "description": "With conditions compared: the contrast to color by, by name (such as \"With ligand vs Without ligand\"); implies color_by differential.",
+          "type": "string"
+        },
+        "from": {
+          "description": "The picture's first position (1 if not given).",
+          "type": "integer"
+        },
+        "image": {
+          "description": "Return the map as a picture (PNG) too.",
+          "type": "boolean"
+        },
+        "palette": {
+          "description": "rdbu (blue loss, red gain) or puor (purple loss, orange gain).",
+          "type": "string"
+        },
+        "rows": {
+          "description": "The order of the substitutions: biochemical, hydrophobicity or alphabetical.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "scale": {
+          "description": "The picture's size against the SVG export's, from 0.5 to 4 (2 if not given).",
+          "type": "number"
+        },
+        "to": {
+          "description": "The picture's last position (the target's last if not given).",
+          "type": "integer"
+        },
+        "zoom": {
+          "description": "Zoom factor from the fitted map (above 1 zooms in).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "scores",
+    "title": "A run's variants as a table",
+    "description": "A run's variants as a table, the columns of its scores export (scores.csv: hgvs_nt, hgvs_splice, hgvs_pro, score, SE, ci95_lower, ci95_upper, df, SE_scale, replicates, replicates_expected, status (scored, low confidence, filtered: the stage, not measured), flags (why low confidence), tau2, I2, leave_one_out, variant_as_written, variant_class, each replicate's score and SE); with contrast its differential scores (difference, SE, interval, t or z, p, q), with protein a nucleotide run's scores at the protein level. Numbers as numbers, null where the export has NA (df \"Inf\" when infinite). Only those at positions, of kinds, in a saved selection or matching a query; sorted by a column; 100 rows from offset unless limit says otherwise (0: every row).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "description": "The columns to give (all if not given).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "contrast": {
+          "description": "With conditions compared: a contrast (its name, or its number from 1): its differential scores.",
+          "type": "string"
+        },
+        "kinds": {
+          "description": "Classes of variant: missense, nonsense, synonymous, and the others the table has.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "limit": {
+          "description": "The rows to give, from offset (100 if not given; 0 for all of them).",
+          "type": "integer"
+        },
+        "offset": {
+          "description": "The rows to pass over first (0 if not given).",
+          "type": "integer"
+        },
+        "positions": {
+          "description": "Positions on the target (the variants' own numbering), each a number or a stretch (\"30-40\").",
+          "items": {
+            "type": [
+              "string",
+              "integer"
+            ]
+          },
+          "type": "array"
+        },
+        "protein": {
+          "description": "A nucleotide run's scores at the protein level (protein_scores.csv).",
+          "type": "boolean"
+        },
+        "query": {
+          "description": "A query of the selection language (as select_variants takes it): the variants it selects only.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "selection": {
+          "description": "A saved selection, by name: its variants only.",
+          "type": "string"
+        },
+        "sort": {
+          "description": "A column to sort by (\"score\"; \"-score\" for the highest first); rows without a value last.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "provenance",
+    "title": "A run's provenance",
+    "description": "A run's provenance as its export (provenance.json) holds it: the table and its mapping by SHA-256, the design and its SHA-256, the parameters, the software, the output's SHA-256, the QC findings with their thresholds and acknowledgements, and the workspace's history head.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "compare",
+    "title": "Compare two sets of scores",
+    "description": "Compares two sets of scores, as the Compare view does: each side a run's condition (its combined scores) or one of its replicates, of one run or two (a rescoring, or a MaveDB record's published scores against its counts scored again), or a MaveDB score set or a predictor kept beside the workspace (a score set named by its URN is fetched and kept first, without opening it; a predictor is AlphaMissense or a predictor's file added with add_track). Returns the compatibility report first (targets and coordinates, the level, the variants matched and those on one side only, the directions and scales, whether the two are independent; each item ok, qualified or blocked), then the agreement of the variants compared: Pearson's r and Spearman's rho, Lin's concordance and Bland–Altman's bias and limits of agreement (the last two only on one scale), each with its 95% interval; for two independent sides on one scale, the variants that differ beyond their uncertainty (each difference's z from both SEs, q by Benjamini–Hochberg) and the disagreement by position; a predictor by rank (Spearman's rho) and by its classes (the measured scores in each class, and the AUC of telling its benign from its pathogenic substitutions, with DeLong's interval). The scale: as scored, stated to be one, or each side rescaled by its own anchors (nonsense median 0 and wild type 1, or synonymous median 0 and nonsense median -1). Filters leave out variants of low confidence, large SE or few reads. Shows the Compare view; export with what comparison writes the variants compared or (a .json path) the report and statistics, comparison-positions the disagreement by position, comparison-map a map (SVG), comparison-classes a predictor by class.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "a": {
+          "description": "The first side, by name: \"Run 1\", \"Run 1: Replicate 2\", \"Run 1: +Lon\", \"Published scores\", a score set or predictor kept beside the workspace (\"AlphaMissense: P62993\"), or a MaveDB score set's URN (fetched and kept when it is not yet). The pair shown, or a default (a run against the published scores, two replicates, two conditions, the last two runs), if not given.",
+          "type": "string"
+        },
+        "b": {
+          "description": "The second side, by name or URN.",
+          "type": "string"
+        },
+        "direction": {
+          "description": "What a higher score of the MaveDB score set compared means (MaveDB records none): higher-more, higher-less, unsigned, or not stated.",
+          "type": "string"
+        },
+        "low_confidence": {
+          "description": "Leave out the variants of low confidence on either side (true); those given replace the comparison's filters, none given keeps them.",
+          "type": "boolean"
+        },
+        "max_se": {
+          "description": "Leave out the variants whose SE on either side is above this.",
+          "minimum": 0,
+          "type": "number"
+        },
+        "min_reads": {
+          "description": "Leave out the variants with fewer input reads than this on either side.",
+          "minimum": 0,
+          "type": "number"
+        },
+        "report": {
+          "description": "Keep the comparison in the workspace's report (true): its sides, scale, filters and statistics, in the history; the report says it.",
+          "type": "boolean"
+        },
+        "scale": {
+          "description": "The scale they are compared on: scored (as scored, the default), stated (stated to be one scale), nonsense-wt (each rescaled so its nonsense median is 0 and its wild type 1) or synonymous-nonsense (its synonymous median 0 and nonsense median -1). Kept for the comparisons that follow.",
+          "type": "string"
+        },
+        "show": {
+          "description": "The tab shown: agreement (the scatter plot and statistics), maps (the two maps and their difference), disagreement (the discordant variants and the positions) or classes (a predictor's classes).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "check_robustness",
+    "title": "Check a run's robustness to analysis choices",
+    "description": "Checks a run's robustness to other reasonable analysis choices, as the Score view's Robustness pane does: the run scored again with each alternative alone (pseudocount; normalization; the model of uncertainty, DiMSum's error model or a regression's; the combination of replicates; the minimum input count, replicates and time points; each replicate left out), then seeded combinations of them. For each variant (and each difference between conditions) its class (lower than, like or higher than the wild type, q \u003c 0.05), effect, rank, SE and inclusion in every analysis, and its verdict: robust, fragile (a choice moves its effect beyond its 95% interval and changes its class, the choice named), depends on its uncertainty, borderline, its effect's size depends on a choice, or not always scored; each alternative's effect; the least tolerant positions. Export with what robustness (the variants, CSV; or its record, a .json path) or robustness-positions.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "description": "How many analyses in all (48 by default): the declared, each alternative alone, then seeded combinations.",
+          "maximum": 256,
+          "minimum": 2,
+          "type": "integer"
+        },
+        "report": {
+          "description": "Keep the check in the workspace's report (true): the choices varied and what each target's verdicts were, in the history; the report says it.",
+          "type": "boolean"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "list_tracks",
+    "title": "The tracks beside the map",
+    "description": "The sequence tracks beside a run's map, in order: the run's own (reference, coverage, position effect, uncertainty) and the workspace's annotations' (UniProt features, conservation, AlphaMissense, ClinVar, gnomAD, MaveDB's annotations, an alignment, a predictor, a custom track), each with its source (service, release, retrieval date), whether it is shown, its filter and the filters it offers, and what it holds; the annotations that could not be read; and what can be added.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "add_track",
+    "title": "Add a track beside the map",
+    "description": "Adds an annotation's tracks beside the map. From public data, through MaveScape's list of services (docs/NETWORK.md; from the cache only with --offline; only an accession, gene symbol or URN is sent): provider uniprot-features, pdbe-conservation, alphamissense, clinvar, gnomad or mavedb-annotations, for the run's target; or mavedb-scores with a urn, a MaveDB score set kept beside the workspace without opening it (its record and published scores; compared in Compare, its scores a track). Or from a file, given as name and text: an alignment (A3M, FASTA, Stockholm, Clustal), a predictor's table (AlphaMissense, EVE, ESM1b, or variants with scores) or a custom track (GFF3, or a table with position, or start and end). The annotation is kept with the workspace (and its archive); in the history.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "description": "mavedb-scores: what a higher score means (MaveDB records none): higher-more, higher-less or unsigned.",
+          "type": "string"
+        },
+        "name": {
+          "description": "A file's name (grb2-sh3.sto), with its text.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "The public source: uniprot-features, pdbe-conservation, alphamissense, clinvar, gnomad, mavedb-annotations or mavedb-scores (with urn).",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "text": {
+          "description": "A file's text: an alignment, a predictor's table or a custom track.",
+          "type": "string"
+        },
+        "urn": {
+          "description": "mavedb-scores: the score set's URN (urn:mavedb:00000054-a-1).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "set_track",
+    "title": "Show, move or filter a track",
+    "description": "Shows or hides a track, moves it, or filters it: features by kind (types), variants by class (classes) or ClinVar's review status (stars, 0-4), gnomAD's frequency (min). The arrangement is kept with the workspace; it is a view, not in the history.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "description": "{types: [...]}, {classes: [...], stars: n} or {min: x}, as the track offers (list_tracks); {} removes its filter.",
+          "type": "object"
+        },
+        "position": {
+          "description": "Its place among the tracks, from 1 (the top).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "shown": {
+          "description": "Show it (true) or hide it (false).",
+          "type": "boolean"
+        },
+        "track": {
+          "description": "The track by id or label (list_tracks).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "track"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "remove_track",
+    "title": "Remove an annotation and its tracks",
+    "description": "Removes an annotation and its tracks (undoable, in the history).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "annotation": {
+          "description": "The annotation by id or name (list_tracks).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "annotation"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "open_structure",
+    "title": "Open a structure",
+    "description": "Opens a structure in the Structure view: a PDB entry by its ID, or the AlphaFold DB model of a UniProt accession (\"target\": the target's), fetched through the program (cached, then available offline). A file of your own opens with open_files. Returns the structure in words: its chains, the residues observed, its assemblies and what else it holds.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "alphafold": {
+          "description": "A UniProt accession, such as P62993, for its AlphaFold DB model; \"target\" for the target's.",
+          "type": "string"
+        },
+        "assembly": {
+          "description": "A biological assembly by its id (\"1\"), or \"asym\" for the asymmetric unit; the coordinates as deposited if not given.",
+          "type": "string"
+        },
+        "chain": {
+          "description": "The chain to map the workspace's target on; the chain that holds the most of it if not given.",
+          "type": "string"
+        },
+        "pdb": {
+          "description": "A PDB ID, such as 2VWF.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "find_structures",
+    "title": "Find structures of the target",
+    "description": "The PDB entries that cover the workspace's target (its UniProt accession), from PDBe's SIFTS through the program: ranked by the target positions each covers, then resolution, each with its method, chains and positions; and that its AlphaFold DB model covers it all.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "map_structure",
+    "title": "Map the target onto the structure",
+    "description": "Maps the workspace's target onto the structure shown: the target aligned to each chain (BLOSUM62, free end gaps), and on the chain chosen each position on a residue (identical or another), in the structure's sequence but not observed, missing from it, or outside it; ambiguous positions; the entry's own record of the UniProt residues compared. Returns the mapping in words and by position.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "chain": {
+          "description": "The chain to map the target on; the one that holds the most of it if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "set_structure",
+    "title": "Draw, color and select on the structure",
+    "description": "Draws the structure shown another way (style, color, surface, assembly), colors its residues by their target positions' scores (the run and condition the map shows, in the map's colors: filtered and missing positions gray, never the wild type's color), and selects residues in Proteoscope's selection language, draws them in a style of their own, labels them and focuses on their neighborhood; or picks a residue as a click does (its substitutions selected on the map, its position in the inspector). Returns the structure's state: what is selected, labeled and focused on, the scores colored by, and the renderer (WebGPU, or the Canvas renderer, which draws no surfaces).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "add": {
+          "description": "pick: add the residue to the selection (or take it away), as a ⌘-click does.",
+          "type": "boolean"
+        },
+        "assembly": {
+          "description": "A biological assembly by its id (\"1\"), or \"asym\" for the asymmetric unit; clears the selection.",
+          "type": "string"
+        },
+        "calibration": {
+          "description": "color fraction: a published calibration of the record whose scores the run is, by title or number (from 1), instead of a threshold.",
+          "type": "string"
+        },
+        "color": {
+          "description": "By the scores: median, mean, minimum, maximum, fraction (abnormal-like, with threshold or calibration), count (substitutions scored), substitution (with substitution), uncertainty (median SE), disagreement (the comparison Compare shows) or qc. Or the structure's own: class (each position's structural class: buried, exposed, interface, disordered), chain, entity, rainbow, secondary, moltype, element, residue, hydrophobicity, nucleotide, bfactor, plddt (a predicted model) or uniform.",
+          "type": "string"
+        },
+        "fit": {
+          "description": "Fit the whole structure in the view.",
+          "type": "boolean"
+        },
+        "focus": {
+          "description": "Focus on the selected residues and their neighbors within 5 Å, side chains drawn (false: the whole structure again).",
+          "type": "boolean"
+        },
+        "label": {
+          "description": "Label the selected residues (false: remove their labels).",
+          "type": "boolean"
+        },
+        "pick": {
+          "description": "A residue picked as a click picks it: \"A 183\" (chain and number, with an insertion code if any); its position's substitutions selected on the map, the position in the inspector.",
+          "type": "string"
+        },
+        "select": {
+          "description": "Residues to select: \"resn CYS\", \"chain A and resi 40-80\", \"within 5 of ligand\", \"helix and chain B\", \"pos 30-40\" (target positions, on the chain mapped), \"uniprot 188-198\" (the reference's); empty to clear the selection.",
+          "type": "string"
+        },
+        "show": {
+          "description": "How the selected residues are drawn: sticks, ball-stick, spacefill, hide or none (as the rest).",
+          "type": "string"
+        },
+        "side": {
+          "description": "color fraction: below or above the threshold is abnormal-like (the readout's loss side if not given).",
+          "type": "string"
+        },
+        "style": {
+          "description": "cartoon, ball-stick, sticks, spacefill or trace.",
+          "type": "string"
+        },
+        "substitution": {
+          "description": "color substitution: the amino acid each residue's substitution to is shown (A or Ala; * or Ter for a stop).",
+          "type": "string"
+        },
+        "surface": {
+          "description": "off, ses (molecular), sas (solvent-accessible), vdw or gaussian; WebGPU only.",
+          "type": "string"
+        },
+        "threshold": {
+          "description": "color fraction: the score beyond which a substitution is abnormal-like (research use).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "render_structure",
+    "title": "The Structure view as a picture",
+    "description": "The Structure view as a picture (a PNG), as a figure panel of it is drawn: the structure as shown, its coloring's legend below (legend: false, the view alone), with what it shows in words.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "legend": {
+          "description": "Draw the legend below the view (true if not given).",
+          "type": "boolean"
+        },
+        "light": {
+          "description": "On white, whatever the window's theme.",
+          "type": "boolean"
+        },
+        "scale": {
+          "description": "The picture's size against the view's, from 0.5 to 4 (2 if not given).",
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "structure_evidence",
+    "title": "The structure as evidence",
+    "description": "What the structure shown says of the target's positions: each one's structural class (buried, exposed, interface with the partners chosen, or a predicted model's disordered region), from DSSP's secondary structure, the solvent accessibility (DSSP's radii), StructureMap's exposure and the partners within 4 Å; the median scores of each class against the rest (Mann–Whitney, BH-adjusted); and whether the least tolerant positions lie closer together than positions of the same burial (pairs within 8 Å against seeded draws within strata of relative accessibility). The same are tracks beside the map (list_tracks).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "fraction": {
+          "description": "The share of positions called least tolerant for the cluster test (0.2 if not given).",
+          "maximum": 0.5,
+          "minimum": 0.05,
+          "type": "number"
+        },
+        "partner": {
+          "description": "The partner the interface is read with: \"all\" (every other chain, ligand and ion but common additives, the default), or one by its id or label (\"chain:B\", \"ligand:A:1352:TLA\").",
+          "type": "string"
+        },
+        "seed": {
+          "description": "The seed of the cluster test's draws (1 if not given).",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "save_structure_view",
+    "title": "Save the structure view",
+    "description": "Saves the view of the structure shown with the workspace, under a name (one already used is saved again): the structure's file kept in the library by its SHA-256 (and a model's aligned error), the assembly, the chain and the mapping, the camera, style, colors and the run and condition they are of, the surface, the residues selected, drawn, labeled and focused on, and the evidence's settings. It reopens as it was, goes into the workspace's archive and is described in its methods.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The view's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "open_structure_view",
+    "title": "Open a saved structure view",
+    "description": "Opens a saved view as it was saved: its structure from the library (or fetched again by its ID, its SHA-256 checked), and everything the view records. Says whether the mapping is the one the view was saved with.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The saved view's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": true,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "remove_structure_view",
+    "title": "Remove a saved structure view",
+    "description": "Removes a saved view, and its structure when no other view shows it (undoable, in the history).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The saved view's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "figures",
+    "title": "The workspace's figures",
+    "description": "The workspace's figures: each one's name, page (millimeters, and the text size in points), its panels lettered in reading order with what each shows, where it is (millimeters) and anything wrong with it (text under 6 pt, a map too narrow for its positions, a run no longer there), and the figure described in words.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dpi": {
+          "description": "The pictures' resolution, from 72 to 600 dots per inch (150 if not given).",
+          "type": "number"
+        },
+        "figure": {
+          "description": "A figure by name or id: only that one.",
+          "type": "string"
+        },
+        "image": {
+          "description": "Each page as a picture too: a PNG as export_figure writes it.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "create_figure",
+    "title": "Make a figure",
+    "description": "Makes a figure: an empty page at a journal's column width or a slide, shown in the Figures view. Add panels with add_figure_panel.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "height_mm": {
+          "description": "The page's height in millimeters, instead of the size's.",
+          "maximum": 700,
+          "minimum": 25,
+          "type": "number"
+        },
+        "name": {
+          "description": "Its name (\"Figure 2\"); Figure n if not given.",
+          "type": "string"
+        },
+        "size": {
+          "description": "single (85 mm wide), onehalf (114 mm), double (174 mm, the default) or slide (16:9).",
+          "type": "string"
+        },
+        "text": {
+          "description": "The text size in points at the printed size (7, or 14 on a slide).",
+          "maximum": 36,
+          "minimum": 4,
+          "type": "number"
+        },
+        "width_mm": {
+          "description": "The page's width in millimeters, instead of the size's.",
+          "maximum": 700,
+          "minimum": 25,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "add_figure_panel",
+    "title": "Add a panel to a figure",
+    "description": "Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's variant-effect map (a condition or a difference between conditions, colored as render_map colors it, a range of positions, tracks below it, its color bar and the key to its states); a QC finding's charts (of a run, or of the counts); a run's scores by class, filter flow or a contrast's volcano; a comparison (as compare takes its sides: agreement, Bland–Altman, disagreement by position, a predictor's classes, or a map of either side or of the difference); a variant's evidence (its score and each replicate's with their intervals, its time course, or its distribution over the bins); a saved structure view (its figure panel, drawn at 4x on white and kept with the figure); or text. Placed below the panels already there unless placed; shown in the Figures view. Returns the panel's id and letter, and what it shows.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "a": {
+          "description": "compare: the first side, as compare takes it; the pair compared last if not given.",
+          "type": "string"
+        },
+        "b": {
+          "description": "compare: the second side.",
+          "type": "string"
+        },
+        "color_by": {
+          "description": "score (the default), se, replicates or input.",
+          "type": "string"
+        },
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "contrast": {
+          "description": "With conditions compared: the difference to draw, by name (such as \"With ligand vs Without ligand\").",
+          "type": "string"
+        },
+        "figure": {
+          "description": "The figure, by name or id; a new figure if not given.",
+          "type": "string"
+        },
+        "finding": {
+          "description": "qc: the finding, by id (qc_findings lists them) or title.",
+          "type": "string"
+        },
+        "from": {
+          "description": "The first position shown (the target's numbering).",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "height_mm": {
+          "description": "Its height.",
+          "minimum": 4,
+          "type": "number"
+        },
+        "kind": {
+          "description": "map (the default), qc, scores, compare, variant, structure or text.",
+          "type": "string"
+        },
+        "pair": {
+          "description": "qc, replicate agreement: the pair of replicates drawn, from 1.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "palette": {
+          "description": "rdbu or puor.",
+          "type": "string"
+        },
+        "plot": {
+          "description": "What a scores panel shows (distribution, flow, volcano), a compare panel (agreement, bland-altman, positions, classes, map-first, map-second, map-difference) or a variant panel (evidence, time-course, bins).",
+          "type": "string"
+        },
+        "rows": {
+          "description": "The order of the substitutions: biochemical, hydrophobicity or alphabetical.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "scale": {
+          "description": "compare: the scale, as compare takes it.",
+          "type": "string"
+        },
+        "subject": {
+          "description": "qc: the run whose QC (by name), or counts; the latest run if not given.",
+          "type": "string"
+        },
+        "text": {
+          "description": "text: the panel's text.",
+          "type": "string"
+        },
+        "to": {
+          "description": "The last position shown.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "tracks": {
+          "description": "The tracks below the map, by id (list_tracks gives them); \"shown\" alone for those shown beside the map; none if not given.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "variant": {
+          "description": "variant: its MAVE-HGVS name, such as p.Trp36Ala.",
+          "type": "string"
+        },
+        "view": {
+          "description": "structure: the saved view, by name; the last saved if not given.",
+          "type": "string"
+        },
+        "width_mm": {
+          "description": "Its width (the page's, less its margins, if not given).",
+          "minimum": 4,
+          "type": "number"
+        },
+        "x_mm": {
+          "description": "Where the panel's left edge is, in millimeters from the page's.",
+          "minimum": 0,
+          "type": "number"
+        },
+        "y_mm": {
+          "description": "Where its top is.",
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "set_figure",
+    "title": "Change or delete a figure",
+    "description": "Changes a figure: its name, page size, text size and lettering, and its panels (moved, resized, their options changed, removed), each change undoable. Returns the figure as figures does.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "delete": {
+          "description": "Delete the figure.",
+          "type": "boolean"
+        },
+        "figure": {
+          "description": "The figure, by name or id.",
+          "type": "string"
+        },
+        "height_mm": {
+          "maximum": 700,
+          "minimum": 25,
+          "type": "number"
+        },
+        "letters": {
+          "description": "Letter the panels A, B, C… in reading order.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "A new name.",
+          "type": "string"
+        },
+        "panels": {
+          "description": "Changes to panels: each { panel (its id or letter), and any of x_mm, y_mm, width_mm, height_mm; a map's from, to, condition, contrast, color_by, rows, palette, tracks, medians, legend; a plot's plot and pair; any panel's title and letter; a text's text, size, bold, align; or remove: true }.",
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "size": {
+          "description": "single, onehalf, double or slide: the page's size (panels kept on it).",
+          "type": "string"
+        },
+        "text": {
+          "description": "The text size in points.",
+          "maximum": 36,
+          "minimum": 4,
+          "type": "number"
+        },
+        "width_mm": {
+          "maximum": 700,
+          "minimum": 25,
+          "type": "number"
+        }
+      },
+      "required": [
+        "figure"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "export_figure",
+    "title": "Export a figure",
+    "description": "Writes a figure: SVG (vector, its text as text and its description in \u003cdesc\u003e), PDF (vector, one page at its printed size, text in Helvetica) or PNG at a resolution of its printed size (300 dpi if not given, its resolution recorded in the file), each carrying its manifest (what each panel shows and was drawn from: each run by its output's SHA-256, the QC thresholds, the sides of a comparison, the tracks' files, a structure view's image; a digest of each panel's drawing; MaveScape's version and commit; a fingerprint), or the manifest alone (json). The same figure is the same bytes (with a fixed time, as mavescape run fixes it). Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "dpi": {
+          "description": "png: dots per inch of the printed size.",
+          "maximum": 1200,
+          "minimum": 72,
+          "type": "number"
+        },
+        "figure": {
+          "description": "The figure, by name or id.",
+          "type": "string"
+        },
+        "format": {
+          "description": "svg, pdf, png or json (the manifest); from the path's extension if not given.",
+          "type": "string"
+        },
+        "overwrite": {
+          "description": "Replace the file if it exists.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The absolute path of the file to write.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "figure",
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "check_figure",
+    "title": "Check an exported figure",
+    "description": "Reads a figure MaveScape exported (SVG, PDF, PNG, or its manifest as JSON): what it shows and where it came from (the workspace, MaveScape's version, when), whether its manifest is as it was written (its fingerprint), and panel by panel what changed in the workspace open since (a run not here, a table scored again since, the QC thresholds or an acknowledgement changed, an annotation's file changed, a structure view saved again). With rebuild, adds the figure to the workspace, its panels drawn again from their inputs and each drawing compared with the one the file records. Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "description": "The figure's file: one absolute path.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rebuild": {
+          "description": "Rebuild the figure in the workspace and say, panel by panel, whether it is drawn the same.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "paths"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "checkpoint",
+    "title": "Keep or delete a checkpoint",
+    "description": "Keeps a checkpoint: the analysis as it stands (the targets, design, runs, QC thresholds and acknowledgements, selections, annotations, structure views, figures and what the report keeps), named, with the history's hash at that moment, in the workspace and its archive; or deletes one. Lists the checkpoints kept. Compare with diff.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The checkpoint's name (\"Before the rescoring\"): keeps one of the analysis as it stands.",
+          "type": "string"
+        },
+        "remove": {
+          "description": "A checkpoint, by name or id, to delete.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "diff",
+    "title": "What changed",
+    "description": "What changed between two states of the analysis, in words: from a checkpoint (the latest if not given) to now or another checkpoint, or between two workspace archives (paths, the earlier first). The tables, targets, design, runs scored and removed, QC thresholds and acknowledgements, selections, annotations, structure views, figures, the report's analyses and MaveDB details; and for each table's latest run, how its analysis changed (parameters, filters, design) and what that did: for each condition, the variants whose effect moved beyond their earlier 95% interval, changed class (lower than, like or higher than the wild type, q \u003c 0.05) or were newly filtered or scored, the most moved by name, and the QC findings whose verdict changed. Shows the changes in the Report view, with a map of the change.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "The checkpoint compared from, by name or id; the latest if not given.",
+          "type": "string"
+        },
+        "paths": {
+          "description": "Two workspace archives (.msz), absolute paths, the earlier first: compared instead of checkpoints.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "show": {
+          "description": "Show the changes in the Report view (the default); false leaves the view shown.",
+          "type": "boolean"
+        },
+        "to": {
+          "description": "now (the default), or another checkpoint by name or id.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "certify",
+    "title": "Certify the workspace",
+    "description": "Writes a reproducibility certificate of the workspace (.msz): the workspace archive with every number it reports computed again from its files (each run's scores, SEs and classes and its output's SHA-256; its QC findings and the SHA-256 of its whole QC; the comparisons and robustness checks kept in the report; each figure panel's drawing by its SHA-256; the report), the files by their SHA-256, the history's head, the checkpoints, what is not computed again, and a fingerprint (the SHA-256 of what was certified, to quote with the analysis). mavescape verify (or verify_certificate) computes every number again and compares them bit for bit. Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "overwrite": {
+          "description": "Replace the file if it exists.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The absolute path of the certificate to write (.msz).",
+          "type": "string"
+        },
+        "tables": {
+          "description": "Include the count tables (the default); false names each by its SHA-256 only, for data that cannot be shared (verifying then needs them beside it).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "review_report",
+    "title": "Write the review report",
+    "description": "Writes the review report of the workspace (.html): one self-contained file a reviewer opens in any browser, without MaveScape (the experiment and design, the inputs with their SHA-256, each run's parameters, classes and maps, the QC findings with their plots, the comparisons and robustness checks kept in the report, the selections, structure views and figures, the methods and the decision log), every number traced to where it comes from with its key and exact value: the numbers of the certificate certify writes, whose fingerprint it names. It loads nothing. Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "overwrite": {
+          "description": "Replace the file if it exists.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The absolute path of the report to write (.html).",
+          "type": "string"
+        },
+        "tables": {
+          "description": "The report of the certificate with the count tables (the default); false, of the one naming them by their SHA-256 only.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "verify_certificate",
+    "title": "Verify a certificate",
+    "description": "Verifies a reproducibility certificate: checks its fingerprint, the workspace and every file against their SHA-256 and the history's chain, computes every number again from the files with this MaveScape's code and compares them bit for bit. Verdict verified, differs (each difference listed) or incomplete (a file it names is missing: give it in paths; the library's are found by their SHA-256). Shows the result in the Report view. Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "library": {
+          "description": "Look for the files it names in this MaveScape's library too (the default); false uses only the certificate's and those given, as someone without this library would.",
+          "type": "boolean"
+        },
+        "paths": {
+          "description": "Absolute paths: the certificate (.msz), and after it the files it names but does not hold (each, or a folder of them), found by their SHA-256.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "review": {
+          "description": "Also return the review report of the certificate verified (its HTML, as review), the same file its maker writes.",
+          "type": "boolean"
+        },
+        "show": {
+          "description": "Show the result in the Report view (the default); false leaves the view shown.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "paths"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "report",
+    "title": "The report and its methods",
+    "description": "The workspace's report, shown in the Report view: its methods written from the record (each run's data, design, scoring with a table of its parameters, and QC; the comparisons and robustness checks kept in it; selections, annotations, structures, figures; every input's SHA-256; the software; the decision log; the limitations; the research-use statement), with numbered references: each section, the Markdown and the BibTeX, and the analyses kept in it. Written again on every change: the same workspace gives the same text.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "remove": {
+          "description": "An analysis kept in the report, by id or by its words (\"the comparison of Run 1 and Run 2\"), taken out first.",
+          "type": "string"
+        },
+        "show": {
+          "description": "Show the Report view (the default); false leaves the view shown.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "proteoscope_link",
+    "title": "Open the structure in Proteoscope",
+    "description": "Hands the structure shown to a Proteoscope running on this computer (found on its ports, 8765-8814, or those --proteoscope names), in what it accepts: for a PDB entry or AlphaFold DB model and a Proteoscope MaveScape was tested with (0.10), the link that opens it there with the scores as its custom residue data, the residues drawn, hidden, selected, labeled and focused on, and the camera (open the link in a browser); for another version, a link to the structure alone; for a file of the person's, the session to open there as a file (export proteoscope-session writes it). Refused, saying why, when Proteoscope is not running.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "export",
+    "title": "Export a file",
+    "description": "Writes a file: a run's scores or counts (MaveDB columns), differential scores, QC per sample or per variant, provenance, the methods or their references, the map (SVG, with the tracks shown), the tracks shown (CSV, position by position), the selection, the whole workspace as an archive (.msz), the analysis package (.zip: counts, target, design, sample sheet, parameters and what is missing), a run's MaveDB deposit (.zip: the scores, counts, column descriptions, experiment and score set as MaveDB takes them), the comparison shown (its matched variants, CSV; its report and statistics, JSON; its positions, maps or a predictor's classes), a run's robustness to analysis choices, or the workspace's report (Markdown, its references BibTeX). Needs the token.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "description": "A condition by name or number (from 1), when the design has more than one; the first if not given.",
+          "type": "string"
+        },
+        "include_structures": {
+          "description": "archive: include the files of the structures the saved views show, or name each by its ID and SHA-256 only (false). Not given: included when the library holds every file, named by ID and SHA-256 when it does not (a workspace opened from an archive that named them so), which the message says.",
+          "type": "boolean"
+        },
+        "include_tables": {
+          "description": "archive: include the count tables (the default), or name each by its SHA-256 only.",
+          "type": "boolean"
+        },
+        "legend": {
+          "description": "structure-image: draw the legend below the image (the default).",
+          "type": "boolean"
+        },
+        "light": {
+          "description": "structure-image: on white whatever the page's theme, as a figure's structure panel draws it.",
+          "type": "boolean"
+        },
+        "map": {
+          "description": "comparison-map: first, second or difference (the default).",
+          "type": "string"
+        },
+        "overwrite": {
+          "description": "Replace the file if it exists.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The absolute path of the file to write.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "scale": {
+          "description": "structure-image: the image's size against the view's (4 if not given).",
+          "maximum": 8,
+          "minimum": 1,
+          "type": "number"
+        },
+        "selection": {
+          "description": "selection: a saved selection by name; the current selection if not given.",
+          "type": "string"
+        },
+        "what": {
+          "description": "scores, counts, differential, qc-samples, qc-variants, qc-findings, barcodes (a table of barcodes), provenance, methods, references, map, tracks, selection, archive, package, mavedb, comparison (the variants of the comparison shown, or its report and statistics to a .json path), comparison-positions (its disagreement by position), comparison-map (a map of it, SVG: map first, second or difference) or comparison-classes (a predictor's classes: the measured scores in each), robustness (a run's robustness to analysis choices: its variants, CSV, or its record, a .json path) or robustness-positions, structure-mapping (the target on the structure shown, position by position, CSV), structure-scores (the scores the structure is colored by, position by position, with each residue's color, CSV), structure-evidence (what the structure says of each position: secondary structure, accessibility, exposure, partner, class, with its median score, CSV) structure-image (a figure panel of the view shown: PNG, its legend below it, what it shows written into it), proteoscope-session (the view shown as a Proteoscope session, .proteoscope.json: the structure, by its ID or embedded, its scores as residue data, the residues drawn, selected and labeled, the camera; Proteoscope need not be running), report (the workspace's report: its methods from the record, Markdown) or report-references (its references, BibTeX).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "what",
+        "path"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  }
+]

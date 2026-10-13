@@ -670,6 +670,36 @@
   "violations": []
  },
  {
+  "scene": "agent-proposal",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "agent-proposal",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "agent-hsp90",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "agent-hsp90",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "agent-accepted",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "agent-accepted",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "record",
   "theme": "dark",
   "violations": []

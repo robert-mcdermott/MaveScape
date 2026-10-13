@@ -18,6 +18,7 @@ import { pairWords } from '../lib/diff.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { confirmDialog } from './overlays.js';
 import { certificatePane } from './certificate.js';
+import { heldRemoval, proposalOfItem } from '../lib/proposals.js';
 
 const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'report';
 
@@ -42,6 +43,14 @@ function blockEl(b) {
   return h('div.report-table',
     b.caption ? h('p.muted', b.caption) : null,
     h('div.table-scroll', h('table.data.compact', h('thead', h('tr', ...b.columns.map((c) => h('th', c)))), h('tbody', ...b.rows.map((r) => h('tr', ...r.map((c) => h('td', ...cited(String(c))))))))));
+}
+
+// An AI agent's mark (wave 7, slice 2): made and proposed, or proposed for removal.
+function mark(ws, collection, item) {
+  const proposal = proposalOfItem(ws, item);
+  if (proposal) return h('span.badge.accent', { style: { marginLeft: '6px' }, title: `Proposed by ${proposal.author}: accept or reject it above the view` }, 'proposed');
+  const removal = heldRemoval(ws, collection, item.id);
+  return removal ? h('span.badge.danger', { style: { marginLeft: '6px' }, title: `${removal.proposal.author} proposes removing it` }, 'remove?') : null;
 }
 
 export function mountReportMode(app, container) {
@@ -107,8 +116,8 @@ export function mountReportMode(app, container) {
     const shown = app.reportView?.from ?? null;
     side.append(h('div.pane', h('h3', icon('branch'), 'Checkpoints', h('span.spacer'), h('button.btn.small', { type: 'button', title: 'Keep the analysis as it stands, to see later what changed since', onclick: () => askCheckpoint(app) }, icon('plus'), 'Keep')),
       checkpoints.length
-        ? h('ul.report-kept', ...checkpoints.slice().reverse().map((c) => h(`li${c.id === shown ? '.selected' : ''}`,
-          h('span', c.name, h('span.muted', { title: c.created }, ` · ${new Date(c.created).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`)),
+        ? h('ul.report-kept', ...checkpoints.slice().reverse().map((c) => h(`li${c.id === shown ? '.selected' : ''}${heldRemoval(ws, 'checkpoints', c.id) ? '.held-removal' : ''}`,
+          h('span', c.name, mark(ws, 'checkpoints', c), h('span.muted', { title: c.created }, ` · ${new Date(c.created).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`)),
           h('span.btn-row',
             h('button.btn.small', { type: 'button', title: `What changed since "${c.name}"`, onclick: () => showChanges(c.id, 'now') }, 'Changes'),
             h('button.icon-button', { type: 'button', title: 'Delete the checkpoint', 'aria-label': `Delete the checkpoint "${c.name}"`, onclick: async () => {
@@ -118,7 +127,7 @@ export function mountReportMode(app, container) {
     const kept = ws.analyses ?? [];
     side.append(h('div.pane', h('h3', icon('report'), 'Kept in the report'),
       kept.length
-        ? h('ul.report-kept', ...kept.map((a) => h('li', h('span', analysisName(a).replace(/^./, (c) => c.toUpperCase()), h('span.muted', ` · ${String(a.created ?? '').slice(0, 10)}`)),
+        ? h('ul.report-kept', ...kept.map((a) => h(`li${heldRemoval(ws, 'analyses', a.id) ? '.held-removal' : ''}`, h('span', analysisName(a).replace(/^./, (c) => c.toUpperCase()), mark(ws, 'analyses', a), h('span.muted', ` · ${String(a.created ?? '').slice(0, 10)}`)),
           h('button.icon-button', { type: 'button', title: 'Take it out of the report', 'aria-label': `Take ${analysisName(a)} out of the report`, onclick: () => removeFromReport(app, a.id) }, icon('close')))))
         : h('p.muted', { style: { margin: 0 } }, 'Nothing yet. A comparison (Compare view) or a run\'s robustness check (Score view) is the session\'s until you add it to the report: then the workspace keeps what it found.')));
     // Robustness checks of this session not yet in the report.

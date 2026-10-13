@@ -241,6 +241,23 @@ try {
     check('--from-workspace on 0.6.0\'s GRB2 archive: its runs reproduced, and the archive written again keeping its figure, the analyses kept in its report and its checkpoint', `exit ${g.code}; ${recG.run?.status}; figures ${(kept?.ws.figures ?? []).map((f) => `${f.name} (${f.panels.length})`).join(', ')}, ${(kept?.ws.analyses ?? []).length} analyses, checkpoints ${(kept?.ws.checkpoints ?? []).map((c) => c.name).join(', ')}`, g.code === 0 && recG.run?.status === 'reproduced' && JSON.stringify(kept?.ws.figures) === JSON.stringify(original.ws.figures) && JSON.stringify(kept?.ws.analyses) === JSON.stringify(original.ws.analyses) && JSON.stringify(kept?.ws.checkpoints) === JSON.stringify(original.ws.checkpoints));
   }
 
+  {
+    // 0.7.0's own record (validation/archives/make-0.7.0.mjs): its certificate verified by this
+    // MaveScape, and its Hsp90 workspace, saved with an AI agent's proposal open, rerun: the
+    // archive written again keeping the proposal as it was, what it made marked, and the history
+    // with the agent's name in it.
+    const cert = join(ROOT, 'validation/archives/release-0.7.0-grb2-agent.certificate.msz');
+    const v = await mavescape(['verify', cert]);
+    check('mavescape verify on 0.7.0\'s certificate (a workspace an AI agent worked in): verified (exit 0), every number computed again identical', `exit ${v.code}; ${v.stdout.split('\n').find((l) => /^Verified|^Not verified|^Not checkable/.test(l))?.slice(0, 160) ?? v.stderr.slice(0, 160)}`, v.code === 0 && /^Verified: all [\d,]+ numbers/m.test(v.stdout));
+    const hsp90 = join(ROOT, 'validation/archives/release-0.7.0-hsp90-proposal.msz');
+    const h = await mavescape(['run', '--from-workspace', hsp90, '--out', out('hsp90-0.7'), '--time', TIME]);
+    const recH = record(out('hsp90-0.7'));
+    const kept = existsSync(join(out('hsp90-0.7'), 'workspace.msz')) ? await readArchive(readFileSync(join(out('hsp90-0.7'), 'workspace.msz'))) : null;
+    const original = await readArchive(readFileSync(hsp90));
+    const agentEntries = (ws) => (ws?.history ?? []).filter((e) => e.by).map((e) => e.hash).join();
+    check('--from-workspace on 0.7.0\'s Hsp90 archive, saved with an agent\'s proposal open: its run reproduced, and the archive written again keeping the proposal, what it made marked proposed, and the agent\'s entries in the history', `exit ${h.code}; ${recH.run?.status}; proposals ${(kept?.ws.proposals ?? []).map((p) => `${p.author}'s, ${p.changes.length} changes`).join(', ') || 'none'}; ${(kept?.ws.history ?? []).filter((e) => e.by).length} entries by the agent`, h.code === 0 && recH.run?.status === 'reproduced' && JSON.stringify(kept?.ws.proposals) === JSON.stringify(original.ws.proposals) && JSON.stringify(kept?.ws.checkpoints) === JSON.stringify(original.ws.checkpoints) && JSON.stringify(kept?.ws.annotations) === JSON.stringify(original.ws.annotations) && agentEntries(original.ws).length > 0 && agentEntries(kept?.ws).startsWith(agentEntries(original.ws)));
+  }
+
   // --- Two conditions, and a table of barcodes ------------------------------------------------
   const two = await mavescape(['run', '--design', 'validation/fixtures/two-condition.design.json', '--out', out('two'), '--time', TIME, 'validation/fixtures/two-condition.csv']);
   archiveReader.set(join(out('two'), 'workspace.msz'), await readArchive(readFileSync(join(out('two'), 'workspace.msz'))));

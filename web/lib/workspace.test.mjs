@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { acknowledgeFinding, createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWorkspace, setQcThresholds, verifyHistory, WORKSPACE_FORMAT, WORKSPACE_VERSION } from './workspace.js';
+import { acknowledgeFinding, createWorkspace, isEmptyWorkspace, parseWorkspace, rename, serializeWorkspace, setHistoryActor, setQcThresholds, verifyHistory, WORKSPACE_FORMAT, WORKSPACE_VERSION } from './workspace.js';
 
 test('a new workspace is an empty, versioned document with a valid id', () => {
   const ws = createWorkspace('GRB2 SH3', { now: '2026-10-08T12:00:00.000Z' });
@@ -143,4 +143,22 @@ test('a finding acknowledged with a reason, in the history; withdrawn; threshold
   assert.throws(() => acknowledgeFinding(ws, { ...finding, status: 'pass' }, 'why'), /only a finding to review or failing/);
   assert.throws(() => acknowledgeFinding(ws, { ...finding, status: 'fail', blocking: true }, 'why'), /blocks the analysis/);
   assert.ok(verifyHistory(ws).ok);
+});
+
+test('an AI agent\'s changes carry its name in the history (by), which the chain covers', () => {
+  setHistoryActor('Claude Code');
+  let ws;
+  try {
+    ws = createWorkspace('By an agent', { now: '2026-10-12T10:00:00.000Z', id: 'ws-agent' });
+    ws = rename(ws, 'Renamed by an agent', '2026-10-12T10:01:00.000Z');
+  } finally {
+    setHistoryActor(null);
+  }
+  ws = rename(ws, 'Renamed by the person', '2026-10-12T10:02:00.000Z');
+  assert.deepEqual(ws.history.map((e) => e.by ?? null), ['Claude Code', 'Claude Code', null]);
+  assert.equal(verifyHistory(ws).ok, true);
+  // The name is part of what the chain covers: taken out, the entry no longer follows.
+  const edited = structuredClone(ws);
+  delete edited.history[1].by;
+  assert.equal(verifyHistory(edited).ok, false);
 });

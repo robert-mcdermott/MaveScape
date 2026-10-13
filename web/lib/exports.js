@@ -57,8 +57,33 @@ export function intervalOf(c, i) {
   return [c.score[i] - q * c.se[i], c.score[i] + q * c.se[i]];
 }
 
+// A table's cell as the CSV writes it: a number in its shortest exact form (NA when not finite; a
+// degrees of freedom's infinity "Inf"), NA for null.
+function cellText(value, column) {
+  if (value === null || value === undefined) return 'NA';
+  if (typeof value !== 'number') return value;
+  if (column === 'df' && value === Infinity) return 'Inf';
+  return num(value);
+}
+
+const asCSV = (table) => csv(table.header, table.rows.map((r) => r.map((v, j) => cellText(v, table.header[j]))));
+
+// A table's cell as data (the remote action scores, wave 7 slice 3): a number, null where the CSV
+// has NA, "Inf" for a degrees of freedom's infinity; text as written.
+export function cellValue(value, column) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'number') return value === 'NA' ? null : value;
+  if (column === 'df' && value === Infinity) return 'Inf';
+  return Number.isFinite(value) ? value : null;
+}
+
 // The scores of one condition of a run, one row per variant of the table, in table order.
 export function scoresCSV(results, run, condition = 0) {
+  return asCSV(scoresTable(results, run, condition));
+}
+
+// The same as { header, rows }, each cell a number (NaN: not available) or text.
+export function scoresTable(results, run, condition = 0) {
   const c = results.conditions[condition];
   const level = run.inputs.design.variants.level;
   const v = results.variants;
@@ -73,21 +98,25 @@ export function scoresCSV(results, run, condition = 0) {
     const [low, high] = scored ? intervalOf(c, i) : [Number.NaN, Number.NaN];
     rows.push([
       ...hgvsColumns(level, v.key[i], v.proKey?.[i]),
-      num(scored ? c.score[i] : Number.NaN), num(scored ? c.se[i] : Number.NaN),
-      num(low), num(high),
-      scored && c.df ? (Number.isFinite(c.df[i]) ? num(c.df[i]) : 'Inf') : 'NA', num(scored && scale ? scale.at(c.score[i]) : Number.NaN),
-      String(c.k[i]), String(c.expected[i]), statusOf(c, i), c.flags[i] ? flagNames(c.flags[i]).join('; ') : '',
-      num(c.tau2[i]), num(c.i2[i]), num(c.loo[i]), v.original[i], v.status[i] === 3 ? 'invalid' : KIND_NAMES[v.kind[i]],
-      ...reps.flatMap((r) => [num(r.score[i]), num(r.se[i])]),
+      scored ? c.score[i] : Number.NaN, scored ? c.se[i] : Number.NaN,
+      low, high,
+      scored && c.df ? (Number.isFinite(c.df[i]) ? c.df[i] : Infinity) : Number.NaN, scored && scale ? scale.at(c.score[i]) : Number.NaN,
+      c.k[i], c.expected[i], statusOf(c, i), c.flags[i] ? flagNames(c.flags[i]).join('; ') : '',
+      c.tau2[i], c.i2[i], c.loo[i], v.original[i], v.status[i] === 3 ? 'invalid' : KIND_NAMES[v.kind[i]],
+      ...reps.flatMap((r) => [r.score[i], r.se[i]]),
     ]);
   }
-  return csv(header, rows);
+  return { header, rows };
 }
 
 // A nucleotide run's scores at the protein level (wave 3, slice 3): one row per protein variant its
 // nucleotide variants make, the score merged as DiMSum merges them (collapse.js), with the
 // nucleotide variants behind it. view: proteinView(results).
 export function proteinScoresCSV(view, condition = 0) {
+  return asCSV(proteinScoresTable(view, condition));
+}
+
+export function proteinScoresTable(view, condition = 0) {
   const c = view.conditions[condition];
   const nt = view.collapse.nucleotide.variants;
   const v = view.variants;
@@ -96,9 +125,9 @@ export function proteinScoresCSV(view, condition = 0) {
   for (let i = 0; i < view.rows; i += 1) {
     const scored = !c.reason[i];
     const [low, high] = scored ? intervalOf(c, i) : [Number.NaN, Number.NaN];
-    rows.push([v.key[i], num(scored ? c.score[i] : Number.NaN), num(scored ? c.se[i] : Number.NaN), num(low), num(high), statusOf(c, i), c.flags[i] ? flagNames(c.flags[i]).join('; ') : '', KIND_NAMES[v.kind[i]], String(v.members[i].length), Array.from(v.members[i], (r) => nt.key[r]).join(' ')]);
+    rows.push([v.key[i], scored ? c.score[i] : Number.NaN, scored ? c.se[i] : Number.NaN, low, high, statusOf(c, i), c.flags[i] ? flagNames(c.flags[i]).join('; ') : '', KIND_NAMES[v.kind[i]], v.members[i].length, Array.from(v.members[i], (r) => nt.key[r]).join(' ')]);
   }
-  return csv(header, rows);
+  return { header, rows };
 }
 
 // The counts the run scored: the design's variant column (and a table of barcodes' barcodes) and
@@ -159,20 +188,27 @@ export function barcodesCSV(results, run) {
 // q, the method, the pairs or replicates behind it (limma, and pairs combined by the moderated
 // combination: t), and why there is none. NA where there is none.
 export function differentialCSV(results, run) {
-  const ds = results.differential;
+  return asCSV(differentialTable(results, run));
+}
+
+// The same as { header, rows }; contrast: one contrast's columns only, named without its suffix.
+export function differentialTable(results, run, contrast = null) {
+  const all = results.differential;
+  const ds = contrast === null ? all : all?.slice(contrast, contrast + 1);
   if (!ds?.length) throw new Error(`${run.name} compares no conditions.`);
   const level = run.inputs.design.variants.level;
   const v = results.variants;
-  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'variant_as_written', ...ds.flatMap((d) => ['difference', 'SE', 'ci95_lower', 'ci95_upper', d.method === 'limma' || d.df ? 't' : 'z', 'p', 'q', d.method === 'limma' ? 'replicates' : 'pairs', 'status'].map((x) => `${x}_${safe(d.id)}`))];
+  const suffix = (d) => (contrast === null ? `_${safe(d.id)}` : '');
+  const header = ['hgvs_nt', 'hgvs_splice', 'hgvs_pro', 'variant_as_written', ...ds.flatMap((d) => ['difference', 'SE', 'ci95_lower', 'ci95_upper', d.method === 'limma' || d.df ? 't' : 'z', 'p', 'q', d.method === 'limma' ? 'replicates' : 'pairs', 'status'].map((x) => `${x}${suffix(d)}`))];
   const rows = [];
   for (let i = 0; i < results.rows; i += 1) {
     rows.push([...hgvsColumns(level, v.key[i]), v.original[i], ...ds.flatMap((d) => {
       const ok = !d.reason[i];
-      const x = (a) => num(ok ? a[i] : Number.NaN);
-      return [x(d.delta), x(d.se), x(d.ciLow), x(d.ciHigh), x(d.z), x(d.p), x(d.q), ok ? String(d.k[i]) : 'NA', DIFFERENTIAL_REASON_NAMES[d.reason[i]]];
+      const x = (a) => (ok ? a[i] : Number.NaN);
+      return [x(d.delta), x(d.se), x(d.ciLow), x(d.ciHigh), x(d.z), x(d.p), x(d.q), ok ? d.k[i] : Number.NaN, DIFFERENTIAL_REASON_NAMES[d.reason[i]]];
     })]);
   }
-  return csv(header, rows);
+  return { header, rows };
 }
 
 // QC per sample (qc.js samples).

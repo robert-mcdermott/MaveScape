@@ -3,14 +3,19 @@ package main
 // The remote-control actions (remote.go): what a program on this computer can ask the open
 // MaveScape page to do. The page performs them (web/ui/remote.js, whose action table must name
 // exactly these; TestEveryActionHasAPageHandler checks it). GET /api/remote/tools lists them with
-// their arguments, and the MCP server (roadmap wave 7) will offer the same list to agents.
+// their arguments, and the MCP server (mcp.go, wave 7) offers the same list to agents as its
+// tools, each with a title and hints (actionHints, below).
 
 import "encoding/json"
 
 type remoteAction struct {
 	Name        string         `json:"name"`
+	Title       string         `json:"title,omitempty"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
+	// MCP's hints to an agent's client (readOnlyHint, destructiveHint, openWorldHint), from
+	// actionHints.
+	Annotations map[string]any `json:"annotations,omitempty"`
 	// long: may run for minutes (scoring a large table, QC, an archive with its tables).
 	long bool
 	// output: writes a file at args.path (output.go), so it needs the token.
@@ -63,7 +68,7 @@ var remoteActions = []remoteAction{
 		"name": textArg("A name for it."),
 	})},
 	{Name: "open_example", Description: "Opens a bundled example as a new workspace, scored with MaveScape's defaults, in the view it opens in. Without an id, the error lists the examples.", InputSchema: schema(map[string]any{
-		"id": textArg("The example's id or part of its title: \"grb2-sh3\" (GRB2 SH3, MaveDB counts), \"simulated\" (a simulated experiment with known effects) \"simulated-time-series\" (a simulated time series) or \"simulated-sort-seq\" (simulated sorted bins)."),
+		"id": textArg("The example's id or part of its title. Published: \"grb2-sh3\" (GRB2's SH3 domain, an input and an output), \"hsp90\" (Hsp90, a time series), \"factor9\" (factor IX, sorted bins), \"dhfr-lon\" (DHFR with and without Lon, two conditions), \"brca1-ring\" (BRCA1's RING domain, from MaveDB and back), \"pten-mavedb\" (PTEN, published scores), \"brca1-sge\" (BRCA1, nucleotide variants), \"tp53-screens\" (TP53, two screens). Simulated, with known effects: \"simulated\", \"simulated-time-series\", \"simulated-sort-seq\", \"simulated-barcodes\", \"simulated-conditions\", \"simulated-problems\". The examples from MaveDB download their tables when opened."),
 	}, "id"), long: true},
 	{Name: "open_files", Description: "Opens files on this computer, as dropping them on the window does: count or score tables (.csv, .tsv), the target's sequence (.fasta), designs (.design.json), workspace archives (.msz) and structures (.pdb, .cif, .bcif, gzipped or not: shown in the Structure view), or folders of them. Needs the token.", InputSchema: schema(map[string]any{
 		"paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths of files or folders."},
@@ -128,6 +133,11 @@ var remoteActions = []remoteAction{
 		"reason":  textArg("Why the finding is expected here; empty to withdraw the acknowledgement."),
 		"run":     textArg("A score run by name or id, or \"counts\"; the latest run of the current design if not given."),
 	}, "finding"), long: true},
+	{Name: "set_qc_thresholds", Description: "Sets the quality-control thresholds by their keys: a finding's review and fail levels (\"agreement\": {\"review\": 0.7, \"fail\": 0.4}, either level alone), or a measure's value (\"lowCount\": 5); the others stay as they are. reset: true goes back to MaveScape's defaults. The findings are read with them; the change goes into the history and the methods.", InputSchema: schema(map[string]any{
+		"thresholds": map[string]any{"type": "object", "description": "By key: readsPerVariant, lowCount, lowFraction, missingExcess, coverage, agreementInput, agreement, excessVariance, outlierReplicate, separation, resolution, scoredFraction, fewerPoints, timeFit, binShare, cellsPerVariant, unmappedReads, singleBarcode, barcodeExcess, splitHalf, outlierBarcodes (qc_findings names each finding's threshold)."},
+		"reset":      flagArg("Go back to MaveScape's default thresholds."),
+	})},
+	{Name: "proposals", Description: "An AI agent's proposals: what it made and marked proposed, and what waits for the person to accept (the design, QC thresholds and acknowledgements, a target's check, the MaveDB details, removals), with the latest decisions, accepted or rejected. The person decides in the window.", InputSchema: schema(map[string]any{})},
 	{Name: "select_variants", Description: "Selects variants on the map: by a query (such as \"missense at 40-80 with se < 0.2\", \"lower and not robust\", \"from C in feature disulfide\", \"in Core and not in Surface\"), by name or by position; replaces the selection or adds to, intersects or subtracts from it; optionally saves it by name (with its query). A query that needs the run's robustness checks it first. Shows the Map view with the selection.", InputSchema: schema(map[string]any{
 		"query":     textArg("A query of MaveScape's selection language: kinds (missense, nonsense, synonymous), states (scored, low, filtered, missing), at/pos/refpos with positions, from/to with residues or groups, score/se/q/replicates/input compared with a number, lower/higher/neutral, robustness verdicts (robust, fragile, uncertain, borderline, size-dependent, sometimes-scored, \"class depends on the pseudocount\"), feature with a name, in with a saved selection's name, selected, and, or, not, parentheses."),
 		"variants":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "MAVE-HGVS names, such as p.Trp36Ala."},
@@ -144,7 +154,7 @@ var remoteActions = []remoteAction{
 		"run":       runArg,
 		"condition": conditionArg,
 	}, "variant")},
-	{Name: "render_map", Description: "Shows a run's variant-effect map with the given settings and returns the map described in words, with the number of cells in each state.", InputSchema: schema(map[string]any{
+	{Name: "render_map", Description: "Shows a run's variant-effect map with the given settings and returns the map described in words, with the number of cells in each state; with image, the map as a picture too (a PNG as its SVG export draws it: on white, the position and row medians, the color scale, the tracks shown), for an agent to look at or a script to save.", InputSchema: schema(map[string]any{
 		"run":       runArg,
 		"condition": conditionArg,
 		"color_by":  textArg("score, se, replicates or input; differential for a run that compares conditions."),
@@ -152,6 +162,28 @@ var remoteActions = []remoteAction{
 		"rows":      textArg("The order of the substitutions: biochemical, hydrophobicity or alphabetical."),
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
+		"image":     flagArg("Return the map as a picture (PNG) too."),
+		"scale":     map[string]any{"type": "number", "description": "The picture's size against the SVG export's, from 0.5 to 4 (2 if not given)."},
+		"from":      map[string]any{"type": "integer", "description": "The picture's first position (1 if not given)."},
+		"to":        map[string]any{"type": "integer", "description": "The picture's last position (the target's last if not given)."},
+	})},
+	{Name: "scores", Description: "A run's variants as a table, the columns of its scores export (scores.csv: hgvs_nt, hgvs_splice, hgvs_pro, score, SE, ci95_lower, ci95_upper, df, SE_scale, replicates, replicates_expected, status (scored, low confidence, filtered: the stage, not measured), flags (why low confidence), tau2, I2, leave_one_out, variant_as_written, variant_class, each replicate's score and SE); with contrast its differential scores (difference, SE, interval, t or z, p, q), with protein a nucleotide run's scores at the protein level. Numbers as numbers, null where the export has NA (df \"Inf\" when infinite). Only those at positions, of kinds, in a saved selection or matching a query; sorted by a column; 100 rows from offset unless limit says otherwise (0: every row).", InputSchema: schema(map[string]any{
+		"run":       runArg,
+		"condition": conditionArg,
+		"contrast":  textArg("With conditions compared: a contrast (its name, or its number from 1): its differential scores."),
+		"protein":   flagArg("A nucleotide run's scores at the protein level (protein_scores.csv)."),
+		"positions": map[string]any{"type": "array", "items": map[string]any{"type": []string{"string", "integer"}}, "description": "Positions on the target (the variants' own numbering), each a number or a stretch (\"30-40\")."},
+		"kinds":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Classes of variant: missense, nonsense, synonymous, and the others the table has."},
+		"selection": textArg("A saved selection, by name: its variants only."),
+		"query":     textArg("A query of the selection language (as select_variants takes it): the variants it selects only."),
+		"sort":      textArg("A column to sort by (\"score\"; \"-score\" for the highest first); rows without a value last."),
+		"columns":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The columns to give (all if not given)."},
+		"limit":     map[string]any{"type": "integer", "description": "The rows to give, from offset (100 if not given; 0 for all of them)."},
+		"offset":    map[string]any{"type": "integer", "description": "The rows to pass over first (0 if not given)."},
+	})},
+	{Name: "provenance", Description: "A run's provenance as its export (provenance.json) holds it: the table and its mapping by SHA-256, the design and its SHA-256, the parameters, the software, the output's SHA-256, the QC findings with their thresholds and acknowledgements, and the workspace's history head.", InputSchema: schema(map[string]any{
+		"run":       runArg,
+		"condition": conditionArg,
 	})},
 	{Name: "compare", Description: "Compares two sets of scores, as the Compare view does: each side a run's condition (its combined scores) or one of its replicates, of one run or two (a rescoring, or a MaveDB record's published scores against its counts scored again), or a MaveDB score set or a predictor kept beside the workspace (a score set named by its URN is fetched and kept first, without opening it; a predictor is AlphaMissense or a predictor's file added with add_track). Returns the compatibility report first (targets and coordinates, the level, the variants matched and those on one side only, the directions and scales, whether the two are independent; each item ok, qualified or blocked), then the agreement of the variants compared: Pearson's r and Spearman's rho, Lin's concordance and Bland–Altman's bias and limits of agreement (the last two only on one scale), each with its 95% interval; for two independent sides on one scale, the variants that differ beyond their uncertainty (each difference's z from both SEs, q by Benjamini–Hochberg) and the disagreement by position; a predictor by rank (Spearman's rho) and by its classes (the measured scores in each class, and the AUC of telling its benign from its pathogenic substitutions, with DeLong's interval). The scale: as scored, stated to be one, or each side rescaled by its own anchors (nonsense median 0 and wild type 1, or synonymous median 0 and nonsense median -1). Filters leave out variants of low confidence, large SE or few reads. Shows the Compare view; export with what comparison writes the variants compared or (a .json path) the report and statistics, comparison-positions the disagreement by position, comparison-map a map (SVG), comparison-classes a predictor by class.", InputSchema: schema(map[string]any{
 		"a":              textArg("The first side, by name: \"Run 1\", \"Run 1: Replicate 2\", \"Run 1: +Lon\", \"Published scores\", a score set or predictor kept beside the workspace (\"AlphaMissense: P62993\"), or a MaveDB score set's URN (fetched and kept when it is not yet). The pair shown, or a default (a run against the published scores, two replicates, two conditions, the last two runs), if not given."),
@@ -218,6 +250,11 @@ var remoteActions = []remoteAction{
 		"focus":        flagArg("Focus on the selected residues and their neighbors within 5 Å, side chains drawn (false: the whole structure again)."),
 		"fit":          flagArg("Fit the whole structure in the view."),
 	}), long: true},
+	{Name: "render_structure", Description: "The Structure view as a picture (a PNG), as a figure panel of it is drawn: the structure as shown, its coloring's legend below (legend: false, the view alone), with what it shows in words.", InputSchema: schema(map[string]any{
+		"scale":  map[string]any{"type": "number", "description": "The picture's size against the view's, from 0.5 to 4 (2 if not given)."},
+		"legend": flagArg("Draw the legend below the view (true if not given)."),
+		"light":  flagArg("On white, whatever the window's theme."),
+	})},
 	{Name: "structure_evidence", Description: "What the structure shown says of the target's positions: each one's structural class (buried, exposed, interface with the partners chosen, or a predicted model's disordered region), from DSSP's secondary structure, the solvent accessibility (DSSP's radii), StructureMap's exposure and the partners within 4 Å; the median scores of each class against the rest (Mann–Whitney, BH-adjusted); and whether the least tolerant positions lie closer together than positions of the same burial (pairs within 8 Å against seeded draws within strata of relative accessibility). The same are tracks beside the map (list_tracks).", InputSchema: schema(map[string]any{
 		"partner":  textArg("The partner the interface is read with: \"all\" (every other chain, ligand and ion but common additives, the default), or one by its id or label (\"chain:B\", \"ligand:A:1352:TLA\")."),
 		"fraction": map[string]any{"type": "number", "minimum": 0.05, "maximum": 0.5, "description": "The share of positions called least tolerant for the cluster test (0.2 if not given)."},
@@ -234,6 +271,8 @@ var remoteActions = []remoteAction{
 	}, "name")},
 	{Name: "figures", Description: "The workspace's figures: each one's name, page (millimeters, and the text size in points), its panels lettered in reading order with what each shows, where it is (millimeters) and anything wrong with it (text under 6 pt, a map too narrow for its positions, a run no longer there), and the figure described in words.", InputSchema: schema(map[string]any{
 		"figure": textArg("A figure by name or id: only that one."),
+		"image":  flagArg("Each page as a picture too: a PNG as export_figure writes it."),
+		"dpi":    map[string]any{"type": "number", "description": "The pictures' resolution, from 72 to 600 dots per inch (150 if not given)."},
 	})},
 	{Name: "create_figure", Description: "Makes a figure: an empty page at a journal's column width or a slide, shown in the Figures view. Add panels with add_figure_panel.", InputSchema: schema(map[string]any{
 		"name":      textArg("Its name (\"Figure 2\"); Figure n if not given."),
@@ -336,6 +375,97 @@ var remoteActions = []remoteAction{
 		"selection":          textArg("selection: a saved selection by name; the current selection if not given."),
 		"map":                textArg("comparison-map: first, second or difference (the default)."),
 	}, "what", "path"), long: true, output: true},
+}
+
+// What MCP's tools/list says of each action besides its description: a title, and how it acts.
+// read: changes nothing in the workspace (it may show something in the window); edit: changes the
+// workspace, in its history, and destructive when it replaces or removes something the person
+// made; file: writes a file at the absolute path given, never replacing one unless asked. public:
+// may ask a public service (MaveDB, UniProt, PDBe, the PDB, AlphaFold DB…) through the program's
+// fetcher. TestEveryActionHasATitleAndHints keeps the table complete.
+type actionHint struct {
+	title       string
+	kind        string
+	destructive bool
+	public      bool
+}
+
+var actionHints = map[string]actionHint{
+	"get_state":             {title: "Describe the workspace", kind: "read"},
+	"new_workspace":         {title: "Start a new workspace", kind: "edit"},
+	"open_example":          {title: "Open an example", kind: "edit", public: true},
+	"open_files":            {title: "Open files", kind: "edit"},
+	"set_mode":              {title: "Show a view", kind: "read"},
+	"focus":                 {title: "Show an item in the inspector", kind: "read"},
+	"draft_design":          {title: "Draft the design from the column names", kind: "edit", destructive: true},
+	"set_design":            {title: "Set the design", kind: "edit", destructive: true},
+	"search_mavedb":         {title: "Search MaveDB", kind: "read", public: true},
+	"open_mavedb":           {title: "Open a MaveDB score set", kind: "edit", public: true},
+	"check_target":          {title: "Check the target against UniProt", kind: "edit", public: true},
+	"mavedb_deposit":        {title: "What a MaveDB deposit would hold", kind: "read"},
+	"set_mavedb_details":    {title: "Set the MaveDB details", kind: "edit"},
+	"check":                 {title: "Check a table, its design and parameters", kind: "read"},
+	"reproduce_run":         {title: "Reproduce a run", kind: "read"},
+	"score":                 {title: "Score the counts", kind: "edit"},
+	"qc_findings":           {title: "Quality-control findings", kind: "read"},
+	"acknowledge_finding":   {title: "Acknowledge a QC finding", kind: "edit"},
+	"set_qc_thresholds":     {title: "Set the QC thresholds", kind: "edit"},
+	"proposals":             {title: "Proposals waiting for the person", kind: "read"},
+	"select_variants":       {title: "Select variants", kind: "edit"},
+	"inspect_variant":       {title: "A variant's evidence", kind: "read"},
+	"render_map":            {title: "The variant-effect map, in words and as a picture", kind: "read"},
+	"scores":                {title: "A run's variants as a table", kind: "read"},
+	"provenance":            {title: "A run's provenance", kind: "read"},
+	"render_structure":      {title: "The Structure view as a picture", kind: "read"},
+	"compare":               {title: "Compare two sets of scores", kind: "edit", public: true},
+	"check_robustness":      {title: "Check a run's robustness to analysis choices", kind: "edit"},
+	"list_tracks":           {title: "The tracks beside the map", kind: "read"},
+	"add_track":             {title: "Add a track beside the map", kind: "edit", public: true},
+	"set_track":             {title: "Show, move or filter a track", kind: "edit"},
+	"remove_track":          {title: "Remove an annotation and its tracks", kind: "edit", destructive: true},
+	"open_structure":        {title: "Open a structure", kind: "read", public: true},
+	"find_structures":       {title: "Find structures of the target", kind: "read", public: true},
+	"map_structure":         {title: "Map the target onto the structure", kind: "read"},
+	"set_structure":         {title: "Draw, color and select on the structure", kind: "read"},
+	"structure_evidence":    {title: "The structure as evidence", kind: "read"},
+	"save_structure_view":   {title: "Save the structure view", kind: "edit"},
+	"open_structure_view":   {title: "Open a saved structure view", kind: "read", public: true},
+	"remove_structure_view": {title: "Remove a saved structure view", kind: "edit", destructive: true},
+	"figures":               {title: "The workspace's figures", kind: "read"},
+	"create_figure":         {title: "Make a figure", kind: "edit"},
+	"add_figure_panel":      {title: "Add a panel to a figure", kind: "edit"},
+	"set_figure":            {title: "Change or delete a figure", kind: "edit", destructive: true},
+	"export_figure":         {title: "Export a figure", kind: "file"},
+	"check_figure":          {title: "Check an exported figure", kind: "edit"},
+	"checkpoint":            {title: "Keep or delete a checkpoint", kind: "edit", destructive: true},
+	"diff":                  {title: "What changed", kind: "read"},
+	"certify":               {title: "Certify the workspace", kind: "file"},
+	"review_report":         {title: "Write the review report", kind: "file"},
+	"verify_certificate":    {title: "Verify a certificate", kind: "read"},
+	"report":                {title: "The report and its methods", kind: "edit", destructive: true},
+	"proteoscope_link":      {title: "Open the structure in Proteoscope", kind: "read"},
+	"export":                {title: "Export a file", kind: "file"},
+}
+
+// MCP's annotations from a hint.
+func (hint actionHint) annotations() map[string]any {
+	out := map[string]any{"readOnlyHint": hint.kind == "read", "openWorldHint": hint.public}
+	if hint.kind != "read" {
+		out["destructiveHint"] = hint.destructive
+	}
+	if hint.kind == "file" {
+		out["idempotentHint"] = false
+	}
+	return out
+}
+
+func init() {
+	for index, action := range remoteActions {
+		if hint, ok := actionHints[action.Name]; ok {
+			remoteActions[index].Title = hint.title
+			remoteActions[index].Annotations = hint.annotations()
+		}
+	}
 }
 
 func findAction(name string) (remoteAction, bool) {

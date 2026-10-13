@@ -9,7 +9,8 @@ Research 2025;53(D1):D609-D617. doi:10.1093/nar/gkae1010
 
 MaveDB's answers (mavedb/, mavedb-search/), retrieved 2026-10-11 from api.mavedb.org, unchanged:
 the records of urn:mavedb:00000835-a-1 (with its scores, counts and mapped variants),
-00000003-a-1, 00000003-a-2, 00001200-a-1, 00000011-a-1, 00000013-a-1, 00000662-a-2 (with its
+00000003-a-1, 00000003-a-2, 00001200-a-1, 00000011-a-1 (with its scores, retrieved 2026-10-10: Hsp90,
+Hietpas RT, et al. PNAS 2011;108:7896-7901, doi:10.1073/pnas.1016024108), 00000013-a-1, 00000662-a-2 (with its
 scores), 00000097-0-2, 00001277-a-1, 00001245-a-1, 00001237-a-1, 00001228-a-1, 00000063-a-1 and
 00000063-b-1 (DHFR with and without Lon, Thompson et al., eLife 2020, doi:10.7554/eLife.53476), and
 two searches; and, retrieved 2026-10-11, the record of urn:mavedb:00000054-a-1 (PTEN's lipid
