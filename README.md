@@ -30,6 +30,8 @@ It covers the path from a count table to a result you can defend, and checks eac
   validators accept;
 - figures for a paper or a talk, drawn from the analysis and exported as SVG, PDF or PNG, each
   carrying what it was drawn from, so it can be checked and rebuilt;
+- AI agents and scripts in the same window: an agent's changes wait for you to accept them, and R
+  and Python call every action;
 - a record a reviewer can repeat: the methods of the whole workspace with their references,
   provenance, and a workspace archive that reopens identically on another computer.
 
@@ -513,6 +515,11 @@ check, its tolerance and how the reference outputs were made are in
   draw it again. Its legend is part of the image, so it shrinks with the panel and is not counted
   when the figure says its smallest text. A PDF's text is in Helvetica's standard encoding, so a
   character outside it (− or Δ) is written as its nearest ASCII (- or delta).
+- An AI agent's proposals are a review, not a fence: an agent that can run programs on your
+  computer can call the remote-control API directly, as a script does, and its changes then apply
+  at once under the name it gives. What you change in the window while an agent's action runs
+  counts as the agent's.
+- The R and Python packages are installed from this repository, not from CRAN or PyPI.
 - Calibration is planned for a later release; see the [roadmap](mavescape-spec/roadmap.md).
 
 ## Development
@@ -575,7 +582,7 @@ node docs/site/build.mjs /tmp/site    # the website, with every link, anchor and
 The version is `version` in `main.go`; `web/app.js`, `web/index.html` and `CITATION.cff` repeat
 it, and `node clients/generate.mjs` gives the R and Python clients the same version. To release,
 set them, add the release to `CHANGELOG.md`, merge to `main` and push a tag such
-as `v0.6.0`. The release workflow (`.github/workflows/release.yml`) checks that the tag matches,
+as `v0.7.0`. The release workflow (`.github/workflows/release.yml`) checks that the tag matches,
 runs the tests, builds the six binaries and attaches them with `SHA256SUMS` to a draft release.
 Review the draft and publish it.
 

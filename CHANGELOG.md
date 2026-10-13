@@ -1,8 +1,19 @@
 # Changelog
 
-## 0.7.0 (unreleased)
+## 0.7.0 (2026-10-12)
 
-Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
+Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts. `mavescape mcp` makes
+MaveScape a Model Context Protocol server, so an AI agent such as Claude Code calls its 54 actions
+as tools in the window you watch: it opens data, scores, reads the quality control and the scores
+as tables, looks at the map, the structure and figures as pictures, compares, makes figures and
+certifies. Its changes are proposals: what it makes is marked proposed and usable at once, while a
+design, QC thresholds, an acknowledgement, a target's check, MaveDB details or a removal waits; you
+accept or reject them above the view, and every change carries the agent's name in the workspace's
+hash-chained history. R and Python packages make each action a function, tables coming back as data
+frames and pictures as files, with a notebook on GRB2 and a script on DHFR's two conditions as
+examples; the guide *Agents and scripts* follows an agent through a session on Hsp90. 0.7.0 keeps
+two archives and a certificate of its own, one archive saved with an agent's proposal open, which
+every later version must reopen as 0.7 decides it.
 
 ### Added
 
@@ -135,6 +146,14 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   guide's session on Hsp90 and checks every number its answers quote, and that `score` refuses
   while a design the agent proposed waits, with a design already in place. Hsp90's published
   scores (urn:mavedb:00000011-a-1, 43 kB) join the fetcher's cached answers the sessions run on.
+- 0.7.0's own archives (`validation/archives/make-0.7.0.mjs`, which drives `mavescape mcp` as an
+  agent and the window as the person): GRB2 with an agent's proposal accepted and another rejected,
+  and its certificate; Hsp90 saved with an agent's proposal open. Every later version reopens them
+  with the agent's entries in an unbroken history, what it made marked proposed, and the open
+  proposal accepted or rejected as 0.7 decides it (`roundtrip`); certifies each earlier release's
+  archive, the one with a proposal open refused until it is accepted, and verifies 0.6.0's and
+  0.7.0's certificates (`certificate`); and reruns the Hsp90 archive with `mavescape run
+  --from-workspace`, the proposal kept (`headless-run`).
 
 ## 0.6.0 (2026-10-12)
 

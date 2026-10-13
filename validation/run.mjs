@@ -120,6 +120,7 @@ import { movedApart, pairsFor, plantedChanges } from './diff-cases.mjs';
 import { certifiedWorkspace, checkTraced, externalReferences, repack, tamperings, windowExample } from './certificate-cases.mjs';
 import { GRB2_ACKNOWLEDGED, grb2Figure, hsp90Checkpoint, ringCertified } from './example-lessons.mjs';
 import { certificateFingerprint, computeNumbers, countNumbers, encodeAll, readCertificate, verifyCertificate, writeCertificate } from '../web/lib/certificate.js';
+import { COLLECTIONS, acceptProposal, describeProposal, rejectProposal } from '../web/lib/proposals.js';
 import { canonicalJSON } from '../web/lib/workspace.js';
 import { panelDigests } from '../web/lib/figure-manifest.js';
 import { analysisState, changeMap, diffStates, pairWords, stateDigest, variantChanges } from '../web/lib/diff.js';
@@ -2283,6 +2284,31 @@ const suites = {
         const computed = await computeNumbers(opened.ws, async (sha) => opened.sources.get(sha) ?? null, { software: SOFTWARE });
         const kept = (opened.ws.checkpoints ?? []).map((c) => ({ name: c.name, ok: stateDigest(c.state) === c.sha256 }));
         check('roundtrip', `${file}: each checkpoint's state its own SHA-256, and every number the workspace reports computed again from the archive's own files (each figure drawn, each analysis kept in the report what it computes now)`, `checkpoints ${kept.map((c) => `${c.name} ${c.ok ? 'as kept' : 'changed'}`).join(', ') || 'none'}; ${(opened.ws.figures ?? []).map((f) => `${f.name}, ${f.panels.length} panels`).join('; ') || 'no figures'}; ${(opened.ws.analyses ?? []).length} analyses kept; ${computed.notes.length ? computed.notes.join(' ') : 'no notes'}; ${computed.blocked.size ? [...computed.blocked].map(([g, why]) => `${g}: ${why}`).join('; ') : 'nothing left out'}`, kept.every((c) => c.ok) && !computed.notes.length && !computed.blocked.size, 'as kept; computed, as kept');
+      }
+      // What 0.7 keeps (an AI agent's work): every change the agent made in the history under its
+      // name, which each entry's hash covers (the chain checked above); what it made marked
+      // proposed, by whom and whether accepted; and a proposal saved open, as it was: accepted in
+      // Node, what waited is applied; rejected, what it made goes and what waited is dropped. Each
+      // decision is one entry of the history, the person's, the chain unbroken.
+      const agents = [...new Set(opened.ws.history.filter((e) => e.by).map((e) => e.by))];
+      if (agents.length || opened.ws.proposals?.length) {
+        const marked = Object.keys(COLLECTIONS).flatMap((c) => (opened.ws[c] ?? []).filter((x) => x.proposed).map((x) => `${COLLECTIONS[c].noun(x, opened.ws)} (${x.proposed.accepted ? 'accepted' : 'open'})`));
+        const open = (opened.ws.proposals ?? []).map((p) => {
+          const items = describeProposal(opened.ws, p);
+          const accepted = acceptProposal(opened.ws, p.id, '2026-10-13T05:00:00.000Z');
+          const rejected = rejectProposal(opened.ws, p.id, '2026-10-13T05:00:00.000Z');
+          const madeIds = Object.keys(COLLECTIONS).flatMap((c) => (opened.ws[c] ?? []).filter((x) => x.proposed?.proposal === p.id).map((x) => `${c}:${x.id}`));
+          const stillThere = (ws) => madeIds.filter((key) => { const [c, id] = key.split(':'); return (ws[c] ?? []).some((x) => x.id === id); });
+          const held = p.changes.filter((c) => c.kind === 'design');
+          const decided = (ws) => ws.history.at(-1).action === 'proposal' && !ws.history.at(-1).by;
+          return {
+            author: p.author, items: items.length,
+            accepted: !accepted.proposals && verifyHistory(accepted).ok && decided(accepted) && held.every((c) => JSON.stringify(accepted.design) === JSON.stringify(c.design)) && stillThere(accepted).length === madeIds.length,
+            rejected: !rejected.proposals && verifyHistory(rejected).ok && decided(rejected) && rejected.history.length === opened.ws.history.length + 1 && !stillThere(rejected).length && JSON.stringify(rejected.design) === JSON.stringify(opened.ws.design),
+          };
+        });
+        check('roundtrip', `${file}: the AI agent's work kept: its changes in the history under its name, what it made marked proposed (accepted or open), and a proposal saved open as it was, accepted in Node (what waited applied) or rejected (what it made removed, the design as it was), each decision one entry of an unbroken history`, `${agents.join(', ') || 'no agent'}: ${opened.ws.history.filter((e) => e.by).length} of ${opened.ws.history.length} entries; marked: ${marked.join(', ') || 'none'}; open: ${open.map((o) => `${o.author}'s, ${o.items} changes, accepted ${o.accepted ? 'as it should' : 'WRONGLY'}, rejected ${o.rejected ? 'as it should' : 'WRONGLY'}`).join('; ') || 'none'}`,
+          marked.length > 0 && open.every((o) => o.accepted && o.rejected), 'kept, and decided as 0.7 decides');
       }
     }
     check('roundtrip', 'every example has a question, source, license, what to expect, the view it opens and its steps', EXAMPLES.map((e) => `${e.id}: ${e.steps.length} steps, opens ${e.opens}`).join('; '), EXAMPLES.every((e) => e.question && e.source && e.license && e.expected.length && e.steps.length && ['qc', 'score', 'map', 'experiment'].includes(e.opens)), 'all');
@@ -4925,15 +4951,24 @@ const suites = {
     }
     check('certificate', `each of the ${EXAMPLES.length} examples opened as the window opens it (its files kept, its source saying how they were assembled), scored and certified (${((performance.now() - e0) / 1000).toFixed(1)} s), and verified bit for bit`, `${total.toLocaleString('en-US')} numbers; ${rows.filter((x) => x.verdict !== 'verified' || x.notes).map((x) => `${x.id}: ${x.verdict}${x.notes ? `, ${x.notes} notes` : ''}`).join('; ') || `every one verified (${rows.map((x) => x.n).join(', ')})`}`, rows.length === EXAMPLES.length && rows.every((x) => x.verdict === 'verified' && !x.notes), 'every one');
 
-    // Each earlier release's archives, opened by this MaveScape, certified and verified.
+    // Each earlier release's archives, opened by this MaveScape, certified and verified. One saved
+    // with an AI agent's proposal open (0.7.0's Hsp90) is refused, saying so, then certified once
+    // the proposal is accepted, as the person would accept it.
     const releases = [];
     for (const name of readdirSync(new URL('./archives/', import.meta.url)).filter((f) => f.endsWith('.msz')).sort()) {
       const opened = await readArchive(new Uint8Array(readFileSync(new URL(`./archives/${name}`, import.meta.url))));
-      const m = await writeCertificate(opened.ws, async (sha) => opened.sources.get(sha) ?? null, { software: SW });
+      const file = async (sha) => opened.sources.get(sha) ?? null;
+      let ws = opened.ws;
+      let refused = null;
+      if (ws.proposals?.length) {
+        refused = await writeCertificate(ws, file, { software: SW }).then(() => 'certified', (error) => error.message);
+        for (const p of ws.proposals) ws = acceptProposal(ws, p.id, '2026-10-13T05:00:00.000Z');
+      }
+      const m = await writeCertificate(ws, file, { software: SW });
       const v = await verifyCertificate(await readCertificate(m.bytes), { software: SW });
-      releases.push({ name, release: opened.manifest.software?.version, n: m.certificate.total, verdict: v.verdict, notes: m.notes });
+      releases.push({ name, release: opened.manifest.software?.version, n: m.certificate.total, verdict: v.verdict, notes: m.notes, refused });
     }
-    check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.6), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output', releases.map((x) => `${x.name} (${x.release}): ${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 9 && releases.every((x) => x.verdict === 'verified' && !x.notes.length), 'every one');
+    check('certificate', 'each earlier release\'s workspace archive (validation/archives/: 0.1 to 0.7), opened by this MaveScape, certified and verified, each run\'s scores computed now its recorded output; one with a proposal open refused until it is accepted', releases.map((x) => `${x.name} (${x.release}): ${x.refused ? `refused (${x.refused.slice(0, 60)}…), then ` : ''}${x.n.toLocaleString('en-US')} numbers, ${x.verdict}${x.notes.length ? `, ${x.notes.length} notes` : ''}`).join('; '), releases.length >= 12 && releases.every((x) => x.verdict === 'verified' && !x.notes.length && (x.refused === null || /has a proposal open/.test(x.refused))) && releases.some((x) => x.refused), 'every one');
     // Each release's own certificate (from 0.6.0: validation/archives/*.certificate.msz), verified by
     // this MaveScape: its fingerprint, files, history and checkpoints as certified, and every number
     // computed again and compared bit for bit with the one that release computed.
@@ -4943,7 +4978,7 @@ const suites = {
       const v = await verifyCertificate(read, { software: SW });
       certified.push({ name, by: read.certificate.software?.version, total: read.certificate.total, verdict: v.verdict, differ: v.numbers.differ.slice(0, 3).map((d) => d.label) });
     }
-    check('certificate', 'each release\'s own certificate (validation/archives/, from 0.6.0), verified by this MaveScape: its fingerprint, files, history and checkpoints as certified, every number computed again and identical, bit for bit, to the one that release computed', certified.map((x) => `${x.name} (certified by ${x.by}): ${x.total.toLocaleString('en-US')} numbers, ${x.verdict}${x.differ.length ? ` (${x.differ.join('; ')})` : ''}`).join('; ') || 'none', certified.length >= 1 && certified.every((x) => x.verdict === 'verified'), 'verified');
+    check('certificate', 'each release\'s own certificate (validation/archives/, from 0.6.0), verified by this MaveScape: its fingerprint, files, history and checkpoints as certified, every number computed again and identical, bit for bit, to the one that release computed', certified.map((x) => `${x.name} (certified by ${x.by}): ${x.total.toLocaleString('en-US')} numbers, ${x.verdict}${x.differ.length ? ` (${x.differ.join('; ')})` : ''}`).join('; ') || 'none', certified.length >= 2 && certified.every((x) => x.verdict === 'verified'), 'verified');
   },
 
   // Wave 6, slice 7 (R7, part 2): the review report (lib/review.js): the certificate's numbers, each

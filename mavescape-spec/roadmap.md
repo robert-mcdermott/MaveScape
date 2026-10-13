@@ -3283,6 +3283,42 @@ Decisions taken in planning (confirmed before slice 1):
        `agent-hsp90` in both themes, no violation; the site builds (23 pages, 73 screenshots).
      - Wave 7 is complete with slice 6.
 
+**Released 0.7.0 on 2026-10-12.** An AI agent's work is kept with the workspace (its changes under
+its name in the history, what it made marked proposed, the person's decisions, a proposal still
+open), so 0.7 leaves two archives and a certificate (`validation/archives/release-0.7.0-*.msz`, 0.7
+MB together), saved by 0.7.0 itself: `make-0.7.0.mjs` starts it as an agent's client does
+(`mavescape mcp`), offline, and drives it over MCP as an agent and through remote control as the
+person, who decides in the strip above the view:
+- GRB2's SH3 domain, opened by the person: the agent's first proposal accepted (Run 2 with the
+  DiMSum-compatible preset, a selection and AlphaMissense, made; the variance beyond counting
+  acknowledged, a QC threshold and the target's check, waiting until then), its second rejected
+  (Run 3, a figure of it, and the removal of the person's UniProt features); then the person's
+  comparison kept in the report and a checkpoint. 13 of its 24 history entries are the agent's;
+- that workspace's certificate, 6,833 numbers;
+- Hsp90 saved with an agent's proposal open: the guide's session to its second answer (the
+  published scores' score set kept beside the map and a checkpoint, made; a design fitting the
+  first three samples, waiting).
+
+Every later version must reopen them with the agent's entries in an unbroken history and what it
+made marked as proposed and accepted, or open; accept the open proposal as 0.7 does (the design it
+holds applied, what it made kept) or reject it (what it made removed, the design as it was); refuse
+to certify that workspace until the proposal is decided; verify 0.7.0's certificate; and rerun the
+Hsp90 archive with `mavescape run --from-workspace`, the proposal kept.
+- Found by the release:
+  - **The website's table of archives that keep opening never named 0.6.0's** (Methods and
+    validation): it names 0.6.0's and 0.7.0's now, and has rows for agents and the clients.
+  - **The home page described 0.6**: its line under the title is 0.7's, it has an article on agents
+    and scripts with Claude Code's proposal, its card of agents and scripts became one of pipelines
+    without a window, and its validation table has rows for agents and the clients.
+  - **The README did not say what proposals cannot do**: its limitations say that they are a
+    review, not a fence (an agent that can run programs can call the remote-control API as a script
+    does, its changes then applied at once), that what the person changes in the window while an
+    agent's action runs counts as the agent's, and that the packages come from the repository. Its
+    opening list names agents and scripts.
+  - The screenshots' audit (axe-core, WCAG 2.1 A and AA): 142 captures of 73 scenes, no violation.
+- After the release, the website is published from the release's checkout (`node
+  docs/site/build.mjs --publish`, then the `gh-pages` checkout committed and pushed).
+
 ## 0.8.0: calibration, for research (wave 8)
 
 ### Wave 8
