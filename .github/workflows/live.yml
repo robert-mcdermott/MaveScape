@@ -1,0 +1,32 @@
+name: Live public data
+
+# MaveScape's public data as the services serve them today, which is not a commit's to pass or fail
+# (ci.yml tests every commit on fixed data): the feasibility records opened from MaveDB live, their
+# tables the ones validation/sources.json pins, the phase-0 exit checked again from them, records
+# whose target is a transcript from NCBI and Ensembl, and DHFR's two score sets opened together
+# (validation/mavedb-live.mjs). A service that is down, or that has changed what it sends, fails
+# this run. Weekly, and by hand from Actions' "Run workflow" button.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: MaveDB, NCBI and Ensembl, live
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: The feasibility records opened from MaveDB, live, and the phase-0 exit checked again
+        run: node validation/mavedb-live.mjs --verbose
+        env:
+          CHROME: /usr/bin/google-chrome

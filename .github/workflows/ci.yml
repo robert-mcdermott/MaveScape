@@ -7,7 +7,8 @@ name: CI
 # to the same branch cancels a run not yet finished. Not for a change of documentation alone: no
 # check reads the Markdown files, the spec, the license or the citation (the site's pages and
 # screenshots are checked, so docs/site and docs/images still run it). Actions' "Run workflow"
-# button runs it all by hand.
+# button runs it all by hand. Every check here is on fixed data; the public services as they answer
+# today are checked weekly instead (live.yml), so that one being down fails no commit.
 on:
   push:
     branches: ['**']
@@ -157,10 +158,6 @@ jobs:
           CHROME: /usr/bin/google-chrome
       - name: mavescape run and validate, as a pipeline runs them
         run: node validation/headless-run.mjs --verbose
-        env:
-          CHROME: /usr/bin/google-chrome
-      - name: The feasibility records opened from MaveDB, live, and the phase-0 exit checked again
-        run: node validation/mavedb-live.mjs --verbose
         env:
           CHROME: /usr/bin/google-chrome
 

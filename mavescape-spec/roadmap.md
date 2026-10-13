@@ -3330,6 +3330,10 @@ Hsp90 archive with `mavescape run --from-workspace`, the proposal kept.
   skips the rest for a merge whose files are its branch's; a newer push cancels an unfinished
   run; and the release checks that a CI run, every job of it run, passed on the tagged files
   instead of testing them again.
+  After the release, the check of MaveDB, NCBI and Ensembl live (`mavedb-live.mjs`) left the CI of
+  each commit, where Ensembl answering HTTP 500 for a few minutes had failed the release's run on
+  `main`: it runs weekly and by hand (`.github/workflows/live.yml`), and every commit's checks are
+  on fixed data.
 - After the release, the website is published from the release's checkout (`node
   docs/site/build.mjs --publish`, then the `gh-pages` checkout committed and pushed).
 

@@ -292,8 +292,10 @@ MultiSTEP's settings, r 0.9995 (≥ 0.999, `scoring`). And two records whose tar
 GenBank, its tables those `sources.json` pins, all 3,893 variants valid and drawn at the protein
 level; BAP1's exon 1, its Ensembl transcript's current version said and used, all 620 variants
 valid. And (slice 6) DHFR's two score sets opened together, each record's tables those
-`sources.json` pins, their counts joined with a condition each. 19 checks, about a minute live; `--offline` checks again from the cache, sending nothing. In
-CI in the `remote` job.
+`sources.json` pins, their counts joined with a condition each. 19 checks, about a minute live; `--offline` checks again from the cache, sending nothing. Not
+in the CI of each commit, whose checks are all on fixed data: the workflow *Live public data*
+(`.github/workflows/live.yml`) runs it weekly and by hand, so that a service being down or changing
+what it sends fails that run, not a commit.
 
 ## Headless runs (`headless-run.mjs`, wave 2 slice 7)
 

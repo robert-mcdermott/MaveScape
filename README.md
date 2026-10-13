@@ -570,7 +570,8 @@ cross-compilation, the JavaScript tests, the validation suites, the performance 
 remote-control session, the agent session, the R and Python clients, headless runs and the
 website build once for each commit pushed, on any branch: a pull request shows its branch's
 checks (one from a fork is tested itself), and a merge whose files are its branch's is not
-tested again.
+tested again. Those checks are all on fixed data; MaveDB, NCBI and Ensembl, live, are checked
+weekly instead (`.github/workflows/live.yml`).
 
 ### Documentation
 
