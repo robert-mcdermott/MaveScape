@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Examples · MaveScape</title>
-  <meta name="description" content="MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), five opened from MaveDB (PTEN's abundance, scores alone; BRCA1's saturation genome editing; DHFR with and without the Lon protease, two score sets as two conditions; the BRCA1 RING domain from MaveDB and back; two screens of TP53 on two scales), and six simulated ones whose true effects are known, one of them with problems planted." />
+  <meta name="description" content="MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), five opened from MaveDB (PTEN's abundance, scores alone; BRCA1's saturation genome editing; DHFR with and without the Lon protease, two score sets as two conditions; the BRCA1 RING domain from MaveDB and back; two screens of TP53 on two scales), three calibrated against ClinVar (BRCA1, TP53, PTEN), and seven simulated ones whose true effects are known, one of them with problems planted and one with circular labels." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/MaveScape/docs/examples.html" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Examples" />
-  <meta property="og:description" content="MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), five opened from MaveDB (PTEN's abundance, scores alone; BRCA1's saturation genome editing; DHFR with and without the Lon protease, two score sets as two conditions; the BRCA1 RING domain from MaveDB and back; two screens of TP53 on two scales), and six simulated ones whose true effects are known, one of them with problems planted." />
+  <meta property="og:description" content="MaveScape's examples: three published experiments from MaveDB (the GRB2 SH3 domain, Hsp90 over 21 generations, factor IX in sorted bins), five opened from MaveDB (PTEN's abundance, scores alone; BRCA1's saturation genome editing; DHFR with and without the Lon protease, two score sets as two conditions; the BRCA1 RING domain from MaveDB and back; two screens of TP53 on two scales), three calibrated against ClinVar (BRCA1, TP53, PTEN), and seven simulated ones whose true effects are known, one of them with problems planted and one with circular labels." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/MaveScape/docs/examples.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/MaveScape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -67,6 +67,7 @@
           <li><a href="compare.html">Comparisons</a></li>
           <li><a href="robustness.html">Robustness</a></li>
           <li><a href="structure.html">Structures</a></li>
+          <li><a href="calibrate.html">Calibration</a></li>
         </ul>
         <h4>Results</h4>
         <ul>
@@ -88,7 +89,7 @@
 
     <main id="main" class="doc">
       <h1>Examples</h1>
-      <p class="doc-lede">Fourteen examples come with MaveScape. Three are published experiments from MaveDB, their counts unchanged and bundled: two populations, a growth time series and sorted bins. Five are opened from MaveDB when you open them: published scores alone, with their record; a saturation genome editing screen of nucleotide variants on a RefSeq transcript, with its counts; two score sets of one enzyme opened together as two conditions; a score set rescored from its counts, deposited and opened again; and two laboratories' screens of one protein, compared on one scale. Six are simulated, with every true effect known: two populations, a time series, a sort, a barcoded library, two conditions from shared inputs, and an experiment with two problems planted. Each opens scored, with its question, guided steps of a few minutes and what to expect, in the inspector.</p>
+      <p class="doc-lede">Eighteen examples come with MaveScape. Three are published experiments from MaveDB, their counts unchanged and bundled: two populations, a growth time series and sorted bins. Five are opened from MaveDB when you open them: published scores alone, with their record; a saturation genome editing screen of nucleotide variants on a RefSeq transcript, with its counts; two score sets of one enzyme opened together as two conditions; a score set rescored from its counts, deposited and opened again; and two laboratories' screens of one protein, compared on one scale. Three calibrate published scores of BRCA1, TP53 and PTEN against ClinVar's records of the gene, which they bring. Seven are simulated, with every true effect known: two populations, a time series, a sort, a barcoded library, two conditions from shared inputs, an experiment with two problems planted, and a calibration whose labels are half made from the assay itself. Each opens scored, with its question, guided steps of a few minutes and what to expect, in the inspector.</p>
 
       <h2 id="grb2">GRB2 SH3 domain (published)</h2>
       <p>An abundance selection of every substitution in the 56-residue SH3 domain of GRB2, in three replicates, from the Human Domainome (MaveDB urn:mavedb:00000835-a-1, CC0 1.0; Beltran et al., Nature 2025). The counts are MaveDB's file, unchanged.</p>
@@ -239,6 +240,14 @@
         <li>Giacomelli et al.'s nutlin-3 screen of the same library, against etoposide: r 0.75 as stated, Lin's concordance 0.72 rescaled. Two selections of one library differ about as much as two laboratories' screens.</li>
       </ul>
 
+      <h2 id="calibration">BRCA1, TP53 and PTEN against ClinVar, calibrated (published scores)</h2>
+      <p>Three examples open published scores from MaveDB (as the examples above, CC0 1.0) with ClinVar's records of the gene as NCBI gave them on 13 October 2026 (public domain), bundled as the ClinVar track keeps them so that the guides' numbers hold; they open in Calibrate, and need the MaveScape program for the scores. <a href="calibrate.html#examples">Calibration</a> tells what each shows.</p>
+      <ul>
+        <li><strong>BRCA1</strong> (Findlay et al.'s saturation genome editing, urn:mavedb:00000097-0-2): how far the function scores separate ClinVar's pathogenic and benign missense variants (AUC 0.993; OddsPath 36.4 and 0.0208, strong both), the record's Fayer calibration measured on today's controls, and how much of the agreement may rest on the assay itself: the 552 controls last evaluated since 2018 set aside, the abnormal-like class's evidence is moderate.</li>
+        <li><strong>TP53</strong> (Giacomelli et al.'s etoposide screen, urn:mavedb:00000068-c-1): moderate evidence for both classes that the bootstrap does not hold, five controls classified before the screens, and the record's ExCALIBR thresholds measured fairly.</li>
+        <li><strong>PTEN</strong> (Matreyek et al.'s VAMP-seq, urn:mavedb:00000013-a-1): an abundance assay against pathogenic variants that fold and still fail (AUC 0.698), only 8 benign controls scored, and controls on a scale set by nonsense variants.</li>
+      </ul>
+
       <h2 id="simulated">A simulated experiment (known truth)</h2>
       <p>A two-population selection of a 40-residue protein in three replicates, simulated by MaveScape (seed 20261009) with every variant's true effect known. It is labeled simulated wherever it appears, and the true effects can be downloaded from its guide.</p>
       <p><strong>The question:</strong> how close do the scores come to the true effects, and where are they least certain?</p>
@@ -312,6 +321,14 @@
         <li>QC fails the variance beyond counting and reviews the agreement and replicate 3, an outlier. The cells recorded account for the excess between replicates 1 and 2 (2.5× predicted, 2.2× seen); with replicate 3 the replicates differ about 12×.</li>
         <li>From all three replicates the scores track the truth with r 0.96, and their 95% intervals hold 99.5% of the true effects: too wide, since the shared error model takes replicate 3's noise into every variant. DiMSum's terms, distorted by it too, put the excess after selection.</li>
         <li>Remove replicate 3 in the Experiment view and score again: r 0.98, the intervals hold 96%, and DiMSum's terms put the bottleneck before selection, where it was planted. The guide shows both runs against the truth. Leaving a replicate out is a decision for the record: the history keeps it.</li>
+      </ul>
+
+      <h2 id="simulated-calibration">A simulated calibration with circular labels (known truth)</h2>
+      <p>A noisy two-population selection of a 40-residue protein in three replicates (seed 20261017), and 100 classifications of its missense variants, each with the date it was last evaluated: 25 a side made before the assay was "published" in 2024, from the truth alone, and 25 a side made since, from the assay's own scores. The labels can be made a control set from the guide, or downloaded. It opens in Calibrate.</p>
+      <p><strong>The question:</strong> half of the labels were made from the assay itself. Can you find them, and how far do they overstate the evidence its classes would give?</p>
+      <ul>
+        <li>Of the 741 missense variants, 319 lose function in truth (a true effect of −0.4 or less). The control set of every label draws a warning: 50 were last evaluated since 2024 and may rest on the assay. Here they do, and 6 of them are wrong by the truth.</li>
+        <li>With every label, the abnormal-like class's OddsPath is 20.0, strong; the guide compares it with the truth at the same thresholds: a likelihood ratio of 11.2, moderate. With the labels made before 2024 (Last evaluated before 2024), 10.5 against a truth of 13.6.</li>
       </ul>
 
       <h2 id="layouts">Blank layouts</h2>

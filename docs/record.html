@@ -67,6 +67,7 @@
           <li><a href="compare.html">Comparisons</a></li>
           <li><a href="robustness.html">Robustness</a></li>
           <li><a href="structure.html">Structures</a></li>
+          <li><a href="calibrate.html">Calibration</a></li>
         </ul>
         <h4>Results</h4>
         <ul>
@@ -126,6 +127,7 @@
         <li><strong><code>scores.csv</code> and <code>counts.csv</code></strong>: every variant named on the target in strict MAVE-HGVS. A run scored from counts gives its score, SE, 95% interval, the replicates' scores and each variant's status, and its counts by sample. Published scores pass through as published, with the record's counts.</li>
         <li><strong>What each column is</strong> (<code>score_columns.json</code>, <code>count_columns.json</code>), as MaveDB shows it beside the data.</li>
         <li><strong>The experiment and the score set</strong> (<code>experiment.json</code>, <code>score_set.json</code>). MaveScape's methods are the analysis. The design's readout and library method become the experiment's keywords, the MAVE minimum information's, in MaveDB's vocabulary. The target is given as MaveDB holds one.</li>
+        <li><strong>The run's calibrations</strong> (<code>score_calibrations.json</code>), for research: each as MaveDB's score calibration, its classes abnormal, not specified and normal with their ranges, OddsPath and evidence strength (<a href="calibrate.html#record">Calibration</a>).</li>
       </ul>
       <p>The dialog shows what the deposit holds and what MaveDB requires that the workspace lacks, usually an abstract. Give it below, with the license (CC0 unless the data have another), the publications (a PubMed id or a DOI), raw reads, contributors' ORCID iDs and, to add to an experiment of yours on MaveDB, its URN. The details are kept with the workspace and in its history. <em>More of the MAVE minimum information</em> adds the keywords the design does not hold: how the library was delivered, the profiling strategy, the reads. Values MaveScape chose, such as a title from the design or the data's license, are listed to confirm.</p>
       <p>MaveDB's own validators (its <code>mavedb</code> package, with mavehgvs and biocommons hgvs) accept what MaveScape writes: the validation checks the deposits of every kind of run it makes, from the examples and from published records. How the variants are named follows the target:</p>

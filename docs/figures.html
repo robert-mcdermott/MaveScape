@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Figures · MaveScape</title>
-  <meta name="description" content="Figures for a paper or a talk: a page at a journal's column width or a slide, its panels any view's plots (the map of a run, a QC finding's charts, the scores by class, a comparison, a variant's evidence, a saved structure view) and text, laid out, lettered and exported as SVG, PDF or PNG at a printed resolution, each file carrying what it was drawn from, to be checked and rebuilt; how the figures are checked." />
+  <meta name="description" content="Figures for a paper or a talk: a page at a journal's column width or a slide, its panels any view's plots (the map of a run, a QC finding's charts, the scores by class, a comparison, a variant's evidence, a saved structure view, a calibration's plots) and text, laid out, lettered and exported as SVG, PDF or PNG at a printed resolution, each file carrying what it was drawn from, to be checked and rebuilt; how the figures are checked." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/MaveScape/docs/figures.html" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Figures" />
-  <meta property="og:description" content="Figures for a paper or a talk: a page at a journal's column width or a slide, its panels any view's plots (the map of a run, a QC finding's charts, the scores by class, a comparison, a variant's evidence, a saved structure view) and text, laid out, lettered and exported as SVG, PDF or PNG at a printed resolution, each file carrying what it was drawn from, to be checked and rebuilt; how the figures are checked." />
+  <meta property="og:description" content="Figures for a paper or a talk: a page at a journal's column width or a slide, its panels any view's plots (the map of a run, a QC finding's charts, the scores by class, a comparison, a variant's evidence, a saved structure view, a calibration's plots) and text, laid out, lettered and exported as SVG, PDF or PNG at a printed resolution, each file carrying what it was drawn from, to be checked and rebuilt; how the figures are checked." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/MaveScape/docs/figures.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/MaveScape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -67,6 +67,7 @@
           <li><a href="compare.html">Comparisons</a></li>
           <li><a href="robustness.html">Robustness</a></li>
           <li><a href="structure.html">Structures</a></li>
+          <li><a href="calibrate.html">Calibration</a></li>
         </ul>
         <h4>Results</h4>
         <ul>
@@ -125,7 +126,7 @@
       <p>Every change can be undone. Making or deleting a figure and adding or removing a panel are written in the workspace's history; moving and resizing are not.</p>
 
       <h2 id="plots">Plots as panels</h2>
-      <p>A plot panel lays out its charts in the panel's box at the figure's text size: its title, then for each chart its heading, its legend and the chart, the room shared by what each chart needs. Its properties choose what it shows (a run's flow instead of its scores, a comparison's Bland–Altman instead of its scatter, a variant's time course), its title, and for replicate agreement the pair of replicates. A plot drawn too small to read, or a bar chart whose labels shrink below 6 pt to fit its rows, is said under the page; an image under 300 dpi at its printed size too.</p>
+      <p>A plot panel lays out its charts in the panel's box at the figure's text size: its title, then for each chart its heading, its legend and the chart, the room shared by what each chart needs. Its properties choose what it shows (a run's flow instead of its scores, a comparison's Bland–Altman instead of its scatter, a variant's time course, a calibration's ROC curve instead of its scores of each side: <a href="calibrate.html#record">Calibration</a>), its title, and for replicate agreement the pair of replicates. A plot drawn too small to read, or a bar chart whose labels shrink below 6 pt to fit its rows, is said under the page; an image under 300 dpi at its printed size too.</p>
 
       <h2 id="map">The map as a panel</h2>
       <p>A map panel draws the run's map as the Map view does: every state its own way (missing, filtered, low confidence, the reference residue), the medians of each position above and of each substitution at the right, the target's numbering above and the reference's below, the color bar with what it measures, and the key to the states. Its properties choose the run, the condition or a difference between conditions, the coloring, row order and palette, the first and last positions shown, the title, whether the medians and the legend are drawn, and which of the run's tracks go below it.</p>
@@ -164,7 +165,7 @@
       <p>In the window, through remote control: a figure of a QC finding, the scores by class, a comparison and a variant's evidence exported as SVG is the same bytes as Node draws the same document from the runs it recomputes, its manifest the one Node writes from the archive; checked in its own workspace every panel is as then, in another that scored the same table it finds the run by its output and says the comparison's second run is not there, and rebuilt every panel is the same drawing; a saved structure view's panel has the same pixels as the view's own figure panel, and its image goes into the archive. <code>mavescape export --format figures</code> writes the window's figure again from its archive: twice the same bytes, the SVG the window's but for the time in its manifest, every panel the window's drawing.</p>
 
       <nav class="doc-pager" aria-label="Pages">
-        <a class="prev" href="structure.html"><span>Previous</span>Structures</a>
+        <a class="prev" href="calibrate.html"><span>Previous</span>Calibration</a>
         <a class="next" href="report.html"><span>Next</span>Report</a>
       </nav>
     </main>
