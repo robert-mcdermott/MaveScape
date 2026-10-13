@@ -149,11 +149,14 @@ guides to every view, with screenshots.
   - Score-level likelihood ratios as acmgscaler computes them (equal to it), with Tavtigian et
     al.'s or Pejaver et al.'s thresholds; a MaveDB record's published calibrations beside
     MaveScape's own.
+  - In the record: the report and methods, figure panels of its plots, the certificate's numbers,
+    the checkpoint diff, and a MaveDB deposit's score calibrations in MaveDB's vocabulary.
 - **Figures.** A page at a journal's column width (85, 114 or 174 mm) or a slide, its panels any
   view's plots, added with **Add to figure**: the variant-effect map of a run (a range of
   positions, its tracks, color bar and key), a QC finding's charts, the scores by class, a
-  comparison, a variant's evidence, a saved structure view, and text; lettered A, B, C… in reading
-  order and laid out by dragging, snapping to each other. A panel says what it shows, so the figure follows the
+  comparison, a variant's evidence, a saved structure view, a calibration's plots, and text;
+  lettered A, B, C… in reading order and laid out by dragging, snapping to each other. A panel
+  says what it shows, so the figure follows the
   analysis until it is exported: SVG and PDF as vectors with the text as text, PNG at 300 or 600 dpi
   of the printed size, or the clipboard. Text under 6 pt at the printed size is flagged.
   - Each exported file carries its manifest: what each panel shows, each run by its output's
@@ -467,7 +470,8 @@ integration on every change.
 | Quality control | Simulated experiments with one planted problem each, three seeds | Exactly their findings, and none for a clean experiment |
 | Variant names | mavehgvs 0.8.1 on 16,959 strings | The same decision, reason and canonical form for every string |
 | Protein changes | biocommons hgvs 1.5.7 on 16,188 variants of BRCA1, TP53 and BAP1 transcripts | The same protein change for every one (MaveScape names nothing after a stop a variant makes) |
-| MaveDB deposits | MaveDB's own validators on 19 deposits of every kind | Every table accepted (92,253 rows); read back and written again, the same bytes |
+| MaveDB deposits | MaveDB's own validators on 21 deposits of every kind, a calibration among them | Every table accepted (111,617 rows), the calibration too; read back and written again, the same bytes |
+| Calibration | pROC, PRROC and binom; Brnich et al.'s own spreadsheet; acmgscaler 1.0.0 and R 4.6.1; MaveDB's published calibrations | Every metric to 13 digits, every OddsPath row to 15, every likelihood ratio to 10⁻¹²; in the report, figures and certificate as computed, the window's Node's |
 | Comparisons | R (cor.test, DescTools, BlandAltmanLeh, pROC); simulated pairs of known agreement | Every statistic equal to R's to 10⁻¹⁰; 95% intervals hold the truth 94–96% |
 | Structures | PDBe's SIFTS; DSSP 4.6.1; SciPy 1.18.1's Mann–Whitney test | Every residue placed where SIFTS places it; every secondary-structure code but five π-helix residues; tests to 10⁻¹² |
 | Examples | All fourteen, against MaveDB's files and the published comparisons; GRB2's figure, Hsp90's checkpoint and BRCA1 RING's certificate as their guides make them | Each raises exactly the QC findings it teaches; published counts byte for byte; each guide's numbers as it states them |
@@ -535,8 +539,6 @@ check, its tolerance and how the reference outputs were made are in
   at once under the name it gives. What you change in the window while an agent's action runs
   counts as the agent's.
 - The R and Python packages are installed from this repository, not from CRAN or PyPI.
-- Calibration is not yet in the report, figures, certificates or MaveDB deposits; see the
-  [roadmap](mavescape-spec/roadmap.md).
 
 ## Development
 

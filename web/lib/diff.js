@@ -8,7 +8,8 @@
 // states it says how the analysis changed (its parameters and filters, its design) and what that
 // did: the variants whose effect moved beyond their earlier 95% interval, crossed a class (lower
 // than, like or higher than the wild type, q < 0.05, as the robustness check calls them), or were
-// newly filtered or scored; the QC findings whose verdict changed; and a map of the change. After
+// newly filtered or scored; the QC findings whose verdict changed; what it did to the calibrations
+// against the same control set (wave 8, slice 5); and a map of the change. After
 // CytoWeave 0.8.0's web/lib/diff.js (a change list in words); the analysis and its words are
 // MaveScape's.
 
@@ -20,7 +21,10 @@ import { THRESHOLDS, defaultThresholds } from './findings.js';
 import { callsOf, CLASS, CLASS_NAMES, CONTRAST_CLASS_NAMES } from './robustness.js';
 import { panelSummary } from './figures.js';
 import { possessive } from './words.js';
-import { thresholdWords } from './calibration.js';
+import { classOf, thresholdWords } from './calibration.js';
+import { metricsOf, scoredControls } from './calibration-record.js';
+import { strengthWords } from './oddspath.js';
+import { KIND } from './variants.js';
 
 const encoder = new TextEncoder();
 const same = (a, b) => canonicalJSON(a ?? null) === canonicalJSON(b ?? null);
@@ -314,11 +318,90 @@ export function changeMap(runA, resultsA, runB, resultsB, condition = 0) {
   return { results: { ...resultsB, conditions: [before, after], differential: [contrast] }, design: runB.inputs.design, contrast: 0 };
 }
 
+// What a rescoring did to its calibrations (wave 8, slice 5): for each run scored again (a → b,
+// both recomputed) and each control set that the earlier state calibrates a against and the later
+// b against (the latest calibration of each, of the same condition), the thresholds each keeps,
+// the AUC and each class's OddsPath computed again (without the bootstrap, so that the diff is
+// quick), and the variants scored in both whose functional class changed. Returns [{ set: { id,
+// name }, a, b (each { calibration, run, side, thresholds, auc, evidence: { abnormal, normal } each
+// { class, oddsPath, strength } }), both, crossed, crossings: [{ from, to, n }], problem? }].
+export function calibrationChanges(before, after, pairs) {
+  const out = [];
+  const latest = (state, run) => {
+    const m = new Map();
+    for (const c of state.calibrations ?? []) if (c.run === run.id) m.set(c.controlSet, c);
+    return m;
+  };
+  for (const p of pairs) {
+    if (p.a.id === p.b.id || !p.resultsA || !p.resultsB) continue;
+    const ca = latest(before, p.a);
+    for (const [setId, cb] of latest(after, p.b)) {
+      const cal = ca.get(setId);
+      if (!cal || (cal.condition ?? 0) !== (cb.condition ?? 0)) continue;
+      const setA = (before.controlSets ?? []).find((c) => c.id === setId);
+      const setB = (after.controlSets ?? []).find((c) => c.id === setId);
+      if (!setA || !setB) continue;
+      const side = (c, set, run, results) => {
+        const scored = scoredControls(set, run, results, c.condition ?? 0);
+        const m = metricsOf(c, scored, { samples: 0 });
+        const ev = (which) => ({ class: m.evidence[which].class, oddsPath: m.evidence[which].oddsPath, strength: m.evidence[which].strength });
+        return { calibration: c.name, run: run.name, side: c.side, thresholds: c.thresholds, auc: m.auc.auc, evidence: { abnormal: ev('abnormal'), normal: ev('normal') }, view: scored.view };
+      };
+      let a;
+      let b;
+      try {
+        a = side(cal, setA, p.a, p.resultsA);
+        b = side(cb, setB, p.b, p.resultsB);
+      } catch (error) {
+        out.push({ set: { id: setId, name: setB.name }, problem: error.message });
+        continue;
+      }
+      // Each variant scored in both, classed by each calibration's thresholds on each run's scores.
+      const condition = cal.condition ?? 0;
+      const scoreA = a.view.conditions[condition]?.score;
+      const scoreB = b.view.conditions[condition]?.score;
+      const rowA = new Map(a.view.variants.key.map((k, i) => [k, i]));
+      let both = 0;
+      let crossed = 0;
+      const crossings = new Map();
+      b.view.variants.key.forEach((key, j) => {
+        const i = rowA.get(key);
+        if (i === undefined || !Number.isFinite(scoreA?.[i]) || !Number.isFinite(scoreB?.[j]) || a.view.variants.kind[i] === KIND.WT) return;
+        both += 1;
+        const from = classOf(scoreA[i], a.side, a.thresholds);
+        const to = classOf(scoreB[j], b.side, b.thresholds);
+        if (from === to) return;
+        crossed += 1;
+        crossings.set(`${from}>${to}`, (crossings.get(`${from}>${to}`) ?? 0) + 1);
+      });
+      const strip = ({ view, ...rest }) => rest;
+      out.push({ set: { id: setId, name: setB.name }, a: strip(a), b: strip(b), both, crossed, crossings: [...crossings].map(([k, n]) => ({ from: k.split('>')[0], to: k.split('>')[1], n })).sort((x, y) => y.n - x.n) });
+    }
+  }
+  return out;
+}
+
+// A calibration change in sentences.
+export function calibrationChangeWords(c) {
+  if (c.problem) return [`Against "${c.set.name}": ${c.problem}`];
+  const g3 = (x) => (Number.isFinite(x) ? Number(x.toPrecision(3)).toString() : 'none');
+  const ev = (x) => (x.oddsPath === null ? 'no control' : `${g3(x.oddsPath)}, ${strengthWords(x.strength)}`);
+  const changed = [];
+  if (!same(c.a.thresholds, c.b.thresholds) || c.a.side !== c.b.side) changed.push(`its thresholds (${thresholdWords(c.a.side, c.a.thresholds)}) → (${thresholdWords(c.b.side, c.b.thresholds)})`);
+  changed.push(`AUC ${g3(c.a.auc)} → ${g3(c.b.auc)}`);
+  for (const which of ['abnormal', 'normal']) {
+    const [x, y] = [c.a.evidence[which], c.b.evidence[which]];
+    changed.push(`the ${y.class} class's OddsPath ${ev(x)} → ${ev(y)}`);
+  }
+  const crossings = c.crossings.length ? ` (${c.crossings.map((x) => `${count(x.n)} ${x.from} → ${x.to}`).join('; ')})` : '';
+  return [`Calibrated against "${c.set.name}", "${c.a.calibration}" (${c.a.run}) → "${c.b.calibration}" (${c.b.run}), for research: ${changed.join('; ')}. Of ${plural(c.both, 'variant')} scored in both, ${count(c.crossed)} changed functional class${crossings}.`];
+}
+
 // What changed between two analysis states (analysisState, or a checkpoint's state). pairs: what
 // the caller computed for runPairs(before, after), each { a, b, resultsA, resultsB, findingsA,
 // findingsB } (results and findings null where they could not be had). Returns { same, changes:
 // [{ kind, id, name, text }], pairs: [{ table, a, b, parameters, design, targets, findings,
-// recomputed }], summary }.
+// recomputed }], calibrations (calibrationChanges's), summary }.
 export function diffStates(before, after, { pairs = [] } = {}) {
   const changes = [];
   const add = (kind, id, name, text) => changes.push({ kind, id, name, text });
@@ -478,11 +561,12 @@ export function diffStates(before, after, { pairs = [] } = {}) {
     const findings = p.findingsA && p.findingsB ? findingChanges(p.findingsA, p.findingsB) : [];
     return { table: p.table, a: { id: p.a.id, name: p.a.name }, b: { id: p.b.id, name: p.b.name, ...(p.b.proposed ? { proposed: { by: p.b.proposed.by, accepted: Boolean(p.b.proposed.accepted) } } : {}) }, parameters, design, targets, findings, recomputed: recomputed || p.a.id === p.b.id };
   }).filter((p) => p.a.id !== p.b.id || p.findings.length);
+  const calibrations = calibrationChanges(before, after, pairs);
   const n = changes.length;
   const summary = n || described.length
-    ? `${plural(n, 'change')}${described.length ? `; ${described.map((p) => (p.a.id === p.b.id ? `${p.b.name}'s QC verdicts` : `${p.a.name} → ${p.b.name}`)).join(', ')}` : ''}.`
+    ? `${plural(n, 'change')}${described.length ? `; ${described.map((p) => (p.a.id === p.b.id ? `${p.b.name}'s QC verdicts` : `${p.a.name} → ${p.b.name}`)).join(', ')}` : ''}${calibrations.length ? `; ${plural(calibrations.length, 'calibration')} compared` : ''}.`
     : 'No change in the analysis.';
-  return { same: !n && !described.length, changes, pairs: described, summary };
+  return { same: !n && !described.length, changes, pairs: described, calibrations, summary };
 }
 
 // A run pair's change in sentences.

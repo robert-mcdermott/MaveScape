@@ -56,10 +56,11 @@ export function checkReferences(fixture = JSON.parse(readFileSync(new URL('./fix
     // Pages, where Crossref records them (a first page or an article number).
     const page = firstPage(ref.pages);
     if (!skip.includes('pages') && (r.page || r.article) && ![firstPage(r.page), r.article].filter(Boolean).map(String).includes(page)) problems.push(`pages ${r.page ?? r.article}`);
-    // The first author's family name (a consortium aside), or its end where Crossref records a
-    // compound one ("Martin Bland").
+    // The first author's family name (a consortium aside, on either side: Crossref puts Brnich et
+    // al.'s "On behalf of the Clinical Genome Resource …" first), or its end where Crossref records
+    // a compound one ("Martin Bland").
     const family = fold(ref.authors?.[0]?.split(',')[0]);
-    const theirs = fold(r.authors?.[0]);
+    const theirs = fold(r.authors?.find((a) => !/^on behalf of\b/i.test(a ?? '')) ?? r.authors?.[0]);
     if (!skip.includes('author') && ref.authors?.[0] && !/^\{/.test(ref.authors[0]) && theirs !== family && !theirs.endsWith(` ${family}`)) problems.push(`first author ${r.authors?.[0]}`);
     out.push({ key, doi: ref.doi, problems, unchecked: [...skip, ...(r.page || r.article ? [] : ['pages'])] });
   }

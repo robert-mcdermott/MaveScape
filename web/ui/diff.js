@@ -4,7 +4,7 @@
 // the score worker and its QC read with each state's thresholds (lib/diff.js).
 
 import { addCheckpoint, removeCheckpoint } from '../lib/workspace.js';
-import { analysisState, changeMap, diffStates, makeCheckpoint, pairWords, runPairs } from '../lib/diff.js';
+import { analysisState, calibrationChangeWords, changeMap, diffStates, makeCheckpoint, pairWords, runPairs } from '../lib/diff.js';
 import { buildMapModel } from '../lib/map-model.js';
 import { ensureResults } from './run-results.js';
 import { qcOf } from './record.js';
@@ -68,7 +68,7 @@ export async function diffWith(app, from, to) {
       return null;
     }
   });
-  const words = [diff.summary, ...diff.changes.map((c) => c.text), ...diff.pairs.flatMap(pairWords)];
+  const words = [diff.summary, ...diff.changes.map((c) => c.text), ...diff.pairs.flatMap(pairWords), ...diff.calibrations.flatMap(calibrationChangeWords)];
   return { from, to, diff, words, maps };
 }
 

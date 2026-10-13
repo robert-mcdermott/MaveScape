@@ -3,11 +3,12 @@
 \alias{ms_add_figure_panel}
 \title{Add a panel to a figure}
 \usage{
-ms_add_figure_panel(a = NULL, b = NULL, color_by = NULL, condition = NULL, contrast = NULL, figure = NULL, finding = NULL, from = NULL, height_mm = NULL, kind = NULL, pair = NULL, palette = NULL, plot = NULL, rows = NULL, run = NULL, scale = NULL, subject = NULL, text = NULL, to = NULL, tracks = NULL, variant = NULL, view = NULL, width_mm = NULL, x_mm = NULL, y_mm = NULL, ms = ms_default())
+ms_add_figure_panel(a = NULL, b = NULL, calibration = NULL, color_by = NULL, condition = NULL, contrast = NULL, figure = NULL, finding = NULL, from = NULL, height_mm = NULL, kind = NULL, pair = NULL, palette = NULL, plot = NULL, rows = NULL, run = NULL, scale = NULL, subject = NULL, text = NULL, to = NULL, tracks = NULL, variant = NULL, view = NULL, width_mm = NULL, x_mm = NULL, y_mm = NULL, ms = ms_default())
 }
 \arguments{
 \item{a}{compare: the first side, as compare takes it; the pair compared last if not given. Optional; a string.}
 \item{b}{compare: the second side. Optional; a string.}
+\item{calibration}{calibration: the calibration, by name; the latest if not given. Optional; a string.}
 \item{color_by}{score (the default), se, replicates or input. Optional; a string.}
 \item{condition}{A condition by name or number (from 1), when the design has more than one; the first if not given. Optional; a string.}
 \item{contrast}{With conditions compared: the difference to draw, by name (such as "With ligand vs Without ligand"). Optional; a string.}
@@ -15,10 +16,10 @@ ms_add_figure_panel(a = NULL, b = NULL, color_by = NULL, condition = NULL, contr
 \item{finding}{qc: the finding, by id (qc_findings lists them) or title. Optional; a string.}
 \item{from}{The first position shown (the target's numbering). Optional; a whole number.}
 \item{height_mm}{Its height. Optional; a number.}
-\item{kind}{map (the default), qc, scores, compare, variant, structure or text. Optional; a string.}
+\item{kind}{map (the default), qc, scores, compare, variant, structure, calibration or text. Optional; a string.}
 \item{pair}{qc, replicate agreement: the pair of replicates drawn, from 1. Optional; a whole number.}
 \item{palette}{rdbu or puor. Optional; a string.}
-\item{plot}{What a scores panel shows (distribution, flow, volcano), a compare panel (agreement, bland-altman, positions, classes, map-first, map-second, map-difference) or a variant panel (evidence, time-course, bins). Optional; a string.}
+\item{plot}{What a scores panel shows (distribution, flow, volcano), a compare panel (agreement, bland-altman, positions, classes, map-first, map-second, map-difference), a variant panel (evidence, time-course, bins) or a calibration panel (distribution, roc, pr, likelihood). Optional; a string.}
 \item{rows}{The order of the substitutions: biochemical, hydrophobicity or alphabetical. Optional; a string.}
 \item{run}{A score run by name ("Run 2") or id; the latest run of the current design if not given. Optional; a string.}
 \item{scale}{compare: the scale, as compare takes it. Optional; a string.}
@@ -37,6 +38,6 @@ ms_add_figure_panel(a = NULL, b = NULL, color_by = NULL, condition = NULL, contr
 A \code{mavescape_result}: the \code{message} and the \code{data} MaveScape answered with.
 }
 \description{
-Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's variant-effect map (a condition or a difference between conditions, colored as render_map colors it, a range of positions, tracks below it, its color bar and the key to its states); a QC finding's charts (of a run, or of the counts); a run's scores by class, filter flow or a contrast's volcano; a comparison (as compare takes its sides: agreement, Bland–Altman, disagreement by position, a predictor's classes, or a map of either side or of the difference); a variant's evidence (its score and each replicate's with their intervals, its time course, or its distribution over the bins); a saved structure view (its figure panel, drawn at 4x on white and kept with the figure); or text. Placed below the panels already there unless placed; shown in the Figures view. Returns the panel's id and letter, and what it shows.
+Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's variant-effect map (a condition or a difference between conditions, colored as render_map colors it, a range of positions, tracks below it, its color bar and the key to its states); a QC finding's charts (of a run, or of the counts); a run's scores by class, filter flow or a contrast's volcano; a comparison (as compare takes its sides: agreement, Bland–Altman, disagreement by position, a predictor's classes, or a map of either side or of the difference); a variant's evidence (its score and each replicate's with their intervals, its time course, or its distribution over the bins); a saved structure view (its figure panel, drawn at 4x on white and kept with the figure); a calibration's plot, for research (each side's scores against the run's with the classes, the ROC or precision–recall curve with its bootstrap band and thresholds, or the likelihood ratio of a score with the evidence thresholds); or text. Placed below the panels already there unless placed; shown in the Figures view. Returns the panel's id and letter, and what it shows.
 }
 \seealso{\code{\link{ms_call}}, which sends any action by its name (here \code{"add_figure_panel"}).}

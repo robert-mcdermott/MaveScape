@@ -22,6 +22,8 @@ import { CALIBRATION_DEFAULTS, CLASSES, MAX_SAMPLES, calibrationWords, evidenceL
 import { STRENGTH_CODES, strengthWords } from '../lib/oddspath.js';
 import { lossSide, readoutOf } from '../lib/readout.js';
 import { heldRemoval, proposalOfItem } from '../lib/proposals.js';
+import { figureButton } from './figure-data.js';
+import { thresholdPoints } from '../lib/calibration-record.js';
 
 const LABEL_ROWS = 300;
 const SIDE_WORDS = { P: 'P: pathogenic or likely pathogenic, or abnormal, as their source says', B: 'B: benign or likely benign, or normal, as their source says' };
@@ -241,6 +243,9 @@ export function mountCalibrateMode(app, container) {
         } }, icon('gauge'), 'Calibrate with its thresholds') : null)));
   }
 
+  // A calibration's plot as a figure panel (slice 5), drawn again from the calibration.
+  const calibrationFigure = (cal, plot, what, size) => figureButton(app, () => ({ kind: 'calibration', calibration: cal.id, plot, ...size }), `${what} of "${cal.name}"`);
+
   // A calibration's metrics (slice 2): what it was made with, the scores of each side against the
   // run's, the curves, the classes and how far the bootstrap moves the thresholds.
   function calibrationPanes(cal, r, warnings = []) {
@@ -251,13 +256,7 @@ export function mountCalibrateMode(app, container) {
     const classes = variantClasses(scored.view, cal.condition ?? 0, cal.side, cal.thresholds);
     const sideFrom = cal.sideFrom === 'readout' ? 'as the readout says' : cal.sideFrom === 'controls' ? 'where the P controls\' median is, the readout not saying' : 'as chosen';
     // The points of the curves at the thresholds.
-    const at = (sideClass) => {
-      const P = m.classes.P;
-      const B = m.classes.B;
-      const called = (c) => (sideClass === 'abnormal' ? c['abnormal-like'] : c['abnormal-like'] + c.intermediate);
-      return { sensitivity: called(P) / m.n.P, specificity: 1 - called(B) / m.n.B, recall: called(P) / m.n.P, precision: called(P) / Math.max(1, called(P) + called(B)) };
-    };
-    const marks = t.abnormal === t.normal ? [{ ...at('abnormal'), label: 'threshold' }] : [...(t.abnormal === null ? [] : [{ ...at('abnormal'), label: 'abnormal' }]), ...(t.normal === null ? [] : [{ ...at('normal'), label: 'normal', below: true }])];
+    const marks = thresholdPoints(m);
     const head = h('div.pane', h('h3', icon('gauge'), cal.name, mark(cal, 'calibrations'), h('span.spacer'),
       h('button.btn.small', { type: 'button', onclick: async () => {
         if (!(await confirmDialog({ title: `Delete the calibration "${cal.name}"?`, message: 'It goes from the workspace; the history keeps that it was made and deleted.', confirm: 'Delete', danger: true }))) return;
@@ -268,17 +267,17 @@ export function mountCalibrateMode(app, container) {
       r.differs ? h('div.callout.danger', { style: { margin: '0 0 8px' } }, icon('warning'), h('span', `Computed again, the thresholds are ${thresholdWords(cal.side, t)}, not the ${thresholdWords(cal.side, cal.thresholds)} kept: MaveScape's computation changed since it was made.`)) : null,
       m.n.P < 10 || m.n.B < 10 ? h('div.callout.warn', { style: { margin: '0 0 8px' } }, icon('warning'), h('span', `With ${Math.min(m.n.P, m.n.B)} controls on a side, every number here is too uncertain to rely on: see the intervals.`)) : null);
     const strips = controlStrips({ all: classes.all.values, P: scored.P, B: scored.B, side: cal.side, thresholds: cal.thresholds, label: `${run.name}'s scores: the P and B controls against the run's ${count(classes.all.total)} scored variants, with the classes the thresholds make` }, frame(900, 210));
-    const distributions = h('div.pane#calibration-scores', h('h3', icon('score'), 'Scores of each side'),
+    const distributions = h('div.pane#calibration-scores', h('h3', icon('score'), 'Scores of each side', h('span.spacer'), calibrationFigure(cal, 'distribution', 'the scores of each side', { h: 150 })),
       legend(strips.legend), plotSVG(strips, strips.description),
       h('p.muted.small', `${thresholdWords(cal.side, cal.thresholds)}. Medians: P ${g3(m.distributions.P.median)} (quartiles ${g3(m.distributions.P.q1)} to ${g3(m.distributions.P.q3)}), B ${g3(m.distributions.B.median)} (${g3(m.distributions.B.q1)} to ${g3(m.distributions.B.q3)}).`));
     const roc = rocChart({ points: m.roc.points, band: m.roc.band, marks, label: `ROC curve: AUC ${g3(m.auc.auc)}` }, frame(320, 300));
     const pr = prChart({ points: m.pr.points, band: m.pr.band, baseline: m.pr.baseline, marks, label: `Precision–recall curve: area ${g3(m.pr.auc)}` }, frame(320, 300));
     const ab = m.auc.boot;
     const curves = h('div.calibration-grid',
-      h('div.pane', h('h3', icon('gauge'), 'ROC curve'), plotSVG(roc, roc.description, 'plot calibration-curve'),
+      h('div.pane', h('h3', icon('gauge'), 'ROC curve', h('span.spacer'), calibrationFigure(cal, 'roc', 'the ROC curve', { w: 240, h: 220 })), plotSVG(roc, roc.description, 'plot calibration-curve'),
         h('p.small', `AUC ${g3(m.auc.auc)}: the chance that a P control scores more abnormal-like than a B control (½ for a tie). DeLong's 95% interval ${g3(m.auc.low)} to ${g3(m.auc.high)}${ab ? `; the bootstrap's ${g3(ab.low)} to ${g3(ab.high)}` : ''}.`),
         h('p.muted.small', `The band: the bootstrap's 95% interval of the sensitivity at each specificity (as pROC's ci.se). The circles: the thresholds.`)),
-      h('div.pane', h('h3', icon('gauge'), 'Precision–recall curve'), plotSVG(pr, pr.description, 'plot calibration-curve'),
+      h('div.pane', h('h3', icon('gauge'), 'Precision–recall curve', h('span.spacer'), calibrationFigure(cal, 'pr', 'the precision–recall curve', { w: 240, h: 220 })), plotSVG(pr, pr.description, 'plot calibration-curve'),
         h('p.small', `Area ${g3(m.pr.auc)}${m.pr.boot ? ` (the bootstrap's 95% interval ${g3(m.pr.boot.low)} to ${g3(m.pr.boot.high)})` : ''}; by chance ${g3(m.pr.baseline)}, the P controls' share (the dashed line).`),
         h('p.muted.small', `Precision here is among these controls, ${m.n.P} P to ${m.n.B} B: not the share of P among variants of unknown effect, which no control set gives. Between its points the curve follows Keilwagen et al. (2014)'s interpolation, as PRROC's.`)));
     const pctOf = (x, n) => (n ? `${count(x)} (${percentText(x / n)})` : '—');
@@ -335,7 +334,7 @@ export function mountCalibrateMode(app, container) {
   }
 
   function likelihoodContent(cal, r, lr) {
-    const head = h('h3', icon('gauge'), 'Score-level likelihood ratios, for research (acmgscaler)');
+    const head = h('h3', icon('gauge'), 'Score-level likelihood ratios, for research (acmgscaler)', ...(lr.problem ? [] : [h('span.spacer'), calibrationFigure(cal, 'likelihood', 'the likelihood ratio of a score', { h: 170 })]));
     const note = h('div.callout.accent', { style: { margin: '0 0 10px' } }, icon('info'), h('span', 'For research use only: how much more likely each score is among the P controls than among the B controls, and the evidence strength that would make for a variant with that score. It is not a classification of any variant.'));
     if (lr.problem) return [head, note, h('p.callout.warn', icon('warning'), h('span', lr.problem))];
     const theme = { ...viewTheme(), P: cssVar('--track-pathogenic'), B: cssVar('--track-benign') };

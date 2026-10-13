@@ -3610,6 +3610,91 @@ Decisions taken in planning (confirmed before slice 1):
    limitations), figure panels (distributions, ROC and precision–recall, the calibration curve),
    the certificate's numbers, the checkpoint diff, and a MaveDB deposit's calibrations in its
    vocabulary (normal, abnormal, not specified).
+   - **Done.** `web/lib/calibration-record.js` computes a calibration again from the workspace and
+     its run's results: the control set's scored controls, the metrics with the seeded bootstrap,
+     where abnormal-like scores are, what limits it, the run's variants in each class, the
+     likelihood ratios. The window (`ui/calibration.js`, which keeps them for the session), the
+     report, a run's methods, figures, the certificate, the diff and the deposit all use it, so each
+     says the same numbers.
+     - **The report and methods**: a section *Calibration, for research*: each control set (where
+       its labels came from, its sides in their source's words, what was left out) and each
+       calibration as computed (the separation, thresholds and classes with Wilson's intervals, the
+       bootstrap's intervals, each class's OddsPath and strength, where each likelihood-ratio
+       strength begins and the run's missense variants at each). Every method is cited (eight
+       references added, the seven with a DOI checked against Crossref's record). What limits each calibration is
+       said with the limitations, the same words for several named together. A calibration whose
+       run's scores are not at hand is said by what it keeps. A run's methods include its
+       calibrations, but a MaveDB deposit's method text does not (they are deposited apart). The
+       inputs name the files control sets were read from, and the AI agents' paragraph the sets and
+       calibrations an agent made.
+     - **Figures**: the panel kind `calibration` (`distribution`, `roc`, `pr`, `likelihood`), drawn
+       as Calibrate draws it (lib/figure-plots.js's `strips`, `roc`, `pr`, `likelihood`), from
+       **Add to figure** on each of Calibrate's four plots or `add_figure_panel`'s `calibration`. A
+       manifest's inputs are the calibration as kept (a digest), its control set's labels and its
+       run; `check_figure` says when the calibration was made otherwise, its labels changed, or it
+       is gone.
+     - **The certificate**: `numbers.calibrations`, each calibration's numbers computed again (its
+       controls scored, thresholds and their stability, distributions, AUC and precision–recall with
+       intervals, the curves by SHA-256, the classes, Wilson's intervals, each class's OddsPath with
+       the bootstrap's, the limitations' ids, the likelihood ratios and every variant's by SHA-256).
+       A certificate holding one is **format 2**, so that an older MaveScape refuses it rather than
+       leave them unchecked; without, format 1 as before. Its figures' calibration panels and its
+       report are drawn and written from the same computation. The review report has a section of
+       them, each number traced (`calibration|…`), with their plots.
+     - **The checkpoint diff**: for each run scored again whose earlier and later runs are each
+       calibrated against the same control set, the thresholds kept, the AUC and each class's
+       OddsPath computed again (without the bootstrap), and the variants scored in both whose
+       functional class changed, in the Report view's changes and `diff`'s data.
+     - **The MaveDB deposit**: `score_calibrations.json`, each of the run's calibrations of the
+       condition as the body of MaveDB's `POST /api/v1/score-calibrations/` (`ScoreCalibrationCreate`):
+       the abnormal-like class `abnormal`, the intermediate zone `not_specified`, the WT-like class
+       `normal`, each range's bounds inclusive so that MaveDB puts a score at a threshold where
+       MaveScape does; each class's OddsPath and its strength (where MaveDB reads the ratio the same);
+       research use only; Brnich et al. the method and evidence source, the study's first publication
+       the threshold source (named as missing when there is none); how it was made in its notes and
+       metadata. One made with a published calibration's thresholds (MaveDB's already) or still an
+       agent's proposal is not deposited. A package's calibrations are read back as its published
+       calibrations and passed through as written when its scores are deposited again.
+     - On factor IX (Run 1 against its ClinVar controls, the defaults): the report says the
+       control set (169 P and 22 B in ClinVar's words; what was left out), AUC 0.706, the classes,
+       OddsPath 11.1 and 0.134, where each likelihood-ratio strength begins, and four limitations.
+       Run 1 scored again with fixed effects and calibrated against the same set moves the WT-like
+       threshold from 1.58 to 1.69 and the AUC to 0.715, and 343 of the 9,013 variants change
+       functional class. Its deposited calibration (PS3 MODERATE, BS3 MODERATE) is taken by MaveDB's
+       model; MaveDB's own test of a range counts 3,212, 5,722 and 80 of the deposited scores, as
+       MaveScape classes them (the wild type's row among the intermediate).
+     - Found by slice 5:
+       - **MaveDB reads an OddsPath as PS3 strong beyond 18.6**, where Brnich et al.'s Table 3
+         prints 18.7, and its validator refuses a stated strength its reading does not give. For a
+         class between the two, the deposit leaves the strength out and says why (MaveScape keeps
+         Table 3 as printed).
+       - **MaveDB requires a threshold source** for any calibration with classes, the publication
+         that reports the thresholds, which a workspace may not hold: named as missing, never
+         guessed.
+       - **A package exported, opened and exported again would have lost its calibrations**: they
+         are kept with the package's record now and passed through.
+       - The likelihood plot's threshold names were 5.95 pt at a figure's 7 pt and overlapped on a
+         short plot: 9/10 of the text now, moved apart where they would overlap.
+       - Crossref lists Brnich et al.'s working group first among the authors: the reference check
+         sets a consortium aside on Crossref's side too.
+       - Four calibration panels added one after another overlap (the parking lot's overlapping
+         panels: a panel added below the others when the page has no room goes to the top): they
+         need placing, as the capture scene places them.
+     - Validation: the suite `record` (6: the report and Run 1's methods, every number as computed
+       and every method cited; the figure of the four plots, each describing its numbers, rebuilt
+       from its manifest with every drawing the same and missing once the calibration is deleted;
+       the certificate verified bit for bit, an OddsPath changed in its last bit caught, a workspace
+       without calibrations format 1; the review report, every traced calibration number the
+       certificate's; the diff after a rescoring, the classes changed counted directly; the deposit
+       read back, its thresholds, classes and OddsPath the same; `record-cases.mjs`); `mavedb-export`
+       (9, +1: two calibrated deposits validated by MaveDB's `ScoreCalibrationCreate`, one refused
+       for the threshold source as said, every deposited score in MaveScape's class by MaveDB's
+       `is_contained_by_range`; 21 deposits, `reference/mavedb-export.json` regenerated); `report`
+       (Crossref's records of the seven new references); `calibration-record.test.mjs` (5); the
+       remote session (211, +1: a figure of the four plots made with `add_figure_panel`, the window's
+       certificate of the calibrated workspace Node's byte for byte and verified in Node, the
+       report's section and `score_calibrations.json` Node's); axe-core on the scene
+       `calibrate-figure`; the site's page *Calibration*.
 6. **Guide and examples.** The site's Calibration page; BRCA1, TP53 and PTEN calibrated against
    ClinVar; a simulated example with known labels and a planted circularity.
 

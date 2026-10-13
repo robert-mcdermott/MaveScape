@@ -723,7 +723,7 @@ export function likelihoodChart(spec, frame) {
   const yl = Math.max(-5, Math.min(...all, tl[0]) - 0.3);
   const yh = Math.min(5, Math.max(...all, tl[7]) + 0.3);
   const names = ['very strong', 'strong', 'moderate', 'supporting', 'supporting', 'moderate', 'strong', 'very strong'];
-  const labelW = Math.max(...names.map((n) => textWidth(n, t * 0.85))) + 0.8 * t;
+  const labelW = Math.max(...names.map((n) => textWidth(n, t * 0.9))) + 0.8 * t;
   // Below the axis: its tick labels, two rows of the controls' ticks, then its name.
   const area = { left: f.x + 5.2 * t, right: f.x + W - labelW - 0.6 * t, top: f.y + 0.8 * t, bottom: f.y + H - 5.6 * t };
   const yTicks = [];
@@ -737,13 +737,23 @@ export function likelihoodChart(spec, frame) {
     // A power of ten as written ("1e3" read exactly), no engine's pow.
     marks.push({ type: 'text', x: area.left - 0.4 * t, y: sy(e), text: e >= 0 ? String(Number(`1e${e}`)) : `1/${Number(`1e${-e}`)}`, size: t, fill: theme.muted, anchor: 'end', baseline: 'middle' });
   }
-  // The thresholds, each side's color, named at the right.
+  // The thresholds, each side's color, named at the right; names that would overlap moved apart
+  // (a small plot's supporting and moderate lines are close).
+  const named = [];
   tl.forEach((v, i) => {
     if (v < yl || v > yh) return;
     const color = i < 4 ? theme.ok : theme.danger;
     marks.push({ type: 'line', x1: area.left, y1: sy(v), x2: area.right, y2: sy(v), stroke: color, width: k, dash: [4 * k, 3 * k], opacity: 0.8 });
-    marks.push({ type: 'text', x: area.right + 0.4 * t, y: sy(v), text: names[i], size: t * 0.85, fill: color, baseline: 'middle' });
+    named.push({ y: sy(v), text: names[i], fill: color });
   });
+  const gap = t * 0.95;
+  named.sort((a, b) => a.y - b.y);
+  for (let j = 1; j < named.length; j += 1) if (named[j].y - named[j - 1].y < gap) named[j].y = named[j - 1].y + gap;
+  for (let j = named.length - 1; j >= 0; j -= 1) {
+    const limit = j === named.length - 1 ? area.bottom : named[j + 1].y - gap;
+    if (named[j].y > limit) named[j].y = limit;
+  }
+  for (const n of named) marks.push({ type: 'text', x: area.right + 0.4 * t, y: n.y, text: n.text, size: t * 0.9, fill: n.fill, baseline: 'middle' });
   marks.push({ type: 'line', x1: area.left, y1: sy(0), x2: area.right, y2: sy(0), stroke: theme.muted, width: k });
   const clampY = (v) => Math.max(yl, Math.min(yh, v));
   const band = [];

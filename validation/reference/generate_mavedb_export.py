@@ -36,7 +36,10 @@ make them:
   answers to /api/v1/controlled-keywords/{key});
 - score_set.json as ScoreSetCreate. MaveDB gives a new experiment its URN when it is created; a
   score set whose experimentUrn is null (a new experiment) is checked with a temporary URN in its
-  place, as MaveDB's own form does before the experiment is saved.
+  place, as MaveDB's own form does before the experiment is saved;
+- score_calibrations.json (wave 8, slice 5), each calibration as ScoreCalibrationCreate with a
+  temporary score set URN in place of the one MaveDB gives the score set, and the scores in each
+  class with a range counted by MaveDB's FunctionalClassificationBase.is_contained_by_range.
 
 Each result is recorded with the SHA-256 of every file checked, so the suite `mavedb-export` knows
 the files it writes now are the ones these validators passed.
@@ -67,6 +70,7 @@ from mavedb.models.target_accession import TargetAccession  # noqa: E402
 from mavedb.models.target_gene import TargetGene  # noqa: E402
 from mavedb.models.target_sequence import TargetSequence  # noqa: E402
 from mavedb.view_models.experiment import ExperimentCreate  # noqa: E402
+from mavedb.view_models.score_calibration import FunctionalClassificationBase, ScoreCalibrationCreate  # noqa: E402
 from mavedb.view_models.score_set import ScoreSetCreate  # noqa: E402
 from mavedb.view_models.score_set_dataset_columns import DatasetColumnMetadata, DatasetColumnsCreate  # noqa: E402
 
@@ -74,6 +78,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 FIXTURES = os.path.join(ROOT, "validation", "fixtures", "public-data")
 OUT = os.path.join(ROOT, "validation", "reference", "mavedb-export.json")
 TMP_URN = "tmp:00000000-0000-4000-8000-000000000000"
+TMP_SCORE_SET = "tmp:00000000-0000-4000-8000-000000000001"
 HGVS_COLUMNS = ("hgvs_nt", "hgvs_splice", "hgvs_pro")
 
 
@@ -225,6 +230,30 @@ def check(folder, vocabulary, hdp):
         result["scoreSet"] = {"ok": True}
     except Exception as e:  # noqa: BLE001
         result["scoreSet"] = {"ok": False, "error": message(e)}
+
+    # Its score calibrations (wave 8, slice 5): each as MaveDB's ScoreCalibrationCreate, the score
+    # set's URN given as MaveDB gives it once the score set is made; and the scores in each class
+    # with a range, counted by MaveDB's own is_contained_by_range.
+    calibrations = load("score_calibrations.json")
+    if calibrations is not None:
+        with open(os.path.join(folder, "scores.csv"), "rb") as f:
+            values = [float(x) for x in csv_data_to_df(io.BytesIO(f.read()))["score"].tolist() if x == x]
+        out = []
+        for body in calibrations:
+            entry = {"title": body.get("title")}
+            try:
+                ScoreCalibrationCreate.model_validate({**body, "scoreSetUrn": body.get("scoreSetUrn") or TMP_SCORE_SET})
+                entry["ok"] = True
+            except Exception as e:  # noqa: BLE001
+                entry["ok"] = False
+                entry["error"] = message(e)
+            classes = []
+            for k in body.get("functionalClassifications") or []:
+                fc = FunctionalClassificationBase.model_validate(k)
+                classes.append({"label": k["label"], "class": k["functionalClassification"], "n": sum(1 for x in values if fc.is_contained_by_range(x))})
+            entry["classes"] = classes
+            out.append(entry)
+        result["calibrations"] = out
     return result
 
 
@@ -241,9 +270,9 @@ def main():
         if os.path.isdir(folder):
             packages[name] = check(folder, vocabulary, hdp)
             r = packages[name]
-            print(name, "tables", r["tables"]["ok"], "names", r["names"]["ok"], "experiment", r["experiment"]["ok"], "score set", r["scoreSet"]["ok"], file=sys.stderr)
+            print(name, "tables", r["tables"]["ok"], "names", r["names"]["ok"], "experiment", r["experiment"]["ok"], "score set", r["scoreSet"]["ok"], "calibrations", [c["ok"] for c in r.get("calibrations", [])], file=sys.stderr)
     out = {
-        "generated": "2026-10-10",
+        "generated": "2026-10-13",
         "tools": {name: metadata.version(name) for name in ("mavedb", "mavehgvs", "hgvs", "pandas", "pydantic", "biopython")},
         "transcripts": sorted(hdp.tx),
         "packages": packages,

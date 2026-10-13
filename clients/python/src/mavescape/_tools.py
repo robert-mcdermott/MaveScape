@@ -210,9 +210,12 @@ class Tools:
 
         What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and
         those left out, with why), the target (its sequence, or the transcript that names it), the
-        columns of scores and counts, the experiment's keywords from the design's readout, and what
-        MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy
-        id). Writes nothing: export with what mavedb writes the package.
+        columns of scores and counts, the experiment's keywords from the design's readout, the run's
+        calibrations of the condition as MaveDB's score calibrations (research use: each class's
+        range as abnormal, not specified or normal, its OddsPath and evidence strength), and what
+        MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id,
+        a calibration's threshold source). Writes nothing: export with what mavedb writes the
+        package.
 
         Args:
             condition: A condition by name or number (from 1), when the design has more than one;
@@ -1120,7 +1123,7 @@ class Tools:
         """
         return self.call("create_figure", **{"height_mm": height_mm, "name": name, "size": size, "text": text, "width_mm": width_mm})
 
-    def add_figure_panel(self, *, a=None, b=None, color_by=None, condition=None, contrast=None, figure=None, finding=None, from_=None, height_mm=None, kind=None, pair=None, palette=None, plot=None, rows=None, run=None, scale=None, subject=None, text=None, to=None, tracks=None, variant=None, view=None, width_mm=None, x_mm=None, y_mm=None):
+    def add_figure_panel(self, *, a=None, b=None, calibration=None, color_by=None, condition=None, contrast=None, figure=None, finding=None, from_=None, height_mm=None, kind=None, pair=None, palette=None, plot=None, rows=None, run=None, scale=None, subject=None, text=None, to=None, tracks=None, variant=None, view=None, width_mm=None, x_mm=None, y_mm=None):
         """Add a panel to a figure.
 
         Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's
@@ -1131,14 +1134,18 @@ class Tools:
         disagreement by position, a predictor's classes, or a map of either side or of the
         difference); a variant's evidence (its score and each replicate's with their intervals, its
         time course, or its distribution over the bins); a saved structure view (its figure panel,
-        drawn at 4x on white and kept with the figure); or text. Placed below the panels already
-        there unless placed; shown in the Figures view. Returns the panel's id and letter, and what
-        it shows.
+        drawn at 4x on white and kept with the figure); a calibration's plot, for research (each
+        side's scores against the run's with the classes, the ROC or precision–recall curve with its
+        bootstrap band and thresholds, or the likelihood ratio of a score with the evidence
+        thresholds); or text. Placed below the panels already there unless placed; shown in the
+        Figures view. Returns the panel's id and letter, and what it shows.
 
         Args:
             a: compare: the first side, as compare takes it; the pair compared last if not given.
                 Optional; a string.
             b: compare: the second side. Optional; a string.
+            calibration: calibration: the calibration, by name; the latest if not given. Optional; a
+                string.
             color_by: score (the default), se, replicates or input. Optional; a string.
             condition: A condition by name or number (from 1), when the design has more than one;
                 the first if not given. Optional; a string.
@@ -1148,14 +1155,15 @@ class Tools:
             finding: qc: the finding, by id (qc_findings lists them) or title. Optional; a string.
             from_: The first position shown (the target's numbering). Optional; a whole number.
             height_mm: Its height. Optional; a number.
-            kind: map (the default), qc, scores, compare, variant, structure or text. Optional; a
-                string.
+            kind: map (the default), qc, scores, compare, variant, structure, calibration or text.
+                Optional; a string.
             pair: qc, replicate agreement: the pair of replicates drawn, from 1. Optional; a whole
                 number.
             palette: rdbu or puor. Optional; a string.
             plot: What a scores panel shows (distribution, flow, volcano), a compare panel
-                (agreement, bland-altman, positions, classes, map-first, map-second, map-difference) or
-                a variant panel (evidence, time-course, bins). Optional; a string.
+                (agreement, bland-altman, positions, classes, map-first, map-second, map-difference), a
+                variant panel (evidence, time-course, bins) or a calibration panel (distribution, roc,
+                pr, likelihood). Optional; a string.
             rows: The order of the substitutions: biochemical, hydrophobicity or alphabetical.
                 Optional; a string.
             run: A score run by name ("Run 2") or id; the latest run of the current design if not
@@ -1179,7 +1187,7 @@ class Tools:
         Returns:
             A Result: the message and the data MaveScape answered with.
         """
-        return self.call("add_figure_panel", **{"a": a, "b": b, "color_by": color_by, "condition": condition, "contrast": contrast, "figure": figure, "finding": finding, "from": from_, "height_mm": height_mm, "kind": kind, "pair": pair, "palette": palette, "plot": plot, "rows": rows, "run": run, "scale": scale, "subject": subject, "text": text, "to": to, "tracks": tracks, "variant": variant, "view": view, "width_mm": width_mm, "x_mm": x_mm, "y_mm": y_mm})
+        return self.call("add_figure_panel", **{"a": a, "b": b, "calibration": calibration, "color_by": color_by, "condition": condition, "contrast": contrast, "figure": figure, "finding": finding, "from": from_, "height_mm": height_mm, "kind": kind, "pair": pair, "palette": palette, "plot": plot, "rows": rows, "run": run, "scale": scale, "subject": subject, "text": text, "to": to, "tracks": tracks, "variant": variant, "view": view, "width_mm": width_mm, "x_mm": x_mm, "y_mm": y_mm})
 
     def set_figure(self, figure, *, delete=None, height_mm=None, letters=None, name=None, panels=None, size=None, text=None, width_mm=None):
         """Change or delete a figure.

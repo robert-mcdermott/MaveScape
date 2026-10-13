@@ -459,7 +459,8 @@ publications as identifiers (`{ db, id }`), data DOIs, contributors (ORCID iDs),
 its columns (`columns: { scores, counts }`), and its experiment's title, descriptions, method text,
 raw reads and publications. A MaveDB package opened from files is kept the same way, with `package`
 (its name) in place of the URN, its tables' `origin` `{ database: "package", package, file,
-license }`.
+license }`, and (MaveScape 0.8) its `score_calibrations.json` read as its published calibrations,
+the bodies as written kept in `calibrationBodies` to deposit them again.
 
 `deposit` (MaveScape 0.3, absent until given) holds the **MaveDB details**: what a MaveDB deposit
 says that the workspace does not hold otherwise (below, "A MaveDB deposit"). Each change is in the
@@ -641,6 +642,14 @@ the effects (from MaveScape 0.6), the later run's are put in the earlier run's u
 them), `after` is in the earlier run's units, and `moved` is `null` (not said) where the factor is
 `null` (replicates whose time courses span different times).
 
+From MaveScape 0.8, what a rescoring did to its **calibrations** (`calibrations`): for each run
+scored again whose earlier run and later run are each calibrated against the same control set (the
+latest calibration of each, of the same condition), `set`, then `a` and `b` (each `calibration`,
+`run`, `side`, `thresholds` as kept, `auc` and each class's `evidence` (`class`, `oddsPath`,
+`strength`) computed again without the bootstrap), and the variants scored in both (`both`) whose
+functional class under each calibration's thresholds changed (`crossed`, with `crossings` by pair
+of classes).
+
 From MaveScape 0.3 the workspace's target can also keep `reference`, the record of
 its last check against its UniProt entry (Experiment, Target: **Check against UniProt**). It is
 provenance, kept with the workspace and not in the design, so a check that changes nothing leaves
@@ -694,7 +703,9 @@ Its files are the archive's, every table included or (for data that cannot be sh
 by its SHA-256 only, every annotation's file and figure image always, every structure's file when
 the library holds them all; and two more:
 
-- `certificate.json`, format `mavescape-certificate`, version 1:
+- `certificate.json`, format `mavescape-certificate`, version 1, or 2 when it certifies calibrations
+  (MaveScape 0.8: an older MaveScape then says it cannot check it rather than leave them
+  unchecked):
   - `software` (`name`, `version`, `commit`). A certificate has no time of its own: the same
     workspace, files and MaveScape give the same bytes, and so the same fingerprint, whenever and
     wherever it is made;
@@ -725,6 +736,7 @@ the library holds them all; and two more:
 | `runs` | each run: `id`, `name`, `recorded` (its output's SHA-256 when scored), `output` (now), `variants` (keys, in order), `conditions` (each `id`, `name`, `score`, `se`, `class`: 0 not scored, 1 like the wild type, 2 lower, 3 higher, as robustness and the diff call them) and `contrasts` (each difference between conditions' `delta`, `se`, `q`, `class`) |
 | `qc` | each run's QC: `digest` (the SHA-256 of every number its QC computed), `findings` (`id`, `status`, `value`, `acknowledged`: the status it was acknowledged at, or null) |
 | `analyses` | each comparison and robustness check kept in the report, computed again: a comparison's `matched`, `statistics`, `discordance` and `classes`; a robustness check's `total`, `skipped` and each target's verdict `counts` |
+| `calibrations` | version 2: each calibration computed again (`id`, `name`, `values`): `scored` (P, B), `thresholds` (with the bootstrap's `stability`), `distributions`, `auc` (with DeLong's `low`, `high`, `se` and the `bootstrap`'s), `precisionRecall` (`auc`, `chance`, `bootstrap`), `curves` (the SHA-256 of the ROC and precision–recall curves' points and bands), `classes` (P, B, the run's `missense` and `all`), `sensitivity`, `specificity` and `misses` (Wilson's), `evidence` (each class's `P`, `B`, `prior`, `posterior`, `oddsPath`, `observed`, `strength`, `contrary` and `bootstrap`), `limitations` (their ids), `likelihood` (`prior`, `c`, each threshold's `boundary`, `lr`, `score`, `lower`, `upper`, the `counts` at each strength, and `variants`, the SHA-256 of every variant's ratio, interval and evidence), or `error` |
 | `figures` | each figure's panels: `id`, `letter`, `kind`, `drawing` (the SHA-256 of its marks written as SVG, as the figure's manifest records it), `missing` when it cannot be drawn |
 | `report` | the SHA-256 of the report (`report.md`) and of its references (`report.bib`) as MaveScape writes them, with the certified version and commit |
 
@@ -1072,14 +1084,15 @@ present only when the workspace did what it says:
 | Quality control | each run's findings and acknowledgements; the thresholds changed from MaveScape's defaults |
 | Comparisons | each comparison added to the report: its scale, filters and variants compared, the correlations, Lin's concordance and the limits of agreement with their intervals, the variants that differ beyond their uncertainty, a predictor's classes, and what to read with care |
 | Robustness to analysis choices | each robustness check added: the choices varied, how many analyses, each target's verdicts |
+| Calibration, for research | from MaveScape 0.8: each control set (where its labels came from, its sides in their source's words, what was left out) and each calibration computed again: its separation (AUC with DeLong's interval, the precision–recall area), thresholds and classes with Wilson's intervals, the bootstrap's intervals, each class's OddsPath and strength, where each likelihood-ratio strength begins and the run's variants at each; or, when its run's scores are not at hand, what it keeps |
 | Selections | each saved selection: its run, how many variants, the query that made it |
 | Annotations, Structures | as a run's methods say them |
 | Figures | each figure: its size and its panels by letter, with what each shows |
-| Inputs | every file read, by SHA-256: tables, MaveDB's mapped variants, annotations' files, structures' files, figures' images |
+| Inputs | every file read, by SHA-256: tables, MaveDB's mapped variants, annotations' files, structures' files, figures' images, the files control sets were read from |
 | Software | the MaveScape that wrote the report; each run's MaveScape, scoring version and output SHA-256 |
 | AI agents | from MaveScape 0.7, when an agent worked in the workspace: what agents proposed and the person accepted, each decision, and what is still proposed |
 | Decision log | the history, entry by entry with its time (UTC), and whether its chain holds |
-| Limitations | what the counts did not record (and what that meant), what each run's model assumes, the QC findings not acknowledged, a predicted structure standing in for one |
+| Limitations | what the counts did not record (and what that meant), what each run's model assumes, the QC findings not acknowledged, what limits each calibration (its thresholds set on its own controls, a class of few controls, a strength the bootstrap does not hold, the set's circularity), a predicted structure standing in for one |
 | Use | the research-use statement |
 
 Runs whose paragraphs read the same are named together ("**Run 1 and Run 2.**"). References are
@@ -1121,6 +1134,7 @@ per condition. A ZIP dated with the workspace's modification time, or the same f
 | `score_columns.json`, `count_columns.json` | MaveDB's `score_columns_metadata` and `count_columns_metadata`: each column beyond the standard ones, `{ "description", "details" }` |
 | `experiment.json` | the experiment, the body of MaveDB's `POST /api/v1/experiments/` (its `ExperimentCreate`, in camelCase): `title`, `shortDescription`, `abstractText`, `methodText`, `keywords`, publications, `rawReadIdentifiers`, `contributors` |
 | `score_set.json` | the score set, the body of `POST /api/v1/score-sets/` (`ScoreSetCreate`): `title`, `shortDescription`, `abstractText`, `methodText`, `licenseId` (MaveDB's: 1 CC0, 3 CC BY 4.0, 6 CC BY-SA 4.0), `experimentUrn` (`null` for a new experiment: MaveDB gives it one), `supersededScoreSetUrn`, `targetGenes`, publications, `doiIdentifiers`, `contributors` |
+| `score_calibrations.json` | MaveScape 0.8, with the run's calibrations of the condition: a list, each the body of `POST /api/v1/score-calibrations/` (`ScoreCalibrationCreate`; below) |
 | `mavescape.json` | format `mavescape-mavedb`, version 1: the software, workspace, run (`outputSha256`, `published`), condition, `mode`, each file with its SHA-256, the variants exported and left out (each reason with its count and examples), `missing`, `defaulted`, `notes` |
 
 The tables are written as MaveDB's validator checks them (MaveDB's own validators pass them:
@@ -1172,9 +1186,29 @@ sentence MaveScape writes (the short description), and says so (`defaulted`). Wh
 and nothing gives (an abstract; a target sequence's taxonomy id; a detail in a form MaveDB refuses)
 is `missing`: the tables are written all the same.
 
+**Score calibrations** (MaveScape 0.8): each calibration of the run's condition, computed again, in
+MaveDB's vocabulary, for research. `scoreSetUrn` is `null` (the score set's URN, once MaveDB gives
+it one), `title` the calibration's name, `researchUseOnly` true; `functionalClassifications`, one
+per class with scores: `label` (`Abnormal-like`, `Intermediate`, `WT-like`), `description`,
+`functionalClassification` (`abnormal`, `not_specified` for the intermediate zone, `normal`),
+`range` (`[lower, upper]`, `null` unbounded) with `inclusiveLowerBound` and `inclusiveUpperBound`
+set so that MaveDB puts a score at a threshold on its abnormal-like side, as MaveScape does (no
+bound includes infinity); for the abnormal-like and WT-like classes `oddspathsRatio` (Brnich et
+al.'s, one control of the other side added) and `acmgClassification` (`criterion` PS3 or BS3,
+`evidenceStrength`) when the class's strength is on its own side and MaveDB reads the ratio the
+same (MaveDB's strong begins beyond 18.6, Table 3's beyond 18.7: between them the strength is left
+out, and said). `thresholdSources`: the deposit's first publication (MaveDB requires one; without
+it, `missing` names it); `evidenceSources` and `methodSources`: Brnich et al. 2020; `notes`: how it
+was made, its limitations, research use; `calibrationMetadata`: MaveScape's version, the control
+set (its source, file SHA-256, rules, controls scored), the side, rule and thresholds, the AUC,
+sensitivity and specificity, the bootstrap, each class's OddsPath, the likelihood ratios' thresholds
+by score, the limitations' ids. A calibration made with a published calibration's thresholds is
+MaveDB's already, and an agent's still proposed waits: neither is deposited.
+
 A package opens again (Open files: its folder or ZIP) as a MaveDB record does: its published scores
-read as published, its counts with a design drafted, its details kept; written again, its MaveDB
-files are the same bytes (validation suite `mavedb-export`).
+read as published, its counts with a design drafted, its details kept, its score calibrations
+listed as its published calibrations (and passed through as written when its scores are deposited
+again); written again, its MaveDB files are the same bytes (validation suite `mavedb-export`).
 
 ### The readiness (`readiness.json`; `mavescape validate --json`'s `readiness`)
 
@@ -1393,6 +1427,10 @@ Lengths are in points (1/72 inch).
     `drawn`: the saved view's time when the image was drawn): the view's figure panel (below,
     *Figure panels of a structure*) drawn on white at 4× and kept in the library by its SHA-256; a
     view saved again since is said, and the image drawn again on request.
+  - `calibration` (MaveScape 0.8): `calibration` (its id), `plot` (`distribution`: each side's
+    scores against the run's with the classes; `roc` and `pr`: the curves with the bootstrap's
+    band and the thresholds circled; `likelihood`: the likelihood ratio of a score with the evidence
+    thresholds), drawn as Calibrate draws it, for research.
 
 A figure read from an archive or sent by a script is checked before it is drawn (every field what a
 figure holds, every panel on the page). A structure panel's image goes into the archive with the
@@ -1449,7 +1487,9 @@ with the keyword `mavescape-figure`, and in the PDF as an attached file, `mavesc
   QC thresholds' digest and the finding's acknowledgement (or, of the counts, the table's SHA-256
   and the design's digest); a `compare` panel's two sides (a run's condition or replicate, or an
   annotation), `scale` and `filters`; a `structure` panel's saved view (its id, name and when it was
-  saved), the structure's file by its SHA-256, and its image's SHA-256. Digests are SHA-256 of the
+  saved), the structure's file by its SHA-256, and its image's SHA-256; a `calibration` panel's
+  calibration (its id, name and `made`, the digest of the calibration as kept), its control set (its
+  id, name and the digest of its labels) and its run. Digests are SHA-256 of the
   canonical JSON (keys sorted, as the workspace's record is).
 - `drawing`: a panel's digest is the SHA-256 of its marks written as SVG, so two drawings of a panel
   compare whatever the format; the manifest's is the digest of the panels' digests.
@@ -1459,7 +1499,8 @@ with the keyword `mavescape-figure`, and in the PDF as an attached file, `mavesc
 **Reading one back.** A figure file dropped on the window (or `check_figure`) is read for its
 manifest and compared with the workspace open, panel by panel: *as then*; *changed since* (the run's
 table scored again since, the QC thresholds or the finding's acknowledgement changed, the design
-changed, an annotation's file changed, a structure view saved again), saying what; or *not here* (a
+changed, an annotation's file changed, a structure view saved again, a calibration made otherwise
+or its control set's labels changed), saying what; or *not here* (a
 run not in this workspace, found by its id or its output's SHA-256, so that a copy of the workspace
 holds it). **Rebuild here** adds the figure to the workspace, its runs mapped to this workspace's
 by their outputs, and draws each panel again from its inputs: each drawing's digest is compared with

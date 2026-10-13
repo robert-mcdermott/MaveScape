@@ -33,6 +33,7 @@ export const PANEL_KINDS = {
   compare: 'Comparison',
   variant: 'A variant\'s evidence',
   structure: 'Structure',
+  calibration: 'Calibration',
   text: 'Text',
 };
 
@@ -41,6 +42,8 @@ export const PANEL_PLOTS = {
   scores: { distribution: 'Score distributions by class', flow: 'The filter flow', volcano: 'Differences against their p (a contrast)' },
   compare: { agreement: 'One against the other', 'bland-altman': 'Bland–Altman', positions: 'Disagreement by position', classes: 'A predictor\'s classes', 'map-first': 'The first side\'s map', 'map-second': 'The second side\'s map', 'map-difference': 'The map of the difference' },
   variant: { evidence: 'The score and each replicate\'s, with their intervals', 'time-course': 'The time course', bins: 'The distribution over the bins' },
+  // Wave 8, slice 5: a calibration's plots, for research (lib/calibration-record.js).
+  calibration: { distribution: 'Each side\'s scores against the run\'s', roc: 'The ROC curve', pr: 'The precision–recall curve', likelihood: 'The likelihood ratio of a score' },
 };
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -88,6 +91,7 @@ function checkPanel(p, fig) {
   if ((p.kind === 'scores' || p.kind === 'variant') && typeof p.run !== 'string') throw new Error(`Panel ${p.id}: a ${p.kind} panel names its run.`);
   if (p.kind === 'variant' && typeof p.variant !== 'string') throw new Error(`Panel ${p.id}: a variant panel names its variant.`);
   if (p.kind === 'compare' && (!p.a || typeof p.a !== 'object' || !p.b || typeof p.b !== 'object')) throw new Error(`Panel ${p.id}: a comparison panel names its two sides.`);
+  if (p.kind === 'calibration' && typeof p.calibration !== 'string') throw new Error(`Panel ${p.id}: a calibration panel names its calibration.`);
   if (p.kind === 'structure' && (typeof p.view !== 'string' || !/^[0-9a-f]{64}$/.test(p.image?.sha256 ?? '') || !(p.image.width > 0 && p.image.height > 0))) throw new Error(`Panel ${p.id}: a structure panel names its saved view and its image (SHA-256, width and height).`);
 }
 
@@ -216,6 +220,7 @@ export function panelSummary(panel, ws = null) {
   if (panel.kind === 'compare') return `the comparison of ${panel.labels?.a ?? 'two sides'} and ${panel.labels?.b ?? ''}: ${(PANEL_PLOTS.compare[panel.plot] ?? panel.plot).toLowerCase()}`.replace(/ and : /, ': ');
   if (panel.kind === 'variant') return `the evidence of ${panel.variant} in ${runName(panel.run)}${panel.plot === 'evidence' ? '' : ` (${(PANEL_PLOTS.variant[panel.plot] ?? panel.plot).toLowerCase()})`}`;
   if (panel.kind === 'structure') return `the structure view "${ws?.structureViews?.find((v) => v.id === panel.view)?.name ?? panel.view}"`;
+  if (panel.kind === 'calibration') return `${(PANEL_PLOTS.calibration[panel.plot] ?? panel.plot).replace(/^The /, 'the ').replace(/^Each /, 'each ')} of the calibration "${ws?.calibrations?.find((c) => c.id === panel.calibration)?.name ?? panel.calibration}"`;
   if (panel.kind === 'map') {
     const run = ws?.runs?.find((r) => r.id === panel.run);
     const what = panel.contrast !== null && panel.contrast !== undefined ? 'the differential map' : 'the map';

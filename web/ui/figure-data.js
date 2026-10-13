@@ -21,6 +21,7 @@ import { computeComparison } from './mode-compare.js';
 import { storeBytes } from './import.js';
 import { figurePanel, openView } from './structure-views.js';
 import { structureState } from './mode-structure.js';
+import { calibrationReport, calibrationWithLikelihood } from './calibration.js';
 
 // A structure panel's image (wave 5's figure panel of the saved view, kept in the library by its
 // SHA-256), decoded once: its pixels for the page and the PDF, its PNG for the SVG.
@@ -58,6 +59,8 @@ export function figureContext(app) {
     comparison: (pair, filters, level, scale) => computeComparison(app, pair, filters, level, scale),
     tracks: async (run, model) => (await runTracks(app, run, model)).tracks,
     image: (sha) => decodedImage(app, sha),
+    // A calibration as the Calibrate view computed it (wave 8, slice 5), kept for the session.
+    calibration: (cal, { likelihood } = {}) => (likelihood ? calibrationWithLikelihood(app, cal) : calibrationReport(app, cal)),
   };
 }
 

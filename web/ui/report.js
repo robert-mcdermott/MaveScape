@@ -11,9 +11,11 @@ import { canonicalJSON, keepAnalysis, removeAnalysis } from '../lib/workspace.js
 import { ROBUSTNESS_SEED } from '../lib/robustness.js';
 import { ensureResults } from './run-results.js';
 import { qcOf } from './record.js';
+import { calibrationWithLikelihood } from './calibration.js';
 
 // What the report is written with: each run's QC findings and scores (null where they cannot be
-// had: the run's table not in the workspace).
+// had: the run's table not in the workspace), and each calibration computed again (wave 8, slice
+// 5), or why it could not be.
 export async function reportContext(app) {
   const runs = new Map();
   for (const run of app.store.ws.runs) {
@@ -21,7 +23,9 @@ export async function reportContext(app) {
     const entry = await ensureResults(app, run).catch(() => null);
     runs.set(run.id, { findings: q?.findings ?? null, results: entry?.results ?? null });
   }
-  return { software: { version: app.version, commit: app.commit }, runs };
+  const calibrations = new Map();
+  for (const cal of app.store.ws.calibrations ?? []) calibrations.set(cal.id, await calibrationWithLikelihood(app, cal).catch((error) => ({ problem: error.message })));
+  return { software: { version: app.version, commit: app.commit }, runs, calibrations };
 }
 
 export async function reportOf(app) {

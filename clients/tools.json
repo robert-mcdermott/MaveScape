@@ -275,7 +275,7 @@
   {
     "name": "mavedb_deposit",
     "title": "What a MaveDB deposit would hold",
-    "description": "What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and those left out, with why), the target (its sequence, or the transcript that names it), the columns of scores and counts, the experiment's keywords from the design's readout, and what MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id). Writes nothing: export with what mavedb writes the package.",
+    "description": "What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and those left out, with why), the target (its sequence, or the transcript that names it), the columns of scores and counts, the experiment's keywords from the design's readout, the run's calibrations of the condition as MaveDB's score calibrations (research use: each class's range as abnormal, not specified or normal, its OddsPath and evidence strength), and what MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id, a calibration's threshold source). Writes nothing: export with what mavedb writes the package.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1511,7 +1511,7 @@
   {
     "name": "add_figure_panel",
     "title": "Add a panel to a figure",
-    "description": "Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's variant-effect map (a condition or a difference between conditions, colored as render_map colors it, a range of positions, tracks below it, its color bar and the key to its states); a QC finding's charts (of a run, or of the counts); a run's scores by class, filter flow or a contrast's volcano; a comparison (as compare takes its sides: agreement, Bland–Altman, disagreement by position, a predictor's classes, or a map of either side or of the difference); a variant's evidence (its score and each replicate's with their intervals, its time course, or its distribution over the bins); a saved structure view (its figure panel, drawn at 4x on white and kept with the figure); or text. Placed below the panels already there unless placed; shown in the Figures view. Returns the panel's id and letter, and what it shows.",
+    "description": "Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's variant-effect map (a condition or a difference between conditions, colored as render_map colors it, a range of positions, tracks below it, its color bar and the key to its states); a QC finding's charts (of a run, or of the counts); a run's scores by class, filter flow or a contrast's volcano; a comparison (as compare takes its sides: agreement, Bland–Altman, disagreement by position, a predictor's classes, or a map of either side or of the difference); a variant's evidence (its score and each replicate's with their intervals, its time course, or its distribution over the bins); a saved structure view (its figure panel, drawn at 4x on white and kept with the figure); a calibration's plot, for research (each side's scores against the run's with the classes, the ROC or precision–recall curve with its bootstrap band and thresholds, or the likelihood ratio of a score with the evidence thresholds); or text. Placed below the panels already there unless placed; shown in the Figures view. Returns the panel's id and letter, and what it shows.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1521,6 +1521,10 @@
         },
         "b": {
           "description": "compare: the second side.",
+          "type": "string"
+        },
+        "calibration": {
+          "description": "calibration: the calibration, by name; the latest if not given.",
           "type": "string"
         },
         "color_by": {
@@ -1554,7 +1558,7 @@
           "type": "number"
         },
         "kind": {
-          "description": "map (the default), qc, scores, compare, variant, structure or text.",
+          "description": "map (the default), qc, scores, compare, variant, structure, calibration or text.",
           "type": "string"
         },
         "pair": {
@@ -1567,7 +1571,7 @@
           "type": "string"
         },
         "plot": {
-          "description": "What a scores panel shows (distribution, flow, volcano), a compare panel (agreement, bland-altman, positions, classes, map-first, map-second, map-difference) or a variant panel (evidence, time-course, bins).",
+          "description": "What a scores panel shows (distribution, flow, volcano), a compare panel (agreement, bland-altman, positions, classes, map-first, map-second, map-difference), a variant panel (evidence, time-course, bins) or a calibration panel (distribution, roc, pr, likelihood).",
           "type": "string"
         },
         "rows": {

@@ -11,6 +11,8 @@
 //     SE, q and class, and the SHA-256 of its whole output;
 //   - each run's QC findings (status, value, acknowledgement) and the SHA-256 of its whole QC;
 //   - each comparison and robustness check kept in the report, computed again;
+//   - each calibration, computed again (wave 8, slice 5): its metrics, evidence strength and
+//     likelihood ratios, the run's variants in each class, what limits it;
 //   - each figure panel's drawing by its SHA-256, as the figure's manifest records it;
 //   - the report and its references by their SHA-256.
 // Its fingerprint, the SHA-256 of its canonical JSON, names exactly what was certified: quoted in
@@ -47,9 +49,13 @@ import { designSource } from './qc-subjects.js';
 import { stateDigest } from './diff.js';
 import { possessive } from './words.js';
 import { composeReview } from './review.js';
+import { computeCalibration } from './calibration-record.js';
 
 export const CERTIFICATE_FORMAT = 'mavescape-certificate';
-export const CERTIFICATE_VERSION = 1;
+// Version 2 (wave 8, slice 5) certifies calibrations: a certificate holding one is version 2, so
+// that a MaveScape that cannot compute them again says so rather than leaving them unchecked; one
+// without is version 1, as before.
+export const CERTIFICATE_VERSION = 2;
 export const CERTIFICATE_NAME = 'certificate.json';
 export const README_NAME = 'README.txt';
 export const EXIT = { verified: 0, differs: 1, incomplete: 2 };
@@ -149,7 +155,7 @@ export function notChecked(ws) {
 // promise). options: { software: { version, commit } (the report says them: the certificate's
 // when verifying), onProgress(fraction, text) }. Returns { numbers, blocked: Map(group → why),
 // missing: [{ sha256, fileName }], notes, results: Map(run id → results), report, methods }.
-// A group is what a number belongs to: 'run:<id>', 'qc:<id>', 'analysis:<id>',
+// A group is what a number belongs to: 'run:<id>', 'qc:<id>', 'analysis:<id>', 'calibration:<id>',
 // 'figure:<id>:<panel>', 'report'; a group is blocked when a file it reads is missing.
 export async function computeNumbers(ws, file, options = {}) {
   const progress = async (fraction, text) => options.onProgress?.(fraction, text);
@@ -216,13 +222,13 @@ export async function computeNumbers(ws, file, options = {}) {
     return qcs.get(key);
   };
 
-  const numbers = { runs: [], qc: [], analyses: [], figures: [], report: null };
+  const numbers = { runs: [], qc: [], analyses: [], calibrations: [], figures: [], report: null };
   const runs = new Map();
   const findings = new Map();
   // What the numbers were computed with, for the review report (lib/review.js): each run's QC, each
   // analysis's comparison or robustness summary, each figure's data and drawing.
-  const detail = { qc: new Map(), analyses: new Map(), figures: new Map() };
-  const steps = ws.runs.length * 2 + (ws.analyses ?? []).length + (ws.figures ?? []).length + 1;
+  const detail = { qc: new Map(), analyses: new Map(), calibrations: new Map(), figures: new Map() };
+  const steps = ws.runs.length * 2 + (ws.analyses ?? []).length + (ws.calibrations ?? []).length + (ws.figures ?? []).length + 1;
   let step = 0;
 
   // Each run, scored again from its recorded inputs, and its QC.
@@ -334,6 +340,30 @@ export async function computeNumbers(ws, file, options = {}) {
     }
   }
 
+  // The calibrations (wave 8, slice 5), each computed again from its run's scores.
+  for (const cal of ws.calibrations ?? []) {
+    await progress(step++ / steps, `Computing the calibration "${cal.name}" again`);
+    const group = `calibration:${cal.id}`;
+    const got = runs.get(cal.run);
+    if (!got || got.absent) {
+      block([group], got?.message ?? `its run ${cal.run} is not in the workspace`);
+      continue;
+    }
+    let values;
+    if (!got.results) values = { error: got.message };
+    else {
+      try {
+        const o = computeCalibration(ws, cal, got.results);
+        detail.calibrations.set(cal.id, o);
+        values = calibrationValues(o);
+        if (o.differs) notes.push(`The calibration "${cal.name}"'s thresholds computed now are not the ones it keeps; the certificate records those computed now.`);
+      } catch (error) {
+        values = { error: error.message };
+      }
+    }
+    numbers.calibrations.push({ id: cal.id, name: cal.name, values: encodeAll(values) });
+  }
+
   // The figures, each panel drawn as the window draws it.
   const ctx = {
     ws,
@@ -353,6 +383,12 @@ export async function computeNumbers(ws, file, options = {}) {
     image: async (sha) => {
       const bytes = await fileOf(sha);
       return bytes ? pngImage(bytes) : null;
+    },
+    // A calibration as computed above.
+    calibration: async (cal) => {
+      const o = detail.calibrations.get(cal.id);
+      if (!o) throw new Error(`The calibration "${cal.name}" could not be computed again.`);
+      return o;
     },
   };
   for (const fig of ws.figures ?? []) {
@@ -386,13 +422,47 @@ export async function computeNumbers(ws, file, options = {}) {
   if (absentRuns.length) block(['report'], `${list(absentRuns.map((r) => r.name))} could not be scored again (${runs.get(absentRuns[0].id).message})`);
   else {
     const info = new Map(ws.runs.map((r) => [r.id, { findings: findings.get(r.id) ?? null, results: runs.get(r.id)?.results ?? null }]));
-    report = writeReport(ws, { software: options.software ?? {}, runs: info });
+    report = writeReport(ws, { software: options.software ?? {}, runs: info, calibrations: detail.calibrations });
     numbers.report = { markdown: textDigest(report.markdown), bibtex: textDigest(report.bibtex) };
     const last = ws.runs.at(-1);
-    if (last) methods = writeMethods(ws, last, { findings: findings.get(last.id) ?? null, thresholds, results: runs.get(last.id)?.results ?? null });
+    if (last) methods = writeMethods(ws, last, { findings: findings.get(last.id) ?? null, thresholds, results: runs.get(last.id)?.results ?? null, calibrations: [...detail.calibrations.values()].filter((o) => o.cal.run === last.id) });
   }
   await progress(1, 'Every number computed');
   return { numbers, blocked, missing: [...missing.values()], notes, results, report, methods, detail };
+}
+
+// What a certificate keeps of a calibration computed again (lib/calibration-record.js's
+// calibrationOutcome): its controls scored, thresholds and their stability, distributions, the
+// AUC and the precision–recall area with their intervals, the curves by their SHA-256, each side's
+// and the run's classes, sensitivity and specificity, each class's OddsPath and strength with the
+// bootstrap's, what limits it (by id), and its likelihood ratios (the score where each strength
+// begins, the variants at each, every variant's ratio by their SHA-256).
+function calibrationValues(o) {
+  const m = o.metrics;
+  const counts = (c) => ({ 'abnormal-like': c['abnormal-like'], intermediate: c.intermediate, 'WT-like': c['WT-like'] });
+  const evidence = (x) => ({ class: x.class, P: x.P, B: x.B, prior: x.prior, posterior: x.posterior, oddsPath: x.oddsPath, observed: x.observed, strength: x.strength?.code ?? null, contrary: x.contrary, ...(x.boot ? { bootstrap: { low: x.boot.low, median: x.boot.median, high: x.boot.high, empty: x.boot.empty, strengths: x.boot.strengths } } : {}) });
+  const lr = o.likelihood;
+  return {
+    scored: m.n,
+    thresholds: { abnormal: m.thresholds.abnormal, normal: m.thresholds.normal, stability: m.thresholds.stability },
+    distributions: m.distributions,
+    auc: { auc: m.auc.auc, low: m.auc.low, high: m.auc.high, se: m.auc.se, bootstrap: m.auc.boot },
+    precisionRecall: { auc: m.pr.auc, chance: m.pr.baseline, bootstrap: m.pr.boot },
+    curves: digestOf({ roc: m.roc, pr: { points: m.pr.points, band: m.pr.band } }),
+    classes: { P: counts(m.classes.P), B: counts(m.classes.B), missense: counts(o.classes.missense), all: counts(o.classes.all) },
+    sensitivity: m.sensitivity,
+    specificity: m.specificity,
+    misses: m.misses,
+    evidence: { abnormal: evidence(m.evidence.abnormal), normal: evidence(m.evidence.normal) },
+    limitations: o.limitations.map((l) => l.id),
+    likelihood: !lr ? null : lr.problem ? { problem: lr.problem } : {
+      prior: lr.settings.prior,
+      c: lr.settings.c,
+      thresholds: lr.result.thresholds.map((t) => ({ boundary: t.boundary, lr: t.lr, lower: t.lower, score: t.score, upper: t.upper })),
+      counts: lr.counts,
+      variants: digestOf(lr.rows.map((r, i) => [r.key, lr.result.rows[i]])),
+    },
+  };
 }
 
 // Why a figure panel cannot be drawn for want of a file: null, or the words.
@@ -449,6 +519,15 @@ export function* numberItems(numbers) {
       else yield [g, `analysis|${a.id}|${path}`, value, () => `${a.name.replace(/^./, (x) => x.toUpperCase())}:${label}`];
     }
     yield* walk(a.values, 'values', '');
+  }
+  for (const c of numbers.calibrations ?? []) {
+    const g = `calibration:${c.id}`;
+    function* walk(value, path, label) {
+      if (Array.isArray(value)) for (const [i, v] of value.entries()) yield* walk(v, `${path}[${i}]`, `${label} ${i + 1}`);
+      else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) yield* walk(v, `${path}.${k}`, `${label} ${k}`);
+      else yield [g, `calibration|${c.id}|${path}`, value, () => `The calibration "${c.name}":${label}`];
+    }
+    yield* walk(c.values, 'values', '');
   }
   for (const f of numbers.figures ?? []) {
     for (const p of f.panels) yield [`figure:${f.id}:${p.id}`, `figure|${f.id}|${p.id}`, p.drawing, () => `The figure "${f.name}", ${p.letter ? `panel ${p.letter}` : `its ${p.kind} panel`}: the SHA-256 of its drawing`];
@@ -541,8 +620,9 @@ function readme(certificate, { tables }) {
     '',
     `This archive holds the workspace, the files it reads (${list(files) || 'none'}) and the ${count(certificate.total)}`,
     'numbers it reports: each run\'s scores, standard errors and classes, its QC findings, the',
-    'analyses kept in its report, its figures\' drawings and the report. Verifying it computes every',
-    'number again from the files with MaveScape\'s own code and compares them bit for bit.',
+    `analyses kept in its report, ${certificate.numbers.calibrations?.length ? 'its calibrations (for research), ' : ''}its figures' drawings and the report. Verifying it`,
+    'computes every number again from the files with MaveScape\'s own code and compares them bit',
+    'for bit.',
     '',
     'What it proves',
     '--------------',
@@ -626,13 +706,14 @@ export async function writeCertificate(ws, file, options = {}) {
   const history = verifyHistory(ws);
   const certificate = {
     format: CERTIFICATE_FORMAT,
-    version: CERTIFICATE_VERSION,
+    version: computed.numbers.calibrations.length ? CERTIFICATE_VERSION : 1,
     software: { name: 'MaveScape', ...software },
     workspace: { id: ws.id, name: ws.name, path: 'workspace.json', sha256: textDigest(workspaceText), modified: ws.modified },
     inputs,
     history: { entries: history.entries, head: history.head, ok: history.ok },
     checkpoints: (ws.checkpoints ?? []).map((c) => ({ id: c.id, name: c.name, created: c.created, sha256: c.sha256 })),
-    numbers: computed.numbers,
+    // A certificate without calibrations is written as version 1 wrote it.
+    numbers: computed.numbers.calibrations.length ? computed.numbers : (({ calibrations, ...rest }) => rest)(computed.numbers),
     total: countNumbers(computed.numbers),
     notChecked: notChecked(ws),
     notes: computed.notes,

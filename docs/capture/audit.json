@@ -720,6 +720,16 @@
   "violations": []
  },
  {
+  "scene": "calibrate-figure",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-figure",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "agent-hsp90",
   "theme": "dark",
   "violations": []

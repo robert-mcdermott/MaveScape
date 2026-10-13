@@ -63,6 +63,15 @@ export function panelInputs(ws, panel) {
       return { run: runRef(ws, panel.run) };
     case 'compare':
       return { a: sideRef(ws, panel.a), b: sideRef(ws, panel.b), scale: panel.scale ?? 'scored', filters: panel.filters ?? null };
+    case 'calibration': {
+      // Wave 8, slice 5: the calibration as kept (without an agent's mark), its control set's labels
+      // and its run.
+      const cal = (ws.calibrations ?? []).find((c) => c.id === panel.calibration);
+      if (!cal) return { calibration: { id: panel.calibration, missing: true } };
+      const { proposed, ...kept } = cal;
+      const set = (ws.controlSets ?? []).find((c) => c.id === cal.controlSet);
+      return { calibration: { id: cal.id, name: cal.name, made: digest(kept) }, controlSet: set ? { id: set.id, name: set.name, labels: digest(set.labels) } : { id: cal.controlSet, missing: true }, run: runRef(ws, cal.run) };
+    }
     case 'structure': {
       const view = (ws.structureViews ?? []).find((v) => v.id === panel.view);
       const structure = view ? (ws.structures ?? []).find((s) => s.id === view.structure) : null;
@@ -273,6 +282,17 @@ export function compareManifest(record, ws) {
       if (digest(ws.qc?.thresholds ?? null) !== inputs.thresholds) changes.push('the QC thresholds changed since');
       const acknowledged = ws.qc?.acknowledged?.[inputs.finding]?.reason ?? null;
       if (acknowledged !== (inputs.acknowledged ?? null)) changes.push(acknowledged ? (inputs.acknowledged ? 'the finding\'s acknowledgement changed since' : 'the finding was acknowledged since') : 'the finding\'s acknowledgement was withdrawn since');
+    }
+    if (p.kind === 'calibration') {
+      const cal = (ws.calibrations ?? []).find((c) => c.id === inputs.calibration?.id);
+      if (!cal) missing.push(`the calibration "${inputs.calibration?.name ?? inputs.calibration?.id}" is not in this workspace`);
+      else {
+        const { proposed, ...kept } = cal;
+        if (digest(kept) !== inputs.calibration.made) changes.push(`the calibration "${cal.name}" is not the one drawn (made otherwise since)`);
+      }
+      const set = (ws.controlSets ?? []).find((c) => c.id === inputs.controlSet?.id);
+      if (!set) missing.push(`the control set "${inputs.controlSet?.name ?? inputs.controlSet?.id}" is not in this workspace`);
+      else if (digest(set.labels) !== inputs.controlSet.labels) changes.push(`the control set "${set.name}"'s labels are not those drawn`);
     }
     if (p.kind === 'structure') {
       const view = (ws.structureViews ?? []).find((v) => v.id === inputs.view?.id);

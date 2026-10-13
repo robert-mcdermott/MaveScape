@@ -56,6 +56,30 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   in Calibrate, and, for a run of the record's published scores, a calibration with a published
   calibration's thresholds (`calibrate`'s `published`), MaveScape's OddsPath on your controls beside
   the one it states.
+- **Calibration in the record** (wave 8, slice 5), each calibration computed again from its run's
+  scores wherever it is written:
+  - the report and a run's methods: each control set (where its labels came from, its sides in
+    their source's words, what was left out) and each calibration as computed, every method cited
+    (pROC, Keilwagen et al. and PRROC, DeLong et al., Wilson, Brnich et al., acmgscaler, Tavtigian
+    et al., Pejaver et al.), what limits it with the limitations;
+  - figure panels of Calibrate's plots (**Add to figure**; `add_figure_panel`'s `calibration`):
+    each side's scores, the ROC and precision–recall curves, the likelihood ratio of a score; a
+    figure's manifest names the calibration as kept, its control set's labels and its run;
+  - the certificate: each calibration's numbers computed again and compared bit for bit (format 2,
+    so that an older MaveScape says it cannot check one rather than skipping them), and the review
+    report's section of them, every number traced;
+  - the checkpoint diff: a run scored again and calibrated against the same set, its thresholds,
+    AUC and each class's OddsPath before and after, and the variants whose functional class changed;
+  - a MaveDB deposit's score calibrations (`score_calibrations.json`, MaveDB's
+    `ScoreCalibrationCreate`): each class's range as abnormal, not specified or normal, bounded as
+    MaveScape classes a score at a threshold, its OddsPath and strength, research use only; a
+    package's calibrations listed as its published calibrations when it is opened, and passed
+    through when its scores are deposited again.
+
+### Changed
+
+- The likelihood-ratio plot's threshold names are a little larger (9/10 of the text) and move apart
+  where they would overlap, so a figure's smallest text stays at 6 pt or more.
 
 ### Fixed
 
@@ -96,6 +120,18 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   thresholds classing the scores as published); Fayer et al. 2021's BRCA1 OddsPath, 52.4 and 0.02,
   from their published data (fetched, pinned). The remote session calibrates factor IX's published
   scores with the investigators' thresholds.
+- Suite `record`: factor IX's Run 1 calibrated against its ClinVar controls in Node, in the report
+  and Run 1's methods (every number as computed, every method cited, what limits it), a figure of
+  its four plots (each describing its numbers; rebuilt from its manifest, every drawing the same;
+  missing once the calibration is deleted), its certificate (format 2, verified bit for bit, an
+  OddsPath changed in its last bit caught) and review report (every traced number the
+  certificate's), the diff after a rescoring (the classes changed counted directly), and its MaveDB
+  deposit read back and calibrated again with the thresholds it states (the same thresholds,
+  classes and OddsPath). Suite `mavedb-export`: MaveDB's own `ScoreCalibrationCreate` takes the
+  deposited calibration, refuses it without a threshold source as MaveScape says, and its own test
+  of a range counts every deposited score in MaveScape's class. The remote session's window
+  certificate of a calibrated workspace is Node's, byte for byte. Every reference is checked
+  against Crossref's record of it (seven more recorded).
 
 ## 0.7.0 (2026-10-12)
 

@@ -30,7 +30,7 @@ import { assembleTable } from '../web/lib/assemble.js';
 import { barcodesCSV, differentialCSV, proteinScoresCSV } from '../web/lib/exports.js';
 import { proteinView } from '../web/lib/collapse.js';
 import { readZip } from '../web/lib/zip.js';
-import { MAVEDB_FILES } from '../web/lib/mavedb-export.js';
+import { MAVEDB_FILES, mavedbDeposit } from '../web/lib/mavedb-export.js';
 import { depositPackages } from './mavedb-export-cases.mjs';
 import { nodeTracks } from './annotation-cases.mjs';
 import { buildMapModel } from '../web/lib/map-model.js';
@@ -1532,6 +1532,41 @@ try {
     const wrongOrder = await send('calibrate', { run: 'Run 1', rule: 'given', abnormal: 0.9, normal: 0.7 });
     check('calibrate with given thresholds: the controls and the run\'s missense variants in each class as Node counts them; thresholds in the wrong order refused, saying why', `${given.message.slice(0, 160)}…; missense ${JSON.stringify(given.data.classes.missense)}; ${wrongOrder.message}`,
       ['abnormal-like', 'intermediate', 'WT-like'].every((k) => given.data.classes.missense[k] === nodeGiven[k] && given.data.classes.P[k] === classCounts(nodeScores.P.scores, 'below', { abnormal: 0.3, normal: 0.7 })[k]) && !given.data.stability && !wrongOrder.ok && /0\.9 is above 0\.7/.test(wrongOrder.message));
+    // In the record (slice 5): a figure of the calibration's four plots made in the window; the
+    // window's certificate (each calibration's numbers, the figure's drawings, the report) the same
+    // bytes as Node's from the window's own archive, and verified in Node; the report's calibration
+    // section and the MaveDB deposit's score calibrations as Node writes them.
+    {
+      await act('create_figure', { name: 'Calibration' });
+      for (const plot of ['distribution', 'roc', 'pr', 'likelihood']) await act('add_figure_panel', { figure: 'Calibration', kind: 'calibration', calibration: 'Run 1 · ClinVar, ★ or more', plot });
+      const calPath = join(out, 'f9-calibrated.certificate.msz');
+      await act('certify', { path: calPath });
+      const calBytes = new Uint8Array(readFileSync(calPath));
+      const calRead = await readCertificate(calBytes);
+      const calVerified = await verifyCertificate(calRead, { software: windowSoftware });
+      await act('export', { what: 'archive', path: join(out, 'f9-calibrated.msz') });
+      const calArchive = await readArchive(readFileSync(join(out, 'f9-calibrated.msz')));
+      const nodeCert = await writeCertificate(calArchive.ws, async (sha) => calArchive.sources.get(sha) ?? null, { software: windowSoftware });
+      const sameCert = Buffer.compare(Buffer.from(nodeCert.bytes), Buffer.from(calBytes)) === 0;
+      const shownReport = await act('report', { show: false });
+      const section = (md) => {
+        const at = md.indexOf('## Calibration, for research');
+        return at < 0 ? '' : md.slice(at, md.indexOf('\n## ', at + 5));
+      };
+      const sameSection = section(shownReport.data.markdown) !== '' && section(shownReport.data.markdown) === section(nodeCert.computed.report.markdown);
+      await act('export', { what: 'mavedb', run: 'Run 1', path: join(out, 'f9-calibrated-mavedb.zip') });
+      const depositFiles = await readZip(new Uint8Array(readFileSync(join(out, 'f9-calibrated-mavedb.zip'))));
+      const windowCalibrations = new TextDecoder().decode(depositFiles.get('score_calibrations.json'));
+      const run1 = calArchive.ws.runs.find((r) => r.name === 'Run 1');
+      const nodeDeposit = mavedbDeposit({ ws: calArchive.ws, run: run1, results: nodeCert.computed.results.get(run1.id), software: { version: windowSoftware.version }, calibrations: [...nodeCert.computed.detail.calibrations.values()].filter((o) => o.cal.run === run1.id) });
+      const sameDeposit = nodeDeposit.files.find((f) => f.name === 'score_calibrations.json')?.text === windowCalibrations;
+      const calNumbers = calRead.certificate.numbers.calibrations ?? [];
+      check('calibration in the record: a figure of the calibration\'s four plots made with add_figure_panel; the window\'s certificate (format 2: both calibrations\' numbers, the figure\'s drawings, the report) the same bytes as Node writes from the window\'s own archive, and verified in Node bit for bit; the report\'s calibration section and the MaveDB deposit\'s score calibrations (score_calibrations.json) as Node writes them',
+        `${calNumbers.length} calibrations certified, ${calRead.certificate.total} numbers, format ${calRead.certificate.version}; Node's certificate ${sameCert ? 'the same bytes' : 'different'}; verified in Node: ${calVerified.verdict}; the report's section ${sameSection ? 'Node\'s' : 'differs'}; score_calibrations.json ${sameDeposit ? 'Node\'s' : 'differs'}`,
+        calNumbers.length === 2 && calRead.certificate.version === 2 && sameCert && calVerified.verdict === 'verified' && calVerified.numbers.same === calRead.certificate.total && sameSection && sameDeposit
+        && calRead.certificate.numbers.figures.some((f) => f.name === 'Calibration' && f.panels.length === 4));
+      await act('set_figure', { figure: 'Calibration', delete: true });
+    }
     const listedCal = await act('calibrations', {});
     const focusedCal = await act('focus', { kind: 'calibration', name: 'Given' });
     const calInspector = await browser.eval(`document.querySelector('#inspector')?.textContent ?? ''`);

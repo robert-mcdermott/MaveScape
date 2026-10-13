@@ -194,9 +194,12 @@ ms_check_target <- function(accession = NULL, apply = NULL, target = NULL, ms = 
 #'
 #' What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and
 #' those left out, with why), the target (its sequence, or the transcript that names it), the
-#' columns of scores and counts, the experiment's keywords from the design's readout, and what
-#' MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy
-#' id). Writes nothing: export with what mavedb writes the package.
+#' columns of scores and counts, the experiment's keywords from the design's readout, the run's
+#' calibrations of the condition as MaveDB's score calibrations (research use: each class's
+#' range as abnormal, not specified or normal, its OddsPath and evidence strength), and what
+#' MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id,
+#' a calibration's threshold source). Writes nothing: export with what mavedb writes the
+#' package.
 #'
 #' @param condition A condition by name or number (from 1), when the design has more than one;
 #' the first if not given. Optional; a string.
@@ -1077,13 +1080,17 @@ ms_create_figure <- function(height_mm = NULL, name = NULL, size = NULL, text = 
 #' disagreement by position, a predictor's classes, or a map of either side or of the
 #' difference); a variant's evidence (its score and each replicate's with their intervals, its
 #' time course, or its distribution over the bins); a saved structure view (its figure panel,
-#' drawn at 4x on white and kept with the figure); or text. Placed below the panels already
-#' there unless placed; shown in the Figures view. Returns the panel's id and letter, and what
-#' it shows.
+#' drawn at 4x on white and kept with the figure); a calibration's plot, for research (each
+#' side's scores against the run's with the classes, the ROC or precision–recall curve with its
+#' bootstrap band and thresholds, or the likelihood ratio of a score with the evidence
+#' thresholds); or text. Placed below the panels already there unless placed; shown in the
+#' Figures view. Returns the panel's id and letter, and what it shows.
 #'
 #' @param a compare: the first side, as compare takes it; the pair compared last if not given.
 #' Optional; a string.
 #' @param b compare: the second side. Optional; a string.
+#' @param calibration calibration: the calibration, by name; the latest if not given. Optional;
+#' a string.
 #' @param color_by score (the default), se, replicates or input. Optional; a string.
 #' @param condition A condition by name or number (from 1), when the design has more than one;
 #' the first if not given. Optional; a string.
@@ -1093,14 +1100,15 @@ ms_create_figure <- function(height_mm = NULL, name = NULL, size = NULL, text = 
 #' @param finding qc: the finding, by id (qc_findings lists them) or title. Optional; a string.
 #' @param from The first position shown (the target's numbering). Optional; a whole number.
 #' @param height_mm Its height. Optional; a number.
-#' @param kind map (the default), qc, scores, compare, variant, structure or text. Optional; a
-#' string.
+#' @param kind map (the default), qc, scores, compare, variant, structure, calibration or text.
+#' Optional; a string.
 #' @param pair qc, replicate agreement: the pair of replicates drawn, from 1. Optional; a whole
 #' number.
 #' @param palette rdbu or puor. Optional; a string.
 #' @param plot What a scores panel shows (distribution, flow, volcano), a compare panel
-#' (agreement, bland-altman, positions, classes, map-first, map-second, map-difference) or a
-#' variant panel (evidence, time-course, bins). Optional; a string.
+#' (agreement, bland-altman, positions, classes, map-first, map-second, map-difference), a
+#' variant panel (evidence, time-course, bins) or a calibration panel (distribution, roc, pr,
+#' likelihood). Optional; a string.
 #' @param rows The order of the substitutions: biochemical, hydrophobicity or alphabetical.
 #' Optional; a string.
 #' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
@@ -1123,8 +1131,8 @@ ms_create_figure <- function(height_mm = NULL, name = NULL, size = NULL, text = 
 #' @param ms A connection from ms_connect() (default: the last one made).
 #' @return A mavescape_result: the message and the data MaveScape answered with.
 #' @export
-ms_add_figure_panel <- function(a = NULL, b = NULL, color_by = NULL, condition = NULL, contrast = NULL, figure = NULL, finding = NULL, from = NULL, height_mm = NULL, kind = NULL, pair = NULL, palette = NULL, plot = NULL, rows = NULL, run = NULL, scale = NULL, subject = NULL, text = NULL, to = NULL, tracks = NULL, variant = NULL, view = NULL, width_mm = NULL, x_mm = NULL, y_mm = NULL, ms = ms_default()) {
-  ms_call("add_figure_panel", a = a, b = b, color_by = color_by, condition = condition, contrast = contrast, figure = figure, finding = finding, from = from, height_mm = height_mm, kind = kind, pair = pair, palette = palette, plot = plot, rows = rows, run = run, scale = scale, subject = subject, text = text, to = to, tracks = .ms_array(tracks), variant = variant, view = view, width_mm = width_mm, x_mm = x_mm, y_mm = y_mm, ms = ms)
+ms_add_figure_panel <- function(a = NULL, b = NULL, calibration = NULL, color_by = NULL, condition = NULL, contrast = NULL, figure = NULL, finding = NULL, from = NULL, height_mm = NULL, kind = NULL, pair = NULL, palette = NULL, plot = NULL, rows = NULL, run = NULL, scale = NULL, subject = NULL, text = NULL, to = NULL, tracks = NULL, variant = NULL, view = NULL, width_mm = NULL, x_mm = NULL, y_mm = NULL, ms = ms_default()) {
+  ms_call("add_figure_panel", a = a, b = b, calibration = calibration, color_by = color_by, condition = condition, contrast = contrast, figure = figure, finding = finding, from = from, height_mm = height_mm, kind = kind, pair = pair, palette = palette, plot = plot, rows = rows, run = run, scale = scale, subject = subject, text = text, to = to, tracks = .ms_array(tracks), variant = variant, view = view, width_mm = width_mm, x_mm = x_mm, y_mm = y_mm, ms = ms)
 }
 
 #' Change or delete a figure

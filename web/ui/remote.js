@@ -359,6 +359,18 @@ export function installRemote(app) {
       if (!qcCharts(finding.plot, entry.qc, withDefaultThresholds(ws().qc?.thresholds)).charts.length) throw new ActionError(`The finding "${finding.title}" has no chart (it is a table, or there is nothing to draw).`);
       return { kind, subject: sub.run ? sub.run.id : 'counts', finding: finding.id, findingTitle: finding.title, ...(finding.plot === 'agreement' ? { pair: Math.max(0, Math.round(Number(args.pair ?? 1)) - 1) } : {}), h: 170 };
     }
+    if (kind === 'calibration') {
+      // Wave 8, slice 5: a calibration's plot, for research.
+      const all = ws().calibrations ?? [];
+      if (!all.length) throw new ActionError('There is no calibration to draw: make one with calibrate.');
+      const cal = args.calibration ? all.find((c) => c.name === choose(String(args.calibration), all.map((x) => x.name), 'calibration')) : all.at(-1);
+      const plot = plotOf('distribution');
+      if (plot === 'likelihood') {
+        const lr = await likelihoodReport(app, cal);
+        if (lr.problem) throw new ActionError(`"${cal.name}" has no likelihood ratios to draw: ${lr.problem}`);
+      }
+      return { kind, calibration: cal.id, plot, ...(plot === 'roc' || plot === 'pr' ? { w: 240, h: 220 } : { h: plot === 'likelihood' ? 170 : 150 }) };
+    }
     if (kind === 'scores') {
       const run = resolveRun(args.run);
       const { results } = await resultsOf(run);
@@ -1423,9 +1435,10 @@ export function installRemote(app) {
       const left = r.variants.leftOut.reduce((a, x) => a + x.count, 0);
       const message = [
         `A MaveDB deposit of ${run.name}${results.conditions.length > 1 ? ` (${r.condition})` : ''}: ${r.variants.exported} of ${r.variants.of} variants${left ? ` (${left} left out)` : ''}, the target ${r.target.targetAccession ? `named by ${r.target.targetAccession.accession}` : 'given by its sequence'}.`,
+        r.calibrations.length ? `Its calibrations as MaveDB's score calibrations, research use (score_calibrations.json): ${r.calibrations.map((c) => `"${c.name}"`).join(', ')}.` : '',
         r.missing.length ? `MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.text).join(' ')}` : 'Nothing MaveDB requires is missing.',
-      ].join(' ');
-      return { message, data: { run: run.name, condition: r.condition, conditions: results.conditions.map((c) => c.name), mode: r.mode, target: r.target, variants: r.variants, scored: r.scored, columns: r.columns, keywords: r.keywords, missing: r.missing, defaulted: r.defaulted, notes: r.notes, ready: r.ready, details: depositDetails(ws(), run).details } };
+      ].filter(Boolean).join(' ');
+      return { message, data: { run: run.name, condition: r.condition, conditions: results.conditions.map((c) => c.name), mode: r.mode, target: r.target, variants: r.variants, scored: r.scored, columns: r.columns, keywords: r.keywords, calibrations: r.calibrations, missing: r.missing, defaulted: r.defaulted, notes: r.notes, ready: r.ready, details: depositDetails(ws(), run).details } };
     },
 
     // Sets the MaveDB details (ws.deposit): the fields given replace the workspace's (an empty one
@@ -2411,6 +2424,7 @@ export function installRemote(app) {
           summary: diff.summary,
           changes: diff.changes,
           pairs: diff.pairs,
+          calibrations: diff.calibrations,
           words: result.words,
           ...(files.length ? { problems: [...from.problems, ...to.problems] } : {}),
         },

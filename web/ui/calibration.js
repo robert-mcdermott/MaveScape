@@ -5,41 +5,22 @@
 // control (remote.js) use these.
 
 import { addCalibration, removeCalibration } from '../lib/workspace.js';
-import { CALIBRATION_DEFAULTS, RULES, calibrationMetrics, classCounts, controlScores, publishedThresholds, scaleSide, threeFigures } from '../lib/calibration.js';
+import { CALIBRATION_DEFAULTS, RULES, calibrationMetrics, publishedThresholds, scaleSide, threeFigures } from '../lib/calibration.js';
+import { calibrationLikelihood, calibrationOutcome, calibrationSubjects, metricsOf, scoredControls as scoredOf, variantClasses } from '../lib/calibration-record.js';
 import { recordOfRun } from '../lib/mavedb-export.js';
-import { matchControls } from '../lib/controls.js';
-import { KIND } from '../lib/variants.js';
-import { calibrateScores, EVIDENCE, likelihoodSettings, MIN_CONTROLS } from '../lib/likelihood.js';
+import { likelihoodSettings } from '../lib/likelihood.js';
 import { ensureResults } from './run-results.js';
+
+export { variantClasses };
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-// The scored controls of a set in a run's condition: { P, B (their scores), keys: { P, B }, match,
-// view (the results the match indexes: a nucleotide run's protein view), condition (its name, when
-// the run has more than one) }.
+// The scored controls of a set in a run's condition (lib/calibration-record.js's scoredControls),
+// the run's scores computed first when no view has needed them.
 export async function scoredControls(app, set, run, condition = 0) {
   const entry = await ensureResults(app, run);
   if (!entry?.results) throw new Error(`${run.name}'s scores could not be computed: ${entry?.message ?? 'no results'}.`);
-  if (!entry.results.conditions[condition]) throw new Error(`${run.name} has no condition ${condition + 1}.`);
-  const match = matchControls(set, entry.results, condition);
-  const s = controlScores(set, match, condition);
-  return { P: s.P.scores, B: s.B.scores, keys: { P: s.P.keys, B: s.B.keys }, match, view: match.view, condition: entry.results.conditions.length > 1 ? entry.results.conditions[condition].name : null };
-}
-
-// The run's scored variants (its protein view) by kind and class: { missense, nonsense, synonymous,
-// all } each classCounts's.
-export function variantClasses(view, condition, side, thresholds) {
-  const score = view.conditions[condition]?.score;
-  const kinds = { missense: KIND.MISSENSE, nonsense: KIND.NONSENSE, synonymous: KIND.SYNONYMOUS };
-  const values = { missense: [], nonsense: [], synonymous: [], all: [] };
-  for (let i = 0; i < view.rows; i += 1) {
-    if (!Number.isFinite(score?.[i])) continue;
-    const k = view.variants.kind[i];
-    if (k === KIND.WT) continue;
-    values.all.push(score[i]);
-    for (const [name, kind] of Object.entries(kinds)) if (k === kind) values[name].push(score[i]);
-  }
-  return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, { ...classCounts(v, side, thresholds), values: v }]));
+  return scoredOf(set, run, entry.results, condition);
 }
 
 // The settings a calibration is made with, checked, from what a form or an agent gives:
@@ -111,90 +92,56 @@ function remember(cal, report) {
 }
 
 // A kept calibration's metrics, computed again from its run and control set (the same: the run's
-// results and the set do not change, and the bootstrap is seeded): { metrics, scored, where, set,
-// run, differs (when the thresholds computed again are not those kept: never, unless MaveScape's
-// computation changed since) }.
+// results and the set do not change, and the bootstrap is seeded): lib/calibration-record.js's
+// calibrationOutcome without the likelihood ratios ({ metrics, scored, where, set, run, differs
+// (when the thresholds computed again are not those kept: never, unless MaveScape's computation
+// changed since), warnings, limitations, classes }).
 export async function calibrationReport(app, cal) {
   const ws = app.store.ws;
-  const set = (ws.controlSets ?? []).find((c) => c.id === cal.controlSet);
-  const run = ws.runs.find((r) => r.id === cal.run);
-  if (!set || !run) throw new Error(`The calibration "${cal.name}" reads ${!set ? 'a control set' : 'a run'} the workspace no longer has.`);
+  const { set, run, problem } = calibrationSubjects(ws, cal);
+  if (problem) throw new Error(problem);
   const key = keyOf(cal);
   if (!reports.has(key)) {
     reports.set(key, (async () => {
       const scored = await scoredControls(app, set, run, cal.condition ?? 0);
-      const metrics = calibrationMetrics(scored.P, scored.B, { side: cal.side, rule: cal.rule, error: cal.error, abnormal: cal.thresholds.abnormal, normal: cal.thresholds.normal, samples: cal.bootstrap.samples, seed: cal.bootstrap.seed });
-      return { metrics, scored, where: scaleSide(cal.side, run.inputs.design, scored.P, scored.B) };
+      return { metrics: metricsOf(cal, scored), scored, where: scaleSide(cal.side, run.inputs.design, scored.P, scored.B) };
     })());
     reports.get(key).catch(() => reports.delete(key));
   }
   const report = await reports.get(key);
-  const same = (a, b) => (a === null && b === null) || Math.abs(a - b) <= 1e-12 * Math.max(1, Math.abs(b));
-  const differs = !same(report.metrics.thresholds.abnormal, cal.thresholds.abnormal) || !same(report.metrics.thresholds.normal, cal.thresholds.normal);
-  return { ...report, set, run, differs };
+  return calibrationOutcome(app.store.ws, cal, { set, run, scored: report.scored, metrics: report.metrics });
 }
 
 // --- Score-level likelihood ratios (slice 4) ----------------------------------------------------------
 
-// The rows acmgscaler is given for a calibration: every variant the run scores in the condition (its
-// protein view; not the wild type), in the run's order, each control with its side, the others
-// unlabeled. Returns { rows: [{ key, score, class, kind }] }.
-export function likelihoodRows(set, match, condition = 0) {
-  const view = match.view;
-  const score = view.conditions[condition]?.score;
-  const side = new Map();
-  set.labels.forEach((l, k) => { if (match.rows[k] >= 0) side.set(match.rows[k], l.side); });
-  const rows = [];
-  for (let i = 0; i < view.rows; i += 1) {
-    if (!Number.isFinite(score?.[i]) || view.variants.kind[i] === KIND.WT) continue;
-    rows.push({ key: view.variants.key[i], score: score[i], class: side.get(i) ?? 'U', kind: view.variants.kind[i] });
-  }
-  return rows;
-}
-
-// Counts of rows by evidence: { evidence: n }, in EVIDENCE's order.
-function evidenceCounts(rows, result, test) {
-  const out = Object.fromEntries(EVIDENCE.map((e) => [e, 0]));
-  rows.forEach((r, i) => { if (test(r) && result.rows[i]) out[result.rows[i].evidence] += 1; });
-  return out;
-}
-
 const likelihoods = new Map();
 
 // A calibration's score-level likelihood ratios, as acmgscaler computes them with the calibration's
-// seed and its likelihood settings (prior 0.1, c by acmgscaler's search, unless set): { result
-// (lib/likelihood.js's calibrateScores's), rows, counts: { P, B, missense, all }, settings } or {
-// problem } with fewer than 10 controls a side. Kept while the window is open.
+// seed and its likelihood settings (prior 0.1, c by acmgscaler's search, unless set): lib/
+// calibration-record.js's calibrationLikelihood ({ result, rows, counts: { P, B, missense, all },
+// settings } or { problem, settings }). Kept while the window is open.
 export async function likelihoodReport(app, cal) {
   const key = JSON.stringify([cal.controlSet, cal.run, cal.condition, cal.bootstrap.seed, cal.likelihood ?? null]);
   if (!likelihoods.has(key)) {
     likelihoods.set(key, (async () => {
-      const ws = app.store.ws;
-      const set = (ws.controlSets ?? []).find((c) => c.id === cal.controlSet);
-      const run = ws.runs.find((r) => r.id === cal.run);
-      if (!set || !run) throw new Error(`The calibration "${cal.name}" reads ${!set ? 'a control set' : 'a run'} the workspace no longer has.`);
+      const { set, run, problem } = calibrationSubjects(app.store.ws, cal);
+      if (problem) throw new Error(problem);
       const scored = await scoredControls(app, set, run, cal.condition ?? 0);
-      const settings = likelihoodSettings(cal.likelihood ?? {});
-      if (scored.P.length < MIN_CONTROLS || scored.B.length < MIN_CONTROLS) return { problem: `Score-level likelihood ratios need at least ${MIN_CONTROLS} P and ${MIN_CONTROLS} B controls scored (acmgscaler's minimum): ${run.name} scores ${scored.P.length} P and ${scored.B.length} B of "${set.name}".`, settings };
       // Let the page draw what it has before the second this takes.
       await new Promise((resolve) => setTimeout(resolve, 0));
-      const rows = likelihoodRows(set, scored.match, cal.condition ?? 0);
-      const result = calibrateScores(rows, { prior: settings.prior, pvst: settings.c, seed: cal.bootstrap.seed });
-      if (result.problem) return { problem: result.problem, settings };
-      return {
-        result, rows, settings,
-        counts: {
-          P: evidenceCounts(rows, result, (r) => r.class === 'P'),
-          B: evidenceCounts(rows, result, (r) => r.class === 'B'),
-          missense: evidenceCounts(rows, result, (r) => r.kind === KIND.MISSENSE),
-          all: evidenceCounts(rows, result, () => true),
-        },
-      };
+      return calibrationLikelihood(cal, set, scored);
     })());
     likelihoods.get(key).catch(() => likelihoods.delete(key));
     while (likelihoods.size > 12) likelihoods.delete(likelihoods.keys().next().value);
   }
   return likelihoods.get(key);
+}
+
+// A calibration with its likelihood ratios, as the report, figures and the deposit read it
+// (calibrationOutcome's).
+export async function calibrationWithLikelihood(app, cal) {
+  const o = await calibrationReport(app, cal);
+  return { ...o, likelihood: await likelihoodReport(app, cal) };
 }
 
 // --- Published calibrations (slice 4) ------------------------------------------------------------------

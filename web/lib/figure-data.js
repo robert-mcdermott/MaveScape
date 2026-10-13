@@ -13,6 +13,8 @@
 //   comparison(pair, filters, level, scale) → compareSides's result with its sides, or { error },
 //   tracks(run, model) → the run's tracks (unarranged),
 //   image(sha256) → { image: { width, height, rgba?, png }, metadata } or null,
+//   calibration(cal, { likelihood }) → lib/calibration-record.js's calibrationOutcome (optional:
+//     computed from the run's results when not given),
 // }
 
 import { buildMapModel } from './map-model.js';
@@ -26,6 +28,7 @@ import { NO_FILTERS } from './compare.js';
 import { qcInputsOf, qcSubjects } from './qc-subjects.js';
 import { PANEL_KEYWORD, pngTexts } from './structure-record.js';
 import { possessive } from './words.js';
+import { calibrationCharts, computeCalibration } from './calibration-record.js';
 
 const notRecomputed = (run, got) => ({ missing: `${possessive(run.name)} scores could not be recomputed${got?.message ? `: ${got.message}` : '.'}` });
 
@@ -121,7 +124,25 @@ async function structureData(ctx, panel) {
   return { image: got.image, title: view?.name ?? meta?.view?.name ?? null, description: `The structure ${meta?.structure?.name ?? ''}${view ? ` as the view "${view.name}" shows it` : ''}${what}.`.replace(/ {2,}/g, ' '), notes };
 }
 
-const RESOLVERS = { map: mapData, qc: qcData, scores: scoresData, compare: compareData, variant: variantData, structure: structureData };
+// A calibration panel's charts (wave 8, slice 5): the calibration computed again (its likelihood
+// ratios only for their plot) and drawn as the Calibrate view draws it.
+async function calibrationData(ctx, panel) {
+  const cal = (ctx.ws.calibrations ?? []).find((c) => c.id === panel.calibration);
+  if (!cal) return { missing: `The calibration ${panel.calibration} is no longer in the workspace.` };
+  const likelihood = panel.plot === 'likelihood';
+  let outcome;
+  if (ctx.calibration) outcome = await ctx.calibration(cal, { likelihood });
+  else {
+    const run = ctx.ws.runs.find((r) => r.id === cal.run);
+    if (!run) return { missing: `The run ${cal.run} is no longer in the workspace.` };
+    const got = await ctx.results(run);
+    if (!got?.results) return notRecomputed(run, got);
+    outcome = computeCalibration(ctx.ws, cal, got.results, { likelihood });
+  }
+  return calibrationCharts(outcome, panel.plot);
+}
+
+const RESOLVERS = { map: mapData, qc: qcData, scores: scoresData, compare: compareData, variant: variantData, structure: structureData, calibration: calibrationData };
 
 // Map(panel id → data) for every panel that needs data.
 export async function resolveFigure(ctx, fig) {

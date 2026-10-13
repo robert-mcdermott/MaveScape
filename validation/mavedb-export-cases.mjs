@@ -17,7 +17,10 @@ import { EXAMPLES } from '../web/lib/examples.js';
 import { MAVEDB_FILES, mavedbDeposit, readDeposit } from '../web/lib/mavedb-export.js';
 import { accessionTarget, countsDesign, readScoreSet, recordSummary, scoresDesign, targetsOf } from '../web/lib/mavedb.js';
 import { detectLayout, reviewImport } from '../web/lib/importer.js';
-import { addSource, addTarget, createWorkspace, setDesign } from '../web/lib/workspace.js';
+import { addControlSet, addSource, addTarget, createWorkspace, setDesign } from '../web/lib/workspace.js';
+import { makeControlSet, tableControls } from '../web/lib/controls.js';
+import { computeCalibration } from '../web/lib/calibration-record.js';
+import { calibrateInNode } from './record-cases.mjs';
 import { addRun, makeRun, runInputs } from '../web/lib/runs.js';
 import { defaultParameters, withDefaults } from '../web/lib/score.js';
 import { writeMethods } from '../web/lib/methods.js';
@@ -91,12 +94,13 @@ function workspace({ name, bytes, design, target, targetOrigin = null, origin = 
   return { ws, run, results: scored.results, table, findings };
 }
 
-// The deposit of a built workspace's run.
+// The deposit of a built workspace's run, with its calibrations computed again (wave 8, slice 5).
 function deposit(built, { condition = 0, counts = null } = {}) {
   const { ws, run, results, table, findings } = built;
   const published = run.inputs.design.model === 'scores';
   const methods = published ? null : writeMethods(ws, run, { findings, results });
-  const out = mavedbDeposit({ ws, run, results, condition, methods, tables: published ? { scores: table, counts } : {}, software: SOFTWARE });
+  const calibrations = (ws.calibrations ?? []).filter((c) => c.run === run.id).map((cal) => computeCalibration(ws, cal, results));
+  const out = mavedbDeposit({ ws, run, results, condition, methods, tables: published ? { scores: table, counts } : {}, software: SOFTWARE, calibrations });
   if (out.problem) throw new Error(out.problem);
   return out;
 }
@@ -108,6 +112,20 @@ function exampleCase(id, details) {
   const design = opened.design;
   const bytes = encoder.encode(tableText(opened.table));
   return workspace({ name: example.title, bytes, design, target: design.targets[0], deposit: details, parameters: opened.parameters });
+}
+
+// Factor IX's example calibrated (wave 8, slice 5): Run 1 against its ClinVar controls as a table
+// of labels (fixtures/controls/factor9-run1-controls.csv: the suite calibration's, still what the
+// example makes), the window's defaults, its calibration for MaveDB's score calibrations.
+function calibratedCase(details) {
+  const built = exampleCase('factor9', details);
+  const rows = readFileSync(new URL('./fixtures/controls/factor9-run1-controls.csv', import.meta.url), 'utf8').trim().split('\n').slice(1).map((l) => l.split(','));
+  const text = `variant,label\n${rows.map(([key, side]) => `${key},${side === 'P' ? 'pathogenic' : 'benign'}`).join('\n')}\n`;
+  const read = tableControls(text, built.run.inputs.design.targets[0], { numbering: 'target', kinds: ['missense'] });
+  const source = { kind: 'table', file: { fileName: 'factor9-run1-controls.csv', sha256: sha256(encoder.encode(text)), size: text.length }, citation: 'ClinVar\'s records of F9, at least one review star; MaveScape\'s validation', numbering: read.numbering };
+  const added = addControlSet(built.ws, makeControlSet({ name: 'ClinVar (table)', source, rules: { kinds: ['missense'] }, read }), NOW);
+  const set = added.ws.controlSets.find((c) => c.id === added.id);
+  return { ...built, ws: calibrateInNode(added.ws, set, built.run, built.results, { time: NOW }).ws };
 }
 
 // A table as CSV text (its cells as read), for an assembled or derived table.
@@ -154,6 +172,10 @@ export const DEPOSIT_CASES = [
   { id: 'grb2-sh3-incomplete', kind: 'no MaveDB details given: the abstract missing', expect: 'abstract', build: () => [deposit(exampleCase('grb2-sh3', null))] },
   { id: 'hsp90', kind: 'a time series, codons read at the protein level', build: () => [deposit(exampleCase('hsp90', DETAILS))] },
   { id: 'factor9', kind: 'sorted bins', build: () => [deposit(exampleCase('factor9', DETAILS))] },
+  // Wave 8, slice 5: a calibration as MaveDB's score calibration; without a publication, its
+  // threshold source missing.
+  { id: 'factor9-calibrated', kind: 'sorted bins, calibrated against ClinVar\'s controls', build: () => [deposit(calibratedCase({ ...DETAILS, publications: [{ db: 'Crossref', id: '10.1038/s41594-025-01582-w' }] }))] },
+  { id: 'factor9-calibrated-no-source', kind: 'calibrated, no publication: its threshold source missing', calibrationExpect: 'thresholdSources', build: () => [deposit(calibratedCase(DETAILS))] },
   { id: 'simulated', kind: 'simulated, two populations', build: () => [deposit(exampleCase('simulated', SIMULATED))] },
   { id: 'simulated-time-series', kind: 'simulated time series', build: () => [deposit(exampleCase('simulated-time-series', SIMULATED))] },
   { id: 'simulated-sort-seq', kind: 'simulated sorted bins', build: () => [deposit(exampleCase('simulated-sort-seq', SIMULATED))] },
@@ -202,7 +224,7 @@ export function depositPackages(only = null) {
   for (const c of DEPOSIT_CASES) {
     if (only && !only.includes(c.id)) continue;
     try {
-      for (const d of c.build()) out.push({ id: d.suffix ? `${c.id}-${d.suffix}` : c.id, kind: c.kind, expect: c.expect ?? 'ok', deposit: d });
+      for (const d of c.build()) out.push({ id: d.suffix ? `${c.id}-${d.suffix}` : c.id, kind: c.kind, expect: c.expect ?? 'ok', calibrationExpect: c.calibrationExpect ?? 'ok', deposit: d });
     } catch (error) {
       if (error instanceof MissingExampleData) missing.push(`${c.id}: ${error.message}`);
       else throw error;

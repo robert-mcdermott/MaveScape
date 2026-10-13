@@ -1,5 +1,5 @@
 {
- "generated": "2026-10-10",
+ "generated": "2026-10-13",
  "packages": {
   "bap1": {
    "experiment": {
@@ -435,6 +435,251 @@
     "count_columns.json": "559bef7d0167e3e6771c4bb301cd4977d0a3eda03cad8c0d27e23b889b770691",
     "counts.csv": "1e39e871a71febe151dca536e128f7861ceb93ab39e46f15b003436a87547048",
     "experiment.json": "e33023866e765c2a09a480f79a26bdcd2c1caf0cc68e23a0ebb7f4d1dd043827",
+    "score_columns.json": "adedb225df14829d248efb14a4e297d81e69d44e31ee456b4fa109ac37df9fd3",
+    "score_set.json": "e16b65588401eef1a600151593f0b36c701f25a85daecd36e1755fd7881de5cd",
+    "scores.csv": "94cc12994e24ab920eb016402de7c735387c4061597222a3ea7c6340d4d10def"
+   },
+   "names": {
+    "checked": 9682,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "t1-r1-bin1",
+      "t1-r1-bin2",
+      "t1-r1-bin3",
+      "t1-r1-bin4",
+      "t1-r2-bin1",
+      "t1-r2-bin2",
+      "t1-r2-bin3",
+      "t1-r2-bin4",
+      "t1-r3-bin1",
+      "t1-r3-bin2",
+      "t1-r3-bin3",
+      "t1-r3-bin4",
+      "t2-r1-bin1",
+      "t2-r1-bin2",
+      "t2-r1-bin3",
+      "t2-r1-bin4",
+      "t2-r2-bin1",
+      "t2-r2-bin2",
+      "t2-r2-bin3",
+      "t2-r2-bin4",
+      "t2-r3-bin1",
+      "t2-r3-bin2",
+      "t2-r3-bin3",
+      "t2-r3-bin4",
+      "t3-r1-bin1",
+      "t3-r1-bin2",
+      "t3-r1-bin3",
+      "t3-r1-bin4",
+      "t3-r2-bin1",
+      "t3-r2-bin2",
+      "t3-r2-bin3",
+      "t3-r2-bin4",
+      "t3-r3-bin1",
+      "t3-r3-bin2",
+      "t3-r3-bin3",
+      "t3-r3-bin4"
+     ],
+     "rows": 9682
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_t1-r1",
+      "SE_t1-r1",
+      "score_t1-r2",
+      "SE_t1-r2",
+      "score_t1-r3",
+      "SE_t1-r3",
+      "score_t2-r1",
+      "SE_t2-r1",
+      "score_t2-r2",
+      "SE_t2-r2",
+      "score_t2-r3",
+      "SE_t2-r3",
+      "score_t3-r1",
+      "SE_t3-r1",
+      "score_t3-r2",
+      "SE_t3-r2",
+      "score_t3-r3",
+      "SE_t3-r3",
+      "status",
+      "flags"
+     ],
+     "rows": 9682
+    }
+   }
+  },
+  "factor9-calibrated": {
+   "calibrations": [
+    {
+     "classes": [
+      {
+       "class": "abnormal",
+       "label": "Abnormal-like",
+       "n": 3212
+      },
+      {
+       "class": "not_specified",
+       "label": "Intermediate",
+       "n": 5722
+      },
+      {
+       "class": "normal",
+       "label": "WT-like",
+       "n": 80
+      }
+     ],
+     "ok": true,
+     "title": "Run 1 \u00b7 ClinVar (table)"
+    }
+   ],
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "559bef7d0167e3e6771c4bb301cd4977d0a3eda03cad8c0d27e23b889b770691",
+    "counts.csv": "1e39e871a71febe151dca536e128f7861ceb93ab39e46f15b003436a87547048",
+    "experiment.json": "ccb101afe14de9f5583c4c8ac5bf41b25450949f36a3453e920e560b1c475b6a",
+    "score_calibrations.json": "0d19f7a35fb7033098b560c4273f874a8c03166c96fd51fb832e578c5e0d1879",
+    "score_columns.json": "adedb225df14829d248efb14a4e297d81e69d44e31ee456b4fa109ac37df9fd3",
+    "score_set.json": "f7b443aa09b43756f3d18e9de32c6eb859658f72fd19bd65815fae4fc62ac064",
+    "scores.csv": "94cc12994e24ab920eb016402de7c735387c4061597222a3ea7c6340d4d10def"
+   },
+   "names": {
+    "checked": 9682,
+    "invalid": [],
+    "ok": true
+   },
+   "scoreSet": {
+    "ok": true
+   },
+   "tables": {
+    "counts": {
+     "columns": [
+      "hgvs_pro",
+      "t1-r1-bin1",
+      "t1-r1-bin2",
+      "t1-r1-bin3",
+      "t1-r1-bin4",
+      "t1-r2-bin1",
+      "t1-r2-bin2",
+      "t1-r2-bin3",
+      "t1-r2-bin4",
+      "t1-r3-bin1",
+      "t1-r3-bin2",
+      "t1-r3-bin3",
+      "t1-r3-bin4",
+      "t2-r1-bin1",
+      "t2-r1-bin2",
+      "t2-r1-bin3",
+      "t2-r1-bin4",
+      "t2-r2-bin1",
+      "t2-r2-bin2",
+      "t2-r2-bin3",
+      "t2-r2-bin4",
+      "t2-r3-bin1",
+      "t2-r3-bin2",
+      "t2-r3-bin3",
+      "t2-r3-bin4",
+      "t3-r1-bin1",
+      "t3-r1-bin2",
+      "t3-r1-bin3",
+      "t3-r1-bin4",
+      "t3-r2-bin1",
+      "t3-r2-bin2",
+      "t3-r2-bin3",
+      "t3-r2-bin4",
+      "t3-r3-bin1",
+      "t3-r3-bin2",
+      "t3-r3-bin3",
+      "t3-r3-bin4"
+     ],
+     "rows": 9682
+    },
+    "ok": true,
+    "scores": {
+     "columns": [
+      "hgvs_pro",
+      "score",
+      "SE",
+      "ci95_lower",
+      "ci95_upper",
+      "replicates",
+      "I2",
+      "score_t1-r1",
+      "SE_t1-r1",
+      "score_t1-r2",
+      "SE_t1-r2",
+      "score_t1-r3",
+      "SE_t1-r3",
+      "score_t2-r1",
+      "SE_t2-r1",
+      "score_t2-r2",
+      "SE_t2-r2",
+      "score_t2-r3",
+      "SE_t2-r3",
+      "score_t3-r1",
+      "SE_t3-r1",
+      "score_t3-r2",
+      "SE_t3-r2",
+      "score_t3-r3",
+      "SE_t3-r3",
+      "status",
+      "flags"
+     ],
+     "rows": 9682
+    }
+   }
+  },
+  "factor9-calibrated-no-source": {
+   "calibrations": [
+    {
+     "classes": [
+      {
+       "class": "abnormal",
+       "label": "Abnormal-like",
+       "n": 3212
+      },
+      {
+       "class": "not_specified",
+       "label": "Intermediate",
+       "n": 5722
+      },
+      {
+       "class": "normal",
+       "label": "WT-like",
+       "n": 80
+      }
+     ],
+     "error": "ValidationError: 1 validation error for ScoreCalibrationCreate\n  Value error, Calibrations with functional classifications must provide at least one threshold source publication. [type=value_error, input_value={'scoreSetUrn': 'tmp:0000...l', 'unstable-normal']}}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.10/v/value_error",
+     "ok": false,
+     "title": "Run 1 \u00b7 ClinVar (table)"
+    }
+   ],
+   "experiment": {
+    "ok": true
+   },
+   "files": {
+    "count_columns.json": "559bef7d0167e3e6771c4bb301cd4977d0a3eda03cad8c0d27e23b889b770691",
+    "counts.csv": "1e39e871a71febe151dca536e128f7861ceb93ab39e46f15b003436a87547048",
+    "experiment.json": "e33023866e765c2a09a480f79a26bdcd2c1caf0cc68e23a0ebb7f4d1dd043827",
+    "score_calibrations.json": "2af26e4c0a668c588bd7f127baf3d2b3c9c55fa63c77f626440e80f415faf906",
     "score_columns.json": "adedb225df14829d248efb14a4e297d81e69d44e31ee456b4fa109ac37df9fd3",
     "score_set.json": "e16b65588401eef1a600151593f0b36c701f25a85daecd36e1755fd7881de5cd",
     "scores.csv": "94cc12994e24ab920eb016402de7c735387c4061597222a3ea7c6340d4d10def"

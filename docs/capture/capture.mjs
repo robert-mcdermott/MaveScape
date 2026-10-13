@@ -956,6 +956,21 @@ const scenes = {
     await scrollTo('#calibration-likelihood');
     await sleep(500);
   },
+  // Calibration in the record (wave 8, slice 5): a figure of the same calibration's four plots (each
+  // side's scores, the ROC and precision–recall curves, the likelihood ratio of a score), made with
+  // add_figure_panel, in the Figures view.
+  async 'calibrate-figure'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await act('create_figure', { name: 'Figure 3', height_mm: 172 });
+    const places = { distribution: [2.8, 2.8, 168.4, 46], roc: [2.8, 51, 83, 72], pr: [88.2, 51, 83, 72], likelihood: [2.8, 125, 168.4, 44] };
+    for (const [plot, [x, y, w, h]] of Object.entries(places)) await act('add_figure_panel', { figure: 'Figure 3', kind: 'calibration', plot, x_mm: x, y_mm: y, width_mm: w, height_mm: h });
+    await act('set_mode', { mode: 'figures' });
+    await clearToasts();
+    await sleep(1500);
+  },
   // The guide's session on Hsp90: the design the agent proposed, in Experiment beside the person's,
   // and the strip reviewed.
   async 'agent-hsp90'() {
