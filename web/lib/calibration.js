@@ -31,6 +31,7 @@ import { quantileSorted } from './stats.js';
 import { createRandom } from './random.js';
 import { log } from './dmath.js';
 import { lossSide } from './readout.js';
+import { classOddsPath, STRENGTH_CODES, strengthWords } from './oddspath.js';
 
 export const RULES = ['error', 'youden', 'given'];
 export const SCALE_SIDES = ['below', 'above'];
@@ -439,7 +440,82 @@ export function calibrationMetrics(P, B, settings) {
     sensitivity: wilson(classes.P['abnormal-like'], P.length, level),
     specificity: wilson(classes.B['WT-like'], B.length, level),
     misses: { P: wilson(classes.P['WT-like'], P.length, level), B: wilson(classes.B['abnormal-like'], B.length, level) },
+    // Evidence strength, for research (slice 3): each class's OddsPath (lib/oddspath.js).
+    evidence: oddsPathEvidence(P, B, side, thresholds, s0),
   };
+}
+
+// --- Evidence strength (wave 8, slice 3) -------------------------------------------------------------
+
+const CLASS_OF = { abnormal: 'abnormal-like', normal: 'WT-like' };
+
+// Each class's OddsPath (Brnich et al. 2019, lib/oddspath.js) from the controls' classes under the
+// thresholds: { abnormal: { class, P, B, prior, posterior, oddsPath, observed, strength, contrary,
+// boot }, normal: … }. With samples, the stratified bootstrap of slice 2 (the same draws: P then B,
+// by the seeded generator) with the thresholds kept: each sample's OddsPath, its percentile
+// interval (of the samples where the class holds a control), the samples where it holds none, and
+// the share of the samples at each strength (Table 3), { code: share }.
+export function oddsPathEvidence(P, B, side, thresholds, { samples = 0, seed = CALIBRATION_DEFAULTS.seed, level = CALIBRATION_DEFAULTS.level } = {}) {
+  const classes = { P: classCounts(P, side, thresholds), B: classCounts(B, side, thresholds) };
+  const out = {};
+  for (const which of ['abnormal', 'normal']) {
+    const cls = CLASS_OF[which];
+    out[which] = { class: cls, ...classOddsPath(classes.P[cls], classes.B[cls], P.length, B.length, which), boot: null };
+  }
+  if (!(samples > 0) || P.length < 2 || B.length < 2) return out;
+  const random = createRandom(seed);
+  const drawn = { abnormal: [], normal: [] };
+  const tally = { abnormal: {}, normal: {} };
+  const empty = { abnormal: 0, normal: 0 };
+  const rp = new Float64Array(P.length);
+  const rb = new Float64Array(B.length);
+  for (let k = 0; k < samples; k += 1) {
+    for (let i = 0; i < P.length; i += 1) rp[i] = P[random.int(P.length)];
+    for (let i = 0; i < B.length; i += 1) rb[i] = B[random.int(B.length)];
+    const cp = classCounts(rp, side, thresholds);
+    const cb = classCounts(rb, side, thresholds);
+    for (const which of ['abnormal', 'normal']) {
+      const cls = CLASS_OF[which];
+      const x = classOddsPath(cp[cls], cb[cls], P.length, B.length, which);
+      if (x.oddsPath === null) {
+        empty[which] += 1;
+        continue;
+      }
+      drawn[which].push(x.oddsPath);
+      tally[which][x.strength.code] = (tally[which][x.strength.code] ?? 0) + 1;
+    }
+  }
+  for (const which of ['abnormal', 'normal']) {
+    const shares = {};
+    for (const code of STRENGTH_CODES) if (tally[which][code]) shares[code] = tally[which][code] / samples;
+    out[which].boot = { ...percentiles(drawn[which], level), empty: empty[which], strengths: shares, samples };
+  }
+  return out;
+}
+
+// What limits a calibration's evidence strength, beside it: [{ id, text }]. warnings: the control
+// set's circularity for the run (lib/controls.js); where: scaleSide's (the controls the other way).
+export function evidenceLimitations({ rule, metrics, warnings = [], where = null }) {
+  const out = [];
+  const e = metrics.evidence;
+  if (rule !== 'given') out.push({ id: 'same-controls', text: 'The thresholds were set on these controls, so the OddsPath they give on the same controls is optimistic: thresholds set elsewhere (a publication\'s, given) are measured fairly by them.' });
+  for (const which of ['abnormal', 'normal']) {
+    const x = e[which];
+    const name = `The ${x.class} class`;
+    const n = x.P + x.B;
+    if (!n) out.push({ id: `empty-${which}`, text: `No control is ${x.class}: the class has no OddsPath.` });
+    else if (n < 10) out.push({ id: `few-${which}`, text: `${name} holds ${n === 1 ? 'one control' : `${n} controls`} (${x.P} P, ${x.B} B): its OddsPath rests on ${n === 1 ? 'it' : 'them'}, with one control of the other side added (Brnich et al.).` });
+    if (x.contrary) out.push({ id: `contrary-${which}`, text: `${name}'s OddsPath (${g3(x.oddsPath)}) points the other way: it holds ${which === 'abnormal' ? 'fewer P controls than the set as a whole' : 'more P controls than the set as a whole'}, so it is no evidence for its side.` });
+    const own = x.boot?.strengths?.[x.strength?.code];
+    if (x.strength && x.boot && (own ?? 0) < 0.8) {
+      const others = Object.entries(x.boot.strengths).filter(([code]) => code !== x.strength.code).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([code, share]) => `${code === 'Indeterminate' ? 'indeterminate' : code} in ${pct(share)}`);
+      if (x.boot.empty) others.push(`no control in the class in ${pct(x.boot.empty / x.boot.samples)}`);
+      out.push({ id: `unstable-${which}`, text: `${name}'s strength, ${strengthWords(x.strength)}, holds in ${pct(own ?? 0)} of the bootstrap's samples (the thresholds kept): ${others.join(', ')}.` });
+    }
+  }
+  if (where?.against) out.push({ id: 'against', text: `The P controls' median is on the WT-like side of the B controls': the side of abnormal-like scores may be the other way.` });
+  for (const w of warnings) out.push({ id: `circular-${w.id}`, text: w.text });
+  return out;
 }
 
 // --- Words ---------------------------------------------------------------------------------------------

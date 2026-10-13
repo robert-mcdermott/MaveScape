@@ -933,6 +933,17 @@ const scenes = {
     await scrollTo('#calibration-scores');
     await sleep(500);
   },
+  // Evidence strength, for research (wave 8, slice 3): the same calibration's OddsPath for each class,
+  // with what it rests on and what limits it.
+  async 'calibrate-evidence'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await clearToasts();
+    await scrollTo('#calibration-evidence');
+    await sleep(500);
+  },
   // The guide's session on Hsp90: the design the agent proposed, in Experiment beside the person's,
   // and the strip reviewed.
   async 'agent-hsp90'() {

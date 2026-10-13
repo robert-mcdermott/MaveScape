@@ -604,8 +604,9 @@ run, condition, side, sideFrom, rule, error, thresholds, bootstrap, n }`:
   with replacement, as many as it has);
 - `n`: `{ P, B }`, the controls the run scored.
 
-Its metrics are not stored: the run, the set and the seeded bootstrap make them again the same (the
-view says so if the thresholds made again differ from those kept). Making and deleting one are in
+Its metrics are not stored, its evidence strength (each class's OddsPath, from MaveScape 0.8) with
+them: the run, the set and the seeded bootstrap make them again the same (the view says so if the
+thresholds made again differ from those kept). Making and deleting one are in
 the history (action `calibrate`); deleting its run or its control set deletes it.
 
 `checkpoints` (MaveScape 0.6, absent until the first) keeps the **checkpoints**: each a named

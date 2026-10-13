@@ -14,6 +14,6 @@ ms_calibrations(curves = NULL, name = NULL, ms = ms_default())
 A \code{mavescape_result}: the \code{message} and the \code{data} MaveScape answered with.
 }
 \description{
-The workspace's calibrations (research use): each one's run, control set, side, rule, thresholds and bootstrap; its AUC and precision-recall area with their intervals, the controls and the run's variants in each class, sensitivity and specificity with Wilson's intervals, and how far the bootstrap moves the thresholds. With curves, the ROC and precision-recall curves' points and bands.
+The workspace's calibrations (research use): each one's run, control set, side, rule, thresholds and bootstrap; its AUC and precision-recall area with their intervals, the controls and the run's variants in each class, sensitivity and specificity with Wilson's intervals, and how far the bootstrap moves the thresholds, and each class's OddsPath and evidence strength (research use) with what limits it. With curves, the ROC and precision-recall curves' points and bands.
 }
 \seealso{\code{\link{ms_call}}, which sends any action by its name (here \code{"calibrations"}).}

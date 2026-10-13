@@ -700,6 +700,16 @@
   "violations": []
  },
  {
+  "scene": "calibrate-evidence",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-evidence",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "agent-hsp90",
   "theme": "dark",
   "violations": []

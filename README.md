@@ -144,6 +144,8 @@ guides to every view, with screenshots.
   - Thresholds set by the controls or given, the functional classes they make (abnormal-like,
     intermediate, WT-like), sensitivity and specificity with Wilson's intervals, and how far a
     bootstrap moves the thresholds.
+  - Each class's evidence strength, for research: Brnich et al.'s OddsPath and their Table 3, with
+    what it rests on and what limits it.
 - **Figures.** A page at a journal's column width (85, 114 or 174 mm) or a slide, its panels any
   view's plots, added with **Add to figure**: the variant-effect map of a run (a range of
   positions, its tracks, color bar and key), a QC finding's charts, the scores by class, a
@@ -352,7 +354,7 @@ every file MaveScape reads and writes, and the start page has blank layouts to f
 | **Map** | The variant-effect map of a run or a difference between conditions, with tracks, selections and the inspector |
 | **Compare** | Two replicates, conditions, runs, score sets or a predictor; robustness to analysis choices |
 | **Structure** | The scores on a PDB entry, AlphaFold DB model or file, and the structure as evidence |
-| **Calibrate** | For research: control sets of variants whose effect is known, from ClinVar or a table, each label as its source gives it, matched to a run, with what may make them circular; how far the run's scores separate them, thresholds and the classes they make |
+| **Calibrate** | For research: control sets of variants whose effect is known, from ClinVar or a table, each label as its source gives it, matched to a run, with what may make them circular; how far the run's scores separate them, thresholds and the classes they make, and each class's evidence strength (OddsPath) |
 | **Figures** | Pages of panels (any view's plots, maps and text) for a paper or a talk, exported as SVG, PDF or PNG |
 | **Report** | The methods of the whole workspace with their references, written from its record, copied as Markdown or downloaded with its BibTeX; checkpoints, and what changed since one; certificates and review reports made and verified |
 
@@ -530,8 +532,8 @@ check, its tolerance and how the reference outputs were made are in
   at once under the name it gives. What you change in the window while an agent's action runs
   counts as the agent's.
 - The R and Python packages are installed from this repository, not from CRAN or PyPI.
-- Calibration has its control sets and how far the scores separate them; evidence strength
-  (OddsPath, likelihood ratios) is planned; see the [roadmap](mavescape-spec/roadmap.md).
+- Calibration has its control sets, how far the scores separate them and each class's OddsPath;
+  score-level likelihood ratios are planned; see the [roadmap](mavescape-spec/roadmap.md).
 
 ## Development
 

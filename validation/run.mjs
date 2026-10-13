@@ -142,7 +142,8 @@ import { CLINVAR } from '../web/lib/providers/clinvar.js';
 import { scoresTable } from '../web/lib/exports.js';
 import { addControlSet } from '../web/lib/workspace.js';
 import { addCalibration, removeControlSet } from '../web/lib/workspace.js';
-import { calibrationMetrics, thresholdWords } from '../web/lib/calibration.js';
+import { calibrationMetrics, evidenceLimitations, thresholdWords } from '../web/lib/calibration.js';
+import { classOddsPath, evidenceStrength } from '../web/lib/oddspath.js';
 import { bootstrapAgreement, exactAgreement, readCalibrationReference } from './calibration-cases.mjs';
 import { FACTOR9_CONTROLS, factor9Controls } from './fixtures/make-calibration.mjs';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
@@ -5180,6 +5181,40 @@ const suites = {
     const m = calibrationMetrics(P, B, { side: 'below', samples: 0 });
     check('calibration', 'factor IX\'s ClinVar controls as the example\'s Run 1 scores them (fixtures/controls/factor9-run1-controls.csv, which R reads): the file is what the example and the control set make now; their AUC, thresholds and classes', `${fixture === written ? 'the same' : 'differs: node validation/fixtures/make-calibration.mjs'}; ${P.length} P and ${B.length} B; AUC ${m.auc.auc.toFixed(3)} (${m.auc.low.toFixed(3)} to ${m.auc.high.toFixed(3)}); ${thresholdWords('below', m.thresholds)}; P ${JSON.stringify(m.classes.P)}, B ${JSON.stringify(m.classes.B)}`,
       fixture === written && P.length === 164 && B.length === 22 && relative13(m.auc.auc, f9.auc.auc) && m.classes.P['abnormal-like'] === f9.rules[0].P['abnormal-like'], 'the same; as R computes');
+
+    // OddsPath (slice 3) against Brnich et al. 2019's own spreadsheet (reference/brnich-oddspath.json,
+    // extract_brnich_oddspath.py): in its model the abnormal readouts are P controls and the normal
+    // ones B, the indeterminate control the one left over.
+    const brnich = JSON.parse(readFileSync(new URL('./reference/brnich-oddspath.json', import.meta.url), 'utf8'));
+    const modeled = [...brnich.tableS1.map((r) => ({ ...r, table: 'S1', indeterminate: 0 })), ...brnich.tableS2.map((r) => ({ ...r, table: 'S2' }))].map((r) => {
+      const pIndeterminate = r.P - r.abnormal;
+      const consistent = pIndeterminate >= 0 && r.indeterminate - pIndeterminate >= 0 && r.B - (r.indeterminate - pIndeterminate) === r.normal;
+      if (!consistent) return { ...r, consistent };
+      const a = classOddsPath(r.abnormal, 0, r.P, r.B, 'abnormal');
+      const n = classOddsPath(0, r.normal, r.P, r.B, 'normal');
+      return { ...r, consistent, a, n, worst: Math.max(Math.abs(a.oddsPath - r.abnormalOddsPath) / r.abnormalOddsPath, Math.abs(n.oddsPath - r.normalOddsPath) / r.normalOddsPath) };
+    });
+    const used = modeled.filter((r) => r.consistent);
+    const left = modeled.filter((r) => !r.consistent);
+    check('calibration', `OddsPath as Brnich et al. 2019's own spreadsheet computes it (Additional file 1): every row of Table S1 (a perfect binary readout, ${brnich.tableS1.length}) and Table S2 (one control indeterminate), both readouts', with one control of the other side added; a row whose counts cannot be (Table S2's row 63: 9 P and 1 B, yet 8 normal readouts and one indeterminate) left out and said`, `${used.length} rows, largest relative difference ${Math.max(...used.map((r) => r.worst)).toExponential(1)}; left out: ${left.map((r) => `${r.table} row ${r.row} (${r.P} P, ${r.B} B; ${r.abnormal} abnormal, ${r.indeterminate} indeterminate, ${r.normal} normal)`).join('; ')}`,
+      used.length === brnich.tableS1.length + brnich.tableS2.length - 1 && left.length === 1 && left[0].table === 'S2' && left[0].row === 63 && Math.max(...used.map((r) => r.worst)) < 1e-15, 'every row but the one that cannot be, to 1e-15');
+    // Table 3's strengths at and around each boundary, and what the paper says its tables show.
+    const boundaries = [[350, 'PS3'], [350.0001, 'PS3_very_strong'], [18.7, 'PS3_moderate'], [18.71, 'PS3'], [4.3, 'PS3_supporting'], [4.31, 'PS3_moderate'], [2.1, 'Indeterminate'], [2.11, 'PS3_supporting'], [0.48, 'Indeterminate'], [0.479, 'BS3_supporting'], [0.23, 'BS3_supporting'], [0.229, 'BS3_moderate'], [0.053, 'BS3_moderate'], [0.0529, 'BS3'], [0.0001, 'BS3']];
+    const wrongStrength = boundaries.filter(([x, code]) => evidenceStrength(x).code !== code);
+    const both = (rows, total) => rows.some((r) => r.total === total && r.consistent && r.a.oddsPath > 4.3 && r.n.oddsPath < 0.23);
+    const s2 = used.filter((r) => r.table === 'S2');
+    const totals = [...new Set(s2.map((r) => r.total))];
+    const fewest = totals.filter((t) => both(s2, t)).sort((a, b) => a - b)[0];
+    const figure1 = { a: classOddsPath(5, 0, 5, 6, 'abnormal'), n: classOddsPath(0, 5, 5, 6, 'normal') };
+    check('calibration', 'evidence strength as Brnich et al.\'s Table 3 gives it, at and around each threshold (each strictly: 2.1 itself indeterminate; no benign code beyond BS3); what the paper says its tables show: with one control indeterminate (Table S2), 11 controls are the fewest with which both readouts reach moderate; Figure 1\'s example (6 B, 5 P, one B indeterminate) PS3_moderate for an abnormal readout, as its caption says, and for a normal one OddsPath 0.24, BS3_supporting by Table 3 where the caption says BS3_moderate', `${boundaries.length - wrongStrength.length} of ${boundaries.length} boundaries${wrongStrength.length ? `; wrong: ${wrongStrength.map(([x]) => x).join(', ')}` : ''}; both moderate first with ${fewest} controls (totals ${totals.join(', ')}); Figure 1: ${figure1.a.oddsPath.toFixed(2)} ${figure1.a.strength.code}, ${figure1.n.oddsPath.toFixed(2)} ${figure1.n.strength.code}`,
+      !wrongStrength.length && fewest === 11 && figure1.a.strength.code === 'PS3_moderate' && Math.abs(figure1.n.oddsPath - 0.24) < 1e-12 && figure1.n.strength.code === 'BS3_supporting', 'Table 3; 11; PS3_moderate and BS3_supporting');
+    // A calibration's evidence: each class's counts through Brnich's formula; its limitations.
+    const ev = m.evidence;
+    const evMade = calibrationMetrics(P, B, { side: 'below' }).evidence;
+    const limits = evidenceLimitations({ rule: 'error', metrics: calibrationMetrics(P, B, { side: 'below' }) }).map((l) => l.id);
+    check('calibration', 'a calibration\'s evidence strength (factor IX\'s ClinVar controls in Run 1, the defaults): each class\'s OddsPath Brnich et al.\'s formula on the controls in it, its strength by Table 3, the seeded bootstrap with the thresholds kept the same twice; what limits it said: thresholds set on the same controls, a class of one control, a strength the bootstrap does not hold', `abnormal-like ${ev.abnormal.P} P, ${ev.abnormal.B} B: ${ev.abnormal.oddsPath.toFixed(2)} ${ev.abnormal.strength.code}; WT-like ${ev.normal.P} P, ${ev.normal.B} B: ${ev.normal.oddsPath.toFixed(3)} ${ev.normal.strength.code}, in ${(100 * evMade.normal.boot.strengths.BS3_moderate).toFixed(1)}% of the samples (no control in ${evMade.normal.boot.empty}); limitations ${limits.join(', ')}`,
+      ev.abnormal.P === m.classes.P['abnormal-like'] && ev.normal.B === m.classes.B['WT-like'] && Math.abs(ev.abnormal.oddsPath - (83 / 1) * (22 / 164)) < 1e-12 && ev.abnormal.strength.code === 'PS3_moderate' && Math.abs(ev.normal.oddsPath - 22 / 164) < 1e-12 && ev.normal.strength.code === 'BS3_moderate'
+      && JSON.stringify(evMade) === JSON.stringify(calibrationMetrics(P, B, { side: 'below' }).evidence) && limits.join() === 'same-controls,few-normal,unstable-normal', '11.1 PS3_moderate; 0.134 BS3_moderate; three limitations');
 
     // The record: through the workspace archive, in a checkpoint's diff, gone with its control set.
     const ex = openExampleInNode(exampleById('factor9'));

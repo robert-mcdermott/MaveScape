@@ -463,8 +463,9 @@ try {
     const after = await workspace();
     const mine = open.calibrations.find((c) => c.name === 'Mine');
     const agents = open.calibrations.find((c) => c.name === 'Theirs');
-    check('calibrations: the person\'s made at once; the agent\'s made at once and marked proposed, its metrics returned (the AUC and its intervals), calibrations listing both; its deleting the person\'s waiting; accepted, the agent\'s kept and marked accepted, the person\'s deleted', `${theirs.message.slice(0, 120)}…; ${listed.data.calibrations.map((c) => `${c.name}${c.proposed ? ', proposed' : ''}`).join('; ')}; ${held.message.slice(0, 60)}…; after: ${after.calibrations.map((c) => `${c.name}${c.proposed?.accepted ? ' (accepted)' : ''}`).join(', ')}`,
+    check('calibrations: the person\'s made at once; the agent\'s made at once and marked proposed, its metrics returned (the AUC and its intervals, each class\'s evidence strength and what limits it), calibrations listing both; its deleting the person\'s waiting; accepted, the agent\'s kept and marked accepted, the person\'s deleted', `${theirs.message.slice(0, 120)}…; ${listed.data.calibrations.map((c) => `${c.name}${c.proposed ? ', proposed' : ''}`).join('; ')}; ${held.message.slice(0, 60)}…; after: ${after.calibrations.map((c) => `${c.name}${c.proposed?.accepted ? ' (accepted)' : ''}`).join(', ')}`,
       !mine.proposed && agents.proposed?.by === AGENT && Number.isFinite(theirs.data.auc.auc) && Number.isFinite(theirs.data.auc.bootstrap.low) && Boolean(held.data.waiting)
+      && typeof theirs.data.evidence.abnormal.strength === 'string' && Array.isArray(theirs.data.limitations)
       && listed.data.calibrations.length === 2 && !listed.data.calibrations[0].proposed && listed.data.calibrations[1].proposed?.by === AGENT
       && after.calibrations.length === 1 && after.calibrations[0].name === 'Theirs' && Boolean(after.calibrations[0].proposed?.accepted) && !after.proposals);
   }

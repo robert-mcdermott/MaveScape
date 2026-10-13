@@ -991,9 +991,13 @@ class Tools:
         controls (rule error: at most `error` of either side's controls in the other side's class;
         youden: one threshold of the largest sensitivity + specificity) or given (abnormal and
         normal); each side's controls and the run's variants in each class; sensitivity (P
-        abnormal-like) and specificity (B WT-like) with Wilson's intervals; and how far the
-        bootstrap moves the thresholds. Kept with the workspace and shown in the Calibrate view;
-        nothing calibrates by itself.
+        abnormal-like) and specificity (B WT-like) with Wilson's intervals; how far the bootstrap
+        moves the thresholds; and the evidence strength each class would give, for research: its
+        OddsPath as Brnich et al. 2019 define it (one control of the other side added) with the
+        strength their Table 3 makes of it (PS3 for the abnormal-like class, BS3 for the WT-like),
+        the bootstrap's interval and strengths with the thresholds kept, and what limits it
+        (thresholds set on the same controls, few controls in a class, circularity). Kept with the
+        workspace and shown in the Calibrate view; nothing calibrates by itself.
 
         Args:
             abnormal: rule given: the abnormal threshold (a score at or beyond it, on the abnormal
@@ -1031,7 +1035,8 @@ class Tools:
         The workspace's calibrations (research use): each one's run, control set, side, rule,
         thresholds and bootstrap; its AUC and precision-recall area with their intervals, the
         controls and the run's variants in each class, sensitivity and specificity with Wilson's
-        intervals, and how far the bootstrap moves the thresholds. With curves, the ROC and
+        intervals, and how far the bootstrap moves the thresholds, and each class's OddsPath and
+        evidence strength (research use) with what limits it. With curves, the ROC and
         precision-recall curves' points and bands.
 
         Args:

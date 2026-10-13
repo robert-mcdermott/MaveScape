@@ -3509,6 +3509,43 @@ Decisions taken in planning (confirmed before slice 1):
 3. **OddsPath (K3, part 1).** Brnich et al. 2019's OddsPath for the classes a run's thresholds
    make, its evidence strengths with the thresholds checked against the paper (`research.md` marks
    them unverified), labeled research use, the controls' composition and limitations beside it.
+   - **Done.** `web/lib/oddspath.js`: a class's OddsPath as the paper's Methods and its own
+     spreadsheet compute it, P1 the P controls' share of all the controls scored (the intermediate
+     ones too, as Table S2 counts its indeterminate control), P2 their share in the class with
+     "exactly one misclassified variant" added (a B control to the abnormal-like class, a P control
+     to the WT-like), OddsPath = [P2 × (1 − P1)]/[(1 − P2) × P1]; the strength by Table 3, each
+     threshold strictly, toward the class's own side only (PS3 for abnormal-like, BS3 for WT-like,
+     benign up to strong); a class pointing the other way contrary, an empty class none.
+     `calibration.js`: each calibration's evidence, with the slice 2 bootstrap's draws and the
+     thresholds kept (each class's OddsPath interval, its share of samples at each strength, the
+     samples with no control in it), and what limits it (`evidenceLimitations`: thresholds set on
+     the same controls, few controls in a class, a strength the bootstrap does not hold, the
+     controls the other way, and the set's circularity for the run). Computed, not stored.
+     - **In Calibrate**: an evidence strength pane (research use said first; each class's controls,
+       OddsPath, strength and bootstrap; how it is computed), and beside it "Four things kept
+       apart" (the assay's separation, a variant's functional class, evidence strength, clinical
+       classification, which MaveScape does not make) and "What it rests on" (the controls, each
+       side's labels in the set, the limitations). `calibrate` and `calibrations` return it.
+     - **The paper checked** (`research.md`, §4, now verified): Table 3's thresholds as the research
+       had them. Two places read differently: Table S2's row 63 cannot be (9 P and 1 B, yet 8
+       normal readouts and one indeterminate), and Figure 1's example (6 B, 5 P, one B
+       indeterminate) gives 0.24 for a normal readout, BS3_supporting by Table 3 where the caption
+       says BS3_moderate. MaveScape applies Table 3 as printed. The "one misclassified variant"
+       is the paper's for modeled assays; MaveScape adds it to observed counts too, as the more
+       conservative reading, and returns the OddsPath without it (`observed`) beside it.
+     - On factor IX, by the defaults: the abnormal-like class (83 P, no B) 11.1, PS3_moderate, in
+       every sample; the WT-like class one B control, 0.134, BS3_moderate in 58% of the samples and
+       empty in 34%, which the limitations say. P1 is 0.88: one B control and the added P control
+       already fall far below the set's odds.
+     - Found by slice 3: nothing in the app; the paper's two discrepancies above.
+     - Validation: the suite `calibration` (9, +3: every row of Brnich et al.'s Tables S1 and S2,
+       read from their spreadsheet by `reference/extract_brnich_oddspath.py` into
+       `reference/brnich-oddspath.json`, but row 63, to 15 digits; Table 3 at and around each
+       threshold, 11 controls the fewest with which both readouts reach moderate, Figure 1's
+       example; factor IX's evidence and limitations); `oddspath.test.mjs` (3, by hand); the
+       remote session (its calibration's evidence as Node's, the pane drawn, the limitations); the
+       agent session (the agent's calibration returns its evidence); axe-core on the new scene
+       `calibrate-evidence`; the site's page *Calibration*.
 4. **Score-level likelihood ratios (K3, part 2).** acmgscaler's method, ported; Pejaver et al.
    2022's evidence strengths; equal to acmgscaler on its examples; Fayer et al. 2021's calibrations
    of BRCA1, TP53 and PTEN reproduced; MaveDB's published calibrations compared.

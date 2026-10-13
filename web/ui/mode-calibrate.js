@@ -16,8 +16,9 @@ import { attributed, clinvarAnnotation, controlsForRun, deleteControlSet, makeCl
 import { calibrationReport, deleteCalibration, makeCalibration, variantClasses } from './calibration.js';
 import { cssVar, legend, plotSVG, viewTheme } from './plots.js';
 import { controlStrips, prChart, rocChart } from '../lib/plots.js';
-import { KINDS, SIDES, controlSetWords } from '../lib/controls.js';
-import { CALIBRATION_DEFAULTS, CLASSES, MAX_SAMPLES, calibrationWords, percentText, ruleWords, threeFigures, thresholdWords } from '../lib/calibration.js';
+import { KINDS, SIDES, composition, controlSetWords } from '../lib/controls.js';
+import { CALIBRATION_DEFAULTS, CLASSES, MAX_SAMPLES, calibrationWords, evidenceLimitations, percentText, ruleWords, threeFigures, thresholdWords } from '../lib/calibration.js';
+import { STRENGTH_CODES, strengthWords } from '../lib/oddspath.js';
 import { lossSide, readoutOf } from '../lib/readout.js';
 import { heldRemoval, proposalOfItem } from '../lib/proposals.js';
 
@@ -210,7 +211,7 @@ export function mountCalibrateMode(app, container) {
 
   // A calibration's metrics (slice 2): what it was made with, the scores of each side against the
   // run's, the curves, the classes and how far the bootstrap moves the thresholds.
-  function calibrationPanes(cal, r) {
+  function calibrationPanes(cal, r, warnings = []) {
     const { metrics: m, scored, set, run } = r;
     const theme = { ...viewTheme(), P: cssVar('--track-pathogenic'), B: cssVar('--track-benign') };
     const frame = (width, height) => ({ width, height, text: 10, theme });
@@ -281,7 +282,51 @@ export function mountCalibrateMode(app, container) {
               h('tbody', ...(cal.rule === 'youden' ? [stabilityRow('the threshold', t.abnormal, s.abnormal, s.empty.abnormal)] : [stabilityRow('abnormal', t.abnormal, s.abnormal, s.empty.abnormal), stabilityRow('normal', t.normal, s.normal, s.empty.normal)])))),
             cal.rule === 'error' ? h('p.small', `In ${percentText(s.withoutZone)} of the ${count(m.bootstrap.samples)} samples the sides met with no intermediate zone${t.crossed ? ', as they do here' : ''}.`) : null,
             h('p.muted.small', `Each sample draws each side's controls again with replacement (seed ${m.bootstrap.seed}) and sets the thresholds by the same rule. A class some samples leave empty (no control far enough) is counted apart; the interval is of the others.`)));
-    return h('div', head, distributions, curves, h('div.calibration-grid', classesPane, stabilityPane));
+    return h('div', head, distributions, curves, h('div.calibration-grid', classesPane, stabilityPane), evidencePanes(cal, r, range, warnings));
+  }
+
+  // Evidence strength, for research (slice 3): each class's OddsPath (Brnich et al. 2019) and its
+  // strength by their Table 3, how the bootstrap moves it, and beside it what it rests on: the
+  // controls' composition and the calibration's limitations. Assay validity, a variant's functional
+  // class and clinical classification are said apart (K3).
+  function evidencePanes(cal, r, range, warnings) {
+    const { metrics: m, set, run } = r;
+    const ev = m.evidence;
+    const bootText = (x) => {
+      if (!x.boot) return '—';
+      const shares = STRENGTH_CODES.filter((code) => x.boot.strengths[code]).map((code) => `${code === 'Indeterminate' ? 'indeterminate' : code} ${percentText(x.boot.strengths[code])}`);
+      if (x.boot.empty) shares.push(`no control ${percentText(x.boot.empty / x.boot.samples)}`);
+      return `${x.boot.n ? `${g3(x.boot.low)} to ${g3(x.boot.high)}; ` : ''}${shares.join(', ')}`;
+    };
+    const row = (which) => {
+      const x = ev[which];
+      return h('tr', h('td', `${x.class} (${range[x.class]})`), h('td.r', String(x.P)), h('td.r', String(x.B)),
+        h('td.r', x.oddsPath === null ? '—' : g3(x.oddsPath)),
+        h('td', x.strength ? h('b', strengthWords(x.strength)) : 'no control'),
+        h('td.small', bootText(x)));
+    };
+    const c = composition(set);
+    const words = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${n}`).join(', ');
+    const limits = evidenceLimitations({ rule: cal.rule, metrics: m, warnings, where: r.where });
+    const strength = h('div.pane#calibration-evidence', h('h3', icon('gauge'), 'Evidence strength, for research (OddsPath)'),
+      h('div.callout.accent', { style: { margin: '0 0 10px' } }, icon('info'), h('span', 'For research use only: what each class would contribute as functional evidence (PS3 for the abnormal-like class, BS3 for the WT-like), by Brnich et al. (2019)\'s OddsPath and their Table 3. It is not a classification of any variant.')),
+      h('div.table-scroll', h('table.data.compact',
+        h('thead', h('tr', h('th', 'Class (scores)'), h('th.r', 'P'), h('th.r', 'B'), h('th.r', 'OddsPath'), h('th', 'Evidence strength'), h('th', `${m.bootstrap ? `Bootstrap (${m.bootstrap.samples.toLocaleString('en-US')}, thresholds kept)` : 'Bootstrap'}`))),
+        h('tbody', row('abnormal'), row('normal')))),
+      h('p.muted.small', `P1, the P controls' share, is ${m.n.P} of ${m.n.P + m.n.B} (${g3(ev.abnormal.prior)}); P2 is the P share in the class with one control of the other side added, as Brnich et al. add "exactly one misclassified variant to each set"; OddsPath = P2 (1 − P1) / ((1 − P2) P1). Strengths: beyond 2.1 PS3_supporting, 4.3 moderate, 18.7 strong (PS3), 350 very strong; below 0.48 BS3_supporting, 0.23 moderate, 0.053 strong (BS3); between, indeterminate.`));
+    // Four things said apart (K3).
+    const apart = h('div.pane', h('h3', icon('info'), 'Four things kept apart'),
+      h('p.small', { style: { marginTop: 0 } }, h('b', 'The assay: '), `how far its scores separate these controls, AUC ${g3(m.auc.auc)} (${g3(m.auc.low)} to ${g3(m.auc.high)}).`),
+      h('p.small', h('b', 'A variant\'s functional class: '), 'abnormal-like, intermediate or WT-like, by its score and these thresholds, in this assay.'),
+      h('p.small', h('b', 'Evidence strength: '), 'what a class would contribute as functional evidence (PS3 or BS3), for research.'),
+      h('p.small', h('b', 'Clinical classification: '), 'not made by MaveScape. Functional evidence is one input among many to a classification made elsewhere, by those qualified to make it.'));
+    const rests = h('div.pane', h('h3', icon('warning'), 'What it rests on'),
+      h('p.small', { style: { marginTop: 0 } }, `${m.n.P} P and ${m.n.B} B controls of "${set.name}" scored in ${run.name}${set.source.kind === 'clinvar' ? `: ClinVar's records on ${set.source.transcript}, at least ${set.rules.minStars} review star${set.rules.minStars === 1 ? '' : 's'}` : `: ${set.source.file.fileName}${set.source.citation ? `, ${set.source.citation}` : ''}`}; ${set.rules.kinds.join(', ')}.`),
+      h('p.small', h('b', 'P'), ` in the set (${c.P.total}): `, words(c.P.labels)), h('p.small', h('b', 'B'), ` in the set (${c.B.total}): `, words(c.B.labels)),
+      limits.length
+        ? h('div', ...limits.map((l) => h('div.callout.warn', { style: { margin: '0 0 6px' } }, icon('warning'), h('span', l.text))))
+        : h('p.callout.ok', icon('check'), h('span', 'Nothing MaveScape checks for limits it.')));
+    return h('div', { style: { marginTop: '14px' } }, strength, h('div.calibration-grid', apart, rests));
   }
 
   function labelsPane(set, run, report) {
@@ -333,7 +378,7 @@ export function mountCalibrateMode(app, container) {
         try {
           const r = await calibrationReport(app, cal);
           if (mine !== token) return;
-          waiting.replaceWith(calibrationPanes(cal, r));
+          waiting.replaceWith(calibrationPanes(cal, r, report.warnings));
         } catch (error) {
           if (mine !== token) return;
           waiting.replaceWith(h('div.callout.danger', icon('warning'), h('span', error.message)));

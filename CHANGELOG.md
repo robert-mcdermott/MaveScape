@@ -32,6 +32,17 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   with the workspace (its archive, history and checkpoints' diffs; deleted with its run or control
   set); an AI agent's are proposals. Remote actions and agent tools `calibrate`, `calibrations`,
   `remove_calibration`, and functions in the R and Python packages (60).
+- **Evidence strength, for research** (wave 8, slice 3): each class of a calibration says what it
+  would contribute as functional evidence, the abnormal-like class toward PS3 and the WT-like class
+  toward BS3: its OddsPath as Brnich et al. (Genome Medicine 2020;12:3) define it, with one control
+  of the other side added to each class as their model adds it, and the strength their Table 3
+  makes of it; the bootstrap's interval and its share of samples at each strength, the thresholds
+  kept. Beside it, what it rests on (the controls, each side's labels as their source gives them)
+  and what limits it: thresholds set on the same controls, few controls in a class, a strength the
+  bootstrap does not hold, circularity. The view says four things apart: how far the assay's scores
+  separate the controls, a variant's functional class, the evidence strength a class would give,
+  and a clinical classification, which MaveScape does not make. In `calibrate`'s and
+  `calibrations`' data.
 
 ### Fixed
 
@@ -56,6 +67,12 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   with their control set. The remote session calibrates in the window as Node does (every number,
   the seeded bootstrap's included); the agent session has an agent's calibration proposed and its
   deletion of the person's waiting, then accepted.
+- OddsPath against Brnich et al.'s own spreadsheet (`reference/brnich-oddspath.json`, extracted from
+  their Additional file 1 by `extract_brnich_oddspath.py`): every row of Tables S1 and S2 to 15
+  digits, but one whose counts cannot be (Table S2's row 63); Table 3 at each threshold; 11 controls
+  the fewest with which both readouts reach moderate, as the paper says. Figure 1's example gives
+  0.24 for a normal readout, BS3_supporting by Table 3, where its caption says BS3_moderate:
+  MaveScape applies Table 3 as printed.
 
 ## 0.7.0 (2026-10-12)
 

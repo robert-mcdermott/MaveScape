@@ -80,7 +80,8 @@ import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure,
 import { KINDS as CONTROL_KINDS, SIDES, composition as controlComposition, controlSetWords } from '../lib/controls.js';
 import { controlsForRun, deleteControlSet, makeClinVarControls, makeTableControls } from './controls.js';
 import { calibrationReport, deleteCalibration, makeCalibration, variantClasses } from './calibration.js';
-import { RULES as CALIBRATION_RULES, calibrationWords, percentText, ruleWords } from '../lib/calibration.js';
+import { RULES as CALIBRATION_RULES, calibrationWords, evidenceLimitations, percentText, ruleWords } from '../lib/calibration.js';
+import { strengthWords } from '../lib/oddspath.js';
 
 export class ActionError extends Error {}
 
@@ -610,6 +611,12 @@ export function installRemote(app) {
     };
   }
 
+  // Each class's OddsPath and strength in words.
+  const evidenceWords = (m) => ['abnormal', 'normal'].map((w) => {
+    const x = m.evidence[w];
+    return `${x.class} ${x.oddsPath === null ? 'none (no control in the class)' : `${x.oddsPath.toPrecision(3)}, ${strengthWords(x.strength)}`}`;
+  }).join('; ');
+
   // A calibration as data (wave 8, slice 2): what it was made with and its metrics; with curves,
   // the ROC and precision–recall curves' points and the bootstrap's bands.
   async function calibrationData(cal, withCurves) {
@@ -629,6 +636,12 @@ export function installRemote(app) {
       sensitivity: share(m.sensitivity), specificity: share(m.specificity), pCalledWtLike: share(m.misses.P), bCalledAbnormalLike: share(m.misses.B),
       noIntermediateZone: m.thresholds.abnormal === m.thresholds.normal,
       ...(m.thresholds.stability ? { stability: m.thresholds.stability } : {}),
+      // Evidence strength, for research (slice 3): each class's OddsPath (Brnich et al. 2019).
+      evidence: Object.fromEntries(['abnormal', 'normal'].map((which) => {
+        const x = m.evidence[which];
+        return [which, { class: x.class, P: x.P, B: x.B, prior: x.prior, posterior: x.posterior, oddsPath: x.oddsPath, observed: x.observed, strength: x.strength?.code ?? null, contrary: x.contrary, ...(x.boot ? { bootstrap: { low: x.boot.low, median: x.boot.median, high: x.boot.high, noControl: x.boot.empty, strengths: x.boot.strengths } } : {}) }];
+      })),
+      limitations: evidenceLimitations({ rule: cal.rule, metrics: m, warnings: (await controlsForRun(app, r.set, r.run)).warnings, where: r.where }).map((l) => ({ id: l.id, text: l.text })),
       ...(r.where.against ? { against: { medianP: r.where.against.P, medianB: r.where.against.B } } : {}),
       ...(r.differs ? { differs: m.thresholds } : {}),
       ...(withCurves ? {
@@ -1067,7 +1080,7 @@ export function installRemote(app) {
       const m = made.metrics;
       const warn = made.where.against ? ` The P controls' median (${m.distributions.P.median.toPrecision(3)}) is on the other side of the B controls' (${m.distributions.B.median.toPrecision(3)}): the side may be the other way (side: ${cal.side === 'below' ? 'above' : 'below'}).` : '';
       return {
-        message: `Calibrated ${calibrationWords(cal, { set, run, metrics: m })}. Sensitivity (P abnormal-like) ${percentText(m.sensitivity.p)}, specificity (B WT-like) ${percentText(m.specificity.p)}; thresholds: ${ruleWords(cal.rule, cal.error)}.${warn} For research: functional classes in this assay, not a classification of any variant.`,
+        message: `Calibrated ${calibrationWords(cal, { set, run, metrics: m })}. Sensitivity (P abnormal-like) ${percentText(m.sensitivity.p)}, specificity (B WT-like) ${percentText(m.specificity.p)}; thresholds: ${ruleWords(cal.rule, cal.error)}. Evidence strength, for research (OddsPath, Brnich et al. 2019): ${evidenceWords(m)}.${warn} ${data.limitations.length ? `Limitations: ${data.limitations.length} (data.limitations). ` : ''}For research: functional classes in this assay and the evidence they would give, not a classification of any variant.`,
         data,
       };
     },
@@ -1078,7 +1091,7 @@ export function installRemote(app) {
       const list = args.name ? [all.find((c) => c.name === choose(String(args.name), all.map((x) => x.name), 'calibration'))] : all;
       const items = [];
       for (const cal of list) items.push(await calibrationData(cal, args.curves === true));
-      const said = items.map((x) => `"${x.name}": ${x.run} against "${x.controlSet}", ${x.scored.P} P and ${x.scored.B} B scored; AUC ${x.auc.auc.toPrecision(3)} (${x.auc.low.toPrecision(3)} to ${x.auc.high.toPrecision(3)}); sensitivity ${percentText(x.sensitivity.p)}, specificity ${percentText(x.specificity.p)}.`);
+      const said = items.map((x) => `"${x.name}": ${x.run} against "${x.controlSet}", ${x.scored.P} P and ${x.scored.B} B scored; AUC ${x.auc.auc.toPrecision(3)} (${x.auc.low.toPrecision(3)} to ${x.auc.high.toPrecision(3)}); sensitivity ${percentText(x.sensitivity.p)}, specificity ${percentText(x.specificity.p)}; OddsPath ${['abnormal', 'normal'].map((w) => `${x.evidence[w].class} ${x.evidence[w].oddsPath === null ? 'none' : `${x.evidence[w].oddsPath.toPrecision(3)} (${x.evidence[w].strength})`}`).join(', ')}.`);
       return { message: list.length ? `${list.length === 1 ? '' : `${list.length} calibrations. `}${said.join(' ')}` : 'No calibration yet: make one with calibrate (after make_control_set).', data: { calibrations: items } };
     },
 
