@@ -92,8 +92,36 @@ const binary = join(temp, process.platform === 'win32' ? 'mavescape.exe' : 'mave
 let URL = '';
 let token = '';
 
+// An AI agent's scenes (wave 7, slice 5) start "mavescape mcp" instead and drive it over its stdin
+// and stdout as Claude Code does (an agent's client): their changes are proposals.
+const AGENT_SCENES = new Set(['agent-proposal', 'agent-accepted']);
+let rpc = null;
+
+function connectAgent(server) {
+  const pending = new Map();
+  let buffered = '';
+  let next = 1;
+  server.stdout.on('data', (chunk) => {
+    buffered += chunk;
+    for (let at = buffered.indexOf('\n'); at >= 0; at = buffered.indexOf('\n')) {
+      const line = buffered.slice(0, at);
+      buffered = buffered.slice(at + 1);
+      try {
+        const message = JSON.parse(line);
+        pending.get(message.id)?.(message);
+        pending.delete(message.id);
+      } catch { /* not a reply */ }
+    }
+  });
+  return (method, params) => new Promise((done) => {
+    const id = next++;
+    pending.set(id, done);
+    server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+  });
+}
+
 // Started per scene on an empty library, so that no scene sees another's workspaces.
-async function startMaveScape() {
+async function startMaveScape({ agent = false } = {}) {
   const library = mkdtempSync(join(temp, 'library-'));
   // UniProt's answers as the fetcher cached them (validation/fixtures/public-data), copied fresh,
   // so the scenes that check a target are answered from the cache and send nothing.
@@ -124,11 +152,15 @@ async function startMaveScape() {
       writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/${table}`, retrieved: '2026-10-11T16:30:00Z' }, null, 2)}\n`);
     }
   }
-  const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache, '--proteoscope', `${PROTEOSCOPE_PORT}-${PROTEOSCOPE_PORT + 4}`], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
+  const flags = ['--window', 'none', '--port', String(PORT), '--data-dir', library, '--cache-dir', cache, '--proteoscope', `${PROTEOSCOPE_PORT}-${PROTEOSCOPE_PORT + 4}`];
+  const server = spawn(binary, agent ? ['mcp', ...flags] : ['--remote-control', ...flags], { cwd: temp, stdio: [agent ? 'pipe' : 'ignore', 'pipe', agent ? 'pipe' : 'inherit'] });
   let output = '';
-  server.stdout.on('data', (chunk) => { output += chunk; });
+  // mcp's banner is on stderr: its stdout is the agent's.
+  (agent ? server.stderr : server.stdout).on('data', (chunk) => { output += chunk; });
+  rpc = agent ? connectAgent(server) : null;
   const stop = async () => {
     const exited = new Promise((done) => server.once('exit', done));
+    if (agent) server.stdin.end();
     server.kill();
     await Promise.race([exited, sleep(3000)]);
   };
@@ -137,6 +169,10 @@ async function startMaveScape() {
     if (address && existsSync(join(library, 'remote.json'))) {
       URL = `${address}/`;
       token = JSON.parse(readFileSync(join(library, 'remote.json'), 'utf8')).token;
+      if (agent) {
+        await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-code', title: 'Claude Code', version: '2' } });
+        server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+      }
       return { stop };
     }
     await sleep(100);
@@ -151,6 +187,13 @@ async function act(action, actionArgs = {}) {
   const result = await response.json();
   if (!result.ok) throw new Error(`${action}: ${result.message ?? result.error}`);
   return result;
+}
+
+// A tool called as an AI agent calls it, through mavescape mcp (the agent scenes).
+async function agent(name, toolArgs = {}) {
+  const reply = await rpc('tools/call', { name, arguments: toolArgs });
+  if (reply.error || reply.result?.isError) throw new Error(`${name}: ${reply.error?.message ?? reply.result.content[0].text}`);
+  return reply.result;
 }
 
 // --- Page helpers ---------------------------------------------------------------------------------
@@ -179,6 +222,20 @@ const scrollTo = async (selector, block = 'start') => {
 };
 const clearToasts = () => js(`document.querySelectorAll('.toast').forEach((t) => t.remove())`);
 const example = (id) => act('open_example', { id });
+
+// GRB2's example as Claude Code works on it (wave 7, slice 5): opened, scored again with the
+// DiMSum-compatible preset (whose error model carries the bottleneck at the inputs that QC finds),
+// the least tolerant core saved as a selection, the variance beyond counting acknowledged; the QC
+// view of Run 1. The run and the selection are made, marked proposed; the acknowledgement waits.
+async function agentOnGRB2() {
+  await agent('open_example', { id: 'grb2-sh3' });
+  await agent('score', { preset: 'dimsum' });
+  await agent('select_variants', { run: 'Run 1', query: 'lower and position 30-40', save_as: 'Core, lower' });
+  await agent('acknowledge_finding', { run: 'Run 1', finding: 'excess-variance', reason: 'The input bottleneck the Domainome\'s own analysis found; DiMSum\'s error model (Run 2) carries it' });
+  await agent('qc_findings', { run: 'Run 1', finding: 'variance' });
+  await waitFor(`Boolean(document.querySelector('.proposal-strip'))`);
+  await sleep(800);
+}
 
 // --- Scenes ---------------------------------------------------------------------------------------
 
@@ -828,6 +885,22 @@ const scenes = {
     await click('Details');
     await sleep(600);
   },
+  // An AI agent's proposal, reviewed (wave 7, slice 5): the strip above the view opened on what
+  // Claude Code made (a run and a selection, marked proposed in the dataset tree) and what waits
+  // for the person (the acknowledgement, which the QC view also shows).
+  async 'agent-proposal'() {
+    await agentOnGRB2();
+    await click('Review', '.proposal-strip button');
+    await sleep(600);
+  },
+  // The same proposal accepted: the history, newest first, with the person's decision, the
+  // acknowledgement applied under the agent's name, and what the agent did before it.
+  async 'agent-accepted'() {
+    await agentOnGRB2();
+    await click('Accept all', '.proposal-strip button');
+    await js(`window.mavescape.toggleDrawer(true, 'history')`);
+    await sleep(800);
+  },
   // The record: a run's exports, from the workflow strip.
   async record() {
     await example('grb2-sh3');
@@ -871,7 +944,7 @@ try {
       let maveScape = null;
       b = null;
       try {
-        maveScape = await startMaveScape();
+        maveScape = await startMaveScape({ agent: AGENT_SCENES.has(name) });
         // A Chrome that does not start (its debugging connection not opened) is started again
         // once; a scene that cannot start fails alone, not the scenes after it.
         b = await launch().catch(async () => {

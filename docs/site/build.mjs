@@ -51,7 +51,7 @@ const DOCS = [
   { group: 'Start', pages: [['index', 'Overview'], ['getting-started', 'Getting started'], ['examples', 'Examples'], ['opening-data', 'Opening your data'], ['public-data', 'Public data']] },
   { group: 'Analysis', pages: [['experiment', 'The design'], ['scoring', 'Scoring'], ['qc', 'Quality control'], ['map', 'The map and the inspector'], ['selections', 'Selections'], ['compare', 'Comparisons'], ['robustness', 'Robustness'], ['structure', 'Structures']] },
   { group: 'Results', pages: [['figures', 'Figures'], ['report', 'Report'], ['certificate', 'Certificates and review reports'], ['record', 'Exports and the record']] },
-  { group: 'Automate', pages: [['scripting', 'Remote control, headless runs and scripting']] },
+  { group: 'Automate', pages: [['scripting', 'Agents and scripts']] },
   { group: 'Reference', pages: [['troubleshooting', 'Troubleshooting']] },
 ];
 const ORDER = DOCS.flatMap((g) => g.pages);
@@ -160,7 +160,7 @@ function footer(root) {
             <li><a href="${root}docs/getting-started.html">Getting started</a></li>
             <li><a href="${root}docs/scoring.html">Scoring</a></li>
             <li><a href="${root}docs/qc.html">Quality control</a></li>
-            <li><a href="${root}docs/scripting.html">Scripting</a></li>
+            <li><a href="${root}docs/scripting.html">Agents and scripts</a></li>
             <li><a href="${root}docs/troubleshooting.html">Troubleshooting</a></li>
           </ul>
         </div>

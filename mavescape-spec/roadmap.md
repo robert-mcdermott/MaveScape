@@ -3201,6 +3201,27 @@ Decisions taken in planning (confirmed before slice 1):
    the tools with the PRD's names; proposals; privacy; how it works), the site's page *Agents and
    scripts* (with the scripting page's remote control and headless runs), the clients' READMEs, the
    README's highlights. Screenshot scenes: an agent's proposal in the window, reviewed.
+   - **Done.** `docs/MCP.md` completed: Claude Code (the user scope, Windows, checking it), Claude
+     Desktop (where its configuration is), Cursor, VS Code and Codex, the options (an agent gets a
+     MaveScape of its own), a check by hand (one `initialize` on stdin; tried), what to ask, the
+     results, proposals with both screenshots, troubleshooting, how it works.
+     - **The site's page is *Agents and scripts*** at its old address (`scripting.html`: other
+       pages, the README and the 0.6.0 site link to it), agents first (setting up, reviewing an
+       agent's changes with both screenshots, what an agent reads and sees), then R and Python,
+       remote control, the screenshots, headless runs, validate, export and verify; its anchors
+       kept. The menu, the footer, the documentation's overview and the home page's card name it.
+     - The README's section *AI agents and scripts*, agents first; the clients' README links to the
+       page.
+     - **Two scenes** (`docs/capture/capture.mjs`): `agent-proposal` and `agent-accepted` start
+       `mavescape mcp` and call its tools as Claude Code's client does (named Claude Code), on
+       GRB2: Run 2 scored with the DiMSum-compatible preset and a selection saved (made), the
+       variance beyond counting acknowledged (waiting); the strip reviewed above the QC view, and
+       then accepted, the history in the drawer. Captured alone, as a slice's own page may be.
+     - Found by slice 5:
+       - **The drawer's tab list held its close button** (axe-core, aria-required-children, critical):
+         no scene had captured the drawer open before. The tabs have a list of their own.
+     - Validation: the site builds (23 pages, 72 screenshots) with every link and anchor; axe-core
+       on both scenes in both themes, no violation.
 6. **Examples.** A Python notebook and an R script on the examples, executed in CI against a build:
    GRB2 opened, scored and checked, its scores against its record's published ones, a figure
    exported; DHFR's two conditions from R. An agent's session on Hsp90, its prompts and what it

@@ -7,7 +7,9 @@ export files) is performed by the open MaveScape window, so you watch the script
 change goes into the workspace's history. A script's changes apply as yours do; an AI agent's are
 proposals ([docs/MCP.md](../docs/MCP.md)).
 
-These packages make each action a function, with its arguments and help:
+These packages make each action a function, with its arguments and help (the website's
+[Agents and scripts](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html#python) shows
+them beside an agent's use of the same actions):
 
 | | R | Python |
 | --- | --- | --- |

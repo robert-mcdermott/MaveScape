@@ -51,6 +51,13 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   as files (`file =` on `render_map`, `render_structure` and `figures`), and an action refused is
   an error carrying MaveScape's reason. Installed from the repository; their version is
   MaveScape's.
+- **The guide to agents and scripts** (wave 7, slice 5): `docs/MCP.md` with the setup for Claude
+  Code, Claude Desktop, Cursor, VS Code and Codex, the options, a check that MaveScape answers,
+  what to ask, proposals with two screenshots (Claude Code's proposal reviewed, and accepted in the
+  history) and troubleshooting; the website's page *Agents and scripts* (formerly *Remote control,
+  headless runs and scripting*, at the same address), agents first; the README's section *AI agents
+  and scripts*. The documentation's capture has two scenes of an agent working through `mavescape
+  mcp`, as Claude Code's client does.
 
 ### Changed
 
@@ -62,6 +69,9 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
 
 ### Fixed
 
+- The drawer's tabs and its close button were in one tab list, which may hold only tabs (axe-core's
+  aria-required-children, found by the new scene with the drawer open): the tabs have a list of
+  their own.
 - The map's SVG and PNG export of a short target cut its key to the states (and could cut its
   title): the page was only as wide as the cells. It is at least as wide as both now.
 - A run focused in the dataset tree that is no longer in the workspace (undone, or an agent's

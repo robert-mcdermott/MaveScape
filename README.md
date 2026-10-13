@@ -46,7 +46,7 @@ guides to every view, with screenshots.
 - [Opening data](#opening-data)
 - [The views](#the-views)
 - [Command-line options](#command-line-options)
-- [Scripting and headless runs](#scripting-and-headless-runs)
+- [AI agents and scripts](#ai-agents-and-scripts)
 - [Validation](#validation)
 - [Privacy and security](#privacy-and-security)
 - [Limitations](#limitations)
@@ -356,7 +356,7 @@ The [user guide](https://robert-mcdermott.github.io/MaveScape/docs/) has a page 
 | `--keep-running` | Keep serving after the window is closed |
 | `mavescape urn:mavedb:…`, `--mavedb URN` | Open a MaveDB score set: its record, published scores and counts ([public data](https://robert-mcdermott.github.io/MaveScape/docs/public-data.html)) |
 | `--offline`, `--no-fetch`, `--cache-dir DIR` | Public data from the cache only, or none; where the cache is ([`docs/NETWORK.md`](docs/NETWORK.md)) |
-| `--remote-control` | Let programs on this computer drive the window ([scripting](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html)) |
+| `--remote-control` | Let programs on this computer drive the window ([agents and scripts](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html)) |
 | `--proteoscope off\|PORTS` | Do not look for a running Proteoscope, or look on other ports than its own 8765–8814 ([open in Proteoscope](https://robert-mcdermott.github.io/MaveScape/docs/structure.html#proteoscope)) |
 | `--version` | Print the version |
 | `mavescape run --design D --out DIR counts.csv` | Score without a window, write the files and `run.json` ([headless runs](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html#headless)) |
@@ -372,12 +372,22 @@ On macOS, Chrome (and Edge, Brave) keeps running after its last window is closed
 to stop MaveScape too. If that browser is already running when MaveScape starts, the window opens
 in it and MaveScape keeps serving until Ctrl+C.
 
-## Scripting and headless runs
+## AI agents and scripts
 
-With `--remote-control`, programs on this computer can drive the open window: open an example or
-files, draft the design, score, read the QC findings, select variants, render the map and export,
-each step visible in the window and undoable. MaveScape writes its address and a token (needed to
-read or write files) to `remote.json` in its data folder:
+`mavescape mcp` is a Model Context Protocol server: an AI agent such as Claude Code opens data,
+scores, reads the QC and the scores, looks at the map and structures as pictures, compares, makes
+figures and certifies in the window you watch. Its changes are proposals you accept or reject in a
+strip above the view; each is recorded with the agent's name ([`docs/MCP.md`](docs/MCP.md): Claude
+Code, Claude Desktop and other clients, the tools, proposals, troubleshooting):
+
+```sh
+claude mcp add mavescape -- ~/.local/bin/mavescape mcp
+```
+
+With `--remote-control`, programs on this computer drive the open window the same way: open an
+example or files, draft the design, score, read the QC findings, select variants, render the map
+and export, each step visible in the window and undoable. MaveScape writes its address and a token
+(needed to read or write files) to `remote.json` in its data folder:
 
 ```sh
 mavescape --remote-control
@@ -401,10 +411,7 @@ ms = mavescape.connect()
 ms.render_map(run="Run 1", file="grb2-map.png")
 ```
 
-The documentation's screenshots are made this way (`docs/capture/capture.mjs`). An AI agent calls
-the same actions as tools
-through `mavescape mcp` (for Claude Code, `claude mcp add mavescape -- ~/.local/bin/mavescape mcp`;
-[`docs/MCP.md`](docs/MCP.md)).
+The documentation's screenshots are made this way (`docs/capture/capture.mjs`).
 
 For pipelines, `mavescape run` does the whole analysis without a window (in a headless Chrome)
 and writes the scores, counts, QC, map, methods, provenance, the workspace archive and `run.json`

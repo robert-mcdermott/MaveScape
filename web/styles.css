@@ -693,6 +693,7 @@ table.matrix td.diag input { color: var(--text-3); }
 .drawer-tab:hover { color: var(--text); }
 .drawer-tab.active { color: var(--accent-text); border-bottom-color: var(--accent); }
 .drawer-head .spacer { flex: 1; }
+.drawer-tabs { display: flex; align-items: center; gap: 4px; }
 .drawer-resize { height: 5px; cursor: row-resize; flex: none; }
 .drawer-resize:hover { background: var(--accent-soft); }
 .history-list { list-style: none; margin: 0; padding: 0; font-size: 12px; }

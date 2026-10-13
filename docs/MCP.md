@@ -10,14 +10,24 @@ checkpoints, certify the analysis and export files.
 The agent works in the MaveScape window you see. Its changes are proposals: you accept or reject
 them there, and each is recorded in the workspace's history with the agent's name.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/agent-proposal-dark.webp">
+  <img alt="Claude Code's proposal in MaveScape: the strip above the QC view lists the run and the selection it made, marked proposed in the dataset tree, and the acknowledgement of a QC finding waiting for the person" src="images/agent-proposal-light.webp">
+</picture>
+
 - [Requirements](#requirements)
 - [Claude Code](#claude-code)
-- [Claude Desktop and other clients](#claude-desktop-and-other-clients)
+- [Claude Desktop](#claude-desktop)
+- [Other clients](#other-clients)
+- [Options](#options)
+- [Checking the connection](#checking-the-connection)
+- [What to ask](#what-to-ask)
 - [Tools](#tools)
 - [Proposals](#proposals)
 - [Files](#files)
 - [Scripts without an agent](#scripts-without-an-agent)
 - [Privacy and security](#privacy-and-security)
+- [Troubleshooting](#troubleshooting)
 - [How it works](#how-it-works)
 
 ## Requirements
@@ -35,14 +45,15 @@ them there, and each is recorded in the workspace's history with the agent's nam
 claude mcp add mavescape -- ~/.local/bin/mavescape mcp
 ```
 
-Then ask, for example:
+`--scope user` (after `add`) makes it available in every project, not this one only. On Windows:
+`claude mcp add mavescape -- "%LOCALAPPDATA%\Programs\MaveScape\mavescape.exe" mcp`. `claude mcp
+list` shows whether it connects, and `/mcp` in a session lists MaveScape's tools.
 
-> Open the GRB2 SH3 example, tell me what its quality control says about the scores, and which
-> positions of the domain tolerate no substitution. Then show me those positions on a structure.
+## Claude Desktop
 
-## Claude Desktop and other clients
-
-Add the server to the client's configuration (for Claude Desktop, `claude_desktop_config.json`):
+Add the server to `claude_desktop_config.json` (on macOS in `~/Library/Application Support/Claude/`,
+on Windows in `%APPDATA%\Claude\`; Settings, Developer, Edit Config opens it), with the full path
+to the program, and restart Claude Desktop:
 
 ```json
 {
@@ -55,11 +66,65 @@ Add the server to the client's configuration (for Claude Desktop, `claude_deskto
 }
 ```
 
+## Other clients
+
+Any client that starts an MCP server on stdio can use MaveScape: the command is the program's full
+path and the arguments are `mcp` and its options. For example:
+
+- Cursor, in `~/.cursor/mcp.json` (or a project's `.cursor/mcp.json`): the same `mcpServers` entry
+  as Claude Desktop's.
+- VS Code, in a project's `.vscode/mcp.json`:
+
+  ```json
+  { "servers": { "mavescape": { "type": "stdio", "command": "/Users/you/.local/bin/mavescape", "args": ["mcp"] } } }
+  ```
+
+- OpenAI's Codex CLI, in `~/.codex/config.toml`:
+
+  ```toml
+  [mcp_servers.mavescape]
+  command = "/Users/you/.local/bin/mavescape"
+  args = ["mcp"]
+  ```
+
+## Options
+
 Options go after `mcp`, as for `mavescape` itself: `--window app|browser|none` (how the window
-opens when a tool first needs it; with `none`, open the address MaveScape prints on stderr),
-`--port` (8820 by default, the next free one is used), `--data-dir` (the workspace library),
-`--offline` or `--no-fetch` (public data from the cache only, or none; [NETWORK.md](NETWORK.md))
-and `--proteoscope off`.
+opens when a tool first needs it, and again if it was closed; with `none`, open the address
+MaveScape prints on stderr), `--port` (8820 by default; the next free one is used), `--data-dir`
+(the workspace library), `--offline` or `--no-fetch` (public data from the cache only, or none;
+[NETWORK.md](NETWORK.md)) and `--proteoscope off`. A MaveScape you already run is not used: the
+agent gets a MaveScape of its own, with its own window, on the same library.
+
+## Checking the connection
+
+Without a client, one message on stdin shows that MaveScape answers as an MCP server (and it stops
+when the input ends):
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"check","version":"1"}}}' | ~/.local/bin/mavescape mcp --window none
+```
+
+The answer is one line of JSON naming the server (`"name":"mavescape"`), its version and its
+instructions to the agent; MaveScape's banner is on stderr.
+
+## What to ask
+
+The agent starts with `get_state` and works in the window as you would. For example:
+
+> Open the GRB2 SH3 example. What does its quality control say, and does the variance beyond
+> counting change how far I can trust the scores?
+
+> Score it again with the DiMSum-compatible preset and compare the two runs. Which variants change
+> class, and why?
+
+> Which positions of the domain tolerate no substitution? Show them on PDB 2VWF, and make a figure
+> of the map and the structure.
+
+> Give me the twenty lowest missense scores of Run 1 with their 95% intervals, as a table.
+
+> Write the methods, keep a checkpoint, and certify the workspace once I have accepted your
+> proposals.
 
 ## Tools
 
@@ -123,7 +188,9 @@ variant pathogenic or benign, and its instructions to the agent say so.
 
 An agent's changes are proposals, which you accept or reject in the window, in the strip above the
 view: who proposes how many changes, the list (**Review**), **Accept all** and **Reject all**. Each
-decision is in the history, and can be undone.
+decision is in the history, and can be undone. (The picture at the top shows Claude Code's
+proposal on the GRB2 example, reviewed: a run scored again and a selection, made at once and
+marked proposed; the acknowledgement of a QC finding, waiting.)
 
 - **Made at once, marked proposed**, so that the agent and you can use them meanwhile: tables and
   targets it opens into your workspace, runs it scores, selections it saves, tracks it adds beside
@@ -155,6 +222,11 @@ and you accepted; a checkpoint's diff names who proposed what was added.
 What the window commits while an agent's action runs counts as the agent's: the window performs one
 action at a time (most take less than a second), and the strip says when an agent is working.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/agent-accepted-dark.webp">
+  <img alt="The same proposal accepted: the workspace's history, newest first, with the person's decision, the acknowledgement applied under Claude Code's name, its proposal, the selection and the run" src="images/agent-accepted-light.webp">
+</picture>
+
 ## Files
 
 `open_files`, `verify_certificate`, `check_figure` and `diff` read files by absolute path; `export`,
@@ -171,7 +243,7 @@ function (`ms_scores()`, `ms.scores()`), with tables as data frames and pictures
 such as `{"action": "score", "args": {"preset": "enrich2"}, "client": "My pipeline"}` to
 `/api/remote/action`, with the token MaveScape prints (and writes to `remote.json` in its data
 folder) for actions that read or write files. See
-[Remote control](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html).
+[Agents and scripts](https://robert-mcdermott.github.io/MaveScape/docs/scripting.html).
 
 ## Privacy and security
 
@@ -183,11 +255,34 @@ folder) for actions that read or write files. See
 - Reading and writing files by path is open to the agent connected over stdio, which you started,
   and to scripts that hold the token (in `remote.json`, readable by you only).
 
+## Troubleshooting
+
+- **The client shows no MaveScape tools**: it could not start the program. Give the full path (the
+  client may not use your shell's `PATH`), check that `mavescape --version` says 0.7.0 or later,
+  and try the [check above](#checking-the-connection). Claude Code's `claude mcp list` and Claude
+  Desktop's logs say why a server did not start.
+- **No window opens**: MaveScape opens one when a tool first needs it. With `--window browser` it
+  opens in your default browser; with `--window none`, open the address on MaveScape's stderr (in
+  the client's logs). A window you close is opened again by the next tool that needs one.
+- **The agent says something waits for you**: a design, an acknowledgement, QC thresholds, a
+  target's check, MaveDB details or a removal it proposed; accept or reject it in the strip above
+  the view. `score` waits for a design it proposed; `certify` and `review_report` wait for every
+  proposal to be decided.
+- **A file was not written**: give an absolute path in a folder that exists; an existing file is
+  replaced only with `overwrite: true`.
+
 ## How it works
 
 `mavescape mcp` starts MaveScape with remote control on and speaks JSON-RPC on its stdin and stdout,
-one message per line; its banner and logs go to stderr. A tool call becomes an action that the
-program forwards to the open window over Server-Sent Events; the window performs it with the same
-code as its own controls and posts the result back. Actions reach the window one at a time. A call
-that takes long (scoring a large table, a robustness check, a certificate) reports progress while
-it runs, and the agent may cancel it. When the agent closes stdin, MaveScape stops.
+one message per line (protocol versions 2024-11-05 to 2025-11-25); its banner and logs go to
+stderr. A tool call becomes an action that the program forwards to the open window over
+Server-Sent Events; the window performs it with the same code as its own controls and posts the
+result back, its pictures turned into MCP images. Actions reach the window one at a time. What the
+action commits passes through the proposals (`web/lib/proposals.js`), which mark what it makes and
+hold what must wait for you. A call that takes long (scoring a large table, a robustness check, a
+certificate) reports progress while it runs, and the agent may cancel it. When the agent closes
+stdin, MaveScape stops.
+
+The tools, their arguments and hints are `actions.go`'s, the same list scripts and the
+[R and Python clients](../clients/) use; `validation/agent-session.mjs` calls every one over stdio
+as an agent's client does, and checks what each returns against Node and the window.
