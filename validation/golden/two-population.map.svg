@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="224" height="318" viewBox="0 0 224 318" font-family="Helvetica, Arial, sans-serif" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" width="516" height="318" viewBox="0 0 516 318" font-family="Helvetica, Arial, sans-serif" role="img">
 <title>Variant-effect map: Synthetic 20-codon target</title>
 <desc>Variant-effect map of Synthetic 20-codon target: 20 positions by 21 substitutions (the 20 amino acids and stop), 419 designed. 193 scored, 5 scored with low confidence, 2 filtered, 219 missing. Positions least tolerant of substitution (lowest median score): L15 -1.61, V11 -1.04, S2 -0.90, G4 -0.89, G20 -0.86. Most tolerant: M1 0.04, P13 -0.03, V16 -0.04, L18 -0.07, I14 -0.17. Colors run from -2.62 to 2.62, centered on the wild type (0.00).</desc>
 <defs><pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="4" height="4" fill="#c8c6c2"/><line x1="0" y1="0" x2="0" y2="4" stroke="#6e6c68" stroke-width="1.2"/></pattern></defs>
-<rect width="224" height="318" fill="#ffffff"/>
+<rect width="516" height="318" fill="#ffffff"/>
 <text x="34" y="15" font-size="12" font-weight="bold" fill="#171b26">Synthetic 20-codon target</text>
 <g>
 <rect x="34" y="22" width="7" height="10" fill="#f7f5f4"/>

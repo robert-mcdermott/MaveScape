@@ -24,7 +24,7 @@ import { parseTable } from '../web/lib/csv.js';
 import { makeRun, outputDigest, recordedInputs, runInputs } from '../web/lib/runs.js';
 import { DEFAULT_PARAMETERS, PRESETS, defaultParameters } from '../web/lib/score.js';
 import { FINGERPRINT } from '../web/lib/dmath.js';
-import { allExports, inputFor, recompute, scoreTable } from './roundtrip-cases.mjs';
+import { allExports, inputFor, recompute, scoreTable, tableMatchesCSV } from './roundtrip-cases.mjs';
 import { exampleById, simulatedExample } from '../web/lib/examples.js';
 import { assembleTable } from '../web/lib/assemble.js';
 import { barcodesCSV, differentialCSV, proteinScoresCSV } from '../web/lib/exports.js';
@@ -36,9 +36,9 @@ import { nodeTracks } from './annotation-cases.mjs';
 import { buildMapModel } from '../web/lib/map-model.js';
 import { mapSVG } from '../web/lib/map-svg.js';
 import { builtinTracks, tracksCSV } from '../web/lib/tracks.js';
-import { figureMarks, figureSVG } from '../web/lib/figures.js';
+import { figureMarks, figureSVG, pngSize } from '../web/lib/figures.js';
 import { buildManifest, checkManifest, embedSVG, panelDigests, readFigureManifest } from '../web/lib/figure-manifest.js';
-import { asPDFText, decodePNG, readPDF, readSVG, sameRects } from './figure-cases.mjs';
+import { asPDFText, decodeDataURL, decodePNG, mapCellsAgree, readPDF, readSVG, sameRects, svgWidth } from './figure-cases.mjs';
 import { qcPanelData } from '../web/lib/qc-plots.js';
 import { comparisonCharts, scoreCharts, variantCharts } from '../web/lib/view-plots.js';
 import { computeQC } from '../web/lib/qc.js';
@@ -316,6 +316,10 @@ try {
   const badTrack = await send('add_figure_panel', { figure: 'Figure 1', run: 'Run 1', tracks: ['no-such-track'] });
   check('add_figure_panel: a run\'s map with two of its tracks, lettered A, and a text panel B where placed; a range backward and an unknown track refused, saying why', `${mapPanel.message} ${textPanel.message} ${badPanel.message} ${badTrack.message}`, mapPanel.data.panel.letter === 'A' && mapPanel.data.panel.notes.length === 0 && textPanel.data.panel.letter === 'B' && textPanel.data.panel.xMm === 95 && !badPanel.ok && /after/.test(badPanel.message) && !badTrack.ok && /reference, coverage, effect, uncertainty/.test(badTrack.message));
   const figureDoc = (await act('figures', { figure: 'Figure 1' })).data.figures[0];
+  // Pictures for a script (wave 7, slice 3): data URLs it decodes or saves.
+  const sheet = (await act('figures', { figure: 'Figure 1', image: true, dpi: 72 })).data.figures[0];
+  const sheetPNG = decodeDataURL(sheet.image);
+  check('figures with image, for a script: the page as a PNG data URL at the dpi asked', `${sheetPNG.width} × ${sheetPNG.height} at ${sheet.dpi} dpi`, sheetPNG.width === pngSize(figureDoc.document, 72).width && sheetPNG.height === sheet.height && sheet.dpi === 72);
   const run1Node = scoreTable(exampleTable, workspaceDesign, DEFAULT_PARAMETERS).results;
   const run1Model = buildMapModel(run1Node, workspaceDesign, { condition: 0, colorBy: 'score', rowOrder: 'biochemical' });
   const run1Tracks = builtinTracks(run1Model);
@@ -377,6 +381,13 @@ try {
     provenance: 'provenance.json', methods: 'methods.md', references: 'references.bib', map: 'map.svg',
   };
   for (const [what, file] of Object.entries(files)) await act('export', { what, path: join(out, file), run: 'Run 1' });
+  // The run's provenance and its scores as data (wave 7, slice 3): what the files hold.
+  const inline = await act('provenance', { run: 'Run 1' });
+  const asTable = await act('scores', { run: 'Run 1', limit: 0 });
+  const tableAgrees = tableMatchesCSV(asTable.data.variants, asTable.data.columns, readFileSync(join(out, 'scores.csv'), 'utf8'));
+  const paged = await act('scores', { run: 'Run 1', limit: 10, offset: 1115, columns: ['hgvs_pro', 'score'] });
+  check('provenance and scores, for a script: the run\'s provenance as its file holds it, and its variants as a table holding every number of its scores file; the last page short', `${inline.message.slice(0, 80)}…; ${tableAgrees.numbers} numbers${tableAgrees.differ.length ? `: ${tableAgrees.differ.join('; ')}` : ''}; ${paged.message.slice(0, 80)}`,
+    JSON.stringify(inline.data) === JSON.stringify(JSON.parse(readFileSync(join(out, 'provenance.json'), 'utf8'))) && tableAgrees.ok && tableAgrees.numbers > 10000 && paged.data.returned === 6 && paged.data.total === 1121 && Object.keys(paged.data.variants[0]).join() === 'hgvs_pro,score');
   await act('export', { what: 'selection', selection: 'Position 36', path: join(out, 'selection.csv') });
   await act('export', { what: 'selection', selection: 'position 36', path: join(out, 'selection.json') });
   const archived = await act('export', { what: 'archive', path: join(out, 'grb2.msz') });
@@ -537,6 +548,13 @@ try {
   check('inspect_variant: a variant\'s annotations, from the tracks (AlphaMissense\'s score and class, the domain and strand it lies in, its conservation)', JSON.stringify(notes).slice(0, 300), /likely pathogenic/.test(notes.AlphaMissense ?? '') && /SH3 2/.test(notes['Domains and regions'] ?? '') && /Beta strand/.test(notes['Secondary structure'] ?? '') && /bits/.test(notes['Conservation (PDBe-KB)'] ?? ''));
   await act('export', { what: 'tracks', run: 'Run 1', path: join(out, 'tracks.csv') });
   await act('export', { what: 'map', run: 'Run 1', path: join(out, 'map-tracks.svg') });
+  // The map as a picture with the same tracks: the export's SVG drawn, every cell its color.
+  const mapPicture = await act('render_map', { run: 'Run 1', image: true, scale: 1 });
+  const tracksSVG = readFileSync(join(out, 'map-tracks.svg'), 'utf8');
+  const mapPNG = decodeDataURL(mapPicture.data.image);
+  const mapCells = mapCellsAgree(tracksSVG, mapPNG, 1);
+  check('render_map with image, for a script: the map with its tracks shown as a PNG data URL, the size of the map\'s SVG export and every cell its color there', `${mapPNG.width} × ${mapPNG.height}; tracks ${mapPicture.data.tracks.join(', ')}; ${mapCells.n} cells, ${mapCells.wrong.length} otherwise${mapCells.wrong.slice(0, 2).map((x) => `; ${x}`).join('')}`,
+    mapPNG.width === svgWidth(tracksSVG) && mapPicture.data.tracks.length > 2 && mapCells.n > 1000 && !mapCells.wrong.length);
   await act('export', { what: 'methods', run: 'Run 1', path: join(out, 'methods-tracks.md') });
   await act('export', { what: 'archive', path: join(out, 'grb2-tracks.msz') });
   const withTracks = await readArchive(readFileSync(join(out, 'grb2-tracks.msz')));
@@ -978,6 +996,12 @@ try {
   await act('export', { what: 'differential', path: join(out, 'differential.csv') });
   const diffWritten = readFileSync(join(out, 'differential.csv'), 'utf8');
   check('export differential.csv: the same bytes as Node\'s', `${diffWritten.length} bytes`, diffWritten === differentialCSV(twoNode, twoRecord));
+  const contrastTable = await act('scores', { contrast: 1, limit: 0 });
+  const suffix = `_${String(d0.id).replace(/[^A-Za-z0-9_.-]+/g, '_')}`;
+  const contrastAgrees = tableMatchesCSV(contrastTable.data.variants, contrastTable.data.columns, diffWritten, (c) => (c.endsWith(suffix) ? c.slice(0, -suffix.length) : c));
+  const lowest = await act('scores', { contrast: d0.name, sort: 'q', columns: ['hgvs_pro', 'difference', 'q'], limit: 3 });
+  check('scores with a contrast: its differential scores as a table, every number of differential.csv; sorted by q, the smallest first', `${contrastTable.data.contrast}: ${contrastAgrees.numbers} numbers${contrastAgrees.differ.length ? `: ${contrastAgrees.differ.join('; ')}` : ''}; q ${lowest.data.variants.map((v) => v.q).join(', ')}`,
+    contrastAgrees.ok && contrastAgrees.numbers > 5000 && contrastTable.data.contrast === d0.name && lowest.data.variants.every((v, i, all) => !i || all[i - 1].q <= v.q) && lowest.data.variants[0].q === Math.min(...contrastTable.data.variants.filter((v) => v.q !== null).map((v) => v.q)));
   const paired = await act('score', { parameters: { differential: 'paired' } });
   check('score with the paired differential: a second run, summarized per contrast', paired.message, paired.data.name === 'Run 2' && paired.data.differential?.[0]?.method === 'paired' && paired.data.differential[0].compared > 800);
 
@@ -1021,6 +1045,9 @@ try {
   await act('export', { what: 'protein-scores', path: join(out, 'protein_scores.csv') });
   const proteinWritten = readFileSync(join(out, 'protein_scores.csv'), 'utf8');
   check('export protein-scores: the run\'s scores at the protein level, the same bytes as Node\'s', `${proteinWritten.split('\n').length - 2} protein variants`, proteinWritten === proteinScoresCSV(view));
+  const proteinTable = await act('scores', { protein: true, limit: 0 });
+  const proteinAgrees = tableMatchesCSV(proteinTable.data.variants, proteinTable.data.columns, proteinWritten);
+  check('scores with protein: a nucleotide run\'s scores at the protein level as a table, every number of protein_scores.csv', `${proteinTable.data.total} protein variants, ${proteinAgrees.numbers} numbers${proteinAgrees.differ.length ? `: ${proteinAgrees.differ.join('; ')}` : ''}`, proteinAgrees.ok && proteinTable.data.level === 'protein' && proteinTable.data.total === view.rows);
   const tMap = await act('render_map', {});
   check('render_map of a nucleotide run: drawn at the protein level, saying how the variants were read and what is beside the map', tMap.message.slice(0, 200), /Read at the protein level/.test(JSON.stringify(tMap.data)) && /not on the map/.test(JSON.stringify(tMap.data)));
 
@@ -1254,6 +1281,9 @@ try {
   const structureSVG = readFileSync(join(out, 'structure-figure.svg'), 'utf8');
   const panelImage = Buffer.from(structureSVG.match(/href="data:image\/png;base64,([^"]+)"/)?.[1] ?? '', 'base64');
   const own4x = decodePNG(readFileSync(join(out, 'core-4x.png')));
+  // The Structure view as a picture (wave 7, slice 3): the same pixels as its panel export.
+  const viewPicture = decodeDataURL((await act('render_structure', { scale: 4, light: true })).data.image);
+  check('render_structure, for a script: the Structure view as a PNG data URL, pixel for pixel the panel structure-image exports', `${viewPicture.width} × ${viewPicture.height} against ${own4x.width} × ${own4x.height}`, viewPicture.width === own4x.width && viewPicture.height === own4x.height && Buffer.compare(Buffer.from(viewPicture.rgba), Buffer.from(own4x.rgba)) === 0);
   const inFigure = panelImage.length ? decodePNG(panelImage) : null;
   const imageField = structureFigure.data.panel.options.image;
   // Through the archive, opened again in the page (a copy: the workspace is in the library).

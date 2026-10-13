@@ -154,7 +154,7 @@ var remoteActions = []remoteAction{
 		"run":       runArg,
 		"condition": conditionArg,
 	}, "variant")},
-	{Name: "render_map", Description: "Shows a run's variant-effect map with the given settings and returns the map described in words, with the number of cells in each state.", InputSchema: schema(map[string]any{
+	{Name: "render_map", Description: "Shows a run's variant-effect map with the given settings and returns the map described in words, with the number of cells in each state; with image, the map as a picture too (a PNG as its SVG export draws it: on white, the position and row medians, the color scale, the tracks shown), for an agent to look at or a script to save.", InputSchema: schema(map[string]any{
 		"run":       runArg,
 		"condition": conditionArg,
 		"color_by":  textArg("score, se, replicates or input; differential for a run that compares conditions."),
@@ -162,6 +162,28 @@ var remoteActions = []remoteAction{
 		"rows":      textArg("The order of the substitutions: biochemical, hydrophobicity or alphabetical."),
 		"palette":   textArg("rdbu (blue loss, red gain) or puor (purple loss, orange gain)."),
 		"zoom":      map[string]any{"type": "number", "description": "Zoom factor from the fitted map (above 1 zooms in)."},
+		"image":     flagArg("Return the map as a picture (PNG) too."),
+		"scale":     map[string]any{"type": "number", "description": "The picture's size against the SVG export's, from 0.5 to 4 (2 if not given)."},
+		"from":      map[string]any{"type": "integer", "description": "The picture's first position (1 if not given)."},
+		"to":        map[string]any{"type": "integer", "description": "The picture's last position (the target's last if not given)."},
+	})},
+	{Name: "scores", Description: "A run's variants as a table, the columns of its scores export (scores.csv: hgvs_nt, hgvs_splice, hgvs_pro, score, SE, ci95_lower, ci95_upper, df, SE_scale, replicates, replicates_expected, status (scored, low confidence, filtered: the stage, not measured), flags (why low confidence), tau2, I2, leave_one_out, variant_as_written, variant_class, each replicate's score and SE); with contrast its differential scores (difference, SE, interval, t or z, p, q), with protein a nucleotide run's scores at the protein level. Numbers as numbers, null where the export has NA (df \"Inf\" when infinite). Only those at positions, of kinds, in a saved selection or matching a query; sorted by a column; 100 rows from offset unless limit says otherwise (0: every row).", InputSchema: schema(map[string]any{
+		"run":       runArg,
+		"condition": conditionArg,
+		"contrast":  textArg("With conditions compared: a contrast (its name, or its number from 1): its differential scores."),
+		"protein":   flagArg("A nucleotide run's scores at the protein level (protein_scores.csv)."),
+		"positions": map[string]any{"type": "array", "items": map[string]any{"type": []string{"string", "integer"}}, "description": "Positions on the target (the variants' own numbering), each a number or a stretch (\"30-40\")."},
+		"kinds":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Classes of variant: missense, nonsense, synonymous, and the others the table has."},
+		"selection": textArg("A saved selection, by name: its variants only."),
+		"query":     textArg("A query of the selection language (as select_variants takes it): the variants it selects only."),
+		"sort":      textArg("A column to sort by (\"score\"; \"-score\" for the highest first); rows without a value last."),
+		"columns":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The columns to give (all if not given)."},
+		"limit":     map[string]any{"type": "integer", "description": "The rows to give, from offset (100 if not given; 0 for all of them)."},
+		"offset":    map[string]any{"type": "integer", "description": "The rows to pass over first (0 if not given)."},
+	})},
+	{Name: "provenance", Description: "A run's provenance as its export (provenance.json) holds it: the table and its mapping by SHA-256, the design and its SHA-256, the parameters, the software, the output's SHA-256, the QC findings with their thresholds and acknowledgements, and the workspace's history head.", InputSchema: schema(map[string]any{
+		"run":       runArg,
+		"condition": conditionArg,
 	})},
 	{Name: "compare", Description: "Compares two sets of scores, as the Compare view does: each side a run's condition (its combined scores) or one of its replicates, of one run or two (a rescoring, or a MaveDB record's published scores against its counts scored again), or a MaveDB score set or a predictor kept beside the workspace (a score set named by its URN is fetched and kept first, without opening it; a predictor is AlphaMissense or a predictor's file added with add_track). Returns the compatibility report first (targets and coordinates, the level, the variants matched and those on one side only, the directions and scales, whether the two are independent; each item ok, qualified or blocked), then the agreement of the variants compared: Pearson's r and Spearman's rho, Lin's concordance and Bland–Altman's bias and limits of agreement (the last two only on one scale), each with its 95% interval; for two independent sides on one scale, the variants that differ beyond their uncertainty (each difference's z from both SEs, q by Benjamini–Hochberg) and the disagreement by position; a predictor by rank (Spearman's rho) and by its classes (the measured scores in each class, and the AUC of telling its benign from its pathogenic substitutions, with DeLong's interval). The scale: as scored, stated to be one, or each side rescaled by its own anchors (nonsense median 0 and wild type 1, or synonymous median 0 and nonsense median -1). Filters leave out variants of low confidence, large SE or few reads. Shows the Compare view; export with what comparison writes the variants compared or (a .json path) the report and statistics, comparison-positions the disagreement by position, comparison-map a map (SVG), comparison-classes a predictor by class.", InputSchema: schema(map[string]any{
 		"a":              textArg("The first side, by name: \"Run 1\", \"Run 1: Replicate 2\", \"Run 1: +Lon\", \"Published scores\", a score set or predictor kept beside the workspace (\"AlphaMissense: P62993\"), or a MaveDB score set's URN (fetched and kept when it is not yet). The pair shown, or a default (a run against the published scores, two replicates, two conditions, the last two runs), if not given."),
@@ -228,6 +250,11 @@ var remoteActions = []remoteAction{
 		"focus":        flagArg("Focus on the selected residues and their neighbors within 5 Å, side chains drawn (false: the whole structure again)."),
 		"fit":          flagArg("Fit the whole structure in the view."),
 	}), long: true},
+	{Name: "render_structure", Description: "The Structure view as a picture (a PNG), as a figure panel of it is drawn: the structure as shown, its coloring's legend below (legend: false, the view alone), with what it shows in words.", InputSchema: schema(map[string]any{
+		"scale":  map[string]any{"type": "number", "description": "The picture's size against the view's, from 0.5 to 4 (2 if not given)."},
+		"legend": flagArg("Draw the legend below the view (true if not given)."),
+		"light":  flagArg("On white, whatever the window's theme."),
+	})},
 	{Name: "structure_evidence", Description: "What the structure shown says of the target's positions: each one's structural class (buried, exposed, interface with the partners chosen, or a predicted model's disordered region), from DSSP's secondary structure, the solvent accessibility (DSSP's radii), StructureMap's exposure and the partners within 4 Å; the median scores of each class against the rest (Mann–Whitney, BH-adjusted); and whether the least tolerant positions lie closer together than positions of the same burial (pairs within 8 Å against seeded draws within strata of relative accessibility). The same are tracks beside the map (list_tracks).", InputSchema: schema(map[string]any{
 		"partner":  textArg("The partner the interface is read with: \"all\" (every other chain, ligand and ion but common additives, the default), or one by its id or label (\"chain:B\", \"ligand:A:1352:TLA\")."),
 		"fraction": map[string]any{"type": "number", "minimum": 0.05, "maximum": 0.5, "description": "The share of positions called least tolerant for the cluster test (0.2 if not given)."},
@@ -244,6 +271,8 @@ var remoteActions = []remoteAction{
 	}, "name")},
 	{Name: "figures", Description: "The workspace's figures: each one's name, page (millimeters, and the text size in points), its panels lettered in reading order with what each shows, where it is (millimeters) and anything wrong with it (text under 6 pt, a map too narrow for its positions, a run no longer there), and the figure described in words.", InputSchema: schema(map[string]any{
 		"figure": textArg("A figure by name or id: only that one."),
+		"image":  flagArg("Each page as a picture too: a PNG as export_figure writes it."),
+		"dpi":    map[string]any{"type": "number", "description": "The pictures' resolution, from 72 to 600 dots per inch (150 if not given)."},
 	})},
 	{Name: "create_figure", Description: "Makes a figure: an empty page at a journal's column width or a slide, shown in the Figures view. Add panels with add_figure_panel.", InputSchema: schema(map[string]any{
 		"name":      textArg("Its name (\"Figure 2\"); Figure n if not given."),
@@ -384,7 +413,10 @@ var actionHints = map[string]actionHint{
 	"proposals":             {title: "Proposals waiting for the person", kind: "read"},
 	"select_variants":       {title: "Select variants", kind: "edit"},
 	"inspect_variant":       {title: "A variant's evidence", kind: "read"},
-	"render_map":            {title: "The variant-effect map in words", kind: "read"},
+	"render_map":            {title: "The variant-effect map, in words and as a picture", kind: "read"},
+	"scores":                {title: "A run's variants as a table", kind: "read"},
+	"provenance":            {title: "A run's provenance", kind: "read"},
+	"render_structure":      {title: "The Structure view as a picture", kind: "read"},
 	"compare":               {title: "Compare two sets of scores", kind: "edit", public: true},
 	"check_robustness":      {title: "Check a run's robustness to analysis choices", kind: "edit"},
 	"list_tracks":           {title: "The tracks beside the map", kind: "read"},

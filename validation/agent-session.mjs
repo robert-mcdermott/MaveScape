@@ -32,7 +32,10 @@ import { buildMapModel } from '../web/lib/map-model.js';
 import { queryContext, selectByQuery } from '../web/lib/query.js';
 import { exampleById } from '../web/lib/examples.js';
 import { openExampleInNode } from './example-cases.mjs';
-import { scoreTable } from './roundtrip-cases.mjs';
+import { scoreTable, tableMatchesCSV } from './roundtrip-cases.mjs';
+import { decodePNG, mapCellsAgree as cellsAgree, svgWidth } from './figure-cases.mjs';
+import { mapSVG } from '../web/lib/map-svg.js';
+import { pngSize } from '../web/lib/figures.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8856;
@@ -97,6 +100,8 @@ function rpc(method, params) {
   });
 }
 
+// The pictures of a tool's result (MCP image content), decoded: [{ width, height, rgba }].
+const imagesOf = (r) => (r.result?.content ?? []).filter((c) => c.type === 'image').map((c) => decodePNG(Buffer.from(c.data, 'base64')));
 // A tool's call: { error } for a JSON-RPC error, else { isError, text, message, data }.
 const called = new Set();
 let hints = new Map();
@@ -136,7 +141,7 @@ try {
   const actions = (await (await fetch(`${URL}api/remote/tools`)).json()).tools;
   const same = listed.length === actions.length && listed.every((t, i) => t.name === actions[i].name && t.title === actions[i].title && t.description === actions[i].description && JSON.stringify(t.inputSchema) === JSON.stringify(actions[i].inputSchema));
   const kinds = { read: listed.filter((t) => t.annotations.readOnlyHint).length, destructive: listed.filter((t) => t.annotations.destructiveHint).length, public: listed.filter((t) => t.annotations.openWorldHint).length };
-  check('tools/list: the remote actions, in order, each with its title, description and arguments\' schema as GET /api/remote/tools gives them, and MCP\'s hints', `${listed.length} tools (${kinds.read} read only, ${kinds.destructive} destructive, ${kinds.public} reaching public data)`, same && listed.length === 51 && listed.every((t) => t.title && typeof t.annotations.readOnlyHint === 'boolean' && typeof t.annotations.openWorldHint === 'boolean'));
+  check('tools/list: the remote actions, in order, each with its title, description and arguments\' schema as GET /api/remote/tools gives them, and MCP\'s hints', `${listed.length} tools (${kinds.read} read only, ${kinds.destructive} destructive, ${kinds.public} reaching public data)`, same && listed.length === 54 && listed.every((t) => t.title && typeof t.annotations.readOnlyHint === 'boolean' && typeof t.annotations.openWorldHint === 'boolean'));
   const unknown = await rpc('tools/call', { name: 'no_such_tool', arguments: {} });
   const missing = await call('inspect_variant', {});
   const nonsense = await rpc('nonsense/method');
@@ -220,6 +225,34 @@ try {
   const model = buildMapModel(node.scored.results, node.design);
   const nodeKeys = selectByQuery(query, queryContext({ model, results: node.scored.results, design: node.design })).keys;
   check('inspect_variant and select_variants by query: p.Trp36Ala\'s score and the query\'s variants Node\'s', `${variant.data.score} (as the page rounds it) against ${nodeScore.toPrecision(6)}; ${selected.data.variants.length} variants against ${nodeKeys.length}`, Math.abs(variant.data.score - nodeScore) <= 5e-4 * Math.max(1, Math.abs(nodeScore)) && JSON.stringify(selected.data.variants) === JSON.stringify(nodeKeys));
+
+  // --- Results as data and pictures (wave 7, slice 3) ----------------------------------------
+  const table = await tool('scores', { run: 'Run 1', limit: 0 });
+  const run1Export = join(out, 'run1-scores.csv');
+  await tool('export', { what: 'scores', path: run1Export, run: 'Run 1' });
+  const matched = tableMatchesCSV(table.data.variants, table.data.columns, readFileSync(run1Export, 'utf8'));
+  const queried = await tool('scores', { run: 'Run 1', query, columns: ['hgvs_pro', 'score'], limit: 0 });
+  const top = await tool('scores', { run: 'Run 1', kinds: ['missense'], sort: '-score', columns: ['hgvs_pro', 'score', 'variant_class'], limit: 5 });
+  const highest = table.data.variants.filter((v) => v.variant_class === 'missense' && v.score !== null).map((v) => v.score).sort((a, b) => b - a).slice(0, 5);
+  const provenance = await tool('provenance', { run: 'Run 1' });
+  check('scores: Run 1\'s variants as a table holding every number of its scores export; a query\'s variants Node\'s; the highest missense scores first; provenance the run\'s, inline', `${table.data.total} rows, ${matched.numbers} numbers compared${matched.differ.length ? `: ${matched.differ.join('; ')}` : ''}; ${queried.data.total} by the query; the highest ${top.data.variants.map((v) => v.score).join(', ')}; ${provenance.message.slice(0, 70)}…`,
+    matched.ok && matched.numbers > 10000 && table.data.total === 1121 && JSON.stringify(queried.data.variants.map((v) => v.hgvs_pro).sort()) === JSON.stringify([...nodeKeys].sort())
+    && JSON.stringify(top.data.variants.map((v) => v.score)) === JSON.stringify(highest) && top.data.variants.every((v) => v.variant_class === 'missense') && top.data.total > 1000
+    && provenance.data.format === 'mavescape-provenance' && provenance.data.run.output.sha256 === run1.outputSha256);
+  const picture = await tool('render_map', { run: 'Run 1', color_by: 'score', rows: 'biochemical', palette: 'rdbu', image: true });
+  const nodeModel = buildMapModel(node.scored.results, node.design, { condition: 0, rowOrder: 'biochemical', colorBy: 'score' });
+  const fullSVG = mapSVG(nodeModel, { palette: 'rdbu', results: node.scored.results });
+  const [whole] = imagesOf(picture);
+  const full = whole ? cellsAgree(fullSVG, whole, 2) : { n: 0, wrong: [] };
+  const stretch = await tool('render_map', { run: 'Run 1', image: true, from: 30, to: 45, scale: 3 });
+  const stretchSVG = mapSVG(nodeModel, { palette: 'rdbu', results: node.scored.results, from: 30, to: 45 });
+  const [part] = imagesOf(stretch);
+  const partCells = part ? cellsAgree(stretchSVG, part, 3) : { n: 0, wrong: [] };
+  check('render_map with image: the map as a picture after the text, captioned, the data naming it by its number; decoded, its size the SVG export\'s at the scale asked, and every cell the color map-svg.js gives it (the whole map at 2×, positions 30–45 at 3×)', `${picture.result.content.map((c) => c.type).join(', ')}; ${whole?.width} × ${whole?.height}, ${full.n} cells, ${full.wrong.length} otherwise; positions 30–45 ${part?.width} × ${part?.height}, ${partCells.n} cells, ${partCells.wrong.length} otherwise${[...full.wrong, ...partCells.wrong].slice(0, 3).map((x) => `; ${x}`).join('')}`,
+    picture.data.image === 1 && picture.data.tracks.length === 0 && /^Image 1: The variant-effect map of Run 1/.test(picture.result.content[1]?.text ?? '') && imagesOf(picture).length === 1
+    && whole.width === svgWidth(fullSVG) * 2 && whole.width === picture.data.width && whole.height === picture.data.height && full.n > 1000 && !full.wrong.length
+    && part.width === svgWidth(stretchSVG) * 3 && partCells.n > 300 && !partCells.wrong.length);
+
   const map = await tool('render_map', { run: 'Run 1' });
   const compared = await tool('compare', { a: 'Run 1', b: 'Run 2' });
   // The same comparison asked of remote control: the agent gets the action's own result.
@@ -293,6 +326,10 @@ try {
   await tool('map_structure', {});
   await tool('set_structure', { color: 'median' });
   await tool('structure_evidence', {});
+  const shot = await tool('render_structure', {});
+  const [view] = imagesOf(shot);
+  const shades = view ? new Set(Array.from({ length: view.width * view.height }, (_, i) => (view.rgba[i * 4] << 16) | (view.rgba[i * 4 + 1] << 8) | view.rgba[i * 4 + 2])).size : 0;
+  check('render_structure: the Structure view as a picture with its legend (the median score), decoded at the size the data says', `${view?.width} × ${view?.height}, ${shades} colors; ${shot.message.slice(0, 90)}…`, view && view.width === shot.data.width && view.height === shot.data.height && shades > 100 && /^Median score/.test(shot.data.legend?.title ?? '') && shot.data.image === 1);
   await tool('save_structure_view', { name: 'Core' });
   await tool('open_structure_view', { name: 'Core' });
   const handoff = await call('proteoscope_link');
@@ -340,6 +377,11 @@ try {
   await tool('add_figure_panel', { figure: 'Figure 2', kind: 'structure', view: 'Core' });
   await tool('set_figure', { figure: 'Figure 2', name: 'GRB2' });
   await tool('figures', { figure: 'GRB2' });
+  const pages = await tool('figures', { figure: 'GRB2', image: true, dpi: 100 });
+  const [sheet] = imagesOf(pages);
+  const pageSize = pngSize(pages.data.figures[0].document, 100);
+  const inside = readFigureManifest(new Uint8Array(Buffer.from(pages.result.content.find((c) => c.type === 'image').data, 'base64')));
+  check('figures with image: the page as export_figure writes it, a PNG at the dpi asked, its manifest inside', `${sheet?.width} × ${sheet?.height} (${pageSize.width} × ${pageSize.height} at 100 dpi); manifest ${inside?.figure?.name}, ${inside?.panels?.length} panels`, sheet?.width === pageSize.width && sheet.height === pageSize.height && inside?.figure?.name === 'GRB2' && inside.panels.length === 2 && pages.data.figures[0].image === 1);
   const figurePath = join(out, 'grb2.svg');
   await tool('export_figure', { figure: 'GRB2', path: figurePath });
   const manifest = readFigureManifest(readFileSync(figurePath, 'utf8'));

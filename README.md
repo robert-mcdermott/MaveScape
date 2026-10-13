@@ -179,9 +179,9 @@ guides to every view, with screenshots.
   MaveDB, and six simulated with every true effect known, one with problems planted. Each has its
   question, guided steps and what to expect.
 - **AI agents.** `mavescape mcp` is a Model Context Protocol server: an agent such as Claude Code
-  opens data, scores, reads the QC, compares, makes figures and certifies in the window you watch.
-  Its changes are proposals you accept or reject there, each recorded with the agent's name
-  ([`docs/MCP.md`](docs/MCP.md)).
+  opens data, scores, reads the QC and the scores as tables, looks at the map, structures and
+  figures as pictures, compares and certifies in the window you watch. Its changes are proposals
+  you accept or reject there, each recorded with the agent's name ([`docs/MCP.md`](docs/MCP.md)).
 - **Scripting and headless runs.** With `--remote-control`, scripts on your computer drive the
   open window, each step visible and undoable. `mavescape run` does a whole analysis without a
   window and writes the same bytes every time.

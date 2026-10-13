@@ -3133,6 +3133,40 @@ Decisions taken in planning (confirmed before slice 1):
      `render_structure` (the Structure view), `figures` with `image` (a page as exported).
    - Validation: the table every number of the run's export; the pictures decoded, their size and
      the map's cells the colors of `map-svg.js`.
+   - **Done.** Three actions and two options, for agents and scripts alike:
+     - **`scores`**: a run's variants as rows with the columns of its scores export (the export's
+       code now builds a typed table, `scoresTable`, that both the CSV and the action read, so the
+       two cannot drift), or a contrast's (`differentialTable`, its columns without the contrast's
+       suffix) or a nucleotide run's at the protein level (`proteinScoresTable`); numbers as JSON
+       numbers, `null` for `NA`, a degrees of freedom's infinity `"Inf"` (`cellValue`). Rows as
+       objects, which pandas and jsonlite read as data frames and an agent reads aligned. Filtered
+       by positions (numbers or stretches), kinds, a saved selection or a query (the query step of
+       `select_variants`, now shared: `queryOn`), sorted by a column, chosen columns, 100 rows at a
+       time from `offset` (`limit: 0`, all).
+     - **`provenance`**, an action of its own rather than a part of every table: the run's
+       `provenance.json` as data.
+     - **Pictures** as data URLs in the data, with a caption beside each (`ui/images.js`):
+       `render_map` with `image` draws the map's SVG export (on white, with the tracks shown; the
+       window's canvas is themed and clipped to the view) at `scale` (2), of the whole target or
+       `from`–`to` (`mapSVG` takes a stretch); `render_structure` (new; the Structure view as its
+       figure panel draws it, with its legend, at 2× the view); `figures` with `image` (each page as
+       `export_figure` writes it, 150 dpi by default). `mavescape mcp` turns each data URL into MCP
+       image content after the text, captioned, the data naming it by its number with its fields
+       still in the page's order (`extractImages`; 8 MB of pictures a result, as CytoWeave's); a
+       script reads the data URLs (slice 4's clients write them to files).
+     - Found by slice 3:
+       - **A short target's map cut its own key to the states** in the SVG and PNG exports: the page
+         was as wide as the cells (the golden file's 20 positions: 224 points for a key that needs
+         about 500). It is as wide as its title and key at least; the golden file was rewritten,
+         only its width changed.
+     - Validation: the agent session (30 checks) and the script session (203): every table holds
+       every number of the export it mirrors (`tableMatchesCSV`: scores, a contrast, the protein
+       level), a query's variants Node's, the highest scores first when sorted, provenance its
+       file's JSON; the map's picture decoded at the SVG's size times its scale, every cell the
+       color of `map-svg.js` (`mapCellsAgree`: the whole map at 2×, positions 30–45 at 3×, with
+       tracks at 1×); the Structure view's picture pixel for pixel the `structure-image` export at
+       4×; a figure page at the dpi asked, its manifest inside. Go: `TestMCPPicturesBecomeImageContent`;
+       unit tests of the map's stretch and of the table's values.
 4. **Python and R clients (M5).** `clients/tools.json`, written from `actions.go` (a Go test keeps
    them equal; `-update`), and `clients/generate.mjs` (CytoWeave's) writing a function for each
    action with its help: a Python package `mavescape` (the standard library; pandas for data

@@ -178,3 +178,25 @@ export function decodePNG(bytes) {
   }
   return { width, height, rgba };
 }
+
+// Whether a picture of the map has every cell of the map's SVG (lib/map-svg.js) in its color (wave
+// 7, slice 3): each cell's center at the picture's scale (missing cells, with a dot at their
+// center, and filtered ones, hatched, left aside). { n (cells compared), wrong: [text] }.
+export function mapCellsAgree(svg, png, scale) {
+  const wrong = [];
+  let n = 0;
+  for (const m of svg.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="(#[0-9a-f]{6})"><title>([^<]*)<\/title>/g)) {
+    if (/missing/.test(m[6])) continue;
+    const [x, y, w, h] = m.slice(1, 5).map(Number);
+    const at = (Math.floor((y + h / 2) * scale) * png.width + Math.floor((x + w / 2) * scale)) * 4;
+    const hex = `#${[0, 1, 2].map((k) => png.rgba[at + k].toString(16).padStart(2, '0')).join('')}`;
+    n += 1;
+    if (hex !== m[5]) wrong.push(`${m[6]} ${hex}, not ${m[5]}`);
+  }
+  return { n, wrong };
+}
+
+export const svgWidth = (svg) => Number(/width="(\d+(?:\.\d+)?)"/.exec(svg)[1]);
+
+// A data URL's PNG, decoded.
+export const decodeDataURL = (url) => decodePNG(Buffer.from(String(url).replace(/^data:image\/png;base64,/, ''), 'base64'));

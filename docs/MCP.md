@@ -74,10 +74,10 @@ PDB, AlphaFold DB) through the program.
 | The workspace and data | `get_state` (start here), `new_workspace`, `open_example`, `open_files`, `search_mavedb`, `open_mavedb`, `check_target`, `set_mode`, `focus` |
 | Design and scoring | `draft_design`, `set_design`, `check`, `score`, `reproduce_run` |
 | Quality control | `qc_findings`, `acknowledge_finding`, `set_qc_thresholds` |
-| Results | `inspect_variant`, `render_map`, `select_variants`, `compare`, `check_robustness` |
+| Results | `inspect_variant`, `scores` (a run's variants as a table), `provenance`, `render_map` (in words, and with `image` as a picture), `select_variants`, `compare`, `check_robustness` |
 | Tracks beside the map | `list_tracks`, `add_track`, `set_track`, `remove_track` |
-| Structures | `find_structures`, `open_structure`, `map_structure`, `set_structure`, `structure_evidence`, `save_structure_view`, `open_structure_view`, `remove_structure_view`, `proteoscope_link` |
-| Figures | `figures`, `create_figure`, `add_figure_panel`, `set_figure`, `export_figure`, `check_figure` |
+| Structures | `find_structures`, `open_structure`, `map_structure`, `set_structure`, `render_structure` (the view as a picture), `structure_evidence`, `save_structure_view`, `open_structure_view`, `remove_structure_view`, `proteoscope_link` |
+| Figures | `figures` (with `image`, each page as a picture), `create_figure`, `add_figure_panel`, `set_figure`, `export_figure`, `check_figure` |
 | The record | `report`, `checkpoint`, `diff`, `certify`, `review_report`, `verify_certificate`, `export`, `mavedb_deposit`, `set_mavedb_details` |
 | Proposals | `proposals` (what waits for you, and what you decided) |
 
@@ -96,10 +96,25 @@ The tools MaveScape's product requirements name, and the tool that does each:
 | `create_figure` | `create_figure` and `add_figure_panel` |
 | `export_results` | `export` |
 | `write_methods` | `report` |
+| `render_structure` | the same |
 
 A result is the action's sentence and its data: as text (the data's JSON after the sentence) and as
 structured content. An action MaveScape refuses is a tool error carrying its reason ("p.Trp999Ala
 is not in Run 1"), which the agent can act on.
+
+**Tables.** `scores` gives a run's variants as rows with the columns of its scores export
+(`scores.csv`: the variant, score, SE, 95% interval, status and why filtered, flags, class, each
+replicate's score and SE), a contrast's differential scores, or a nucleotide run's scores at the
+protein level; numbers as numbers, `null` where the export has `NA`. It takes the variants at
+positions, of kinds, in a saved selection or matching a query of the selection language, sorted by
+a column, 100 rows at a time (`offset` for the next; `limit: 0` for all). `provenance` gives what a
+run's `provenance.json` holds.
+
+**Pictures.** `render_map` with `image` (the map as its SVG export draws it, at `scale`, positions
+`from` to `to`), `render_structure` (the Structure view with its legend) and `figures` with `image`
+(each page as `export_figure` writes it, at `dpi`) give PNGs. The agent receives each as an image
+after the text, captioned, and the data names it by its number; a script gets it as a data URL
+(`data:image/png;base64,…`). The pictures of one result are limited to 8 MB in all.
 
 Scores are research evidence of a variant's functional effect in its assay. MaveScape never calls a
 variant pathogenic or benign, and its instructions to the agent say so.

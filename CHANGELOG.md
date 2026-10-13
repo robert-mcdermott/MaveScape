@@ -10,7 +10,7 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   It starts MaveScape with remote control on and speaks the Model Context Protocol on stdin and
   stdout (JSON-RPC, protocol versions 2024-11-05 to 2025-11-25), its banner and logs on stderr; the
   window opens when a tool first needs it (`--window`), and MaveScape stops when the agent closes
-  stdin. Its tools are the 51 remote actions under their names, each with a title and MCP's hints
+  stdin. Its tools are the 54 remote actions under their names, each with a title and MCP's hints
   (read only; replaces or removes something; may ask a public service), and its instructions say
   where to start and that scores are never a clinical classification. A call reports progress
   while it runs long and may be cancelled; files are read and written by absolute path, an
@@ -35,6 +35,14 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   checkpoint's diff names who proposed what was added. Scripts' changes are not proposals.
 - Two actions: `set_qc_thresholds` (a script's apply at once, an agent's wait) and `proposals` (what
   waits for the person, and the latest decisions).
+- **Results as data and pictures** (wave 7, slice 3). `scores` gives a run's variants as a table
+  with the columns of its scores export (or a contrast's differential scores, or a nucleotide run's
+  at the protein level), numbers as numbers: those at positions, of kinds, in a saved selection or
+  matching a query, sorted by a column, a page at a time. `provenance` gives a run's provenance
+  inline. `render_map` with `image` gives the map as a picture (its SVG export drawn as a PNG, at a
+  scale, of the whole target or a stretch of positions), `render_structure` the Structure view with
+  its legend, and `figures` with `image` each page as exported. `mavescape mcp` sends the pictures
+  to an agent as images it can look at; a script gets them as data URLs.
 
 ### Changed
 
@@ -46,6 +54,8 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
 
 ### Fixed
 
+- The map's SVG and PNG export of a short target cut its key to the states (and could cut its
+  title): the page was only as wide as the cells. It is at least as wide as both now.
 - A run focused in the dataset tree that is no longer in the workspace (undone, or an agent's
   rejected) left the Structure view without scores to color by, saying the workspace had no run;
   it is passed over now.
@@ -56,7 +66,7 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
 ### Validation
 
 - `validation/agent-session.mjs` (CI job `agents`): `mavescape mcp` driven over stdio as
-  an agent's client drives it, with no model, every one of the 51 tools called on the examples in
+  an agent's client drives it, with no model, every one of the 54 tools called on the examples in
   headless Chrome: initialize and the tools' list (the remote actions with their titles and
   hints), errors, the runs' output hashes, a variant's score and a query's variants Node's, a
   comparison the remote action's field for field, the record through the agent (a figure and its
@@ -73,6 +83,13 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   checkpoint naming the proposer; tables opened into the agent's own workspace proposed, and
   scoring waiting for its proposed design. `web/lib/proposals.test.mjs` (11 tests). The remote
   session checks that a script's QC thresholds apply at once and that a script proposes nothing.
+- Results as data and pictures, through the agent (30 checks in all) and the script session (203):
+  each table holds every number of the export it mirrors (scores, a contrast's differential scores,
+  the protein level), a query's variants are Node's, and provenance is its file's JSON; the map's
+  picture, decoded, has the SVG export's size at its scale and every cell the color `map-svg.js`
+  gives it (the whole map, a stretch at 3×, and with tracks); the Structure view's picture is pixel
+  for pixel the panel `structure-image` exports; a figure's picture is the page at the dpi asked,
+  its manifest inside. A Go test of pictures as MCP image content.
 
 ## 0.6.0 (2026-10-12)
 

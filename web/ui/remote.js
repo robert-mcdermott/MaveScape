@@ -32,7 +32,8 @@ import { ensureResults, forgetResults } from './run-results.js';
 import { runScore, workerInput } from './score-input.js';
 import { computeQc, markQcSeen, qcInputsOf, qcSubjects } from './mode-qc.js';
 import { archiveFile, packageFile, RUN_FILES, runFile, selectionFile } from './record.js';
-import { intervalOf } from '../lib/exports.js';
+import { cellValue, differentialTable, intervalOf, proteinScoresTable, scoresTable } from '../lib/exports.js';
+import { dataURL, svgToPNG } from './images.js';
 import { anchorUncertainty } from '../lib/anchors.js';
 import { readiness, readinessText } from '../lib/readiness.js';
 import { applyCheck, checkTarget, fetchPublic, placementText } from './public-data.js';
@@ -214,6 +215,22 @@ export function installRemote(app) {
       });
       return { contrast: d.name, method: d.method, compared, lowerAtQ05: lower, higherAtQ05: higher, ...(d.note ? { note: d.note } : {}) };
     });
+  }
+
+  // A query of the selection language on a run's map ({ model, results, own }): { keys, query }. One
+  // that needs the run's robustness checks it first (seeded: the same each time).
+  async function queryOn(run, text, map) {
+    try {
+      return await runQuery(app, run, text, map).catch(async (error) => {
+        if (!(error instanceof QueryError) || error.need !== 'robustness') throw error;
+        const state = await checkRobustness(app, run);
+        if (state.status !== 'done') throw new ActionError(`The query needs ${possessive(run.name)} robustness checked, and it could not be: ${state.error}`);
+        return runQuery(app, run, text, map);
+      });
+    } catch (error) {
+      if (error instanceof QueryError) throw new ActionError(`${error.message}${error.position >= 0 ? ` (at character ${error.position + 1} of the query)` : ''}`);
+      throw error;
+    }
   }
 
   // --- Figures (wave 6, slice 1) ---------------------------------------------------------------
@@ -914,10 +931,27 @@ export function installRemote(app) {
 
     // --- Figures (wave 6, slice 1) -----------------------------------------------------------------
 
+    // image: each page as exported, a PNG at dpi (150 by default), for an agent to look at (wave 7,
+    // slice 3).
     async figures(args) {
       const list = args.figure ? [resolveFigure(args.figure)] : (ws().figures ?? []);
+      const dpi = args.dpi === undefined || args.dpi === null ? 150 : Number(args.dpi);
+      if (args.image === true && !(dpi >= 72 && dpi <= 600)) throw new ActionError('dpi is from 72 to 600.');
       const out = [];
-      for (const fig of list) out.push(await figureData(fig));
+      for (const fig of list) {
+        const data = await figureData(fig);
+        if (args.image === true) {
+          let png;
+          try {
+            png = await exportFigure(app, fig, 'png', { dpi });
+          } catch (error) {
+            throw new ActionError(error.message);
+          }
+          const size = pngSize(fig, dpi);
+          Object.assign(data, { caption: `The figure "${fig.name}" as exported, at ${dpi} dpi`, image: await dataURL(png.data), width: size.width, height: size.height, dpi });
+        }
+        out.push(data);
+      }
       return { message: list.length ? out.map((f) => f.description).join(' ') : 'The workspace has no figures: create_figure makes one.', data: { figures: out } };
     },
 
@@ -1500,19 +1534,7 @@ export function installRemote(app) {
       // A query; one that needs the run's robustness checks it first (seeded: the same each time).
       let query = null;
       if (args.query) {
-        const map = { model, results, own };
-        let found;
-        try {
-          found = await runQuery(app, run, String(args.query), map).catch(async (error) => {
-            if (!(error instanceof QueryError) || error.need !== 'robustness') throw error;
-            const state = await checkRobustness(app, run);
-            if (state.status !== 'done') throw new ActionError(`The query needs ${possessive(run.name)} robustness checked, and it could not be: ${state.error}`);
-            return runQuery(app, run, String(args.query), map);
-          });
-        } catch (error) {
-          if (error instanceof QueryError) throw new ActionError(`${error.message}${error.position >= 0 ? ` (at character ${error.position + 1} of the query)` : ''}`);
-          throw error;
-        }
+        const found = await queryOn(run, String(args.query), { model, results, own });
         cells.push(...found.keys.map((k) => byName.get(k)));
         query = found.query;
       }
@@ -1663,7 +1685,170 @@ export function installRemote(app) {
       const model = modelOf(run, results, condition, view);
       const counts = Object.fromEntries(STATE_NAMES.map((name, i) => [name, model.counts[i]]));
       const lines = describeMap(model, proteinView(results) ?? results);
-      return { message: lines.join(' '), data: { run: run.name, condition: model.contrast ? null : results.conditions[condition].name, ...(model.contrast ? { contrast: model.contrast.name } : {}), colorBy: model.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines } };
+      const data = { run: run.name, condition: model.contrast ? null : results.conditions[condition].name, ...(model.contrast ? { contrast: model.contrast.name } : {}), colorBy: model.colorBy, rows: view.rowOrder, palette: view.palette, counts, description: lines };
+      // The map as a picture (wave 7, slice 3): as its SVG export draws it (on white, with the
+      // tracks shown), at scale times its size, positions from to to.
+      if (args.image === true) {
+        const scale = args.scale === undefined || args.scale === null ? 2 : Number(args.scale);
+        if (!(scale >= 0.5 && scale <= 4)) throw new ActionError('scale is from 0.5 to 4: the picture\'s size against the map\'s export.');
+        const range = {};
+        for (const key of ['from', 'to']) {
+          if (args[key] === undefined || args[key] === null) continue;
+          const p = Number(args[key]);
+          if (!Number.isInteger(p) || p < 1 || p > model.length) throw new ActionError(`${key} is a position from 1 to ${model.length}.`);
+          range[key] = p;
+        }
+        if ((range.from ?? 1) > (range.to ?? model.length)) throw new ActionError(`from (${range.from}) is after to (${range.to}).`);
+        const shown = (await runTrackState(app, run, { condition })).arranged.filter((t) => t.shown);
+        const tracks = shown.length && shown.every((t) => t.length === model.length) ? shown : [];
+        const svg = mapSVG(model, { palette: view.palette ?? 'rdbu', results: proteinView(results) ?? results, tracks, ...range });
+        const width = Number(/width="(\d+(?:\.\d+)?)"/.exec(svg)[1]) * scale;
+        if (width > 8000) throw new ActionError(`The map is ${Math.round(width).toLocaleString('en-US')} pixels wide at this scale: give from and to (a stretch of positions), or a smaller scale.`);
+        const png = await svgToPNG(svg, scale);
+        const stretch = range.from || range.to ? `, positions ${range.from ?? 1}–${range.to ?? model.length}` : '';
+        Object.assign(data, { caption: `The variant-effect map of ${run.name}${data.contrast ? `, ${data.contrast}` : results.conditions.length > 1 ? `, ${data.condition}` : ''}${stretch}`, image: await dataURL(png.blob), width: png.width, height: png.height, scale, from: range.from ?? 1, to: range.to ?? model.length, tracks: tracks.map((t) => t.label) });
+      }
+      return { message: lines.join(' '), data };
+    },
+
+    // A run's variants as a table (wave 7, slice 3): the columns of its scores export (scores.csv),
+    // or with a contrast its differential scores' (differential.csv, that contrast's), or with
+    // protein a nucleotide run's scores at the protein level (protein_scores.csv); numbers as
+    // numbers, null where the export has NA. Those at positions, of kinds, in a saved selection or
+    // matching a query; sorted by a column; columns chosen; a page (limit, 0 for all; offset).
+    async scores(args) {
+      const run = resolveRun(args.run);
+      const { results: own } = await resultsOf(run);
+      const view = proteinView(own);
+      const protein = args.protein === true;
+      if (protein && !view) throw new ActionError(`${run.name} names protein variants: its scores are at the protein level already.`);
+      let contrast = null;
+      if (args.contrast !== undefined && args.contrast !== null && args.contrast !== '') {
+        const names = (own.differential ?? []).map((d) => d.name);
+        if (!names.length) throw new ActionError(`${run.name} compares no conditions: score it with two conditions and a contrast first.`);
+        contrast = /^\d+$/.test(String(args.contrast)) ? Number(args.contrast) - 1 : names.indexOf(choose(args.contrast, names, 'contrast'));
+        if (contrast < 0 || contrast >= names.length) throw new ActionError(`There ${names.length === 1 ? 'is 1 contrast' : `are ${names.length} contrasts`}: ${names.join(', ')}.`);
+        if (protein) throw new ActionError('A contrast\'s differences are of the run\'s own variants: give contrast or protein, not both.');
+      }
+      const results = protein ? view : own;
+      const condition = contrast === null ? resolveCondition(own, args.condition) : own.conditions.findIndex((c) => c.id === own.differential[contrast].condition);
+      const table = contrast !== null ? differentialTable(own, run, contrast) : protein ? proteinScoresTable(view, condition) : scoresTable(own, run, condition);
+      const v = results.variants;
+      let keep = Array.from({ length: results.rows }, (_, i) => i);
+      const filters = [];
+      // Positions: numbers, or stretches as "30-40".
+      if (args.positions !== undefined && args.positions !== null) {
+        const wanted = new Set();
+        for (const item of Array.isArray(args.positions) ? args.positions : [args.positions]) {
+          const m = /^\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*$/.exec(String(item));
+          if (!m) throw new ActionError(`"${item}" is not a position (a number, or a stretch as "30-40").`);
+          for (let p = Number(m[1]); p <= Number(m[2] ?? m[1]); p += 1) wanted.add(p);
+        }
+        keep = keep.filter((i) => wanted.has(v.position[i]));
+        filters.push('at the positions given');
+      }
+      if (args.kinds !== undefined && args.kinds !== null) {
+        const names = [...new Set(Object.values(KIND_NAMES))];
+        const wanted = new Set((Array.isArray(args.kinds) ? args.kinds : [args.kinds]).map((k) => choose(k, names, 'kind of variant')));
+        keep = keep.filter((i) => wanted.has(KIND_NAMES[v.kind[i]]));
+        filters.push([...wanted].join(' or '));
+      }
+      // A saved selection's variants, or a query's, by their names on the run's map.
+      let named = null;
+      if (args.selection !== undefined && args.selection !== null) {
+        const list = ws().selections;
+        if (!list.length) throw new ActionError('There is no saved selection: select_variants with save_as saves one.');
+        const saved = list.find((x) => x.name === choose(args.selection, list.map((y) => y.name), 'saved selection'));
+        named = new Set(saved.keys);
+        filters.push(`in "${saved.name}"`);
+      }
+      if (args.query) {
+        const mapResults = view ?? own;
+        const mapCondition = contrast === null ? resolveCondition(own, args.condition) : condition;
+        const model = buildMapModel(mapResults, run.inputs.design, contrast === null ? { condition: mapCondition } : { contrast, colorBy: 'differential' });
+        const found = await queryOn(run, String(args.query), { model, results: mapResults, own });
+        named = named ? new Set(found.keys.filter((k) => named.has(k))) : new Set(found.keys);
+        filters.push(`matching "${found.query}"`);
+      }
+      if (named) keep = keep.filter((i) => named.has(view && !protein ? v.proKey[i] : v.key[i]));
+      const header = table.header;
+      // Sorted by a column (descending with "-" before it), what has no value last.
+      let sortedBy = null;
+      if (args.sort) {
+        const text = String(args.sort).trim();
+        const descending = text.startsWith('-');
+        const column = header.indexOf(choose(text.replace(/^[-+]/, ''), header, 'column'));
+        const value = (i) => table.rows[i][column];
+        const missing = (x) => x === null || x === undefined || (typeof x === 'number' && Number.isNaN(x)) || x === 'NA';
+        keep = keep.slice().sort((a, b) => {
+          const x = value(a);
+          const y = value(b);
+          if (missing(x) || missing(y)) return missing(x) - missing(y);
+          const order = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
+          return descending ? -order : order;
+        });
+        sortedBy = `${header[column]}${descending ? ', the highest first' : ''}`;
+      }
+      const columns = args.columns ? (Array.isArray(args.columns) ? args.columns : [args.columns]).map((c) => header.indexOf(choose(c, header, 'column'))) : header.map((_, j) => j);
+      const limit = args.limit === undefined || args.limit === null ? 100 : Number(args.limit);
+      const offset = args.offset === undefined || args.offset === null ? 0 : Number(args.offset);
+      if (!Number.isInteger(limit) || limit < 0) throw new ActionError('limit is a whole number of rows (0 for all of them).');
+      if (!Number.isInteger(offset) || offset < 0) throw new ActionError('offset is a whole number of rows to pass over.');
+      const page = keep.slice(offset, limit ? offset + limit : undefined);
+      const variants = page.map((i) => Object.fromEntries(columns.map((j) => [header[j], cellValue(table.rows[i][j], header[j])])));
+      const of = contrast !== null ? own.differential[contrast].name : own.conditions.length > 1 ? results.conditions[condition].name : null;
+      const export_ = contrast !== null ? 'differential.csv' : protein ? 'protein_scores.csv' : 'scores.csv';
+      const count = (n) => n.toLocaleString('en-US');
+      const rest = offset + page.length < keep.length ? ` (offset ${offset + page.length} for the next)` : '';
+      return {
+        message: `${run.name}${of ? `, ${of}` : ''}${protein ? ' at the protein level' : ''}: ${keep.length === results.rows ? `${count(results.rows)} variants` : `${count(keep.length)} of ${count(results.rows)} variants (${filters.join(', ')})`}${sortedBy ? `, sorted by ${sortedBy}` : ''}; ${page.length ? `rows ${count(offset + 1)}–${count(offset + page.length)} here${rest}` : 'none here'}. The columns are those of its ${export_} export; null where it has NA.`,
+        data: { run: run.name, ...(contrast !== null ? { contrast: own.differential[contrast].name } : { condition: results.conditions[condition].name }), level: protein ? 'protein' : 'variants', export: export_, columns: columns.map((j) => header[j]), total: keep.length, of: results.rows, offset, returned: page.length, ...(sortedBy ? { sortedBy } : {}), variants },
+      };
+    },
+
+    // A run's provenance (wave 7, slice 3), as its export (provenance.json) holds it: the table and
+    // its mapping by SHA-256, the design, the parameters, the software, the output's SHA-256, the
+    // QC and the workspace's history head.
+    async provenance(args) {
+      const run = resolveRun(args.run);
+      const { results } = await resultsOf(run);
+      let file;
+      try {
+        file = await runFile(app, run, 'provenance', resolveCondition(results, args.condition));
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const doc = JSON.parse(file.text);
+      const qc = doc.qc?.findings ?? [];
+      return {
+        message: `${possessive(run.name)} provenance: the table ${doc.inputs.table.name} (SHA-256 ${doc.inputs.table.sha256.slice(0, 12)}…), its design (SHA-256 ${doc.inputs.designSha256.slice(0, 12)}…), ${doc.run.description}; scored by MaveScape ${doc.run.software.version}, output SHA-256 ${doc.run.output.sha256.slice(0, 12)}…${qc.length ? `; QC ${qc.filter((f) => f.status === 'fail').length} fail, ${qc.filter((f) => f.status === 'review').length} to review` : ''}.`,
+        data: doc,
+      };
+    },
+
+    // The Structure view as a picture (wave 7, slice 3): as a figure panel of it is drawn, at scale
+    // times the view's size (2 by default), its legend below it (legend: false, the view alone).
+    async render_structure(args) {
+      const state = structureState(app);
+      if (!state.viewer?.structure) throw new ActionError('No structure is open: open one with open_structure (a PDB ID or an AlphaFold DB model), or a file with open_files.');
+      const scale = args.scale === undefined || args.scale === null ? 2 : Number(args.scale);
+      if (!(scale >= 0.5 && scale <= 4)) throw new ActionError('scale is from 0.5 to 4: the picture\'s size against the view\'s.');
+      if (store.ui.mode !== 'structure') await app.setMode('structure');
+      await surfaceReady(state.viewer);
+      await settle();
+      let panel;
+      try {
+        panel = await figurePanel(app, { scale, legend: args.legend !== false, light: args.light === true });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      const summary = structureSummary(false);
+      const { width, height } = panel.metadata.image;
+      const coloring = summary.scores && !summary.scores.error ? `${summary.scores.label.toLowerCase()} (${summary.scores.source})` : COLOR_SCHEMES.find((c) => c.id === summary.color)?.label.toLowerCase() ?? summary.color;
+      return {
+        message: `${summary.name}, as the Structure view shows it: ${STYLES[summary.style].label.toLowerCase()}, colored by ${coloring}${summary.selected.count ? `, ${plural(summary.selected.count, 'residue')} selected` : ''}; ${width} × ${height} pixels${panel.metadata.image.legend ? ', its legend below' : ''}, drawn with ${state.viewer.kind === 'webgpu' ? 'WebGPU' : 'the Canvas renderer'}.`,
+        data: { caption: `${summary.name} in the Structure view, colored by ${coloring}`, image: await dataURL(panel.bytes), width, height, scale, legend: panel.metadata.legend, structure: summary },
+      };
     },
 
     // --- Tracks (wave 3, slice 5) -------------------------------------------------------------------

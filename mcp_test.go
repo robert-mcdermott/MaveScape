@@ -217,6 +217,42 @@ func TestMCPPageRefusalsBecomeToolErrors(t *testing.T) {
 	}
 }
 
+// Pictures (wave 7, slice 3): each data URL in a result's data becomes an image after the text,
+// captioned, the data naming it by its number with its fields in the page's order; past the limit,
+// null and said.
+func TestMCPPicturesBecomeImageContent(t *testing.T) {
+	hub := newRemoteHub()
+	png := "iVBORw0KGgo="
+	stop := fakePage(t, hub, func(remoteEvent) remoteResult {
+		return remoteResult{OK: true, Message: "The map.", Data: json.RawMessage(`{"run":"Run 1","caption":"The map of Run 1","image":"data:image/png;base64,` + png + `","pages":[{"name":"Figure 1","image":"data:image/png;base64,AAAA"}]}`)}
+	})
+	defer stop()
+	server := &mcpServer{hub: hub, pageWait: time.Second}
+	replies := runLines(t, server, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"render_map","arguments":{"image":true}}}`)
+	result := replies[0]["result"].(map[string]any)
+	content := result["content"].([]any)
+	if len(content) != 5 {
+		t.Fatalf("content: %v", content)
+	}
+	if text := content[0].(map[string]any)["text"].(string); text != `The map.`+"\n\n"+`{"run":"Run 1","caption":"The map of Run 1","image":1,"pages":[{"name":"Figure 1","image":2}]}` {
+		t.Fatalf("text: %s", text)
+	}
+	first, second := content[2].(map[string]any), content[4].(map[string]any)
+	if content[1].(map[string]any)["text"] != "Image 1: The map of Run 1" || first["type"] != "image" || first["data"] != png || first["mimeType"] != "image/png" || content[3].(map[string]any)["text"] != "Image 2: Figure 1" || second["data"] != "AAAA" {
+		t.Fatalf("images: %v", content[1:])
+	}
+	data, _ := json.Marshal(result["structuredContent"].(map[string]any)["data"])
+	if !strings.Contains(string(data), `"image":1`) || strings.Contains(string(data), "base64") {
+		t.Fatalf("structured: %s", data)
+	}
+
+	big := strings.Repeat("A", mcpImageLimit/2+4)
+	out, images, dropped := extractImages(json.RawMessage(`{"a":"data:image/png;base64,` + big + `","b":"data:image/png;base64,` + big + `"}`))
+	if len(images) != 1 || dropped != 1 || string(out) != `{"a":1,"b":null}` {
+		t.Fatalf("limit: %d images, %d dropped, %.40s", len(images), dropped, out)
+	}
+}
+
 // An agent writes and reads files by path, as a script with the token does: an export gets an
 // upload slot for its path, checked first; files to open are registered for the page.
 func TestMCPFilesByPath(t *testing.T) {

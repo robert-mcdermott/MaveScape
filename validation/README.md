@@ -183,8 +183,14 @@ withdrawn said of the QC panel); Hsp90's checkpoint (Run 2 over the whole time c
 of generations 9 to 21 set aside, Run 3 Node's, `diff` as Node says it); BRCA1 RING opened offline
 from MaveDB's two tables (`fetch.mjs mavedb-brca1-ring`), scored with the Enrich2-compatible preset,
 certified (110,975 numbers, verified in Node), certified without its tables and verified with
-MaveDB's two files beside it, its review report's numbers the certificate's.
-196 checks; in CI as the `remote` job.
+MaveDB's two files beside it, its review report's numbers the certificate's. (Wave 7, slice 2) a
+script's QC thresholds applied at once, and nothing of a script's proposed. (Slice 3) results as
+data and pictures, for a script: Run 1's scores as a table holding every number of its scores file
+(`tableMatchesCSV`), a short last page, its provenance its file's JSON; a contrast's differential
+scores and a nucleotide run's protein-level scores each holding every number of their files; the
+map with its tracks as a PNG data URL, the SVG export's size and every cell its color there
+(`mapCellsAgree`); the Structure view's picture pixel for pixel the `structure-image` export; a
+figure page at the dpi asked. 203 checks; in CI as the `remote` job.
 
 `--like-ci` runs the session as GitHub's runners do: WebGPU drawn in software (Chrome's
 `--use-webgpu-adapter=swiftshader`, whose graphics process does not last) and the page's processor
@@ -192,7 +198,7 @@ slowed (`Emulation.setCPUThrottlingRate`, 4 times unless a rate is given). Every
 release met only in CI failed this way here first; run it before a release, and after any change to
 the Structure view or to what runs in the background.
 
-## The agent session (`agent-session.mjs`, wave 7 slices 1 and 2)
+## The agent session (`agent-session.mjs`, wave 7 slices 1 to 3)
 
 `node validation/agent-session.mjs [--verbose] [--like-ci [rate]]` builds MaveScape and starts
 `mavescape mcp` (`--window none`, an empty library, `--offline` on the fetcher's cached answers in
@@ -204,7 +210,7 @@ view, and changing the workspace as a script does (not a proposal). It checks th
 scores are never a clinical classification; `tools/list` the remote actions in order, each with
 its title, description, schema and MCP's hints, as `GET /api/remote/tools` gives them; an unknown
 tool, a missing argument and an unknown method answered with errors that say so), then calls every
-one of the 51 tools on the examples:
+one of the 54 tools on the examples:
 
 - GRB2's example opened (not a proposal), checked, reproduced and its QC read; a finding
   acknowledged, QC thresholds set, the target's check applied, MaveDB's details and a design set:
@@ -213,6 +219,11 @@ one of the 51 tools on the examples:
   proposed; a variant inspected (its score Node's), variants selected by a query (Node's variants)
   and saved, the map rendered, two runs compared (the result the remote action's, field for field),
   a robustness check with a progress token while the strip says the agent is working.
+- Results as data and pictures: Run 1's scores as a table holding every number of its scores
+  export, a query's variants Node's, the highest missense scores first; its provenance; the map as
+  MCP image content after the text, captioned, decoded at the SVG export's size times its scale with
+  every cell the color `map-svg.js` gives it (the whole map at 2×, positions 30–45 at 3×); the
+  Structure view's picture with its legend; a figure page at the dpi asked, its manifest inside.
 - In the window: the strip (who proposes how many changes, made and waiting, the list), the
   dataset tree's marks, the design proposed beside the person's, the QC view's note; certify
   refused while the proposal is open. Accepted: what waited applied under the agent's name, what
@@ -237,7 +248,7 @@ one of the 51 tools on the examples:
 Every tool said to read only must leave the workspace's history as it was; every change the agent
 made must carry its name in the history (`by`), the other entries being the person's decisions and
 the person's own changes; stdout must carry nothing but JSON-RPC; closing stdin must stop MaveScape
-and remove its connection file. 26 checks; in CI as the `agents` job.
+and remove its connection file. 30 checks; in CI as the `agents` job.
 
 ## Proteoscope itself (`proteoscope-handoff.mjs`, wave 5 slice 6)
 

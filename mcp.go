@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +31,7 @@ var mcpProtocolVersions = []string{"2025-11-25", "2025-06-18", "2025-03-26", "20
 const (
 	mcpMaxLine      = 64 << 20
 	mcpTextLimit    = 200_000
+	mcpImageLimit   = 8 << 20
 	mcpPageWait     = 40 * time.Second
 	mcpReopenAfter  = 20 * time.Second
 	mcpProgressTick = 5 * time.Second
@@ -415,17 +419,20 @@ func toolError(message string) map[string]any {
 
 // commandResult: the page's sentence and its data, as text (the data's JSON after the sentence,
 // cut at mcpTextLimit) and as structured content (all of it, as the page wrote it: its fields in
-// their order, its numbers exactly).
+// their order, its numbers exactly), and its pictures as images (extractImages).
 func commandResult(outcome remoteResult) map[string]any {
 	if !outcome.OK {
 		return toolError(outcome.Message)
 	}
 	text := outcome.Message
 	structured := map[string]any{"message": outcome.Message}
+	var images []mcpImage
 	if len(outcome.Data) > 0 && string(outcome.Data) != "null" {
 		if json.Valid(outcome.Data) {
-			structured["data"] = outcome.Data
-			serialized := string(outcome.Data)
+			data, found, dropped := extractImages(outcome.Data)
+			images = found
+			structured["data"] = data
+			serialized := string(data)
 			if len(serialized) > mcpTextLimit {
 				serialized = strings.ToValidUTF8(serialized[:mcpTextLimit], "") + " … (truncated; the structured content has everything)"
 			}
@@ -433,10 +440,86 @@ func commandResult(outcome remoteResult) map[string]any {
 				text += "\n\n"
 			}
 			text += serialized
+			if dropped > 0 {
+				text += fmt.Sprintf("\n\n%d more image%s left out (null above): the images of one result are limited to %d MB in all.", dropped, map[bool]string{true: "", false: "s"}[dropped == 1], mcpImageLimit>>20)
+			}
 		}
 	}
 	if text == "" {
 		text = "Done."
 	}
-	return map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}, "structuredContent": structured}
+	content := []any{map[string]any{"type": "text", "text": text}}
+	for index, image := range images {
+		content = append(content,
+			map[string]any{"type": "text", "text": fmt.Sprintf("Image %d: %s", index+1, image.caption)},
+			map[string]any{"type": "image", "data": image.data, "mimeType": image.mimeType})
+	}
+	return map[string]any{"content": content, "structuredContent": structured}
+}
+
+// Pictures in a result (wave 7, slice 3; after CytoWeave's): the page gives each as a data URL in
+// its data (render_map, render_structure, figures with image), with a caption beside it. An agent
+// gets each as MCP image content, after the text, and the data names it by its number (1, 2, …),
+// its fields kept in the page's order; past mcpImageLimit of them in all, null. A script reads the
+// data URLs as they are.
+type mcpImage struct {
+	data, mimeType, caption string
+}
+
+var dataURLImage = regexp.MustCompile(`"data:(image/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)"`)
+
+func extractImages(raw json.RawMessage) (json.RawMessage, []mcpImage, int) {
+	if !bytes.Contains(raw, []byte(`"data:image/`)) {
+		return raw, nil, 0
+	}
+	captions := map[string]string{}
+	var decoded any
+	if json.Unmarshal(raw, &decoded) == nil {
+		collectCaptions(decoded, captions)
+	}
+	var images []mcpImage
+	dropped, total := 0, 0
+	out := dataURLImage.ReplaceAllFunc(raw, func(match []byte) []byte {
+		parts := dataURLImage.FindSubmatch(match)
+		data := string(parts[2])
+		if total+len(data) > mcpImageLimit {
+			dropped++
+			return []byte("null")
+		}
+		total += len(data)
+		caption := captions[data]
+		if caption == "" {
+			caption = "image"
+		}
+		images = append(images, mcpImage{data: data, mimeType: string(parts[1]), caption: caption})
+		return []byte(strconv.Itoa(len(images)))
+	})
+	return out, images, dropped
+}
+
+// collectCaptions finds each data URL's caption: its object's caption, title or name.
+func collectCaptions(value any, captions map[string]string) {
+	switch typed := value.(type) {
+	case map[string]any:
+		caption := ""
+		for _, key := range []string{"caption", "title", "name"} {
+			if text, ok := typed[key].(string); ok && text != "" {
+				caption = text
+				break
+			}
+		}
+		for _, item := range typed {
+			if text, ok := item.(string); ok && strings.HasPrefix(text, "data:image/") {
+				if _, data, found := strings.Cut(text, ";base64,"); found {
+					captions[data] = caption
+				}
+				continue
+			}
+			collectCaptions(item, captions)
+		}
+	case []any:
+		for _, item := range typed {
+			collectCaptions(item, captions)
+		}
+	}
 }

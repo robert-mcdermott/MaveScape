@@ -11,6 +11,7 @@
 // words.
 
 import { h, icon, clear, downloadBlob, formatCount } from './dom.js';
+import { svgToPNG } from './images.js';
 import { promptDialog, showMenu, toast } from './overlays.js';
 import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, NO_DIFFERENTIAL, offMapRows, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
 import { proteinView } from '../lib/collapse.js';
@@ -143,28 +144,14 @@ export function mountMapMode(app, container) {
     downloadBlob(new Blob([mapSVG(model, { palette: view.palette, results, tracks: shownTracks() })], { type: 'image/svg+xml' }), `${fileBase()}.svg`);
   }
   async function exportPNG() {
-    const svg = mapSVG(model, { palette: view.palette, results, tracks: shownTracks() });
-    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
     try {
-      const img = new Image();
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = () => reject(new Error('The map could not be drawn as an image.'));
-        img.src = url;
-      });
-      const scale = 3;
-      const canvas = h('canvas', { width: img.width * scale, height: img.height * scale });
-      const ctx = canvas.getContext('2d');
-      ctx.scale(scale, scale);
-      ctx.drawImage(img, 0, 0);
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const { blob } = await svgToPNG(mapSVG(model, { palette: view.palette, results, tracks: shownTracks() }), 3);
       downloadBlob(blob, `${fileBase()}.png`);
     } catch (error) {
       toast(error.message, { kind: 'error' });
-    } finally {
-      URL.revokeObjectURL(url);
     }
   }
+
 
   // --- Panes -------------------------------------------------------------------------------------
   function controls() {

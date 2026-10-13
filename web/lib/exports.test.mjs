@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { countsCSV, csv, num, proteinScoresCSV, scoresCSV, selectionCSV, statusOf } from './exports.js';
+import { cellValue, countsCSV, csv, num, proteinScoresCSV, scoresCSV, scoresTable, selectionCSV, statusOf } from './exports.js';
 import { proteinView } from './collapse.js';
 import { columnText, parseTable } from './csv.js';
 import { scoreExperiment, DEFAULT_PARAMETERS } from './score.js';
@@ -61,4 +61,18 @@ test('a nucleotide run\'s scores give each variant\'s protein change, and merge 
   const protein = proteinScoresCSV(proteinView(out.results)).trim().split('\n');
   assert.equal(protein[0], 'hgvs_pro,score,SE,ci95_lower,ci95_upper,status,flags,variant_class,nucleotide_variants,hgvs_nt');
   assert.deepEqual(protein.slice(1).map((l) => [l.split(',')[0], l.split(',').at(-2), l.split(',').at(-1)]), [['p.=', '1', 'c.='], ['p.Ala2Ser', '2', 'c.4G>T c.[4G>T;6T>A]'], ['p.Ala2=', '1', 'c.6T>C']]);
+});
+
+test('a run\'s scores as data (the remote action scores): the CSV\'s cells, numbers as numbers, NA as null', () => {
+  const t = scoresTable(results, run);
+  const [header, ...lines] = scoresCSV(results, run).trimEnd().split('\n').map((line) => line.split(','));
+  assert.deepEqual(t.header, header);
+  t.rows.forEach((row, i) => row.forEach((value, j) => {
+    const data = cellValue(value, t.header[j]);
+    assert.equal(data === null ? 'NA' : String(data), lines[i][j]);
+  }));
+  assert.equal(cellValue(Number.NaN, 'score'), null);
+  assert.equal(cellValue(Infinity, 'df'), 'Inf');
+  assert.equal(cellValue('NA', 'hgvs_nt'), null);
+  assert.equal(cellValue(2, 'replicates'), 2);
 });

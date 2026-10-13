@@ -865,6 +865,12 @@ MaveDB's score layout, one row per variant of the table, in the table's order:
 | `variant_as_written`, `variant_class` | the name as in the table, and its class |
 | `score_<replicate>`, `SE_<replicate>` | each replicate's score and SE (kept for filtered variants too) |
 
+The remote action `scores` (MaveScape 0.7; [MCP.md](MCP.md)) gives the same columns as data: one
+object per variant, each number as a JSON number (the same double), `null` where the file has `NA`,
+`df` `"Inf"` where the file has `Inf`, text as written; with a contrast, the columns of
+`differential.csv` for that contrast without their suffix; with `protein`, those of
+`protein_scores.csv`. `provenance` gives the provenance file's JSON.
+
 For sorted bins (MaveScape 0.2), a score is the weighted average of the bins' values, or the
 maximum-likelihood mean of the variant's log fluorescence, scaled per replicate (by default so that
 nonsense scores 0 and the wild type 1); the run's methods say which.
@@ -1132,7 +1138,10 @@ The whole map at a fixed cell size on a light background, with the position and 
 numberings, the color scale and a key to the states; the SVG carries the map's description as its
 `<desc>`, and each cell its variant as a `<title>`. The PNG is the SVG drawn at three times its
 size. With tracks shown (MaveScape 0.3), they are below the grid as in the window, their names in
-the margin, and their descriptions in the `<desc>`.
+the margin, and their descriptions in the `<desc>`. From MaveScape 0.7 the page is at least as wide
+as its title and its key to the states (a short target's was cut), and remote control's
+`render_map` with `image` draws the same SVG as a PNG, at a scale, of the whole target or a stretch
+of positions (`from`, `to`; then the title says which).
 
 ### The tracks (`*_tracks_*.csv`)
 
