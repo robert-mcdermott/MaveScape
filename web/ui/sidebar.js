@@ -3,10 +3,11 @@
 // views that use it open on it.
 
 import { h, icon, clear, formatCount } from './dom.js';
+import { heldOfKind, heldRemoval, proposalOfItem } from '../lib/proposals.js';
 
 const SECTIONS = [
   {
-    kind: 'source', title: 'Tables', icon: 'table',
+    kind: 'source', collection: 'sources', title: 'Tables', icon: 'table',
     items: (ws) => ws.sources,
     label: (s) => s.name ?? s.fileName ?? 'Table',
     meta: (s) => (Number.isFinite(s.rows) ? `${formatCount(s.rows)} rows` : ''),
@@ -14,7 +15,7 @@ const SECTIONS = [
     action: { label: 'Open a table', run: (app) => app.pickFiles() },
   },
   {
-    kind: 'target', title: 'Targets', icon: 'sequence',
+    kind: 'target', collection: 'targets', title: 'Targets', icon: 'sequence',
     items: (ws) => ws.targets,
     label: (t) => t.name ?? 'Target',
     meta: (t) => (t.sequence ? `${formatCount(t.sequence.length)} ${t.sequenceType === 'dna' ? 'nt' : 'aa'}` : ''),
@@ -28,7 +29,7 @@ const SECTIONS = [
     empty: 'Samples, roles, conditions and replicates, set in the Experiment view.',
   },
   {
-    kind: 'run', title: 'Score runs', icon: 'score',
+    kind: 'run', collection: 'runs', title: 'Score runs', icon: 'score',
     items: (ws) => ws.runs,
     label: (r) => r.name ?? r.model ?? 'Score run',
     meta: (r) => (r.output ? `${formatCount(r.output.conditions[0]?.scored ?? 0)} scored` : ''),
@@ -36,14 +37,14 @@ const SECTIONS = [
   },
   {
     // Views of structures saved in Structure (wave 5, slice 5).
-    kind: 'structureView', title: 'Structure views', icon: 'structure',
+    kind: 'structureView', collection: 'structureViews', title: 'Structure views', icon: 'structure',
     items: (ws) => ws.structureViews ?? [],
     label: (v) => v.name ?? 'View',
     meta: (v) => v.chain ?? '',
     empty: 'Views saved in Structure: the structure, its camera, colors and selection.',
   },
   {
-    kind: 'selection', title: 'Selections', icon: 'target',
+    kind: 'selection', collection: 'selections', title: 'Selections', icon: 'target',
     items: (ws) => ws.selections,
     label: (s) => s.name ?? 'Selection',
     meta: (s) => (s.keys ? `${formatCount(s.keys.length)}` : ''),
@@ -65,15 +66,27 @@ export function mountSidebar(app) {
       const list = h('div', { role: items.length ? 'list' : null });
       for (const item of items) {
         const selected = ui.focus?.kind === section.kind && ui.focus?.id === item.id;
-        list.append(h(`button.dataset-row${selected ? '.selected' : ''}`, {
+        // An AI agent's: made and marked proposed, or proposed to be removed (wave 7, slice 2).
+        const proposal = section.collection ? proposalOfItem(ws, item) : null;
+        const removal = section.collection ? heldRemoval(ws, section.collection, item.id) : null;
+        const mark = proposal ? h('span.badge.accent', { title: `Proposed by ${proposal.author}: accept or reject it above the view` }, 'proposed')
+          : removal ? h('span.badge.danger', { title: `${removal.proposal.author} proposes removing it` }, 'remove?') : null;
+        list.append(h(`button.dataset-row${selected ? '.selected' : ''}${removal ? '.held-removal' : ''}`, {
           type: 'button',
           role: 'listitem',
           'aria-current': selected ? 'true' : null,
           title: section.label(item),
           onclick: () => app.focusItem({ kind: section.kind, id: item.id }),
-        }, icon(section.icon), h('span.label', section.label(item)), h('span.meta', section.meta(item))));
+        }, icon(section.icon), h('span.label', section.label(item)), mark, h('span.meta', section.meta(item))));
       }
-      if (!items.length) {
+      // A design an agent proposed, waiting for the person.
+      const held = section.kind === 'design' ? heldOfKind(ws, 'design')[0] : null;
+      if (held) {
+        list.setAttribute('role', 'list');
+        list.append(h('button.dataset-row', { type: 'button', role: 'listitem', title: `The design ${held.proposal.author} proposes`, onclick: () => app.setMode('experiment') },
+          icon(section.icon), h('span.label', held.change.design?.name ?? 'A design'), h('span.badge.warn', { title: `${held.proposal.author} proposes it: it applies if you accept` }, 'proposed'), h('span.meta', '')));
+      }
+      if (!items.length && !held) {
         list.append(h('p.tree-empty', section.empty));
         if (section.action) list.append(h('button.drop-hint', { type: 'button', style: { width: 'calc(100% - 12px)' }, onclick: () => section.action.run(app) }, `${section.action.label}, or drop files here`));
       }

@@ -3072,6 +3072,59 @@ Decisions taken in planning (confirmed before slice 1):
    - Validation: each kind of change held, accepted and rejected (unit tests of `lib/proposals.js`;
      the agent session in the window), what was built on a rejected change removed, a checkpoint
      and the diff naming the proposer, certify refused with a proposal open.
+   - **Done.** `web/lib/proposals.js` (after CytoWeave 0.8.0's): the workspace keeps the open
+     proposals (`proposals`, one per agent), and an item an agent made carries `proposed` (`{ by,
+     proposal }`, then `{ by, accepted }`).
+     - **One place.** While an agent's action runs, every change the window commits passes through
+       `absorb` (the store's commit filter, set by `ui/remote.js`): what is new is marked proposed;
+       a change of the person's figure (or of what a higher score of a score set means) is made at
+       once with the item as it was kept; the design, QC thresholds and acknowledgements, a
+       target's change and the MaveDB details are taken back out of the workspace into the
+       proposal, their history entries made `propose` entries. Removals are proposed by the actions
+       themselves (`proposeRemoval`: a track, a saved view, a checkpoint, an analysis kept in the
+       report, a figure, a panel of the person's figure), so that accepting one removes it as the
+       person would, with what goes with it; `absorb` refuses a removal of the person's that was
+       not proposed, and any field no proposal holds, so that nothing changes unseen. So every
+       path an action takes, the helpers that commit for it included, is covered, and the actions
+       changed only their words (and QC thresholds built on those the agent proposed before:
+       `set_qc_thresholds`, a new action).
+     - **Beyond the plan's list.** Tables and targets an agent opens into the person's workspace
+       are proposed too; opening a workspace (`new_workspace`, `open_example`, a MaveDB score set
+       as its own workspace) is not, nor what the window shows. An agent never saves a structure
+       view over the person's (refused: its removal would be a replacement made unseen). Changing
+       or removing what the agent proposed itself applies at once.
+     - **The person decides** in a strip between the analysis steps and the view
+       (`ui/proposals.js`): who proposes how many changes (made, waiting), **Review** (the list, in
+       two groups), **Accept all**, **Reject all** (asking first when it would remove what the
+       person built on it since: `dependentsOf`). A decision is the person's commit, undoable, one
+       history entry (`proposal`); accepting applies what was held under the agent's name, the
+       design before a target's check so that the design's copy of the target stays in step.
+       While an agent's action runs the strip says so.
+     - The views: the dataset tree (*proposed*, *remove?*, struck out; a design proposed), the
+       Experiment view (the design proposed beside the person's, and how they differ: `diff.js`,
+       `designChanges`), the QC view (thresholds and acknowledgements proposed), Figures (a note;
+       the panels an agent added outlined, those it would remove hatched), Report (kept analyses
+       and checkpoints).
+     - **The record.** Nothing is certified while a proposal is open (`writeCertificate` refuses,
+       so every path does; the Report view's buttons say why). The report's *AI agents* section
+       says what agents proposed and the person accepted, each decision, and what is still
+       proposed; a diff names who proposed what was added ("Run 2 was scored (proposed by Claude
+       Code)"), what was accepted since and what waits, and compares items without the mark.
+     - `proposals` tells the agent what is open and what was decided; a tool's result says when
+       what it did waits, and gives its proposal; `score` waits for a design the agent proposed.
+       `mavescape run` accepts nothing: it is a script, whose changes are never proposals.
+     - Found by slice 2:
+       - **A focused run that is gone** (undone, or now an agent's rejected) left the Structure view
+         saying the workspace had no run to color by. It is passed over, and rejecting lets go of
+         the focus and the selection of what went.
+       - What is committed in the window while an agent's action runs counts as the agent's: the
+         window performs one action at a time, so the history and proposals attribute by the
+         action running. The strip says when an agent is working, and `docs/MCP.md` says this.
+     - Validation: `web/lib/proposals.test.mjs` (11: each kind held, accepted and rejected, the
+       history's chain after each, what was built on a rejected run, a change taken back, two
+       agents, the diff); the agent session (26 checks), acting as the person in the window; the
+       remote session (197) checks a script's thresholds apply at once and that it proposes
+       nothing.
 3. **Results as data and pictures (M4, M5).** What the PRD's clients read and an agent looks at,
    which the actions give today only as files or words:
    - `scores`: a run's variants as a table (score, SE, 95% interval, class, flags, why filtered),

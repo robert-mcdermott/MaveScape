@@ -19,6 +19,7 @@ import { mountWorkflow } from './ui/workflow.js';
 import { showNetwork } from './ui/public-data.js';
 import { findPackages, importMaveDB, importMaveDBPackage, openMaveDBDialog, openZips } from './ui/mavedb.js';
 import { importTrackFiles } from './ui/tracks.js';
+import { mountProposals } from './ui/proposals.js';
 import { fixClock } from './lib/clock.js';
 
 const VERSION = '0.6.0';
@@ -127,8 +128,11 @@ async function start() {
 
   // The workflow strip (ui/workflow.js) stays above the views; each view mounts into the host.
   const workflowEl = h('nav.workflow', { 'aria-label': 'Analysis steps' });
+  // An AI agent's proposals, for the person to accept or reject (ui/proposals.js, wave 7).
+  const proposalsEl = h('div.proposals');
   const workbench = h('div.view-host');
-  document.getElementById('workbench').append(workflowEl, workbench);
+  document.getElementById('workbench').append(workflowEl, proposalsEl, workbench);
+  mountProposals(app, proposalsEl);
   const switcher = document.getElementById('mode-switcher');
   let current = null;
   let currentId = null;

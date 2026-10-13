@@ -276,6 +276,17 @@ try {
   const passing = await act('acknowledge_finding', { finding: 'depth', reason: 'Expected' });
   const unknownFinding = await send('acknowledge_finding', { finding: 'nonsense', reason: 'Expected' });
   check('acknowledging a finding that passes changes nothing and says so; an unknown one lists the findings', `${passing.message} | ${unknownFinding.message}`, passing.ok && /nothing to acknowledge/.test(passing.message) && !unknownFinding.ok && /Separation of controls/.test(unknownFinding.message));
+  // QC thresholds (wave 7, slice 2): a script's apply at once, as the person's do; it proposes
+  // nothing (an agent's wait for the person: agent-session.mjs).
+  const loose = await act('set_qc_thresholds', { thresholds: { excessVariance: { review: 1000, fail: 2000 } } });
+  const loosened = (await act('qc_findings', {})).data.findings.find((f) => f.id === 'excess-variance');
+  const reset = await act('set_qc_thresholds', { reset: true });
+  const tightAgain = (await act('qc_findings', {})).data.findings.find((f) => f.id === 'excess-variance');
+  const wrongSide = await send('set_qc_thresholds', { thresholds: { agreement: { review: 0.4, fail: 0.8 } } });
+  const none = await act('proposals');
+  check('set_qc_thresholds: a script\'s thresholds apply at once (the variance beyond counting passes under limits raised), reset goes back to MaveScape\'s defaults, a fail level on the wrong side is refused; a script proposes nothing', `${loose.message} | ${loosened.status} | ${reset.message} | ${tightAgain.status} | ${wrongSide.message} | ${none.message}`,
+    loose.ok && !loose.data.waiting && loose.data.thresholds.excessVariance?.review === 1000 && loosened.status === 'pass' && reset.data.defaults === true && tightAgain.status === 'fail'
+    && !wrongSide.ok && /fail level must be below/.test(wrongSide.message) && none.data.yours === null && none.data.others.length === 0 && (await browser.eval('JSON.stringify(window.mavescape.store.ws.proposals ?? null)')) === 'null');
 
   // Scoring: a second preset, the same run not computed twice, refused parameters.
   const enrich2 = await act('score', { preset: 'Enrich2' });

@@ -133,6 +133,11 @@ var remoteActions = []remoteAction{
 		"reason":  textArg("Why the finding is expected here; empty to withdraw the acknowledgement."),
 		"run":     textArg("A score run by name or id, or \"counts\"; the latest run of the current design if not given."),
 	}, "finding"), long: true},
+	{Name: "set_qc_thresholds", Description: "Sets the quality-control thresholds by their keys: a finding's review and fail levels (\"agreement\": {\"review\": 0.7, \"fail\": 0.4}, either level alone), or a measure's value (\"lowCount\": 5); the others stay as they are. reset: true goes back to MaveScape's defaults. The findings are read with them; the change goes into the history and the methods.", InputSchema: schema(map[string]any{
+		"thresholds": map[string]any{"type": "object", "description": "By key: readsPerVariant, lowCount, lowFraction, missingExcess, coverage, agreementInput, agreement, excessVariance, outlierReplicate, separation, resolution, scoredFraction, fewerPoints, timeFit, binShare, cellsPerVariant, unmappedReads, singleBarcode, barcodeExcess, splitHalf, outlierBarcodes (qc_findings names each finding's threshold)."},
+		"reset":      flagArg("Go back to MaveScape's default thresholds."),
+	})},
+	{Name: "proposals", Description: "An AI agent's proposals: what it made and marked proposed, and what waits for the person to accept (the design, QC thresholds and acknowledgements, a target's check, the MaveDB details, removals), with the latest decisions, accepted or rejected. The person decides in the window.", InputSchema: schema(map[string]any{})},
 	{Name: "select_variants", Description: "Selects variants on the map: by a query (such as \"missense at 40-80 with se < 0.2\", \"lower and not robust\", \"from C in feature disulfide\", \"in Core and not in Surface\"), by name or by position; replaces the selection or adds to, intersects or subtracts from it; optionally saves it by name (with its query). A query that needs the run's robustness checks it first. Shows the Map view with the selection.", InputSchema: schema(map[string]any{
 		"query":     textArg("A query of MaveScape's selection language: kinds (missense, nonsense, synonymous), states (scored, low, filtered, missing), at/pos/refpos with positions, from/to with residues or groups, score/se/q/replicates/input compared with a number, lower/higher/neutral, robustness verdicts (robust, fragile, uncertain, borderline, size-dependent, sometimes-scored, \"class depends on the pseudocount\"), feature with a name, in with a saved selection's name, selected, and, or, not, parentheses."),
 		"variants":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "MAVE-HGVS names, such as p.Trp36Ala."},
@@ -375,6 +380,8 @@ var actionHints = map[string]actionHint{
 	"score":                 {title: "Score the counts", kind: "edit"},
 	"qc_findings":           {title: "Quality-control findings", kind: "read"},
 	"acknowledge_finding":   {title: "Acknowledge a QC finding", kind: "edit"},
+	"set_qc_thresholds":     {title: "Set the QC thresholds", kind: "edit"},
+	"proposals":             {title: "Proposals waiting for the person", kind: "read"},
 	"select_variants":       {title: "Select variants", kind: "edit"},
 	"inspect_variant":       {title: "A variant's evidence", kind: "read"},
 	"render_map":            {title: "The variant-effect map in words", kind: "read"},

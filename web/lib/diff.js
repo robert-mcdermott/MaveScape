@@ -22,6 +22,16 @@ import { possessive } from './words.js';
 
 const encoder = new TextEncoder();
 const same = (a, b) => canonicalJSON(a ?? null) === canonicalJSON(b ?? null);
+// Items compared without the mark of an AI agent's proposal (wave 7, slice 2), which a decision
+// changes: the diff says the decision apart.
+const plain = (x) => {
+  if (!x || typeof x !== 'object' || !('proposed' in x)) return x;
+  const { proposed, ...rest } = x;
+  return rest;
+};
+const sameItem = (a, b) => same(plain(a), plain(b));
+// Who proposed an item, when an agent did: " (proposed by Claude Code)", ", accepted" once it was.
+const byAgent = (x) => (x?.proposed ? ` (proposed by ${x.proposed.by}${x.proposed.accepted ? ', accepted' : ''})` : '');
 const byId = (list, key = 'id') => new Map((list ?? []).map((x) => [x[key], x]));
 const list = (items) => (items.length > 2 ? `${items.slice(0, -1).join(', ')} and ${items.at(-1)}` : items.join(' and '));
 const count = (n) => n.toLocaleString('en-US');
@@ -315,20 +325,20 @@ export function diffStates(before, after, { pairs = [] } = {}) {
   // Tables and targets.
   const sa = byId(before.sources);
   const sb = byId(after.sources);
-  for (const [id, s] of sb) if (!sa.has(id)) add('table', id, s.name, `The table ${s.name} was imported (SHA-256 ${short(s.sha256)}${s.rows ? `, ${count(s.rows)} rows` : ''}).`);
-  for (const [id, s] of sa) if (!sb.has(id)) add('table', id, s.name, `The table ${s.name} was removed.`);
-  for (const [id, s] of sb) if (sa.has(id) && !same(sa.get(id), s)) add('table', id, s.name, `The table ${s.name}: ${lower(fieldsChanged(sa.get(id), s))}.`);
+  for (const [id, s] of sb) if (!sa.has(id)) add('table', id, s.name, `The table ${s.name} was imported (SHA-256 ${short(s.sha256)}${s.rows ? `, ${count(s.rows)} rows` : ''})${byAgent(s)}.`);
+  for (const [id, s] of sa) if (!sb.has(id)) add('table', id, s.name, `The table ${s.name} was removed${byAgent(s)}.`);
+  for (const [id, s] of sb) if (sa.has(id) && !sameItem(sa.get(id), s)) add('table', id, s.name, `The table ${s.name}: ${lower(fieldsChanged(plain(sa.get(id)), plain(s)))}.`);
   const tb = byId(after.targets);
   const ta = byId(before.targets);
   for (const [id, t] of tb) {
     const old = ta.get(id);
-    if (!old) add('target', id, t.name, `The target ${t.name} was added (${t.sequence?.length ?? '?'} ${t.sequenceType === 'dna' ? 'nt' : 'aa'}).`);
-    else if (!same(old, t)) {
+    if (!old) add('target', id, t.name, `The target ${t.name} was added (${t.sequence?.length ?? '?'} ${t.sequenceType === 'dna' ? 'nt' : 'aa'})${byAgent(t)}.`);
+    else if (!sameItem(old, t)) {
       const what = [];
       if (old.sequence !== t.sequence) what.push(`its sequence (${old.sequence.length} → ${t.sequence.length})`);
       if ((old.offset ?? 0) !== (t.offset ?? 0)) what.push(`its offset ${old.offset ?? 0} → ${t.offset ?? 0}`);
       if (!same(old.reference, t.reference)) what.push(t.reference ? `checked against UniProt ${t.reference.accession}${t.reference.release ? ` (release ${t.reference.release})` : ''}` : 'its check against UniProt removed');
-      const rest = Object.keys({ ...old, ...t }).filter((k) => !['sequence', 'offset', 'reference'].includes(k) && !same(old[k], t[k]));
+      const rest = Object.keys({ ...old, ...t }).filter((k) => !['sequence', 'offset', 'reference', 'proposed'].includes(k) && !same(old[k], t[k]));
       if (rest.length) what.push(`its ${rest.join(', ')}`);
       add('target', id, t.name, `The target ${t.name}: ${what.join('; ')}.`);
     }
@@ -342,8 +352,8 @@ export function diffStates(before, after, { pairs = [] } = {}) {
   // Runs.
   const ra = byId(before.runs);
   const rb = byId(after.runs);
-  for (const [id, r] of rb) if (!ra.has(id)) add('run', id, r.name, `${r.name} was scored: ${describeParameters(r.inputs.parameters, isBarcodeRun(r))} (output SHA-256 ${short(r.output.sha256)}).`);
-  for (const [id, r] of ra) if (!rb.has(id)) add('run', id, r.name, `${r.name} was removed.`);
+  for (const [id, r] of rb) if (!ra.has(id)) add('run', id, r.name, `${r.name} was scored${byAgent(r)}: ${describeParameters(r.inputs.parameters, isBarcodeRun(r))} (output SHA-256 ${short(r.output.sha256)}).`);
+  for (const [id, r] of ra) if (!rb.has(id)) add('run', id, r.name, `${r.name} was removed${byAgent(r)}.`);
 
   // QC thresholds and acknowledgements.
   const d = defaultThresholds();
@@ -369,33 +379,33 @@ export function diffStates(before, after, { pairs = [] } = {}) {
   const sla = byId(before.selections);
   const slb = byId(after.selections);
   for (const [id, s] of slb) {
-    if (!sla.has(id)) add('selection', id, s.name, `The selection "${s.name}" was saved (${sel(s)}).`);
-    else if (!same(sla.get(id), s)) add('selection', id, s.name, `The selection "${s.name}": ${sel(sla.get(id))} → ${sel(s)}.`);
+    if (!sla.has(id)) add('selection', id, s.name, `The selection "${s.name}" was saved (${sel(s)})${byAgent(s)}.`);
+    else if (!sameItem(sla.get(id), s)) add('selection', id, s.name, `The selection "${s.name}": ${sel(sla.get(id))} → ${sel(s)}.`);
   }
-  for (const [id, s] of sla) if (!slb.has(id)) add('selection', id, s.name, `The selection "${s.name}" was removed.`);
+  for (const [id, s] of sla) if (!slb.has(id)) add('selection', id, s.name, `The selection "${s.name}" was removed${byAgent(s)}.`);
   const ana = byId(before.annotations);
   const anb = byId(after.annotations);
   for (const [id, a] of anb) {
-    if (!ana.has(id)) add('annotation', id, a.name, `The annotation "${a.name}" was added beside the map${a.file?.sha256 ? ` (its file's SHA-256 ${short(a.file.sha256)})` : ''}.`);
-    else if (!same(ana.get(id), a)) add('annotation', id, a.name, `The annotation "${a.name}": ${lower(fieldsChanged(ana.get(id), a))}.`);
+    if (!ana.has(id)) add('annotation', id, a.name, `The annotation "${a.name}" was added beside the map${a.file?.sha256 ? ` (its file's SHA-256 ${short(a.file.sha256)})` : ''}${byAgent(a)}.`);
+    else if (!sameItem(ana.get(id), a)) add('annotation', id, a.name, `The annotation "${a.name}": ${lower(fieldsChanged(plain(ana.get(id)), plain(a)))}.`);
   }
-  for (const [id, a] of ana) if (!anb.has(id)) add('annotation', id, a.name, `The annotation "${a.name}" was removed.`);
+  for (const [id, a] of ana) if (!anb.has(id)) add('annotation', id, a.name, `The annotation "${a.name}" was removed${byAgent(a)}.`);
   const va = byId(before.structureViews);
   const vb = byId(after.structureViews);
   for (const [id, v] of vb) {
-    if (!va.has(id)) add('structure-view', id, v.name, `The structure view "${v.name}" was saved.`);
-    else if (!same(va.get(id), v)) add('structure-view', id, v.name, `The structure view "${v.name}" was saved again (${Object.keys({ ...va.get(id), ...v }).filter((k) => !same(va.get(id)[k], v[k]) && k !== 'created').join(', ') || 'its time'}).`);
+    if (!va.has(id)) add('structure-view', id, v.name, `The structure view "${v.name}" was saved${byAgent(v)}.`);
+    else if (!sameItem(va.get(id), v)) add('structure-view', id, v.name, `The structure view "${v.name}" was saved again (${Object.keys({ ...va.get(id), ...v }).filter((k) => !same(va.get(id)[k], v[k]) && k !== 'created' && k !== 'proposed').join(', ') || 'its time'}).`);
   }
-  for (const [id, v] of va) if (!vb.has(id)) add('structure-view', id, v.name, `The structure view "${v.name}" was removed.`);
+  for (const [id, v] of va) if (!vb.has(id)) add('structure-view', id, v.name, `The structure view "${v.name}" was removed${byAgent(v)}.`);
   const fa = byId(before.figures);
   const fb = byId(after.figures);
   for (const [id, f] of fb) {
     const old = fa.get(id);
     if (!old) {
-      add('figure', id, f.name, `The figure "${f.name}" was made (${plural(f.panels.length, 'panel')}).`);
+      add('figure', id, f.name, `The figure "${f.name}" was made (${plural(f.panels.length, 'panel')})${byAgent(f)}.`);
       continue;
     }
-    if (same(old, f)) continue;
+    if (sameItem(old, f)) continue;
     const what = [];
     if (old.name !== f.name) what.push(`renamed from "${old.name}"`);
     const pa = byId(old.panels);
@@ -409,19 +419,32 @@ export function diffStates(before, after, { pairs = [] } = {}) {
     if (removed.length) what.push(`${removed.length === 1 ? 'a panel' : `${removed.length} panels`} removed (${removed.join('; ')})`);
     if (shown.length) what.push(`what ${shown.length === 1 ? 'a panel shows' : `${shown.length} panels show`} changed (${shown.join('; ')})`);
     if (moved) what.push(`${plural(moved, 'panel')} moved or resized`);
-    const page = Object.keys({ ...old, ...f }).filter((k) => !['name', 'panels'].includes(k) && !same(old[k], f[k]));
+    const page = Object.keys({ ...old, ...f }).filter((k) => !['name', 'panels', 'proposed'].includes(k) && !same(old[k], f[k]));
     if (page.length) what.push(`its ${page.join(', ')}`);
     add('figure', id, f.name, `The figure "${f.name}": ${what.join('; ') || 'changed'}.`);
   }
-  for (const [id, f] of fa) if (!fb.has(id)) add('figure', id, f.name, `The figure "${f.name}" was deleted.`);
+  for (const [id, f] of fa) if (!fb.has(id)) add('figure', id, f.name, `The figure "${f.name}" was deleted${byAgent(f)}.`);
   const ka = byId(before.analyses);
   const kb = byId(after.analyses);
   const kept = (a) => (a.kind === 'comparison' ? `the comparison of ${a.a.label} and ${a.b.label}` : `${possessive(a.run.name)} robustness check`);
-  for (const [id, a] of kb) if (!ka.has(id)) add('report', id, kept(a), `${kept(a).replace(/^./, (c) => c.toUpperCase())} was added to the report.`);
-  for (const [id, a] of ka) if (!kb.has(id)) add('report', id, kept(a), `${kept(a).replace(/^./, (c) => c.toUpperCase())} was taken out of the report.`);
+  for (const [id, a] of kb) if (!ka.has(id)) add('report', id, kept(a), `${kept(a).replace(/^./, (c) => c.toUpperCase())} was added to the report${byAgent(a)}.`);
+  for (const [id, a] of ka) if (!kb.has(id)) add('report', id, kept(a), `${kept(a).replace(/^./, (c) => c.toUpperCase())} was taken out of the report${byAgent(a)}.`);
+
+  // AI agents' proposals (wave 7, slice 2): what an agent proposed and the person accepted since,
+  // and what waits for the person in the later state that did not in the earlier.
+  for (const [key, kind] of [['sources', 'table'], ['targets', 'target'], ['runs', 'run'], ['selections', 'selection'], ['annotations', 'annotation'], ['structureViews', 'structure-view'], ['figures', 'figure'], ['analyses', 'report']]) {
+    const was = byId(before[key]);
+    for (const x of after[key] ?? []) {
+      const old = was.get(x.id);
+      if (old?.proposed?.proposal && x.proposed?.accepted) add('proposal', `${key}:${x.id}`, x.name ?? kept(x), `${x.name ? (kind === 'run' ? x.name : `The ${kind === 'structure-view' ? 'structure view' : kind} "${x.name}"`) : kept(x).replace(/^./, (c) => c.toUpperCase())}, proposed by ${x.proposed.by}, was accepted.`);
+    }
+  }
+  const waiting = (state) => new Map((state.proposals ?? []).flatMap((p) => p.changes.filter((c) => !['add', 'edit'].includes(c.kind)).map((c) => [`${p.author}:${canonicalJSON(c)}`, { author: p.author, c }])));
+  const wa = waiting(before);
+  for (const [k, { author, c }] of waiting(after)) if (!wa.has(k)) add('proposal', k, author, `Proposed by ${author}, waiting for the person: ${c.detail ?? (c.kind === 'remove' ? `remove ${c.name}` : c.kind)}.`);
   if (!same(before.deposit, after.deposit)) add('deposit', 'deposit', 'MaveDB details', `The MaveDB details: ${lower(fieldsChanged(before.deposit ?? {}, after.deposit ?? {})).replace(/^changed \((.*)\)$/, '$1 changed')}.`);
   if (!same(before.tracks, after.tracks)) add('tracks', 'tracks', 'tracks', 'The tracks beside the map were arranged or filtered otherwise.');
-  const covered = new Set(['name', 'sources', 'targets', 'design', 'designSource', 'runs', 'qc', 'selections', 'annotations', 'structureViews', 'structures', 'figures', 'analyses', 'deposit', 'tracks']);
+  const covered = new Set(['name', 'sources', 'targets', 'design', 'designSource', 'runs', 'qc', 'selections', 'annotations', 'structureViews', 'structures', 'figures', 'analyses', 'deposit', 'tracks', 'proposals']);
   for (const key of Object.keys({ ...before, ...after })) if (!covered.has(key) && !same(before[key], after[key])) add('workspace', key, key, `The workspace's ${key} changed.`);
 
   // The latest run of each table: how its analysis changed and what that did.
@@ -431,7 +454,7 @@ export function diffStates(before, after, { pairs = [] } = {}) {
     const recomputed = Boolean(p.resultsA && p.resultsB);
     const targets = recomputed && p.a.id !== p.b.id ? variantChanges(p.a, p.resultsA, p.b, p.resultsB) : [];
     const findings = p.findingsA && p.findingsB ? findingChanges(p.findingsA, p.findingsB) : [];
-    return { table: p.table, a: { id: p.a.id, name: p.a.name }, b: { id: p.b.id, name: p.b.name }, parameters, design, targets, findings, recomputed: recomputed || p.a.id === p.b.id };
+    return { table: p.table, a: { id: p.a.id, name: p.a.name }, b: { id: p.b.id, name: p.b.name, ...(p.b.proposed ? { proposed: { by: p.b.proposed.by, accepted: Boolean(p.b.proposed.accepted) } } : {}) }, parameters, design, targets, findings, recomputed: recomputed || p.a.id === p.b.id };
   }).filter((p) => p.a.id !== p.b.id || p.findings.length);
   const n = changes.length;
   const summary = n || described.length
@@ -444,7 +467,7 @@ export function diffStates(before, after, { pairs = [] } = {}) {
 export function pairWords(p) {
   const out = [];
   if (p.a.id !== p.b.id) {
-    out.push(`${p.a.name} → ${p.b.name}${p.parameters.length ? `: ${p.parameters.join('; ')}` : ''}${p.design.length ? `${p.parameters.length ? '; ' : ': '}the design: ${p.design.join('; ')}` : ''}${!p.parameters.length && !p.design.length ? ': the same analysis' : ''}.`);
+    out.push(`${p.a.name} → ${p.b.name}${p.b.proposed ? ` (proposed by ${p.b.proposed.by}${p.b.proposed.accepted ? ', accepted' : ''})` : ''}${p.parameters.length ? `: ${p.parameters.join('; ')}` : ''}${p.design.length ? `${p.parameters.length ? '; ' : ': '}the design: ${p.design.join('; ')}` : ''}${!p.parameters.length && !p.design.length ? ': the same analysis' : ''}.`);
     if (!p.recomputed) out.push('Their scores could not be recomputed here, so what the change did to the variants is not said.');
     for (const t of p.targets) {
       const where = p.targets.length > 1 ? `${t.name}: ` : '';

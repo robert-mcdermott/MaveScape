@@ -399,6 +399,32 @@ entry, so that a change made later breaks the chain. From MaveScape 0.7, a chang
 through `mavescape mcp` also has `by`, the agent's name as its client gives it ("Claude Code"),
 which the entry's hash covers as it covers the rest.
 
+**Proposals** (MaveScape 0.7). An AI agent's changes are proposals the person accepts or rejects
+([MCP.md](MCP.md)). `proposals`, absent when none is open, holds them, one per agent: `{ id,
+author, opened, changes }`, each change one of
+
+| `kind` | What | Fields |
+| --- | --- | --- |
+| `add` | an item the agent made: a table, target, run, selection, annotation, structure view, figure, analysis kept in the report or checkpoint, made at once | `collection` (the workspace's field: `sources`, `targets`, `runs`, `selections`, `annotations`, `structureViews`, `figures`, `analyses`, `checkpoints`), `id`, `name` |
+| `edit` | a change of the person's item, made at once (a figure's panels; what a higher score of a score set means) | `collection`, `id`, `name`, `before` (the item as it was) |
+| `design` | a design set or drafted, held | `design` (`null`: cleared), `source` (the table it describes), `detail` |
+| `qc-thresholds` | QC thresholds, held | `thresholds` (`null`: MaveScape's defaults), `detail` |
+| `acknowledge` | a QC finding acknowledged, or its acknowledgement withdrawn, held | `finding` (its id), `entry` (as `qc.acknowledged` keeps it; `null`: withdrawn), `detail` |
+| `target` | a change of a target (its check against UniProt applied), held | `id`, `name`, `patch` (the fields changed, with `reference`), `detail` |
+| `deposit` | MaveDB details, held | `patch` (each field's new value; `null` removes it), `detail` |
+| `remove` | a removal of the person's item, held | `collection`, `id`, `name`, `detail` |
+| `remove-panel` | a panel of the person's figure removed, held | `collection` (`figures`), `id` (the figure), `panel`, `name`, `detail` |
+
+`detail` is what the history says when the change is applied. An item an agent made carries
+`proposed`: `{ by, proposal }` while the proposal is open, `{ by, accepted }` (the time) once the
+person accepted it. Its history entries carry the agent's name (`by`); a held change is an entry
+`propose` ("Proposed: …") until it is applied. Accepting applies what was held (its entries under
+the agent's name) and is one entry `proposal` ("Accepted the proposal of …: …"), the person's;
+rejecting removes what the agent made, with what was built on it since (a run's selections, the
+structure views colored by it, the figure panels showing it, the analyses reading it), puts back the
+person's items it changed, and is one entry `proposal` ("Rejected the proposal of …: …"). Older
+versions of MaveScape open the workspace and keep both fields as they are.
+
 A table opened from MaveDB (MaveScape 0.3) keeps where it came from, as its source's `origin`:
 `{ database: "MaveDB", urn, file: "scores" | "counts", url, retrieved, license, hasCounts,
 rawReads }`, and, when it was opened with MaveDB's mapped variants, `mapped: { fileName, sha256,
@@ -540,7 +566,9 @@ and deleting one are in the history (action `checkpoint`). A **diff** compares t
 checkpoint and now, two checkpoints, or two archives' workspaces; the Report view, remote control's
 `diff`) and says, in words, each change of the tables, targets, design, runs (scored, removed), QC
 thresholds and acknowledgements, selections, annotations, structure views, figures (made, deleted,
-a panel added, removed, changed or moved), the report's analyses and the MaveDB details. For each
+a panel added, removed, changed or moved), the report's analyses and the MaveDB details; from
+MaveScape 0.7, who proposed what an AI agent made ("Run 2 was scored (proposed by Claude Code)"),
+what the person accepted since, and what waits for the person (kind `proposal`). For each
 table scored in both states it pairs the latest run of each and says how its parameters, filters and
 design changed, and, both runs' scores recomputed, for each condition (and difference between
 conditions): the variants scored in both (`both`), those whose effect (the score less the wild
@@ -600,7 +628,9 @@ workspace reports, computed again from its files when it was made, so that anyon
 once more and compare. It is made from the Report view (**Certify…**), with remote control's
 `certify`, or in Node (`web/lib/certificate.js`, `writeCertificate`); `mavescape verify`, the
 Report view's **Verify…** and remote control's `verify_certificate` check one. Opened as a
-workspace, it is the workspace; MaveScape offers to verify it.
+workspace, it is the workspace; MaveScape offers to verify it. A workspace with an AI agent's
+proposal open (MaveScape 0.7, above) is not certified, nor its review report written: the person
+accepts or rejects the proposal first.
 
 Its files are the archive's, every table included or (for data that cannot be shared) each named
 by its SHA-256 only, every annotation's file and figure image always, every structure's file when
@@ -983,6 +1013,7 @@ present only when the workspace did what it says:
 | Figures | each figure: its size and its panels by letter, with what each shows |
 | Inputs | every file read, by SHA-256: tables, MaveDB's mapped variants, annotations' files, structures' files, figures' images |
 | Software | the MaveScape that wrote the report; each run's MaveScape, scoring version and output SHA-256 |
+| AI agents | from MaveScape 0.7, when an agent worked in the workspace: what agents proposed and the person accepted, each decision, and what is still proposed |
 | Decision log | the history, entry by entry with its time (UTC), and whether its chain holds |
 | Limitations | what the counts did not record (and what that meant), what each run's model assumes, the QC findings not acknowledged, a predicted structure standing in for one |
 | Use | the research-use statement |

@@ -7,14 +7,14 @@ the map, select variants by query, compare runs, score sets and predictors, chec
 robustness, show the scores on a protein structure, make figures, write the methods, keep
 checkpoints, certify the analysis and export files.
 
-The agent works in the MaveScape window you see. Its changes appear there as it makes them, each
-recorded in the workspace's history with the agent's name, and you can undo any of them.
+The agent works in the MaveScape window you see. Its changes are proposals: you accept or reject
+them there, and each is recorded in the workspace's history with the agent's name.
 
 - [Requirements](#requirements)
 - [Claude Code](#claude-code)
 - [Claude Desktop and other clients](#claude-desktop-and-other-clients)
 - [Tools](#tools)
-- [What an agent changes](#what-an-agent-changes)
+- [Proposals](#proposals)
 - [Files](#files)
 - [Scripts without an agent](#scripts-without-an-agent)
 - [Privacy and security](#privacy-and-security)
@@ -73,12 +73,13 @@ PDB, AlphaFold DB) through the program.
 | --- | --- |
 | The workspace and data | `get_state` (start here), `new_workspace`, `open_example`, `open_files`, `search_mavedb`, `open_mavedb`, `check_target`, `set_mode`, `focus` |
 | Design and scoring | `draft_design`, `set_design`, `check`, `score`, `reproduce_run` |
-| Quality control | `qc_findings`, `acknowledge_finding` |
+| Quality control | `qc_findings`, `acknowledge_finding`, `set_qc_thresholds` |
 | Results | `inspect_variant`, `render_map`, `select_variants`, `compare`, `check_robustness` |
 | Tracks beside the map | `list_tracks`, `add_track`, `set_track`, `remove_track` |
 | Structures | `find_structures`, `open_structure`, `map_structure`, `set_structure`, `structure_evidence`, `save_structure_view`, `open_structure_view`, `remove_structure_view`, `proteoscope_link` |
 | Figures | `figures`, `create_figure`, `add_figure_panel`, `set_figure`, `export_figure`, `check_figure` |
 | The record | `report`, `checkpoint`, `diff`, `certify`, `review_report`, `verify_certificate`, `export`, `mavedb_deposit`, `set_mavedb_details` |
+| Proposals | `proposals` (what waits for you, and what you decided) |
 
 The tools MaveScape's product requirements name, and the tool that does each:
 
@@ -103,12 +104,41 @@ is not in Run 1"), which the agent can act on.
 Scores are research evidence of a variant's functional effect in its assay. MaveScape never calls a
 variant pathogenic or benign, and its instructions to the agent say so.
 
-## What an agent changes
+## Proposals
 
-Every change appears in the window as the agent makes it, and goes into the workspace's history
-with the agent's name (the name its MCP client gives, such as Claude Code). The history's entries
-are hash-chained, and the name is part of what each entry's hash covers. You can undo any change in
-the window, and the report's decision log names the agent beside each change it made.
+An agent's changes are proposals, which you accept or reject in the window, in the strip above the
+view: who proposes how many changes, the list (**Review**), **Accept all** and **Reject all**. Each
+decision is in the history, and can be undone.
+
+- **Made at once, marked proposed**, so that the agent and you can use them meanwhile: tables and
+  targets it opens into your workspace, runs it scores, selections it saves, tracks it adds beside
+  the map, structure views it saves, figures it makes and panels it adds to yours, analyses it keeps
+  in the report, checkpoints. The views mark them *proposed*. Rejecting removes them, with what was
+  built on them since (a selection of a run, the figure panels showing it); MaveScape asks before
+  removing anything of yours.
+- **Held until you accept**: a design it sets or drafts (the Experiment view shows it beside yours,
+  and how they differ; the agent scores only once you have accepted it), QC thresholds and
+  acknowledgements (shown in the QC view), a target's check against UniProt applied, the MaveDB
+  details, and every removal (the views strike out what it would remove).
+- **Not proposals**: opening a workspace (`new_workspace`, `open_example`, a MaveDB score set opened
+  as its own workspace), what the window shows (the view, the map's coloring, the structure's
+  style, the selected variants, the tracks' order), and exports, which write only to the path given
+  and change nothing in the analysis.
+
+Changing or removing what it proposed itself applies at once: it is still part of its proposal.
+`proposals` tells the agent what is open and what you decided; a tool's result says when what it
+did waits for you. Nothing is certified while a proposal is open: `certify` and `review_report`
+refuse, saying which.
+
+Every change goes into the workspace's history with the agent's name (the name its MCP client
+gives, such as Claude Code); a held change is a *proposed* entry until you accept it, then the
+change itself, under the agent's name, followed by your decision. The history's entries are
+hash-chained, and the name is part of what each entry's hash covers. The report's decision log
+names the agent beside each change it made, and its *AI agents* section says what agents proposed
+and you accepted; a checkpoint's diff names who proposed what was added.
+
+What the window commits while an agent's action runs counts as the agent's: the window performs one
+action at a time (most take less than a second), and the strip says when an agent is working.
 
 ## Files
 
@@ -119,7 +149,9 @@ file is never replaced unless the call passes `overwrite: true`.
 
 ## Scripts without an agent
 
-`mavescape --remote-control` accepts the same actions from programs on this computer: post JSON
+A script's changes are not proposals: you wrote it, and they apply as yours do (the window's log
+names the script). `mavescape --remote-control` accepts the same actions from programs on this
+computer: post JSON
 such as `{"action": "score", "args": {"preset": "enrich2"}, "client": "My pipeline"}` to
 `/api/remote/action`, with the token MaveScape prints (and writes to `remote.json` in its data
 folder) for actions that read or write files. See
@@ -130,8 +162,8 @@ folder) for actions that read or write files. See
 - Everything runs on this computer: MaveScape answers only requests from this computer, and your
   tables never leave it. Public data are fetched only from the services listed in
   [NETWORK.md](NETWORK.md), and never with your data.
-- The agent acts through the window you use; nothing happens out of sight, and every change can be
-  undone.
+- The agent acts through the window you use; nothing happens out of sight, its changes wait for
+  your decision as above, and every change can be undone.
 - Reading and writing files by path is open to the agent connected over stdio, which you started,
   and to scripts that hold the token (in `remote.json`, readable by you only).
 

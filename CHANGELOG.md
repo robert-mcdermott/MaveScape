@@ -10,7 +10,7 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   It starts MaveScape with remote control on and speaks the Model Context Protocol on stdin and
   stdout (JSON-RPC, protocol versions 2024-11-05 to 2025-11-25), its banner and logs on stderr; the
   window opens when a tool first needs it (`--window`), and MaveScape stops when the agent closes
-  stdin. Its tools are the 49 remote actions under their names, each with a title and MCP's hints
+  stdin. Its tools are the 51 remote actions under their names, each with a title and MCP's hints
   (read only; replaces or removes something; may ask a public service), and its instructions say
   where to start and that scores are never a clinical classification. A call reports progress
   while it runs long and may be cancelled; files are read and written by absolute path, an
@@ -19,23 +19,44 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   history and the report's decision log. `docs/MCP.md` gives the setup for Claude Code and other
   clients, the tools by area and the product requirements' names for them.
 - `GET /api/remote/tools` gives each action's title and hints too.
+- **An agent's changes are proposals** (wave 7, slice 2; `web/lib/proposals.js`, after
+  CytoWeave's). What an agent makes (tables and targets it opens into your workspace, runs,
+  selections, tracks, structure views, figures and the panels it adds to yours, analyses kept in
+  the report, checkpoints) is made at once and marked *proposed*, so that it and you can use it
+  meanwhile; a design it sets or drafts, QC thresholds and acknowledgements, a target's check, the
+  MaveDB details and every removal wait until you accept them. A strip above the view says who
+  proposes how many changes, lists them, and has **Accept all** and **Reject all**; rejecting
+  removes what the agent made with what was built on it since (MaveScape asks first), and puts back
+  the items of yours it changed. Each decision is one entry of the history, yours, and can be
+  undone; what was held is applied under the agent's name. The views mark what is proposed: the
+  dataset tree, the design proposed beside yours with how they differ, the QC view, the figures'
+  panels, the report's kept analyses and checkpoints. Nothing is certified while a proposal is
+  open. The report has an *AI agents* section (what agents proposed and you accepted), and a
+  checkpoint's diff names who proposed what was added. Scripts' changes are not proposals.
+- Two actions: `set_qc_thresholds` (a script's apply at once, an agent's wait) and `proposals` (what
+  waits for the person, and the latest decisions).
 
 ### Changed
 
+- An agent's tool results say when what it did waits for the person, and `score` waits for a design
+  the agent proposed. The MCP server's instructions say how proposals work.
 - The website's Figures page shows the figure of its screenshot as MaveScape exports it: a PNG at
   200 dpi with its manifest inside, to download and drop on the window (the capture's figures scene
   writes it, `docs/images/figure-export.png`; the site's build takes such a file as `<artwork>`).
 
 ### Fixed
 
+- A run focused in the dataset tree that is no longer in the workspace (undone, or an agent's
+  rejected) left the Structure view without scores to color by, saying the workspace had no run;
+  it is passed over now.
 - A figure exported as PNG left its last row (or column) of pixels partly transparent: its size in
   points rarely makes whole pixels (a page 178 mm tall is 1,401.6 pixels at 200 dpi), and only the
   page's own background was painted. The whole image is white now before the figure is drawn.
 
 ### Validation
 
-- `validation/agent-session.mjs` (18 checks; CI job `agents`): `mavescape mcp` driven over stdio as
-  an agent's client drives it, with no model, every one of the 49 tools called on the examples in
+- `validation/agent-session.mjs` (CI job `agents`): `mavescape mcp` driven over stdio as
+  an agent's client drives it, with no model, every one of the 51 tools called on the examples in
   headless Chrome: initialize and the tools' list (the remote actions with their titles and
   hints), errors, the runs' output hashes, a variant's score and a query's variants Node's, a
   comparison the remote action's field for field, the record through the agent (a figure and its
@@ -44,6 +65,14 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   and MaveScape stopped when stdin closes. Go tests of the protocol (`mcp_test.go`): versions, the
   tools, a call reaching the page under the agent's name, required arguments, files by path,
   cancellation and progress, the real command's stdout, and `docs/MCP.md` naming every tool.
+- The agent session (26 checks) also acts as the person, in the window: each kind of change held or
+  made at once as it should be, said in the tool's result and in the views; accepted (applied under
+  the agent's name, the decision the person's, the history's chain intact) and rejected (with the
+  figure panel the person had made of the agent's run since); the agent's removals of the person's
+  items waiting until accepted; certify refused while a proposal is open; the diff from a
+  checkpoint naming the proposer; tables opened into the agent's own workspace proposed, and
+  scoring waiting for its proposed design. `web/lib/proposals.test.mjs` (11 tests). The remote
+  session checks that a script's QC thresholds apply at once and that a script proposes nothing.
 
 ## 0.6.0 (2026-10-12)
 

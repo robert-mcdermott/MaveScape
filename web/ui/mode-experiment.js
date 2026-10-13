@@ -19,6 +19,8 @@ import { draftFromColumns } from './design-draft.js';
 import { GAPS, readiness, readinessLine } from '../lib/readiness.js';
 import { currentRun } from '../lib/workflow.js';
 import { exportPackage } from './record.js';
+import { heldOfKind } from '../lib/proposals.js';
+import { designChanges } from '../lib/diff.js';
 import { targetPublicData } from './public-data.js';
 
 const MODELS = [['two-population', 'Two populations'], ['time-series', 'Time series'], ['bins', 'FACS bins']];
@@ -450,6 +452,21 @@ export function mountExperimentMode(app, container) {
 
   // --- The view -------------------------------------------------------------------------------
 
+  // A design an AI agent proposed (wave 7, slice 2): what it is and how it differs from this one.
+  // It applies only if the person accepts the proposal, in the strip above the view.
+  function proposedPane(design) {
+    const held = heldOfKind(store.ws, 'design')[0];
+    if (!held) return null;
+    const next = held.change.design;
+    const table = store.ws.sources.find((x) => x.id === held.change.source);
+    const changes = next ? designChanges(design, next) : ['the design cleared'];
+    return h('div.pane.proposed-design', h('div.callout.warn', icon('sparkles'), h('div',
+      h('strong', `${held.proposal.author} proposes ${next ? `a design${table ? ` of ${table.name}` : ''}` : 'clearing the design'}`),
+      h('p', { style: { margin: '4px 0' } }, `${held.change.detail}. It applies only if you accept the proposal (above the view).`),
+      next ? h('ul', { style: { margin: '4px 0', paddingLeft: '18px' } }, ...summarizeDesign(next).lines.map((line) => h('li', line))) : null,
+      design && changes.length ? h('p', { style: { margin: '4px 0 0' } }, `Against the design now: ${changes.join('; ')}.`) : null)));
+  }
+
   function render() {
     clear(root);
     const s = source();
@@ -470,13 +487,13 @@ export function mountExperimentMode(app, container) {
     if (!design) {
       const suggested = s.roleSuggestions?.length ?? 0;
       const scoresTable = !countColumns(s).length && s.mapping?.scoreColumns?.score;
-      root.append(h('div.view-body', h('div.split', h('div', sourcePane(s), targetPane(s)), h('div', h('div.pane', h('h3', icon('experiment'), 'Design'),
+      root.append(h('div.view-body', proposedPane(null), h('div.split', h('div', sourcePane(s), targetPane(s)), h('div', h('div.pane', h('h3', icon('experiment'), 'Design'),
         h('p', scoresTable ? `${s.name} holds published scores ("${s.mapping.scoreColumns.score}"${s.mapping.scoreColumns.se ? `, with standard errors in "${s.mapping.scoreColumns.se}"` : ''}): start from the design that reads them as published.` : suggested ? `MaveScape suggested roles for ${suggested} of ${countColumns(s).length} columns from their names. Start from that draft, then check and correct it here; or fill the design from a sample sheet.` : 'Start a design from the columns, or fill it from a sample sheet.'),
         h('div.btn-row', h('button.btn.primary', { type: 'button', onclick: () => draftFromColumns(app, s) }, icon('sparkles'), suggested ? 'Start from the suggested design' : 'Start a design'),
           h('button.btn', { type: 'button', onclick: () => sampleSheet() }, icon('upload'), 'Sample sheet…')))))));
       return;
     }
-    root.append(h('div.view-body', h('div.split.experiment-split',
+    root.append(h('div.view-body', proposedPane(design), h('div.split.experiment-split',
       h('div', sourcePane(s), summaryPane(design, s), readinessPane(), settingsPane(design, s), readoutPane(design), targetPane(s)),
       h('div', ...(design.model === 'scores' ? [scoresPane(design, s)] : [replicatesPane(design), design.model === 'bins' ? gatesPane(design) : null, columnsPane(design, s)]),
         h('div.btn-row', { style: { marginTop: '12px' } }, h('button.btn', { type: 'button', onclick: async () => { if (await confirmDialog({ title: 'Draft the design again?', message: 'The design is replaced by the draft from the column names. Undo (⌘Z) brings this one back.', confirm: 'Draft again' })) draftFromColumns(app, s); } }, icon('sparkles'), 'Draft again from the column names'))))));

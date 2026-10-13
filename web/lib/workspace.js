@@ -48,11 +48,24 @@ export function setHistoryActor(name) {
   historyActor = name || null;
 }
 
-// The history fields of ws with an entry appended: { history, historyAnchor? }.
-export function appendHistory(ws, action, detail, time = clockNow()) {
+// fn's result, with the history's entries made meanwhile by name (null: the person's). Accepting a
+// proposal records the agent's changes under its name and the decision under none (proposals.js).
+export function withHistoryActor(name, fn) {
+  const before = historyActor;
+  historyActor = name || null;
+  try {
+    return fn();
+  } finally {
+    historyActor = before;
+  }
+}
+
+// The history fields of ws with an entry appended: { history, historyAnchor? }. by: who made the
+// change, when not the person (by default, the actor of the moment).
+export function appendHistory(ws, action, detail, time = clockNow(), by = historyActor) {
   const history = ws.history ?? [];
   const previous = history.length ? history[history.length - 1].hash : ws.historyAnchor ?? '';
-  const all = [...history, chained(previous, { time, action, detail, ...(historyActor ? { by: historyActor } : {}) })];
+  const all = [...history, chained(previous, { time, action, detail, ...(by ? { by } : {}) })];
   if (all.length <= HISTORY_LIMIT) return { history: all };
   return { history: all.slice(-HISTORY_LIMIT), historyAnchor: all[all.length - HISTORY_LIMIT - 1].hash };
 }
@@ -245,6 +258,16 @@ export function acknowledgeFinding(ws, finding, reason, time = clockNow()) {
   if (finding.status !== 'review' && finding.status !== 'fail') throw new Error(`"${finding.title}" is ${finding.status === 'pass' ? 'a pass' : 'not assessed'}: only a finding to review or failing is acknowledged.`);
   all[finding.id] = { reason: text, status: finding.status, value: finding.value, time };
   return change(ws, { qc: qcWith(ws, 'acknowledged', all) }, 'qc', `Acknowledged "${finding.title}" (${finding.status}): ${text}`, time);
+}
+
+// An acknowledgement as acknowledgeFinding made it (null: withdrawn), set by a finding's id: an
+// agent's, accepted (lib/proposals.js). In the history, with detail.
+export function setAcknowledgement(ws, id, entry, detail) {
+  const all = { ...(ws.qc?.acknowledged ?? {}) };
+  if (canonicalJSON(all[id] ?? null) === canonicalJSON(entry ?? null)) return ws;
+  if (entry) all[id] = entry;
+  else delete all[id];
+  return change(ws, { qc: qcWith(ws, 'acknowledged', Object.keys(all).length ? all : null) }, 'qc', detail);
 }
 
 // Sets (or clears) the design, and the table it describes.

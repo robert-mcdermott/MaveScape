@@ -1,8 +1,10 @@
 // Remote control (wave 2, slice 1): actions sent by programs on this computer (scripts, the
 // documentation's screenshot capture, and AI agents through the MCP server, mavescape mcp, wave 7)
 // are performed here, in the open window, where the user sees them, they go into the history like
-// any edit (an agent's carrying its name), and can be undone. Each action returns { ok, message, data }. The program lists the same actions with
-// their arguments (actions.go, GET /api/remote/tools); a Go test checks the two lists agree.
+// any edit (an agent's carrying its name, as proposals the person accepts or rejects: lib/
+// proposals.js), and can be undone. Each action returns { ok, message, data }. The program lists
+// the same actions with their arguments (actions.go, GET /api/remote/tools); a Go test checks the
+// two lists agree.
 // The connection and the export upload follow CytoWeave 0.8.0's web/ui/remote.js.
 
 import { toast } from './overlays.js';
@@ -11,10 +13,11 @@ import { coversPosition, validateDesign, summarizeDesign } from '../lib/design.j
 import { checkParameters, defaultParameters, PRESETS, withDefaults } from '../lib/score.js';
 import { addRun, makeRun, nextRunName, outputDigest, runId, runInputs } from '../lib/runs.js';
 import { reviewImport } from '../lib/importer.js';
-import { acknowledgeFinding, addSelection, addTarget, createWorkspace, removeFigure, rename, saveFigure, setDeposit, setDesign } from '../lib/workspace.js';
+import { acknowledgeFinding, addSelection, addTarget, canonicalJSON, createWorkspace, removeFigure, rename, saveFigure, setDeposit, setDesign, setQcThresholds } from '../lib/workspace.js';
+import { absorb, decisions, describeProposal, heldOfKind, openProposals, proposalOf, ProposalError, proposalSummary, proposeChange, proposeRemoval } from '../lib/proposals.js';
 import { now } from '../lib/clock.js';
 import { currentRun, currentSource, focusStep, workflowSteps } from '../lib/workflow.js';
-import { findingsFrom, overall, withDefaultThresholds } from '../lib/findings.js';
+import { checkThresholds, findingsFrom, overall, THRESHOLDS, withDefaultThresholds } from '../lib/findings.js';
 import { buildMapModel, cellAt, cellName, COLOR_BY, describeMap, ROW_ORDERS, STATE, STATE_NAMES } from '../lib/map-model.js';
 import { proteinView } from '../lib/collapse.js';
 import { mappedFor } from './mapped.js';
@@ -113,8 +116,30 @@ const shapeOf = (d) => (d.model === 'scores' ? `published scores in "${d.scoreCo
 export function installRemote(app) {
   const { store } = app;
   const ws = () => store.ws;
-  // Who sent the action being performed (what the script calls itself).
+  // Who sent the action being performed (what the script calls itself), and whether it is an AI
+  // agent (mavescape mcp, wave 7), whose changes are proposals (lib/proposals.js).
   let author = 'a program on this computer';
+  let agent = false;
+
+  // --- Proposals (wave 7, slice 2) --------------------------------------------------------------
+
+  const mine = () => (agent ? proposalOf(ws(), author) : null);
+  // An item the agent proposed itself, still open: changing or removing it applies at once.
+  const own = (item) => Boolean(agent && item?.proposed?.proposal && item.proposed.proposal === mine()?.id);
+  // The design the agent proposed, waiting for the person.
+  const heldDesign = () => (agent ? heldOfKind(ws(), 'design').find((x) => x.proposal.author === author)?.change ?? null : null);
+  const waits = ' It waits for the person to accept it (proposals says when it is decided).';
+
+  // A removal: an agent's proposed, unless it removes what the agent proposed itself. Returns
+  // whether it waits.
+  function removing(item, collection, name, detail, remove, label) {
+    if (agent && !own(item)) {
+      store.commit(proposeRemoval(ws(), author, { collection, id: item.id, name, detail }), label);
+      return true;
+    }
+    remove();
+    return false;
+  }
 
   // --- Resolution of names --------------------------------------------------------------------
 
@@ -857,6 +882,8 @@ export function installRemote(app) {
     async save_structure_view(args) {
       if (!structureState(app).viewer?.structure) throw new ActionError('No structure is open: open one with open_structure, then save the view of it.');
       if (!args.name || !String(args.name).trim()) throw new ActionError('Give the view a name.');
+      const taken = agent ? (ws().structureViews ?? []).find((v) => v.name === String(args.name).trim()) : null;
+      if (taken && !own(taken)) throw new ActionError(`The person has a view "${taken.name}": name yours otherwise (saving it again would replace theirs).`);
       const saved = await saveView(app, String(args.name));
       if (!saved.ok) throw new ActionError(saved.message);
       await settle();
@@ -878,9 +905,11 @@ export function installRemote(app) {
     async remove_structure_view(args) {
       const views = ws().structureViews ?? [];
       const name = choose(String(args.name ?? ''), views.map((v) => v.name), 'saved view');
-      const removed = removeView(app, views.find((v) => v.name === name).id);
+      const view = views.find((v) => v.name === name);
+      let removed = null;
+      const held = removing(view, 'structureViews', `the structure view "${name}"`, `Removed the view "${name}"`, () => { removed = removeView(app, view.id); }, `Propose removing the view "${name}"`);
       await settle();
-      return { message: removed.message, data: { removed: name, views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
+      return { message: held ? `Proposed removing the view "${name}".${waits}` : removed.message, data: { removed: name, ...(held ? { waiting: true } : {}), views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
     },
 
     // --- Figures (wave 6, slice 1) -----------------------------------------------------------------
@@ -928,12 +957,16 @@ export function installRemote(app) {
     async set_figure(args) {
       let fig = resolveFigure(args.figure);
       if (args.delete === true) {
-        store.commit(removeFigure(ws(), fig.id), 'Delete figure');
+        const held = removing(fig, 'figures', `the figure "${fig.name}"`, `Deleted the figure "${fig.name}"`, () => store.commit(removeFigure(ws(), fig.id), 'Delete figure'), `Propose deleting the figure "${fig.name}"`);
         await settle();
-        return { message: `Deleted the figure "${fig.name}".`, data: { deleted: fig.name, figures: (ws().figures ?? []).map((f) => f.name) } };
+        return { message: held ? `Proposed deleting the figure "${fig.name}".${waits}` : `Deleted the figure "${fig.name}".`, data: { deleted: fig.name, ...(held ? { waiting: true } : {}), figures: (ws().figures ?? []).map((f) => f.name) } };
       }
       const before = fig;
       const words = [];
+      // An agent's removal of a panel of the person's figure waits for the person; those of the
+      // panels it added itself do not.
+      const original = agent && !own(fig) ? mine()?.changes.find((c) => c.kind === 'edit' && c.collection === 'figures' && c.id === fig.id)?.before ?? fig : null;
+      const heldPanels = [];
       if (args.name !== undefined) {
         const name = String(args.name).trim();
         if (!name) throw new ActionError('A figure has a name.');
@@ -954,7 +987,12 @@ export function installRemote(app) {
         const target = fig.panels.find((p) => p.id === ref) ?? fig.panels.find((p) => letters.get(p.id) === ref.toUpperCase());
         if (!target) throw new ActionError(`"${ref}" is not a panel of "${fig.name}": its panels are ${fig.panels.map((p) => `${letters.get(p.id) ?? ''} (${p.id})`).join(', ')}.`);
         if (change.remove === true) {
-          words.push(`removed ${letters.get(target.id) ? `panel ${letters.get(target.id)}` : target.id}: ${panelSummary(target, ws())}`);
+          const which = `${letters.get(target.id) ? `panel ${letters.get(target.id)}` : target.id}: ${panelSummary(target, ws())}`;
+          if (original?.panels.some((p) => p.id === target.id)) {
+            heldPanels.push({ panel: target, which });
+            continue;
+          }
+          words.push(`removed ${which}`);
           fig = removePanel(fig, target.id);
           continue;
         }
@@ -975,9 +1013,10 @@ export function installRemote(app) {
       }
       checked(fig);
       store.commit(saveFigure(ws(), fig, words.length ? `The figure "${before.name}": ${words.join('; ')}` : null), 'Edit figure');
+      for (const { panel, which } of heldPanels) store.commit(proposeRemoval(ws(), author, { collection: 'figures', id: fig.id, panel: panel.id, name: panelSummary(panel, ws()), detail: `The figure "${fig.name}": removed ${which}` }), 'Propose removing a panel');
       await showFigure(fig.id);
       const data = await figureData(figureById(fig.id));
-      return { message: data.description, data };
+      return { message: `${data.description}${heldPanels.length ? ` Proposed removing ${heldPanels.map((x) => x.which).join('; ')}.${waits}` : ''}`, data };
     },
 
     async export_figure(args) {
@@ -1062,9 +1101,11 @@ export function installRemote(app) {
       if (!(source.mapping?.countColumns?.length)) throw new ActionError(`${source.name} has no columns of counts to draft a design from.`);
       await draftFromColumns(app, source);
       await settle();
-      const design = ws().design;
+      // An agent's draft is proposed: it waits for the person.
+      const held = heldDesign()?.design ?? null;
+      const design = held ?? ws().design;
       const summary = designSummary(design, source);
-      return { message: `Drafted the design of ${source.name}: ${shapeOf(summary)}. ${summary.valid ? 'It is valid.' : `${plural(summary.problems.length, 'problem')}: ${summary.problems.join(' ')}`}`, data: { design, ...summary } };
+      return { message: `${held ? 'Proposed a design' : 'Drafted the design'} of ${source.name}${held ? ', drafted from its column names' : ''}: ${shapeOf(summary)}. ${summary.valid ? 'It is valid.' : `${plural(summary.problems.length, 'problem')}: ${summary.problems.join(' ')}`}${held ? waits : ''}`, data: { design, ...summary, ...(held ? { waiting: true } : {}) } };
     },
 
     async set_design(args) {
@@ -1089,7 +1130,8 @@ export function installRemote(app) {
       store.commit(setDesign(w, next, `The design set by ${author}`, source.id), `Set the design (${author})`);
       await settle();
       const summary = designSummary(next, source);
-      return { message: `Set the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')}.${summary.warnings.length ? ` Warnings: ${summary.warnings.join(' ')}` : ''}`, data: summary };
+      const held = Boolean(heldDesign());
+      return { message: `${held ? 'Proposed' : 'Set'} the design of ${source.name}: ${summary.model}, ${plural(summary.replicates, 'replicate')}.${summary.warnings.length ? ` Warnings: ${summary.warnings.join(' ')}` : ''}${held ? waits : ''}`, data: { ...summary, ...(held ? { waiting: true } : {}) } };
     },
 
     // MaveDB (wave 3, slice 2): a search, and a score set opened as a workspace.
@@ -1150,7 +1192,8 @@ export function installRemote(app) {
       const next = setDeposit(ws(), patch, `MaveDB details set by ${author}: ${Object.keys(patch).join(', ')}`);
       const changed = next !== ws();
       if (changed) store.commit(next, 'Change the MaveDB details');
-      return { message: changed ? `Set the MaveDB details: ${Object.keys(patch).join(', ')}.` : 'The MaveDB details are as they were.', data: { details: ws().deposit ?? {} } };
+      const held = agent ? heldOfKind(ws(), 'deposit').find((x) => x.proposal.author === author)?.change.patch ?? null : null;
+      return { message: changed ? `${held ? 'Proposed' : 'Set'} the MaveDB details: ${Object.keys(patch).join(', ')}.${held ? waits : ''}` : 'The MaveDB details are as they were.', data: { details: ws().deposit ?? {}, ...(held ? { proposed: held } : {}) } };
     },
 
     async check_target(args) {
@@ -1163,6 +1206,8 @@ export function installRemote(app) {
       if (!check.ok) throw new ActionError(check.message);
       const changes = Object.keys(check.patch);
       if (args.apply) applyCheck(app, target, check);
+      // An agent's check applied waits for the person.
+      const held = Boolean(args.apply && agent && heldOfKind(ws(), 'target').some((x) => x.proposal.author === author && x.change.id === target.id));
       const p = check.placement;
       const data = {
         target: target.name,
@@ -1170,9 +1215,12 @@ export function installRemote(app) {
         retrieval: check.retrieval,
         placement: { offset: p.offset, start: p.start, end: p.end, identical: p.identical, differences: p.differences, outside: p.outside, places: p.places },
         changes: check.patch,
-        applied: Boolean(args.apply),
+        applied: Boolean(args.apply) && !held,
+        ...(held ? { waiting: true } : {}),
       };
-      const what = changes.length ? (args.apply ? ` Set ${changes.join(', ')}, and recorded the check.` : ` It would change ${changes.join(', ')} (apply: true to use them).`) : (args.apply ? ' Nothing to change; recorded the check.' : ' Nothing to change.');
+      const what = held
+        ? ` Proposed ${changes.length ? `${changes.join(', ')} and ` : ''}the record of the check.${waits}`
+        : changes.length ? (args.apply ? ` Set ${changes.join(', ')}, and recorded the check.` : ` It would change ${changes.join(', ')} (apply: true to use them).`) : (args.apply ? ' Nothing to change; recorded the check.' : ' Nothing to change.');
       return { message: `${placementText(target, check)}${what} (UniProt ${retrievalText(check.retrieval) || 'entry'}.)`, data };
     },
 
@@ -1258,6 +1306,7 @@ export function installRemote(app) {
     async score(args) {
       const source = resolveSource();
       const design = ws().design;
+      if (!design && heldDesign()) throw new ActionError('The design you proposed waits for the person to accept it: score once they have (proposals says when).');
       if (!design) throw new ActionError('There is no design yet: draft it (draft_design) or set it (set_design) first.');
       const presetId = choose(args.preset ?? 'mavescape', Object.keys(PRESETS), 'preset');
       const base = defaultParameters(design, source, presetId);
@@ -1339,10 +1388,74 @@ export function installRemote(app) {
       } catch (error) {
         throw new ActionError(error.message);
       }
+      // An agent's acknowledgement (or withdrawal) waits for the person; withdrawing one it
+      // proposed takes that back.
+      if (agent) {
+        const earlier = heldOfKind(ws(), 'acknowledge').find((x) => x.proposal.author === author && x.change.finding === finding.id)?.change ?? null;
+        const current = ws().qc?.acknowledged?.[finding.id] ?? null;
+        if (!reason && !earlier && !current) return { message: `"${finding.title}" was not acknowledged; nothing to withdraw.`, data: findingSummary(finding) };
+        const entry = reason ? next.qc.acknowledged[finding.id] : earlier ? current : null;
+        store.commit(proposeChange(ws(), author, { kind: 'acknowledge', finding: finding.id, entry, detail: reason ? `Acknowledged "${finding.title}" (${finding.status}): ${reason}` : `Withdrew the acknowledgement of "${finding.title}"` }), reason ? `Propose acknowledging "${finding.title}"` : `Propose withdrawing the acknowledgement of "${finding.title}"`);
+        const again = (await qcOfSubject(args.run)).findings.find((f) => f.id === finding.id);
+        const message = reason ? `Proposed acknowledging "${finding.title}" (${finding.status}): ${reason}.${waits}` : earlier ? `Took back your proposed change of the acknowledgement of "${finding.title}".` : `Proposed withdrawing the acknowledgement of "${finding.title}".${waits}`;
+        return { message, data: { ...findingSummary(again), ...(reason || !earlier ? { waiting: true } : {}) } };
+      }
       if (next === ws()) return { message: `"${finding.title}" was not acknowledged; nothing to withdraw.`, data: findingSummary(finding) };
       app.store.commit(next, reason ? `Acknowledge "${finding.title}"` : `Withdraw the acknowledgement of "${finding.title}"`);
       const again = (await qcOfSubject(args.run)).findings.find((f) => f.id === finding.id);
       return { message: reason ? `Acknowledged "${finding.title}" (${finding.status}): ${reason}. Its status is unchanged; the reason goes into the history, the methods and the QC exports.` : `Withdrew the acknowledgement of "${finding.title}".`, data: findingSummary(again) };
+    },
+
+    // Sets the QC thresholds (wave 7, slice 2): those given (by their keys: a { review, fail } pair,
+    // either of them, or a number for a measure), the others as they are; reset: MaveScape's
+    // defaults. An agent's, built on those it proposed before, wait for the person.
+    async set_qc_thresholds(args) {
+      const given = args.thresholds && typeof args.thresholds === 'object' ? args.thresholds : null;
+      if (!given && args.reset !== true) throw new ActionError(`Give "thresholds" (by key: ${THRESHOLDS.map((t) => t.key).join(', ')}), or reset: true for MaveScape's defaults.`);
+      const earlier = agent ? heldOfKind(ws(), 'qc-thresholds').find((x) => x.proposal.author === author)?.change ?? null : null;
+      const from = withDefaultThresholds(earlier ? earlier.thresholds : ws().qc?.thresholds);
+      let next = args.reset === true ? null : { ...from };
+      const words = [];
+      for (const [key, value] of Object.entries(given ?? {})) {
+        const t = THRESHOLDS.find((x) => x.key === key) ?? THRESHOLDS.find((x) => x.label === choose(key, THRESHOLDS.map((y) => y.label), 'threshold'));
+        if (!next) next = { ...withDefaultThresholds(null) };
+        if (t.measure) {
+          next[t.key] = Number(value);
+          words.push(`"${t.label}" ${from[t.key]} → ${next[t.key]}`);
+        } else {
+          const patch = typeof value === 'object' && value ? value : { review: value };
+          next[t.key] = { ...next[t.key], ...Object.fromEntries(['review', 'fail'].filter((k) => patch[k] !== undefined).map((k) => [k, Number(patch[k])])) };
+          const levels = ['review', 'fail'].filter((k) => next[t.key][k] !== from[t.key][k]).map((k) => `${k} ${from[t.key][k]} → ${next[t.key][k]}`);
+          words.push(`"${t.label}" ${levels.join(', ') || 'as it was'}`);
+        }
+      }
+      const problems = next ? checkThresholds(next) : [];
+      if (problems.length) throw new ActionError(problems.join(' '));
+      const detail = next ? `QC thresholds set by ${author}: ${words.join('; ')}` : 'QC thresholds reset to MaveScape\'s defaults';
+      if (agent) store.commit(proposeChange(ws(), author, { kind: 'qc-thresholds', thresholds: next, detail }), 'Propose QC thresholds');
+      else store.commit(setQcThresholds(ws(), next, detail), 'Change QC thresholds');
+      const held = agent ? heldOfKind(ws(), 'qc-thresholds').find((x) => x.proposal.author === author)?.change ?? null : null;
+      const changed = Object.fromEntries(THRESHOLDS.filter((t) => canonicalJSON(withDefaultThresholds(next)[t.key]) !== canonicalJSON(withDefaultThresholds(null)[t.key])).map((t) => [t.key, withDefaultThresholds(next)[t.key]]));
+      const what = next ? `the QC thresholds: ${words.join('; ') || 'as they were'}` : 'MaveScape\'s default QC thresholds';
+      let message = `Set ${what}. The QC findings are read with them.`;
+      if (held) message = `Proposed ${what}.${waits}`;
+      else if (agent) message = earlier ? 'Took back the QC thresholds you proposed: the workspace\'s are as they were.' : 'The QC thresholds are already these: nothing to propose.';
+      return { message, data: { thresholds: changed, defaults: !Object.keys(changed).length, ...(held ? { waiting: true } : {}) } };
+    },
+
+    // The proposals open (an agent's changes the person has yet to accept or reject) and the
+    // latest decisions (wave 7, slice 2).
+    async proposals() {
+      const w = ws();
+      const yours = proposalSummary(w, proposalOf(w, author));
+      const others = openProposals(w).filter((p) => p.author !== author).map((p) => proposalSummary(w, p));
+      const decided = decisions(w, 10).map((e) => ({ time: e.time, decision: /^Accepted/.test(e.detail) ? 'accepted' : 'rejected', detail: e.detail }));
+      const last = decided[0];
+      const count = yours ? yours.made.length + yours.waiting.length : 0;
+      return {
+        message: `${yours ? `Your proposal (${plural(count, 'change')}) waits for the person: ${[...yours.made, ...yours.waiting].join('; ')}.` : 'You have no proposal open.'}${others.length ? ` Open from others: ${others.map((p) => `${p.author} (${plural(p.made.length + p.waiting.length, 'change')})`).join(', ')}.` : ''}${last ? ` The latest decision (${last.time}): ${last.detail}` : ''}`,
+        data: { yours, others, decisions: decided },
+      };
     },
 
     async select_variants(args) {
@@ -1641,9 +1754,9 @@ export function installRemote(app) {
       if (!list.length) throw new ActionError('The workspace has no annotation to remove.');
       const ref = String(args.annotation ?? args.track ?? '').replace(/:.*$/, '');
       const a = list.find((x) => x.id === ref) ?? list.find((x) => x.name === choose(ref, list.map((y) => y.name), 'annotation'));
-      removeTrack(app, a.id);
+      const held = removing(a, 'annotations', `the annotation "${a.name}"`, `Removed the annotation "${a.name}" and its tracks`, () => removeTrack(app, a.id), `Propose removing the track ${a.name}`);
       await settle();
-      return { message: `Removed ${a.name} and its tracks.`, data: { removed: a.id } };
+      return { message: held ? `Proposed removing ${a.name} and its tracks.${waits}` : `Removed ${a.name} and its tracks.`, data: { removed: a.id, ...(held ? { waiting: true } : {}) } };
     },
 
     // Checks a run's robustness to other analysis choices (wave 4, slice 4): scored again across
@@ -1831,8 +1944,8 @@ export function installRemote(app) {
       if (args.remove !== undefined && args.remove !== null) {
         if (!(ws().checkpoints ?? []).length) throw new ActionError('No checkpoint is kept.');
         const gone = find(args.remove);
-        deleteCheckpoint(app, gone.id);
-        message = `Deleted the checkpoint "${gone.name}".`;
+        const held = removing(gone, 'checkpoints', `the checkpoint "${gone.name}"`, `Deleted the checkpoint "${gone.name}"`, () => deleteCheckpoint(app, gone.id), `Propose deleting the checkpoint "${gone.name}"`);
+        message = held ? `Proposed deleting the checkpoint "${gone.name}".${waits}` : `Deleted the checkpoint "${gone.name}".`;
       } else if (args.name !== undefined && args.name !== null) {
         const id = keepCheckpoint(app, args.name);
         const c = ws().checkpoints.find((x) => x.id === id);
@@ -1903,6 +2016,7 @@ export function installRemote(app) {
     // view shows them (Markdown, BibTeX, and each section). remove: an analysis kept in it, by id
     // or by its words ("the comparison of Run 1 and Run 2"), taken out first.
     async report(args) {
+      let heldOut = null;
       if (args.remove !== undefined && args.remove !== null) {
         const kept = ws().analyses ?? [];
         if (!kept.length) throw new ActionError('Nothing is kept in the report.');
@@ -1910,13 +2024,13 @@ export function installRemote(app) {
         const text = String(args.remove).trim().toLowerCase();
         const at = [(a, i) => a.id === args.remove, (a, i) => names[i].toLowerCase() === text, (a, i) => names[i].toLowerCase().includes(text)].reduce((found, test) => (found >= 0 ? found : kept.findIndex(test)), -1);
         if (at < 0) throw new ActionError(`No analysis "${args.remove}" is kept in the report. Kept: ${kept.map((a, i) => `${names[i]} (${a.id})`).join('; ')}.`);
-        removeFromReport(app, kept[at].id);
+        heldOut = removing(kept[at], 'analyses', names[at], `Took ${names[at]} out of the report`, () => removeFromReport(app, kept[at].id), `Propose taking ${names[at]} out of the report`) ? names[at] : null;
       }
       if (args.show !== false) await app.setMode('report');
       const report = await reportOf(app);
       await settle();
       return {
-        message: `${report.title}: ${report.sections.filter((x) => x.title).map((x) => x.title).join(', ')}; ${report.references.length} references. Kept in it: ${(ws().analyses ?? []).map((a) => analysisName(a)).join('; ') || 'nothing'}.`,
+        message: `${heldOut ? `Proposed taking ${heldOut} out of the report.${waits} ` : ''}${report.title}: ${report.sections.filter((x) => x.title).map((x) => x.title).join(', ')}; ${report.references.length} references. Kept in it: ${(ws().analyses ?? []).map((a) => analysisName(a)).join('; ') || 'nothing'}.`,
         data: {
           title: report.title,
           sections: report.sections.map((x) => ({ id: x.id, title: x.title, blocks: x.blocks })),
@@ -2076,16 +2190,40 @@ export function installRemote(app) {
 
   async function perform(event) {
     let outcome;
+    // The workspace open when the action began, and the agent's proposal in it then.
+    const start = { id: store.ws.id, proposal: null };
     try {
       const handler = Object.hasOwn(actions, event.action) ? actions[event.action] : null;
       if (!handler) throw new ActionError(`Unknown action "${event.action}". Actions: ${Object.keys(actions).join(', ')}.`);
       const args = typeof event.args === 'object' && event.args ? event.args : {};
       author = event.client || 'a program on this computer';
+      agent = Boolean(event.agent);
       app.log(`${author}: ${event.action}${Object.keys(args).length ? ` ${JSON.stringify(args).slice(0, 200)}` : ''}`);
-      // An AI agent's changes (mavescape mcp) carry its name in the history (by).
-      setHistoryActor(event.agent ? author : null);
+      // An AI agent's changes (mavescape mcp) carry its name in the history (by) and are proposals:
+      // what it commits to the workspace open when it began passes through absorb (lib/
+      // proposals.js); a workspace it opens meanwhile is its own. What is committed in the window
+      // while the action runs counts as the agent's: the page performs one action at a time, and
+      // the strip above the view says that the agent is working.
+      setHistoryActor(agent ? author : null);
+      if (agent) {
+        start.proposal = proposalOf(store.ws, author);
+        store.setCommitFilter((before, next) => (next.id === start.id ? absorb(before, next, author).ws : next));
+        app.agentAction = { author, action: event.action };
+        store.notify(['agent']);
+      }
       const result = await handler(args, event);
       let message = result.message ?? 'Done.';
+      let data = result.data ?? null;
+      // What the agent made, marked proposed: said, so that it knows the person decides.
+      if (agent && store.ws.id === start.id) {
+        const now = proposalOf(store.ws, author);
+        const fresh = (now?.changes ?? []).filter((c) => !(start.proposal?.changes ?? []).some((x) => canonicalJSON(x) === canonicalJSON(c)));
+        if (fresh.length) {
+          const made = describeProposal(store.ws, { ...now, changes: fresh }).filter((i) => !i.held).map((i) => i.text);
+          if (made.length) message = `${message} Proposed to the person, who accepts or rejects it (meanwhile you can use it): ${made.join('; ')}.`;
+          data = { ...(data ?? {}), proposal: proposalSummary(store.ws, now) };
+        }
+      }
       // An export: the file goes to the program, which writes it where the caller asked.
       if (result.file !== undefined) {
         if (!event.output) throw new ActionError('Writing files needs the MaveScape program.');
@@ -2094,12 +2232,18 @@ export function installRemote(app) {
         if (!response.ok) throw new ActionError(`The file could not be written: ${written.error ?? `HTTP ${response.status}`}`);
         message = `Wrote ${written.path} (${written.bytes} bytes). ${message}`;
       }
-      outcome = { ok: true, message, data: result.data ?? null };
+      outcome = { ok: true, message, data };
     } catch (error) {
       outcome = { ok: false, message: error.message ?? String(error) };
-      if (!(error instanceof ActionError)) console.error(error);
+      if (!(error instanceof ActionError) && !(error instanceof ProposalError)) console.error(error);
     } finally {
       setHistoryActor(null);
+      store.setCommitFilter(null);
+      if (agent) {
+        app.agentAction = null;
+        store.notify(['agent']);
+      }
+      agent = false;
     }
     await fetch(`api/remote/result/${encodeURIComponent(event.id)}`, { method: 'POST', body: JSON.stringify(outcome), headers: { 'Content-Type': 'application/json' } }).catch(() => {});
   }
