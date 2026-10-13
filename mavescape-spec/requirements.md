@@ -132,8 +132,8 @@ Status: **planned (wave N)** until built; then **done**, **partial** (the gap no
 
 | # | Requirement | Status |
 | --- | --- | --- |
-| K1 | Known-effect control sets with provenance; circularity warnings | planned (wave 8) |
-| K2 | Score distributions by control class; ROC and precision–recall curves; thresholds and an indeterminate zone; sensitivity and specificity with intervals; bootstrap threshold stability | planned (wave 8) |
+| K1 | Known-effect control sets with provenance; circularity warnings | done (wave 8, slice 1: from ClinVar's records of the gene or a table of labels, each label as its source gives it, with the source's file by its SHA-256; matched to a run; circularity: scale anchors, the design's controls, ClinVar evaluated since the assay, its own publication, few controls, a predictor set with ClinVar; validation `controls`) |
+| K2 | Score distributions by control class; ROC and precision–recall curves; thresholds and an indeterminate zone; sensitivity and specificity with intervals; bootstrap threshold stability | done (wave 8, slice 2: calibrations made when asked; each side's scores against the run's; ROC with DeLong's interval and PR, each with a seeded stratified bootstrap's intervals and bands; thresholds by the controls or given, the intermediate zone between; sensitivity and specificity with Wilson's intervals; the thresholds' bootstrap intervals; validation `calibration` against pROC, PRROC and binom) |
 | K3 | OddsPath and likelihood-ratio evidence strength, labeled research use only; assay validity, functional class and clinical classification kept as separate concepts | planned (wave 8) |
 | K4 | Calibration never runs automatically and reports control composition and limitations | planned (wave 8) |
 

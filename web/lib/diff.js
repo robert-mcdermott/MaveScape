@@ -4,7 +4,7 @@
 // says what changed between two states (two checkpoints, a checkpoint and now, two archives), in
 // words: the tables and targets, the design, the runs scored and removed, the QC thresholds and
 // acknowledgements, the selections, annotations, structure views, figures, the analyses kept in
-// the report, the control sets, the MaveDB details. For the latest run of each table in the two
+// the report, the control sets and calibrations, the MaveDB details. For the latest run of each table in the two
 // states it says how the analysis changed (its parameters and filters, its design) and what that
 // did: the variants whose effect moved beyond their earlier 95% interval, crossed a class (lower
 // than, like or higher than the wild type, q < 0.05, as the robustness check calls them), or were
@@ -20,6 +20,7 @@ import { THRESHOLDS, defaultThresholds } from './findings.js';
 import { callsOf, CLASS, CLASS_NAMES, CONTRAST_CLASS_NAMES } from './robustness.js';
 import { panelSummary } from './figures.js';
 import { possessive } from './words.js';
+import { thresholdWords } from './calibration.js';
 
 const encoder = new TextEncoder();
 const same = (a, b) => canonicalJSON(a ?? null) === canonicalJSON(b ?? null);
@@ -439,10 +440,21 @@ export function diffStates(before, after, { pairs = [] } = {}) {
     else if (!sameItem(ca.get(id), c)) add('controls', id, c.name, `The control set "${c.name}": ${cs(ca.get(id))} → ${cs(c)}.`);
   }
   for (const [id, c] of ca) if (!cb.has(id)) add('controls', id, c.name, `The control set "${c.name}" was deleted${byAgent(c)}.`);
+  // Calibrations (wave 8, slice 2): made once too.
+  const runName = (state, id) => (state.runs ?? []).find((r) => r.id === id)?.name ?? id;
+  const setName = (state, id) => (state.controlSets ?? []).find((c) => c.id === id)?.name ?? id;
+  const cw = (state, c) => `${runName(state, c.run)} against "${setName(state, c.controlSet)}", ${c.n.P} P and ${c.n.B} B controls scored; ${thresholdWords(c.side, c.thresholds)}`;
+  const la = byId(before.calibrations);
+  const lb = byId(after.calibrations);
+  for (const [id, c] of lb) {
+    if (!la.has(id)) add('calibration', id, c.name, `The calibration "${c.name}" was made (${cw(after, c)})${byAgent(c)}.`);
+    else if (!sameItem(la.get(id), c)) add('calibration', id, c.name, `The calibration "${c.name}": ${cw(before, la.get(id))} → ${cw(after, c)}.`);
+  }
+  for (const [id, c] of la) if (!lb.has(id)) add('calibration', id, c.name, `The calibration "${c.name}" was deleted${byAgent(c)}.`);
 
   // AI agents' proposals (wave 7, slice 2): what an agent proposed and the person accepted since,
   // and what waits for the person in the later state that did not in the earlier.
-  for (const [key, kind] of [['sources', 'table'], ['targets', 'target'], ['runs', 'run'], ['selections', 'selection'], ['annotations', 'annotation'], ['structureViews', 'structure-view'], ['figures', 'figure'], ['analyses', 'report'], ['controlSets', 'control set']]) {
+  for (const [key, kind] of [['sources', 'table'], ['targets', 'target'], ['runs', 'run'], ['selections', 'selection'], ['annotations', 'annotation'], ['structureViews', 'structure-view'], ['figures', 'figure'], ['analyses', 'report'], ['controlSets', 'control set'], ['calibrations', 'calibration']]) {
     const was = byId(before[key]);
     for (const x of after[key] ?? []) {
       const old = was.get(x.id);
@@ -454,7 +466,7 @@ export function diffStates(before, after, { pairs = [] } = {}) {
   for (const [k, { author, c }] of waiting(after)) if (!wa.has(k)) add('proposal', k, author, `Proposed by ${author}, waiting for the person: ${c.detail ?? (c.kind === 'remove' ? `remove ${c.name}` : c.kind)}.`);
   if (!same(before.deposit, after.deposit)) add('deposit', 'deposit', 'MaveDB details', `The MaveDB details: ${lower(fieldsChanged(before.deposit ?? {}, after.deposit ?? {})).replace(/^changed \((.*)\)$/, '$1 changed')}.`);
   if (!same(before.tracks, after.tracks)) add('tracks', 'tracks', 'tracks', 'The tracks beside the map were arranged or filtered otherwise.');
-  const covered = new Set(['name', 'sources', 'targets', 'design', 'designSource', 'runs', 'qc', 'selections', 'annotations', 'structureViews', 'structures', 'figures', 'analyses', 'controlSets', 'deposit', 'tracks', 'proposals']);
+  const covered = new Set(['name', 'sources', 'targets', 'design', 'designSource', 'runs', 'qc', 'selections', 'annotations', 'structureViews', 'structures', 'figures', 'analyses', 'controlSets', 'calibrations', 'deposit', 'tracks', 'proposals']);
   for (const key of Object.keys({ ...before, ...after })) if (!covered.has(key) && !same(before[key], after[key])) add('workspace', key, key, `The workspace's ${key} changed.`);
 
   // The latest run of each table: how its analysis changed and what that did.

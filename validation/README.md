@@ -34,6 +34,7 @@ the tolerance required. Suites that need public data skip without it (and fail w
 | `certificate` | Reproducibility certificates (wave 6, slice 6; `certificate-cases.mjs`, `web/lib/certificate.js`): GRB2's workspace of every operation (two runs, a threshold changed, a finding acknowledged, a selection, a comparison and a robustness check kept in the report, an annotation, a structure view, a checkpoint, a figure of six panels: a map, a QC finding, the scores by class, a comparison, a variant's evidence, text) certified, each kind of number what is computed apart from the certificate (each run's scores, SEs and classes by scoring and `callsOf`; its QC, every number and each finding; the comparison and robustness check as the report keeps them; each panel drawn from the numbers computed apart; the report), and verified bit for bit; made again, the same bytes; its fingerprint the SHA-256 of `certificate.json`'s canonical JSON without it (computed with Node's own SHA-256), named in README.txt with what it proves and how to verify; the selection and structure view said not computed again; verified by another version and said so; six kinds of tampering caught and said, the archive's manifest made to list each change (a count changed in its table; a score changed in its last bit, with and without its fingerprint made again; a run's pseudocount, a history entry's words and a checkpoint's state edited, `certificate.json` made to agree); without its tables, not checkable (exit 2), the table named, then verified with it beside; each of the 14 examples opened as the window opens it, certified and verified (172,383 numbers); each earlier release's archive (0.1 to 0.7) certified and verified, 0.7.0's with a proposal open refused until it is accepted, and 0.6.0's and 0.7.0's own certificates verified. 7 checks | bundled |
 | `review` | The review report (wave 6, slice 7; `certificate-cases.mjs`'s `checkTraced` and `externalReferences`, `web/lib/review.js`): GRB2's workspace of every operation, its review report's every traced number (182: each run's output, each QC finding's verdict, measure and acknowledgement and its QC's digest, each kept analysis's statistics and verdicts, each figure panel's drawing, the report; each parameter and recorded value; the counts by class) where it says it comes from: the certificate's value under its key, the workspace's at its path, a count of the certificate's classes; the file loading nothing (no element, CSS or address that loads, its only links DOIs; an image, a stylesheet and a request planted in it caught); made again, the same bytes, and from the certificate verified the same as its maker's, none from a tampered one; every section, the certificate whole in its JSON block (its fingerprint its own), each input's SHA-256, a map for each condition and difference, the QC findings' plots, each figure, the report's sections and references, every history entry; the 14 examples' reviews, every traced number as recorded (1,164) and nothing from outside. 5 checks | bundled |
 | `controls` | Control sets, for calibration (wave 8, slice 1; `control-cases.mjs`, `web/lib/controls.js`): factor IX's ClinVar controls under four rules (the default, at least one star and missense; any review and every kind; two stars; three stars), every control, its side, stars, records, latest evaluation and kind as an account read straight from NCBI's cached answers gives them, with a reader of its own (169 P and 22 B by default); matched to the example's Run 1, each scored, not scored or not in the run as its scores export has it; a table of invented labels for GRB2 (`fixtures/controls/`) with every case a reader meets planted; each kind of circularity planted (scale anchors, the design's named controls, the assay's own publication, ClinVar classifications evaluated since the assay, as many as the account dates, few controls, a predictor set with ClinVar) and none for a clean set; the sets through the workspace archive and a checkpoint's diff. 5 checks | `fixtures/public-data/` (ClinVar's answers for F9), `fixtures/controls/` |
+| `calibration` | Calibration's metrics (wave 8, slice 2; `calibration-cases.mjs`, `web/lib/calibration.js`) against R (`reference/calibration.json`, below): on seven cases, the ROC curve's points, the AUC and DeLong's interval as pROC 1.19 computes them; the precision–recall curve's points and area (Keilwagen et al. 2014's interpolation) as PRROC 1.4's; each rule's thresholds (the rule error at 5% and 10%, Youden's J, given), each side's controls in each class and Wilson's intervals as binom 1.1's, all to 13 digits; the stratified bootstrap (2000 samples) as distributions: every quantile of R's (2.5%, 50%, 97.5%; the AUC, the sensitivity at 21 specificities, the precision–recall area, the precision at 20 recalls, each rule's thresholds) where it falls among MaveScape's samples, within four standard errors (1,092); factor IX's scored controls (`fixtures/controls/factor9-run1-controls.csv`) still what the example makes; calibrations through the workspace archive and a checkpoint's diff, deleted with their control set. 6 checks | `reference/calibration.json`, `fixtures/controls/factor9-run1-controls.csv` |
 
 ## The remote-control session (`remote-session.mjs`)
 
@@ -193,8 +194,11 @@ map with its tracks as a PNG data URL, the SVG export's size and every cell its 
 (`mapCellsAgree`); the Structure view's picture pixel for pixel the `structure-image` export; a
 figure page at the dpi asked. Control sets (wave 8, slice 1): made in the window from factor IX's
 ClinVar records and from a table as Node makes them, matched to Run 1 and checked for circularity as
-Node does, a table of another protein's labels refused, focused and deleted. 206 checks; in CI as
-the `remote` job.
+Node does, a table of another protein's labels refused, focused and deleted. Calibrations (wave 8,
+slice 2): Run 1 against the ClinVar set calibrated in the window, every number as Node computes it
+from the same scored controls (the seeded bootstrap's included), drawn in Calibrate; given
+thresholds counted as Node counts them, thresholds in the wrong order refused; listed, focused,
+deleted, and deleted with their set. 209 checks; in CI as the `remote` job.
 
 `--like-ci` runs the session as GitHub's runners do: WebGPU drawn in software (Chrome's
 `--use-webgpu-adapter=swiftshader`, whose graphics process does not last) and the page's processor
@@ -259,11 +263,15 @@ one of the 54 tools on the examples:
 - Control sets (wave 8, slice 1), on GRB2: the person's set made at once; the agent's made at once
   and marked proposed, `control_sets` listing both matched to Run 1, its deleting the person's set
   waiting; rejected, the agent's gone and the person's kept.
+- Calibrations (wave 8, slice 2), on GRB2's Run 1 against the person's set: the person's
+  calibration made at once; the agent's made at once and marked proposed, its metrics returned,
+  `calibrations` listing both, its deleting the person's waiting; accepted, the agent's kept and
+  marked accepted, the person's deleted.
 
 Every tool said to read only must leave the workspace's history as it was; every change the agent
 made must carry its name in the history (`by`), the other entries being the person's decisions and
 the person's own changes; stdout must carry nothing but JSON-RPC; closing stdin must stop MaveScape
-and remove its connection file. 35 checks; in CI as the `agents` job.
+and remove its connection file. 36 checks; in CI as the `agents` job.
 
 ## Proteoscope itself (`proteoscope-handoff.mjs`, wave 5 slice 6)
 
@@ -727,6 +735,35 @@ The suite also simulates:
   variants fewer.
 - 6,000 pairs of classes of known AUC (two normal groups). DeLong's interval holds the AUC 94–95%
   of the time.
+
+## Calibration (`reference/calibration.json`, wave 8 slice 2)
+
+`reference/generate_calibration.R` (R 4.6.1, pROC 1.19.1, PRROC 1.4, binom 1.1.2, jsonlite; run
+from the repository root after `node validation/fixtures/make-calibration.mjs`) writes seven cases,
+each two vectors of scores, P and B, and the side where abnormal-like scores are, rounded to 13
+significant digits before anything is computed so that MaveScape is given the very numbers R used:
+five simulated (`set.seed(20261014)`: P below B, overlapping; P above B; ties at one decimal; well
+apart, where the rule error's thresholds cross; fully apart, AUC 1; few controls, 8 and 6) and
+factor IX's ClinVar controls as the example's Run 1 scores them
+(`fixtures/controls/factor9-run1-controls.csv`, 164 P and 22 B, which the suite checks is what the
+example makes now). For each:
+- the ROC curve: pROC's `roc` (the P controls the cases, the direction the side gives), every point
+  of `coords(r, "all")`, the AUC and DeLong's interval (`ci.auc`);
+- the precision–recall curve: PRROC's `pr.curve` on scores oriented so that higher is more
+  abnormal-like, its area (`auc.integral`; and Davis and Goadrich's) and points (`minStepSize = Inf`);
+- MaveScape's threshold rules written out on pROC's points (the rule error at 0.05 and 0.1, Youden's
+  J; factor IX's given 0.3 and 0.7), each side's controls in each class, sensitivity and
+  specificity with binom's Wilson intervals;
+- a stratified bootstrap of 2000 samples (`set.seed` per case): pROC's `ci.auc` and `ci.se` (at
+  `seq(0, 1, 0.05)`), and written out on each sample's curves the precision–recall area, the
+  precision at the recalls 0.05 to 1 and each rule's thresholds; their quantiles (type 7), and how
+  many samples leave a class empty or no intermediate zone.
+
+MaveScape draws its samples with its own seeded generator, so the suite compares distributions:
+where each of R's quantiles falls among MaveScape's samples (four standard errors of the difference
+of two quantile levels from as many samples). Four mistakes planted in a copy of the module (the
+ROC band not interpolated, the precision–recall band not interpolated, a side not resampled whole,
+ties broken toward more B) each put 14 to 31 of the 1,092 quantiles outside.
 
 ## Robustness to analysis choices (`robustness-cases.mjs`, wave 4 slice 4)
 

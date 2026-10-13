@@ -79,6 +79,8 @@ import { SelectionError } from '../lib/structure/select.js';
 import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
 import { KINDS as CONTROL_KINDS, SIDES, composition as controlComposition, controlSetWords } from '../lib/controls.js';
 import { controlsForRun, deleteControlSet, makeClinVarControls, makeTableControls } from './controls.js';
+import { calibrationReport, deleteCalibration, makeCalibration, variantClasses } from './calibration.js';
+import { RULES as CALIBRATION_RULES, calibrationWords, percentText, ruleWords } from '../lib/calibration.js';
 
 export class ActionError extends Error {}
 
@@ -608,6 +610,34 @@ export function installRemote(app) {
     };
   }
 
+  // A calibration as data (wave 8, slice 2): what it was made with and its metrics; with curves,
+  // the ROC and precision–recall curves' points and the bootstrap's bands.
+  async function calibrationData(cal, withCurves) {
+    const r = await calibrationReport(app, cal);
+    const m = r.metrics;
+    const classes = variantClasses(r.scored.view, cal.condition ?? 0, cal.side, cal.thresholds);
+    const counts = (c) => ({ 'abnormal-like': c['abnormal-like'], intermediate: c.intermediate, 'WT-like': c['WT-like'] });
+    const share = (w) => ({ x: w.x, n: w.n, p: w.p, low: w.low, high: w.high });
+    const finite = (v) => (Number.isFinite(v) ? v : null);
+    return {
+      id: cal.id, name: cal.name, created: cal.created, run: r.run.name, controlSet: r.set.name, ...(r.scored.condition ? { condition: r.scored.condition } : {}),
+      side: cal.side, sideFrom: cal.sideFrom, rule: cal.rule, ...(cal.rule === 'error' ? { error: cal.error } : {}), thresholds: cal.thresholds, bootstrap: cal.bootstrap, scored: cal.n,
+      ...(cal.proposed ? { proposed: { by: cal.proposed.by, accepted: Boolean(cal.proposed.accepted) } } : {}),
+      auc: { auc: m.auc.auc, low: m.auc.low, high: m.auc.high, method: 'DeLong', ...(m.auc.boot ? { bootstrap: { low: m.auc.boot.low, median: m.auc.boot.median, high: m.auc.boot.high } } : {}) },
+      precisionRecall: { auc: m.pr.auc, chance: m.pr.baseline, ...(m.pr.boot ? { bootstrap: { low: m.pr.boot.low, median: m.pr.boot.median, high: m.pr.boot.high } } : {}) },
+      classes: { P: counts(m.classes.P), B: counts(m.classes.B), missense: counts(classes.missense), all: counts(classes.all) },
+      sensitivity: share(m.sensitivity), specificity: share(m.specificity), pCalledWtLike: share(m.misses.P), bCalledAbnormalLike: share(m.misses.B),
+      noIntermediateZone: m.thresholds.abnormal === m.thresholds.normal,
+      ...(m.thresholds.stability ? { stability: m.thresholds.stability } : {}),
+      ...(r.where.against ? { against: { medianP: r.where.against.P, medianB: r.where.against.B } } : {}),
+      ...(r.differs ? { differs: m.thresholds } : {}),
+      ...(withCurves ? {
+        roc: { points: m.roc.points.map((p) => ({ threshold: finite(p.threshold), sensitivity: p.sensitivity, specificity: p.specificity })), band: m.roc.band },
+        prCurve: { points: m.pr.points.filter((p) => !p.between).map((p) => ({ recall: p.recall, precision: p.precision, threshold: p.threshold })), band: m.pr.band },
+      } : {}),
+    };
+  }
+
   const actions = {
     async get_state() {
       const w = ws();
@@ -633,6 +663,8 @@ export function installRemote(app) {
         structureViews: (w.structureViews ?? []).map((v) => ({ id: v.id, name: v.name, structure: v.structure, chain: v.chain, shows: viewWords(v, w), created: v.created })),
         // Control sets, for calibration (wave 8, slice 1).
         controlSets: (w.controlSets ?? []).map((c) => ({ name: c.name, source: c.source.kind, P: c.labels.filter((l) => l.side === 'P').length, B: c.labels.filter((l) => l.side === 'B').length, created: c.created })),
+        // Calibrations (wave 8, slice 2).
+        calibrations: (w.calibrations ?? []).map((c) => ({ name: c.name, run: w.runs.find((r) => r.id === c.run)?.name ?? c.run, controlSet: (w.controlSets ?? []).find((x) => x.id === c.controlSet)?.name ?? c.controlSet, P: c.n.P, B: c.n.B, created: c.created })),
       };
       const message = `${w.name}: ${plural(w.sources.length, 'table')}, ${plural(w.runs.length, 'score run')}${w.design ? `, a ${w.design.model} design` : ', no design'}; showing ${data.mode}.${next ? ` ${next.state === 'optional' ? 'All done' : 'Next'}: ${next.detail}` : ''}`;
       return { message, data };
@@ -1007,6 +1039,59 @@ export function installRemote(app) {
       return { message: held ? `Proposed deleting the control set "${name}".${waits}` : `Deleted the control set "${name}".`, data: { removed: name, ...(held ? { waiting: true } : {}), sets: (ws().controlSets ?? []).map((c) => c.name) } };
     },
 
+    // --- Calibrations (wave 8, slice 2) ---------------------------------------------------------
+
+    // A run's scores against a control set, when asked: the separation of the sides (ROC and
+    // precision–recall, with intervals), thresholds and the classes they make, and how far a
+    // bootstrap moves them. Kept with the workspace; an agent's is made at once, marked proposed.
+    async calibrate(args) {
+      const sets = ws().controlSets ?? [];
+      if (!sets.length) throw new ActionError('No control set yet: make one first (make_control_set).');
+      const focus = app.store.ui.focus;
+      const setName = args.control_set ? choose(String(args.control_set), sets.map((c) => c.name), 'control set') : null;
+      const set = setName ? sets.find((c) => c.name === setName) : (focus?.kind === 'controls' && sets.find((c) => c.id === focus.id)) || sets.at(-1);
+      const run = resolveRun(args.run);
+      if (args.rule !== undefined && args.rule !== null) choose(String(args.rule), CALIBRATION_RULES, 'rule');
+      if (args.side !== undefined && args.side !== null) choose(String(args.side), ['auto', 'below', 'above'], 'side');
+      let made;
+      try {
+        made = await makeCalibration(app, { set, run, name: args.name ?? null, side: args.side ?? 'auto', rule: args.rule ?? undefined, error: args.error, abnormal: args.abnormal, normal: args.normal, samples: args.samples, seed: args.seed, condition: args.condition });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      app.focusItem({ kind: 'calibration', id: made.id });
+      await app.setMode('calibrate');
+      await settle();
+      const cal = (ws().calibrations ?? []).find((c) => c.id === made.id);
+      const data = await calibrationData(cal, args.curves === true);
+      const m = made.metrics;
+      const warn = made.where.against ? ` The P controls' median (${m.distributions.P.median.toPrecision(3)}) is on the other side of the B controls' (${m.distributions.B.median.toPrecision(3)}): the side may be the other way (side: ${cal.side === 'below' ? 'above' : 'below'}).` : '';
+      return {
+        message: `Calibrated ${calibrationWords(cal, { set, run, metrics: m })}. Sensitivity (P abnormal-like) ${percentText(m.sensitivity.p)}, specificity (B WT-like) ${percentText(m.specificity.p)}; thresholds: ${ruleWords(cal.rule, cal.error)}.${warn} For research: functional classes in this assay, not a classification of any variant.`,
+        data,
+      };
+    },
+
+    // The calibrations: each with what it was made with and its metrics; with curves, the curves.
+    async calibrations(args) {
+      const all = ws().calibrations ?? [];
+      const list = args.name ? [all.find((c) => c.name === choose(String(args.name), all.map((x) => x.name), 'calibration'))] : all;
+      const items = [];
+      for (const cal of list) items.push(await calibrationData(cal, args.curves === true));
+      const said = items.map((x) => `"${x.name}": ${x.run} against "${x.controlSet}", ${x.scored.P} P and ${x.scored.B} B scored; AUC ${x.auc.auc.toPrecision(3)} (${x.auc.low.toPrecision(3)} to ${x.auc.high.toPrecision(3)}); sensitivity ${percentText(x.sensitivity.p)}, specificity ${percentText(x.specificity.p)}.`);
+      return { message: list.length ? `${list.length === 1 ? '' : `${list.length} calibrations. `}${said.join(' ')}` : 'No calibration yet: make one with calibrate (after make_control_set).', data: { calibrations: items } };
+    },
+
+    async remove_calibration(args) {
+      const list = ws().calibrations ?? [];
+      if (!list.length) throw new ActionError('The workspace has no calibration.');
+      const name = choose(String(args.name ?? ''), list.map((c) => c.name), 'calibration');
+      const cal = list.find((c) => c.name === name);
+      const held = removing(cal, 'calibrations', `the calibration "${name}"`, `Deleted the calibration "${name}"`, () => deleteCalibration(app, cal.id), `Propose deleting the calibration "${name}"`);
+      await settle();
+      return { message: held ? `Proposed deleting the calibration "${name}".${waits}` : `Deleted the calibration "${name}".`, data: { removed: name, ...(held ? { waiting: true } : {}), calibrations: (ws().calibrations ?? []).map((c) => c.name) } };
+    },
+
     // --- Figures (wave 6, slice 1) -----------------------------------------------------------------
 
     // image: each page as exported, a PNG at dpi (150 by default), for an agent to look at (wave 7,
@@ -1194,9 +1279,9 @@ export function installRemote(app) {
         app.focusItem(null);
         return { message: 'Cleared the focus.' };
       }
-      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant', 'structure view': 'structureView', 'control set': 'controls' };
+      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant', 'structure view': 'structureView', 'control set': 'controls', calibration: 'calibration' };
       const kind = args.kind ? kinds[choose(args.kind, Object.keys(kinds), 'kind')] : null;
-      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections, structureView: w.structureViews ?? [], controls: w.controlSets ?? [] };
+      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections, structureView: w.structureViews ?? [], controls: w.controlSets ?? [], calibration: w.calibrations ?? [] };
       const candidates = Object.entries(lists).filter(([k]) => !kind || k === kind).flatMap(([k, items]) => items.map((item) => ({ kind: k, id: item.id, name: item.name })));
       // A variant by its name, when nothing else is called that.
       const looksLikeVariant = /^p\.[A-Z][a-z]{2}\d+/.test(variantName(args.name)) && !candidates.some((c) => c.name === args.name);

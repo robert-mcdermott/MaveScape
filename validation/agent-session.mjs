@@ -449,6 +449,26 @@ try {
       && after.controlSets.length === 1 && after.controlSets[0].name === 'Mine' && !after.proposals);
   }
 
+  // --- Calibrations (wave 8, slice 2) -------------------------------------------------------
+  // Run 1 against the person's set: the person's calibration applies at once; the agent's is made
+  // at once and marked proposed, its metrics returned, and its deleting the person's waits; accepted,
+  // the agent's is kept, marked accepted, and the person's goes.
+  {
+    await person('calibrate', { control_set: 'Mine', run: 'Run 1', rule: 'youden', samples: 200, name: 'Mine' });
+    const theirs = await tool('calibrate', { control_set: 'Mine', run: 'Run 1', samples: 200, name: 'Theirs' });
+    const listed = await tool('calibrations', {});
+    const held = await tool('remove_calibration', { name: 'Mine' });
+    const open = await workspace();
+    await decide('Accept all');
+    const after = await workspace();
+    const mine = open.calibrations.find((c) => c.name === 'Mine');
+    const agents = open.calibrations.find((c) => c.name === 'Theirs');
+    check('calibrations: the person\'s made at once; the agent\'s made at once and marked proposed, its metrics returned (the AUC and its intervals), calibrations listing both; its deleting the person\'s waiting; accepted, the agent\'s kept and marked accepted, the person\'s deleted', `${theirs.message.slice(0, 120)}…; ${listed.data.calibrations.map((c) => `${c.name}${c.proposed ? ', proposed' : ''}`).join('; ')}; ${held.message.slice(0, 60)}…; after: ${after.calibrations.map((c) => `${c.name}${c.proposed?.accepted ? ' (accepted)' : ''}`).join(', ')}`,
+      !mine.proposed && agents.proposed?.by === AGENT && Number.isFinite(theirs.data.auc.auc) && Number.isFinite(theirs.data.auc.bootstrap.low) && Boolean(held.data.waiting)
+      && listed.data.calibrations.length === 2 && !listed.data.calibrations[0].proposed && listed.data.calibrations[1].proposed?.by === AGENT
+      && after.calibrations.length === 1 && after.calibrations[0].name === 'Theirs' && Boolean(after.calibrations[0].proposed?.accepted) && !after.proposals);
+  }
+
   // --- The guide's session on Hsp90 (wave 7, slice 6) ---------------------------------------
   // The tool calls the guide's page Agents and scripts shows (docs/site/pages/docs/scripting.html,
   // A session on Hsp90), in its order, and every number its answers quote.

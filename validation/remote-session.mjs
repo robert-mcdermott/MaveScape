@@ -70,6 +70,8 @@ import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/
 import { cellsAtPositions, coloringCSV, coloringLegend, coloringPalette, placeOnTarget, POSITION, positionValues, residueColors, thresholdClasses } from '../web/lib/structure-scores.js';
 import { cellAt, cellName } from '../web/lib/map-model.js';
 import { circularity, clinvarControls, matchControls, tableControls } from '../web/lib/controls.js';
+import { calibrationMetrics, classCounts, controlScores } from '../web/lib/calibration.js';
+import { KIND } from '../web/lib/variants.js';
 import { CLINVAR } from '../web/lib/providers/clinvar.js';
 import { cachedGet } from './cached-fetch.mjs';
 
@@ -1483,6 +1485,41 @@ try {
     const after = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws)'));
     check('focus a control set (the inspector says where its labels came from), remove_control_set: gone, made and deleted in the history', `${focused.message} ${removed.message}; ${after.history.filter((e) => e.action === 'controls').map((e) => e.detail).join(' | ').slice(0, 220)}`,
       /From a table/.test(inspector) && /Open in Calibrate/.test(inspector) && after.controlSets.length === 1 && after.history.filter((e) => e.action === 'controls').length === 3 && /^Deleted the control set "From a table"$/.test(after.history.at(-1).detail));
+
+    // Calibrations (wave 8, slice 2): Run 1 against the set, made in the window, every metric as Node
+    // computes it from the same scored controls (the bootstrap too: it is seeded), drawn in
+    // Calibrate; given thresholds, and thresholds in the wrong order refused; listed, focused,
+    // deleted, and deleted with their set.
+    const cal = await act('calibrate', { curves: true });
+    const nodeScores = controlScores({ labels: nodeSet.labels }, nodeMatch);
+    const nm = calibrationMetrics(nodeScores.P.scores, nodeScores.B.scores, { side: 'below' });
+    const near = (a, b) => (a === null && b === null) || Math.abs(a - b) <= 1e-12 * Math.max(1, Math.abs(b));
+    const d = cal.data;
+    const same = near(d.auc.auc, nm.auc.auc) && near(d.auc.low, nm.auc.low) && near(d.auc.high, nm.auc.high) && near(d.auc.bootstrap.low, nm.auc.boot.low) && near(d.auc.bootstrap.high, nm.auc.boot.high)
+      && near(d.precisionRecall.auc, nm.pr.auc) && near(d.precisionRecall.bootstrap.low, nm.pr.boot.low) && near(d.thresholds.abnormal, nm.thresholds.abnormal) && near(d.thresholds.normal, nm.thresholds.normal)
+      && ['P', 'B'].every((side) => ['abnormal-like', 'intermediate', 'WT-like'].every((k) => d.classes[side][k] === nm.classes[side][k]))
+      && near(d.sensitivity.low, nm.sensitivity.low) && near(d.specificity.high, nm.specificity.high) && near(d.stability.abnormal.high, nm.thresholds.stability.abnormal.high) && near(d.stability.normal.low, nm.thresholds.stability.normal.low)
+      && d.roc.points.length === nm.roc.points.length && d.roc.band.every((b, i) => near(b.low, nm.roc.band[i].low) && near(b.high, nm.roc.band[i].high)) && d.prCurve.points.length === nm.pr.points.filter((p) => !p.between).length;
+    const shown = JSON.parse(await browser.eval(`JSON.stringify({ mode: document.getElementById('app').dataset.mode, plots: document.querySelectorAll('.view-body svg.plot').length, curves: document.querySelectorAll('.view-body svg.calibration-curve').length, text: document.querySelector('.view-body')?.textContent ?? '' })`));
+    check('calibrate on factor IX (Run 1 against the ClinVar set, the defaults): every metric as Node computes it from the same scored controls (the AUC and DeLong\'s interval, the precision-recall area, the thresholds, each side in each class, Wilson\'s intervals, the seeded bootstrap\'s intervals and bands, the curves\' points); shown in Calibrate, the scores of each side and both curves drawn', `${cal.message.slice(0, 230)}…; ${shown.plots} plots`,
+      same && d.side === 'below' && d.sideFrom === 'readout' && d.scored.P === 164 && d.scored.B === 22 && shown.mode === 'calibrate' && shown.plots === 3 && shown.curves === 2 && /Sensitivity/.test(shown.text) && /How far the bootstrap moves the thresholds/.test(shown.text));
+    const given = await act('calibrate', { rule: 'given', abnormal: 0.3, normal: 0.7, samples: 0, name: 'Given' });
+    const missense = proteinView(f9.scored.results) ?? f9.scored.results;
+    const values = [];
+    for (let i = 0; i < missense.rows; i += 1) if (missense.variants.kind[i] === KIND.MISSENSE && Number.isFinite(missense.conditions[0].score[i])) values.push(missense.conditions[0].score[i]);
+    const nodeGiven = classCounts(values, 'below', { abnormal: 0.3, normal: 0.7 });
+    const wrongOrder = await send('calibrate', { rule: 'given', abnormal: 0.9, normal: 0.7 });
+    check('calibrate with given thresholds: the controls and the run\'s missense variants in each class as Node counts them; thresholds in the wrong order refused, saying why', `${given.message.slice(0, 160)}…; missense ${JSON.stringify(given.data.classes.missense)}; ${wrongOrder.message}`,
+      ['abnormal-like', 'intermediate', 'WT-like'].every((k) => given.data.classes.missense[k] === nodeGiven[k] && given.data.classes.P[k] === classCounts(nodeScores.P.scores, 'below', { abnormal: 0.3, normal: 0.7 })[k]) && !given.data.stability && !wrongOrder.ok && /0\.9 is above 0\.7/.test(wrongOrder.message));
+    const listedCal = await act('calibrations', {});
+    const focusedCal = await act('focus', { kind: 'calibration', name: 'Given' });
+    const calInspector = await browser.eval(`document.querySelector('#inspector')?.textContent ?? ''`);
+    const removedCal = await act('remove_calibration', { name: 'Given' });
+    await act('remove_control_set', { name: windowSet.name });
+    const afterCal = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws)'));
+    check('calibrations lists them; focus shows one in the inspector; remove_calibration deletes one; deleting the control set deletes those made with it, the history saying so', `${listedCal.message.slice(0, 120)}… ${focusedCal.message} ${removedCal.message} ${afterCal.history.at(-1).detail}`,
+      listedCal.data.calibrations.length === 2 && /Given thresholds|given thresholds/.test(calInspector) && /Open in Calibrate/.test(calInspector) && removedCal.ok && afterCal.calibrations === undefined && afterCal.controlSets === undefined
+      && /^Deleted the control set "ClinVar, ★ or more", and the calibration "Run 1 · ClinVar, ★ or more" made with it$/.test(afterCal.history.at(-1).detail) && afterCal.history.filter((e) => e.action === 'calibrate').length === 3);
   }
 
   // WebGPU lost under the view (the 0.5.0 release; GitHub's runner lost it on its own): the GPU

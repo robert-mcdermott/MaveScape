@@ -690,6 +690,16 @@
   "violations": []
  },
  {
+  "scene": "calibrate-metrics",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-metrics",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "agent-hsp90",
   "theme": "dark",
   "violations": []

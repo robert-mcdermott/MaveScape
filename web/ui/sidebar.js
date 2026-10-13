@@ -58,6 +58,14 @@ const SECTIONS = [
     meta: (c) => `${c.labels.filter((l) => l.side === 'P').length} P · ${c.labels.filter((l) => l.side === 'B').length} B`,
     empty: 'Variants of known effect, from ClinVar or a table, made in Calibrate.',
   },
+  {
+    // A run's scores against a control set, when asked (wave 8, slice 2): made and read in Calibrate.
+    kind: 'calibration', collection: 'calibrations', title: 'Calibrations', icon: 'calibrate',
+    items: (ws) => ws.calibrations ?? [],
+    label: (c) => c.name ?? 'Calibration',
+    meta: (c) => `${c.n.P} P · ${c.n.B} B`,
+    empty: 'A run\'s scores against a control set, made in Calibrate when asked.',
+  },
 ];
 
 export function mountSidebar(app) {

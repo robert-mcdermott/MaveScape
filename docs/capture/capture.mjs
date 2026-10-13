@@ -921,6 +921,18 @@ const scenes = {
     await act('make_control_set', {});
     await sleep(800);
   },
+  // Calibration's metrics (wave 8, slice 2): Run 1 against factor IX's ClinVar controls, by the
+  // defaults: each side's scores against the run's with the classes, the ROC and precision–recall
+  // curves with their bootstrap bands.
+  async 'calibrate-metrics'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await clearToasts();
+    await scrollTo('#calibration-scores');
+    await sleep(500);
+  },
   // The guide's session on Hsp90: the design the agent proposed, in Experiment beside the person's,
   // and the strip reviewed.
   async 'agent-hsp90'() {

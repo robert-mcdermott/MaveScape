@@ -3441,6 +3441,71 @@ Decisions taken in planning (confirmed before slice 1):
    thresholds and an indeterminate zone, sensitivity and specificity with Wilson intervals,
    threshold stability by seeded bootstrap; checked against R (pROC, PRROC, binom), as Compare's
    statistics are.
+   - **Done.** `web/lib/calibration.js`: a **calibration**, a run's scores against a control set,
+     made when asked and kept in `ws.calibrations` with what makes it again (the set, the run and
+     condition, the side, the rule, the thresholds, the bootstrap's samples and seed, the controls
+     scored); its metrics are computed again when shown, the same (the view says if the thresholds
+     made again differ from those kept). In the history (`calibrate`), the archive and a
+     checkpoint's diff; deleted with its run or control set; an agent's made at once and marked
+     proposed (`proposals.js`'s collections).
+     - **Where abnormal-like scores are**: the design's readout's side for less function when it is
+       stated, else the P controls' median's (pROC's direction "auto"), or chosen; when the
+       controls' medians run the other way, the calibration says so.
+     - **The curves**, on scores oriented so that higher is more abnormal-like: the ROC curve's
+       points as pROC keeps them (a threshold midway between each two scores, ±∞ at the ends), the
+       AUC with DeLong's interval (Compare's `aucAgreement`); the precision–recall curve with
+       Keilwagen, Grosse and Grau (2014)'s interpolation between its points and its area written
+       out in PRROC's order of operations; precision among these controls, said to be so.
+     - **Thresholds and classes**: the rule `error` (the abnormal threshold where the most P
+       controls are abnormal-like with at most a share, 5%, of the B controls so, ties to the
+       fewer B; the normal threshold where the fewest B controls are not WT-like with at most that
+       share of the P controls WT-like, ties to the more P; where they cross, both their middle),
+       `youden` (one threshold, the largest sensitivity + specificity, ties to the higher
+       specificity) or `given`. The classes in `conventions.md`'s words: abnormal-like, intermediate
+       (the indeterminate zone) and WT-like; a score at a threshold on its abnormal-like side, as
+       pROC puts a case at its threshold. Sensitivity, specificity and each side's misses with
+       Wilson's intervals.
+     - **The bootstrap**, stratified and seeded (2000 samples, seed 20261009 by default, as
+       pROC's `boot.n` and scoring's seed): the AUC's and the precision–recall area's intervals,
+       the ROC curve's band (sensitivity at 21 specificities, interpolated as pROC's `ci.se`), the
+       precision–recall curve's (precision at 20 recalls), each threshold's interval, and how many
+       samples leave a class empty or the intermediate zone none.
+     - **In Calibrate**: the form (the condition, the side, the rule, the bootstrap) beside the
+       set's composition; the calibrations listed; for the one shown, each side's scores as dots
+       against the run's histogram with the zones tinted, the ROC and precision–recall curves with
+       their bands and the thresholds marked, the classes of the controls and the run's missense
+       variants, and the thresholds' stability. The dataset tree has a section of calibrations, the
+       inspector describes one. `lib/plots.js`: `controlStrips`, `rocChart`, `prChart`, for the
+       figures of slice 5 too.
+     - On factor IX, by the defaults: AUC 0.706 (DeLong 0.627 to 0.785); half the P controls (83
+       of 164) abnormal-like (≤ 0.781) and no B control; the other half among the B controls, so
+       the normal threshold (≤ 5% of P WT-like) is above all B controls but one (sensitivity 51%,
+       specificity 5%); Youden's one threshold at the same score calls every B control WT-like.
+       Secretion, which the assay measures, separates the pathogenic variants that are not secreted;
+       those secreted but inactive can score like benign ones.
+     - Remote actions `calibrate` (the metrics returned; with `curves`, the curves' points and
+       bands), `calibrations`, `remove_calibration`; `get_state` lists them, `focus` knows them;
+       the MCP instructions and docs/MCP.md name them; the clients have 60 functions.
+     - Found by slice 2: nothing in the app. The bootstrap is compared with R's as distributions
+       (where each of R's quantiles falls among MaveScape's samples, within four standard errors),
+       which compares discrete thresholds and few controls as fairly as many: values compared with
+       a tolerance failed on the few controls' discrete thresholds by MC noise alone, and four
+       mistakes planted in a copy of the module (no interpolation of the ROC band, none of the
+       precision–recall band, a side not resampled whole, ties broken toward more B) each put
+       14–31 of the 1,092 quantiles outside. The agent session's "every tool called" made the
+       agent call `calibrations` too.
+     - Validation: the suite `calibration` (6: against `reference/calibration.json`, written by
+       `generate_calibration.R` with pROC 1.19, PRROC 1.4 and binom 1.1 on seven cases, synthetic of
+       known shape, ties, sides well and fully apart, few controls, and factor IX's controls in Run
+       1 (`fixtures/controls/factor9-run1-controls.csv`, `fixtures/make-calibration.mjs`, checked to
+       be what the example makes now): the ROC curve's points, AUC and DeLong's interval, the
+       precision–recall curve and area, each rule's thresholds, classes and Wilson's intervals to 13
+       digits; the bootstrap as distributions; the archive, the diff, and deletion with the set);
+       `calibration.test.mjs` (6, by hand); the remote session (209, +3: the window's calibration
+       every number as Node's, the seeded bootstrap's included, drawn; given thresholds and a
+       refusal; listing, focus, deletion, deletion with the set); the agent session (36, +1: an
+       agent's calibration proposed, listed, its deletion of the person's held, accepted); axe-core
+       on the new scene `calibrate-metrics` in both themes; the site's page *Calibration*.
 3. **OddsPath (K3, part 1).** Brnich et al. 2019's OddsPath for the classes a run's thresholds
    make, its evidence strengths with the thresholds checked against the paper (`research.md` marks
    them unverified), labeled research use, the controls' composition and limitations beside it.

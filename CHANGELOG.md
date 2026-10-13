@@ -20,6 +20,18 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   history and checkpoints' diffs); an AI agent's are proposals. Remote actions and agent tools
   `make_control_set`, `control_sets`, `remove_control_set`, and functions in the R and Python
   packages.
+- **Calibrations** (wave 8, slice 2): how far a run's scores separate a control set's P controls
+  from its B controls, made when asked in Calibrate. Each side's scores against the run's; the ROC
+  curve and its AUC with DeLong's interval, the precision–recall curve and its area (Keilwagen et
+  al. 2014's interpolation), both with a seeded, stratified bootstrap's intervals and bands;
+  thresholds set by the controls (at most 5% of either side in the other's class, or Youden's J)
+  or given, and the functional classes they make (abnormal-like, intermediate, WT-like) for the
+  controls and the run's variants; sensitivity and specificity with Wilson's intervals; and how far
+  the bootstrap moves the thresholds. Where abnormal-like scores are comes from the design's
+  readout, else the controls, and the calibration says when the controls run the other way. Kept
+  with the workspace (its archive, history and checkpoints' diffs; deleted with its run or control
+  set); an AI agent's are proposals. Remote actions and agent tools `calibrate`, `calibrations`,
+  `remove_calibration`, and functions in the R and Python packages (60).
 
 ### Fixed
 
@@ -35,6 +47,15 @@ Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
   checkpoint's diff. The remote session makes sets in the window from ClinVar and a table as Node
   makes them; the agent session has an agent's set proposed and its deletion of the person's
   waiting, then rejected.
+- Suite `calibration`: every metric computed with R as well (pROC 1.19, PRROC 1.4, binom 1.1;
+  `reference/generate_calibration.R`) on seven cases, factor IX's controls in Run 1 among them: the
+  ROC curve's points, the AUC and DeLong's interval, the precision–recall curve and area, each
+  rule's thresholds, the controls in each class and Wilson's intervals to 13 digits; the
+  bootstrap's intervals within their Monte Carlo error (where each of R's 1,092 quantiles falls
+  among MaveScape's samples); calibrations through the archive and a checkpoint's diff, deleted
+  with their control set. The remote session calibrates in the window as Node does (every number,
+  the seeded bootstrap's included); the agent session has an agent's calibration proposed and its
+  deletion of the person's waiting, then accepted.
 
 ## 0.7.0 (2026-10-12)
 

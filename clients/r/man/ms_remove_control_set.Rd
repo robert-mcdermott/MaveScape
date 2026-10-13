@@ -13,6 +13,6 @@ ms_remove_control_set(name, ms = ms_default())
 A \code{mavescape_result}: the \code{message} and the \code{data} MaveScape answered with.
 }
 \description{
-Deletes a control set (undoable, in the history).
+Deletes a control set, with the calibrations made with it (undoable, in the history).
 }
 \seealso{\code{\link{ms_call}}, which sends any action by its name (here \code{"remove_control_set"}).}

@@ -77,8 +77,8 @@ var remoteActions = []remoteAction{
 	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map, compare, structure, calibrate, figures or report.", InputSchema: schema(map[string]any{
 		"mode": textArg("start, experiment, qc, score, map, compare, structure, calibrate, figures or report."),
 	}, "mode")},
-	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view, control set or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
-		"kind": textArg("table, target, run, selection, structure view, control set or variant; found by name across all of them if not given."),
+	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view, control set, calibration or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
+		"kind": textArg("table, target, run, selection, structure view, control set, calibration or variant; found by name across all of them if not given."),
 		"name": textArg("Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala)."),
 		"run":  runArg,
 	})},
@@ -285,8 +285,29 @@ var remoteActions = []remoteAction{
 		"run":    runArg,
 		"labels": flagArg("Each control too (its variant, side, label, ids, state and score in the run)."),
 	})},
-	{Name: "remove_control_set", Description: "Deletes a control set (undoable, in the history).", InputSchema: schema(map[string]any{
+	{Name: "remove_control_set", Description: "Deletes a control set, with the calibrations made with it (undoable, in the history).", InputSchema: schema(map[string]any{
 		"name": textArg("The control set's name."),
+	}, "name")},
+	{Name: "calibrate", Description: "Calibrates a run's scores against a control set, for research: how far the scores separate its P controls from its B controls, and the functional classes thresholds make (abnormal-like, intermediate, WT-like: classes in this assay, never a classification of a variant). Returns the ROC curve's AUC with DeLong's interval, the precision-recall curve's area, both with a seeded stratified bootstrap's intervals; the thresholds, set by the controls (rule error: at most `error` of either side's controls in the other side's class; youden: one threshold of the largest sensitivity + specificity) or given (abnormal and normal); each side's controls and the run's variants in each class; sensitivity (P abnormal-like) and specificity (B WT-like) with Wilson's intervals; and how far the bootstrap moves the thresholds. Kept with the workspace and shown in the Calibrate view; nothing calibrates by itself.", InputSchema: schema(map[string]any{
+		"control_set": textArg("The control set by name; the one focused, else the latest, if not given."),
+		"run":         runArg,
+		"condition":   map[string]any{"type": "integer", "minimum": 0, "description": "The run's condition, counted from 0 (0 if not given)."},
+		"side":        textArg("Where abnormal-like scores are: below or above the others; auto (the default): the design's readout's side for less function when it is stated, else the side of the P controls' median."),
+		"rule":        textArg("How the thresholds are set: error (the default), youden or given."),
+		"error":       map[string]any{"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 0.5, "description": "rule error: the share of either side's controls allowed in the other side's class (0.05 if not given)."},
+		"abnormal":    map[string]any{"type": "number", "description": "rule given: the abnormal threshold (a score at or beyond it, on the abnormal side, is abnormal-like)."},
+		"normal":      map[string]any{"type": "number", "description": "rule given: the normal threshold (a score short of it is WT-like); the abnormal threshold again for one threshold."},
+		"samples":     map[string]any{"type": "integer", "minimum": 0, "maximum": 20000, "description": "The bootstrap's samples (2000 if not given; 0: no bootstrap)."},
+		"seed":        map[string]any{"type": "integer", "description": "The bootstrap's seed (20261009 if not given)."},
+		"name":        textArg("The calibration's name; the run's and the set's if not given."),
+		"curves":      flagArg("The ROC and precision-recall curves' points and bands too."),
+	})},
+	{Name: "calibrations", Description: "The workspace's calibrations (research use): each one's run, control set, side, rule, thresholds and bootstrap; its AUC and precision-recall area with their intervals, the controls and the run's variants in each class, sensitivity and specificity with Wilson's intervals, and how far the bootstrap moves the thresholds. With curves, the ROC and precision-recall curves' points and bands.", InputSchema: schema(map[string]any{
+		"name":   textArg("A calibration by name: only that one."),
+		"curves": flagArg("The curves' points and bands too."),
+	})},
+	{Name: "remove_calibration", Description: "Deletes a calibration (undoable, in the history).", InputSchema: schema(map[string]any{
+		"name": textArg("The calibration's name."),
 	}, "name")},
 	{Name: "figures", Description: "The workspace's figures: each one's name, page (millimeters, and the text size in points), its panels lettered in reading order with what each shows, where it is (millimeters) and anything wrong with it (text under 6 pt, a map too narrow for its positions, a run no longer there), and the figure described in words.", InputSchema: schema(map[string]any{
 		"figure": textArg("A figure by name or id: only that one."),
@@ -453,6 +474,9 @@ var actionHints = map[string]actionHint{
 	"make_control_set":      {title: "Make a control set", kind: "edit"},
 	"control_sets":          {title: "The control sets", kind: "read"},
 	"remove_control_set":    {title: "Delete a control set", kind: "edit", destructive: true},
+	"calibrate":             {title: "Calibrate a run against a control set", kind: "edit"},
+	"calibrations":          {title: "The calibrations", kind: "read"},
+	"remove_calibration":    {title: "Delete a calibration", kind: "edit", destructive: true},
 	"figures":               {title: "The workspace's figures", kind: "read"},
 	"create_figure":         {title: "Make a figure", kind: "edit"},
 	"add_figure_panel":      {title: "Add a panel to a figure", kind: "edit"},

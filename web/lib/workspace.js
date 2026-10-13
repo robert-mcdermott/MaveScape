@@ -156,7 +156,7 @@ export function rename(ws, name) {
 
 // Whether a workspace holds anything worth saving (an empty, untitled one is not saved).
 export function isEmptyWorkspace(ws) {
-  return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length && !(ws.structureViews ?? []).length && !(ws.controlSets ?? []).length;
+  return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length && !(ws.structureViews ?? []).length && !(ws.controlSets ?? []).length && !(ws.calibrations ?? []).length;
 }
 
 // An id not yet used in a list: the base, or the base with a number.
@@ -458,6 +458,38 @@ export function removeControlSet(ws, id) {
   const gone = list.find((c) => c.id === id);
   if (!gone) return ws;
   const rest = list.filter((c) => c.id !== id);
-  return change(ws, { controlSets: rest.length ? rest : undefined }, 'controls', `Deleted the control set "${gone.name}"`);
+  // Its calibrations go with it (wave 8, slice 2).
+  const { calibrations, words } = withoutCalibrations(ws, (c) => c.controlSet === id);
+  return change(ws, { controlSets: rest.length ? rest : undefined, ...calibrations }, 'controls', `Deleted the control set "${gone.name}"${words}`);
+}
+
+// --- Calibrations (wave 8, slice 2) -------------------------------------------------------------------------
+
+// Keeps a calibration (lib/calibration.js: a control set's controls against a run's scores, its
+// side, rule, thresholds and bootstrap) in ws.calibrations, absent until the first, in the history.
+// detail: what the history says it found (its controls and AUC).
+export function addCalibration(ws, calibration, detail, time = clockNow()) {
+  const list = ws.calibrations ?? [];
+  const id = uniqueId(calibration.name ?? 'calibration', list);
+  const entry = { ...calibration, id, created: calibration.created ?? time };
+  return { ws: change(ws, { calibrations: [...list, entry] }, 'calibrate', `Calibrated: "${entry.name}"${detail ? `, ${detail}` : ''}`, time), id };
+}
+
+export function removeCalibration(ws, id) {
+  const list = ws.calibrations ?? [];
+  const gone = list.find((c) => c.id === id);
+  if (!gone) return ws;
+  const rest = list.filter((c) => c.id !== id);
+  return change(ws, { calibrations: rest.length ? rest : undefined }, 'calibrate', `Deleted the calibration "${gone.name}"`);
+}
+
+// The calibrations kept when those `leaving` reads go (their run or control set removed): the
+// field's patch and the words for the history.
+export function withoutCalibrations(ws, leaving) {
+  const list = ws.calibrations ?? [];
+  const gone = list.filter(leaving);
+  if (!gone.length) return { calibrations: {}, words: '' };
+  const rest = list.filter((c) => !leaving(c));
+  return { calibrations: { calibrations: rest.length ? rest : undefined }, words: `, and ${gone.length === 1 ? `the calibration "${gone[0].name}"` : `${gone.length} calibrations`} made with it` };
 }
 

@@ -80,10 +80,10 @@ ms_set_mode <- function(mode, ms = ms_default()) {
 #' Show an item in the inspector
 #'
 #' Shows an item in the inspector: a table, target, score run, saved selection, saved structure
-#' view, control set or variant, by name. With no name, clears the focus.
+#' view, control set, calibration or variant, by name. With no name, clears the focus.
 #'
-#' @param kind table, target, run, selection, structure view, control set or variant; found by
-#' name across all of them if not given. Optional; a string.
+#' @param kind table, target, run, selection, structure view, control set, calibration or
+#' variant; found by name across all of them if not given. Optional; a string.
 #' @param name Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala). Optional; a
 #' string.
 #' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
@@ -922,7 +922,7 @@ ms_control_sets <- function(labels = NULL, name = NULL, run = NULL, ms = ms_defa
 
 #' Delete a control set
 #'
-#' Deletes a control set (undoable, in the history).
+#' Deletes a control set, with the calibrations made with it (undoable, in the history).
 #'
 #' @param name The control set's name. Required; a string.
 #' @param ms A connection from ms_connect() (default: the last one made).
@@ -930,6 +930,81 @@ ms_control_sets <- function(labels = NULL, name = NULL, run = NULL, ms = ms_defa
 #' @export
 ms_remove_control_set <- function(name, ms = ms_default()) {
   ms_call("remove_control_set", name = name, ms = ms)
+}
+
+#' Calibrate a run against a control set
+#'
+#' Calibrates a run's scores against a control set, for research: how far the scores separate
+#' its P controls from its B controls, and the functional classes thresholds make
+#' (abnormal-like, intermediate, WT-like: classes in this assay, never a classification of a
+#' variant). Returns the ROC curve's AUC with DeLong's interval, the precision-recall curve's
+#' area, both with a seeded stratified bootstrap's intervals; the thresholds, set by the
+#' controls (rule error: at most `error` of either side's controls in the other side's class;
+#' youden: one threshold of the largest sensitivity + specificity) or given (abnormal and
+#' normal); each side's controls and the run's variants in each class; sensitivity (P
+#' abnormal-like) and specificity (B WT-like) with Wilson's intervals; and how far the
+#' bootstrap moves the thresholds. Kept with the workspace and shown in the Calibrate view;
+#' nothing calibrates by itself.
+#'
+#' @param abnormal rule given: the abnormal threshold (a score at or beyond it, on the abnormal
+#' side, is abnormal-like). Optional; a number.
+#' @param condition The run's condition, counted from 0 (0 if not given). Optional; a whole
+#' number.
+#' @param control_set The control set by name; the one focused, else the latest, if not given.
+#' Optional; a string.
+#' @param curves The ROC and precision-recall curves' points and bands too. Optional; TRUE or
+#' FALSE (Python: True or False).
+#' @param error rule error: the share of either side's controls allowed in the other side's
+#' class (0.05 if not given). Optional; a number.
+#' @param name The calibration's name; the run's and the set's if not given. Optional; a
+#' string.
+#' @param normal rule given: the normal threshold (a score short of it is WT-like); the
+#' abnormal threshold again for one threshold. Optional; a number.
+#' @param rule How the thresholds are set: error (the default), youden or given. Optional; a
+#' string.
+#' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
+#' given. Optional; a string.
+#' @param samples The bootstrap's samples (2000 if not given; 0: no bootstrap). Optional; a
+#' whole number.
+#' @param seed The bootstrap's seed (20261009 if not given). Optional; a whole number.
+#' @param side Where abnormal-like scores are: below or above the others; auto (the default):
+#' the design's readout's side for less function when it is stated, else the side of the P
+#' controls' median. Optional; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_calibrate <- function(abnormal = NULL, condition = NULL, control_set = NULL, curves = NULL, error = NULL, name = NULL, normal = NULL, rule = NULL, run = NULL, samples = NULL, seed = NULL, side = NULL, ms = ms_default()) {
+  ms_call("calibrate", abnormal = abnormal, condition = condition, control_set = control_set, curves = curves, error = error, name = name, normal = normal, rule = rule, run = run, samples = samples, seed = seed, side = side, ms = ms)
+}
+
+#' The calibrations
+#'
+#' The workspace's calibrations (research use): each one's run, control set, side, rule,
+#' thresholds and bootstrap; its AUC and precision-recall area with their intervals, the
+#' controls and the run's variants in each class, sensitivity and specificity with Wilson's
+#' intervals, and how far the bootstrap moves the thresholds. With curves, the ROC and
+#' precision-recall curves' points and bands.
+#'
+#' @param curves The curves' points and bands too. Optional; TRUE or FALSE (Python: True or
+#' False).
+#' @param name A calibration by name: only that one. Optional; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_calibrations <- function(curves = NULL, name = NULL, ms = ms_default()) {
+  ms_call("calibrations", curves = curves, name = name, ms = ms)
+}
+
+#' Delete a calibration
+#'
+#' Deletes a calibration (undoable, in the history).
+#'
+#' @param name The calibration's name. Required; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_remove_calibration <- function(name, ms = ms_default()) {
+  ms_call("remove_calibration", name = name, ms = ms)
 }
 
 #' The workspace's figures

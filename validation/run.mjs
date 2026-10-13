@@ -141,6 +141,10 @@ import { cachedGet } from './cached-fetch.mjs';
 import { CLINVAR } from '../web/lib/providers/clinvar.js';
 import { scoresTable } from '../web/lib/exports.js';
 import { addControlSet } from '../web/lib/workspace.js';
+import { addCalibration, removeControlSet } from '../web/lib/workspace.js';
+import { calibrationMetrics, thresholdWords } from '../web/lib/calibration.js';
+import { bootstrapAgreement, exactAgreement, readCalibrationReference } from './calibration-cases.mjs';
+import { FACTOR9_CONTROLS, factor9Controls } from './fixtures/make-calibration.mjs';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
 import { describeMapping, mapTarget, mapTargetOnChain, rankStructures } from '../web/lib/mapping.js';
 import { assemblyChoices, chainSummaries, openStructureText, readStructureBytes } from '../web/lib/structures.js';
@@ -5140,7 +5144,65 @@ const suites = {
       JSON.stringify(back.ws.controlSets) === JSON.stringify(ws.controlSets) && verifyHistory(back.ws).ok && words.join(' ') === 'The control set "ClinVar" was made (169 P and 22 B controls, from ClinVar). The control set "Invented" was made (4 P and 7 B controls, from a table).', 'the same; both named');
   },
 
+
+  // Wave 8, slice 2 (K2): calibration's metrics (lib/calibration.js) against R (pROC 1.19, PRROC
+  // 1.4, binom 1.1; reference/generate_calibration.R) on seven cases (calibration-cases.mjs): the
+  // curves, areas and intervals exactly, each rule's thresholds and classes, Wilson's intervals; the
+  // bootstrap as distributions; factor IX's scored controls still what the example makes; and
+  // calibrations kept with the workspace.
+  async calibration() {
+    const reference = readCalibrationReference();
+    const cases = reference.cases.map((c) => ({ c, e: exactAgreement(c) }));
+    const worst = (k) => Math.max(...cases.map((x) => x.e[k]));
+    const names = cases.map((x) => x.c.name).join('; ');
+    const differ = cases.flatMap((x) => x.e.differ.map((d) => `${x.c.name}: ${d}`));
+    check('calibration', `the ROC curve as pROC 1.19 computes it, in ${cases.length} cases (${names}): every point's threshold (midway between two scores), sensitivity and specificity; the AUC and DeLong's 95% interval`, `largest relative difference: points ${worst('roc').toExponential(1)}, AUC and interval ${worst('auc').toExponential(1)}${differ.some((d) => /ROC/.test(d)) ? `; ${differ.filter((d) => /ROC/.test(d)).join('; ')}` : ''}`,
+      worst('roc') < 1e-11 && worst('auc') < 1e-11 && !differ.some((d) => /ROC/.test(d)), 'below 1e-11 (R\'s numbers to 13 digits)');
+    check('calibration', 'the precision-recall curve as PRROC 1.4\'s pr.curve computes it: its area by Keilwagen et al. (2014)\'s interpolation (auc.integral) and its points (recall, precision, threshold)', `largest relative difference ${worst('pr').toExponential(1)}${differ.some((d) => /PR/.test(d)) ? `; ${differ.filter((d) => /PR/.test(d)).join('; ')}` : ''}; factor IX's area ${cases.at(-1).c.pr.auc.toFixed(4)} (chance ${(cases.at(-1).c.P.length / (cases.at(-1).c.P.length + cases.at(-1).c.B.length)).toFixed(4)})`,
+      worst('pr') < 1e-11 && !differ.some((d) => /PR/.test(d)), 'below 1e-11');
+    const rules = cases.reduce((n, x) => n + x.c.rules.length, 0);
+    const classDiffer = differ.filter((d) => !/ROC|PR/.test(d));
+    check('calibration', `thresholds by MaveScape's rules on pROC's points (${rules}: the rule error at 0.05 and 0.1, two thresholds, met midway where they cross; Youden's J, one; factor IX's given 0.3 and 0.7), each side's controls in each class, sensitivity and specificity with Wilson's 95% intervals as binom 1.1's`, `thresholds ${worst('thresholds').toExponential(1)}, Wilson ${worst('wilson').toExponential(1)}; ${classDiffer.length ? classDiffer.slice(0, 3).join('; ') : 'every class count the same'}`,
+      worst('thresholds') < 1e-11 && worst('wilson') < 1e-11 && !classDiffer.length, 'the same');
+    const boot = cases.map((x) => ({ name: x.c.name, ...bootstrapAgreement(x.c) }));
+    const compared = boot.reduce((n, x) => n + x.compared, 0);
+    const outside = boot.flatMap((x) => x.outside.map((o) => `${x.name}: ${o}`));
+    check('calibration', `the stratified bootstrap (${reference.cases[0].bootstrap.samples} samples, MaveScape's seeded generator against R's): every quantile (2.5%, 50%, 97.5%) of the AUC (pROC's ci.auc), the sensitivity at 21 specificities (pROC's ci.se), the precision-recall area, the precision at 20 recalls and each rule's thresholds, and the samples leaving a class empty or no intermediate zone, where R's falls among MaveScape's samples within four standard errors`, `${compared - outside.length} of ${compared} within${outside.length ? `; outside: ${outside.slice(0, 4).join('; ')}` : ''}`,
+      !outside.length && compared > 1000, 'every one');
+
+    // Factor IX's scored controls: the reference's real case is still what the example makes.
+    const rows = await factor9Controls();
+    const fixture = readFileSync(FACTOR9_CONTROLS, 'utf8');
+    const written = `variant,side,score\n${rows.map(([k, side, x]) => `${k},${side},${x}`).join('\n')}\n`;
+    const f9 = reference.cases.find((c) => /factor IX/.test(c.name));
+    const P = rows.filter((r) => r[1] === 'P').map((r) => r[2]);
+    const B = rows.filter((r) => r[1] === 'B').map((r) => r[2]);
+    const m = calibrationMetrics(P, B, { side: 'below', samples: 0 });
+    check('calibration', 'factor IX\'s ClinVar controls as the example\'s Run 1 scores them (fixtures/controls/factor9-run1-controls.csv, which R reads): the file is what the example and the control set make now; their AUC, thresholds and classes', `${fixture === written ? 'the same' : 'differs: node validation/fixtures/make-calibration.mjs'}; ${P.length} P and ${B.length} B; AUC ${m.auc.auc.toFixed(3)} (${m.auc.low.toFixed(3)} to ${m.auc.high.toFixed(3)}); ${thresholdWords('below', m.thresholds)}; P ${JSON.stringify(m.classes.P)}, B ${JSON.stringify(m.classes.B)}`,
+      fixture === written && P.length === 164 && B.length === 22 && relative13(m.auc.auc, f9.auc.auc) && m.classes.P['abnormal-like'] === f9.rules[0].P['abnormal-like'], 'the same; as R computes');
+
+    // The record: through the workspace archive, in a checkpoint's diff, gone with its control set.
+    const ex = openExampleInNode(exampleById('factor9'));
+    const run1 = makeRun({ inputs: runInputs({ source: ex.ws.sources[0], design: ex.design, parameters: ex.parameters }), source: ex.ws.sources[0], results: ex.scored.results, software: SOFTWARE, name: 'Run 1' });
+    let ws = addControlSet({ ...ex.ws, runs: [run1] }, { name: 'Controls', source: { kind: 'table', file: { fileName: 'factor9-run1-controls.csv' } }, rules: { kinds: ['missense'] }, labels: rows.map(([key, side]) => ({ key, side, label: side, kind: 'missense', variant: key, ids: [] })), excluded: {}, notes: [] }, '2026-10-13T07:00:00.000Z').ws;
+    const before = analysisState(ws);
+    const run = ws.runs[0];
+    const cal = { name: 'Run 1 · Controls', controlSet: 'Controls', run: run.id, condition: 0, side: 'below', sideFrom: 'readout', rule: 'error', error: 0.05, thresholds: { abnormal: m.thresholds.abnormal, normal: m.thresholds.normal }, bootstrap: { samples: 2000, seed: 20261009 }, n: m.n };
+    ws = addCalibration(ws, cal, `${run.name} against "Controls": 164 P and 22 B controls scored, AUC ${m.auc.auc.toPrecision(3)}`, '2026-10-13T07:01:00.000Z').ws;
+    const archived = await writeArchive(ws, { software: SOFTWARE, results: new Map(), methods: null });
+    const back = await readArchive(archived.bytes);
+    const words = diffStates(before, analysisState(back.ws)).changes.filter((x) => x.kind === 'calibration').map((x) => x.text);
+    const gone = removeControlSet(back.ws, 'Controls');
+    check('calibration', 'calibrations kept with the workspace: through its archive the same, the history\'s chain unbroken; a checkpoint\'s diff names each one made; deleting its control set deletes it, and the history says so', `${(back.ws.calibrations ?? []).map((c) => `${c.name}: ${thresholdWords(c.side, c.thresholds)}`).join(', ')}; ${words.join(' ')} Then: ${gone.history.at(-1).detail}`,
+      JSON.stringify(back.ws.calibrations) === JSON.stringify(ws.calibrations) && verifyHistory(back.ws).ok && words.length === 1 && /^The calibration "Run 1 · Controls" was made \(Run 1 against "Controls", 164 P and 22 B controls scored; abnormal-like ≤ 0\.781; intermediate 0\.781 to 1\.58; WT-like > 1\.58\)\.$/.test(words[0]) && gone.calibrations === undefined && /and the calibration "Run 1 · Controls" made with it$/.test(gone.history.at(-1).detail), 'the same; named; gone with its set');
+  },
+
 };
+
+// R's numbers are rounded to 13 significant digits.
+function relative13(a, b) {
+  return Math.abs(a - b) <= 1e-11 * Math.max(1, Math.abs(b));
+}
 
 // --- Run ------------------------------------------------------------------------------------------
 

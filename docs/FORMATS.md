@@ -405,7 +405,7 @@ author, opened, changes }`, each change one of
 
 | `kind` | What | Fields |
 | --- | --- | --- |
-| `add` | an item the agent made: a table, target, run, selection, annotation, structure view, figure, analysis kept in the report, checkpoint or control set, made at once | `collection` (the workspace's field: `sources`, `targets`, `runs`, `selections`, `annotations`, `structureViews`, `figures`, `analyses`, `checkpoints`, `controlSets`), `id`, `name` |
+| `add` | an item the agent made: a table, target, run, selection, annotation, structure view, figure, analysis kept in the report, checkpoint, control set or calibration, made at once | `collection` (the workspace's field: `sources`, `targets`, `runs`, `selections`, `annotations`, `structureViews`, `figures`, `analyses`, `checkpoints`, `controlSets`, `calibrations`), `id`, `name` |
 | `edit` | a change of the person's item, made at once (a figure's panels; what a higher score of a score set means) | `collection`, `id`, `name`, `before` (the item as it was) |
 | `design` | a design set or drafted, held | `design` (`null`: cleared), `source` (the table it describes), `detail` |
 | `qc-thresholds` | QC thresholds, held | `thresholds` (`null`: MaveScape's defaults), `detail` |
@@ -584,7 +584,29 @@ and a column of labels (`label`, `class`, `classification`, `clinical_significan
 abnormal; benign, likely benign, B, LB, B/LB, normal), numbered on the reference (the target's
 offset) or on the target, whichever its residues agree with. Making and deleting one are in the
 history (action `controls`). MaveScape reports functional evidence and does not classify variants:
-a label is its source's, and the views and exports always name the source beside it.
+a label is its source's, and the views and exports always name the source beside it. Deleting a set
+deletes the calibrations made with it.
+
+`calibrations` (MaveScape 0.8, absent until the first) keeps the **calibrations**, for research:
+a run's scores against a control set, made when asked. Each is `{ id, name, created, controlSet,
+run, condition, side, sideFrom, rule, error, thresholds, bootstrap, n }`:
+- `controlSet` and `run`: the ids of the set and the run; `condition`: the run's condition, from 0;
+- `side`: where abnormal-like scores are, `below` or `above` the others; `sideFrom`: `readout` (the
+  design's readout's direction), `controls` (the P controls' median, the readout not saying) or
+  `chosen`;
+- `rule`: how the thresholds were set, `error` (at most `error`, a share, of either side's controls
+  in the other side's class), `youden` (one threshold, of the largest sensitivity + specificity) or
+  `given`;
+- `thresholds`: `{ abnormal, normal }` on the scores' scale, `null` for a class no threshold makes.
+  With `side` below, a score at or below `abnormal` is abnormal-like, one above `normal` WT-like,
+  one between intermediate (above: the mirror image); equal, no score is intermediate;
+- `bootstrap`: `{ samples, seed }` of its stratified bootstrap (each side's controls drawn again
+  with replacement, as many as it has);
+- `n`: `{ P, B }`, the controls the run scored.
+
+Its metrics are not stored: the run, the set and the seeded bootstrap make them again the same (the
+view says so if the thresholds made again differ from those kept). Making and deleting one are in
+the history (action `calibrate`); deleting its run or its control set deletes it.
 
 `checkpoints` (MaveScape 0.6, absent until the first) keeps the **checkpoints**: each a named
 state of the analysis, `{ id, name, created, head, sha256, state }`, where `state` is the workspace
@@ -595,7 +617,7 @@ and deleting one are in the history (action `checkpoint`). A **diff** compares t
 checkpoint and now, two checkpoints, or two archives' workspaces; the Report view, remote control's
 `diff`) and says, in words, each change of the tables, targets, design, runs (scored, removed), QC
 thresholds and acknowledgements, selections, annotations, structure views, figures (made, deleted,
-a panel added, removed, changed or moved), the report's analyses, the control sets (made, deleted) and the MaveDB details; from
+a panel added, removed, changed or moved), the report's analyses, the control sets and calibrations (made, deleted) and the MaveDB details; from
 MaveScape 0.7, who proposed what an AI agent made ("Run 2 was scored (proposed by Claude Code)"),
 what the person accepted since, and what waits for the person (kind `proposal`). For each
 table scored in both states it pairs the latest run of each and says how its parameters, filters and

@@ -149,7 +149,7 @@ PDB, AlphaFold DB) through the program.
 | Results | `inspect_variant`, `scores` (a run's variants as a table), `provenance`, `render_map` (in words, and with `image` as a picture), `select_variants`, `compare`, `check_robustness` |
 | Tracks beside the map | `list_tracks`, `add_track`, `set_track`, `remove_track` |
 | Structures | `find_structures`, `open_structure`, `map_structure`, `set_structure`, `render_structure` (the view as a picture), `structure_evidence`, `save_structure_view`, `open_structure_view`, `remove_structure_view`, `proteoscope_link` |
-| Calibration, for research | `make_control_set` (variants of known effect, from ClinVar or a table of labels), `control_sets` (their composition, what a run measured of them, what may make them circular), `remove_control_set` |
+| Calibration, for research | `make_control_set` (variants of known effect, from ClinVar or a table of labels), `control_sets` (their composition, what a run measured of them, what may make them circular), `remove_control_set`; `calibrate` (a run's scores against a control set: ROC and precision–recall with intervals, thresholds and the functional classes they make, sensitivity and specificity), `calibrations`, `remove_calibration` |
 | Figures | `figures` (with `image`, each page as a picture), `create_figure`, `add_figure_panel`, `set_figure`, `export_figure`, `check_figure` |
 | The record | `report`, `checkpoint`, `diff`, `certify`, `review_report`, `verify_certificate`, `export`, `mavedb_deposit`, `set_mavedb_details` |
 | Proposals | `proposals` (what waits for you, and what you decided) |
