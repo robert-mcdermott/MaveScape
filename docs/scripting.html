@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Remote control, headless runs and scripting · MaveScape</title>
-  <meta name="description" content="Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), check them before scoring (mavescape validate), write a saved run as a MaveDB deposit or tables (mavescape export), and verify a certificate (mavescape verify)." />
+  <title>Agents and scripts · MaveScape</title>
+  <meta name="description" content="Let an AI agent work in the MaveScape window (mavescape mcp, a Model Context Protocol server), its changes proposals you accept or reject; drive the window from R, Python or any program on your computer with --remote-control; score a table with its design without a window (mavescape run), check the files first (mavescape validate), write a saved run as a MaveDB deposit or tables (mavescape export), and verify a certificate (mavescape verify)." />
   <link rel="canonical" href="https://robert-mcdermott.github.io/MaveScape/docs/scripting.html" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Remote control, headless runs and scripting" />
-  <meta property="og:description" content="Drive the open MaveScape window from scripts on your computer with --remote-control, score a table with its design without a window (mavescape run), check them before scoring (mavescape validate), write a saved run as a MaveDB deposit or tables (mavescape export), and verify a certificate (mavescape verify)." />
+  <meta property="og:title" content="Agents and scripts" />
+  <meta property="og:description" content="Let an AI agent work in the MaveScape window (mavescape mcp, a Model Context Protocol server), its changes proposals you accept or reject; drive the window from R, Python or any program on your computer with --remote-control; score a table with its design without a window (mavescape run), check the files first (mavescape validate), write a saved run as a MaveDB deposit or tables (mavescape export), and verify a certificate (mavescape verify)." />
   <meta property="og:url" content="https://robert-mcdermott.github.io/MaveScape/docs/scripting.html" />
   <meta property="og:image" content="https://robert-mcdermott.github.io/MaveScape/assets/img/og-image.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -77,7 +77,7 @@
         </ul>
         <h4>Automate</h4>
         <ul>
-          <li><a href="scripting.html" aria-current="page">Remote control, headless runs and scripting</a></li>
+          <li><a href="scripting.html" aria-current="page">Agents and scripts</a></li>
         </ul>
         <h4>Reference</h4>
         <ul>
@@ -87,16 +87,113 @@
     </aside>
 
     <main id="main" class="doc">
-      <h1>Remote control, headless runs and scripting</h1>
-      <p class="doc-lede">Started with --remote-control, MaveScape accepts actions from programs on your computer: open an example or your files, score, read the quality control, select variants, export. Each action happens in the open window, where you see it; its changes go into the history and can be undone. For pipelines, mavescape run does a whole analysis without a window, and mavescape validate checks the files first.</p>
+      <h1>Agents and scripts</h1>
+      <p class="doc-lede">An AI agent such as Claude Code, or a script of yours, can do in MaveScape what you do: open data, score, read the quality control, select variants, compare, make figures, certify, export. Either works in the open window, where you see each step and the history records it; an agent's changes wait for you to accept them. For pipelines, mavescape run does a whole analysis without a window.</p>
 
-      <h2 id="start">Turn it on</h2>
+      <h2 id="agents">AI agents</h2>
+      <p><code>mavescape mcp</code> is a Model Context Protocol server: an AI agent such as Claude Code calls MaveScape's actions as its tools, under the same names and with the same arguments as a script. It starts MaveScape with remote control on, speaks MCP on its stdin and stdout, and opens the window when a tool first needs it; when the agent closes stdin, MaveScape stops. For Claude Code:</p>
+      <div class="code"><pre><code><span class="prompt">$ </span>claude mcp add mavescape -- ~/.local/bin/mavescape mcp</code></pre></div>
+      <p>Claude Desktop, Cursor, VS Code, OpenAI's Codex and any other client that starts a server on stdio take the program's full path with the argument <code>mcp</code>; <a href="https://github.com/robert-mcdermott/mavescape/blob/main/docs/MCP.md">docs/MCP.md</a> gives each one's configuration, the options, a check that MaveScape answers, and what to do when it does not. Then ask, as you would ask a colleague at the bench:</p>
+      <ul>
+        <li>"Open the GRB2 SH3 example. What does its quality control say, and does the variance beyond counting change how far I can trust the scores?"</li>
+        <li>"Score it again with the DiMSum-compatible preset and compare the two runs. Which variants change class, and why?"</li>
+        <li>"Which positions tolerate no substitution? Show them on PDB 2VWF, and make a figure of the map and the structure."</li>
+      </ul>
+      <p>The agent starts with <code>get_state</code> and works through the same steps you would, in the window you watch. Scores are research evidence of a variant's functional effect in its assay; MaveScape's instructions to the agent say never to call a variant pathogenic or benign.</p>
+
+      <h2 id="proposals">Reviewing an agent's changes</h2>
+      <p>An agent's changes are proposals. What it makes (a run, a selection, a figure or a panel of yours, a track, a saved view, an analysis kept in the report, a checkpoint, a table it opens into your workspace) is made at once and marked <em>proposed</em>, so that it and you can use it meanwhile. A design it sets or drafts, QC thresholds and acknowledgements, a target's check, the MaveDB details and every removal wait until you accept them: the Experiment view shows a proposed design beside yours with how they differ, the QC view what is proposed of QC, and the views strike out what would be removed. Opening a workspace, what the window shows, and exports are not proposals.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/agent-proposal-dark.webp" width="2000" height="1250" loading="lazy" alt="Claude Code's proposal in the QC view of the GRB2 example: the strip above the view lists the run and the selection it made, marked proposed in the dataset tree, and the acknowledgement of the variance beyond counting, waiting; the QC view notes the acknowledgement proposed" /><img class="shot-light" src="../assets/img/agent-proposal-light.webp" width="2000" height="1250" loading="lazy" alt="Claude Code's proposal in the QC view of the GRB2 example: the strip above the view lists the run and the selection it made, marked proposed in the dataset tree, and the acknowledgement of the variance beyond counting, waiting; the QC view notes the acknowledgement proposed" /></div>
+        <figcaption>Claude Code worked on the GRB2 example: it scored the counts again with the DiMSum-compatible preset and saved the least tolerant core (made, marked proposed), and proposed acknowledging the bottleneck (waiting).</figcaption>
+      </figure>
+      <p>The strip above the view says who proposes how many changes; <strong>Review</strong> lists them, made and waiting. <strong>Accept all</strong> applies what waits, under the agent's name, and keeps what was made; <strong>Reject all</strong> removes what was made, with what you built on it since (MaveScape asks first), and drops what waits. Each decision is one entry of the history, yours, and can be undone. The agent asks <code>proposals</code> what is open and what you decided; <code>score</code> waits for a design it proposed, and nothing is certified while a proposal is open.</p>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/agent-accepted-dark.webp" width="2000" height="1250" loading="lazy" alt="The same proposal accepted: the history drawer below the QC view, newest first: the acceptance of Claude Code's proposal, the acknowledgement applied under its name, the proposed entry before it, the selection saved and the run scored by Claude Code" /><img class="shot-light" src="../assets/img/agent-accepted-light.webp" width="2000" height="1250" loading="lazy" alt="The same proposal accepted: the history drawer below the QC view, newest first: the acceptance of Claude Code's proposal, the acknowledgement applied under its name, the proposed entry before it, the selection saved and the run scored by Claude Code" /></div>
+        <figcaption>Accepted: the acknowledgement applies, under Claude Code's name, after your decision; every change the agent made carries its name.</figcaption>
+      </figure>
+      <p>Every change goes into the workspace's history with the agent's name (the name its client gives), which the history's chain covers. The report's decision log names the agent beside its changes, its <em>AI agents</em> section says what agents proposed and you accepted, and a checkpoint's diff names who proposed what was added.</p>
+
+      <h2 id="results">What an agent reads and sees</h2>
+      <p>Each result is the action's sentence and its data. <code>scores</code> gives a run's variants as a table with the columns of its scores export (filtered by position, kind, a selection or a query, sorted, 100 rows at a time), and <code>provenance</code> a run's provenance. The agent looks at pictures: the map (<code>render_map</code> with <code>image</code>, the whole target or a stretch of positions), the Structure view (<code>render_structure</code>) and the figures' pages (<code>figures</code> with <code>image</code>), which a script gets as data URLs. Each tool carries MCP's hints: whether it only reads, whether it replaces or removes something, and whether it may ask a public service. Files are read and written by absolute path, an existing file never replaced unless the call says so. An action MaveScape refuses comes back with its reason, which the agent can act on.</p>
+      <p>Everything runs on this computer: MaveScape answers only requests from it, and your tables never leave it. The agent acts through the window you use, nothing out of sight.</p>
+
+      <h2 id="session">A session on Hsp90</h2>
+      <p>What working with an agent looks like, on the Hsp90 example: nine positions of yeast Hsp90, every codon, grown for 21 generations in one replicate (Hietpas et al. 2011). Each tool call below is real: <code>validation/agent-session.mjs</code> makes them through <code>mavescape mcp</code> in CI and checks every number the answers quote. The answers were written by Claude from those results; another agent's wording will differ, its numbers not.</p>
+      <div class="session">
+        <p class="ask"><span class="who">You</span>Open the Hsp90 example. How well do its scores agree with the published fitness, and what does quality control say about them?</p>
+        <ul class="calls">
+          <li><code>open_example</code> <code>{"id": "hsp90"}</code></li>
+          <li><code>qc_findings</code> <code>{"run": "Run 1"}</code></li>
+          <li><code>compare</code> <code>{"a": "Run 1", "b": "urn:mavedb:00000011-a-1", "scale": "stated", "direction": "higher-more"}</code></li>
+          <li><code>scores</code> <code>{"run": "Run 1", "kinds": ["nonsense"], "limit": 0}</code></li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>Run 1, scored with MaveScape's defaults per generation, ranks the 187 variants it shares with the record's published scores much as they do (r 0.95). Stated to be on one scale, though, they agree poorly: Lin's concordance is 0.48, Run 1 is higher by 0.22 on average, and the difference grows with the effect (a Bland–Altman slope of −0.91), most at W585, S586 and A587 (0.34 to 0.39).</p>
+          <p>Quality control fails the fit of the time courses: they scatter about 44 times more than counting predicts. With one replicate, the agreement between replicates and the variance beyond counting are not assessed. The stops fall to the floor within a few generations, so a line through all eight samples flattens them (a median of −0.32 per generation). The authors fitted their null-like variants on the first three samples only. I can fit those three, keeping the present analysis in a checkpoint to compare with.</p>
+        </div>
+        <p class="ask"><span class="who">You</span>Do that.</p>
+        <ul class="calls">
+          <li><code>checkpoint</code> <code>{"name": "All eight samples"}</code></li>
+          <li><code>provenance</code> <code>{"run": "Run 1"}</code>, for the design it was scored with</li>
+          <li><code>set_design</code> with that design, generations 9 to 21 not used (<code>ignoredColumns</code>, the reason "later time points: the authors fit their null-like variants on the first three")</li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>I kept the checkpoint "All eight samples" and proposed a design that fits generations 0, 3 and 6: the columns Gen_9 to Gen_21 not used, with the reason. The design waits for you; Experiment shows it beside yours. Accept it, and I'll score with it.</p>
+        </div>
+      </div>
+      <figure>
+        <div class="shot"><img class="shot-dark" src="../assets/img/agent-hsp90-dark.webp" width="2000" height="1250" loading="lazy" alt="Claude Code's proposal on the Hsp90 example, reviewed above the Experiment view: the annotation of the record's published scores and the checkpoint All eight samples made, the design waiting; below, the proposed design (one replicate of three time points, 0 to 6 generations, five columns not used) and how it differs from the person's" /><img class="shot-light" src="../assets/img/agent-hsp90-light.webp" width="2000" height="1250" loading="lazy" alt="Claude Code's proposal on the Hsp90 example, reviewed above the Experiment view: the annotation of the record's published scores and the checkpoint All eight samples made, the design waiting; below, the proposed design (one replicate of three time points, 0 to 6 generations, five columns not used) and how it differs from the person's" /></div>
+        <figcaption>The proposal reviewed: the published scores' annotation and the checkpoint made, the design waiting, shown beside yours with what it changes.</figcaption>
+      </figure>
+      <p>Had the agent scored now, MaveScape would have refused: a run scored meanwhile would have your design, not the one it means. You accept in the strip, then ask on.</p>
+      <div class="session">
+        <p class="ask"><span class="who">You</span>Accepted. Score it and tell me what changed.</p>
+        <ul class="calls">
+          <li><code>score</code> <code>{"parameters": {"timeScale": "unit"}}</code>, per generation as Run 1</li>
+          <li><code>diff</code> <code>{"from": "All eight samples"}</code></li>
+          <li><code>scores</code> <code>{"run": "Run 2", "kinds": ["nonsense"], "limit": 0}</code></li>
+          <li><code>inspect_variant</code> <code>{"variant": "p.Trp4Ter", "run": "Run 2"}</code></li>
+          <li><code>compare</code> <code>{"a": "Run 2", "b": "urn:mavedb:00000011-a-1", "scale": "stated"}</code></li>
+        </ul>
+        <div class="answer"><span class="who">The agent</span>
+          <p>Run 2 fits the first three samples, per generation like Run 1. Since the checkpoint, 148 of the 188 variants moved beyond their earlier 95% interval and 102 changed class, 93 of them from lower than the wild type to like it: over six generations, most substitutions have barely begun to fall. The stops fall faster at first, a median of −0.41 per generation against −0.32, but still not as fast as published: p.Trp4Ter scores −0.51 here and −0.73 to −0.79 in the record, one score per codon.</p>
+          <p>Against the published scores Run 2 agrees less, not more (r 0.82, Lin's concordance 0.44): the authors fitted only their null-like variants on three samples and the rest on all eight, which one design for every variant cannot do. Run 2 is a sensitivity analysis, then, not a replacement: the choice of time points moves most of the scores. It is proposed; keep it, or reject it and it goes.</p>
+        </div>
+      </div>
+      <p>Run 2 waits in the strip, made and marked proposed: <strong>Accept all</strong> keeps it, <strong>Reject all</strong> removes it with what you built on it since. The checkpoint, the design and your decisions stay in the history, each change of the agent's under its name, and Report's diff from the checkpoint shows what moved, on a map of the change.</p>
+
+      <h2 id="python">From R and Python</h2>
+      <p>The R and Python packages make each action a function, with its arguments and help: they find the running MaveScape through <code>remote.json</code>, give tables as data frames and pictures as files, and raise an error carrying MaveScape's reason when an action is refused. They are installed from the repository, and their version is MaveScape's.</p>
+      <div class="code wrap"><pre><code><span class="prompt">$ </span>pip install "git+https://github.com/robert-mcdermott/MaveScape#subdirectory=clients/python"</code></pre></div>
+      <div class="code"><pre><code>import mavescape
+
+ms = mavescape.connect()                      # finds the running MaveScape
+ms.open_files(["/data/counts.csv", "/data/target.fasta"], new_workspace=True)
+ms.draft_design()
+run = ms.score()["name"]
+findings = ms.qc_findings().frame()           # a data frame (pandas)
+scores = ms.scores(run=run, limit=0).frame()  # every variant, the columns of scores.csv
+ms.render_map(run=run, file="/data/map.png")
+ms.export("scores", "/data/scores.csv", run=run)</code></pre></div>
+      <div class="code wrap"><pre><code><span class="prompt">&gt; </span>remotes::install_github("robert-mcdermott/MaveScape", subdir = "clients/r")</code></pre></div>
+      <div class="code"><pre><code>library(mavescape)
+ms_connect()
+ms_open_example("grb2-sh3")
+scores <- as.data.frame(ms_scores(run = "Run 1", limit = 0))
+lowest <- as.data.frame(ms_scores(run = "Run 1", kinds = "missense", sort = "score", limit = 10))
+ms_render_map(run = "Run 1", file = "grb2-map.png")</code></pre></div>
+      <p>Two examples go further, and CI runs both against a build of MaveScape: a Python notebook on GRB2 (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/clients/examples/grb2-sh3.ipynb">clients/examples/grb2-sh3.ipynb</a>: the example opened, checked and its QC read into data frames, scored again with the DiMSum-compatible preset, both runs against the record's published scores, and a figure exported as PDF and PNG) and an R script on DHFR's two conditions (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/clients/examples/dhfr-lon.R">clients/examples/dhfr-lon.R</a>: each condition's fast growers, the authors' unweighted regression against the published scores, the differences +Lon − −Lon called, which residues they replace, and where, as a plot and as MaveScape's map).</p>
+      <p><code>help(ms.scores)</code> and <code>?ms_scores</code> describe each action; <a href="https://github.com/robert-mcdermott/mavescape/tree/main/clients">clients/README.md</a> says how the connection is found, and how tables, pictures and errors come back. A script's <code>client</code> name (<code>"Python"</code>, <code>"R"</code>, or yours) appears in the window's log beside each action. Without a package, the HTTP API needs nothing but JSON: the standard library's <code>urllib.request</code> posts <code>{"action": …, "args": …}</code> to <code>/api/remote/action</code> with the token from <code>remote.json</code> (on macOS in <code>~/Library/Application Support/MaveScape</code>, on Linux <code>~/.config/MaveScape</code>, on Windows <code>%AppData%\MaveScape</code>, unless MaveScape was started with <code>--data-dir</code>).</p>
+
+      <h2 id="start">Remote control</h2>
+      <p>The actions the agent and the clients use are MaveScape's remote control, open to any program on your computer that speaks JSON.</p>
       <div class="code"><pre><code><span class="prompt">$ </span>mavescape --remote-control</code></pre></div>
       <p>MaveScape prints the address actions go to and the token that reading and writing files need, and writes both to <code>remote.json</code> in its data folder, readable only by you (<code>~/Library/Application Support/MaveScape/remote.json</code> on macOS), so scripts can find a running MaveScape without being told. The file is removed when MaveScape stops.</p>
       <div class="code" data-no-copy><pre><code>{
   "url": "http://127.0.0.1:8820",
   "token": "…",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "pid": 41237
 }</code></pre></div>
       <p>Only programs on this computer can use remote control, addressing it as <code>127.0.0.1</code> or <code>localhost</code>, and web pages on other sites cannot. A MaveScape started with <code>--remote-control</code> while another is running starts on the next free port rather than handing its files over, so the script reaches a window it can drive.</p>
@@ -118,10 +215,11 @@
             <tr><td><code>find_structures</code></td><td>The PDB entries that cover the workspace's target, from PDBe's SIFTS: ranked by the target positions each covers, then resolution, with their methods and chains</td></tr>
             <tr><td><code>map_structure</code></td><td>Maps the target onto the structure shown (on a <code>chain</code>): each position on a residue (identical or another, with the entry's reason), not observed, missing from the structure's sequence, or outside; the ambiguous; the entry's own record compared (<a href="structure.html#mapping">The target on the structure</a>)</td></tr>
             <tr><td><code>set_structure</code></td><td>Draws the structure shown another way (<code>style</code>, <code>color</code>, <code>surface</code>, <code>assembly</code>) and selects residues in words (<code>select</code>: <code>"resn CYS"</code>, <code>"chain A and resi 40-80"</code>, <code>"pos 30-40"</code> by the target's positions), draws them (<code>show</code>: sticks, ball-stick, spacefill, hide or none), labels them (<code>label</code>) and focuses on them (<code>focus</code>); colors the residues by their positions' scores (<code>color</code>: <code>median</code>, <code>mean</code>, <code>minimum</code>, <code>maximum</code>, <code>fraction</code> with a <code>threshold</code> and <code>side</code> or a <code>calibration</code>, <code>count</code>, <code>substitution</code> with the <code>substitution</code>, <code>uncertainty</code>, <code>disagreement</code> or <code>qc</code>; <a href="structure.html#scores">Scores on the structure</a>); colors by structural class (<code>color: "class"</code>); picks a residue as a click does (<code>pick</code>: <code>"A 183"</code>; <code>add</code> to add it): its position's variants selected on the map, the position in the inspector; returns what is selected, labeled and focused on, the scores colored by, and the renderer</td></tr>
+            <tr><td><code>render_structure</code></td><td>The Structure view as a picture (PNG, as a data URL): the structure as shown, its coloring's legend below (<code>legend: false</code>, the view alone), at <code>scale</code> times the view (2), on white with <code>light</code>; an agent receives it as an image</td></tr>
             <tr><td><code>structure_evidence</code></td><td>What the structure shown says of the target's positions: their structural classes (buried, exposed, interface with the <code>partner</code> chosen, or a predicted model's disordered region), from DSSP, the accessibility, StructureMap's exposure and the partners within 4 Å; the median scores of each class against the rest (Mann–Whitney, BH); and whether the least tolerant (a <code>fraction</code>, 0.2) lie closer together than positions as buried (seeded: <code>seed</code>) (<a href="structure.html#evidence">Structure as evidence</a>)</td></tr>
             <tr><td><code>save_structure_view</code>, <code>open_structure_view</code>, <code>remove_structure_view</code></td><td>Keep the view of the structure shown with the workspace under a <code>name</code> (its structure's file by its SHA-256, the chain and mapping, camera, colors and their run, residues selected, drawn and labeled), reopen it as it was saved (saying whether the mapping is the one it was saved with), or remove it (<a href="structure.html#views">Saved views</a>)</td></tr>
             <tr><td><code>proteoscope_link</code></td><td>Hands the view of the structure shown to a Proteoscope running on this computer: the link that opens it there with the scores as its residue data, the residues drawn, selected and labeled, and the camera (open it in a browser); for a version not tested, a link to the structure alone; for a file of your own, the session to open as a file. Refused, saying where it looked, when Proteoscope is not running (<a href="structure.html#proteoscope">Open in Proteoscope</a>)</td></tr>
-            <tr><td><code>figures</code></td><td>The workspace's figures: each one's page in millimeters, its panels lettered in reading order with what each shows and where, anything wrong with them (text under 6 pt, a map too narrow for its positions), the figure in words and its document (<a href="figures.html">Figures</a>)</td></tr>
+            <tr><td><code>figures</code></td><td>The workspace's figures: each one's page in millimeters, its panels lettered in reading order with what each shows and where, anything wrong with them (text under 6 pt, a map too narrow for its positions), the figure in words and its document (<a href="figures.html">Figures</a>); with <code>image</code>, each page as a picture too (PNG as <code>export_figure</code> writes it, at <code>dpi</code>, 150 by default)</td></tr>
             <tr><td><code>create_figure</code>, <code>add_figure_panel</code>, <code>set_figure</code></td><td>Make a figure (<code>size</code>: <code>single</code>, <code>onehalf</code>, <code>double</code> or <code>slide</code>; or <code>width_mm</code> and <code>height_mm</code>; <code>text</code> in points), add a panel to it (<code>kind</code>: a run's <code>map</code>, with <code>condition</code> or <code>contrast</code>, <code>color_by</code>, <code>rows</code>, <code>palette</code>, <code>from</code> and <code>to</code>, <code>tracks</code> by id or <code>"shown"</code>; a <code>qc</code> finding's charts, by <code>subject</code> and <code>finding</code>; a run's <code>scores</code>; a <code>compare</code>ison of <code>a</code> and <code>b</code>; a <code>variant</code>'s evidence; a saved <code>structure</code> view; or <code>text</code>; what a plot shows by <code>plot</code>; placed with <code>x_mm</code>, <code>y_mm</code>, <code>width_mm</code>, <code>height_mm</code>), or change one: its name, page and lettering, its <code>panels</code> moved, resized, changed or removed by letter or id</td></tr>
             <tr><td><code>export_figure</code></td><td>Writes a figure (<code>figure</code>) as SVG, PDF or PNG (<code>format</code>, or the path's extension; <code>dpi</code> for a PNG, 300 if not given), each carrying its manifest, or the manifest alone (<code>json</code>), to <code>path</code>; needs the token</td></tr>
             <tr><td><code>check_figure</code></td><td>Reads a figure MaveScape exported (<code>paths</code>: one SVG, PDF, PNG or manifest): what it shows, where it came from, whether its manifest is as written, and panel by panel what changed in the workspace since; with <code>rebuild</code>, adds it to the workspace drawn again from its inputs, each panel compared with the drawing recorded (<a href="figures.html#provenance">Figures</a>); needs the token</td></tr>
@@ -143,9 +241,12 @@
             <tr><td><code>score</code></td><td>Scores with a preset (<code>mavescape</code>, <code>enrich2</code> or <code>dimsum</code>, which returns each replicate's fitted scale, shift and error terms) and changed <code>parameters</code>, such as <code>{"model": "ratio"}</code> for a time series by its ends, <code>{"model": "bins-mle"}</code> for sorted bins by maximum likelihood or <code>{"differential": "paired"}</code> to compare conditions by pairs of replicates; with conditions compared, how many variants differ; the existing run when the inputs are the same</td></tr>
             <tr><td><code>qc_findings</code></td><td>Each finding of a run (or of the counts) with its status, value, threshold and rationale, what could cause it and what to do next, and its acknowledgement; <code>finding</code> shows one in the QC view</td></tr>
             <tr><td><code>acknowledge_finding</code></td><td>Acknowledges a finding to review or failing with the <code>reason</code> it is expected (an empty reason withdraws it). Its status stays; the reason goes into the history, the methods and the QC exports. A finding that passes needs none, and is left as it is</td></tr>
+            <tr><td><code>set_qc_thresholds</code></td><td>Sets QC thresholds by their keys (<code>thresholds</code>: <code>{"agreement": {"review": 0.7}}</code>, a measure's value such as <code>{"lowCount": 5}</code>), the others as they are; <code>reset: true</code> for MaveScape's defaults. In the history; an agent's wait for you (<a href="#agents">AI agents</a>)</td></tr>
             <tr><td><code>select_variants</code></td><td>Selects variants on the map by a <code>query</code> (<code>"missense at 40-80 with se &lt; 0.2"</code>, <code>"lower and not robust"</code>, <code>"in Core and not in Surface"</code>: <a href="selections.html#query">the query language</a>), by name (<code>variants</code>) or by position (<code>positions</code>), optionally only those scored, low, filtered or missing; replaces the selection or, by <code>operation</code>, adds to it (<code>add</code>), keeps the matches in it (<code>intersect</code>) or removes them (<code>subtract</code>); on a contrast's differential map with <code>contrast</code>; and saves it with its query (<code>save_as</code>). A query that needs the run's robustness checks it first. Returns the variants, how many matched, and the selection's query</td></tr>
             <tr><td><code>inspect_variant</code></td><td>A variant's score, SE and interval (with the moderated combination, its degrees of freedom, <code>df</code>; rescaled, the anchors' uncertainty, <code>seScale</code>), flags, replicates and counts (for a regression, each replicate's time points and departure from a line; with conditions compared, each difference with its SE, interval and q); a nucleotide variant's protein change (<code>protein</code>); a protein variant of a nucleotide run, its nucleotide variants each with its score (<code>nucleotideVariants</code>); a variant MaveDB mapped, its HGVS on the reference, VRS identifier and ClinGen allele (<code>mapped</code>)</td></tr>
-            <tr><td><code>render_map</code></td><td>Shows the map with the given coloring (<code>differential</code> for a comparison of conditions, and <code>contrast</code> to choose one), row order, palette and zoom, and returns it in words</td></tr>
+            <tr><td><code>render_map</code></td><td>Shows the map with the given coloring (<code>differential</code> for a comparison of conditions, and <code>contrast</code> to choose one), row order, palette and zoom, and returns it in words; with <code>image</code>, as a picture too: its SVG export drawn as a PNG (a data URL) at <code>scale</code> (2), of the whole target or positions <code>from</code> to <code>to</code></td></tr>
+            <tr><td><code>scores</code></td><td>A run's variants as a table: one object per variant with the columns of its scores export (or with <code>contrast</code> a contrast's differential scores, with <code>protein</code> a nucleotide run's at the protein level), numbers as numbers, <code>null</code> where the export has NA; only those at <code>positions</code>, of <code>kinds</code>, in a saved <code>selection</code> or matching a <code>query</code>; <code>sort</code> by a column (<code>"-score"</code>, the highest first); chosen <code>columns</code>; 100 rows from <code>offset</code> unless <code>limit</code> says otherwise (0, all)</td></tr>
+            <tr><td><code>provenance</code></td><td>A run's provenance as its <code>provenance.json</code> holds it: the table and design by SHA-256, the parameters, the software, the output's SHA-256, the QC</td></tr>
             <tr><td><code>check_robustness</code></td><td>Checks a run's robustness to other reasonable analysis choices (<code>run</code>; <code>max</code>, the analyses in all, 48 by default): the run scored again with each alternative alone (pseudocount, normalization, model of uncertainty, combination of replicates, filters, each replicate left out) and seeded combinations; each variant's and difference's class across them, its verdict and what it depends on, each alternative's effect, the least tolerant positions. Shows the run in Score; with <code>report: true</code>, the check is kept in the workspace's report (<a href="robustness.html">Robustness</a>)</td></tr>
             <tr><td><code>compare</code></td><td>Compares two sets of scores, each a run's condition or one of its replicates by name (<code>a</code>, <code>b</code>: <code>"Run 1: Replicate 2"</code>, <code>"Published scores"</code>), or a score set or predictor kept beside the workspace (<code>"AlphaMissense: P62993"</code>, or a MaveDB score set's URN, fetched and kept first when it is not yet), on a scale (<code>scale</code>: <code>scored</code>, <code>stated</code>, <code>nonsense-wt</code> or <code>synonymous-nonsense</code>, each side rescaled by its own anchors), with what a higher score of a score set means (<code>direction</code>) and filters (<code>low_confidence</code>, <code>max_se</code>, <code>min_reads</code>): the compatibility report, then Pearson's r, Spearman's ρ, Lin's concordance and Bland–Altman with their 95% intervals (the last two on one scale only), the variants that differ beyond their uncertainty and the disagreement by position (two independent sides on one scale), a predictor by rank and by its classes (the AUC with DeLong's interval). Shows the Compare view, the tab <code>show</code> (agreement, maps, disagreement or classes); with <code>report: true</code>, the comparison is kept in the workspace's report (<a href="compare.html">Comparisons</a>)</td></tr>
             <tr><td><code>list_tracks</code></td><td>The tracks beside a run's map, in order: each one's kind, source (service, release, retrieval date, or file), whether it is shown, its filter and the filters it offers, and what it holds; the annotations that could not be read; what can be added, and why not (<a href="map.html#tracks">Tracks</a>)</td></tr>
@@ -154,6 +255,7 @@
             <tr><td><code>remove_track</code></td><td>Removes an <code>annotation</code> and its tracks</td></tr>
             <tr><td><code>mavedb_deposit</code></td><td>What a MaveDB deposit of a run (and <code>condition</code>) would hold: the variants and those left out with why, the target as MaveDB holds it, the columns, the keywords, and what MaveDB requires that the workspace lacks (<code>missing</code>). Writes nothing (<a href="record.html#mavedb">Depositing in MaveDB</a>)</td></tr>
             <tr><td><code>set_mavedb_details</code></td><td>Sets the MaveDB details (<code>details</code>: title, abstract, license, publications such as <code>"PubMed 29785012"</code> or a DOI, raw reads, contributors' ORCID iDs, the experiment's URN, keywords…); undoable, in the history</td></tr>
+            <tr><td><code>proposals</code></td><td>An AI agent's proposals: what it made and marked proposed, what waits for you, and the latest decisions (<a href="#agents">AI agents</a>)</td></tr>
             <tr><td><code>export</code></td><td>Writes <code>scores</code>, <code>protein-scores</code> (a nucleotide run's scores at the protein level), <code>counts</code>, <code>qc-samples</code>, <code>qc-variants</code>, <code>qc-findings</code>, <code>barcodes</code> (a table of barcodes), <code>differential</code> (conditions compared), <code>provenance</code>, <code>methods</code>, <code>references</code>, <code>map</code> (SVG, with the tracks shown), <code>tracks</code> (the tracks shown, CSV), <code>selection</code>, <code>archive</code>, <code>package</code> (the analysis package of a run, or of the design with the default parameters), <code>mavedb</code> (a run's MaveDB deposit, a ZIP) or <code>comparison</code> (the comparison shown: its variants compared, or to a <code>.json</code> path its report and statistics), <code>comparison-positions</code> (its disagreement by position), <code>comparison-classes</code> (a predictor's classes), <code>comparison-map</code> (a map of it: <code>map</code> first, second or difference), <code>robustness</code> (a run's robustness: its variants, or to a <code>.json</code> path its record) or <code>robustness-positions</code>, <code>structure-mapping</code> (the target on the structure shown, position by position), <code>structure-scores</code> (the scores it is colored by, position by position, with each residue's color) or <code>structure-evidence</code> (what it says of each position, with its median score) <code>structure-image</code> (a figure panel of the view: PNG, a <code>scale</code>, the <code>legend</code> below it, what it shows written into it) or <code>proteoscope-session</code> (the view as a Proteoscope session, <code>.proteoscope.json</code>), <code>report</code> (the workspace's report, Markdown) or <code>report-references</code> (its references, BibTeX) to <code>path</code>; the archive's <code>include_structures: false</code> names the saved views' structures by their IDs and checksums. Needs the token</td></tr>
           </tbody>
         </table>
@@ -164,31 +266,6 @@
       <div class="code wrap"><pre><code><span class="prompt">$ </span>TOKEN=$(python3 -c 'import json, os; print(json.load(open(os.path.expanduser("~/Library/Application Support/MaveScape/remote.json")))["token"])')
 <span class="prompt">$ </span>curl -s http://127.0.0.1:8820/api/remote/action -H "X-MaveScape-Token: $TOKEN" -d '{"action": "export", "args": {"what": "scores", "path": "/tmp/grb2_scores.csv"}}'</code></pre></div>
 
-      <h2 id="python">From Python</h2>
-      <p>No client library is needed; the standard library is enough:</p>
-      <div class="code"><pre><code>import json, os, urllib.request
-
-connection = json.load(open(os.path.expanduser("~/Library/Application Support/MaveScape/remote.json")))
-
-def act(action, **args):
-    request = urllib.request.Request(
-        connection["url"] + "/api/remote/action",
-        data=json.dumps({"action": action, "args": args, "client": "my notebook"}).encode(),
-        headers={"Content-Type": "application/json", "X-MaveScape-Token": connection["token"]},
-    )
-    answer = json.load(urllib.request.urlopen(request))
-    if not answer["ok"]:
-        raise RuntimeError(answer["message"])
-    return answer
-
-act("open_files", paths=["/data/counts.csv", "/data/target.fasta"], new_workspace=True)
-act("draft_design")
-run = act("score")["data"]
-findings = act("qc_findings")["data"]["findings"]
-print(run["name"], [(f["title"], f["status"]) for f in findings])
-act("export", what="scores", path="/data/scores.csv")</code></pre></div>
-      <p>On Linux the data folder is <code>~/.config/MaveScape</code>, on Windows <code>%AppData%\MaveScape</code>, unless MaveScape was started with <code>--data-dir</code>. The <code>client</code> name appears in the window's log beside each action.</p>
-
       <h2 id="screenshots">The documentation's screenshots</h2>
       <p>The pictures on this site are captured the same way: <code>docs/capture/capture.mjs</code> builds MaveScape, starts it with <code>--remote-control</code> on an empty library, drives each scene through these actions in headless Chrome, and writes each scene in the light and dark themes. <code>validation/remote-session.mjs</code> runs every action and checks the results against the same analysis in Node, and runs in continuous integration.</p>
       <div class="code"><pre><code><span class="prompt">$ </span>node docs/capture/capture.mjs map qc --theme dark</code></pre></div>
@@ -196,7 +273,7 @@ act("export", what="scores", path="/data/scores.csv")</code></pre></div>
       <h2 id="headless">Headless runs</h2>
       <p><code>mavescape run</code> scores a count table with its design without a window, for pipelines and continuous integration. It starts MaveScape on a private port with a temporary library, opens it in a headless Chrome (or Chromium, Edge or Brave: <code>--chrome</code>, or the <code>CHROME</code> variable), performs the analysis through the actions above, writes the files to a folder and stops.</p>
       <div class="code wrap"><pre><code><span class="prompt">$ </span>mavescape run --design design.json --out results/ counts.csv</code></pre></div>
-      <div class="code wrap" data-no-copy><pre><code>MaveScape 0.6.0: running in Google Chrome
+      <div class="code wrap" data-no-copy><pre><code>MaveScape 0.7.0: running in Google Chrome
 [1] new_workspace: ok (0.0 s) Started a new workspace, "GRB2 SH3 domain, Domainome abundance (aPCA)".
 [2] open_files: ok (0.1 s) Opened the table counts.csv.
 [3] set_design: ok (0.0 s) Set the design of counts.csv: two-population, 3 replicates.
@@ -250,7 +327,7 @@ Done in 1.2 s: 9 files written to results (run.json lists them).</code></pre></d
       <p><code>mavescape verify</code> verifies a reproducibility certificate without a window, in a headless page as <code>mavescape run</code> uses. It checks the certificate's fingerprint, its files and its history, then computes every number again from its files and compares them bit for bit (<a href="certificate.html">Certificates</a>). <code>--data</code> names a folder, or a file, with the tables a certificate made without them names; they are found by their SHA-256. <code>--report verification.json</code> writes what was found as JSON, and <code>--review review.html</code> the review report of the certificate verified (<a href="certificate.html#review">The review report</a>). Exit status: 0 verified; 1 something differs, each difference listed; 2 it could not be checked (a file missing, a wrong command line, no browser).</p>
 
       <h2 id="later">Coming</h2>
-      <p>An MCP server for AI agents on the same actions (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/mavescape-spec/roadmap.md">roadmap</a>).</p>
+      <p>An agent benchmark: graded tasks on the examples, for agents and for MaveScape's tools (<a href="https://github.com/robert-mcdermott/mavescape/blob/main/mavescape-spec/roadmap.md">roadmap</a>, wave 9).</p>
 
       <nav class="doc-pager" aria-label="Pages">
         <a class="prev" href="record.html"><span>Previous</span>Exports and the record</a>
@@ -286,7 +363,7 @@ Done in 1.2 s: 9 files written to results (run.json lists them).</code></pre></d
             <li><a href="../docs/getting-started.html">Getting started</a></li>
             <li><a href="../docs/scoring.html">Scoring</a></li>
             <li><a href="../docs/qc.html">Quality control</a></li>
-            <li><a href="../docs/scripting.html">Scripting</a></li>
+            <li><a href="../docs/scripting.html">Agents and scripts</a></li>
             <li><a href="../docs/troubleshooting.html">Troubleshooting</a></li>
           </ul>
         </div>
