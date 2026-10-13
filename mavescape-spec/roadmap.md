@@ -3801,6 +3801,9 @@ sets, calibrations, figure and checkpoint kept.
     program's session; `TestOnlyThisRunsPageIsTheWindow`); a page of another run says MaveScape
     was started again and asks to be reloaded. The leftover browsers (four, from runs whose parent
     was stopped) were closed.
+  - **CI's remote-control job failed on slice 6**: it runs the session with `--require-data` but
+    fetched only the MaveDB tables earlier slices needed, not PTEN's, which the calibration
+    example's check opens. It fetches and caches `mavedb-pten-vampseq` now.
   - The factor IX archive first held a second run, scored with fixed effects and calibrated, for
     the diff: its results' table doubled the archive (2.7 MB, and 3.1 MB for the certificate). The
     diff of calibrations is checked by the suite `record`; the archive keeps one run.
