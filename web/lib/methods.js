@@ -12,6 +12,7 @@ import { barcodeSentence, binSentence, differentialSentence, dimsumSentence, reg
 import { notRecorded, readiness } from './readiness.js';
 import { anchorUncertainty } from './anchors.js';
 import { viewWords } from './structure-record.js';
+import { calibrationParagraphs, controlSetParagraph } from './calibration-record.js';
 
 export const REFERENCES = {
   enrich2: { type: 'article', authors: ['Rubin, Alan F', 'Gelman, Hannah', 'Lucas, Nathan', 'Bajjalieh, Sandra M', 'Papenfuss, Anthony T', 'Speed, Terence P', 'Fowler, Douglas M'], title: 'A statistical framework for analyzing deep mutational scanning data', journal: 'Genome Biology', year: 2017, volume: 18, pages: '150', doi: '10.1186/s13059-017-1272-5' },
@@ -65,6 +66,15 @@ export const REFERENCES = {
   steegen2016: { type: 'article', authors: ['Steegen, Sara', 'Tuerlinckx, Francis', 'Gelman, Andrew', 'Vanpaemel, Wolf'], title: 'Increasing transparency through a multiverse analysis', journal: 'Perspectives on Psychological Science', year: 2016, volume: 11, number: 5, pages: '702--712', doi: '10.1177/1745691616658637' },
   simonsohn2020: { type: 'article', authors: ['Simonsohn, Uri', 'Simmons, Joseph P', 'Nelson, Leif D'], title: 'Specification curve analysis', journal: 'Nature Human Behaviour', year: 2020, volume: 4, number: 11, pages: '1208--1214', doi: '10.1038/s41562-020-0912-z' },
   mavedb: { type: 'article', authors: ['Esposito, Daniel', 'Weile, Jochen', 'Shendure, Jay', 'Starita, Lea M', 'Papenfuss, Anthony T', 'Roth, Frederick P', 'Fowler, Douglas M', 'Rubin, Alan F'], title: 'MaveDB: an open-source platform to distribute and interpret data from multiplexed assays of variant effect', journal: 'Genome Biology', year: 2019, volume: 20, pages: '223', doi: '10.1186/s13059-019-1845-6' },
+  // Wave 8, slice 5: calibration, for research (lib/calibration-record.js cites each where it says it).
+  robin2011: { type: 'article', authors: ['Robin, Xavier', 'Turck, Natacha', 'Hainard, Alexandre', 'Tiberti, Natalia', 'Lisacek, Frédérique', 'Sanchez, Jean-Charles', 'Müller, Markus'], title: 'pROC: an open-source package for R and S+ to analyze and compare ROC curves', journal: 'BMC Bioinformatics', year: 2011, volume: 12, pages: '77', doi: '10.1186/1471-2105-12-77' },
+  keilwagen2014: { type: 'article', authors: ['Keilwagen, Jens', 'Grosse, Ivo', 'Grau, Jan'], title: 'Area under precision-recall curves for weighted and unweighted data', journal: 'PLoS ONE', year: 2014, volume: 9, number: 3, pages: 'e92209', doi: '10.1371/journal.pone.0092209' },
+  grau2015: { type: 'article', authors: ['Grau, Jan', 'Grosse, Ivo', 'Keilwagen, Jens'], title: 'PRROC: computing and visualizing precision-recall and receiver operating characteristic curves in R', journal: 'Bioinformatics', year: 2015, volume: 31, number: 15, pages: '2595--2597', doi: '10.1093/bioinformatics/btv153' },
+  wilson1927: { type: 'article', authors: ['Wilson, Edwin B'], title: 'Probable inference, the law of succession, and statistical inference', journal: 'Journal of the American Statistical Association', year: 1927, volume: 22, number: 158, pages: '209--212', doi: '10.1080/01621459.1927.10502953' },
+  brnich2020: { type: 'article', authors: ['Brnich, Sarah E', 'Abou Tayoun, Ahmad N', 'Couch, Fergus J', 'Cutting, Garry R', 'Greenblatt, Marc S', 'Heinen, Christopher D', 'Kanavy, Dona M', 'others'], title: 'Recommendations for application of the functional evidence PS3/BS3 criterion using the ACMG/AMP sequence variant interpretation framework', journal: 'Genome Medicine', year: 2020, volume: 12, number: 1, pages: '3', doi: '10.1186/s13073-019-0690-2' },
+  tavtigian2018: { type: 'article', authors: ['Tavtigian, Sean V', 'Greenblatt, Marc S', 'Harrison, Steven M', 'Nussbaum, Robert L', 'Prabhu, Snehit A', 'Boucher, Kenneth M', 'Biesecker, Leslie G'], title: 'Modeling the ACMG/AMP variant classification guidelines as a Bayesian classification framework', journal: 'Genetics in Medicine', year: 2018, volume: 20, number: 9, pages: '1054--1060', doi: '10.1038/gim.2017.210' },
+  pejaver2022: { type: 'article', authors: ['Pejaver, Vikas', 'Byrne, Alicia B', 'Feng, Bing-Jian', 'Pagel, Kymberleigh A', 'Mooney, Sean D', 'Karchin, Rachel', "O'Donnell-Luria, Anne", 'others'], title: 'Calibration of computational tools for missense variant pathogenicity classification and ClinGen recommendations for PP3/BP4 criteria', journal: 'American Journal of Human Genetics', year: 2022, volume: 109, number: 12, pages: '2163--2177', doi: '10.1016/j.ajhg.2022.10.013' },
+  badonyi2025: { type: 'software', authors: ['Badonyi, Mihaly'], title: 'acmgscaler', version: '1.0.0', year: 2025, url: 'https://doi.org/10.32614/CRAN.package.acmgscaler' },
 };
 
 const plainAuthors = (authors) => {
@@ -114,7 +124,8 @@ export function citations() {
 }
 
 // Writes the methods of a run. options: { software: { version, commit }, findings (QC, optional),
-// thresholds, results (the run's scores, optional: the rescaling anchors' SEs) }. Returns { paragraphs, references: [{ n, key, text }], markdown, bibtex }.
+// thresholds, results (the run's scores, optional: the rescaling anchors' SEs), calibrations (its
+// calibrations computed again, optional: lib/calibration-record.js's calibrationOutcome of each) }. Returns { paragraphs, references: [{ n, key, text }], markdown, bibtex }.
 export function writeMethods(ws, run, options = {}) {
   const refs = citations();
   const { cite } = refs;
@@ -133,6 +144,13 @@ export function writeMethods(ws, run, options = {}) {
   // mapping onto it as the views were saved, and how what it says of each position was read.
   const structures = ws.structures ?? [];
   if (structures.length) paragraphs.push(...structureParagraphs(ws, cite));
+
+  // Calibration, for research (wave 8, slice 5): the run's calibrations given (options.calibrations:
+  // lib/calibration-record.js's calibrationOutcome of each), each control set once.
+  const calibrations = (options.calibrations ?? []).filter((o) => o.cal.run === run.id);
+  const sets = [...new Map(calibrations.filter((o) => o.set).map((o) => [o.set.id, o.set])).values()];
+  for (const set of sets) paragraphs.push(`Calibration, for research: ${controlSetParagraph(set, ws, cite).replace(/^The /, 'the ')}`);
+  for (const o of calibrations) paragraphs.push(...calibrationParagraphs(o, cite));
 
   // Software.
   const sw = run.software;

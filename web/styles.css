@@ -806,6 +806,11 @@ table.design-columns tr.unset td:first-child { color: var(--warn-text); }
 .filter-stage .field { margin-bottom: 0; }
 .filter-stage .field > span { display: none; }
 .filter-stage textarea.input { width: 100%; resize: vertical; font-family: var(--mono); font-size: 12px; }
+.calibration-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.calibration-grid .pane + .pane { margin-top: 0; }
+@media (max-width: 1180px) { .calibration-grid { grid-template-columns: minmax(0, 1fr); } }
+.calibration-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+.plot.calibration-curve { max-width: 440px; display: block; margin: 0 auto; }
 .score-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 14px; margin-top: 14px; }
 .score-grid .pane + .pane { margin-top: 0; }
 @media (max-width: 1700px) { .score-grid { grid-template-columns: minmax(0, 1fr); } }

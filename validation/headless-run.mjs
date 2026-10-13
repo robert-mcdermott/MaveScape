@@ -258,6 +258,23 @@ try {
     check('--from-workspace on 0.7.0\'s Hsp90 archive, saved with an agent\'s proposal open: its run reproduced, and the archive written again keeping the proposal, what it made marked proposed, and the agent\'s entries in the history', `exit ${h.code}; ${recH.run?.status}; proposals ${(kept?.ws.proposals ?? []).map((p) => `${p.author}'s, ${p.changes.length} changes`).join(', ') || 'none'}; ${(kept?.ws.history ?? []).filter((e) => e.by).length} entries by the agent`, h.code === 0 && recH.run?.status === 'reproduced' && JSON.stringify(kept?.ws.proposals) === JSON.stringify(original.ws.proposals) && JSON.stringify(kept?.ws.checkpoints) === JSON.stringify(original.ws.checkpoints) && JSON.stringify(kept?.ws.annotations) === JSON.stringify(original.ws.annotations) && agentEntries(original.ws).length > 0 && agentEntries(kept?.ws).startsWith(agentEntries(original.ws)));
   }
 
+  {
+    // 0.8.0's own record (validation/archives/make-0.8.0.mjs): its certificate (format 2, its
+    // calibrations' numbers among them) verified by this MaveScape, and its factor IX workspace
+    // rerun, the archive written again keeping its ClinVar records, control sets, calibrations, the
+    // figure of a calibration's plots and the checkpoint.
+    const cert = join(ROOT, 'validation/archives/release-0.8.0-factor9-calibration.certificate.msz');
+    const v = await mavescape(['verify', cert]);
+    check('mavescape verify on 0.8.0\'s certificate (format 2: a workspace with calibrations): verified (exit 0), every number computed again identical', `exit ${v.code}; ${v.stdout.split('\n').find((l) => /^Verified|^Not verified|^Not checkable/.test(l))?.slice(0, 160) ?? v.stderr.slice(0, 160)}`, v.code === 0 && /^Verified: all [\d,]+ numbers/m.test(v.stdout));
+    const f9 = join(ROOT, 'validation/archives/release-0.8.0-factor9-calibration.msz');
+    const r = await mavescape(['run', '--from-workspace', f9, '--out', out('factor9-0.8'), '--time', TIME]);
+    const recR = record(out('factor9-0.8'));
+    const kept = existsSync(join(out('factor9-0.8'), 'workspace.msz')) ? await readArchive(readFileSync(join(out('factor9-0.8'), 'workspace.msz'))) : null;
+    const original = await readArchive(readFileSync(f9));
+    const same = (k) => JSON.stringify(kept?.ws[k]) === JSON.stringify(original.ws[k]);
+    check('--from-workspace on 0.8.0\'s factor IX archive: its run reproduced, and the archive written again keeping its ClinVar records, control sets, calibrations, figure and checkpoint', `exit ${r.code}; ${recR.run?.status}; control sets ${(kept?.ws.controlSets ?? []).map((c) => c.name).join(', ')}; calibrations ${(kept?.ws.calibrations ?? []).map((c) => c.name).join(', ')}; figures ${(kept?.ws.figures ?? []).map((f) => `${f.name} (${f.panels.length})`).join(', ')}`, r.code === 0 && recR.run?.status === 'reproduced' && ['annotations', 'controlSets', 'calibrations', 'figures', 'checkpoints'].every(same) && original.ws.calibrations?.length === 3);
+  }
+
   // --- Two conditions, and a table of barcodes ------------------------------------------------
   const two = await mavescape(['run', '--design', 'validation/fixtures/two-condition.design.json', '--out', out('two'), '--time', TIME, 'validation/fixtures/two-condition.csv']);
   archiveReader.set(join(out('two'), 'workspace.msz'), await readArchive(readFileSync(join(out('two'), 'workspace.msz'))));

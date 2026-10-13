@@ -6,13 +6,13 @@
 ms_set_mode(mode, ms = ms_default())
 }
 \arguments{
-\item{mode}{start, experiment, qc, score, map, compare, structure, figures or report. Required; a string.}
+\item{mode}{start, experiment, qc, score, map, compare, structure, calibrate, figures or report. Required; a string.}
 \item{ms}{A connection from \code{\link{ms_connect}} (default: the last one made).}
 }
 \value{
 A \code{mavescape_result}: the \code{message} and the \code{data} MaveScape answered with.
 }
 \description{
-Shows a view: start, experiment, qc, score, map, compare, structure, figures or report.
+Shows a view: start, experiment, qc, score, map, compare, structure, calibrate, figures or report.
 }
 \seealso{\code{\link{ms_call}}, which sends any action by its name (here \code{"set_mode"}).}

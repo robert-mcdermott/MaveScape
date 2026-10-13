@@ -14,7 +14,7 @@ import { analysisName } from '../lib/report.js';
 import { possessive } from '../lib/words.js';
 import { keepInReport, keptLike, removeFromReport, reportOf, robustnessForReport } from './report.js';
 import { askCheckpoint, deleteCheckpoint, diffWith, stateOf } from './diff.js';
-import { pairWords } from '../lib/diff.js';
+import { calibrationChangeWords, pairWords } from '../lib/diff.js';
 import { mapSVG } from '../lib/map-svg.js';
 import { confirmDialog } from './overlays.js';
 import { certificatePane } from './certificate.js';
@@ -192,6 +192,11 @@ export function mountReportMode(app, container) {
         art.append(h('p.muted', 'The map of the change: each variant\'s effect after less before (blue lower, red higher); gray where either did not score it.'), box);
       }
     });
+    // What the rescoring did to the calibrations (wave 8, slice 5).
+    if (diff.calibrations.length) {
+      art.append(h('h3', 'Calibrations, for research'));
+      for (const c of diff.calibrations) for (const line of calibrationChangeWords(c)) art.append(h('p', line));
+    }
     changesEl.append(art);
   }
 

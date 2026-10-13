@@ -1,6 +1,6 @@
 // The dataset tree: what the workspace holds, by kind (tables, targets, the design, score runs,
-// structure views, selections). Selecting an item focuses it (store.ui.focus): the inspector describes it, and the
-// views that use it open on it.
+// structure views, selections, control sets). Selecting an item focuses it (store.ui.focus): the
+// inspector describes it, and the views that use it open on it.
 
 import { h, icon, clear, formatCount } from './dom.js';
 import { heldOfKind, heldRemoval, proposalOfItem } from '../lib/proposals.js';
@@ -49,6 +49,22 @@ const SECTIONS = [
     label: (s) => s.name ?? 'Selection',
     meta: (s) => (s.keys ? `${formatCount(s.keys.length)}` : ''),
     empty: 'Named sets of variants or positions, made on the map.',
+  },
+  {
+    // Variants of known effect, for calibration (wave 8, slice 1): made and read in Calibrate.
+    kind: 'controls', collection: 'controlSets', title: 'Control sets', icon: 'calibrate',
+    items: (ws) => ws.controlSets ?? [],
+    label: (c) => c.name ?? 'Control set',
+    meta: (c) => `${c.labels.filter((l) => l.side === 'P').length} P · ${c.labels.filter((l) => l.side === 'B').length} B`,
+    empty: 'Variants of known effect, from ClinVar or a table, made in Calibrate.',
+  },
+  {
+    // A run's scores against a control set, when asked (wave 8, slice 2): made and read in Calibrate.
+    kind: 'calibration', collection: 'calibrations', title: 'Calibrations', icon: 'calibrate',
+    items: (ws) => ws.calibrations ?? [],
+    label: (c) => c.name ?? 'Calibration',
+    meta: (c) => `${c.n.P} P · ${c.n.B} B`,
+    empty: 'A run\'s scores against a control set, made in Calibrate when asked.',
   },
 ];
 

@@ -92,7 +92,7 @@ const CLASS_NAMES = { normal: 'WT-like (normal)', abnormal: 'abnormal-like (abno
 // in MaveScape's words, WT-like and abnormal-like), each with its range of scores, and, for a
 // clinical calibration, the evidence strength it assigns (research use: MaveScape classifies no
 // variant).
-function calibrationOf(c) {
+export function readCalibration(c) {
   return {
     title: c.title ?? 'Calibration',
     researchUseOnly: Boolean(c.researchUseOnly),
@@ -149,7 +149,7 @@ export function readScoreSet(json) {
       identifiers: (t.externalIdentifiers ?? []).map((x) => ({ db: x.identifier?.dbName, id: x.identifier?.identifier, offset: x.offset ?? 0 })),
     })),
     keywords: (experiment.keywords ?? []).map((k) => ({ key: k.keyword?.key, label: k.keyword?.label, description: k.description ?? null })),
-    calibrations: (json.scoreCalibrations ?? []).map(calibrationOf),
+    calibrations: (json.scoreCalibrations ?? []).map(readCalibration),
     // What a deposit of the record says again (wave 3, slice 4): its publications as identifiers,
     // its data DOIs, contributors (ORCID iDs), the experiment's texts and the descriptions of its
     // columns.

@@ -41,7 +41,7 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "description": "The example's id or part of its title. Published: \"grb2-sh3\" (GRB2's SH3 domain, an input and an output), \"hsp90\" (Hsp90, a time series), \"factor9\" (factor IX, sorted bins), \"dhfr-lon\" (DHFR with and without Lon, two conditions), \"brca1-ring\" (BRCA1's RING domain, from MaveDB and back), \"pten-mavedb\" (PTEN, published scores), \"brca1-sge\" (BRCA1, nucleotide variants), \"tp53-screens\" (TP53, two screens). Simulated, with known effects: \"simulated\", \"simulated-time-series\", \"simulated-sort-seq\", \"simulated-barcodes\", \"simulated-conditions\", \"simulated-problems\". The examples from MaveDB download their tables when opened.",
+          "description": "The example's id or part of its title. Published: \"grb2-sh3\" (GRB2's SH3 domain, an input and an output), \"hsp90\" (Hsp90, a time series), \"factor9\" (factor IX, sorted bins), \"dhfr-lon\" (DHFR with and without Lon, two conditions), \"brca1-ring\" (BRCA1's RING domain, from MaveDB and back), \"pten-mavedb\" (PTEN, published scores), \"brca1-sge\" (BRCA1, nucleotide variants), \"tp53-screens\" (TP53, two screens); calibrated against ClinVar's records of the gene, which they bring: \"brca1-calibration\", \"tp53-calibration\", \"pten-calibration\". Simulated, with known effects: \"simulated\", \"simulated-time-series\", \"simulated-sort-seq\", \"simulated-barcodes\", \"simulated-conditions\", \"simulated-problems\", \"simulated-calibration\" (labels, half of them circular). The examples from MaveDB download their tables when opened.",
           "type": "string"
         }
       },
@@ -89,12 +89,12 @@
   {
     "name": "set_mode",
     "title": "Show a view",
-    "description": "Shows a view: start, experiment, qc, score, map, compare, structure, figures or report.",
+    "description": "Shows a view: start, experiment, qc, score, map, compare, structure, calibrate, figures or report.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
         "mode": {
-          "description": "start, experiment, qc, score, map, compare, structure, figures or report.",
+          "description": "start, experiment, qc, score, map, compare, structure, calibrate, figures or report.",
           "type": "string"
         }
       },
@@ -111,12 +111,12 @@
   {
     "name": "focus",
     "title": "Show an item in the inspector",
-    "description": "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view or variant, by name. With no name, clears the focus.",
+    "description": "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view, control set, calibration or variant, by name. With no name, clears the focus.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "description": "table, target, run, selection, structure view or variant; found by name across all of them if not given.",
+          "description": "table, target, run, selection, structure view, control set, calibration or variant; found by name across all of them if not given.",
           "type": "string"
         },
         "name": {
@@ -275,7 +275,7 @@
   {
     "name": "mavedb_deposit",
     "title": "What a MaveDB deposit would hold",
-    "description": "What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and those left out, with why), the target (its sequence, or the transcript that names it), the columns of scores and counts, the experiment's keywords from the design's readout, and what MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id). Writes nothing: export with what mavedb writes the package.",
+    "description": "What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and those left out, with why), the target (its sequence, or the transcript that names it), the columns of scores and counts, the experiment's keywords from the design's readout, the run's calibrations of the condition as MaveDB's score calibrations (research use: each class's range as abnormal, not specified or normal, its OddsPath and evidence strength), and what MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id, a calibration's threshold source). Writes nothing: export with what mavedb writes the package.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1204,6 +1204,248 @@
     }
   },
   {
+    "name": "make_control_set",
+    "title": "Make a control set",
+    "description": "Makes a control set, for calibration (research use): variants whose effect is known, each label as its source gives it, kept with the workspace and shown in the Calibrate view. From ClinVar (the ClinVar track's records of the gene: add_track clinvar first), pathogenic and likely pathogenic records as P, benign and likely benign as B, conflicting and uncertain ones left out, with at least min_stars review stars; or from a table of labels (file_name and text: a column of variants, such as p.Trp36Ala or W36A, one of labels: pathogenic, likely pathogenic, benign, likely benign, or abnormal and normal from another assay, and optionally last_evaluated, the date of each), numbered on the reference or the target; or the open example's own labels (example). With evaluated_before, only classifications last evaluated before that year (those made before the assay was published cannot rest on it). Placed on the target as the tracks place ClinVar's; says what was left out and why. MaveScape reports functional evidence and never classifies a variant.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "citation": {
+          "description": "table: where the labels were published, with its DOI.",
+          "type": "string"
+        },
+        "evaluated_before": {
+          "description": "Only classifications last evaluated before this year (ClinVar's dates, or the table's last_evaluated column); those with no date are left out. None if not given.",
+          "maximum": 2100,
+          "minimum": 1900,
+          "type": "integer"
+        },
+        "file_name": {
+          "description": "table: the file's name (labels.csv).",
+          "type": "string"
+        },
+        "kinds": {
+          "description": "The kinds of variant kept: missense, nonsense, synonymous (clinvar: missense if not given; table: all three).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "min_stars": {
+          "description": "clinvar: the fewest review stars a record may have (1, criteria provided, if not given).",
+          "maximum": 4,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The set's name; one is made from its source if not given.",
+          "type": "string"
+        },
+        "numbering": {
+          "description": "table: reference or target; whichever the residues agree with if not given.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "source": {
+          "description": "clinvar (the default), table, or example (the open example's own labels: the simulated calibration's).",
+          "type": "string"
+        },
+        "text": {
+          "description": "table: the file's text (CSV or TSV).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "control_sets",
+    "title": "The control sets",
+    "description": "The workspace's control sets (research use): each one's source and rules, its P and B controls by label, review stars and kind, what was left out when it was made; matched to a run (the latest if not given), how many of each side it scored, did not score or does not hold, and what may make the labels circular for it (labels anchoring the run's scale, the design's own controls, ClinVar classifications evaluated since the assay was published, the assay's own publication, too few controls, a predictor whose classes were set with the same labels). With labels, each control: its variant, side, label as its source gives it, ids and state in the run.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "labels": {
+          "description": "Each control too (its variant, side, label, ids, state and score in the run).",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "A control set by name: only that one.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "remove_control_set",
+    "title": "Delete a control set",
+    "description": "Deletes a control set, with the calibrations made with it (undoable, in the history).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The control set's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "calibrate",
+    "title": "Calibrate a run against a control set",
+    "description": "Calibrates a run's scores against a control set, for research: how far the scores separate its P controls from its B controls, and the functional classes thresholds make (abnormal-like, intermediate, WT-like: classes in this assay, never a classification of a variant). Returns the ROC curve's AUC with DeLong's interval, the precision-recall curve's area, both with a seeded stratified bootstrap's intervals; the thresholds, set by the controls (rule error: at most `error` of either side's controls in the other side's class; youden: one threshold of the largest sensitivity + specificity) or given (abnormal and normal); each side's controls and the run's variants in each class; sensitivity (P abnormal-like) and specificity (B WT-like) with Wilson's intervals; how far the bootstrap moves the thresholds; score-level likelihood ratios as acmgscaler computes them (each score's ratio of the P controls' density to the B controls', with its interval, the evidence strength it gives, Tavtigian et al.'s thresholds from a prior or Pejaver et al. 2022's, and the score where each strength begins); and the evidence strength each class would give, for research: its OddsPath as Brnich et al. 2019 define it (one control of the other side added) with the strength their Table 3 makes of it (PS3 for the abnormal-like class, BS3 for the WT-like), the bootstrap's interval and strengths with the thresholds kept, and what limits it (thresholds set on the same controls, few controls in a class, circularity). Kept with the workspace and shown in the Calibrate view; nothing calibrates by itself.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "abnormal": {
+          "description": "rule given: the abnormal threshold (a score at or beyond it, on the abnormal side, is abnormal-like).",
+          "type": "number"
+        },
+        "condition": {
+          "description": "The run's condition, counted from 0 (0 if not given).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "control_set": {
+          "description": "The control set by name; the one focused, else the latest, if not given.",
+          "type": "string"
+        },
+        "curves": {
+          "description": "The ROC and precision-recall curves' points and bands too, and the likelihood ratio curve and each variant's ratio.",
+          "type": "boolean"
+        },
+        "error": {
+          "description": "rule error: the share of either side's controls allowed in the other side's class (0.05 if not given).",
+          "exclusiveMaximum": 0.5,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "name": {
+          "description": "The calibration's name; the run's and the set's if not given.",
+          "type": "string"
+        },
+        "normal": {
+          "description": "rule given: the normal threshold (a score short of it is WT-like); the abnormal threshold again for one threshold.",
+          "type": "number"
+        },
+        "pejaver": {
+          "description": "The likelihood ratios' evidence thresholds of Pejaver et al. 2022's Table 1 instead (prior 0.0441, c = 1,124).",
+          "type": "boolean"
+        },
+        "prior": {
+          "description": "The prior of pathogenicity the likelihood ratios' evidence thresholds come from (0.1 if not given: c = 350, as acmgscaler's search finds it).",
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "published": {
+          "description": "A published calibration of the run's MaveDB record, by its title: its abnormal and normal ranges as the thresholds (for a run of the record's own scores), MaveScape's OddsPath on the control set beside the one it states.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "How the thresholds are set: error (the default), youden or given.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "samples": {
+          "description": "The bootstrap's samples (2000 if not given; 0: no bootstrap).",
+          "maximum": 20000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seed": {
+          "description": "The bootstrap's seed (20261009 if not given).",
+          "type": "integer"
+        },
+        "side": {
+          "description": "Where abnormal-like scores are: below or above the others; auto (the default): the design's readout's side for less function when it is stated, else the side of the P controls' median.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "calibrations",
+    "title": "The calibrations",
+    "description": "The workspace's calibrations (research use): each one's run, control set, side, rule, thresholds and bootstrap; its AUC and precision-recall area with their intervals, the controls and the run's variants in each class, sensitivity and specificity with Wilson's intervals, and how far the bootstrap moves the thresholds, each class's OddsPath and evidence strength (research use) with what limits it, and the score-level likelihood ratios (where each strength begins, the variants at each). With curves, the ROC and precision-recall curves' points and bands, the likelihood ratio curve and each variant's ratio.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "curves": {
+          "description": "The curves' points and bands too.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "A calibration by name: only that one.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "remove_calibration",
+    "title": "Delete a calibration",
+    "description": "Deletes a calibration (undoable, in the history).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The calibration's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
     "name": "figures",
     "title": "The workspace's figures",
     "description": "The workspace's figures: each one's name, page (millimeters, and the text size in points), its panels lettered in reading order with what each shows, where it is (millimeters) and anything wrong with it (text under 6 pt, a map too narrow for its positions, a run no longer there), and the figure described in words.",
@@ -1275,7 +1517,7 @@
   {
     "name": "add_figure_panel",
     "title": "Add a panel to a figure",
-    "description": "Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's variant-effect map (a condition or a difference between conditions, colored as render_map colors it, a range of positions, tracks below it, its color bar and the key to its states); a QC finding's charts (of a run, or of the counts); a run's scores by class, filter flow or a contrast's volcano; a comparison (as compare takes its sides: agreement, Bland–Altman, disagreement by position, a predictor's classes, or a map of either side or of the difference); a variant's evidence (its score and each replicate's with their intervals, its time course, or its distribution over the bins); a saved structure view (its figure panel, drawn at 4x on white and kept with the figure); or text. Placed below the panels already there unless placed; shown in the Figures view. Returns the panel's id and letter, and what it shows.",
+    "description": "Adds a panel to a figure (or to a new one), drawn as its view draws it: a run's variant-effect map (a condition or a difference between conditions, colored as render_map colors it, a range of positions, tracks below it, its color bar and the key to its states); a QC finding's charts (of a run, or of the counts); a run's scores by class, filter flow or a contrast's volcano; a comparison (as compare takes its sides: agreement, Bland–Altman, disagreement by position, a predictor's classes, or a map of either side or of the difference); a variant's evidence (its score and each replicate's with their intervals, its time course, or its distribution over the bins); a saved structure view (its figure panel, drawn at 4x on white and kept with the figure); a calibration's plot, for research (each side's scores against the run's with the classes, the ROC or precision–recall curve with its bootstrap band and thresholds, or the likelihood ratio of a score with the evidence thresholds); or text. Placed below the panels already there unless placed; shown in the Figures view. Returns the panel's id and letter, and what it shows.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
@@ -1285,6 +1527,10 @@
         },
         "b": {
           "description": "compare: the second side.",
+          "type": "string"
+        },
+        "calibration": {
+          "description": "calibration: the calibration, by name; the latest if not given.",
           "type": "string"
         },
         "color_by": {
@@ -1318,7 +1564,7 @@
           "type": "number"
         },
         "kind": {
-          "description": "map (the default), qc, scores, compare, variant, structure or text.",
+          "description": "map (the default), qc, scores, compare, variant, structure, calibration or text.",
           "type": "string"
         },
         "pair": {
@@ -1331,7 +1577,7 @@
           "type": "string"
         },
         "plot": {
-          "description": "What a scores panel shows (distribution, flow, volcano), a compare panel (agreement, bland-altman, positions, classes, map-first, map-second, map-difference) or a variant panel (evidence, time-course, bins).",
+          "description": "What a scores panel shows (distribution, flow, volcano), a compare panel (agreement, bland-altman, positions, classes, map-first, map-second, map-difference), a variant panel (evidence, time-course, bins) or a calibration panel (distribution, roc, pr, likelihood).",
           "type": "string"
         },
         "rows": {

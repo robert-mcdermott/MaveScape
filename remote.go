@@ -47,6 +47,10 @@ type remoteHub struct {
 	open    func(paths []string) ([]localFile, []string)
 	token   string
 	outputs outputSlots
+	// session names this run of the program (main.go's): only a page opened from it takes its
+	// actions, so that a tab left open while MaveScape was started again (another version,
+	// another library) is refused when it reconnects. Empty: any page (the tests' hubs).
+	session string
 }
 
 type remoteClient struct {
@@ -189,6 +193,10 @@ func (h *remoteHub) take(id string) (chan remoteResult, bool) {
 }
 
 func (h *remoteHub) serveEvents(w http.ResponseWriter, r *http.Request) {
+	if h.session != "" && r.URL.Query().Get("session") != h.session {
+		writeError(w, http.StatusConflict, "This page was opened from another run of MaveScape: reload it to drive this one.")
+		return
+	}
 	stream := http.NewResponseController(w)
 	header := w.Header()
 	header.Set("Content-Type", "text/event-stream")

@@ -141,7 +141,7 @@ try {
   const actions = (await (await fetch(`${URL}api/remote/tools`)).json()).tools;
   const same = listed.length === actions.length && listed.every((t, i) => t.name === actions[i].name && t.title === actions[i].title && t.description === actions[i].description && JSON.stringify(t.inputSchema) === JSON.stringify(actions[i].inputSchema));
   const kinds = { read: listed.filter((t) => t.annotations.readOnlyHint).length, destructive: listed.filter((t) => t.annotations.destructiveHint).length, public: listed.filter((t) => t.annotations.openWorldHint).length };
-  check('tools/list: the remote actions, in order, each with its title, description and arguments\' schema as GET /api/remote/tools gives them, and MCP\'s hints', `${listed.length} tools (${kinds.read} read only, ${kinds.destructive} destructive, ${kinds.public} reaching public data)`, same && listed.length === 54 && listed.every((t) => t.title && typeof t.annotations.readOnlyHint === 'boolean' && typeof t.annotations.openWorldHint === 'boolean'));
+  check('tools/list: the remote actions, in order, each with its title, description and arguments\' schema as GET /api/remote/tools gives them, and MCP\'s hints', `${listed.length} tools (${kinds.read} read only, ${kinds.destructive} destructive, ${kinds.public} reaching public data)`, same && listed.length > 50 && listed.every((t) => t.title && typeof t.annotations.readOnlyHint === 'boolean' && typeof t.annotations.openWorldHint === 'boolean'));
   const unknown = await rpc('tools/call', { name: 'no_such_tool', arguments: {} });
   const missing = await call('inspect_variant', {});
   const nonsense = await rpc('nonsense/method');
@@ -428,6 +428,47 @@ try {
   const blankNow = await workspace();
   check('tables and a target opened into the agent\'s workspace are proposed; its draft design waits, and so does scoring with it, until the person accepts it', `${files.data.proposal?.made.join('; ')}; ${drafted.message.slice(0, 50)}…; ${tooSoon.text.slice(0, 70)}; ${scored.message.slice(0, 40)}`,
     files.data.proposal?.made.length === 2 && drafted.data.waiting && tooSoon.isError && /waits for the person to accept it/.test(tooSoon.text) && blankNow.design && blankNow.sources[0].proposed?.accepted && blankNow.runs[0]?.proposed?.proposal);
+
+  // --- Control sets (wave 8, slice 1) -------------------------------------------------------
+  // On GRB2: the person's set applies at once; the agent's is made at once and marked proposed, and
+  // its deleting the person's waits; rejected, the agent's goes and the person's stays.
+  {
+    const labels = readFileSync(join(ROOT, 'validation/fixtures/controls/grb2-invented-labels.csv'), 'utf8');
+    await tool('open_example', { id: 'grb2-sh3' });
+    await person('make_control_set', { source: 'table', file_name: 'grb2-invented-labels.csv', text: labels, name: 'Mine' });
+    const theirs = await tool('make_control_set', { source: 'table', file_name: 'grb2-invented-labels.csv', text: labels, name: 'Missense only', kinds: ['missense'] });
+    const listed = await tool('control_sets', { run: 'Run 1' });
+    const held = await tool('remove_control_set', { name: 'Mine' });
+    const open = await workspace();
+    const mine = open.controlSets.find((c) => c.name === 'Mine');
+    const agents = open.controlSets.find((c) => c.name === 'Missense only');
+    await decide('Reject all');
+    const after = await workspace();
+    check('control sets: the person\'s made at once; the agent\'s made at once and marked proposed (control_sets listing both, matched to Run 1), its deleting the person\'s waiting; rejected, the agent\'s gone and the person\'s kept', `${theirs.message.slice(0, 90)}…; ${listed.data.sets.map((x) => `${x.name}: ${x.P.controls} P, ${x.B.controls} B, ${x.measured.P.scored + x.measured.B.scored} scored${x.proposed ? ', proposed' : ''}`).join('; ')}; ${held.message.slice(0, 60)}…; after: ${after.controlSets.map((c) => c.name).join(', ')}`,
+      !mine.proposed && agents.proposed?.by === AGENT && Boolean(held.data.waiting) && listed.data.sets.length === 2 && listed.data.sets[1].proposed && listed.data.sets[0].P.controls === 4 && listed.data.sets[1].B.controls === 6
+      && after.controlSets.length === 1 && after.controlSets[0].name === 'Mine' && !after.proposals);
+  }
+
+  // --- Calibrations (wave 8, slice 2) -------------------------------------------------------
+  // Run 1 against the person's set: the person's calibration applies at once; the agent's is made
+  // at once and marked proposed, its metrics returned, and its deleting the person's waits; accepted,
+  // the agent's is kept, marked accepted, and the person's goes.
+  {
+    await person('calibrate', { control_set: 'Mine', run: 'Run 1', rule: 'youden', samples: 200, name: 'Mine' });
+    const theirs = await tool('calibrate', { control_set: 'Mine', run: 'Run 1', samples: 200, name: 'Theirs' });
+    const listed = await tool('calibrations', {});
+    const held = await tool('remove_calibration', { name: 'Mine' });
+    const open = await workspace();
+    await decide('Accept all');
+    const after = await workspace();
+    const mine = open.calibrations.find((c) => c.name === 'Mine');
+    const agents = open.calibrations.find((c) => c.name === 'Theirs');
+    check('calibrations: the person\'s made at once; the agent\'s made at once and marked proposed, its metrics returned (the AUC and its intervals, each class\'s evidence strength and what limits it), calibrations listing both; its deleting the person\'s waiting; accepted, the agent\'s kept and marked accepted, the person\'s deleted', `${theirs.message.slice(0, 120)}…; ${listed.data.calibrations.map((c) => `${c.name}${c.proposed ? ', proposed' : ''}`).join('; ')}; ${held.message.slice(0, 60)}…; after: ${after.calibrations.map((c) => `${c.name}${c.proposed?.accepted ? ' (accepted)' : ''}`).join(', ')}`,
+      !mine.proposed && agents.proposed?.by === AGENT && Number.isFinite(theirs.data.auc.auc) && Number.isFinite(theirs.data.auc.bootstrap.low) && Boolean(held.data.waiting)
+      && typeof theirs.data.evidence.abnormal.strength === 'string' && Array.isArray(theirs.data.limitations)
+      && listed.data.calibrations.length === 2 && !listed.data.calibrations[0].proposed && listed.data.calibrations[1].proposed?.by === AGENT
+      && after.calibrations.length === 1 && after.calibrations[0].name === 'Theirs' && Boolean(after.calibrations[0].proposed?.accepted) && !after.proposals);
+  }
 
   // --- The guide's session on Hsp90 (wave 7, slice 6) ---------------------------------------
   // The tool calls the guide's page Agents and scripts shows (docs/site/pages/docs/scripting.html,

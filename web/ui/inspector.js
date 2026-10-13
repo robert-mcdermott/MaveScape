@@ -12,6 +12,8 @@ import { retrievalText } from '../lib/uniprot.js';
 import { recordView } from './mavedb.js';
 import { setsFor } from './selections.js';
 import { exportSelection } from './record.js';
+import { composition } from '../lib/controls.js';
+import { ruleWords, thresholdWords } from '../lib/calibration.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -125,8 +127,51 @@ export function mountInspector(app) {
       } }, icon('structure'), 'Open the view')));
   }
 
+  // A control set (wave 8, slice 1): where its labels came from, and how many on each side.
+  function controlSetSection(set) {
+    const c = composition(set);
+    return h('section.inspector-section', h('h3', icon('calibrate'), set.name),
+      h('dl.kv',
+        h('dt', 'From'), h('dd', set.source.kind === 'clinvar' ? `ClinVar, ${set.source.transcript}` : set.source.file.fileName),
+        set.source.citation ? [h('dt', 'Citation'), h('dd', set.source.citation)] : null,
+        set.source.kind === 'clinvar' ? [h('dt', 'Review status'), h('dd', `at least ${set.rules.minStars} star${set.rules.minStars === 1 ? '' : 's'}`)] : null,
+        h('dt', 'Kinds'), h('dd', set.rules.kinds.join(', ')),
+        Number.isInteger(set.rules.evaluatedBefore) ? [h('dt', 'Evaluated'), h('dd', `before ${set.rules.evaluatedBefore}`)] : null,
+        h('dt', 'P controls'), h('dd', formatCount(c.P.total)),
+        h('dt', 'B controls'), h('dd', formatCount(c.B.total)),
+        h('dt', 'Made'), h('dd', relativeTime(set.created))),
+      h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, 'Labels as their source gives them, for research: MaveScape does not classify variants.'),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => app.setMode('calibrate') }, icon('calibrate'), 'Open in Calibrate')));
+  }
+
+  // A calibration (wave 8, slice 2): what it was made with; its metrics are in Calibrate.
+  function calibrationSection(cal) {
+    const ws = app.store.ws;
+    const run = ws.runs.find((r) => r.id === cal.run);
+    const set = (ws.controlSets ?? []).find((c) => c.id === cal.controlSet);
+    return h('section.inspector-section', h('h3', icon('calibrate'), cal.name),
+      h('dl.kv',
+        h('dt', 'Run'), h('dd', run?.name ?? cal.run),
+        h('dt', 'Control set'), h('dd', set?.name ?? cal.controlSet),
+        h('dt', 'Controls scored'), h('dd', `${formatCount(cal.n.P)} P, ${formatCount(cal.n.B)} B`),
+        h('dt', 'Abnormal-like'), h('dd', `${cal.side} the others (${cal.sideFrom === 'readout' ? 'the readout' : cal.sideFrom === 'controls' ? 'the controls\' medians' : 'chosen'})`),
+        h('dt', 'Thresholds'), h('dd', `${ruleWords(cal.rule, cal.error)}: ${thresholdWords(cal.side, cal.thresholds)}`),
+        h('dt', 'Bootstrap'), h('dd', `${formatCount(cal.bootstrap.samples)} samples, seed ${cal.bootstrap.seed}`),
+        h('dt', 'Made'), h('dd', relativeTime(cal.created))),
+      h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, 'For research: how far the scores separate variants of known effect. MaveScape does not classify variants.'),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => app.setMode('calibrate') }, icon('calibrate'), 'Open in Calibrate')));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
+    if (focus?.kind === 'controls') {
+      const set = (app.store.ws.controlSets ?? []).find((x) => x.id === focus.id);
+      if (set) return controlSetSection(set);
+    }
+    if (focus?.kind === 'calibration') {
+      const cal = (app.store.ws.calibrations ?? []).find((x) => x.id === focus.id);
+      if (cal) return calibrationSection(cal);
+    }
     if (focus?.kind === 'source') {
       const source = app.store.ws.sources.find((x) => x.id === focus.id);
       if (source) return sourceSection(source);

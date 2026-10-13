@@ -1,5 +1,200 @@
 # Changelog
 
+## 0.8.0 (2026-10-13)
+
+Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research. A new view,
+Calibrate, measures how far a run's scores separate variants whose effect is known: control sets
+from ClinVar's records of the gene or a table of labels, each label in its source's words, with what
+may make them circular; ROC and precision–recall curves with a seeded bootstrap, thresholds and the
+functional classes they make, each checked against R; each class's evidence strength as Brnich et
+al.'s OddsPath, and score-level likelihood ratios as acmgscaler computes them, always marked for
+research and kept apart from a clinical classification, which MaveScape never makes. Nothing
+calibrates by itself. A calibration is part of the record: the report and methods, figure panels,
+the certificate (format 2), the checkpoint diff and a MaveDB deposit's score calibrations. Four
+examples teach it: BRCA1, TP53 and PTEN calibrated against ClinVar, which shows how much of a strong
+agreement may rest on classifications made since the assay, and a simulated calibration whose
+circular labels overstate its evidence against the truth. 0.8.0 keeps two archives and a
+certificate of its own, a calibrated workspace and one with an agent's calibration waiting.
+
+### Added
+
+- **Control sets and the Calibrate view** (wave 8, slice 1): variants whose effect is known, for
+  calibration (research use), each label as its source gives it and always shown with it ("ClinVar:
+  Likely pathogenic ★★"). Made from the ClinVar track's records of the gene (pathogenic and likely
+  pathogenic against benign and likely benign, at least one review star and missense variants by
+  default, conflicting and uncertain records left out) or from a table of labels (CSV or TSV,
+  numbered on the reference or the target, with its citation), placed on the target as the ClinVar
+  track places its records, saying what was left out and why. The Calibrate view, the eighth, shows
+  a set's composition, what of it the run shown scored, and what may make its labels circular:
+  nonsense or synonymous controls on a scale they set, the design's own controls, ClinVar
+  classifications evaluated since the assay was published, the assay's own publication, too few
+  controls, a predictor whose classes were set with ClinVar. Kept with the workspace (its archive,
+  history and checkpoints' diffs); an AI agent's are proposals. Remote actions and agent tools
+  `make_control_set`, `control_sets`, `remove_control_set`, and functions in the R and Python
+  packages.
+- **Calibrations** (wave 8, slice 2): how far a run's scores separate a control set's P controls
+  from its B controls, made when asked in Calibrate. Each side's scores against the run's; the ROC
+  curve and its AUC with DeLong's interval, the precision–recall curve and its area (Keilwagen et
+  al. 2014's interpolation), both with a seeded, stratified bootstrap's intervals and bands;
+  thresholds set by the controls (at most 5% of either side in the other's class, or Youden's J)
+  or given, and the functional classes they make (abnormal-like, intermediate, WT-like) for the
+  controls and the run's variants; sensitivity and specificity with Wilson's intervals; and how far
+  the bootstrap moves the thresholds. Where abnormal-like scores are comes from the design's
+  readout, else the controls, and the calibration says when the controls run the other way. Kept
+  with the workspace (its archive, history and checkpoints' diffs; deleted with its run or control
+  set); an AI agent's are proposals. Remote actions and agent tools `calibrate`, `calibrations`,
+  `remove_calibration`, and functions in the R and Python packages (60).
+- **Evidence strength, for research** (wave 8, slice 3): each class of a calibration says what it
+  would contribute as functional evidence, the abnormal-like class toward PS3 and the WT-like class
+  toward BS3: its OddsPath as Brnich et al. (Genome Medicine 2020;12:3) define it, with one control
+  of the other side added to each class as their model adds it, and the strength their Table 3
+  makes of it; the bootstrap's interval and its share of samples at each strength, the thresholds
+  kept. Beside it, what it rests on (the controls, each side's labels as their source gives them)
+  and what limits it: thresholds set on the same controls, few controls in a class, a strength the
+  bootstrap does not hold, circularity. The view says four things apart: how far the assay's scores
+  separate the controls, a variant's functional class, the evidence strength a class would give,
+  and a clinical classification, which MaveScape does not make. In `calibrate`'s and
+  `calibrations`' data.
+- **Score-level likelihood ratios, for research** (wave 8, slice 4): each calibration's likelihood
+  ratio at every score, as acmgscaler computes it (Badonyi 2025; ported from its R package 1.0.0,
+  MIT, and equal to it): each side's kernel density in 1,000 bootstrap samples, their regularized
+  log ratio made monotone, the samples' median with its interval; each variant's evidence strength
+  from its interval's conservative end, and the score where each strength begins. The thresholds
+  are Tavtigian et al.'s from a prior (0.1 by default, c = 350) or Pejaver et al. 2022's Table 1
+  (prior 0.0441, c = 1,124). A plot of the ratio against the score, the thresholds, the controls;
+  `calibrate`'s `prior` and `pejaver`, and with `curves` each variant's ratio. R's numerics it rests
+  on are MaveScape's own (`rcompat.js`), written from their publications.
+- **Published calibrations** (wave 8, slice 4): a MaveDB record's calibrations of its scores listed
+  in Calibrate, and, for a run of the record's published scores, a calibration with a published
+  calibration's thresholds (`calibrate`'s `published`), MaveScape's OddsPath on your controls beside
+  the one it states.
+- **Calibration in the record** (wave 8, slice 5), each calibration computed again from its run's
+  scores wherever it is written:
+  - the report and a run's methods: each control set (where its labels came from, its sides in
+    their source's words, what was left out) and each calibration as computed, every method cited
+    (pROC, Keilwagen et al. and PRROC, DeLong et al., Wilson, Brnich et al., acmgscaler, Tavtigian
+    et al., Pejaver et al.), what limits it with the limitations;
+  - figure panels of Calibrate's plots (**Add to figure**; `add_figure_panel`'s `calibration`):
+    each side's scores, the ROC and precision–recall curves, the likelihood ratio of a score; a
+    figure's manifest names the calibration as kept, its control set's labels and its run;
+  - the certificate: each calibration's numbers computed again and compared bit for bit (format 2,
+    so that an older MaveScape says it cannot check one rather than skipping them), and the review
+    report's section of them, every number traced;
+  - the checkpoint diff: a run scored again and calibrated against the same set, its thresholds,
+    AUC and each class's OddsPath before and after, and the variants whose functional class changed;
+  - a MaveDB deposit's score calibrations (`score_calibrations.json`, MaveDB's
+    `ScoreCalibrationCreate`): each class's range as abnormal, not specified or normal, bounded as
+    MaveScape classes a score at a threshold, its OddsPath and strength, research use only; a
+    package's calibrations listed as its published calibrations when it is opened, and passed
+    through when its scores are deposited again.
+- **Classifications made before the assay** (wave 8, slice 6): a control set can keep only the
+  classifications last evaluated before a year (**Last evaluated before** in Calibrate,
+  `make_control_set`'s `evaluated_before`), ClinVar's by each record's date or a table's by its own
+  column of dates (`last_evaluated`; ClinVar's tabular download is read as it is, its words such as
+  "Benign; association" by their first term). Those made before the assay was published cannot rest
+  on it; a dated table's made since are named as ClinVar's are. Nonsense or synonymous controls on
+  published scores are named too: how the authors set their scale is not recorded.
+- **Four examples of calibration** (wave 8, slice 6), each opening in Calibrate with its guide, every
+  number in it checked:
+  - BRCA1, TP53 and PTEN: published scores from MaveDB (Findlay et al.'s saturation genome
+    editing, Giacomelli et al.'s etoposide screen, Matreyek et al.'s VAMP-seq) with ClinVar's
+    records of the gene as NCBI gave them on 13 October 2026, bundled as the ClinVar track keeps
+    them (`web/examples/clinvar/`) so that the numbers hold. BRCA1's evidence is strong for both
+    classes, but rests on classifications made since the assay (made before it, moderate); TP53's
+    is moderate and the bootstrap does not hold it; PTEN's abundance misses pathogenic variants that
+    fold, with too few benign controls to say more;
+  - a simulated calibration with circular labels: 100 dated classifications of a noisy simulated
+    assay's missense variants, half made from the truth before the assay was "published", half
+    made since from its own scores. The guide compares each calibration's classes with the truth:
+    the circular labels lift the abnormal-like class to strong where the truth is moderate.
+  `make_control_set`'s `source` `example` makes the open example's labels a set; `open_example`
+  names the four.
+
+### Changed
+
+- The likelihood-ratio plot's threshold names are a little larger (9/10 of the text) and move apart
+  where they would overlap, so a figure's smallest text stays at 6 pt or more.
+- A table of labels' column names are matched without case and with spaces as underscores, so
+  "Germline classification" or "Protein change" are found as `germline_classification` and
+  `protein_change` are.
+
+### Fixed
+
+- A count of 0 given as a table cell's or label's only content was left out, in every view: the
+  page's element helper took a bare 0 for missing properties. Zeros show now.
+- A page left open while MaveScape was started again took the new run's remote control when it
+  reconnected, whatever its version or library (found by the release's headless runs, whose
+  window's actions a test browser left from an earlier run answered with 0.7.0's code). Remote
+  control takes only a page opened from the run; another says so and asks to be reloaded.
+
+### Validation
+
+- Suite `controls`: factor IX's ClinVar controls under four rules, each as an account read straight
+  from NCBI's cached answers gives it (169 P and 22 B by default); matched to Run 1 as its scores
+  export has it; a table of invented labels with every case a reader meets planted; each kind of
+  circularity planted, and none where none is; the sets through the workspace archive and a
+  checkpoint's diff. The remote session makes sets in the window from ClinVar and a table as Node
+  makes them; the agent session has an agent's set proposed and its deletion of the person's
+  waiting, then rejected.
+- Suite `calibration`: every metric computed with R as well (pROC 1.19, PRROC 1.4, binom 1.1;
+  `reference/generate_calibration.R`) on seven cases, factor IX's controls in Run 1 among them: the
+  ROC curve's points, the AUC and DeLong's interval, the precision–recall curve and area, each
+  rule's thresholds, the controls in each class and Wilson's intervals to 13 digits; the
+  bootstrap's intervals within their Monte Carlo error (where each of R's 1,092 quantiles falls
+  among MaveScape's samples); calibrations through the archive and a checkpoint's diff, deleted
+  with their control set. The remote session calibrates in the window as Node does (every number,
+  the seeded bootstrap's included); the agent session has an agent's calibration proposed and its
+  deletion of the person's waiting, then accepted.
+- OddsPath against Brnich et al.'s own spreadsheet (`reference/brnich-oddspath.json`, extracted from
+  their Additional file 1 by `extract_brnich_oddspath.py`): every row of Tables S1 and S2 to 15
+  digits, but one whose counts cannot be (Table S2's row 63); Table 3 at each threshold; 11 controls
+  the fewest with which both readouts reach moderate, as the paper says. Figure 1's example gives
+  0.24 for a normal readout, BS3_supporting by Table 3, where its caption says BS3_moderate:
+  MaveScape applies Table 3 as printed.
+- Suite `likelihood`: R's random numbers, kernel density, bandwidth, isotonic regression, Brent's
+  minimizer, interpolation and quantiles against R 4.6.1 as a black box (`reference/likelihood.json`,
+  `generate_likelihood.R`); acmgscaler 1.0.0 itself on its own example (by gene), at Pejaver et
+  al.'s prior, on negated scores and on factor IX's Run 1 with its 8,827 unlabeled variants: every
+  ratio, interval and evidence, and every threshold, to 1e-12; c from the prior and Pejaver et al.
+  2022's Table 1 as printed; MaveDB's published calibrations of six records read as MaveDB means
+  them (105 classes counted as MaveDB counts them, 12 stated strengths Table 3's, 17 calibrations'
+  thresholds classing the scores as published); Fayer et al. 2021's BRCA1 OddsPath, 52.4 and 0.02,
+  from their published data (fetched, pinned). The remote session calibrates factor IX's published
+  scores with the investigators' thresholds.
+- Suite `record`: factor IX's Run 1 calibrated against its ClinVar controls in Node, in the report
+  and Run 1's methods (every number as computed, every method cited, what limits it), a figure of
+  its four plots (each describing its numbers; rebuilt from its manifest, every drawing the same;
+  missing once the calibration is deleted), its certificate (format 2, verified bit for bit, an
+  OddsPath changed in its last bit caught) and review report (every traced number the
+  certificate's), the diff after a rescoring (the classes changed counted directly), and its MaveDB
+  deposit read back and calibrated again with the thresholds it states (the same thresholds,
+  classes and OddsPath). Suite `mavedb-export`: MaveDB's own `ScoreCalibrationCreate` takes the
+  deposited calibration, refuses it without a threshold source as MaveScape says, and its own test
+  of a range counts every deposited score in MaveScape's class. The remote session's window
+  certificate of a calibrated workspace is Node's, byte for byte. Every reference is checked
+  against Crossref's record of it (seven more recorded).
+- Suite `examples` (+16): the four examples opened and checked as every example is; their ClinVar
+  records the ones `snapshots.json` names, and, where NCBI's answers they were made from are kept,
+  the same table and every control by three rules as an account read straight from them; each
+  guide's numbers as computed (BRCA1's, TP53's, PTEN's, the simulated calibration's against its
+  truth). Suites `certificate`, `review` and `report` cover the eighteen examples (224,792 numbers
+  verified). Suite `controls` (+1): factor IX's
+  controls last evaluated before 2025 as the account gives them, and a table dated as ClinVar's
+  tabular download dates it. The remote session (213) follows the simulated and PTEN guides in the
+  window, every number as Node makes it.
+- 0.8.0's own archives (`validation/archives/make-0.8.0.mjs`, which drives the window as the
+  person and `mavescape mcp` as an agent): factor IX with two ClinVar control sets (the second of
+  classifications last evaluated before 2025), three calibrations (by the defaults, of the earlier
+  set, and with given thresholds and Pejaver et al.'s), a figure of a calibration's plots and a
+  checkpoint, and its certificate (format 2, 29,642 numbers); and the simulated calibration with the
+  person's set and calibration and the agent's, saved waiting. Every later version reopens them,
+  reads each ClinVar set again from the annotation's file in the archive and computes each
+  calibration again with the thresholds it keeps (`roundtrip`); certifies each earlier release's
+  archive, those with a proposal open refused until it is accepted, and verifies 0.6.0's, 0.7.0's
+  and 0.8.0's certificates (`certificate`); and verifies 0.8.0's certificate and reruns its factor IX
+  archive with `mavescape run --from-workspace`, its control sets, calibrations and figure kept
+  (`headless-run`). The Go test `TestOnlyThisRunsPageIsTheWindow` refuses a page of another run.
+
 ## 0.7.0 (2026-10-12)
 
 Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts. `mavescape mcp` makes

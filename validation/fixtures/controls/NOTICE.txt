@@ -1,0 +1,8 @@
+grb2-invented-labels.csv: labels INVENTED for MaveScape's tests of control sets (wave 8, slice 1),
+not classifications of any variant. Each row plants a case the reader of a table of labels must
+handle: P62993's numbering (the GRB2 SH3 example's target is its residues 159-214), the words of
+each side (pathogenic, LP, abnormal; benign, likely benign, normal, B), protein changes written as
+MAVE-HGVS, one-letter or ClinVar's titles, a change labeled on both sides, a change labeled twice on
+one side, labels not read (VUS, uncertain significance, empty), a position outside the target, a
+residue the target does not have, and a name that is no variant. validation/run.mjs, suite
+controls, says what each must become.

@@ -41,7 +41,7 @@ test('a checkpoint keeps the analysis without the history, named by its state\'s
 });
 
 test('the same analysis: no change; parameters and designs in words', () => {
-  assert.deepEqual(diffStates(analysisState(base), analysisState(base)), { same: true, changes: [], pairs: [], summary: 'No change in the analysis.' });
+  assert.deepEqual(diffStates(analysisState(base), analysisState(base)), { same: true, changes: [], pairs: [], calibrations: [], summary: 'No change in the analysis.' });
   assert.deepEqual(parameterChanges({}, { pseudocount: 1, filters: { minReplicates: 'all' } }), ['the pseudocount 0.5 → 1', 'the minimum replicates 1 → all']);
   assert.deepEqual(parameterChanges({}, { pseudocount: 0.5 }), [], 'a default made explicit is no change');
   assert.deepEqual(designChanges(design, { ...design, replicates: design.replicates.slice(0, 1) }), ['replicate Replicate 2 left out']);

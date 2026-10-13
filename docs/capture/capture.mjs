@@ -52,7 +52,7 @@ if (wanted.length === 0 || wanted.includes('pten-mavedb') || wanted.includes('co
 }
 // BRCA1's saturation genome editing (wave 3, slice 3): its scores and counts.
 const BRCA1_SGE = join(ROOT, 'validation/cache/mavedb-brca1-sge');
-if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant', 'compare-published'].includes(w))) {
+if (wanted.length === 0 || wanted.some((w) => ['brca1-sge', 'merged-variant', 'compare-published', 'calibrate-brca1'].includes(w))) {
   if (!existsSync(join(BRCA1_SGE, 'counts.csv'))) throw new Error('The BRCA1 example\'s scenes need MaveDB\'s tables: run node validation/fetch.mjs mavedb-brca1-sge');
 }
 // The examples opened from MaveDB with their counts (wave 3, slice 6): DHFR's two score sets, BRCA1
@@ -912,6 +912,89 @@ const scenes = {
     await agentOnGRB2();
     await click('Review', '.proposal-strip button');
     await sleep(600);
+  },
+  // Calibration, for research (wave 8, slice 1): factor IX's control set from ClinVar, matched to
+  // Run 1, with what may make it circular.
+  async 'calibrate-controls'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await sleep(800);
+  },
+  // Calibration's metrics (wave 8, slice 2): Run 1 against factor IX's ClinVar controls, by the
+  // defaults: each side's scores against the run's with the classes, the ROC and precision–recall
+  // curves with their bootstrap bands.
+  async 'calibrate-metrics'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await clearToasts();
+    await scrollTo('#calibration-scores');
+    await sleep(500);
+  },
+  // Evidence strength, for research (wave 8, slice 3): the same calibration's OddsPath for each class,
+  // with what it rests on and what limits it.
+  async 'calibrate-evidence'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await clearToasts();
+    await scrollTo('#calibration-evidence');
+    await sleep(500);
+  },
+  // Score-level likelihood ratios, for research (wave 8, slice 4): the same calibration's, as
+  // acmgscaler computes them, with where each strength begins.
+  async 'calibrate-likelihood'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await clearToasts();
+    await waitFor(`Boolean(document.querySelector('#calibration-likelihood svg.plot'))`);
+    await scrollTo('#calibration-likelihood');
+    await sleep(500);
+  },
+  // The calibration examples (wave 8, slice 6). BRCA1's published scores against the ClinVar records
+  // the example brings, calibrated by the defaults: each side's scores, the curves, and the
+  // evidence strength with what it rests on.
+  async 'calibrate-brca1'() {
+    await example('brca1-calibration');
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await clearToasts();
+    await scrollTo('#calibration-evidence');
+    await sleep(500);
+  },
+  // The simulated calibration: its labels made a control set, then those last evaluated before 2024,
+  // each calibrated; the first shown, with its warning, and the guide in the inspector comparing
+  // each with the truth.
+  async 'calibrate-truth'() {
+    await example('simulated-calibration');
+    await act('make_control_set', { source: 'example' });
+    await act('calibrate', {});
+    await act('make_control_set', { source: 'example', evaluated_before: 2024 });
+    await act('calibrate', {});
+    await act('focus', { kind: 'calibration', name: 'Run 1 · simulated-labels' });
+    await clearToasts();
+    await scrollTo('.example-guide');
+    await sleep(500);
+  },
+  // Calibration in the record (wave 8, slice 5): a figure of the same calibration's four plots (each
+  // side's scores, the ROC and precision–recall curves, the likelihood ratio of a score), made with
+  // add_figure_panel, in the Figures view.
+  async 'calibrate-figure'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await act('calibrate', {});
+    await act('create_figure', { name: 'Figure 3', height_mm: 172 });
+    const places = { distribution: [2.8, 2.8, 168.4, 46], roc: [2.8, 51, 83, 72], pr: [88.2, 51, 83, 72], likelihood: [2.8, 125, 168.4, 44] };
+    for (const [plot, [x, y, w, h]] of Object.entries(places)) await act('add_figure_panel', { figure: 'Figure 3', kind: 'calibration', plot, x_mm: x, y_mm: y, width_mm: w, height_mm: h });
+    await act('set_mode', { mode: 'figures' });
+    await clearToasts();
+    await sleep(1500);
   },
   // The guide's session on Hsp90: the design the agent proposed, in Experiment beside the person's,
   // and the strip reviewed.

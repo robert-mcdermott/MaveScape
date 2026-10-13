@@ -11,6 +11,7 @@ import { DESIGN_KEYWORDS, MAVEDB_KEYWORDS } from '../lib/readout.js';
 import { setDeposit } from '../lib/workspace.js';
 import { ensureResults } from './run-results.js';
 import { methodsOf } from './record.js';
+import { calibrationWithLikelihood } from './calibration.js';
 import { possessive } from '../lib/words.js';
 
 const safe = (s) => String(s).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'export';
@@ -33,9 +34,13 @@ export async function runDeposit(app, run, condition = 0) {
   const entry = await ensureResults(app, run);
   if (!entry?.results) throw new Error(`${possessive(run.name)} scores could not be recomputed: ${entry?.message ?? 'unknown'}`);
   const published = run.inputs.design.model === 'scores';
-  const methods = published ? null : await methodsOf(app, run);
+  const methods = published ? null : await methodsOf(app, run, { calibrations: false });
   const tables = published ? await publishedTables(app, run) : {};
-  const out = mavedbDeposit({ ws: app.store.ws, run, results: entry.results, condition, methods, tables, software: { version: app.version } });
+  // The run's calibrations of the condition (wave 8, slice 5), computed again, for MaveDB's score
+  // calibrations.
+  const calibrations = [];
+  for (const cal of (app.store.ws.calibrations ?? []).filter((c) => c.run === run.id && (c.condition ?? 0) === condition)) calibrations.push(await calibrationWithLikelihood(app, cal).catch((error) => ({ cal, problem: error.message })));
+  const out = mavedbDeposit({ ws: app.store.ws, run, results: entry.results, condition, methods, tables, software: { version: app.version }, calibrations });
   if (out.problem) throw new Error(out.problem);
   return out;
 }
@@ -65,7 +70,9 @@ export function reportView(report) {
       h('dt', 'Target'), h('dd', target),
       h('dt', 'Scores'), h('dd', report.columns.scores.join(', ')),
       h('dt', 'Counts'), h('dd', report.columns.counts.length ? report.columns.counts.join(', ') : 'none'),
-      h('dt', 'Keywords'), h('dd', report.keywords.length ? report.keywords.map((k) => `${k.key}: ${k.label}${k.description ? ` (${k.description})` : ''}`).join('; ') : 'none (the design states no readout)')),
+      h('dt', 'Keywords'), h('dd', report.keywords.length ? report.keywords.map((k) => `${k.key}: ${k.label}${k.description ? ` (${k.description})` : ''}`).join('; ') : 'none (the design states no readout)'),
+      // Its calibrations as MaveDB's score calibrations (wave 8, slice 5), research use.
+      h('dt', 'Calibrations'), h('dd', report.calibrations.length ? report.calibrations.map((c) => `"${c.name}" (research use): ${c.classes.map((k) => `${k.label} ${k.class}${k.oddsPath !== null ? `, OddsPath ${Number(k.oddsPath.toPrecision(3))}${k.strength ? ` ${k.strength}` : ''}` : ''}`).join('; ')}`).join(' ') : 'none')),
     report.defaulted.length ? h('div', h('b.small', 'Chosen for you, to confirm'), h('ul.small', ...report.defaulted.map((d) => h('li', `${DETAIL_NAMES[d.field] ?? d.field}: ${d.text}`)))) : null,
     report.notes.length ? h('details.small', h('summary', `Notes (${report.notes.length})`), h('ul', ...report.notes.map((n) => h('li', n)))) : null);
 }

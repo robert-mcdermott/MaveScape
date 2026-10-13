@@ -4,10 +4,14 @@
 // legend; and an image (a saved structure view, as its figure panel draws it). The charts are
 // lib/plots.js's, the same the views draw. Pure.
 
-import { barChart, classBoxes, classHistogram, coverageGrid, evidencePlot, flowBars, legendMarks, lineChart, PLOT_LIGHT, positionBars, scatter } from './plots.js';
+import { barChart, classBoxes, classHistogram, controlStrips, coverageGrid, evidencePlot, flowBars, legendMarks, likelihoodChart, lineChart, PLOT_LIGHT, positionBars, prChart, rocChart, scatter } from './plots.js';
 import { ellipsizeText, textMarks } from './draw.js';
 
-export const CHARTS = { bar: barChart, line: lineChart, scatter, histogram: classHistogram, flow: flowBars, coverage: coverageGrid, positions: positionBars, classes: classBoxes, evidence: evidencePlot };
+export const CHARTS = { bar: barChart, line: lineChart, scatter, histogram: classHistogram, flow: flowBars, coverage: coverageGrid, positions: positionBars, classes: classBoxes, evidence: evidencePlot, strips: controlStrips, roc: rocChart, pr: prChart, likelihood: likelihoodChart };
+
+// The charts whose legend is their own (drawn from their data): a histogram's, a coverage grid's
+// key, a calibration's sides (wave 8, slice 5).
+const OWN_LEGEND = { histogram: classHistogram, coverage: coverageGrid, strips: controlStrips, likelihood: likelihoodChart };
 
 // The smallest a chart is drawn, in multiples of the text size.
 const MIN_CHART = 6;
@@ -23,6 +27,10 @@ function naturalHeight(chart) {
     case 'line': return 22;
     case 'scatter': return 30;
     case 'coverage': return 16.8;
+    case 'strips': return 19;
+    case 'roc':
+    case 'pr': return 28;
+    case 'likelihood': return 26;
     default: return 15;
   }
 }
@@ -49,8 +57,8 @@ export function chartsPanel(box, data, options = {}) {
   }
   // Each chart's heading and legend first, then the room left shared among the charts.
   const parts = charts.map((raw) => {
-    // A histogram's legend and a coverage grid's key are the chart's own.
-    const own = raw.kind === 'histogram' ? classHistogram : raw.kind === 'coverage' ? coverageGrid : null;
+    // A histogram's legend, a coverage grid's key and a calibration's sides are the chart's own.
+    const own = OWN_LEGEND[raw.kind] ?? null;
     const c = raw.legend || !own ? raw : { ...raw, legend: own(raw.spec, { width: 100, height: 100, text: t, theme }).legend };
     const heading = c.heading ? t + 4 : 0;
     const legend = c.legend?.length ? legendMarks(c.legend, { x: box.x, y: 0, width: box.w, text: t, theme }) : null;

@@ -10,6 +10,11 @@
 // scored with it (wave 3, slice 6).
 
 import { simulateExperiment } from './simulate.js';
+import { createRandom } from './random.js';
+import { parseTable } from './csv.js';
+import { KIND } from './variants.js';
+import { classOf } from './calibration.js';
+import { log } from './dmath.js';
 
 export const EXAMPLES = [
   {
@@ -292,6 +297,102 @@ export const EXAMPLES = [
     ],
   },
   {
+    id: 'brca1-calibration',
+    title: 'BRCA1 against ClinVar, calibrated (published scores)',
+    summary: 'Findlay et al.\'s saturation genome editing of BRCA1, opened from MaveDB as published, with ClinVar\'s records of BRCA1 as NCBI gave them on 13 October 2026: how far the function scores separate ClinVar\'s pathogenic and benign missense variants, the evidence each class would give, for research, and how much of the agreement may rest on the assay itself.',
+    question: 'How far do the function scores separate ClinVar\'s pathogenic and benign missense variants of BRCA1, and how much of that agreement could rest on the assay itself?',
+    source: 'MaveDB urn:mavedb:00000097-0-2 (its scores, downloaded when opened; SHA-256 checked) and ClinVar\'s records of BRCA1 (NCBI E-utilities, retrieved 2026-10-13, with the example)',
+    license: 'CC0 1.0 and public domain (ClinVar)',
+    citation: 'Findlay GM, et al. Accurate classification of BRCA1 variants with saturation genome editing. Nature 2018;562:217–222. doi:10.1038/s41586-018-0461-z; Landrum MJ, et al. ClinVar. Nucleic Acids Res 2018;46:D1062–D1067',
+    simulated: false,
+    mavedb: { urn: 'urn:mavedb:00000097-0-2', scores: { sha256: '906dc152f28b4c8261e4e532a03c9c42f2e45e211aa3ada12e3c826c151580ec', size: 610024 } },
+    readout: { direction: 'higher-more' },
+    // ClinVar's records of the gene, as the ClinVar track keeps them (web/examples/clinvar/): the
+    // annotation the example opens with, so that its numbers hold (wave 8, slice 6).
+    clinvar: 'BRCA1',
+    findings: { coverage: 'fail' },
+    teaches: [],
+    opens: 'calibrate',
+    expected: [
+      'ClinVar\'s records of BRCA1 come with the example: 9,385 records as NCBI gave them on 13 October 2026, kept as the ClinVar track keeps them. By the defaults (at least one review star, missense) they make 212 P controls and 447 B; the published scores hold 196 and 111 of them, since the experiment edited 13 exons. 552 were last evaluated by ClinVar\'s submitters in or after 2018, when the assay was published: their classifications may rest on it.',
+      'Calibrated by the defaults: AUC 0.993 (DeLong\'s interval 0.985 to 1.000). The two thresholds, each letting at most 5% of the other side\'s controls into its class, cross, so they meet at −0.997 and no score is intermediate: 193 of the 196 P controls are abnormal-like and 109 of the 111 B WT-like.',
+      'Evidence strength, for research: the abnormal-like class\'s OddsPath is 36.4, PS3 (strong) in 95% of the bootstrap\'s samples; the WT-like class\'s 0.0208, BS3 (strong) in all of them. Pathogenic-Strong begins below −1.34 by the scores\' likelihood ratios, Benign-Strong above −0.652.',
+      'With the record\'s Fayer calibration (Findlay et al.\'s classes: below −1.328 and above −0.748), today\'s controls give OddsPath 53.5 and 0.0157 (189 P and 1 B abnormal-like; 2 P and 108 B WT-like), beside the 52.4 and 0.02 it states from ClinVar as it was in 2020, observed without the control Brnich et al. add (107 and 0.0105 here).',
+      'Only the classifications last evaluated before 2018: 28 P and 87 B, of which the scores hold 25 and 12. They separate too (AUC 0.980), but the abnormal-like class\'s OddsPath is 9.12 (PS3_moderate; 5.76 with Fayer et al.\'s thresholds), and the WT-like class\'s 0.0436 rests on 11 B controls. The strong evidence rests on classifications made since the assay was published, some of which may have used it.',
+    ],
+    steps: [
+      ['calibrate', 'The example opens in Calibrate with ClinVar\'s records of BRCA1 as they were on 13 October 2026, the ClinVar track beside the map (removing it and adding ClinVar again in Map, Tracks fetches today\'s). Under New control set, Make from ClinVar with the defaults: at least one review star, missense. Read the set\'s composition, what the published scores hold of it, and what may make it circular: 552 controls were last evaluated since the assay was published in 2018.'],
+      ['calibrate', 'Calibrate with the defaults. Each side\'s scores against the run\'s: the controls barely overlap, so the two thresholds cross and meet at −0.997. The ROC curve\'s AUC is 0.993.'],
+      ['calibrate', 'Under Evidence strength, each class\'s OddsPath and the strength Brnich et al.\'s Table 3 makes of it, for research: PS3 and BS3, both strong. What it rests on names the limits: thresholds set on these same controls, and 552 classifications that may rest on the assay itself.'],
+      ['calibrate', 'Under Published calibrations, Calibrate with the thresholds of the Fayer calibration (Findlay et al.\'s classes). Its OddsPath on today\'s controls stands beside the one the calibration states, from ClinVar as it was in 2020.'],
+      ['calibrate', 'Under New control set, give Last evaluated before 2018 and Make from ClinVar again, then calibrate the new set. Classifications made before the assay cannot rest on it: the scores separate them as well, but there are 25 P and 12 B, and the abnormal-like class\'s evidence is moderate, not strong.'],
+      ['report', 'In Report, the section Calibration, for research: each control set, each calibration with its numbers and methods cited, and what limits it.'],
+    ],
+  },
+  {
+    id: 'tp53-calibration',
+    title: 'TP53 against ClinVar, calibrated (published scores)',
+    summary: 'Giacomelli et al.\'s screen of every substitution of TP53 under etoposide, opened from MaveDB as published, with ClinVar\'s records of TP53 as NCBI gave them on 13 October 2026: how far the screen separates ClinVar\'s pathogenic and benign missense variants, the evidence each class would give, for research, and why almost none of the labels predate it.',
+    question: 'How far does the etoposide screen separate ClinVar\'s pathogenic and benign missense variants of TP53, and how firmly do the bootstrap and the controls\' history let its evidence stand?',
+    source: 'MaveDB urn:mavedb:00000068-c-1 (its scores, downloaded when opened; SHA-256 checked) and ClinVar\'s records of TP53 (NCBI E-utilities, retrieved 2026-10-13, with the example)',
+    license: 'CC0 1.0 and public domain (ClinVar)',
+    citation: 'Giacomelli AO, et al. Mutational processes shape the landscape of TP53 mutations in human cancer. Nature Genetics 2018;50:1381–1387. doi:10.1038/s41588-018-0204-y; Landrum MJ, et al. ClinVar. Nucleic Acids Res 2018;46:D1062–D1067',
+    simulated: false,
+    mavedb: { urn: 'urn:mavedb:00000068-c-1', scores: { sha256: '085237d96f287ce8642d49372b46ef9dc07c08e84240c04cfc17d8fb42977022', size: 553289 } },
+    readout: { direction: 'higher-more' },
+    clinvar: 'TP53',
+    findings: { separation: 'review' },
+    teaches: [],
+    opens: 'calibrate',
+    expected: [
+      'ClinVar\'s records of TP53 come with the example: 2,171 as NCBI gave them on 13 October 2026. By the defaults they make 227 P and 146 B missense controls, every one in the screen; the 17 records of a change at proline 72 are left out, since the screen\'s TP53 has arginine there. 370 of the 373 were last evaluated in or after 2018, when the screen was published.',
+      'Calibrated by the defaults: AUC 0.984 (0.974 to 0.995). The thresholds, at Z-scores 0.0150 and 0.0554, make 211 P controls and 7 B abnormal-like, 135 B and 11 P WT-like.',
+      'Evidence strength, for research: OddsPath 17.0 (PS3_moderate) and 0.0572 (BS3_moderate), each strong in about four of the bootstrap\'s samples in ten (44% and 43%); the thresholds\' intervals (−0.159 to 0.0716 and −0.0337 to 0.260) overlap. What it rests on says the strength is not held.',
+      'Only the classifications last evaluated before 2018: 2 P and 3 B, too few for any measure; before 2021, 9 P and 10 B. Nearly every TP53 classification has been evaluated again since the screens of 2018 were published (133 of the controls by an expert panel), and may count them as functional evidence.',
+      'With the record\'s ExCALIBR calibration (thresholds −0.318 and −0.0467, set by another method), the abnormal-like class holds 200 P controls and 1 B: OddsPath 64.3, PS3 in every sample; the WT-like 141 B and 18 P, 0.0867 (BS3_moderate). Thresholds not fitted to these controls are measured fairly by them.',
+      'By the scores\' likelihood ratios, Pathogenic-Supporting begins below −0.222 and Pathogenic-VeryStrong below −0.621; Benign-Supporting above −0.0184 and Benign-VeryStrong above 1.23.',
+    ],
+    steps: [
+      ['calibrate', 'The example opens in Calibrate with ClinVar\'s records of TP53 as they were on 13 October 2026. Make from ClinVar with the defaults: 227 P and 146 B missense controls, all of them in the screen; 370 were last evaluated since 2018.'],
+      ['calibrate', 'Calibrate with the defaults: AUC 0.984. Under How far the bootstrap moves the thresholds, each threshold\'s interval is wider than the gap between them.'],
+      ['calibrate', 'Under Evidence strength, both classes are moderate, but strong in about four samples of ten: what it rests on says the strength is not held.'],
+      ['calibrate', 'Under New control set, give Last evaluated before 2018 and Make from ClinVar again: five controls are left. TP53\'s classifications have nearly all been evaluated again since these screens appeared.'],
+      ['calibrate', 'Under Published calibrations, Calibrate with the ExCALIBR calibration\'s thresholds. They were not set on these controls, so these controls measure them fairly: the abnormal-like class\'s evidence is strong.'],
+      ['calibrate', 'Under Score-level likelihood ratios, the ratio of the P controls\' density to the B controls\' at each score: where each strength begins, and how many of the screen\'s missense variants reach it.'],
+    ],
+  },
+  {
+    id: 'pten-calibration',
+    title: 'PTEN abundance against ClinVar, calibrated (published scores)',
+    summary: 'Matreyek et al.\'s VAMP-seq abundance of PTEN variants, opened from MaveDB as published, with ClinVar\'s records of PTEN as NCBI gave them on 13 October 2026: an abundance assay against pathogenic variants that may fold and still fail, and a gene with few benign controls.',
+    question: 'What can an abundance assay\'s scores say about ClinVar\'s pathogenic and benign PTEN variants, and what do too few benign controls leave unsaid?',
+    source: 'MaveDB urn:mavedb:00000013-a-1 (the scores, downloaded when opened; SHA-256 checked) and ClinVar\'s records of PTEN (NCBI E-utilities, retrieved 2026-10-13, with the example)',
+    license: 'CC0 1.0 and public domain (ClinVar)',
+    citation: 'Matreyek KA, et al. Multiplex assessment of protein variant abundance by massively parallel sequencing. Nat Genet 2018;50:874–882. doi:10.1038/s41588-018-0122-z; Landrum MJ, et al. ClinVar. Nucleic Acids Res 2018;46:D1062–D1067',
+    simulated: false,
+    mavedb: { urn: 'urn:mavedb:00000013-a-1', scores: { sha256: 'ceaf3f0720af8aa06012d60959efbcd7ab54a5317d2bebdace8a0f49de4b2b97', size: 1735960 } },
+    readout: { direction: 'higher-more' },
+    clinvar: 'PTEN',
+    findings: { coverage: 'review' },
+    teaches: [],
+    opens: 'calibrate',
+    expected: [
+      'ClinVar\'s records of PTEN come with the example: 2,071 as NCBI gave them on 13 October 2026. By the defaults they make 255 P missense controls but only 9 B, of which the abundance scores hold 152 and 8: with fewer than 10 B controls, the view says, no measure of separation can be relied on. 251 were last evaluated in or after 2018.',
+      'Calibrated by the defaults: AUC 0.698 (0.548 to 0.848). The normal threshold, letting at most 5% of the P controls be WT-like, lies above all B controls but one (1.19): 94 P controls and 7 B are intermediate, 55 P and no B abnormal-like (below 0.341).',
+      'Evidence strength, for research: the abnormal-like class\'s OddsPath is 2.89 (PS3_supporting). The WT-like class holds one B control and three P (0.211), and 37% of the bootstrap\'s samples have no normal threshold at all. Score-level likelihood ratios need 10 B controls; there are 8.',
+      'With the record\'s ExCALIBR calibration (0.551 and 0.818), 44 of the 152 P controls score WT-like: a pathogenic PTEN variant can be stable and still lose its function, which an abundance assay cannot see. Neither class gives evidence (OddsPath 1.39 and 0.592).',
+      'With nonsense and synonymous controls too (375 P and 300 B, of which 198 and 127 scored), the AUC is 0.857 and the abnormal-like class PS3_moderate (12.5). MaveScape warns that 411 of them are on published scores whose scale may be set by such variants: this record\'s is, nonsense at 0 and the wild type at 1.',
+    ],
+    steps: [
+      ['calibrate', 'The example opens in Calibrate with ClinVar\'s records of PTEN as they were on 13 October 2026. Make from ClinVar with the defaults: 255 P controls but only 9 B, and the view says what so few B controls mean.'],
+      ['calibrate', 'Calibrate with the defaults: AUC 0.70. Each side\'s scores against the run\'s: many P controls score as high as the wild type, among the B controls.'],
+      ['calibrate', 'Under Evidence strength: supporting for the abnormal-like class, a WT-like class resting on one B control, and no likelihood ratios, with fewer than 10 B controls.'],
+      ['calibrate', 'Under Published calibrations, Calibrate with the ExCALIBR calibration\'s thresholds: 44 of the 152 P controls score WT-like. VAMP-seq measures abundance, and a pathogenic variant can be stable but inactive.'],
+      ['calibrate', 'Under New control set, tick nonsense and synonymous too and Make from ClinVar, then calibrate the new set: the separation looks far better, and MaveScape says why it is not evidence: the published scale may be set by those very variants.'],
+      ['report', 'In Report, the section Calibration, for research: each calibration with what limits it.'],
+    ],
+  },
+  {
     id: 'simulated',
     title: 'A simulated experiment (known truth)',
     summary: 'A simulated two-population selection of a 40-residue protein, three replicates, where every variant\'s true effect is known.',
@@ -445,20 +546,140 @@ export const EXAMPLES = [
       ['map', 'The guide compares each run with the truth: how close the scores are, and how often their intervals hold the true effects.'],
     ],
   },
+  {
+    id: 'simulated-calibration',
+    title: 'A simulated calibration with circular labels (known truth)',
+    summary: 'A simulated selection of a 40-residue protein in three replicates, with classifications of 100 of its missense variants, each dated as ClinVar dates them: half made before the simulated assay was published, from the truth; half made since, from the assay\'s own scores.',
+    question: 'Half of the labels were made from the assay itself. Can you find them, and how far do they overstate the evidence its classes would give?',
+    source: 'Simulated by MaveScape (web/lib/simulate.js, seed 20261017): not real data',
+    license: 'Simulated: no license needed',
+    citation: null,
+    simulated: true,
+    simulation: { seed: 20261017, replicates: 3, readsPerVariant: 30, libraryLogSd: 0.7, replicateNoise: 0.8, neutralSd: 0.1, lossMin: 0.4 },
+    // Its classifications (lib/examples.js's simulatedLabels): 25 a side from the truth before the
+    // assay's year, 25 a side from its own scores since.
+    labels: { independent: 25, circular: 25, published: 2024 },
+    // The assay is noisy on purpose (mild losses overlap the wild type): how closely the first run
+    // follows the truth is lower.
+    minimumR: 0.85,
+    findings: { depth: 'review', agreement: 'review', 'excess-variance': 'review', resolution: 'review' },
+    opens: 'calibrate',
+    expected: [
+      'The simulated assay is noisy: QC reviews the depth, the agreement between replicates, the variance beyond counting and the scores\' resolution. Of the 741 missense variants Run 1 scores, 319 lose function in truth (a true effect of −0.4 or less) and 422 do not.',
+      'The labels (simulated-labels.csv) classify 100 missense variants, 50 P and 50 B, each with the date it was last evaluated. Made a control set, they draw a warning: 50 were last evaluated in or after 2024, when the assay was published, and may rest on it. Here they do: they were made from the assay\'s own scores, and 6 of them are wrong by the truth.',
+      'Calibrated with every label: AUC 0.964, the abnormal-like class\'s OddsPath 20.0 (PS3, strong) and the WT-like class\'s 0.0769 (BS3_moderate). Against the truth at the same thresholds, the abnormal-like class holds 262 of the 319 variants that lose function and 31 of the 422 that do not: a likelihood ratio of 11.2, moderate.',
+      'With only the classifications made before 2024 (25 a side, from the truth alone): AUC 0.933, OddsPath 10.5 (PS3_moderate) and 0.0833 (BS3_moderate). Against the truth, 13.6 and 0.0584: moderate both, as the calibration says.',
+      'The labels made from the assay agree with it by construction: they add confidence, not information, and lift the abnormal-like class to a strength the truth does not hold.',
+    ],
+    steps: [
+      ['calibrate', 'In the guide below, Make a control set of the labels: simulated-labels.csv, 100 classifications of missense variants, each dated (or download it and open it under New control set, From a table). Read what may make them circular: 50 were last evaluated since 2024, when the simulated assay was published.'],
+      ['calibrate', 'Calibrate with the defaults. The guide compares the calibration with the truth: at its thresholds, the share of the variants that lose function in each class over the share of those that do not, the ratio its OddsPath estimates.'],
+      ['calibrate', 'Make a control set of only those last evaluated before 2024 (the guide\'s second button, or Last evaluated before under New control set): 25 P and 25 B, made from the truth alone. Calibrate it, and compare both calibrations with the truth in the guide.'],
+      ['report', 'In Report, the section Calibration, for research: what limits each calibration. The first says that 50 of its classifications may rest on the assay.'],
+    ],
+  },
 ];
 
 export const exampleById = (id) => EXAMPLES.find((e) => e.id === id) ?? null;
 
 // The simulated example's files: { files: [{ name, text, role }] (the counts, and a barcoded
-// library's barcode-to-variant map), csv, design, truth: { key: effect } }.
+// library's barcode-to-variant map), csv, design, truth: { key: effect }, labels (the calibration
+// example's: { name, text }, simulatedLabels's) }.
 export function simulatedExample(example = exampleById('simulated')) {
   const sim = simulateExperiment(example.simulation);
   // A simulated selection for function: a variant that loses it becomes rarer (wave 2, slice 8).
   const design = { ...sim.design, name: `${sim.design.name} (simulated data)`, readout: { phenotype: `Simulated ${example.simulation.sort ? 'reporter fluorescence, sorted into bins' : 'growth under a selection for function'}`, direction: 'higher-more' } };
+  // The year the calibration example's assay was "published", for its dated labels.
+  if (example.labels) design.source = { citation: `Simulated by MaveScape (web/lib/simulate.js, seed ${example.simulation.seed}), its assay taken to be published in ${example.labels.published}: not real data` };
   // The truth: each variant's effect (a sort-seq experiment's: its shift in log fluorescence; two
   // conditions': the difference between them).
   const truth = Object.fromEntries(sim.variants.map((v) => [v.name, v.differential ?? v.shift ?? v.effect]));
   const files = [{ name: 'simulated-counts.csv', text: sim.csv, role: 'counts' }];
   if (sim.map) files.push({ name: 'simulated-barcode-map.csv', text: sim.map, role: 'map' });
-  return { files, csv: sim.csv, design, truth, truthOf: example.simulation.conditions ? 'differential' : 'effect' };
+  return { files, csv: sim.csv, design, truth, truthOf: example.simulation.conditions ? 'differential' : 'effect', ...(example.labels ? { labels: simulatedLabels(sim, example) } : {}) };
+}
+
+// --- The simulated calibration (wave 8, slice 6) -----------------------------------------------------
+
+// A variant loses function, in the simulation's truth, when its true effect is at or below
+// −lossMin (the smallest loss it draws); the others are the wild type's within a few neutralSd.
+export const losesFunction = (effect, simulation) => effect <= -(simulation.lossMin ?? 0.3);
+
+const day = (random, from, to) => {
+  const t = Date.UTC(...from) + Math.floor(random() * (Date.UTC(...to) - Date.UTC(...from)) / 86400000) * 86400000;
+  return new Date(t).toISOString().slice(0, 10);
+};
+
+// The calibration example's classifications of its missense variants, each with the date it was
+// last evaluated, as a table of labels (variant, classification, last_evaluated): { name, text,
+// rows: [{ variant, classification, evaluated, from ('truth' | 'assay') }] }. example.labels:
+// { independent, circular, published (a year) }. `independent` variants a side, drawn at random,
+// were classified before the assay was published, from the truth alone (pathogenic or likely
+// pathogenic when they lose function, benign or likely benign when not). `circular` a side were
+// classified since, from the assay's own scores, as a laboratory using it as functional evidence
+// would: likely pathogenic where the variant's log ratio to the wild type, averaged over the
+// replicates, is clearly low (below −0.6), likely benign where it is near the wild type's (within
+// 0.2), whatever its truth. Seeded by the simulation's seed.
+export function simulatedLabels(sim, example) {
+  const { independent, circular, published } = example.labels;
+  const random = createRandom(example.simulation.seed + 7);
+  const shuffled = (list) => {
+    const a = [...list];
+    for (let i = a.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  // Each variant's log ratio to the wild type, averaged over the replicates (pseudocount 0.5): the
+  // assay's scores as a laboratory reads them.
+  const table = parseTable(sim.csv, { fileName: 'simulated-counts.csv' });
+  const column = (name) => table.columns.find((c) => c.name === name).numeric;
+  const reps = sim.design.replicates.map((r) => ({ input: column(r.input), output: column(r.output) }));
+  const wt = sim.variants.findIndex((v) => v.kind === 'wild type');
+  const logRatio = (i) => reps.reduce((sum, r) => sum + log((r.output[i] + 0.5) / (r.input[i] + 0.5)) - log((r.output[wt] + 0.5) / (r.input[wt] + 0.5)), 0) / reps.length;
+  const missense = sim.variants.map((v, i) => ({ ...v, measured: logRatio(i) })).filter((v) => v.kind === 'missense');
+  const loss = shuffled(missense.filter((v) => losesFunction(v.effect, example.simulation)));
+  const kept = shuffled(missense.filter((v) => !losesFunction(v.effect, example.simulation)));
+  const before = [published - 12, 0, 1];
+  const end = [published - 1, 11, 31];
+  const rows = [];
+  for (const v of loss.slice(0, independent)) rows.push({ variant: v.name, classification: random() < 0.5 ? 'Pathogenic' : 'Likely pathogenic', evaluated: day(random, before, end), from: 'truth' });
+  for (const v of kept.slice(0, independent)) rows.push({ variant: v.name, classification: random() < 0.5 ? 'Benign' : 'Likely benign', evaluated: day(random, before, end), from: 'truth' });
+  const used = new Set(rows.map((r) => r.variant));
+  const rest = shuffled(missense.filter((v) => !used.has(v.name)));
+  const since = [published, 1, 1];
+  const last = [published + 2, 8, 30];
+  for (const v of rest.filter((x) => x.measured < -0.6).slice(0, circular)) rows.push({ variant: v.name, classification: 'Likely pathogenic', evaluated: day(random, since, last), from: 'assay' });
+  for (const v of rest.filter((x) => Math.abs(x.measured) < 0.2).slice(0, circular)) rows.push({ variant: v.name, classification: 'Likely benign', evaluated: day(random, since, last), from: 'assay' });
+  // In the order of the protein, as a table of labels usually is.
+  const order = new Map(sim.variants.map((v, i) => [v.name, i]));
+  rows.sort((a, b) => order.get(a.variant) - order.get(b.variant));
+  const text = `variant,classification,last_evaluated\n${rows.map((r) => `${r.variant},${r.classification},${r.evaluated}`).join('\n')}\n`;
+  return { name: 'simulated-labels.csv', text, rows };
+}
+
+// A calibration against the simulated truth: its thresholds applied to every missense variant the
+// run scores (view: its protein view), each known to lose function or not. Returns { loss:
+// { n, 'abnormal-like', intermediate, 'WT-like' }, kept: { … }, ratio: { abnormal, normal } }, a
+// class's ratio its share of the variants that lose function over its share of those that do not
+// (the likelihood ratio its OddsPath estimates; null where a share is 0), and the sensitivity and
+// specificity on every variant.
+export function calibrationTruth(view, cal, truth, simulation) {
+  const score = view.conditions[cal.condition ?? 0]?.score;
+  const tally = () => ({ n: 0, 'abnormal-like': 0, intermediate: 0, 'WT-like': 0 });
+  const out = { loss: tally(), kept: tally() };
+  for (let i = 0; i < view.rows; i += 1) {
+    const key = view.variants.key[i];
+    if (view.variants.kind[i] !== KIND.MISSENSE || !Number.isFinite(score?.[i]) || !(key in truth)) continue;
+    const t = out[losesFunction(truth[key], simulation) ? 'loss' : 'kept'];
+    t.n += 1;
+    t[classOf(score[i], cal.side, cal.thresholds)] += 1;
+  }
+  const ratio = (cls) => {
+    const a = out.loss[cls] / out.loss.n;
+    const b = out.kept[cls] / out.kept.n;
+    return a > 0 && b > 0 ? a / b : null;
+  };
+  return { ...out, ratio: { abnormal: ratio('abnormal-like'), normal: ratio('WT-like') }, sensitivity: out.loss['abnormal-like'] / out.loss.n, specificity: out.kept['WT-like'] / out.kept.n };
 }

@@ -680,6 +680,76 @@
   "violations": []
  },
  {
+  "scene": "calibrate-controls",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-controls",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-metrics",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-metrics",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-evidence",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-evidence",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-likelihood",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-likelihood",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-brca1",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-brca1",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-truth",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-truth",
+  "theme": "light",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-figure",
+  "theme": "dark",
+  "violations": []
+ },
+ {
+  "scene": "calibrate-figure",
+  "theme": "light",
+  "violations": []
+ },
+ {
   "scene": "agent-hsp90",
   "theme": "dark",
   "violations": []

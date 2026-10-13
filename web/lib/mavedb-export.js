@@ -22,8 +22,9 @@
 //     ' as its quote character, so no value or column name holds a comma or a quote.
 //
 //   depositDetails(ws, run) → { details, defaulted, record }      what the deposit says, filled
-//   mavedbDeposit({ ws, run, results, condition, methods, tables, software })
+//   mavedbDeposit({ ws, run, results, condition, methods, tables, software, calibrations })
 //     → { files: [{ name, text }], report } | { problem }
+//   depositCalibration(outcome, details, software) → { body, notes, missing }   (wave 8, slice 5)
 //   depositZip(deposit, { date }) → Uint8Array
 //   readDeposit(files) → { record, details, problems }             a package read back
 
@@ -34,11 +35,13 @@ import { intervalOf, num, statusOf } from './exports.js';
 import { flagNames } from './filters.js';
 import { anchorUncertainty } from './anchors.js';
 import { DESIGN_KEYWORDS, MAVEDB_KEYWORDS } from './readout.js';
-import { accessionKind, licenseOf } from './mavedb.js';
+import { accessionKind, licenseOf, readCalibration } from './mavedb.js';
 import { replicateSamples, summarizeDesign } from './design.js';
 import { createZip } from './zip.js';
 import { sha256 } from './sha256.js';
 import { possessive } from './words.js';
+import { ruleWords, thresholdWords } from './calibration.js';
+import { controlSetWords } from './controls.js';
 
 export const DEPOSIT_FORMAT = 'mavescape-mavedb';
 export const DEPOSIT_VERSION = 1;
@@ -48,7 +51,7 @@ const exact = (n) => n.toLocaleString('en-US');
 const plural = (n, word, many = `${word}s`) => `${exact(n)} ${n === 1 ? word : many}`;
 
 // The files MaveDB reads, in the order of the package; README.md and mavescape.json are MaveScape's.
-export const MAVEDB_FILES = ['scores.csv', 'counts.csv', 'score_columns.json', 'count_columns.json', 'experiment.json', 'score_set.json'];
+export const MAVEDB_FILES = ['scores.csv', 'counts.csv', 'score_columns.json', 'count_columns.json', 'experiment.json', 'score_set.json', 'score_calibrations.json'];
 
 // The licenses MaveDB takes for a new score set, by its ids (api.mavedb.org/api/v1/licenses,
 // retrieved 2026-10-10; CC BY-NC-SA 4.0 and "Other" are no longer offered).
@@ -438,6 +441,113 @@ function methodsText(methods) {
   return `${methods.paragraphs.join('\n\n')}\n\n**References**\n\n${methods.references.map((r) => `${r.n}. ${r.text}`).join('\n')}`;
 }
 
+// --- Calibrations (wave 8, slice 5) -----------------------------------------------------------------
+
+// Brnich et al.'s recommendations (the OddsPath and its Table 3), as MaveDB names a publication.
+const BRNICH = { identifier: '10.1186/s13073-019-0690-2', dbName: 'Crossref' };
+// MaveScape's evidence strengths (lib/oddspath.js) as MaveDB's ACMG classification.
+const ACMG = {
+  PS3_very_strong: ['PS3', 'VERY_STRONG'], PS3: ['PS3', 'STRONG'], PS3_moderate: ['PS3', 'MODERATE'], PS3_supporting: ['PS3', 'SUPPORTING'],
+  BS3: ['BS3', 'STRONG'], BS3_moderate: ['BS3', 'MODERATE'], BS3_supporting: ['BS3', 'SUPPORTING'],
+};
+
+// The strength MaveDB reads an OddsPath as (its own Table 3, which its validator holds a class's
+// stated strength to): as Brnich et al.'s but PS3 strong beyond 18.6, where the paper prints 18.7.
+// [criterion, strength], or null for indeterminate.
+export function mavedbOddsPathStrength(x) {
+  if (x > 350) return ['PS3', 'VERY_STRONG'];
+  if (x > 18.6) return ['PS3', 'STRONG'];
+  if (x > 4.3) return ['PS3', 'MODERATE'];
+  if (x > 2.1) return ['PS3', 'SUPPORTING'];
+  if (x >= 0.48) return null;
+  if (x >= 0.23) return ['BS3', 'SUPPORTING'];
+  if (x >= 0.053) return ['BS3', 'MODERATE'];
+  return ['BS3', 'STRONG'];
+}
+
+// The ranges of a calibration's classes in MaveDB's terms: [{ class ('abnormal-like' |
+// 'intermediate' | 'WT-like'), range: [lower, upper] (null unbounded), inclusive: [lower, upper] }],
+// a score at a threshold on its abnormal-like side (lib/calibration.js's classOf), empty classes
+// left out.
+export function calibrationRanges(side, thresholds) {
+  const { abnormal: a, normal: n } = thresholds;
+  const out = [];
+  if (side === 'below') {
+    if (a !== null) out.push({ class: 'abnormal-like', range: [null, a], inclusive: [false, true] });
+    if (a === null || n === null || a !== n) out.push({ class: 'intermediate', range: [a, n], inclusive: [false, n !== null] });
+    if (n !== null) out.push({ class: 'WT-like', range: [n, null], inclusive: [false, false] });
+  } else {
+    if (n !== null) out.push({ class: 'WT-like', range: [null, n], inclusive: [false, false] });
+    if (a === null || n === null || a !== n) out.push({ class: 'intermediate', range: [n, a], inclusive: [n !== null, false] });
+    if (a !== null) out.push({ class: 'abnormal-like', range: [a, null], inclusive: [true, false] });
+  }
+  // Both thresholds absent: no class at all.
+  return out.filter((r) => r.range[0] !== null || r.range[1] !== null);
+}
+
+const FUNCTIONAL = { 'abnormal-like': 'abnormal', intermediate: 'not_specified', 'WT-like': 'normal' };
+const LABELS = { 'abnormal-like': 'Abnormal-like', intermediate: 'Intermediate', 'WT-like': 'WT-like' };
+
+// A calibration (lib/calibration-record.js's calibrationOutcome) as the body of MaveDB's POST
+// /api/v1/score-calibrations/ (ScoreCalibrationCreate), in MaveDB's vocabulary: its classes' ranges
+// abnormal, not specified (the intermediate zone) and normal, each class's OddsPath and the strength
+// Table 3 makes of it (where MaveDB reads the OddsPath the same), research use only; how it was made
+// in its notes and metadata. details: the MaveDB details (the threshold source is the study's
+// primary publication). Returns { body, notes, missing }.
+export function depositCalibration(o, details, software = {}) {
+  const { cal, set, run, metrics: m } = o;
+  const notes = [];
+  const missing = [];
+  const fmt = (x) => Number(x.toPrecision(3)).toString();
+  const classes = calibrationRanges(cal.side, cal.thresholds).map((r) => {
+    const x = r.class === 'abnormal-like' ? m.evidence.abnormal : r.class === 'WT-like' ? m.evidence.normal : null;
+    const k = { label: LABELS[r.class], description: null, functionalClassification: FUNCTIONAL[r.class], range: r.range, inclusiveLowerBound: r.inclusive[0], inclusiveUpperBound: r.inclusive[1] };
+    const bounds = `${r.range[0] === null ? '' : `${r.inclusive[0] ? 'at or above' : 'above'} ${fmt(r.range[0])}`}${r.range[0] !== null && r.range[1] !== null ? ' and ' : ''}${r.range[1] === null ? '' : `${r.inclusive[1] ? 'at or below' : 'below'} ${fmt(r.range[1])}`}`;
+    k.description = `Scores ${bounds}: ${r.class} in this assay, by MaveScape's calibration against ${m.classes.P[r.class]} P and ${m.classes.B[r.class]} B controls of "${set.name}" (for research).`;
+    if (x && x.oddsPath !== null) {
+      k.oddspathsRatio = x.oddsPath;
+      const acmg = x.strength && ACMG[x.strength.code];
+      if (acmg) {
+        const theirs = mavedbOddsPathStrength(x.oddsPath);
+        if (theirs && theirs[0] === acmg[0] && theirs[1] === acmg[1]) k.acmgClassification = { criterion: acmg[0], evidenceStrength: acmg[1] };
+        else notes.push(`"${cal.name}": the ${r.class} class's OddsPath, ${fmt(x.oddsPath)}, is ${x.strength.code} by Brnich et al.'s Table 3 as printed; MaveDB reads it as ${theirs ? theirs.join(' ') : 'indeterminate'} (strong beyond 18.6, not 18.7), so its strength is left for MaveDB's reading of the ratio.`);
+      }
+    }
+    return k;
+  });
+  const primary = details.publications?.[0] ?? null;
+  if (!primary) missing.push({ field: 'calibrations', text: `A threshold source for the calibration "${cal.name}": MaveDB asks for the publication that reports its thresholds (the study's own, the first of the publications in the MaveDB details).` });
+  const hasAcmg = classes.some((k) => k.acmgClassification);
+  const evidence = (x) => ({ P: x.P, B: x.B, oddsPath: x.oddsPath, observed: x.observed, strength: x.strength?.code ?? null });
+  const lr = o.likelihood && !o.likelihood.problem ? o.likelihood : null;
+  const body = {
+    scoreSetUrn: null,
+    title: cal.name,
+    researchUseOnly: true,
+    notes: `Made with MaveScape${software.version ? ` ${software.version}` : ''} against the control set ${controlSetWords(set)}, of which ${m.n.P} P and ${m.n.B} B are scored here (${run.name}${o.scored?.condition ? `, ${o.scored.condition}` : ''}). Abnormal-like scores are ${cal.side} the others; thresholds ${cal.rule === 'given' ? 'given' : `set by the controls, ${ruleWords(cal.rule, cal.error)}`}: ${thresholdWords(cal.side, cal.thresholds)}. AUC ${fmt(m.auc.auc)} (DeLong's 95% interval ${fmt(m.auc.low)} to ${fmt(m.auc.high)}). Each class's OddsPath as Brnich et al. (Genome Medicine 2020) define it, one control of the other side added, and its strength by their Table 3. ${o.limitations.length ? `Limitations: ${o.limitations.map((l) => l.text).join(' ')} ` : ''}For research: functional classes in this assay and the evidence strength they would give, not a classification of any variant.`,
+    functionalClassifications: classes,
+    thresholdSources: primary ? publicationsOf([primary]) : [],
+    evidenceSources: hasAcmg ? [BRNICH] : [],
+    methodSources: [BRNICH],
+    calibrationMetadata: {
+      software: { name: 'MaveScape', version: software.version ?? null },
+      controls: { name: set.name, source: set.source?.kind === 'clinvar' ? { database: 'ClinVar', transcript: set.source.transcript ?? null, sha256: set.source.file?.sha256 ?? null, retrieved: set.source.retrieved ?? null, minStars: set.rules?.minStars ?? null, kinds: set.rules?.kinds ?? null } : { file: set.source?.file?.fileName ?? null, sha256: set.source?.file?.sha256 ?? null, citation: set.source?.citation ?? null }, ...(Number.isInteger(set.rules?.evaluatedBefore) ? { evaluatedBefore: set.rules.evaluatedBefore } : {}), scored: m.n },
+      side: cal.side,
+      rule: cal.rule,
+      ...(cal.rule === 'error' ? { error: cal.error } : {}),
+      thresholds: cal.thresholds,
+      auc: { auc: m.auc.auc, low: m.auc.low, high: m.auc.high, method: 'DeLong' },
+      sensitivity: { p: m.sensitivity.p, low: m.sensitivity.low, high: m.sensitivity.high },
+      specificity: { p: m.specificity.p, low: m.specificity.low, high: m.specificity.high },
+      bootstrap: cal.bootstrap,
+      oddsPath: { method: 'Brnich et al. 2020, one misclassified control added', abnormal: evidence(m.evidence.abnormal), normal: evidence(m.evidence.normal) },
+      ...(lr ? { likelihoodRatios: { method: 'acmgscaler 1.0.0 (Badonyi 2025), ported', prior: lr.settings.prior, c: lr.settings.c, seed: cal.bootstrap.seed, thresholds: lr.result.thresholds.map((t) => ({ boundary: t.boundary, ratio: t.lr, score: t.score, lower: t.lower, upper: t.upper })) } } : {}),
+      limitations: o.limitations.map((l) => l.id),
+    },
+  };
+  return { body, notes, missing };
+}
+
 // What the design says of the experiment, for its method text when the researcher gives none.
 function experimentText(design) {
   return summarizeDesign(design).lines.join(' ');
@@ -448,8 +558,10 @@ function experimentText(design) {
 // The deposit of one condition of a run. methods: writeMethods' result for a run scored from
 // counts (its paragraphs are the score set's method text). tables: for published scores, the
 // tables to pass through: { scores, counts } (parsed tables; counts null when the record has none
-// in the workspace). Returns { files: [{ name, text }], report } or { problem }.
-export function mavedbDeposit({ ws, run, results, condition = 0, methods = null, tables = {}, software = {} }) {
+// in the workspace). calibrations: the run's calibrations computed again (lib/calibration-record.js's
+// calibrationOutcome), written as MaveDB's score calibrations of this condition (wave 8, slice 5).
+// Returns { files: [{ name, text }], report } or { problem }.
+export function mavedbDeposit({ ws, run, results, condition = 0, methods = null, tables = {}, software = {}, calibrations = [] }) {
   const design = run.inputs.design;
   const { details, defaulted, record } = depositDetails(ws, run);
   const plan = depositTarget(ws, design, details, results.variants);
@@ -590,6 +702,23 @@ export function mavedbDeposit({ ws, run, results, condition = 0, methods = null,
   if (results.conditions.length > 1) notes.push(`This score set holds the condition ${c.name}; MaveDB keeps each condition as a score set of its own, in the same experiment.`);
   if (!details.experimentUrn) notes.push(record?.experiment?.urn ? `The score set's experiment is new (experiment.json); to add it to ${record.experiment.urn} instead, give that experiment's URN.` : 'The score set\'s experiment is new (experiment.json): MaveDB gives it a URN when it is created, and the score set needs that URN (experimentUrn).');
 
+  // The run's calibrations of this condition, in MaveDB's vocabulary (wave 8, slice 5): those made
+  // with a published calibration's thresholds are MaveDB's already; an agent's proposal waits.
+  const deposited = [];
+  for (const o of calibrations) {
+    const cal = o.cal;
+    if (cal.run !== run.id || (cal.condition ?? 0) !== condition) continue;
+    if (cal.published) notes.push(`The calibration "${cal.name}" takes the thresholds of "${cal.published.title}", which MaveDB holds already (${cal.published.urn}): not deposited again.`);
+    else if (cal.proposed && !cal.proposed.accepted) notes.push(`The calibration "${cal.name}" is still proposed by ${cal.proposed.by}: not deposited until it is accepted.`);
+    else if (!o.metrics) notes.push(`The calibration "${cal.name}" could not be computed again: ${o.problem ?? 'its scores are not at hand'}.`);
+    else {
+      const d = depositCalibration(o, details, software);
+      deposited.push({ name: cal.name, body: d.body });
+      notes.push(...d.notes);
+      for (const x of d.missing) if (!missing.some((y) => y.text === x.text)) missing.push(x);
+    }
+  }
+
   const files = [];
   files.push({ name: 'scores.csv', text: scoresText });
   if (countsText) files.push({ name: 'counts.csv', text: countsText });
@@ -597,6 +726,11 @@ export function mavedbDeposit({ ws, run, results, condition = 0, methods = null,
   if (countsText && Object.keys(countMeta).length) files.push({ name: 'count_columns.json', text: json(countMeta) });
   files.push({ name: 'experiment.json', text: json(experimentJSON) });
   files.push({ name: 'score_set.json', text: json(scoreSetJSON) });
+  // A package's own calibrations, as it wrote them, with its published scores.
+  const passed = isPublished && record?.package && Array.isArray(record.calibrationBodies) ? record.calibrationBodies : [];
+  if (passed.length) notes.push(`The package's ${passed.length === 1 ? 'calibration is' : `${passed.length} calibrations are`} passed through as ${passed.length === 1 ? 'it was' : 'they were'} written.`);
+  for (const body of passed) deposited.unshift({ name: body.title, body });
+  if (deposited.length) files.push({ name: 'score_calibrations.json', text: json(deposited.map((d) => d.body)) });
   const report = {
     mode: plan.mode,
     target: plan.gene,
@@ -605,6 +739,7 @@ export function mavedbDeposit({ ws, run, results, condition = 0, methods = null,
     columns: { scores: ['score', ...scoreColumns.map((x) => x.name)], counts: countColumns.map((x) => x.name) },
     condition: c.name,
     keywords: keywords.map((k) => ({ key: k.keyword.key, label: k.keyword.label, ...(k.description ? { description: k.description } : {}) })),
+    calibrations: deposited.map((d) => ({ name: d.name, classes: d.body.functionalClassifications.map((k) => ({ label: k.label, class: k.functionalClassification, range: k.range, oddsPath: k.oddspathsRatio ?? null, strength: k.acmgClassification ? `${k.acmgClassification.criterion} ${k.acmgClassification.evidenceStrength}` : null })) })),
     missing,
     defaulted,
     notes,
@@ -654,6 +789,7 @@ function readmeOf({ ws, run, report, files, details, software }) {
     ...(has('count_columns.json') ? [['count_columns.json', 'what each column of counts.csv is; MaveDB\'s count_columns_metadata']] : []),
     ['experiment.json', 'the experiment: its title, descriptions, method, keywords (the MAVE minimum information), publications and raw reads; the body of POST /api/v1/experiments/'],
     ['score_set.json', 'the score set: its title, descriptions, the analysis (the methods), license, target and publications; the body of POST /api/v1/score-sets/'],
+    ...(has('score_calibrations.json') ? [['score_calibrations.json', `${report.calibrations.length === 1 ? 'the calibration' : `the ${report.calibrations.length} calibrations`} of these scores, for research: each class's range (abnormal, not specified, normal), OddsPath and evidence strength, how it was made; each the body of POST /api/v1/score-calibrations/`]] : []),
     ['mavescape.json', 'what MaveScape wrote: the run, each file\'s SHA-256, the variants left out and why, what is missing'],
   ];
   return `# ${details.title}: a MaveDB deposit
@@ -673,7 +809,8 @@ set in it (score_set.json's fields), and upload scores.csv${has('counts.csv') ? 
 an access key: POST experiment.json to /api/v1/experiments/, put the experiment's URN in
 score_set.json's experimentUrn, POST it to /api/v1/score-sets/, then POST the files to
 /api/v1/score-sets/{urn}/variants/data (scores_file, counts_file, score_columns_metadata,
-count_columns_metadata). Nothing here is sent anywhere by MaveScape.
+count_columns_metadata).${has('score_calibrations.json') ? ` Then each calibration in score_calibrations.json, its
+scoreSetUrn the score set's URN, to /api/v1/score-calibrations/ (MaveDB marks it research use).` : ''} Nothing here is sent anywhere by MaveScape.
 
 ${report.missing.length ? `## Still to give\n\nMaveDB requires these, which the workspace does not hold (MaveScape's Record, "MaveDB details"):\n\n${report.missing.map((m) => `- ${m.text}`).join('\n')}\n` : '## Still to give\n\nNothing MaveDB requires is missing.\n'}
 ${report.defaulted.length ? `## Chosen for you, to confirm\n\n${report.defaulted.map((d) => `- ${DETAIL_NAMES[d.field] ?? d.field}: ${d.text}`).join('\n')}\n` : ''}
@@ -711,6 +848,8 @@ export function readDeposit(files, { name = 'package' } = {}) {
   if (!files.has('scores.csv')) problems.push('The package has no scores.csv.');
   const scoreColumns = parse('score_columns.json');
   const countColumns = parse('count_columns.json');
+  // Its score calibrations (wave 8, slice 5), read as a MaveDB record's.
+  const calibrations = parse('score_calibrations.json');
   const license = MAVEDB_LICENSES.find((l) => l.id === scoreSet.licenseId);
   const pubs = (list) => (list ?? []).map((p) => ({ db: p.dbName ?? null, id: String(p.identifier) }));
   const target = scoreSet.targetGenes?.[0];
@@ -745,7 +884,9 @@ export function readDeposit(files, { name = 'package' } = {}) {
     hasCounts: files.has('counts.csv'),
     targets,
     keywords,
-    calibrations: [],
+    calibrations: Array.isArray(calibrations) ? calibrations.map(readCalibration) : [],
+    // As written, so that a deposit of the package's scores passes them through (wave 8, slice 5).
+    ...(Array.isArray(calibrations) && calibrations.length ? { calibrationBodies: calibrations } : {}),
     experiment: {
       urn: scoreSet.experimentUrn ?? null,
       title: experiment.title ?? null,

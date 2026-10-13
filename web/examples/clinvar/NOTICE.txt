@@ -1,0 +1,25 @@
+ClinVar's records of BRCA1, TP53 and PTEN, for MaveScape's calibration examples
+
+These files are NCBI ClinVar's records of three genes' missense, nonsense and synonymous variants,
+as MaveScape's ClinVar track keeps them: each record's accession, variant (its transcript, c. and
+p. names), classification, review status, date last evaluated and molecular consequence, one row
+a record. MaveScape's fetcher asked NCBI's E-utilities for them on 13 October 2026 (esearch for
+the gene's records, then esummary, 500 records at a time) and providers/clinvar.js wrote the table,
+exactly as the ClinVar track does when added in Map, Tracks; each is gzipped here.
+
+  BRCA1.csv.gz  9,385 records (clinvar_BRCA1.csv)
+  TP53.csv.gz   2,171 records (clinvar_TP53.csv)
+  PTEN.csv.gz   2,071 records (clinvar_PTEN.csv)
+
+snapshots.json gives each table's SHA-256, size and retrieval record. The examples
+brca1-calibration, tp53-calibration and pten-calibration add them as the workspace's ClinVar
+annotation, so that their guides' numbers hold: ClinVar changes every week. Removing the annotation
+and adding ClinVar again in Map, Tracks fetches today's records. The script that made them is
+validation/fixtures/make-clinvar-snapshots.mjs.
+
+ClinVar's data have no restriction on use (NCBI's policies). Cite:
+Landrum MJ, et al. ClinVar: improving access to variant interpretations and supporting evidence.
+Nucleic Acids Research 2018;46(D1):D1062-D1067. doi:10.1093/nar/gkx1153
+
+Each label is ClinVar's submitters' classification, in their words. MaveScape uses them as
+controls for calibration, for research, and never classifies a variant.

@@ -1,8 +1,8 @@
 // The report (wave 6, slice 4; requirement R4): the methods of the workspace, not only of a run,
 // written from its record whenever it is shown. Each run's data, design, scoring (with a table of
 // its parameters) and quality control, as its own methods say them (lib/methods.js); the
-// comparisons and robustness checks kept in the report; the saved selections, the annotations, the
-// structures and the figures; every input's SHA-256; the software; the decision log (the history,
+// comparisons and robustness checks kept in the report; the control sets and calibrations (wave 8,
+// slice 5: for research); the saved selections, the annotations, the structures and the figures; every input's SHA-256; the software; the decision log (the history,
 // in words); the limitations (what the counts did not record, the models' assumptions, findings
 // not acknowledged); the research-use statement; numbered references and their BibTeX.
 //
@@ -21,6 +21,7 @@ import { comparisonJSON, DISCORDANT_Q, filtersApplied, SCALES } from './compare.
 import { ROBUSTNESS_Q } from './robustness.js';
 import { possessive } from './words.js';
 import { decisions, describeProposal, openProposals } from './proposals.js';
+import { calibrationParagraphs, calibrationSubjects, controlSetParagraph } from './calibration-record.js';
 
 export const REPORT_FORMAT = 'mavescape-report';
 export const REPORT_VERSION = 1;
@@ -214,7 +215,8 @@ function thresholdChanges(thresholds) {
 
 // Writes the report of a workspace. context: { software: { version, commit } (the MaveScape
 // writing it), runs: Map(run id → { findings (its QC findings), results (its scores, for the
-// rescaling anchors' SEs) }), each optional }. Returns { format, version, title, sections: [{ id,
+// rescaling anchors' SEs) }), calibrations: Map(calibration id → lib/calibration-record.js's
+// calibrationOutcome, or { problem }), each optional }. Returns { format, version, title, sections: [{ id,
 // title, blocks: [{ kind: 'p', label?, text } | { kind: 'table', columns, rows } | { kind: 'list',
 // items }] }], references: [{ n, key, text }], markdown, bibtex }.
 export function writeReport(ws, context = {}) {
@@ -246,7 +248,7 @@ export function writeReport(ws, context = {}) {
   const own = runs.map((run) => ({ run, ...runParagraphs(ws, run, { findings: info.get(run.id)?.findings ?? null, results: info.get(run.id)?.results ?? null, missingApart: true }, cite) }));
 
   // What the workspace holds, in a sentence.
-  const intro = [paragraph(`The methods of the workspace "${ws.name}", written by MaveScape ${software.version ?? '?'} from its record as it stood on ${String(ws.modified ?? ws.created).slice(0, 10)}: ${runs.length ? `${plural(runs.length, 'score run')} of ${plural(new Set(runs.map((r) => r.inputs.source.sha256)).size, 'table')}` : 'no score run yet'}${(ws.analyses ?? []).length ? `, ${plural(ws.analyses.length, 'analysis', 'analyses')} kept in the report` : ''}${(ws.figures ?? []).length ? `, ${plural(ws.figures.length, 'figure')}` : ''}. It says only what was done.`)];
+  const intro = [paragraph(`The methods of the workspace "${ws.name}", written by MaveScape ${software.version ?? '?'} from its record as it stood on ${String(ws.modified ?? ws.created).slice(0, 10)}: ${runs.length ? `${plural(runs.length, 'score run')} of ${plural(new Set(runs.map((r) => r.inputs.source.sha256)).size, 'table')}` : 'no score run yet'}${(ws.analyses ?? []).length ? `, ${plural(ws.analyses.length, 'analysis', 'analyses')} kept in the report` : ''}${(ws.calibrations ?? []).length ? `, ${plural(ws.calibrations.length, 'calibration')}` : ''}${(ws.figures ?? []).length ? `, ${plural(ws.figures.length, 'figure')}` : ''}. It says only what was done.`)];
   section('summary', null, intro);
 
   // The data, the design and the scoring, run by run.
@@ -276,6 +278,24 @@ export function writeReport(ws, context = {}) {
   const analyses = ws.analyses ?? [];
   section('comparisons', 'Comparisons', analyses.filter((a) => a.kind === 'comparison').map((a) => paragraph(comparisonParagraph(a, cite))));
   section('robustness', 'Robustness to analysis choices', analyses.filter((a) => a.kind === 'robustness').map((a) => paragraph(robustnessParagraph(a, cite))));
+
+  // Calibration, for research (wave 8, slice 5): each control set (where its labels came from, its
+  // composition, what was left out) and each calibration computed again (its metrics, evidence
+  // strength and likelihood ratios); what limits them is said with the limitations.
+  const sets = ws.controlSets ?? [];
+  const calibrations = ws.calibrations ?? [];
+  const given = context.calibrations ?? new Map();
+  const outcomes = calibrations.map((cal) => {
+    const o = given.get(cal.id);
+    if (o?.metrics) return o;
+    const subjects = calibrationSubjects(ws, cal);
+    return { cal, ...subjects, problem: o?.problem ?? subjects.problem };
+  });
+  section('calibration', 'Calibration, for research', sets.length || calibrations.length ? [
+    ...sets.map((set) => paragraph(controlSetParagraph(set, ws, cite))),
+    ...outcomes.flatMap((o) => calibrationParagraphs(o, cite).map((text, i) => paragraph(text, i === 0 ? o.cal.name : null))),
+    ...(calibrations.length ? [paragraph('Calibration says how far the scores separate variants whose effect is known, the functional classes thresholds on them make in this assay, and the evidence strength those classes would give: for research. MaveScape classifies no variant; a clinical classification rests on more than one assay and is made elsewhere.')] : []),
+  ] : []);
 
   // Saved selections.
   const runName = (id) => runs.find((r) => r.id === id)?.name ?? `a run no longer in the workspace (${id})`;
@@ -313,6 +333,14 @@ export function writeReport(ws, context = {}) {
   for (const f of annotationFiles(ws)) inputs.push([f.fileName ?? f.name, `annotation "${f.name}"`, f.sha256]);
   for (const f of structureFiles(ws)) inputs.push([f.fileName ?? f.name, `structure ${f.name}`, f.sha256]);
   for (const f of figureFiles(ws)) inputs.push([f.fileName, f.name, f.sha256]);
+  // The files control sets were read from (their labels are kept with the workspace).
+  for (const set of sets) {
+    const file = set.source?.file;
+    if (!file?.sha256) continue;
+    const row = inputs.find((r) => r[2] === file.sha256);
+    if (row) row[1] = `${row[1]}; the control set "${set.name}"`;
+    else inputs.push([file.fileName ?? (set.source.kind === 'clinvar' ? 'ClinVar\'s records' : set.name), `the control set "${set.name}"`, file.sha256]);
+  }
   section('inputs', 'Inputs', inputs.length ? [{ kind: 'table', caption: 'Every file the analysis read, by its SHA-256.', columns: ['File', 'What', 'SHA-256'], rows: inputs }] : []);
 
   // The software, and each run's output.
@@ -326,7 +354,7 @@ export function writeReport(ws, context = {}) {
   const decided = decisions(ws, Infinity).reverse();
   const open = openProposals(ws);
   const madeBy = new Map();
-  for (const [what, items] of [['the table', ws.sources], ['the target', ws.targets], ['', runs], ['the selection', ws.selections], ['the annotation', ws.annotations ?? []], ['the structure view', ws.structureViews ?? []], ['the figure', ws.figures ?? []], ['the checkpoint', ws.checkpoints ?? []]]) {
+  for (const [what, items] of [['the table', ws.sources], ['the target', ws.targets], ['', runs], ['the selection', ws.selections], ['the annotation', ws.annotations ?? []], ['the structure view', ws.structureViews ?? []], ['the figure', ws.figures ?? []], ['the checkpoint', ws.checkpoints ?? []], ['the control set', sets], ['the calibration', calibrations]]) {
     for (const x of items) {
       if (!x.proposed?.accepted) continue;
       if (!madeBy.has(x.proposed.by)) madeBy.set(x.proposed.by, []);
@@ -359,6 +387,15 @@ export function writeReport(ws, context = {}) {
     const open = (findings ?? []).filter((x) => (x.status === 'fail' || x.status === 'review') && !x.acknowledged?.current);
     if (open.length) limits.push(`${o.run.name}: ${list(open.map((x) => `${x.title.charAt(0).toLowerCase()}${x.title.slice(1)} (${x.status === 'fail' ? 'failed' : 'to review'})`))}, not acknowledged.`);
   }
+  // What limits each calibration; the same words for several named together.
+  const limited = new Map();
+  for (const o of outcomes) {
+    for (const l of o.limitations ?? []) {
+      if (!limited.has(l.text)) limited.set(l.text, []);
+      limited.get(l.text).push(`"${o.cal.name}"`);
+    }
+  }
+  for (const [text, names] of limited) limits.push(`${names.length > 1 ? `The calibrations ${list(names)}` : `The calibration ${names[0]}`}: ${text.replace(/^(The|No|Only|A|An) /, (w) => w.toLowerCase())}`);
   const predicted = (ws.structures ?? []).filter((s) => s.origin?.kind === 'alphafold');
   if (predicted.length) limits.push(`${list(predicted.map((s) => s.name))} ${predicted.length > 1 ? 'are predicted models' : 'is a predicted model'}: what ${predicted.length > 1 ? 'they say' : 'it says'} of each position rests on the prediction, whose confidence and aligned error say where it holds.`);
   section('limitations', 'Limitations', limits.length ? [{ kind: 'list', items: limits }] : []);

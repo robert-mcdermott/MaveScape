@@ -156,7 +156,7 @@ export function rename(ws, name) {
 
 // Whether a workspace holds anything worth saving (an empty, untitled one is not saved).
 export function isEmptyWorkspace(ws) {
-  return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length && !(ws.structureViews ?? []).length;
+  return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length && !(ws.structureViews ?? []).length && !(ws.controlSets ?? []).length && !(ws.calibrations ?? []).length;
 }
 
 // An id not yet used in a list: the base, or the base with a number.
@@ -440,3 +440,56 @@ export function removeCheckpoint(ws, id) {
   const rest = list.filter((c) => c.id !== id);
   return change(ws, { checkpoints: rest.length ? rest : undefined }, 'checkpoint', `Deleted the checkpoint "${gone.name}"`);
 }
+
+// --- Control sets (wave 8, slice 1) -------------------------------------------------------------------------
+
+// Keeps a control set (lib/controls.js: variants of known effect, each label as its source gives it)
+// in ws.controlSets, absent until the first, in the history.
+export function addControlSet(ws, set, time = clockNow()) {
+  const list = ws.controlSets ?? [];
+  const id = uniqueId(set.name ?? 'controls', list);
+  const entry = { ...set, id, created: set.created ?? time };
+  const sides = ['P', 'B'].map((side) => `${entry.labels.filter((l) => l.side === side).length} ${side}`).join(' and ');
+  return { ws: change(ws, { controlSets: [...list, entry] }, 'controls', `Made the control set "${entry.name}" from ${entry.source.kind === 'clinvar' ? 'ClinVar' : `the table ${entry.source.file?.fileName ?? ''}`.trim()}: ${sides} controls`, time), id };
+}
+
+export function removeControlSet(ws, id) {
+  const list = ws.controlSets ?? [];
+  const gone = list.find((c) => c.id === id);
+  if (!gone) return ws;
+  const rest = list.filter((c) => c.id !== id);
+  // Its calibrations go with it (wave 8, slice 2).
+  const { calibrations, words } = withoutCalibrations(ws, (c) => c.controlSet === id);
+  return change(ws, { controlSets: rest.length ? rest : undefined, ...calibrations }, 'controls', `Deleted the control set "${gone.name}"${words}`);
+}
+
+// --- Calibrations (wave 8, slice 2) -------------------------------------------------------------------------
+
+// Keeps a calibration (lib/calibration.js: a control set's controls against a run's scores, its
+// side, rule, thresholds and bootstrap) in ws.calibrations, absent until the first, in the history.
+// detail: what the history says it found (its controls and AUC).
+export function addCalibration(ws, calibration, detail, time = clockNow()) {
+  const list = ws.calibrations ?? [];
+  const id = uniqueId(calibration.name ?? 'calibration', list);
+  const entry = { ...calibration, id, created: calibration.created ?? time };
+  return { ws: change(ws, { calibrations: [...list, entry] }, 'calibrate', `Calibrated: "${entry.name}"${detail ? `, ${detail}` : ''}`, time), id };
+}
+
+export function removeCalibration(ws, id) {
+  const list = ws.calibrations ?? [];
+  const gone = list.find((c) => c.id === id);
+  if (!gone) return ws;
+  const rest = list.filter((c) => c.id !== id);
+  return change(ws, { calibrations: rest.length ? rest : undefined }, 'calibrate', `Deleted the calibration "${gone.name}"`);
+}
+
+// The calibrations kept when those `leaving` reads go (their run or control set removed): the
+// field's patch and the words for the history.
+export function withoutCalibrations(ws, leaving) {
+  const list = ws.calibrations ?? [];
+  const gone = list.filter(leaving);
+  if (!gone.length) return { calibrations: {}, words: '' };
+  const rest = list.filter((c) => !leaving(c));
+  return { calibrations: { calibrations: rest.length ? rest : undefined }, words: `, and ${gone.length === 1 ? `the calibration "${gone[0].name}"` : `${gone.length} calibrations`} made with it` };
+}
+

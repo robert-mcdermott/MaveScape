@@ -14,6 +14,6 @@ ms_mavedb_deposit(condition = NULL, run = NULL, ms = ms_default())
 A \code{mavescape_result}: the \code{message} and the \code{data} MaveScape answered with.
 }
 \description{
-What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and those left out, with why), the target (its sequence, or the transcript that names it), the columns of scores and counts, the experiment's keywords from the design's readout, and what MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id). Writes nothing: export with what mavedb writes the package.
+What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and those left out, with why), the target (its sequence, or the transcript that names it), the columns of scores and counts, the experiment's keywords from the design's readout, the run's calibrations of the condition as MaveDB's score calibrations (research use: each class's range as abnormal, not specified or normal, its OddsPath and evidence strength), and what MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id, a calibration's threshold source). Writes nothing: export with what mavedb writes the package.
 }
 \seealso{\code{\link{ms_call}}, which sends any action by its name (here \code{"mavedb_deposit"}).}

@@ -3,6 +3,7 @@
 // provenance, the methods with their references). Built on lib/archive.js, lib/exports.js and
 // lib/methods.js.
 
+import { calibrationWithLikelihood } from './calibration.js';
 import { h, downloadBlob } from './dom.js';
 import { progressToast, showDialog, toast } from './overlays.js';
 import { annotationFiles, figureFiles, readArchive, structureFiles, writeArchive, sourceFiles } from '../lib/archive.js';
@@ -49,11 +50,15 @@ export async function qcOf(app, run, state = app.store.ws.qc, from = null) {
   return { qc, findings: findingsFrom(qc, thresholds, { acknowledged: state?.acknowledged }), thresholds };
 }
 
-// The methods of a run, with its QC findings.
-export async function methodsOf(app, run) {
+// The methods of a run, with its QC findings and (wave 8, slice 5) its calibrations, unless
+// options.calibrations is false (a MaveDB deposit's method text: its calibrations are deposited
+// apart).
+export async function methodsOf(app, run, { calibrations = true } = {}) {
   const q = await qcOf(app, run).catch(() => null);
   const entry = await ensureResults(app, run).catch(() => null);
-  return writeMethods(app.store.ws, run, { findings: q?.findings ?? null, thresholds: q?.thresholds ?? null, results: entry?.results ?? null });
+  const own = [];
+  if (calibrations) for (const cal of (app.store.ws.calibrations ?? []).filter((c) => c.run === run.id)) own.push(await calibrationWithLikelihood(app, cal).catch(() => null));
+  return writeMethods(app.store.ws, run, { findings: q?.findings ?? null, thresholds: q?.thresholds ?? null, results: entry?.results ?? null, calibrations: own.filter(Boolean) });
 }
 
 // --- A run's files ------------------------------------------------------------------------------

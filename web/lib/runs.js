@@ -5,7 +5,7 @@
 // in the workspace but recomputed from the inputs when needed, and the recomputed output must
 // have the recorded hash (reproduced, or the run says it was not).
 
-import { analysesOf, canonicalJSON, change } from './workspace.js';
+import { analysesOf, canonicalJSON, change, withoutCalibrations } from './workspace.js';
 import { now } from './clock.js';
 import { sha256 } from './sha256.js';
 import { SCORING_VERSION, withDefaults, RESCALINGS } from './score.js';
@@ -118,7 +118,9 @@ export function removeRun(ws, id) {
   // The analyses kept in the report that read it go with it (wave 6, slice 4).
   const gone = new Set(analysesOf(ws, id).map((a) => a.id));
   const analyses = (ws.analyses ?? []).filter((a) => !gone.has(a.id));
-  return change(ws, { runs: ws.runs.filter((r) => r.id !== id), ...(gone.size ? { analyses: analyses.length ? analyses : undefined } : {}) }, 'remove-run', `Removed the score run ${run.name} (${run.id})${gone.size ? `, and from the report the ${gone.size === 1 ? 'analysis' : `${gone.size} analyses`} reading it` : ''}`);
+  // So do its calibrations (wave 8, slice 2).
+  const { calibrations, words } = withoutCalibrations(ws, (c) => c.run === id);
+  return change(ws, { runs: ws.runs.filter((r) => r.id !== id), ...(gone.size ? { analyses: analyses.length ? analyses : undefined } : {}), ...calibrations }, 'remove-run', `Removed the score run ${run.name} (${run.id})${gone.size ? `, and from the report the ${gone.size === 1 ? 'analysis' : `${gone.size} analyses`} reading it` : ''}${words}`);
 }
 
 // Whether a run scored a table of barcodes.

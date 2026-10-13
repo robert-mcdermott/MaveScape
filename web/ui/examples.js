@@ -2,17 +2,19 @@
 // library, its target, its design, and a first score run with MaveScape's defaults, then the view
 // it opens in; and the example's guide in the inspector (its question, steps, what to expect,
 // source, license and citation; for the simulated one, how close the scores come to the truth).
+// A calibration example (wave 8, slice 6) brings ClinVar's records of its gene, added as the
+// ClinVar annotation, or its simulated labels, made into a control set when the person asks.
 
 import { h, icon, downloadBlob } from './dom.js';
 import { progressToast, toast } from './overlays.js';
-import { EXAMPLES, exampleById, simulatedExample } from '../lib/examples.js';
+import { EXAMPLES, calibrationTruth, exampleById, simulatedExample } from '../lib/examples.js';
 import { parseTable } from '../lib/csv.js';
 import { assembleTable } from '../lib/assemble.js';
 import { detectLayout, reviewImport, suggestRoles } from '../lib/importer.js';
 import { sha256 } from '../lib/sha256.js';
 import { addRun, makeRun, runInputs } from '../lib/runs.js';
 import { defaultParameters, withDefaults } from '../lib/score.js';
-import { addSource, addTarget, change, createWorkspace, setDesign, updateTarget } from '../lib/workspace.js';
+import { addAnnotation, addSource, addTarget, change, createWorkspace, setDesign, updateTarget } from '../lib/workspace.js';
 import { now } from '../lib/clock.js';
 import { pearson } from '../lib/stats.js';
 import { intervalOf } from '../lib/exports.js';
@@ -20,6 +22,11 @@ import { runScore, workerInput } from './score-input.js';
 import { runEntry } from './run-results.js';
 import { exampleRecords, importMaveDB } from './mavedb.js';
 import { possessive } from '../lib/words.js';
+import { gunzip } from '../lib/source-table.js';
+import { proteinView } from '../lib/collapse.js';
+import { evidenceStrength } from '../lib/oddspath.js';
+import { storeBytes } from './import.js';
+import { makeTableControls } from './controls.js';
 
 const fetchBytes = async (path) => {
   const response = await fetch(path);
@@ -36,8 +43,13 @@ export async function openExample(app, id) {
   if (example.mavedb) {
     const records = exampleRecords(example);
     // Its counts too when the example teaches them (BRCA1's saturation genome editing), with its
-    // own design and a first run when it gives one (DHFR's, BRCA1 RING's).
-    const prepare = example.files?.design ? (ws, context) => scoreExampleCounts(app, example, ws, context) : null;
+    // own design and a first run when it gives one (DHFR's, BRCA1 RING's); ClinVar's records of its
+    // gene when it brings them (a calibration example).
+    const prepare = example.files?.design || example.clinvar ? async (ws, context) => {
+      let out = example.files?.design ? await scoreExampleCounts(app, example, ws, context) : ws;
+      if (example.clinvar) out = await addClinVarSnapshot(app, example, out);
+      return out;
+    } : null;
     const opened = await importMaveDB(app, records.map((r) => r.urn).join(' '), { counts: records.some((r) => Boolean(r.counts)), example, prepare });
     if (opened.ok) {
       setExampleMapView(app, example);
@@ -138,6 +150,28 @@ function setExampleMapView(app, example) {
   app.store.notify(['results']);
 }
 
+// ClinVar's records of an example's gene (wave 8, slice 6), as the ClinVar track keeps them and as
+// NCBI gave them on the day the example was made (web/examples/clinvar/, checked by their SHA-256):
+// stored in the library and added as the ClinVar annotation, so that the guide's numbers hold.
+// Removing it and adding ClinVar again in Map, Tracks fetches today's.
+async function addClinVarSnapshot(app, example, ws) {
+  const gene = example.clinvar;
+  const entry = JSON.parse(new TextDecoder().decode(await fetchBytes('examples/clinvar/snapshots.json')))[gene];
+  const bytes = await gunzip(await fetchBytes(`examples/clinvar/${gene}.csv.gz`));
+  const stored = await storeBytes(app, bytes);
+  if (stored.sha256 !== entry.sha256) throw new Error(`ClinVar's records of ${gene} in this build are not those the example was made with.`);
+  return addAnnotation(ws, { provider: 'clinvar', name: `ClinVar: ${gene}`, file: { fileName: entry.fileName, sha256: stored.sha256, size: stored.size }, record: entry.record, added: now() }, `Added ClinVar's records of ${gene} as the example brings them (${entry.record.records.toLocaleString('en-US')} records, retrieved ${entry.record.retrieved.slice(0, 10)} from NCBI)`).ws;
+}
+
+// A simulated calibration's labels made into a control set, as From a table makes one (only those
+// last evaluated before a year, when given): the person's request in the guide.
+export function exampleLabelControls(app, { evaluatedBefore = null, name = null } = {}) {
+  const example = exampleById(app.store.ws.example?.id);
+  if (!example?.labels) throw new Error('The open workspace is not an example with labels of its own.');
+  const { labels } = simulatedExample(example);
+  return makeTableControls(app, { fileName: labels.name, text: labels.text, evaluatedBefore, name });
+}
+
 // A MaveDB example's counts given the example's design, from the paper (which the column names do
 // not say: DHFR's sub-libraries, BRCA1 RING's shared inputs and second assay), in place of the
 // draft, its target's offset and identifiers with it, and scored with MaveScape's defaults and
@@ -211,6 +245,18 @@ function truthLine(run, results, info, example) {
   return h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `${possessive(run.name)} scores against the simulated true effects: Pearson r = ${pearson(a, b).toFixed(3)} over ${a.length} variants${comparable ? `; their 95% intervals hold ${percent(held, a.length)} of them` : ''}.`));
 }
 
+// A calibration against the simulated truth, as a callout: at its thresholds, the share of the
+// missense variants that lose function in each class over the share of those that do not, beside
+// the OddsPath it estimates.
+function calibrationTruthLine(app, cal, info, example) {
+  const run = app.store.ws.runs.find((r) => r.id === cal.run);
+  const results = run ? runEntry(app, run)?.results : null;
+  if (!results) return null;
+  const t = calibrationTruth(proteinView(results) ?? results, cal, info.truth, example.simulation);
+  const ratio = (x) => (x === null ? 'none' : `${x.toPrecision(3)} (${evidenceStrength(x).code.replace('Indeterminate', 'indeterminate')})`);
+  return h('div.callout.ok', { style: { margin: '8px 0', fontSize: '12px' } }, icon('check'), h('span', `"${cal.name}" against the simulated truth: of ${possessive(run.name)} ${t.loss.n} missense variants that lose function and ${t.kept.n} that do not, the abnormal-like class holds ${t.loss['abnormal-like']} and ${t.kept['abnormal-like']}, a likelihood ratio of ${ratio(t.ratio.abnormal)}; the WT-like class ${t.loss['WT-like']} and ${t.kept['WT-like']}, ${ratio(t.ratio.normal)}. The OddsPath estimates these ratios from the controls.`));
+}
+
 // The guide of the open example, as an inspector section (null when the workspace is not one).
 export function exampleGuide(app) {
   const info = app.store.ws.example;
@@ -225,12 +271,28 @@ export function exampleGuide(app) {
       if (!results) continue;
       truthLines.push(truthLine(run, results, info, example));
     }
+    if (example.labels) for (const cal of (app.store.ws.calibrations ?? []).slice(0, 6)) truthLines.push(calibrationTruthLine(app, cal, info, example));
   }
+  // A simulated calibration's labels: made into a control set when asked, or downloaded.
+  const make = (evaluatedBefore) => () => {
+    try {
+      const made = exampleLabelControls(app, { evaluatedBefore });
+      app.focusItem({ kind: 'controls', id: made.id });
+      app.setMode('calibrate');
+    } catch (error) {
+      toast(error.message, { kind: 'error' });
+    }
+  };
+  const labelButtons = example.labels ? h('div.btn-row', { style: { marginTop: '6px' } },
+    h('button.btn.small', { type: 'button', onclick: make(null) }, icon('plus'), 'Make a control set of the labels'),
+    h('button.btn.small', { type: 'button', onclick: make(example.labels.published) }, icon('plus'), `Of those last evaluated before ${example.labels.published}`),
+    h('button.btn.small', { type: 'button', onclick: () => { const { labels } = simulatedExample(example); downloadBlob(new Blob([labels.text], { type: 'text/csv' }), labels.name); } }, icon('download'), 'The labels (simulated)')) : null;
   return h('section.inspector-section.example-guide',
     h('h3', icon('school'), 'Example', example.simulated ? h('span.badge.warn', 'simulated data') : h('span.badge.accent', example.license)),
     h('p', { style: { margin: '0 0 6px', fontWeight: 600 } }, example.question),
     ...truthLines,
     h('ol.example-steps', ...example.steps.map(([mode, text]) => h('li', h('span', text), h('button.btn.small', { type: 'button', onclick: () => app.setMode(mode) }, `Open ${mode === 'qc' ? 'QC' : mode[0].toUpperCase() + mode.slice(1)}`)))),
+    labelButtons,
     h('details', h('summary', 'What to expect'), h('ul.summary-lines', ...example.expected.map((x) => h('li', x)))),
     h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, `Source: ${example.source}. License: ${example.license}.${example.citation ? ` Cite: ${example.citation}.` : ''}`),
     example.files?.notice ? h('div.btn-row', { style: { marginTop: '6px' } }, h('button.btn.small', { type: 'button', onclick: async () => downloadBlob(new Blob([await fetchBytes(example.files.notice)], { type: 'text/plain' }), 'NOTICE.txt') }, icon('download'), 'Notice'),

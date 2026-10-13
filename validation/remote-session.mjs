@@ -30,7 +30,7 @@ import { assembleTable } from '../web/lib/assemble.js';
 import { barcodesCSV, differentialCSV, proteinScoresCSV } from '../web/lib/exports.js';
 import { proteinView } from '../web/lib/collapse.js';
 import { readZip } from '../web/lib/zip.js';
-import { MAVEDB_FILES } from '../web/lib/mavedb-export.js';
+import { MAVEDB_FILES, mavedbDeposit } from '../web/lib/mavedb-export.js';
 import { depositPackages } from './mavedb-export-cases.mjs';
 import { nodeTracks } from './annotation-cases.mjs';
 import { buildMapModel } from '../web/lib/map-model.js';
@@ -69,6 +69,15 @@ import { gunzipSync, inflateRawSync } from 'node:zlib';
 import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/lib/mapping.js';
 import { cellsAtPositions, coloringCSV, coloringLegend, coloringPalette, placeOnTarget, POSITION, positionValues, residueColors, thresholdClasses } from '../web/lib/structure-scores.js';
 import { cellAt, cellName } from '../web/lib/map-model.js';
+import { circularity, clinvarControls, matchControls, tableControls } from '../web/lib/controls.js';
+import { calibrationMetrics, classCounts, controlScores, publishedThresholds } from '../web/lib/calibration.js';
+import { calibrateScores } from '../web/lib/likelihood.js';
+import { readScoreSet } from '../web/lib/mavedb.js';
+import { calibrationExample, calibrationOf, controlSetOf } from './guide-cases.mjs';
+import { calibrationTruth } from '../web/lib/examples.js';
+import { KIND } from '../web/lib/variants.js';
+import { CLINVAR } from '../web/lib/providers/clinvar.js';
+import { cachedGet } from './cached-fetch.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -91,6 +100,15 @@ const TP53_TABLES = [['urn:mavedb:00000068-c-1', 'scores.csv'], ['urn:mavedb:000
 // mavedb-brca1-ring keeps them: the example opened offline, then certified.
 const RING = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-brca1-ring', 'aa');
 const RING_URN = 'urn:mavedb:00000003-a-2';
+// Factor IX's published scores and counts (wave 8, slice 4), as node validation/fetch.mjs
+// mavedb-factor9 keeps them: the record opened offline, its published calibrations' thresholds.
+const F9 = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-factor9');
+const F9_URN = 'urn:mavedb:00001200-a-1';
+// PTEN's published abundance scores (wave 8, slice 6), as node validation/fetch.mjs
+// mavedb-pten-vampseq keeps them: put in the fetcher's cache once the session has found its record
+// refused for want of them, then its calibration example opened offline.
+const PTEN = join(dirname(fileURLToPath(import.meta.url)), 'cache', 'mavedb-pten-vampseq');
+const PTEN_URN = 'urn:mavedb:00000013-a-1';
 const results = [];
 const fmtShare = (x) => `${(100 * x).toFixed(0)}% drawn`;
 function check(name, value, ok, required = '') {
@@ -135,6 +153,13 @@ async function startMaveScape() {
       const name = `${urn.replaceAll(':', '_')}.scores.csv`;
       cpSync(join(TP53, file), join(cache, 'mavedb', name));
       writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${urn}/scores`, retrieved: '2026-10-12T01:15:25Z' }, null, 2)}\n`);
+    }
+  }
+  if (existsSync(join(F9, 'counts.csv'))) {
+    for (const table of ['scores', 'counts']) {
+      const name = `${F9_URN.replaceAll(':', '_')}.${table}.csv`;
+      cpSync(join(F9, `${table}.csv`), join(cache, 'mavedb', name));
+      writeFileSync(join(cache, 'mavedb', `${name}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${F9_URN}/${table}`, retrieved: '2026-10-13T08:00:00Z' }, null, 2)}\n`);
     }
   }
   const server = spawn(binary, ['--remote-control', '--window', 'none', '--port', String(PORT), '--data-dir', library, '--offline', '--cache-dir', cache, '--proteoscope', String(PROTEOSCOPE_PORT)], { cwd: temp, stdio: ['ignore', 'pipe', 'inherit'] });
@@ -1447,6 +1472,200 @@ try {
   const noChain = await send('map_structure', { chain: 'X' });
   check('map_structure: factor IX on 1RFN\'s light chain (chain B), at 132–188, the entry\'s own record five earlier, as Node maps it; a chain that does not hold it refused, naming those that do', `${lightChain.message.slice(0, 260)} | ${noChain.message}`, lightChain.data.chain === 'B' && lightChain.data.onStructure === lightNode.onStructure && lightChain.data.positions.onStructure.join() === '132–188' && lightChain.data.record.differ.length === 56 && /5 earlier/.test(lightChain.message) && !noChain.ok && /Chains that hold it: A, B/.test(noChain.message));
 
+  // Control sets (wave 8, slice 1): made in the window from factor IX's ClinVar records and from a
+  // table, as Node makes them; matched to Run 1 and checked for circularity as Node does; a table of
+  // another protein's labels refused, saying why; shown in Calibrate and the inspector; deleted.
+  {
+    await act('add_track', { provider: 'clinvar' });
+    const f9 = openExampleInNode(exampleById('factor9'));
+    const f9Target = { ...f9.design.targets[0], identifiers: { ...(f9.design.targets[0].identifiers ?? {}), gene: 'F9' } };
+    const nodeSet = clinvarControls((await CLINVAR.fetch(f9Target, {}, cachedGet())).text, f9Target);
+    const made = await act('make_control_set', {});
+    const windowWs = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws)'));
+    const [windowSet] = windowWs.controlSets;
+    const listed = await act('control_sets', { labels: true });
+    const [data] = listed.data.sets;
+    const nodeMatch = matchControls({ labels: nodeSet.labels }, f9.scored.results);
+    const nodeWarnings = circularity(windowSet, { ws: windowWs, run: windowWs.runs.find((r) => r.name === 'Run 1'), matched: nodeMatch }).map((w) => w.text);
+    check('make_control_set from ClinVar and control_sets on factor IX: the window\'s set as Node makes it from the same records (every label, what was left out), Run 1\'s scored, not scored and not in the run as Node matches them, each label\'s state, and the circularity Node finds', `${made.message.slice(0, 140)}…; ${JSON.stringify(data.measured)}; ${data.circularity.map((w) => w.id).join(', ')}`,
+      JSON.stringify(windowSet.labels) === JSON.stringify(nodeSet.labels) && JSON.stringify(windowSet.excluded) === JSON.stringify(nodeSet.excluded) && windowSet.source.transcript === nodeSet.transcript
+      && JSON.stringify(data.measured) === JSON.stringify(nodeMatch.counts) && data.labels.map((l) => l.state).join() === nodeMatch.states.join() && JSON.stringify(data.circularity.map((w) => w.text)) === JSON.stringify(nodeWarnings)
+      && data.P.controls === 169 && data.B.controls === 22 && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'calibrate');
+    const text = `variant,label\n${nodeSet.labels.map((l) => `${l.key},${l.side === 'P' ? 'pathogenic' : 'benign'}`).join('\n')}\n`;
+    const fromTable = await act('make_control_set', { source: 'table', file_name: 'f9-labels.csv', text, citation: 'A table of factor IX\'s labels', numbering: 'target', name: 'From a table' });
+    const tableSet = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws.controlSets.find((c) => c.name === "From a table"))'));
+    const nodeTable = tableControls(text, f9.design.targets[0], { numbering: 'target' });
+    const foreign = await send('make_control_set', { source: 'table', file_name: 'grb2-invented-labels.csv', text: readFileSync(join(ROOT, 'validation/fixtures/controls/grb2-invented-labels.csv'), 'utf8') });
+    check('make_control_set from a table: its labels as Node reads them, the file named by its SHA-256 with its citation; a table of another protein\'s labels refused, saying why', `${fromTable.message.slice(0, 100)}…; ${foreign.message}`,
+      JSON.stringify(tableSet.labels) === JSON.stringify(nodeTable.labels) && tableSet.source.file.sha256 === sha256(new TextEncoder().encode(text)) && tableSet.source.citation === 'A table of factor IX\'s labels'
+      && foreign.ok === false && /disagree with the target/.test(foreign.message));
+    const focused = await act('focus', { kind: 'control set', name: 'From a table' });
+    const inspector = await browser.eval(`document.querySelector('#inspector')?.textContent ?? ''`);
+    const removed = await act('remove_control_set', { name: 'From a table' });
+    const after = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws)'));
+    check('focus a control set (the inspector says where its labels came from), remove_control_set: gone, made and deleted in the history', `${focused.message} ${removed.message}; ${after.history.filter((e) => e.action === 'controls').map((e) => e.detail).join(' | ').slice(0, 220)}`,
+      /From a table/.test(inspector) && /Open in Calibrate/.test(inspector) && after.controlSets.length === 1 && after.history.filter((e) => e.action === 'controls').length === 3 && /^Deleted the control set "From a table"$/.test(after.history.at(-1).detail));
+
+    // Calibrations (wave 8, slice 2): Run 1 against the set, made in the window, every metric as Node
+    // computes it from the same scored controls (the bootstrap too: it is seeded), drawn in
+    // Calibrate; given thresholds, and thresholds in the wrong order refused; listed, focused,
+    // deleted, and deleted with their set.
+    const cal = await act('calibrate', { curves: true });
+    const nodeScores = controlScores({ labels: nodeSet.labels }, nodeMatch);
+    const nm = calibrationMetrics(nodeScores.P.scores, nodeScores.B.scores, { side: 'below' });
+    const near = (a, b) => (a === null && b === null) || Math.abs(a - b) <= 1e-12 * Math.max(1, Math.abs(b));
+    const d = cal.data;
+    const same = near(d.auc.auc, nm.auc.auc) && near(d.auc.low, nm.auc.low) && near(d.auc.high, nm.auc.high) && near(d.auc.bootstrap.low, nm.auc.boot.low) && near(d.auc.bootstrap.high, nm.auc.boot.high)
+      && near(d.precisionRecall.auc, nm.pr.auc) && near(d.precisionRecall.bootstrap.low, nm.pr.boot.low) && near(d.thresholds.abnormal, nm.thresholds.abnormal) && near(d.thresholds.normal, nm.thresholds.normal)
+      && ['P', 'B'].every((side) => ['abnormal-like', 'intermediate', 'WT-like'].every((k) => d.classes[side][k] === nm.classes[side][k]))
+      && near(d.sensitivity.low, nm.sensitivity.low) && near(d.specificity.high, nm.specificity.high) && near(d.stability.abnormal.high, nm.thresholds.stability.abnormal.high) && near(d.stability.normal.low, nm.thresholds.stability.normal.low)
+      && d.roc.points.length === nm.roc.points.length && d.roc.band.every((b, i) => near(b.low, nm.roc.band[i].low) && near(b.high, nm.roc.band[i].high)) && d.prCurve.points.length === nm.pr.points.filter((p) => !p.between).length
+      // Evidence strength (slice 3): each class's OddsPath, strength and bootstrap.
+      && ['abnormal', 'normal'].every((w) => near(d.evidence[w].oddsPath, nm.evidence[w].oddsPath) && d.evidence[w].strength === nm.evidence[w].strength.code && near(d.evidence[w].bootstrap.low, nm.evidence[w].boot.low) && d.evidence[w].bootstrap.noControl === nm.evidence[w].boot.empty);
+    // Score-level likelihood ratios (slice 4): acmgscaler's in Node on the window's own rows.
+    const nodeLr = calibrateScores(d.likelihood.variants.map((v) => ({ score: v.score, class: v.class })), { prior: 0.1, seed: 20261009 });
+    const sameLr = d.likelihood.c === 350 && d.likelihood.thresholds.every((t, k) => near(t.score, nodeLr.thresholds[k].score) && near(t.lower, nodeLr.thresholds[k].lower)) && d.likelihood.variants.every((v, i) => near(v.lr, nodeLr.rows[i].lr) && v.evidence === nodeLr.rows[i].evidence)
+      && d.likelihood.variants.length === 9013 && d.likelihood.variants.filter((v) => v.class === 'P').length === 164;
+    const shown = JSON.parse(await browser.eval(`JSON.stringify({ mode: document.getElementById('app').dataset.mode, plots: document.querySelectorAll('.view-body svg.plot').length, curves: document.querySelectorAll('.view-body svg.calibration-curve').length, text: document.querySelector('.view-body')?.textContent ?? '', evidence: document.querySelector('#calibration-evidence')?.textContent ?? '' })`));
+    check('calibrate on factor IX (Run 1 against the ClinVar set, the defaults): every metric as Node computes it from the same scored controls (the AUC and DeLong\'s interval, the precision-recall area, the thresholds, each side in each class, Wilson\'s intervals, the seeded bootstrap\'s intervals and bands, the curves\' points, each class\'s OddsPath and evidence strength); its score-level likelihood ratios as acmgscaler computes them in Node from the window\'s own rows (every variant\'s ratio and evidence, the score where each strength begins); shown in Calibrate, the scores of each side and both curves drawn, the evidence strength with what limits it', `${cal.message.slice(0, 230)}…; ${shown.plots} plots; ${sameLr ? 'the likelihood ratios Node\'s' : 'the likelihood ratios differ'}; OddsPath ${d.evidence.abnormal.oddsPath.toFixed(2)} ${d.evidence.abnormal.strength}, ${d.evidence.normal.oddsPath.toFixed(3)} ${d.evidence.normal.strength}; ${d.limitations.length} limitations`,
+      same && d.side === 'below' && d.sideFrom === 'readout' && d.scored.P === 164 && d.scored.B === 22 && shown.mode === 'calibrate' && shown.plots === 4 && shown.curves === 2 && /Sensitivity/.test(shown.text) && /How far the bootstrap moves the thresholds/.test(shown.text)
+      && /PS3_moderate \(moderate\)/.test(shown.evidence) && /What it rests on/.test(shown.text) && d.limitations.map((l) => l.id).join() === 'same-controls,few-normal,unstable-normal,circular-evaluated-since' && /OddsPath, Brnich et al\. 2019/.test(cal.message)
+      && sameLr && /Pathogenic-Strong below 0\.505/.test(cal.message));
+    const given = await act('calibrate', { run: 'Run 1', rule: 'given', abnormal: 0.3, normal: 0.7, samples: 0, name: 'Given' });
+    const missense = proteinView(f9.scored.results) ?? f9.scored.results;
+    const values = [];
+    for (let i = 0; i < missense.rows; i += 1) if (missense.variants.kind[i] === KIND.MISSENSE && Number.isFinite(missense.conditions[0].score[i])) values.push(missense.conditions[0].score[i]);
+    const nodeGiven = classCounts(values, 'below', { abnormal: 0.3, normal: 0.7 });
+    const wrongOrder = await send('calibrate', { run: 'Run 1', rule: 'given', abnormal: 0.9, normal: 0.7 });
+    check('calibrate with given thresholds: the controls and the run\'s missense variants in each class as Node counts them; thresholds in the wrong order refused, saying why', `${given.message.slice(0, 160)}…; missense ${JSON.stringify(given.data.classes.missense)}; ${wrongOrder.message}`,
+      ['abnormal-like', 'intermediate', 'WT-like'].every((k) => given.data.classes.missense[k] === nodeGiven[k] && given.data.classes.P[k] === classCounts(nodeScores.P.scores, 'below', { abnormal: 0.3, normal: 0.7 })[k]) && !given.data.stability && !wrongOrder.ok && /0\.9 is above 0\.7/.test(wrongOrder.message));
+    // In the record (slice 5): a figure of the calibration's four plots made in the window; the
+    // window's certificate (each calibration's numbers, the figure's drawings, the report) the same
+    // bytes as Node's from the window's own archive, and verified in Node; the report's calibration
+    // section and the MaveDB deposit's score calibrations as Node writes them.
+    {
+      await act('create_figure', { name: 'Calibration' });
+      for (const plot of ['distribution', 'roc', 'pr', 'likelihood']) await act('add_figure_panel', { figure: 'Calibration', kind: 'calibration', calibration: 'Run 1 · ClinVar, ★ or more', plot });
+      const calPath = join(out, 'f9-calibrated.certificate.msz');
+      await act('certify', { path: calPath });
+      const calBytes = new Uint8Array(readFileSync(calPath));
+      const calRead = await readCertificate(calBytes);
+      const calVerified = await verifyCertificate(calRead, { software: windowSoftware });
+      await act('export', { what: 'archive', path: join(out, 'f9-calibrated.msz') });
+      const calArchive = await readArchive(readFileSync(join(out, 'f9-calibrated.msz')));
+      const nodeCert = await writeCertificate(calArchive.ws, async (sha) => calArchive.sources.get(sha) ?? null, { software: windowSoftware });
+      const sameCert = Buffer.compare(Buffer.from(nodeCert.bytes), Buffer.from(calBytes)) === 0;
+      const shownReport = await act('report', { show: false });
+      const section = (md) => {
+        const at = md.indexOf('## Calibration, for research');
+        return at < 0 ? '' : md.slice(at, md.indexOf('\n## ', at + 5));
+      };
+      const sameSection = section(shownReport.data.markdown) !== '' && section(shownReport.data.markdown) === section(nodeCert.computed.report.markdown);
+      await act('export', { what: 'mavedb', run: 'Run 1', path: join(out, 'f9-calibrated-mavedb.zip') });
+      const depositFiles = await readZip(new Uint8Array(readFileSync(join(out, 'f9-calibrated-mavedb.zip'))));
+      const windowCalibrations = new TextDecoder().decode(depositFiles.get('score_calibrations.json'));
+      const run1 = calArchive.ws.runs.find((r) => r.name === 'Run 1');
+      const nodeDeposit = mavedbDeposit({ ws: calArchive.ws, run: run1, results: nodeCert.computed.results.get(run1.id), software: { version: windowSoftware.version }, calibrations: [...nodeCert.computed.detail.calibrations.values()].filter((o) => o.cal.run === run1.id) });
+      const sameDeposit = nodeDeposit.files.find((f) => f.name === 'score_calibrations.json')?.text === windowCalibrations;
+      const calNumbers = calRead.certificate.numbers.calibrations ?? [];
+      check('calibration in the record: a figure of the calibration\'s four plots made with add_figure_panel; the window\'s certificate (format 2: both calibrations\' numbers, the figure\'s drawings, the report) the same bytes as Node writes from the window\'s own archive, and verified in Node bit for bit; the report\'s calibration section and the MaveDB deposit\'s score calibrations (score_calibrations.json) as Node writes them',
+        `${calNumbers.length} calibrations certified, ${calRead.certificate.total} numbers, format ${calRead.certificate.version}; Node's certificate ${sameCert ? 'the same bytes' : 'different'}; verified in Node: ${calVerified.verdict}; the report's section ${sameSection ? 'Node\'s' : 'differs'}; score_calibrations.json ${sameDeposit ? 'Node\'s' : 'differs'}`,
+        calNumbers.length === 2 && calRead.certificate.version === 2 && sameCert && calVerified.verdict === 'verified' && calVerified.numbers.same === calRead.certificate.total && sameSection && sameDeposit
+        && calRead.certificate.numbers.figures.some((f) => f.name === 'Calibration' && f.panels.length === 4));
+      await act('set_figure', { figure: 'Calibration', delete: true });
+    }
+    const listedCal = await act('calibrations', {});
+    const focusedCal = await act('focus', { kind: 'calibration', name: 'Given' });
+    const calInspector = await browser.eval(`document.querySelector('#inspector')?.textContent ?? ''`);
+    const removedCal = await act('remove_calibration', { name: 'Given' });
+    await act('remove_control_set', { name: windowSet.name });
+    const afterCal = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws)'));
+    check('calibrations lists them; focus shows one in the inspector; remove_calibration deletes one; deleting the control set deletes those made with it, the history saying so', `${listedCal.message.slice(0, 120)}… ${focusedCal.message} ${removedCal.message} ${afterCal.history.at(-1).detail}`,
+      listedCal.data.calibrations.length === 2 && /Given thresholds|given thresholds/.test(calInspector) && /Open in Calibrate/.test(calInspector) && removedCal.ok && afterCal.calibrations === undefined && afterCal.controlSets === undefined
+      && /^Deleted the control set "ClinVar, ★ or more", and the calibration "Run 1 · ClinVar, ★ or more" made with it$/.test(afterCal.history.at(-1).detail) && afterCal.history.filter((e) => e.action === 'calibrate').length === 3);
+
+    // A record's published calibration (slice 4): factor IX's published scores opened offline (a
+    // workspace of their own), the investigators' classes as the thresholds, every number as Node
+    // computes it from the window's rows.
+    if (existsSync(join(F9, 'counts.csv'))) {
+      await act('open_mavedb', { urn: F9_URN });
+      await act('check_target', { accession: 'P00740', apply: true });
+      await act('add_track', { provider: 'clinvar' });
+      await act('make_control_set', {});
+      const refused = await send('calibrate', { run: 'Published scores', published: 'ExCALIBR calibration' });
+      const pub = await act('calibrate', { run: 'Published scores', published: 'Investigator-provided functional classes', curves: true });
+      const record = readScoreSet(JSON.parse(readFileSync(join(ROOT, 'validation/fixtures/public-data/mavedb/urn_mavedb_00001200-a-1.json'), 'utf8')));
+      const thr = publishedThresholds(record.calibrations.find((c) => c.title === 'Investigator-provided functional classes'));
+      const rows = pub.data.likelihood.variants;
+      const nP = rows.filter((v) => v.class === 'P').map((v) => v.score);
+      const nB = rows.filter((v) => v.class === 'B').map((v) => v.score);
+      const nodePub = calibrationMetrics(nP, nB, { side: thr.side, rule: 'given', abnormal: thr.abnormal, normal: thr.normal });
+      const pane = await browser.eval(`[...document.querySelectorAll('.view-body .pane h3')].map((h) => h.textContent).join(' | ')`);
+      check('calibrate with a published calibration\'s thresholds: factor IX\'s published scores (urn:mavedb:00001200-a-1, opened offline) against the ClinVar set, the investigators\' classes as MaveScape\'s thresholds, the OddsPath as Node computes it from the window\'s rows; listed in Calibrate; a calibration with no normal class to take a threshold from (ExCALIBR\'s here) refused, saying why', `${pub.message.slice(0, 200)}…; ${refused.message}`,
+        pub.data.published?.title === 'Investigator-provided functional classes' && pub.data.thresholds.abnormal === thr.abnormal && pub.data.thresholds.normal === thr.normal && pub.data.side === thr.side
+        && ['abnormal', 'normal'].every((w) => near(pub.data.evidence[w].oddsPath, nodePub.evidence[w].oddsPath) && pub.data.evidence[w].strength === nodePub.evidence[w].strength.code) && pub.data.scored.P === 164 && pub.data.scored.B === 22
+        && !refused.ok && /no abnormal and normal ranges/.test(refused.message) && /Published calibrations/.test(pane));
+      // The example again, as the session goes on with it.
+      await act('open_example', { id: 'factor9' });
+    }
+  }
+
+  // Wave 8, slice 6: the calibration examples' guides followed in the window, every number as Node
+  // makes it on the same data (guide-cases.mjs). The simulated calibration: its labels made a
+  // control set (all, then those before the assay), each calibrated, the guide comparing each with
+  // the truth.
+  {
+    const near = (a, b) => (a === null && b === null) || Math.abs(a - b) <= 1e-12 * Math.max(1, Math.abs(b));
+    const sameAs = (d, o) => near(d.auc.auc, o.metrics.auc.auc) && near(d.thresholds.abnormal, o.metrics.thresholds.abnormal) && near(d.thresholds.normal, o.metrics.thresholds.normal)
+      && ['P', 'B'].every((side) => ['abnormal-like', 'intermediate', 'WT-like'].every((k) => d.classes[side][k] === o.metrics.classes[side][k]))
+      && ['abnormal', 'normal'].every((w) => near(d.evidence[w].oddsPath, o.metrics.evidence[w].oddsPath) && d.evidence[w].strength === o.metrics.evidence[w].strength.code && near(d.evidence[w].bootstrap.low, o.metrics.evidence[w].boot.low));
+    await act('open_example', { id: 'simulated-calibration' });
+    const allSet = await act('make_control_set', { source: 'example' });
+    const allCal = await act('calibrate', {});
+    const early = await act('make_control_set', { source: 'example', evaluated_before: 2024 });
+    const earlyCal = await act('calibrate', {});
+    const st = calibrationExample('simulated-calibration');
+    const nAll = controlSetOf(st, {}, { table: true });
+    const nAllCal = calibrationOf(nAll.state, nAll.set);
+    const nEarly = controlSetOf(nAllCal.state, { evaluatedBefore: 2024 }, { table: true, minute: 3 });
+    const nEarlyCal = calibrationOf(nEarly.state, nEarly.set, { minute: 4 });
+    const t1 = calibrationTruth(st.results, nAllCal.cal, st.truth, st.example.simulation);
+    const t2 = calibrationTruth(st.results, nEarlyCal.cal, st.truth, st.example.simulation);
+    const guide = await browser.eval(`document.querySelector('.example-guide')?.textContent ?? ''`);
+    const labelsSame = (await browser.eval('JSON.stringify(window.mavescape.store.ws.controlSets.map((c) => c.labels.map((l) => [l.key, l.side, l.label, l.evaluated])))')) === JSON.stringify([nAll.set, nEarly.set].map((c) => c.labels.map((l) => [l.key, l.side, l.label, l.evaluated])));
+    check('the simulated calibration\'s guide in the window: its labels made a control set from the example (make_control_set\'s source example), the 50 made since 2024 named; calibrated, every number as Node makes it; those last evaluated before 2024 (evaluated_before), none named since, calibrated as Node; the guide comparing each calibration with the truth as Node does',
+      `${allSet.message.slice(0, 120)}…; ${early.message.slice(0, 90)}…; OddsPath ${allCal.data.evidence.abnormal.oddsPath.toFixed(1)} and ${earlyCal.data.evidence.abnormal.oddsPath.toFixed(1)}; the guide says ${(guide.match(/a likelihood ratio of [\d.]+/g) ?? []).join(', ')}`,
+      labelsSame && allSet.data.circularity.some((w) => w.id === 'evaluated-since' && w.n === 50) && !early.data.circularity.some((w) => w.id === 'evaluated-since') && early.data.rules.evaluatedBefore === 2024
+        && sameAs(allCal.data, nAllCal.outcome) && sameAs(earlyCal.data, nEarlyCal.outcome)
+        && guide.includes(`a likelihood ratio of ${t1.ratio.abnormal.toPrecision(3)}`) && guide.includes(`a likelihood ratio of ${t2.ratio.abnormal.toPrecision(3)}`) && /Make a control set of the labels/.test(guide));
+    // PTEN's calibration example, opened offline: ClinVar's records it brings beside the map, its
+    // control sets and calibrations as Node makes them.
+    if (existsSync(join(PTEN, 'scores.csv'))) {
+      const cached = `${PTEN_URN.replaceAll(':', '_')}.scores.csv`;
+      cpSync(join(PTEN, 'scores.csv'), join(cache, 'mavedb', cached));
+      writeFileSync(join(cache, 'mavedb', `${cached}.meta.json`), `${JSON.stringify({ contentType: 'text/csv; charset=utf-8', service: 'MaveDB', source: `https://api.mavedb.org/api/v1/score-sets/${PTEN_URN}/scores`, retrieved: '2026-10-11T00:00:00Z' }, null, 2)}\n`);
+      await act('open_example', { id: 'pten-calibration' });
+      const annotations = await browser.eval('JSON.stringify(window.mavescape.store.ws.annotations.map((a) => [a.provider, a.name, a.file.sha256, a.record.retrieved]))');
+      const set = await act('make_control_set', {});
+      const cal = await act('calibrate', {});
+      const ex = await act('calibrate', { run: 'Published scores', published: 'ExCALIBR calibration' });
+      const every = await act('make_control_set', { kinds: ['missense', 'nonsense', 'synonymous'] });
+      const pst = calibrationExample('pten-calibration');
+      const a = controlSetOf(pst);
+      const def = calibrationOf(a.state, a.set);
+      const nEx = calibrationOf(def.state, a.set, { published: 'ExCALIBR calibration', minute: 3 });
+      check('PTEN\'s calibration example opened offline: ClinVar\'s records of PTEN as the example brings them (2026-10-13), beside the map; its ClinVar set (255 P, 9 B), the calibration by the defaults and with the ExCALIBR calibration\'s thresholds, every number as Node makes them; with every kind of variant, the warning of controls on a published scale',
+        `${annotations}; ${set.message.slice(0, 100)}…; AUC ${cal.data.auc.auc.toFixed(3)}, ExCALIBR's ${ex.data.evidence.abnormal.oddsPath.toFixed(2)}; ${every.data.circularity.map((w) => `${w.id} ${w.n}`).join(', ')}`,
+        JSON.parse(annotations).length === 1 && JSON.parse(annotations)[0][1] === 'ClinVar: PTEN' && JSON.parse(annotations)[0][3].startsWith('2026-10-13') && set.data.P.controls === 255 && set.data.B.controls === 9
+          && sameAs(cal.data, def.outcome) && sameAs(ex.data, nEx.outcome) && ex.data.published?.title === 'ExCALIBR calibration' && every.data.circularity.some((w) => w.id === 'anchor-published' && w.n === 411));
+    } else {
+      console.log('  PTEN\'s MaveDB table is not in validation/cache: node validation/fetch.mjs mavedb-pten-vampseq (its calibration example\'s checks skipped)');
+      if (requireData) check('PTEN\'s MaveDB table present', 'not in validation/cache', false, 'present (--require-data)');
+    }
+    // The example again, as the session goes on with it.
+    await act('open_example', { id: 'factor9' });
+  }
+
   // WebGPU lost under the view (the 0.5.0 release; GitHub's runner lost it on its own): the GPU
   // process crashed (Browser.crashGpuProcess) while factor IX's 1RFN is drawn with WebGPU, the view goes on with
   // the Canvas renderer on a fresh canvas, its badge and words saying why, the structure drawn again
@@ -1465,7 +1684,10 @@ try {
   const afterLoss = await send('set_structure', { select: 'chain B', show: 'sticks' });
   check('WebGPU lost under the view (the GPU process crashed): the view goes on with the Canvas renderer, its badge and words saying why, the structure drawn again, still answering', `${beforeCrash.kind === 'webgpu' ? 'crashed under WebGPU' : `already ${beforeCrash.kind}`}; now ${afterCrash.kind} (${afterCrash.failure.slice(0, 120)}); badge ${badge}; ${fmtShare(lostShare)}; then ${afterLoss.ok ? afterLoss.data.renderer : afterLoss.message}`, afterCrash.kind === 'canvas' && /graphics device was lost|WebGPU failed|does not offer WebGPU|No WebGPU|WebGPU did not start/.test(afterCrash.failure) && badge === 'Canvas' && lostShare > 0.03 && afterLoss.ok && afterLoss.data.renderer === 'canvas');
 
-  // The Canvas renderer, the page opened again.
+  // The Canvas renderer, the page opened again: the workspace saved first, as before the review
+  // report's file (a page with a change not yet saved asks before it is left, and the navigation
+  // waits on the question).
+  await browser.eval('window.mavescape.saveNow()');
   await browser.goto(`${URL}?renderer=canvas`, 1500);
   for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);
   await sleep(500);

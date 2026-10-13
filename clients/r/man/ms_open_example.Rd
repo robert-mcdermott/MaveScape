@@ -6,7 +6,7 @@
 ms_open_example(id, ms = ms_default())
 }
 \arguments{
-\item{id}{The example's id or part of its title. Published: "grb2-sh3" (GRB2's SH3 domain, an input and an output), "hsp90" (Hsp90, a time series), "factor9" (factor IX, sorted bins), "dhfr-lon" (DHFR with and without Lon, two conditions), "brca1-ring" (BRCA1's RING domain, from MaveDB and back), "pten-mavedb" (PTEN, published scores), "brca1-sge" (BRCA1, nucleotide variants), "tp53-screens" (TP53, two screens). Simulated, with known effects: "simulated", "simulated-time-series", "simulated-sort-seq", "simulated-barcodes", "simulated-conditions", "simulated-problems". The examples from MaveDB download their tables when opened. Required; a string.}
+\item{id}{The example's id or part of its title. Published: "grb2-sh3" (GRB2's SH3 domain, an input and an output), "hsp90" (Hsp90, a time series), "factor9" (factor IX, sorted bins), "dhfr-lon" (DHFR with and without Lon, two conditions), "brca1-ring" (BRCA1's RING domain, from MaveDB and back), "pten-mavedb" (PTEN, published scores), "brca1-sge" (BRCA1, nucleotide variants), "tp53-screens" (TP53, two screens); calibrated against ClinVar's records of the gene, which they bring: "brca1-calibration", "tp53-calibration", "pten-calibration". Simulated, with known effects: "simulated", "simulated-time-series", "simulated-sort-seq", "simulated-barcodes", "simulated-conditions", "simulated-problems", "simulated-calibration" (labels, half of them circular). The examples from MaveDB download their tables when opened. Required; a string.}
 \item{ms}{A connection from \code{\link{ms_connect}} (default: the last one made).}
 }
 \value{

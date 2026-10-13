@@ -34,10 +34,12 @@ ms_new_workspace <- function(name = NULL, ms = ms_default()) {
 #' an input and an output), "hsp90" (Hsp90, a time series), "factor9" (factor IX, sorted bins),
 #' "dhfr-lon" (DHFR with and without Lon, two conditions), "brca1-ring" (BRCA1's RING domain,
 #' from MaveDB and back), "pten-mavedb" (PTEN, published scores), "brca1-sge" (BRCA1,
-#' nucleotide variants), "tp53-screens" (TP53, two screens). Simulated, with known effects:
-#' "simulated", "simulated-time-series", "simulated-sort-seq", "simulated-barcodes",
-#' "simulated-conditions", "simulated-problems". The examples from MaveDB download their tables
-#' when opened. Required; a string.
+#' nucleotide variants), "tp53-screens" (TP53, two screens); calibrated against ClinVar's
+#' records of the gene, which they bring: "brca1-calibration", "tp53-calibration",
+#' "pten-calibration". Simulated, with known effects: "simulated", "simulated-time-series",
+#' "simulated-sort-seq", "simulated-barcodes", "simulated-conditions", "simulated-problems",
+#' "simulated-calibration" (labels, half of them circular). The examples from MaveDB download
+#' their tables when opened. Required; a string.
 #' @param ms A connection from ms_connect() (default: the last one made).
 #' @return A mavescape_result: the message and the data MaveScape answered with.
 #' @export
@@ -65,10 +67,11 @@ ms_open_files <- function(paths, new_workspace = NULL, ms = ms_default()) {
 
 #' Show a view
 #'
-#' Shows a view: start, experiment, qc, score, map, compare, structure, figures or report.
+#' Shows a view: start, experiment, qc, score, map, compare, structure, calibrate, figures or
+#' report.
 #'
-#' @param mode start, experiment, qc, score, map, compare, structure, figures or report.
-#' Required; a string.
+#' @param mode start, experiment, qc, score, map, compare, structure, calibrate, figures or
+#' report. Required; a string.
 #' @param ms A connection from ms_connect() (default: the last one made).
 #' @return A mavescape_result: the message and the data MaveScape answered with.
 #' @export
@@ -79,10 +82,10 @@ ms_set_mode <- function(mode, ms = ms_default()) {
 #' Show an item in the inspector
 #'
 #' Shows an item in the inspector: a table, target, score run, saved selection, saved structure
-#' view or variant, by name. With no name, clears the focus.
+#' view, control set, calibration or variant, by name. With no name, clears the focus.
 #'
-#' @param kind table, target, run, selection, structure view or variant; found by name across
-#' all of them if not given. Optional; a string.
+#' @param kind table, target, run, selection, structure view, control set, calibration or
+#' variant; found by name across all of them if not given. Optional; a string.
 #' @param name Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala). Optional; a
 #' string.
 #' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
@@ -193,9 +196,12 @@ ms_check_target <- function(accession = NULL, apply = NULL, target = NULL, ms = 
 #'
 #' What a MaveDB deposit of a run would hold, as MaveDB takes a score set: the variants (and
 #' those left out, with why), the target (its sequence, or the transcript that names it), the
-#' columns of scores and counts, the experiment's keywords from the design's readout, and what
-#' MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy
-#' id). Writes nothing: export with what mavedb writes the package.
+#' columns of scores and counts, the experiment's keywords from the design's readout, the run's
+#' calibrations of the condition as MaveDB's score calibrations (research use: each class's
+#' range as abnormal, not specified or normal, its OddsPath and evidence strength), and what
+#' MaveDB requires that the workspace lacks (an abstract, a license, an organism's taxonomy id,
+#' a calibration's threshold source). Writes nothing: export with what mavedb writes the
+#' package.
 #'
 #' @param condition A condition by name or number (from 1), when the design has more than one;
 #' the first if not given. Optional; a string.
@@ -863,6 +869,172 @@ ms_remove_structure_view <- function(name, ms = ms_default()) {
   ms_call("remove_structure_view", name = name, ms = ms)
 }
 
+#' Make a control set
+#'
+#' Makes a control set, for calibration (research use): variants whose effect is known, each
+#' label as its source gives it, kept with the workspace and shown in the Calibrate view. From
+#' ClinVar (the ClinVar track's records of the gene: add_track clinvar first), pathogenic and
+#' likely pathogenic records as P, benign and likely benign as B, conflicting and uncertain
+#' ones left out, with at least min_stars review stars; or from a table of labels (file_name
+#' and text: a column of variants, such as p.Trp36Ala or W36A, one of labels: pathogenic,
+#' likely pathogenic, benign, likely benign, or abnormal and normal from another assay, and
+#' optionally last_evaluated, the date of each), numbered on the reference or the target; or
+#' the open example's own labels (example). With evaluated_before, only classifications last
+#' evaluated before that year (those made before the assay was published cannot rest on it).
+#' Placed on the target as the tracks place ClinVar's; says what was left out and why.
+#' MaveScape reports functional evidence and never classifies a variant.
+#'
+#' @param citation table: where the labels were published, with its DOI. Optional; a string.
+#' @param evaluated_before Only classifications last evaluated before this year (ClinVar's
+#' dates, or the table's last_evaluated column); those with no date are left out. None if not
+#' given. Optional; a whole number.
+#' @param file_name table: the file's name (labels.csv). Optional; a string.
+#' @param kinds The kinds of variant kept: missense, nonsense, synonymous (clinvar: missense if
+#' not given; table: all three). Optional; a vector of strings (Python: a list).
+#' @param min_stars clinvar: the fewest review stars a record may have (1, criteria provided,
+#' if not given). Optional; a whole number.
+#' @param name The set's name; one is made from its source if not given. Optional; a string.
+#' @param numbering table: reference or target; whichever the residues agree with if not given.
+#' Optional; a string.
+#' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
+#' given. Optional; a string.
+#' @param source clinvar (the default), table, or example (the open example's own labels: the
+#' simulated calibration's). Optional; a string.
+#' @param text table: the file's text (CSV or TSV). Optional; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_make_control_set <- function(citation = NULL, evaluated_before = NULL, file_name = NULL, kinds = NULL, min_stars = NULL, name = NULL, numbering = NULL, run = NULL, source = NULL, text = NULL, ms = ms_default()) {
+  ms_call("make_control_set", citation = citation, evaluated_before = evaluated_before, file_name = file_name, kinds = .ms_array(kinds), min_stars = min_stars, name = name, numbering = numbering, run = run, source = source, text = text, ms = ms)
+}
+
+#' The control sets
+#'
+#' The workspace's control sets (research use): each one's source and rules, its P and B
+#' controls by label, review stars and kind, what was left out when it was made; matched to a
+#' run (the latest if not given), how many of each side it scored, did not score or does not
+#' hold, and what may make the labels circular for it (labels anchoring the run's scale, the
+#' design's own controls, ClinVar classifications evaluated since the assay was published, the
+#' assay's own publication, too few controls, a predictor whose classes were set with the same
+#' labels). With labels, each control: its variant, side, label as its source gives it, ids and
+#' state in the run.
+#'
+#' @param labels Each control too (its variant, side, label, ids, state and score in the run).
+#' Optional; TRUE or FALSE (Python: True or False).
+#' @param name A control set by name: only that one. Optional; a string.
+#' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
+#' given. Optional; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_control_sets <- function(labels = NULL, name = NULL, run = NULL, ms = ms_default()) {
+  ms_call("control_sets", labels = labels, name = name, run = run, ms = ms)
+}
+
+#' Delete a control set
+#'
+#' Deletes a control set, with the calibrations made with it (undoable, in the history).
+#'
+#' @param name The control set's name. Required; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_remove_control_set <- function(name, ms = ms_default()) {
+  ms_call("remove_control_set", name = name, ms = ms)
+}
+
+#' Calibrate a run against a control set
+#'
+#' Calibrates a run's scores against a control set, for research: how far the scores separate
+#' its P controls from its B controls, and the functional classes thresholds make
+#' (abnormal-like, intermediate, WT-like: classes in this assay, never a classification of a
+#' variant). Returns the ROC curve's AUC with DeLong's interval, the precision-recall curve's
+#' area, both with a seeded stratified bootstrap's intervals; the thresholds, set by the
+#' controls (rule error: at most `error` of either side's controls in the other side's class;
+#' youden: one threshold of the largest sensitivity + specificity) or given (abnormal and
+#' normal); each side's controls and the run's variants in each class; sensitivity (P
+#' abnormal-like) and specificity (B WT-like) with Wilson's intervals; how far the bootstrap
+#' moves the thresholds; score-level likelihood ratios as acmgscaler computes them (each
+#' score's ratio of the P controls' density to the B controls', with its interval, the evidence
+#' strength it gives, Tavtigian et al.'s thresholds from a prior or Pejaver et al. 2022's, and
+#' the score where each strength begins); and the evidence strength each class would give, for
+#' research: its OddsPath as Brnich et al. 2019 define it (one control of the other side added)
+#' with the strength their Table 3 makes of it (PS3 for the abnormal-like class, BS3 for the
+#' WT-like), the bootstrap's interval and strengths with the thresholds kept, and what limits
+#' it (thresholds set on the same controls, few controls in a class, circularity). Kept with
+#' the workspace and shown in the Calibrate view; nothing calibrates by itself.
+#'
+#' @param abnormal rule given: the abnormal threshold (a score at or beyond it, on the abnormal
+#' side, is abnormal-like). Optional; a number.
+#' @param condition The run's condition, counted from 0 (0 if not given). Optional; a whole
+#' number.
+#' @param control_set The control set by name; the one focused, else the latest, if not given.
+#' Optional; a string.
+#' @param curves The ROC and precision-recall curves' points and bands too, and the likelihood
+#' ratio curve and each variant's ratio. Optional; TRUE or FALSE (Python: True or False).
+#' @param error rule error: the share of either side's controls allowed in the other side's
+#' class (0.05 if not given). Optional; a number.
+#' @param name The calibration's name; the run's and the set's if not given. Optional; a
+#' string.
+#' @param normal rule given: the normal threshold (a score short of it is WT-like); the
+#' abnormal threshold again for one threshold. Optional; a number.
+#' @param pejaver The likelihood ratios' evidence thresholds of Pejaver et al. 2022's Table 1
+#' instead (prior 0.0441, c = 1,124). Optional; TRUE or FALSE (Python: True or False).
+#' @param prior The prior of pathogenicity the likelihood ratios' evidence thresholds come from
+#' (0.1 if not given: c = 350, as acmgscaler's search finds it). Optional; a number.
+#' @param published A published calibration of the run's MaveDB record, by its title: its
+#' abnormal and normal ranges as the thresholds (for a run of the record's own scores),
+#' MaveScape's OddsPath on the control set beside the one it states. Optional; a string.
+#' @param rule How the thresholds are set: error (the default), youden or given. Optional; a
+#' string.
+#' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
+#' given. Optional; a string.
+#' @param samples The bootstrap's samples (2000 if not given; 0: no bootstrap). Optional; a
+#' whole number.
+#' @param seed The bootstrap's seed (20261009 if not given). Optional; a whole number.
+#' @param side Where abnormal-like scores are: below or above the others; auto (the default):
+#' the design's readout's side for less function when it is stated, else the side of the P
+#' controls' median. Optional; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_calibrate <- function(abnormal = NULL, condition = NULL, control_set = NULL, curves = NULL, error = NULL, name = NULL, normal = NULL, pejaver = NULL, prior = NULL, published = NULL, rule = NULL, run = NULL, samples = NULL, seed = NULL, side = NULL, ms = ms_default()) {
+  ms_call("calibrate", abnormal = abnormal, condition = condition, control_set = control_set, curves = curves, error = error, name = name, normal = normal, pejaver = pejaver, prior = prior, published = published, rule = rule, run = run, samples = samples, seed = seed, side = side, ms = ms)
+}
+
+#' The calibrations
+#'
+#' The workspace's calibrations (research use): each one's run, control set, side, rule,
+#' thresholds and bootstrap; its AUC and precision-recall area with their intervals, the
+#' controls and the run's variants in each class, sensitivity and specificity with Wilson's
+#' intervals, and how far the bootstrap moves the thresholds, each class's OddsPath and
+#' evidence strength (research use) with what limits it, and the score-level likelihood ratios
+#' (where each strength begins, the variants at each). With curves, the ROC and
+#' precision-recall curves' points and bands, the likelihood ratio curve and each variant's
+#' ratio.
+#'
+#' @param curves The curves' points and bands too. Optional; TRUE or FALSE (Python: True or
+#' False).
+#' @param name A calibration by name: only that one. Optional; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_calibrations <- function(curves = NULL, name = NULL, ms = ms_default()) {
+  ms_call("calibrations", curves = curves, name = name, ms = ms)
+}
+
+#' Delete a calibration
+#'
+#' Deletes a calibration (undoable, in the history).
+#'
+#' @param name The calibration's name. Required; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_remove_calibration <- function(name, ms = ms_default()) {
+  ms_call("remove_calibration", name = name, ms = ms)
+}
+
 #' The workspace's figures
 #'
 #' The workspace's figures: each one's name, page (millimeters, and the text size in points),
@@ -916,13 +1088,17 @@ ms_create_figure <- function(height_mm = NULL, name = NULL, size = NULL, text = 
 #' disagreement by position, a predictor's classes, or a map of either side or of the
 #' difference); a variant's evidence (its score and each replicate's with their intervals, its
 #' time course, or its distribution over the bins); a saved structure view (its figure panel,
-#' drawn at 4x on white and kept with the figure); or text. Placed below the panels already
-#' there unless placed; shown in the Figures view. Returns the panel's id and letter, and what
-#' it shows.
+#' drawn at 4x on white and kept with the figure); a calibration's plot, for research (each
+#' side's scores against the run's with the classes, the ROC or precision–recall curve with its
+#' bootstrap band and thresholds, or the likelihood ratio of a score with the evidence
+#' thresholds); or text. Placed below the panels already there unless placed; shown in the
+#' Figures view. Returns the panel's id and letter, and what it shows.
 #'
 #' @param a compare: the first side, as compare takes it; the pair compared last if not given.
 #' Optional; a string.
 #' @param b compare: the second side. Optional; a string.
+#' @param calibration calibration: the calibration, by name; the latest if not given. Optional;
+#' a string.
 #' @param color_by score (the default), se, replicates or input. Optional; a string.
 #' @param condition A condition by name or number (from 1), when the design has more than one;
 #' the first if not given. Optional; a string.
@@ -932,14 +1108,15 @@ ms_create_figure <- function(height_mm = NULL, name = NULL, size = NULL, text = 
 #' @param finding qc: the finding, by id (qc_findings lists them) or title. Optional; a string.
 #' @param from The first position shown (the target's numbering). Optional; a whole number.
 #' @param height_mm Its height. Optional; a number.
-#' @param kind map (the default), qc, scores, compare, variant, structure or text. Optional; a
-#' string.
+#' @param kind map (the default), qc, scores, compare, variant, structure, calibration or text.
+#' Optional; a string.
 #' @param pair qc, replicate agreement: the pair of replicates drawn, from 1. Optional; a whole
 #' number.
 #' @param palette rdbu or puor. Optional; a string.
 #' @param plot What a scores panel shows (distribution, flow, volcano), a compare panel
-#' (agreement, bland-altman, positions, classes, map-first, map-second, map-difference) or a
-#' variant panel (evidence, time-course, bins). Optional; a string.
+#' (agreement, bland-altman, positions, classes, map-first, map-second, map-difference), a
+#' variant panel (evidence, time-course, bins) or a calibration panel (distribution, roc, pr,
+#' likelihood). Optional; a string.
 #' @param rows The order of the substitutions: biochemical, hydrophobicity or alphabetical.
 #' Optional; a string.
 #' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
@@ -962,8 +1139,8 @@ ms_create_figure <- function(height_mm = NULL, name = NULL, size = NULL, text = 
 #' @param ms A connection from ms_connect() (default: the last one made).
 #' @return A mavescape_result: the message and the data MaveScape answered with.
 #' @export
-ms_add_figure_panel <- function(a = NULL, b = NULL, color_by = NULL, condition = NULL, contrast = NULL, figure = NULL, finding = NULL, from = NULL, height_mm = NULL, kind = NULL, pair = NULL, palette = NULL, plot = NULL, rows = NULL, run = NULL, scale = NULL, subject = NULL, text = NULL, to = NULL, tracks = NULL, variant = NULL, view = NULL, width_mm = NULL, x_mm = NULL, y_mm = NULL, ms = ms_default()) {
-  ms_call("add_figure_panel", a = a, b = b, color_by = color_by, condition = condition, contrast = contrast, figure = figure, finding = finding, from = from, height_mm = height_mm, kind = kind, pair = pair, palette = palette, plot = plot, rows = rows, run = run, scale = scale, subject = subject, text = text, to = to, tracks = .ms_array(tracks), variant = variant, view = view, width_mm = width_mm, x_mm = x_mm, y_mm = y_mm, ms = ms)
+ms_add_figure_panel <- function(a = NULL, b = NULL, calibration = NULL, color_by = NULL, condition = NULL, contrast = NULL, figure = NULL, finding = NULL, from = NULL, height_mm = NULL, kind = NULL, pair = NULL, palette = NULL, plot = NULL, rows = NULL, run = NULL, scale = NULL, subject = NULL, text = NULL, to = NULL, tracks = NULL, variant = NULL, view = NULL, width_mm = NULL, x_mm = NULL, y_mm = NULL, ms = ms_default()) {
+  ms_call("add_figure_panel", a = a, b = b, calibration = calibration, color_by = color_by, condition = condition, contrast = contrast, figure = figure, finding = finding, from = from, height_mm = height_mm, kind = kind, pair = pair, palette = palette, plot = plot, rows = rows, run = run, scale = scale, subject = subject, text = text, to = to, tracks = .ms_array(tracks), variant = variant, view = view, width_mm = width_mm, x_mm = x_mm, y_mm = y_mm, ms = ms)
 }
 
 #' Change or delete a figure

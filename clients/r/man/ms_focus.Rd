@@ -6,7 +6,7 @@
 ms_focus(kind = NULL, name = NULL, run = NULL, ms = ms_default())
 }
 \arguments{
-\item{kind}{table, target, run, selection, structure view or variant; found by name across all of them if not given. Optional; a string.}
+\item{kind}{table, target, run, selection, structure view, control set, calibration or variant; found by name across all of them if not given. Optional; a string.}
 \item{name}{Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala). Optional; a string.}
 \item{run}{A score run by name ("Run 2") or id; the latest run of the current design if not given. Optional; a string.}
 \item{ms}{A connection from \code{\link{ms_connect}} (default: the last one made).}
@@ -15,6 +15,6 @@ ms_focus(kind = NULL, name = NULL, run = NULL, ms = ms_default())
 A \code{mavescape_result}: the \code{message} and the \code{data} MaveScape answered with.
 }
 \description{
-Shows an item in the inspector: a table, target, score run, saved selection, saved structure view or variant, by name. With no name, clears the focus.
+Shows an item in the inspector: a table, target, score run, saved selection, saved structure view, control set, calibration or variant, by name. With no name, clears the focus.
 }
 \seealso{\code{\link{ms_call}}, which sends any action by its name (here \code{"focus"}).}

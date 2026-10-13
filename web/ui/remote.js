@@ -25,7 +25,7 @@ import { mapSVG } from '../lib/map-svg.js';
 import { flagNames, REPLICATE_STATE_NAMES, STAGE_BY_CODE } from '../lib/filters.js';
 import { DIFFERENTIAL_REASON_NAMES } from '../lib/differential.js';
 import { KIND_NAMES } from '../lib/variants.js';
-import { openExample } from './examples.js';
+import { exampleLabelControls, openExample } from './examples.js';
 import { readCodonsFor } from './import.js';
 import { draftFromColumns } from './design-draft.js';
 import { ensureResults, forgetResults } from './run-results.js';
@@ -77,6 +77,13 @@ import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
 import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
+import { KINDS as CONTROL_KINDS, SIDES, composition as controlComposition, controlSetWords } from '../lib/controls.js';
+import { controlsForRun, deleteControlSet, makeClinVarControls, makeTableControls } from './controls.js';
+import { calibrationReport, deleteCalibration, likelihoodReport, makeCalibration, publishedCalibrationsOf, variantClasses } from './calibration.js';
+import { likelihoodWords } from '../lib/likelihood.js';
+import { exp as dexp } from '../lib/dmath.js';
+import { RULES as CALIBRATION_RULES, calibrationWords, evidenceLimitations, percentText, publishedEvidence, ruleWords } from '../lib/calibration.js';
+import { strengthWords } from '../lib/oddspath.js';
 
 export class ActionError extends Error {}
 
@@ -85,7 +92,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const ONE_TO_THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter', X: 'Ter' };
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure', figures: 'figures', figure: 'figures', report: 'report', methods: 'report' };
+const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure', calibrate: 'calibrate', calibration: 'calibrate', figures: 'figures', figure: 'figures', report: 'report', methods: 'report' };
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -352,6 +359,18 @@ export function installRemote(app) {
       if (!qcCharts(finding.plot, entry.qc, withDefaultThresholds(ws().qc?.thresholds)).charts.length) throw new ActionError(`The finding "${finding.title}" has no chart (it is a table, or there is nothing to draw).`);
       return { kind, subject: sub.run ? sub.run.id : 'counts', finding: finding.id, findingTitle: finding.title, ...(finding.plot === 'agreement' ? { pair: Math.max(0, Math.round(Number(args.pair ?? 1)) - 1) } : {}), h: 170 };
     }
+    if (kind === 'calibration') {
+      // Wave 8, slice 5: a calibration's plot, for research.
+      const all = ws().calibrations ?? [];
+      if (!all.length) throw new ActionError('There is no calibration to draw: make one with calibrate.');
+      const cal = args.calibration ? all.find((c) => c.name === choose(String(args.calibration), all.map((x) => x.name), 'calibration')) : all.at(-1);
+      const plot = plotOf('distribution');
+      if (plot === 'likelihood') {
+        const lr = await likelihoodReport(app, cal);
+        if (lr.problem) throw new ActionError(`"${cal.name}" has no likelihood ratios to draw: ${lr.problem}`);
+      }
+      return { kind, calibration: cal.id, plot, ...(plot === 'roc' || plot === 'pr' ? { w: 240, h: 220 } : { h: plot === 'likelihood' ? 170 : 150 }) };
+    }
     if (kind === 'scores') {
       const run = resolveRun(args.run);
       const { results } = await resultsOf(run);
@@ -589,6 +608,101 @@ export function installRemote(app) {
     for (let i = 0; i < 300 && viewer.surface.kind !== 'off' && viewer.kind === 'webgpu' && !viewer.surface.ready && !/could not/.test(viewer.surface.status); i += 1) await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
+  // A control set as data (wave 8, slice 1): where it came from, its composition, what was left
+  // out; matched to a run, what it measured and what may make the labels circular; with labels,
+  // each control and its state and score in the run.
+  async function controlSetData(set, run, withLabels) {
+    const c = controlComposition(set);
+    const report = run ? await controlsForRun(app, set, run) : null;
+    const score = report?.match.view.conditions[0]?.score;
+    return {
+      id: set.id, name: set.name, created: set.created, source: set.source, rules: set.rules,
+      ...Object.fromEntries(SIDES.map((side) => [side, { controls: c[side].total, labels: c[side].labels, ...(set.source.kind === 'clinvar' ? { stars: c[side].stars } : {}), kinds: c[side].kinds }])),
+      excluded: set.excluded ?? {}, notes: set.notes ?? [],
+      ...(set.proposed ? { proposed: { by: set.proposed.by, accepted: Boolean(set.proposed.accepted) } } : {}),
+      ...(report ? { run: run.name, measured: report.match.counts, circularity: report.warnings.map((w) => ({ id: w.id, n: w.n, text: w.text })) } : {}),
+      ...(withLabels ? { labels: set.labels.map((l, k) => ({ variant: l.key, side: l.side, label: l.label, kind: l.kind, ids: l.ids, ...(Number.isInteger(l.stars) ? { stars: l.stars } : {}), ...(l.evaluated ? { evaluated: l.evaluated } : {}), ...(report ? { state: report.match.states[k], score: report.match.rows[k] >= 0 && Number.isFinite(score?.[report.match.rows[k]]) ? score[report.match.rows[k]] : null } : {}) })) } : {}),
+    };
+  }
+
+  // The likelihood ratios in a sentence: where the strongest pathogenic and benign strengths begin.
+  const likelihoodSentence = (x) => {
+    if (x.problem) return `No score-level likelihood ratios: ${x.problem}`;
+    const reached = x.thresholds.filter((t) => t.score !== null);
+    // A pathogenic strength holds beyond its score toward the pathogenic end, a benign one toward
+    // the other.
+    const words = (t) => {
+      const benign = t.boundary.startsWith('Benign');
+      return `${t.boundary.split('|')[benign ? 0 : 1]} ${benign === x.inverse ? 'above' : 'below'} ${t.score.toPrecision(3)}`;
+    };
+    const p = reached.filter((t) => !t.boundary.startsWith('Benign')).at(-1);
+    const b = reached.filter((t) => t.boundary.startsWith('Benign'))[0];
+    return `Score-level likelihood ratios (acmgscaler; ${likelihoodWords(x)}): ${[p && words(p), b && words(b)].filter(Boolean).join('; ') || 'no strength reached'} (data.likelihood).`;
+  };
+
+  // Each class's OddsPath and strength in words.
+  const evidenceWords = (m) => ['abnormal', 'normal'].map((w) => {
+    const x = m.evidence[w];
+    return `${x.class} ${x.oddsPath === null ? 'none (no control in the class)' : `${x.oddsPath.toPrecision(3)}, ${strengthWords(x.strength)}`}`;
+  }).join('; ');
+
+  // A calibration's score-level likelihood ratios as data (slice 4): the settings, where each
+  // strength begins, the variants at each strength; with curves, the curve and each variant's ratio.
+  async function likelihoodData(cal, withCurves) {
+    const lr = await likelihoodReport(app, cal);
+    const settings = { from: lr.settings.from, prior: lr.settings.prior, c: lr.settings.c, seed: cal.bootstrap.seed, method: 'acmgscaler 1.0.0 (Badonyi 2025), ported' };
+    if (lr.problem) return { ...settings, problem: lr.problem };
+    const res = lr.result;
+    return {
+      ...settings,
+      inverse: res.curve.inverse,
+      thresholds: res.thresholds.map((t) => ({ boundary: t.boundary, lr: t.lr, score: t.score, lower: t.lower, upper: t.upper })),
+      counts: lr.counts,
+      ...(withCurves ? {
+        curve: { score: Array.from(res.curve.grid), lr: Array.from(res.curve.llr, (v) => dexp(v)), lower: Array.from(res.curve.lo, (v) => dexp(v)), upper: Array.from(res.curve.hi, (v) => dexp(v)) },
+        variants: lr.rows.map((row, i) => ({ variant: row.key, score: row.score, class: row.class, lr: res.rows[i].lr, lower: res.rows[i].lrLower, upper: res.rows[i].lrUpper, evidence: res.rows[i].evidence })),
+      } : {}),
+    };
+  }
+
+  // A calibration as data (wave 8, slice 2): what it was made with and its metrics; with curves,
+  // the ROC and precision–recall curves' points and the bootstrap's bands.
+  async function calibrationData(cal, withCurves) {
+    const r = await calibrationReport(app, cal);
+    const m = r.metrics;
+    const classes = variantClasses(r.scored.view, cal.condition ?? 0, cal.side, cal.thresholds);
+    const counts = (c) => ({ 'abnormal-like': c['abnormal-like'], intermediate: c.intermediate, 'WT-like': c['WT-like'] });
+    const share = (w) => ({ x: w.x, n: w.n, p: w.p, low: w.low, high: w.high });
+    const finite = (v) => (Number.isFinite(v) ? v : null);
+    return {
+      id: cal.id, name: cal.name, created: cal.created, run: r.run.name, controlSet: r.set.name, ...(r.scored.condition ? { condition: r.scored.condition } : {}),
+      side: cal.side, sideFrom: cal.sideFrom, rule: cal.rule, ...(cal.rule === 'error' ? { error: cal.error } : {}), thresholds: cal.thresholds, bootstrap: cal.bootstrap, scored: cal.n,
+      ...(cal.proposed ? { proposed: { by: cal.proposed.by, accepted: Boolean(cal.proposed.accepted) } } : {}),
+      auc: { auc: m.auc.auc, low: m.auc.low, high: m.auc.high, method: 'DeLong', ...(m.auc.boot ? { bootstrap: { low: m.auc.boot.low, median: m.auc.boot.median, high: m.auc.boot.high } } : {}) },
+      precisionRecall: { auc: m.pr.auc, chance: m.pr.baseline, ...(m.pr.boot ? { bootstrap: { low: m.pr.boot.low, median: m.pr.boot.median, high: m.pr.boot.high } } : {}) },
+      classes: { P: counts(m.classes.P), B: counts(m.classes.B), missense: counts(classes.missense), all: counts(classes.all) },
+      sensitivity: share(m.sensitivity), specificity: share(m.specificity), pCalledWtLike: share(m.misses.P), bCalledAbnormalLike: share(m.misses.B),
+      noIntermediateZone: m.thresholds.abnormal === m.thresholds.normal,
+      ...(m.thresholds.stability ? { stability: m.thresholds.stability } : {}),
+      // Evidence strength, for research (slice 3): each class's OddsPath (Brnich et al. 2019).
+      evidence: Object.fromEntries(['abnormal', 'normal'].map((which) => {
+        const x = m.evidence[which];
+        return [which, { class: x.class, P: x.P, B: x.B, prior: x.prior, posterior: x.posterior, oddsPath: x.oddsPath, observed: x.observed, strength: x.strength?.code ?? null, contrary: x.contrary, ...(x.boot ? { bootstrap: { low: x.boot.low, median: x.boot.median, high: x.boot.high, noControl: x.boot.empty, strengths: x.boot.strengths } } : {}) }];
+      })),
+      limitations: evidenceLimitations({ rule: cal.rule, metrics: m, warnings: (await controlsForRun(app, r.set, r.run)).warnings, where: r.where }).map((l) => ({ id: l.id, text: l.text })),
+      // Score-level likelihood ratios, for research (slice 4): acmgscaler's.
+      likelihood: await likelihoodData(cal, withCurves),
+      // The published calibration whose thresholds these are, and what it states of its classes.
+      ...(cal.published ? { published: { ...cal.published, states: publishedEvidence(publishedCalibrationsOf(ws(), r.run).find((x) => x.calibration.title === cal.published.title)?.calibration ?? { classes: [] }) } } : {}),
+      ...(r.where.against ? { against: { medianP: r.where.against.P, medianB: r.where.against.B } } : {}),
+      ...(r.differs ? { differs: m.thresholds } : {}),
+      ...(withCurves ? {
+        roc: { points: m.roc.points.map((p) => ({ threshold: finite(p.threshold), sensitivity: p.sensitivity, specificity: p.specificity })), band: m.roc.band },
+        prCurve: { points: m.pr.points.filter((p) => !p.between).map((p) => ({ recall: p.recall, precision: p.precision, threshold: p.threshold })), band: m.pr.band },
+      } : {}),
+    };
+  }
+
   const actions = {
     async get_state() {
       const w = ws();
@@ -612,6 +726,10 @@ export function installRemote(app) {
         // The structures kept and their saved views (wave 5, slice 5).
         structures: (w.structures ?? []).map((x) => ({ id: x.id, name: x.name, origin: x.origin?.kind ?? null, file: x.file.fileName, sha256: x.file.sha256, ...(x.pae ? { alignedError: x.pae.sha256 } : {}) })),
         structureViews: (w.structureViews ?? []).map((v) => ({ id: v.id, name: v.name, structure: v.structure, chain: v.chain, shows: viewWords(v, w), created: v.created })),
+        // Control sets, for calibration (wave 8, slice 1).
+        controlSets: (w.controlSets ?? []).map((c) => ({ name: c.name, source: c.source.kind, P: c.labels.filter((l) => l.side === 'P').length, B: c.labels.filter((l) => l.side === 'B').length, created: c.created })),
+        // Calibrations (wave 8, slice 2).
+        calibrations: (w.calibrations ?? []).map((c) => ({ name: c.name, run: w.runs.find((r) => r.id === c.run)?.name ?? c.run, controlSet: (w.controlSets ?? []).find((x) => x.id === c.controlSet)?.name ?? c.controlSet, P: c.n.P, B: c.n.B, created: c.created })),
       };
       const message = `${w.name}: ${plural(w.sources.length, 'table')}, ${plural(w.runs.length, 'score run')}${w.design ? `, a ${w.design.model} design` : ', no design'}; showing ${data.mode}.${next ? ` ${next.state === 'optional' ? 'All done' : 'Next'}: ${next.detail}` : ''}`;
       return { message, data };
@@ -929,6 +1047,125 @@ export function installRemote(app) {
       return { message: held ? `Proposed removing the view "${name}".${waits}` : removed.message, data: { removed: name, ...(held ? { waiting: true } : {}), views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
     },
 
+    // --- Control sets (wave 8, slice 1) ---------------------------------------------------------
+
+    // A control set from ClinVar's records of the gene (the ClinVar track's) or a table of labels,
+    // kept with the workspace and shown in Calibrate. An agent's is made at once, marked proposed.
+    async make_control_set(args) {
+      const run = ws().runs.length ? resolveRun(args.run) : null;
+      const from = choose(args.source ?? 'clinvar', ['clinvar', 'table', 'example'], 'source');
+      const kinds = args.kinds === undefined || args.kinds === null ? undefined : (Array.isArray(args.kinds) ? args.kinds : [args.kinds]).map((k) => choose(k, CONTROL_KINDS, 'kind'));
+      if (kinds && !kinds.length) throw new ActionError(`kinds names at least one of ${CONTROL_KINDS.join(', ')}.`);
+      const evaluatedBefore = args.evaluated_before ?? null;
+      let made;
+      if (from === 'clinvar') {
+        const minStars = args.min_stars === undefined || args.min_stars === null ? 1 : Number(args.min_stars);
+        if (!Number.isInteger(minStars) || minStars < 0 || minStars > 4) throw new ActionError('min_stars is a whole number from 0 to 4.');
+        try {
+          made = await makeClinVarControls(app, { name: args.name ?? null, minStars, kinds: kinds ?? ['missense'], evaluatedBefore, run });
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+      } else if (from === 'example') {
+        // The open example's own labels (the simulated calibration's; wave 8, slice 6).
+        try {
+          made = exampleLabelControls(app, { evaluatedBefore, name: args.name ?? null });
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+      } else {
+        if (!args.file_name || args.text === undefined || args.text === null) throw new ActionError('A table is given by its file_name and text.');
+        const numbering = args.numbering ? choose(args.numbering, ['reference', 'target'], 'numbering') : null;
+        try {
+          made = makeTableControls(app, { name: args.name ?? null, fileName: String(args.file_name), text: String(args.text), citation: args.citation ?? null, numbering, kinds, evaluatedBefore, run });
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+      }
+      app.focusItem({ kind: 'controls', id: made.id });
+      await app.setMode('calibrate');
+      await settle();
+      const set = (ws().controlSets ?? []).find((c) => c.id === made.id);
+      const left = Object.entries(made.read.excluded).sort((a, b) => b[1] - a[1]).map(([why, n]) => `${n} ${why}`);
+      return { message: `Made the control set ${controlSetWords(set)}.${left.length ? ` Left out: ${left.join('; ')}.` : ''}${(made.read.notes ?? []).length ? ` ${made.read.notes.join(' ')}` : ''}`, data: await controlSetData(set, run, false) };
+    },
+
+    // The control sets, each matched to a run: its composition, what the run measured of it, and
+    // what may make its labels circular; with labels, each control.
+    async control_sets(args) {
+      const all = ws().controlSets ?? [];
+      const list = args.name ? [all.find((c) => c.name === choose(String(args.name), all.map((x) => x.name), 'control set'))] : all;
+      const run = ws().runs.length ? resolveRun(args.run) : null;
+      const sets = [];
+      for (const set of list) sets.push(await controlSetData(set, run, args.labels === true));
+      const said = sets.map((x) => `${controlSetWords(list.find((c) => c.id === x.id))}${x.measured ? `; ${x.run} scores ${x.measured.P.scored} P and ${x.measured.B.scored} B${x.circularity.length ? `; ${x.circularity.length === 1 ? 'one thing' : `${x.circularity.length} things`} may make it circular: ${x.circularity.map((w) => w.text).join(' ')}` : ''}` : ''}`.replace(/\.?$/, '.'));
+      return { message: list.length ? `${list.length === 1 ? '' : `${list.length} control sets. `}${said.join(' ')}` : 'No control set yet: make one from ClinVar (make_control_set, after add_track clinvar) or from a table of labels.', data: { sets } };
+    },
+
+    async remove_control_set(args) {
+      const list = ws().controlSets ?? [];
+      if (!list.length) throw new ActionError('The workspace has no control set.');
+      const name = choose(String(args.name ?? ''), list.map((c) => c.name), 'control set');
+      const set = list.find((c) => c.name === name);
+      const held = removing(set, 'controlSets', `the control set "${name}"`, `Deleted the control set "${name}"`, () => deleteControlSet(app, set.id), `Propose deleting the control set "${name}"`);
+      await settle();
+      return { message: held ? `Proposed deleting the control set "${name}".${waits}` : `Deleted the control set "${name}".`, data: { removed: name, ...(held ? { waiting: true } : {}), sets: (ws().controlSets ?? []).map((c) => c.name) } };
+    },
+
+    // --- Calibrations (wave 8, slice 2) ---------------------------------------------------------
+
+    // A run's scores against a control set, when asked: the separation of the sides (ROC and
+    // precision–recall, with intervals), thresholds and the classes they make, and how far a
+    // bootstrap moves them. Kept with the workspace; an agent's is made at once, marked proposed.
+    async calibrate(args) {
+      const sets = ws().controlSets ?? [];
+      if (!sets.length) throw new ActionError('No control set yet: make one first (make_control_set).');
+      const focus = app.store.ui.focus;
+      const setName = args.control_set ? choose(String(args.control_set), sets.map((c) => c.name), 'control set') : null;
+      const set = setName ? sets.find((c) => c.name === setName) : (focus?.kind === 'controls' && sets.find((c) => c.id === focus.id)) || sets.at(-1);
+      const run = resolveRun(args.run);
+      if (args.rule !== undefined && args.rule !== null) choose(String(args.rule), CALIBRATION_RULES, 'rule');
+      if (args.side !== undefined && args.side !== null) choose(String(args.side), ['auto', 'below', 'above'], 'side');
+      let made;
+      try {
+        const published = args.published ? choose(String(args.published), publishedCalibrationsOf(ws(), run).map((c) => c.calibration.title), 'published calibration') : null;
+        made = await makeCalibration(app, { set, run, name: args.name ?? null, published, side: args.side ?? 'auto', rule: args.rule ?? undefined, error: args.error, abnormal: args.abnormal, normal: args.normal, samples: args.samples, seed: args.seed, condition: args.condition, prior: args.prior, pejaver: args.pejaver === true });
+      } catch (error) {
+        throw new ActionError(error.message);
+      }
+      app.focusItem({ kind: 'calibration', id: made.id });
+      await app.setMode('calibrate');
+      await settle();
+      const cal = (ws().calibrations ?? []).find((c) => c.id === made.id);
+      const data = await calibrationData(cal, args.curves === true);
+      const m = made.metrics;
+      const warn = made.where.against ? ` The P controls' median (${m.distributions.P.median.toPrecision(3)}) is on the other side of the B controls' (${m.distributions.B.median.toPrecision(3)}): the side may be the other way (side: ${cal.side === 'below' ? 'above' : 'below'}).` : '';
+      return {
+        message: `Calibrated ${calibrationWords(cal, { set, run, metrics: m })}. Sensitivity (P abnormal-like) ${percentText(m.sensitivity.p)}, specificity (B WT-like) ${percentText(m.specificity.p)}; thresholds: ${cal.published ? `those of "${cal.published.title}", published with ${cal.published.urn}` : ruleWords(cal.rule, cal.error)}. Evidence strength, for research (OddsPath, Brnich et al. 2019): ${evidenceWords(m)}. ${likelihoodSentence(data.likelihood)}${warn} ${data.limitations.length ? `Limitations: ${data.limitations.length} (data.limitations). ` : ''}For research: functional classes in this assay and the evidence they would give, not a classification of any variant.`,
+        data,
+      };
+    },
+
+    // The calibrations: each with what it was made with and its metrics; with curves, the curves.
+    async calibrations(args) {
+      const all = ws().calibrations ?? [];
+      const list = args.name ? [all.find((c) => c.name === choose(String(args.name), all.map((x) => x.name), 'calibration'))] : all;
+      const items = [];
+      for (const cal of list) items.push(await calibrationData(cal, args.curves === true));
+      const said = items.map((x) => `"${x.name}": ${x.run} against "${x.controlSet}", ${x.scored.P} P and ${x.scored.B} B scored; AUC ${x.auc.auc.toPrecision(3)} (${x.auc.low.toPrecision(3)} to ${x.auc.high.toPrecision(3)}); sensitivity ${percentText(x.sensitivity.p)}, specificity ${percentText(x.specificity.p)}; OddsPath ${['abnormal', 'normal'].map((w) => `${x.evidence[w].class} ${x.evidence[w].oddsPath === null ? 'none' : `${x.evidence[w].oddsPath.toPrecision(3)} (${x.evidence[w].strength})`}`).join(', ')}.`);
+      return { message: list.length ? `${list.length === 1 ? '' : `${list.length} calibrations. `}${said.join(' ')}` : 'No calibration yet: make one with calibrate (after make_control_set).', data: { calibrations: items } };
+    },
+
+    async remove_calibration(args) {
+      const list = ws().calibrations ?? [];
+      if (!list.length) throw new ActionError('The workspace has no calibration.');
+      const name = choose(String(args.name ?? ''), list.map((c) => c.name), 'calibration');
+      const cal = list.find((c) => c.name === name);
+      const held = removing(cal, 'calibrations', `the calibration "${name}"`, `Deleted the calibration "${name}"`, () => deleteCalibration(app, cal.id), `Propose deleting the calibration "${name}"`);
+      await settle();
+      return { message: held ? `Proposed deleting the calibration "${name}".${waits}` : `Deleted the calibration "${name}".`, data: { removed: name, ...(held ? { waiting: true } : {}), calibrations: (ws().calibrations ?? []).map((c) => c.name) } };
+    },
+
     // --- Figures (wave 6, slice 1) -----------------------------------------------------------------
 
     // image: each page as exported, a PNG at dpi (150 by default), for an agent to look at (wave 7,
@@ -1116,9 +1353,9 @@ export function installRemote(app) {
         app.focusItem(null);
         return { message: 'Cleared the focus.' };
       }
-      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant', 'structure view': 'structureView' };
+      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant', 'structure view': 'structureView', 'control set': 'controls', calibration: 'calibration' };
       const kind = args.kind ? kinds[choose(args.kind, Object.keys(kinds), 'kind')] : null;
-      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections, structureView: w.structureViews ?? [] };
+      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections, structureView: w.structureViews ?? [], controls: w.controlSets ?? [], calibration: w.calibrations ?? [] };
       const candidates = Object.entries(lists).filter(([k]) => !kind || k === kind).flatMap(([k, items]) => items.map((item) => ({ kind: k, id: item.id, name: item.name })));
       // A variant by its name, when nothing else is called that.
       const looksLikeVariant = /^p\.[A-Z][a-z]{2}\d+/.test(variantName(args.name)) && !candidates.some((c) => c.name === args.name);
@@ -1127,7 +1364,7 @@ export function installRemote(app) {
       const item = candidates.find((c) => c.name === name);
       app.focusItem({ kind: item.kind, id: item.id });
       await settle();
-      return { message: `Showing ${name} in the inspector.`, data: { kind: item.kind === 'source' ? 'table' : item.kind === 'structureView' ? 'structure view' : item.kind, name } };
+      return { message: `Showing ${name} in the inspector.`, data: { kind: item.kind === 'source' ? 'table' : item.kind === 'structureView' ? 'structure view' : item.kind === 'controls' ? 'control set' : item.kind, name } };
     },
 
     async draft_design(args) {
@@ -1206,9 +1443,10 @@ export function installRemote(app) {
       const left = r.variants.leftOut.reduce((a, x) => a + x.count, 0);
       const message = [
         `A MaveDB deposit of ${run.name}${results.conditions.length > 1 ? ` (${r.condition})` : ''}: ${r.variants.exported} of ${r.variants.of} variants${left ? ` (${left} left out)` : ''}, the target ${r.target.targetAccession ? `named by ${r.target.targetAccession.accession}` : 'given by its sequence'}.`,
+        r.calibrations.length ? `Its calibrations as MaveDB's score calibrations, research use (score_calibrations.json): ${r.calibrations.map((c) => `"${c.name}"`).join(', ')}.` : '',
         r.missing.length ? `MaveDB requires what the workspace lacks: ${r.missing.map((m) => m.text).join(' ')}` : 'Nothing MaveDB requires is missing.',
-      ].join(' ');
-      return { message, data: { run: run.name, condition: r.condition, conditions: results.conditions.map((c) => c.name), mode: r.mode, target: r.target, variants: r.variants, scored: r.scored, columns: r.columns, keywords: r.keywords, missing: r.missing, defaulted: r.defaulted, notes: r.notes, ready: r.ready, details: depositDetails(ws(), run).details } };
+      ].filter(Boolean).join(' ');
+      return { message, data: { run: run.name, condition: r.condition, conditions: results.conditions.map((c) => c.name), mode: r.mode, target: r.target, variants: r.variants, scored: r.scored, columns: r.columns, keywords: r.keywords, calibrations: r.calibrations, missing: r.missing, defaulted: r.defaulted, notes: r.notes, ready: r.ready, details: depositDetails(ws(), run).details } };
     },
 
     // Sets the MaveDB details (ws.deposit): the fields given replace the workspace's (an empty one
@@ -2194,6 +2432,7 @@ export function installRemote(app) {
           summary: diff.summary,
           changes: diff.changes,
           pairs: diff.pairs,
+          calibrations: diff.calibrations,
           words: result.words,
           ...(files.length ? { problems: [...from.problems, ...to.problems] } : {}),
         },
@@ -2438,8 +2677,12 @@ export function installRemote(app) {
 
   let source = null;
   let announced = false;
+  // Only the run of MaveScape this page was opened from takes it as its window: when the
+  // connection drops and another run answers (MaveScape started again, maybe another version or
+  // library), the page stops taking remote control and asks to be reloaded.
+  const session = app.info?.session ?? '';
   const connect = () => {
-    source = new EventSource('api/remote/events');
+    source = new EventSource(`api/remote/events?session=${encodeURIComponent(session)}`);
     source.addEventListener('open', () => {
       if (!announced) app.log('Remote control is on: programs on this computer can drive this window (mavescape --remote-control).');
       announced = true;
@@ -2453,8 +2696,15 @@ export function installRemote(app) {
       }
       perform(event);
     });
-    source.onerror = () => {
+    source.onerror = async () => {
       source.close();
+      const now = await fetch('api/info', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (now?.session && now.session !== session) {
+        const words = `MaveScape was started again (${now.version}): this page no longer takes remote control. Reload it to work with that run.`;
+        app.log(words);
+        toast(words, { kind: 'error', timeout: 0 });
+        return;
+      }
       setTimeout(connect, 2000);
     };
   };

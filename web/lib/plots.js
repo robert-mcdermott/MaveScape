@@ -522,3 +522,255 @@ export function legendMarks(items, frame) {
   }
   return { marks, height: items.length ? y - f.y + line : 0 };
 }
+
+// --- Calibration (wave 8, slice 2) -------------------------------------------------------------------
+
+// The colors of a control set's two sides: the ClinVar track's (theme.P, theme.B where the page
+// gives its own), Okabe and Ito's vermilion and blue.
+export const sideColors = (theme) => ({ P: theme.P ?? '#d55e00', B: theme.B ?? '#0072b2' });
+
+// A control set's scores against the run's: the run's scored variants as a histogram (gray), each
+// side's controls as dots in a row of its own (spread up and down so that they do not hide each
+// other), and, with thresholds, the classes they make: the abnormal-like zone and the intermediate
+// one tinted, each threshold a dashed line. spec: { all (the run's scores), P, B, side ('below' |
+// 'above'), thresholds ({ abnormal, normal } or null), label }.
+export function controlStrips(spec, frame) {
+  const { all = [], P, B, side = 'below', thresholds = null, label = '' } = spec;
+  const f = frameOf(frame);
+  const t = f.text;
+  const k = t / 10;
+  const theme = f.theme;
+  const colors = sideColors(theme);
+  const W = f.width ?? 560;
+  const H = f.height ?? 190 * k;
+  const marks = [];
+  const values = [...all, ...P, ...B].filter(finite);
+  if (values.length < 2) {
+    marks.push({ type: 'text', x: f.x + W / 2, y: f.y + H / 2, text: 'Too few scores to draw.', size: t, fill: theme.muted, anchor: 'middle', baseline: 'middle' });
+    return { marks, width: W, height: H, description: label, legend: [], empty: true };
+  }
+  // The range: the run's middle 99% and every control, with the thresholds.
+  const s = Float64Array.from(all.filter(finite)).sort();
+  const edges = s.length >= 20 ? [s[Math.floor(s.length * 0.005)], s[Math.ceil(s.length * 0.995) - 1]] : [];
+  const tv = thresholds ? [thresholds.abnormal, thresholds.normal].filter(finite) : [];
+  let lo = Math.min(...edges, ...P.filter(finite), ...B.filter(finite), ...tv);
+  let hi = Math.max(...edges, ...P.filter(finite), ...B.filter(finite), ...tv);
+  const m = (hi - lo) * 0.04 || 0.5;
+  lo -= m;
+  hi += m;
+  const names = [['All', `${s.length.toLocaleString('en-US')} variants`], ['B', `${B.length} controls`], ['P', `${P.length} controls`]];
+  const labelW = Math.max(...names.map(([a, b]) => Math.max(textWidth(a, t * 1.1), textWidth(b, t * 0.9))), 0) + 1.2 * t;
+  const area = { left: f.x + labelW, right: f.x + W - 1.2 * t, top: f.y + 1.6 * t, bottom: f.y + H - 3.4 * t };
+  const sx = (v) => area.left + ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * (area.right - area.left);
+  const rowsTop = area.top + (area.bottom - area.top) * 0.42;
+  const rowH = (area.bottom - rowsTop) / 2;
+  // The classes' zones, under everything.
+  if (thresholds) {
+    const a = finite(thresholds.abnormal) ? sx(thresholds.abnormal) : side === 'below' ? area.left : area.right;
+    const n = finite(thresholds.normal) ? sx(thresholds.normal) : side === 'below' ? area.right : area.left;
+    const abnormal = side === 'below' ? [area.left, a] : [a, area.right];
+    const between = side === 'below' ? [a, n] : [n, a];
+    if (abnormal[1] > abnormal[0]) marks.push({ type: 'rect', x: abnormal[0], y: area.top, w: abnormal[1] - abnormal[0], h: area.bottom - area.top, fill: theme.danger, opacity: 0.11, title: 'abnormal-like' });
+    if (between[1] > between[0]) marks.push({ type: 'rect', x: between[0], y: area.top, w: between[1] - between[0], h: area.bottom - area.top, fill: theme.warn, opacity: 0.1, title: 'intermediate' });
+    const zone = (x0, x1, text) => {
+      if (x1 - x0 < textWidth(text, t * 0.9) + 0.4 * t) return;
+      marks.push({ type: 'text', x: (x0 + x1) / 2, y: f.y + 0.9 * t, text, size: t * 0.9, fill: theme.muted, anchor: 'middle' });
+    };
+    zone(abnormal[0], abnormal[1], 'abnormal-like');
+    zone(between[0], between[1], 'intermediate');
+    zone(...(side === 'below' ? [n, area.right] : [area.left, n]), 'WT-like');
+  }
+  marks.push({ type: 'line', x1: area.left, y1: area.bottom, x2: area.right, y2: area.bottom, stroke: theme.axis, width: k });
+  for (const v of ticks(lo, hi)) {
+    if (v < lo || v > hi) continue;
+    marks.push({ type: 'line', x1: sx(v), y1: area.bottom, x2: sx(v), y2: area.bottom + 0.3 * t, stroke: theme.axis, width: k });
+    marks.push({ type: 'text', x: sx(v), y: area.bottom + 1.3 * t, text: tickText(v), size: t, fill: theme.muted, anchor: 'middle' });
+  }
+  marks.push({ type: 'text', x: (area.left + area.right) / 2, y: f.y + H - 0.3 * t, text: 'score', size: t * 1.05, fill: theme.label, anchor: 'middle' });
+  // The run's variants: a histogram over the top of the plot.
+  if (s.length) {
+    const bins = 60;
+    const counts = new Float64Array(bins);
+    for (const v of s) counts[Math.min(bins - 1, Math.max(0, Math.floor(((v - lo) / (hi - lo)) * bins)))] += 1;
+    const top = Math.max(...counts) || 1;
+    const hTop = rowsTop - area.top - 0.4 * t;
+    let d = `M${area.left} ${rowsTop - 0.4 * t}`;
+    for (let b = 0; b < bins; b += 1) {
+      const y = rowsTop - 0.4 * t - (counts[b] / top) * hTop;
+      d += `L${area.left + (b / bins) * (area.right - area.left)} ${y}L${area.left + ((b + 1) / bins) * (area.right - area.left)} ${y}`;
+    }
+    d += `L${area.right} ${rowsTop - 0.4 * t}Z`;
+    marks.push({ type: 'path', d, fill: theme.muted, opacity: 0.35, title: `The run's ${s.length.toLocaleString('en-US')} scored variants` });
+  }
+  // Each side's controls as dots, spread over its row by a fixed sequence (the golden ratio's).
+  const rowOf = (values, row, color, name) => {
+    const y0 = rowsTop + row * rowH;
+    const dots = [];
+    values.forEach((v, i) => {
+      if (!finite(v)) return;
+      const jitter = ((i * 0.6180339887498949) % 1) * 0.7 + 0.15;
+      dots.push({ type: 'circle', x: sx(v), y: y0 + jitter * rowH, r: Math.min(2.6 * k, rowH * 0.12), fill: color, opacity: 0.75 });
+    });
+    marks.push({ type: 'group', label: name, marks: dots });
+  };
+  rowOf(B, 0, colors.B, 'B controls');
+  rowOf(P, 1, colors.P, 'P controls');
+  const rowLabel = (y, a, b, color) => {
+    marks.push({ type: 'text', x: area.left - 0.6 * t, y: y - 0.2 * t, text: a, size: t * 1.1, fill: color, anchor: 'end', bold: true });
+    marks.push({ type: 'text', x: area.left - 0.6 * t, y: y + 1.0 * t, text: b, size: t * 0.9, fill: theme.muted, anchor: 'end' });
+  };
+  if (s.length) rowLabel(area.top + (rowsTop - area.top) / 2, ...names[0], theme.label);
+  rowLabel(rowsTop + rowH / 2, ...names[1], colors.B);
+  rowLabel(rowsTop + 1.5 * rowH, ...names[2], colors.P);
+  if (thresholds) {
+    for (const v of tv) marks.push({ type: 'line', x1: sx(v), y1: area.top, x2: sx(v), y2: area.bottom, stroke: theme.text, width: 1.5 * k, dash: [4 * k, 3 * k] });
+  }
+  const legend = [{ label: `P controls (${P.length})`, color: colors.P }, { label: `B controls (${B.length})`, color: colors.B }, ...(s.length ? [{ label: `the run's variants (${s.length.toLocaleString('en-US')})`, color: theme.muted }] : []), ...(thresholds ? [{ label: 'thresholds', color: theme.text, dash: true }] : [])];
+  return { marks, width: W, height: H, description: label, legend, range: [lo, hi] };
+}
+
+// A square plot of 0–1 on both axes, for the ROC and precision–recall curves: a band ([[x, low,
+// high]]), a curve ([[x, y]]), points marked ([{ x, y, label }]) and reference lines.
+function unitCurve(spec, f, { xLabel, yLabel, reference }) {
+  const { curve, band = null, points = [], color = null, label = '' } = spec;
+  const t = f.text;
+  const k = t / 10;
+  const theme = f.theme;
+  const W = f.width ?? 300;
+  const H = f.height ?? 280 * k;
+  const marks = [];
+  const area = { left: f.x + 4.6 * t, right: f.x + W - 1.2 * t, top: f.y + 0.8 * t, bottom: f.y + H - 3.4 * t };
+  const unit = [0, 0.25, 0.5, 0.75, 1];
+  const { sx, sy } = axes(marks, area, { x: { lo: 0, hi: 1, ticks: unit }, y: { lo: 0, hi: 1, ticks: unit }, xLabel, yLabel, t, theme, frame: { ...f, width: W, height: H } });
+  const c = color ?? theme.accent;
+  reference(marks, sx, sy, k);
+  const ok = band?.filter((b) => finite(b[1]) && finite(b[2])) ?? [];
+  if (ok.length > 1) {
+    const up = ok.map((b) => `${sx(b[0])} ${sy(b[2])}`);
+    const down = ok.slice().reverse().map((b) => `${sx(b[0])} ${sy(b[1])}`);
+    marks.push({ type: 'path', d: `M${up.join('L')}L${down.join('L')}Z`, fill: c, opacity: 0.16, title: 'the bootstrap\'s 95% band' });
+  }
+  const pts = curve.filter((p) => finite(p[0]) && finite(p[1]));
+  if (pts.length > 1) marks.push({ type: 'path', d: pts.map(([x, y], i) => `${i ? 'L' : 'M'}${sx(x)} ${sy(y)}`).join(''), fill: 'none', stroke: c, width: 2 * k, title: label });
+  for (const p of points) {
+    if (!finite(p.x) || !finite(p.y)) continue;
+    marks.push({ type: 'circle', x: sx(p.x), y: sy(p.y), r: 3.5 * k, fill: theme.background, stroke: theme.text, width: 1.5 * k, title: p.label });
+    // Its label beside it, below where it is near the top, on a patch of the background so that
+    // the curve and the band do not run through it.
+    if (!p.label) continue;
+    const below = p.below || p.y > 0.9;
+    const size = t * 0.9;
+    const w = textWidth(p.label, size);
+    const x = sx(p.x) + (p.x > 0.6 ? -0.7 * t : 0.7 * t);
+    const y = sy(p.y) + (below ? 1.4 * t : -0.6 * t);
+    marks.push({ type: 'rect', x: (p.x > 0.6 ? x - w : x) - 0.2 * t, y: y - 0.95 * size, w: w + 0.4 * t, h: 1.25 * size, fill: theme.background, opacity: 0.85 });
+    marks.push({ type: 'text', x, y, text: p.label, size, fill: theme.text, anchor: p.x > 0.6 ? 'end' : 'start' });
+  }
+  return { marks, width: W, height: H, description: label };
+}
+
+// The ROC curve: sensitivity against 1 − specificity, with the line of chance and the bootstrap's
+// band of sensitivity at each specificity. spec: { points: [{ sensitivity, specificity }], band:
+// [{ specificity, low, high }] | null, marks: [{ sensitivity, specificity, label }], label }.
+export function rocChart(spec, frame) {
+  const f = frameOf(frame);
+  const curve = spec.points.map((p) => [1 - p.specificity, p.sensitivity]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  return unitCurve({
+    curve, band: spec.band ? spec.band.map((b) => [1 - b.specificity, b.low, b.high]).sort((a, b) => a[0] - b[0]) : null,
+    points: (spec.marks ?? []).map((m) => ({ x: 1 - m.specificity, y: m.sensitivity, label: m.label, below: m.below })), label: spec.label,
+  }, f, {
+    xLabel: '1 − specificity (B controls called abnormal-like)', yLabel: 'sensitivity (P called)',
+    reference: (marks, sx, sy, k) => marks.push({ type: 'line', x1: sx(0), y1: sy(0), x2: sx(1), y2: sy(1), stroke: f.theme.muted, width: k, dash: [4 * k, 3 * k] }),
+  });
+}
+
+// The precision–recall curve, with the precision of chance (the P controls' share, a dashed line)
+// and the bootstrap's band of precision at each recall. spec: { points: [{ recall, precision }],
+// band: [{ recall, low, high }] | null, baseline, marks: [{ recall, precision, label }], label }.
+export function prChart(spec, frame) {
+  const f = frameOf(frame);
+  return unitCurve({
+    curve: spec.points.map((p) => [p.recall, p.precision]),
+    band: spec.band ? [[0, Number.NaN, Number.NaN], ...spec.band.map((b) => [b.recall, b.low, b.high])] : null,
+    points: (spec.marks ?? []).map((m) => ({ x: m.recall, y: m.precision, label: m.label, below: m.below })), label: spec.label,
+  }, f, {
+    xLabel: 'recall (P controls called)', yLabel: 'precision (among these controls)',
+    reference: (marks, sx, sy, k) => {
+      if (finite(spec.baseline)) marks.push({ type: 'line', x1: sx(0), y1: sy(spec.baseline), x2: sx(1), y2: sy(spec.baseline), stroke: f.theme.muted, width: k, dash: [4 * k, 3 * k] });
+    },
+  });
+}
+
+// Score-level likelihood ratios (wave 8, slice 4): the ratio against the score on a log axis, the
+// interval of its bootstrap's median as a band, the evidence thresholds as dashed lines (the
+// pathogenic side in the danger color, the benign in the ok color, each named at its right), 1 as a
+// line, and each side's controls as ticks along the bottom. spec: { grid (scores), llr, lo, hi
+// (natural logs), thresholds (the eight likelihood ratios, benign very strong first), P, B, label }.
+export function likelihoodChart(spec, frame) {
+  const { grid, llr, lo, hi, thresholds, P = [], B = [], label = '' } = spec;
+  const f = frameOf(frame);
+  const t = f.text;
+  const k = t / 10;
+  const theme = f.theme;
+  const colors = sideColors(theme);
+  const W = f.width ?? 560;
+  const H = f.height ?? 260 * k;
+  const marks = [];
+  const L10 = Math.LN10;
+  const toLog10 = (v) => v / L10;
+  const all = [...Array.from(lo, toLog10), ...Array.from(hi, toLog10)].filter(finite);
+  const tl = thresholds.map((v) => log10(v));
+  const yl = Math.max(-5, Math.min(...all, tl[0]) - 0.3);
+  const yh = Math.min(5, Math.max(...all, tl[7]) + 0.3);
+  const names = ['very strong', 'strong', 'moderate', 'supporting', 'supporting', 'moderate', 'strong', 'very strong'];
+  const labelW = Math.max(...names.map((n) => textWidth(n, t * 0.9))) + 0.8 * t;
+  // Below the axis: its tick labels, two rows of the controls' ticks, then its name.
+  const area = { left: f.x + 5.2 * t, right: f.x + W - labelW - 0.6 * t, top: f.y + 0.8 * t, bottom: f.y + H - 5.6 * t };
+  const yTicks = [];
+  for (let e = Math.ceil(yl); e <= Math.floor(yh); e += 1) yTicks.push(e);
+  const xs = Array.from(grid);
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  const { sx, sy } = axes(marks, area, { x: { lo: x0, hi: x1 }, y: { lo: yl, hi: yh, ticks: [] }, xLabel: 'score', yLabel: 'likelihood ratio (P : B)', t, theme, grid: false, frame: { ...f, width: W, height: H } });
+  for (const e of yTicks) {
+    marks.push({ type: 'line', x1: area.left, y1: sy(e), x2: area.right, y2: sy(e), stroke: theme.grid, width: k, dash: [2 * k, 3 * k] });
+    // A power of ten as written ("1e3" read exactly), no engine's pow.
+    marks.push({ type: 'text', x: area.left - 0.4 * t, y: sy(e), text: e >= 0 ? String(Number(`1e${e}`)) : `1/${Number(`1e${-e}`)}`, size: t, fill: theme.muted, anchor: 'end', baseline: 'middle' });
+  }
+  // The thresholds, each side's color, named at the right; names that would overlap moved apart
+  // (a small plot's supporting and moderate lines are close).
+  const named = [];
+  tl.forEach((v, i) => {
+    if (v < yl || v > yh) return;
+    const color = i < 4 ? theme.ok : theme.danger;
+    marks.push({ type: 'line', x1: area.left, y1: sy(v), x2: area.right, y2: sy(v), stroke: color, width: k, dash: [4 * k, 3 * k], opacity: 0.8 });
+    named.push({ y: sy(v), text: names[i], fill: color });
+  });
+  const gap = t * 0.95;
+  named.sort((a, b) => a.y - b.y);
+  for (let j = 1; j < named.length; j += 1) if (named[j].y - named[j - 1].y < gap) named[j].y = named[j - 1].y + gap;
+  for (let j = named.length - 1; j >= 0; j -= 1) {
+    const limit = j === named.length - 1 ? area.bottom : named[j + 1].y - gap;
+    if (named[j].y > limit) named[j].y = limit;
+  }
+  for (const n of named) marks.push({ type: 'text', x: area.right + 0.4 * t, y: n.y, text: n.text, size: t * 0.9, fill: n.fill, baseline: 'middle' });
+  marks.push({ type: 'line', x1: area.left, y1: sy(0), x2: area.right, y2: sy(0), stroke: theme.muted, width: k });
+  const clampY = (v) => Math.max(yl, Math.min(yh, v));
+  const band = [];
+  for (let i = 0; i < xs.length; i += 1) if (finite(lo[i]) && finite(hi[i])) band.push(i);
+  if (band.length > 1) {
+    const up = band.map((i) => `${sx(xs[i])} ${sy(clampY(toLog10(hi[i])))}`);
+    const down = band.slice().reverse().map((i) => `${sx(xs[i])} ${sy(clampY(toLog10(lo[i])))}`);
+    marks.push({ type: 'path', d: `M${up.join('L')}L${down.join('L')}Z`, fill: theme.accent, opacity: 0.16, title: 'the interval of the bootstrap\'s median' });
+  }
+  marks.push({ type: 'path', d: xs.map((x, i) => `${i ? 'L' : 'M'}${sx(x)} ${sy(clampY(toLog10(llr[i])))}`).join(''), fill: 'none', stroke: theme.accent, width: 2 * k, title: label });
+  // The controls along the bottom, B above P.
+  const rug = (values, row, color) => {
+    const y0 = area.bottom + 2.1 * t + row * 0.9 * t;
+    for (const v of values) if (finite(v) && v >= x0 && v <= x1) marks.push({ type: 'line', x1: sx(v), y1: y0, x2: sx(v), y2: y0 + 0.6 * t, stroke: color, width: k, opacity: 0.7 });
+  };
+  rug(B, 0, colors.B);
+  rug(P, 1, colors.P);
+  const legend = [{ label: 'likelihood ratio', color: theme.accent, mark: 'line' }, { label: 'pathogenic thresholds', color: theme.danger, dash: true }, { label: 'benign thresholds', color: theme.ok, dash: true }, { label: `B controls (${B.length})`, color: colors.B }, { label: `P controls (${P.length})`, color: colors.P }];
+  return { marks, width: W, height: H, description: label, legend };
+}

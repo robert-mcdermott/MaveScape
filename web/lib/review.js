@@ -34,6 +34,7 @@ import { describeReadout } from './readout.js';
 import { analysisName } from './report.js';
 import { sha256 } from './sha256.js';
 import { serializeWorkspace, verifyHistory } from './workspace.js';
+import { calibrationCharts } from './calibration-record.js';
 
 export const REVIEW_FORMAT = 'mavescape-review';
 export const REVIEW_VERSION = 1;
@@ -336,6 +337,55 @@ function analysesSection(ws, certificate, computed) {
   ].filter(Boolean);
 }
 
+// Calibrations, for research (wave 8, slice 5): each one's certified numbers and its plots.
+function calibrationsSection(ws, certificate, computed) {
+  const list = certificate.numbers.calibrations ?? [];
+  if (!list.length) return null;
+  const parts = ['<p class="callout">For research: how far the scores separate variants of known effect, the functional classes thresholds make in this assay and the evidence strength they would give. MaveScape classifies no variant.</p>'];
+  for (const n of list) {
+    const cal = (ws.calibrations ?? []).find((x) => x.id === n.id);
+    const v = n.values;
+    const key = (path) => `calibration|${n.id}|values.${path}`;
+    const at = (path) => path.split('.').reduce((x, k) => x?.[k], v);
+    const t = (path, digits = 4) => (at(path) === undefined || at(path) === null ? '—' : traced(key(path), at(path), formatNumber(asNumber(at(path)) ?? at(path), digits)));
+    parts.push(`<h3>${esc(n.name)}</h3>`);
+    if (v.error) {
+      parts.push(`<p class="callout warn">${esc(v.error)}</p>`);
+      continue;
+    }
+    const set = cal ? (ws.controlSets ?? []).find((c) => c.id === cal.controlSet) : null;
+    const run = cal ? (ws.runs ?? []).find((r) => r.id === cal.run) : null;
+    parts.push(`<p>${esc(run?.name ?? '')} against the control set "${esc(set?.name ?? '')}": ${t('scored.P')} P and ${t('scored.B')} B controls scored. Abnormal-like scores ${esc(cal?.side ?? '')} the others; thresholds: abnormal ${t('thresholds.abnormal')}, normal ${t('thresholds.normal')}.</p>`);
+    parts.push(table(`Metrics of ${n.name}`, ['Measure', { text: 'Value', r: true }, { text: '95% interval', r: true }], [
+      row(['AUC (DeLong)', { r: true, html: t('auc.auc') }, { r: true, html: `${t('auc.low')} to ${t('auc.high')}` }]),
+      row(['AUC (bootstrap)', { r: true, html: t('auc.bootstrap.median') }, { r: true, html: `${t('auc.bootstrap.low')} to ${t('auc.bootstrap.high')}` }]),
+      row(['Precision–recall area', { r: true, html: t('precisionRecall.auc') }, { r: true, html: `${t('precisionRecall.bootstrap.low')} to ${t('precisionRecall.bootstrap.high')}` }]),
+      row(['Sensitivity (Wilson)', { r: true, html: t('sensitivity.p') }, { r: true, html: `${t('sensitivity.low')} to ${t('sensitivity.high')}` }]),
+      row(['Specificity (Wilson)', { r: true, html: t('specificity.p') }, { r: true, html: `${t('specificity.low')} to ${t('specificity.high')}` }]),
+    ]));
+    parts.push(table(`Evidence strength of ${n.name}`, ['Class', { text: 'P', r: true }, { text: 'B', r: true }, { text: 'OddsPath', r: true }, 'Strength (Brnich et al.\'s Table 3)'], ['abnormal', 'normal'].map((w) => row([
+      esc(at(`evidence.${w}.class`)), { r: true, html: t(`evidence.${w}.P`) }, { r: true, html: t(`evidence.${w}.B`) }, { r: true, html: t(`evidence.${w}.oddsPath`) }, { html: traced(key(`evidence.${w}.strength`), at(`evidence.${w}.strength`), String(at(`evidence.${w}.strength`) ?? 'none')) },
+    ]))));
+    const lr = v.likelihood;
+    if (lr && !lr.problem) {
+      parts.push(table(`Where each strength begins, ${n.name}`, ['Boundary', { text: 'Ratio', r: true }, { text: 'Score', r: true }, { text: 'Interval', r: true }], lr.thresholds.map((x, k) => row([
+        esc(x.boundary), { r: true, html: t(`likelihood.thresholds[${k}].lr`) }, { r: true, html: x.score === null ? 'not reached' : traced(key(`likelihood.thresholds[${k}].score`), x.score) }, { r: true, html: x.lower === null ? '—' : `${traced(key(`likelihood.thresholds[${k}].lower`), x.lower)} to ${traced(key(`likelihood.thresholds[${k}].upper`), x.upper)}` },
+      ]))));
+    }
+    const o = computed.detail.calibrations?.get(n.id);
+    if (o) {
+      for (const plot of ['distribution', 'roc', 'likelihood']) {
+        try {
+          const data = calibrationCharts(o, plot);
+          if (data.missing) continue;
+          parts.push(`<figure class="plot">${chartsSVG(data, { w: plot === 'roc' ? 340 : 640, h: plot === 'roc' ? 300 : 240, title: data.title, prefix: `cal-${n.id}-${plot}` })}<figcaption>${esc(data.description)}</figcaption></figure>`);
+        } catch { /* no plot */ }
+      }
+    }
+  }
+  return section('calibrations', 'Calibration, for research', parts.join(''));
+}
+
 function selectionsSection(ws) {
   const list = ws.selections ?? [];
   if (!list.length) return null;
@@ -429,6 +479,7 @@ function reviewModel(ws, certificate, computed, wsSha) {
     contrastClassNames: CONTRAST_CLASS_NAMES,
     qc: [...computed.detail.qc].map(([run, d]) => ({ run, findings: d.findings.map((f) => ({ id: f.id, title: f.title, threshold: f.threshold ?? '', rationale: f.rationale ?? '' })) })),
     analyses: (ws.analyses ?? []).map((a) => ({ id: a.id, kind: a.kind, name: analysisName(a), ...(a.kind === 'comparison' ? { a: a.a.label, b: a.b.label, scale: a.scale?.mode ?? 'scored' } : { run: a.run.name, max: a.max, seed: a.seed }) })),
+    calibrations: (ws.calibrations ?? []).map((c) => ({ id: c.id, name: c.name, run: (ws.runs ?? []).find((r) => r.id === c.run)?.name ?? c.run, controlSet: (ws.controlSets ?? []).find((x) => x.id === c.controlSet)?.name ?? c.controlSet, samples: c.bootstrap.samples, seed: c.bootstrap.seed })),
     figures: (ws.figures ?? []).map((f) => ({ id: f.id, name: f.name, panels: f.panels.map((p) => ({ id: p.id, shows: panelSummary(p, ws), inputs: panelInputs(ws, p) })) })),
     certificate,
   };
@@ -542,6 +593,12 @@ const SCRIPT = `
       if (a && a.kind === 'comparison') lines.push(esc(a.a) + ' against ' + esc(a.b) + ' (scale: ' + esc(a.scale) + ')');
       return { title: a ? a.name.charAt(0).toUpperCase() + a.name.slice(1) : 'An analysis', lines };
     }
+    if (kind === 'calibration') {
+      const c = (model.calibrations || []).find((x) => x.id === parts[1]);
+      const path = parts[2].replace(/^values\\./, '').replace(/\\[(\\d+)\\]/g, ' $1').split('.').join(' › ');
+      const lines = ['Computed again from ' + (c ? esc(c.run) + '\\'s scores and the control set "' + esc(c.controlSet) + '"' : 'its run\\'s scores and its control set') + (c ? ', the bootstrap seeded (' + c.samples + ' samples, seed ' + c.seed + ')' : '') + ': ' + esc(path) + '.', 'For research: not a classification of any variant.'];
+      return { title: c ? 'The calibration "' + c.name + '"' : 'A calibration', lines };
+    }
     if (kind === 'figure') {
       const f = model.figures.find((x) => x.id === parts[1]);
       const p = f && f.panels.find((x) => x.id === parts[2]);
@@ -623,6 +680,7 @@ export function composeReview(ws, computed, certificate) {
     runsSection(ws, certificate, computed),
     qcSection(ws, certificate, computed),
     ...analysesSection(ws, certificate, computed),
+    calibrationsSection(ws, certificate, computed),
     selectionsSection(ws),
     structuresSection(ws),
     figuresSection(ws, certificate, computed),

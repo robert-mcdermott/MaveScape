@@ -1,7 +1,7 @@
 Package: mavescape
 Type: Package
 Title: Remote Control of a Running 'MaveScape'
-Version: 0.7.0
+Version: 0.8.0
 Authors@R: person("Robert", "McDermott", email = "robert.c.mcdermott@gmail.com", role = c("aut", "cre"))
 Description: Drives 'MaveScape', a workbench for multiplexed assays of variant
     effect (deep mutational scans), from R: every action an AI agent can take
