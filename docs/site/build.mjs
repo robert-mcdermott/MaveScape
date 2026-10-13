@@ -11,7 +11,9 @@
 // pages) and holds only its own content: the header, documentation menu, pager and footer are
 // added here. <shot name="gate" alt="…">caption</shot> becomes a figure with the screenshot in
 // both themes, docs/images/gate-light.webp and gate-dark.webp (written by docs/capture, copied to
-// assets/img), of which the page shows the one matching its theme. The build then checks every local link, anchor and
+// assets/img), of which the page shows the one matching its theme; <artwork name="figure-export"
+// alt="…">caption</artwork>, a file MaveScape wrote (docs/images/figure-export.png), the same in both
+// themes. The build then checks every local link, anchor and
 // image, and fails if one is broken. Adapted from CytoWeave 0.8.0's docs/site/build.mjs.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -226,6 +228,30 @@ function shots(html, root) {
   });
 }
 
+// <artwork name="x" alt="…">caption</artwork> → a figure with docs/images/x.png, a file MaveScape
+// wrote (the figure it exports; docs/capture's figures scene), the same in both themes, in a white
+// frame, at its own size (read from the PNG). {{src}} in the caption is the file's address, to link
+// to it.
+const artworkUsed = new Set();
+function artworks(html, root) {
+  return html.replace(/<artwork\s+([^>]*)>([\s\S]*?)<\/artwork>/g, (_, attrs, caption) => {
+    const attr = (name) => new RegExp(`${name}="([^"]*)"`).exec(attrs)?.[1];
+    const name = attr('name');
+    const alt = attr('alt');
+    if (!name || !alt) throw new Error(`<artwork> needs name and alt: ${attrs}`);
+    artworkUsed.add(name);
+    const file = join(repo, 'docs/images', `${name}.png`);
+    // A PNG's size is in its header (IHDR: width and height at bytes 16 and 20).
+    const head = existsSync(file) ? readFileSync(file).subarray(0, 24) : null;
+    const [width, height] = head ? [head.readUInt32BE(16), head.readUInt32BE(20)] : [1, 1];
+    const src = `${root}assets/img/${name}.png`;
+    return `<figure class="artwork">
+        <div class="shot shot-artwork"><img src="${src}" width="${width}" height="${height}" loading="lazy" alt="${alt}" /></div>${caption.trim() ? `
+        <figcaption>${caption.trim().replaceAll('{{src}}', src)}</figcaption>` : ''}
+      </figure>`;
+  });
+}
+
 const fill = (html) => html.replaceAll('{{version}}', VERSION).replaceAll('{{github}}', GITHUB);
 
 function write(path, html) {
@@ -248,7 +274,7 @@ for (const [slug, key] of [['index', 'home'], ['install', 'install'], ['science'
       <h1>${meta.heading ?? meta.title}</h1>
       <p class="doc-lede">${meta.lede}</p>
 
-${fill(shots(body, root)).trimEnd()}
+${fill(artworks(shots(body, root), root)).trimEnd()}
     </main>
 
     <aside class="toc" aria-label="On this page">
@@ -258,7 +284,7 @@ ${fill(shots(body, root)).trimEnd()}
   </div>
 ` : `
   <main id="main">
-${fill(shots(body, root)).trimEnd()}
+${fill(artworks(shots(body, root), root)).trimEnd()}
   </main>
 `;
   write(`${slug}.html`, head(meta, root, path) + header(root, key) + main + footer(root));
@@ -276,7 +302,7 @@ for (const [slug] of ORDER) {
       <h1>${meta.title}</h1>
       <p class="doc-lede">${meta.lede}</p>
 
-${fill(shots(body, root)).trimEnd()}
+${fill(artworks(shots(body, root), root)).trimEnd()}
 ${pager(slug)}
     </main>
 
@@ -297,6 +323,10 @@ copyFileSync(join(repo, 'web/favicon.svg'), join(out, 'assets/img/logo.svg'));
 for (const name of shotsUsed) for (const theme of ['light', 'dark']) {
   const image = join(repo, 'docs/images', `${name}-${theme}.webp`);
   if (existsSync(image)) copyFileSync(image, join(out, 'assets/img', `${name}-${theme}.webp`));
+}
+for (const name of artworkUsed) {
+  const image = join(repo, 'docs/images', `${name}.png`);
+  if (existsSync(image)) copyFileSync(image, join(out, 'assets/img', `${name}.png`));
 }
 // Link previews: social sites want PNG or JPEG, so the preview image is kept as a JPEG.
 if (existsSync(join(here, 'assets/og-image.jpg'))) copyFileSync(join(here, 'assets/og-image.jpg'), join(out, 'assets/img/og-image.jpg'));
@@ -341,7 +371,10 @@ for (const file of pages) {
 for (const name of shotsUsed) for (const theme of ['light', 'dark']) {
   if (!existsSync(join(repo, 'docs/images', `${name}-${theme}.webp`))) problems.push(`screenshot docs/images/${name}-${theme}.webp is missing (node docs/capture/capture.mjs ${name})`);
 }
-console.log(`Built ${pages.length} pages into ${out} (MaveScape ${VERSION}, ${shotsUsed.size} screenshots).`);
+for (const name of artworkUsed) {
+  if (!existsSync(join(repo, 'docs/images', `${name}.png`))) problems.push(`image docs/images/${name}.png is missing (node docs/capture/capture.mjs figures writes figure-export.png)`);
+}
+console.log(`Built ${pages.length} pages into ${out} (MaveScape ${VERSION}, ${shotsUsed.size} screenshots${artworkUsed.size ? `, ${artworkUsed.size} exported figure${artworkUsed.size === 1 ? '' : 's'}` : ''}).`);
 if (problems.length) {
   console.error(`${problems.length} problem${problems.length === 1 ? '' : 's'}:\n  ${[...new Set(problems)].join('\n  ')}`);
   process.exitCode = 1;

@@ -3,7 +3,8 @@
 // the website (docs/site/build.mjs copies them) the one matching the page's. Each scene drives a
 // MaveScape built from source through its remote control (actions.go), as any script can, on a
 // fresh, empty library, so every run gives the same pictures. Follows CytoWeave 0.8.0's
-// docs/capture/capture.mjs.
+// docs/capture/capture.mjs. The figures scene also writes the figure it makes as MaveScape exports
+// it, docs/images/figure-export.png (one file for both themes: a figure's page is white).
 //
 //   node docs/capture/capture.mjs [scene …] [--theme light|dark|both] [--audit [--no-shots]]
 //
@@ -700,9 +701,10 @@ const scenes = {
     await sleep(3000);
   },
   // Figures (wave 6): a figure as a paper's would be, on a page two columns wide: GRB2's map with
-  // its sequence, UniProt's features, AlphaMissense and each position's effect below it; the
-  // domain on 2VWF colored by the median score; the measured scores in each of AlphaMissense's
-  // classes; and two replicates' agreement. Nothing selected, so the page is seen as printed.
+  // its sequence, UniProt's secondary structure, AlphaMissense and each position's effect below it;
+  // the domain on 2VWF colored by the median score; the measured scores in each of AlphaMissense's
+  // classes; and two replicates' agreement. Nothing selected, so the page is seen as printed; and
+  // the figure exported (docs/images/figure-export.png).
   async figures() {
     await example('grb2-sh3');
     for (const provider of ['uniprot-features', 'alphamissense']) await act('add_track', { provider });
@@ -721,6 +723,9 @@ const scenes = {
     await act('add_figure_panel', { figure: 'Figure 1', kind: 'qc', subject: 'Run 1', finding: 'agreement', x_mm: 125, y_mm: 106, width_mm: 46, height_mm: 69 });
     await act('set_figure', { figure: 'Figure 1', panels: [{ panel: 'C', title: 'Scores by AlphaMissense class' }, { panel: 'D', title: 'Replicates 1 and 2' }] });
     console.log(JSON.stringify((await act('figures', { figure: 'Figure 1' })).data.figures[0].panels.map((p) => [p.letter, p.notes])));
+    // The figure as MaveScape exports it, for the site (the same white page in either theme): a PNG
+    // at 200 dpi, its manifest in it, so that the file the site shows can be dropped on MaveScape.
+    if (shots) await act('export_figure', { figure: 'Figure 1', format: 'png', dpi: 200, path: join(IMAGES, 'figure-export.png'), overwrite: true });
     await js(`(() => { window.mavescape.figuresView = { figure: window.mavescape.store.ws.figures[0].id, panel: null }; window.mavescape.store.notify(['ws']); })()`);
     await act('set_mode', { mode: 'figures' });
     await sleep(1500);

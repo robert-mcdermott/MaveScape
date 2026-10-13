@@ -2957,6 +2957,13 @@ recorded hash.
     checkpoints and certificates, and its validation table has their rows.
   - **main had two commits wave 6 lacked**: the README's links to the site, with the capitals of
     its address, which wave 6's rewritten README already had; merged, its version kept.
+- After the release, the site's Figures page shows the figure of its screenshot as MaveScape
+  exports it (`docs/images/figure-export.png`, written by the capture's figures scene: a PNG at
+  200 dpi, its manifest in it, to download and drop on the window); the site's build takes such a
+  file (`<artwork>`), the same in both themes. Making it found that 0.6.0's PNG of a figure leaves
+  its last row of pixels partly transparent (a page 178 mm tall is 1,401.6 pixels at 200 dpi, and
+  only the page's own background was painted); the next release paints the whole image white
+  first.
 
 ## 0.7.0: agents and scripts (wave 7)
 

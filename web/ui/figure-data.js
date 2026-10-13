@@ -122,6 +122,10 @@ async function figurePNG(fig, marks, dpi) {
   canvas.width = size.width;
   canvas.height = size.height;
   const ctx = canvas.getContext('2d');
+  // The page is white to its last pixel: its size in points rarely makes whole pixels, and the
+  // page's own background would leave the last row or column partly transparent.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.scale(size.scale, size.scale);
   paintMarks(ctx, marks, { imageOf });
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));

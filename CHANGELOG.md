@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The website's Figures page shows the figure of its screenshot as MaveScape exports it: a PNG at
+  200 dpi with its manifest inside, to download and drop on the window (the capture's figures scene
+  writes it, `docs/images/figure-export.png`; the site's build takes such a file as `<artwork>`).
+
+### Fixed
+
+- A figure exported as PNG left its last row (or column) of pixels partly transparent: its size in
+  points rarely makes whole pixels (a page 178 mm tall is 1,401.6 pixels at 200 dpi), and only the
+  page's own background was painted. The whole image is white now before the figure is drawn.
+
 ## 0.6.0 (2026-10-12)
 
 Wave 6 of the [roadmap](mavescape-spec/roadmap.md): figures and a provable record. A figure is a
