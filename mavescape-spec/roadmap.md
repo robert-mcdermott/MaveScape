@@ -3339,23 +3339,120 @@ Hsp90 archive with `mavescape run --from-workspace`, the proposal kept.
 
 ## 0.8.0: calibration, for research (wave 8)
 
+What says how far a functional score can serve as evidence about a variant, for research: control
+sets of variants whose effect is known, metrics of how well the scores separate them, and evidence
+strength (OddsPath and score-level likelihood ratios) labeled research use only. Calibration never
+runs by itself, reports its controls' composition and limitations, and keeps the assay's validity,
+a variant's functional class and its clinical classification apart (K1–K4).
+
 ### Wave 8
 
-1. **Control sets (K1).** Known-effect labels from ClinVar (with review status), user tables or
-   published sets, each with provenance; circularity warnings (labels that informed the assay's
-   design or thresholds, or predictors trained on the same labels).
+The roadmap first had three items for this wave. Before the wave began they were split into six
+slices: control sets (K1), metrics (K2), evidence strength (K3) in two (OddsPath, then score-level
+likelihood ratios), the record (K4: the report, figures, certificates, MaveDB), and the guide and
+examples. Each slice adds its remote actions, agent tools and client functions, as wave 7's did.
+
+Decisions taken in planning (confirmed before slice 1):
+- **A Calibrate view**, the eighth (the PRD's name and place, after Structure), opened from a run: control sets, metrics and evidence
+  strength have too much of their own to share Compare.
+- **Labels in their source's words, attributed.** A control's label is shown as its source gives
+  it ("ClinVar: Likely pathogenic ★★"; a table's own words with its citation); MaveScape's own
+  output stays a functional class and an evidence strength (research use), and MaveScape never
+  calls a variant pathogenic or benign (`conventions.md`, Terminology).
+- **ClinVar's default controls**: records with at least one review star, pathogenic or likely
+  pathogenic against benign or likely benign, conflicting and uncertain records left out; each
+  control set can choose otherwise.
+- **Score-level likelihood ratios ported from acmgscaler** (Badonyi 2025, MIT, an origin comment in
+  the file) and checked against its own examples, not written from the papers alone; maveLLR
+  (GPL-3) is an outside reference only.
+- **Agents**: a control set or calibration an agent makes is made at once and marked proposed, as a
+  run is; nothing is certified while it is open.
+- **Nothing automatic**: no calibration unless asked, `mavescape run` included (a flag, if ever).
+
+1. **Control sets (K1).** Variants of known effect kept with the workspace, each label with its
+   provenance, matched to a run's variants, with warnings where the labels may be circular.
+   - **Sources**: ClinVar (the records of the gene's ClinVar annotation, with classification and
+     review status, filtered as above), or a table (a variant column, MAVE-HGVS or as ClinVar
+     names it, and a label column: pathogenic, likely pathogenic, benign, likely benign, or
+     abnormal and normal from another assay), with its file's SHA-256 and, for a published set,
+     its citation.
+   - **Matched to a run** at the protein level (a nucleotide run's protein view), on the target's
+     numbering as the tracks place ClinVar's: matched, not measured, not on the target.
+   - **Circularity warnings**: labels that anchor the run's own scale (nonsense and synonymous
+     variants, when its normalization or rescaling uses them); ClinVar records last evaluated after
+     the assay was published, whose classification may rest on it (PS3/BS3); labels that are the
+     design's own controls; and few controls on a side.
+   - The Calibrate view: the control sets, a set's composition (each side by source class,
+     review stars and kind of variant), what matched the run, the warnings, the labels.
+   - Remote actions: `make_control_set`, `control_sets`, `remove_control_set`.
+   - **Done.** `web/lib/controls.js` makes a set from the ClinVar annotation's table (the transcript
+     most records name, placed on the target by its offset where the residues agree, as the
+     ClinVar track places them) or from a table of labels (its columns found by name; numbered on
+     the reference or the target, whichever its residues agree with); records of one change on one
+     side merge (their accessions, the most stars, the latest evaluation), a change on both sides
+     is left out, and the set says what it left out and why. `ws.controlSets` keeps each set with
+     its labels and their source (the annotation's file by its SHA-256 and retrieval date, or the
+     table's with its citation), in the history (`controls`), the archive and a checkpoint's diff;
+     an agent's is made at once and marked proposed (`proposals.js`'s collections).
+     - **The Calibrate view** (`ui/mode-calibrate.js`, after Structure): a research-use note; the
+       sets and a form to make one (from ClinVar, its review status and kinds of variant; from a
+       table, its citation); for the run shown, a set's composition (each side by its source's
+       words, review stars and kind), what the run scored, did not score or does not hold, what
+       may make it circular, and every label with its source, state and score. The dataset tree
+       has a section of control sets and the inspector describes one. `conventions.md`'s
+       terminology names the exception: a label is its source's, always shown with it.
+     - **Circularity**, for the run shown: nonsense or synonymous controls on a scale they set (its
+       rescaling, its bins' scale, its normalization), the design's own named controls, ClinVar
+       classifications last evaluated in or after the year the assay was published (its MaveDB
+       record's, else its design's citation), a table from the assay's own publication (its DOI),
+       fewer than 10 controls scored on a side, and AlphaMissense beside the map with a ClinVar
+       set (its classes were set with ClinVar's classifications).
+     - On factor IX, ClinVar's 553 records make 169 P and 22 B missense controls with at least one
+       star (247 and 148 with any review and every kind); Run 1 scores 164 and 22. 70 were last
+       evaluated in or after 2025, when MultiSTEP was published. GRB2 has ten records and no usable
+       control.
+     - Remote actions `make_control_set` (from ClinVar or a table's text), `control_sets` (each set,
+       matched to a run, its labels if asked) and `remove_control_set`; `get_state` lists the sets,
+       `focus` and `set_mode` know them; the MCP instructions name calibration; the clients have
+       57 functions.
+     - Found by slice 1:
+       - **A number 0 given as an element's only content was dropped** (`ui/dom.js`'s `h()` took it
+         for missing properties): every table cell or label of a count that happened to be 0 was
+         empty, in every view. Anything but an object of properties is content now.
+       - The labels' scrolling table could not be reached by keyboard (axe-core's
+         scrollable-region-focusable, on the new scene): it is a region of its own, focusable.
+       - **The remote session's reload could wait forever**: it opened the page again (with the
+         Canvas renderer) within the second after a change, before the workspace was saved, and a
+         page with a change not yet saved asks before it is left, which the navigation waits on.
+         The session saves first now, as it did before opening the review report's file; the steps
+         this slice added before it only moved the timing. The agent session no longer expects 54
+         tools: it compares the list with the actions, as before, and the clients' tests' "more
+         than 50".
+     - Validation: the suite `controls` (5: factor IX's controls under four rules against an
+       account read straight from NCBI's cached answers by a reader of its own, `control-cases.mjs`;
+       matched to Run 1 as its scores export has it; a table of invented labels with every case
+       planted, `fixtures/controls/`; each circularity planted and none elsewhere; the archive and
+       the diff); `controls.test.mjs` (6); the remote session (206, +3: the window's sets as Node
+       makes them, its matches and warnings, a foreign table refused, focus and deletion); the agent
+       session (35, +1: an agent's set proposed, its deletion of the person's held, rejected); axe-core
+       on the new scene `calibrate-controls` in both themes, no violation; the site's page
+       *Calibration*.
 2. **Metrics (K2).** Distributions by class, ROC and precision–recall with bootstrap intervals,
    thresholds and an indeterminate zone, sensitivity and specificity with Wilson intervals,
-   threshold stability by seeded bootstrap.
-3. **Evidence strength (K3, K4).** OddsPath (Brnich et al. 2019) and score-level
-   likelihood-ratio calibration (Pejaver et al. 2022's local posterior; van Loggerenberg et al.
-   2023), labeled research use only, with control composition and limitations in the report;
-   classes exported in MaveDB's calibration vocabulary (normal, abnormal, not specified). ClinGen
-   retired its SVI working group in 2025, so the method is chosen from the publications, and
-   recorded.
-   - Validation: equal to acmgscaler (MIT) on its examples; published calibrations reproduced
-     (Fayer et al. 2021 for BRCA1, TP53 and PTEN; calibrations MaveDB publishes for its score
-     sets); maveLLR (GPL-3) as an external reference only.
+   threshold stability by seeded bootstrap; checked against R (pROC, PRROC, binom), as Compare's
+   statistics are.
+3. **OddsPath (K3, part 1).** Brnich et al. 2019's OddsPath for the classes a run's thresholds
+   make, its evidence strengths with the thresholds checked against the paper (`research.md` marks
+   them unverified), labeled research use, the controls' composition and limitations beside it.
+4. **Score-level likelihood ratios (K3, part 2).** acmgscaler's method, ported; Pejaver et al.
+   2022's evidence strengths; equal to acmgscaler on its examples; Fayer et al. 2021's calibrations
+   of BRCA1, TP53 and PTEN reproduced; MaveDB's published calibrations compared.
+5. **The record (K4).** Calibration in the report and methods (its controls' composition and
+   limitations), figure panels (distributions, ROC and precision–recall, the calibration curve),
+   the certificate's numbers, the checkpoint diff, and a MaveDB deposit's calibrations in its
+   vocabulary (normal, abnormal, not specified).
+6. **Guide and examples.** The site's Calibration page; BRCA1, TP53 and PTEN calibrated against
+   ClinVar; a simulated example with known labels and a planted circularity.
 
 ## 0.9.0: ready for others (wave 9)
 

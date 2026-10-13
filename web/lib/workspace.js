@@ -156,7 +156,7 @@ export function rename(ws, name) {
 
 // Whether a workspace holds anything worth saving (an empty, untitled one is not saved).
 export function isEmptyWorkspace(ws) {
-  return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length && !(ws.structureViews ?? []).length;
+  return !ws.sources.length && !ws.targets.length && !ws.design && !ws.runs.length && !ws.selections.length && !(ws.structureViews ?? []).length && !(ws.controlSets ?? []).length;
 }
 
 // An id not yet used in a list: the base, or the base with a number.
@@ -440,3 +440,24 @@ export function removeCheckpoint(ws, id) {
   const rest = list.filter((c) => c.id !== id);
   return change(ws, { checkpoints: rest.length ? rest : undefined }, 'checkpoint', `Deleted the checkpoint "${gone.name}"`);
 }
+
+// --- Control sets (wave 8, slice 1) -------------------------------------------------------------------------
+
+// Keeps a control set (lib/controls.js: variants of known effect, each label as its source gives it)
+// in ws.controlSets, absent until the first, in the history.
+export function addControlSet(ws, set, time = clockNow()) {
+  const list = ws.controlSets ?? [];
+  const id = uniqueId(set.name ?? 'controls', list);
+  const entry = { ...set, id, created: set.created ?? time };
+  const sides = ['P', 'B'].map((side) => `${entry.labels.filter((l) => l.side === side).length} ${side}`).join(' and ');
+  return { ws: change(ws, { controlSets: [...list, entry] }, 'controls', `Made the control set "${entry.name}" from ${entry.source.kind === 'clinvar' ? 'ClinVar' : `the table ${entry.source.file?.fileName ?? ''}`.trim()}: ${sides} controls`, time), id };
+}
+
+export function removeControlSet(ws, id) {
+  const list = ws.controlSets ?? [];
+  const gone = list.find((c) => c.id === id);
+  if (!gone) return ws;
+  const rest = list.filter((c) => c.id !== id);
+  return change(ws, { controlSets: rest.length ? rest : undefined }, 'controls', `Deleted the control set "${gone.name}"`);
+}
+

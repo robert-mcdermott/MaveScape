@@ -31,7 +31,8 @@ export function h(selector, props, ...children) {
   const el = document.createElement(tag);
   if (classes.length) el.className = classes.join(' ');
   if (id) el.id = id;
-  if (props && (typeof props !== 'object' || props instanceof Node || Array.isArray(props))) {
+  // Anything but an object of properties is a child: 0 too, which a test of truth would drop.
+  if (props !== null && props !== undefined && props !== false && (typeof props !== 'object' || props instanceof Node || Array.isArray(props))) {
     children.unshift(props);
     props = null;
   }

@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.8.0 (unreleased)
+
+Wave 8 of the [roadmap](mavescape-spec/roadmap.md): calibration, for research.
+
+### Added
+
+- **Control sets and the Calibrate view** (wave 8, slice 1): variants whose effect is known, for
+  calibration (research use), each label as its source gives it and always shown with it ("ClinVar:
+  Likely pathogenic ★★"). Made from the ClinVar track's records of the gene (pathogenic and likely
+  pathogenic against benign and likely benign, at least one review star and missense variants by
+  default, conflicting and uncertain records left out) or from a table of labels (CSV or TSV,
+  numbered on the reference or the target, with its citation), placed on the target as the ClinVar
+  track places its records, saying what was left out and why. The Calibrate view, the eighth, shows
+  a set's composition, what of it the run shown scored, and what may make its labels circular:
+  nonsense or synonymous controls on a scale they set, the design's own controls, ClinVar
+  classifications evaluated since the assay was published, the assay's own publication, too few
+  controls, a predictor whose classes were set with ClinVar. Kept with the workspace (its archive,
+  history and checkpoints' diffs); an AI agent's are proposals. Remote actions and agent tools
+  `make_control_set`, `control_sets`, `remove_control_set`, and functions in the R and Python
+  packages.
+
+### Fixed
+
+- A count of 0 given as a table cell's or label's only content was left out, in every view: the
+  page's element helper took a bare 0 for missing properties. Zeros show now.
+
+### Validation
+
+- Suite `controls`: factor IX's ClinVar controls under four rules, each as an account read straight
+  from NCBI's cached answers gives it (169 P and 22 B by default); matched to Run 1 as its scores
+  export has it; a table of invented labels with every case a reader meets planted; each kind of
+  circularity planted, and none where none is; the sets through the workspace archive and a
+  checkpoint's diff. The remote session makes sets in the window from ClinVar and a table as Node
+  makes them; the agent session has an agent's set proposed and its deletion of the person's
+  waiting, then rejected.
+
 ## 0.7.0 (2026-10-12)
 
 Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts. `mavescape mcp` makes

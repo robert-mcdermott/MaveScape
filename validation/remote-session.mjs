@@ -69,6 +69,9 @@ import { gunzipSync, inflateRawSync } from 'node:zlib';
 import { mapTarget, mapTargetOnChain, mappingCSV, rankStructures } from '../web/lib/mapping.js';
 import { cellsAtPositions, coloringCSV, coloringLegend, coloringPalette, placeOnTarget, POSITION, positionValues, residueColors, thresholdClasses } from '../web/lib/structure-scores.js';
 import { cellAt, cellName } from '../web/lib/map-model.js';
+import { circularity, clinvarControls, matchControls, tableControls } from '../web/lib/controls.js';
+import { CLINVAR } from '../web/lib/providers/clinvar.js';
+import { cachedGet } from './cached-fetch.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8836;
@@ -1447,6 +1450,41 @@ try {
   const noChain = await send('map_structure', { chain: 'X' });
   check('map_structure: factor IX on 1RFN\'s light chain (chain B), at 132–188, the entry\'s own record five earlier, as Node maps it; a chain that does not hold it refused, naming those that do', `${lightChain.message.slice(0, 260)} | ${noChain.message}`, lightChain.data.chain === 'B' && lightChain.data.onStructure === lightNode.onStructure && lightChain.data.positions.onStructure.join() === '132–188' && lightChain.data.record.differ.length === 56 && /5 earlier/.test(lightChain.message) && !noChain.ok && /Chains that hold it: A, B/.test(noChain.message));
 
+  // Control sets (wave 8, slice 1): made in the window from factor IX's ClinVar records and from a
+  // table, as Node makes them; matched to Run 1 and checked for circularity as Node does; a table of
+  // another protein's labels refused, saying why; shown in Calibrate and the inspector; deleted.
+  {
+    await act('add_track', { provider: 'clinvar' });
+    const f9 = openExampleInNode(exampleById('factor9'));
+    const f9Target = { ...f9.design.targets[0], identifiers: { ...(f9.design.targets[0].identifiers ?? {}), gene: 'F9' } };
+    const nodeSet = clinvarControls((await CLINVAR.fetch(f9Target, {}, cachedGet())).text, f9Target);
+    const made = await act('make_control_set', {});
+    const windowWs = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws)'));
+    const [windowSet] = windowWs.controlSets;
+    const listed = await act('control_sets', { labels: true });
+    const [data] = listed.data.sets;
+    const nodeMatch = matchControls({ labels: nodeSet.labels }, f9.scored.results);
+    const nodeWarnings = circularity(windowSet, { ws: windowWs, run: windowWs.runs.find((r) => r.name === 'Run 1'), matched: nodeMatch }).map((w) => w.text);
+    check('make_control_set from ClinVar and control_sets on factor IX: the window\'s set as Node makes it from the same records (every label, what was left out), Run 1\'s scored, not scored and not in the run as Node matches them, each label\'s state, and the circularity Node finds', `${made.message.slice(0, 140)}…; ${JSON.stringify(data.measured)}; ${data.circularity.map((w) => w.id).join(', ')}`,
+      JSON.stringify(windowSet.labels) === JSON.stringify(nodeSet.labels) && JSON.stringify(windowSet.excluded) === JSON.stringify(nodeSet.excluded) && windowSet.source.transcript === nodeSet.transcript
+      && JSON.stringify(data.measured) === JSON.stringify(nodeMatch.counts) && data.labels.map((l) => l.state).join() === nodeMatch.states.join() && JSON.stringify(data.circularity.map((w) => w.text)) === JSON.stringify(nodeWarnings)
+      && data.P.controls === 169 && data.B.controls === 22 && (await browser.eval(`document.getElementById('app').dataset.mode`)) === 'calibrate');
+    const text = `variant,label\n${nodeSet.labels.map((l) => `${l.key},${l.side === 'P' ? 'pathogenic' : 'benign'}`).join('\n')}\n`;
+    const fromTable = await act('make_control_set', { source: 'table', file_name: 'f9-labels.csv', text, citation: 'A table of factor IX\'s labels', numbering: 'target', name: 'From a table' });
+    const tableSet = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws.controlSets.find((c) => c.name === "From a table"))'));
+    const nodeTable = tableControls(text, f9.design.targets[0], { numbering: 'target' });
+    const foreign = await send('make_control_set', { source: 'table', file_name: 'grb2-invented-labels.csv', text: readFileSync(join(ROOT, 'validation/fixtures/controls/grb2-invented-labels.csv'), 'utf8') });
+    check('make_control_set from a table: its labels as Node reads them, the file named by its SHA-256 with its citation; a table of another protein\'s labels refused, saying why', `${fromTable.message.slice(0, 100)}…; ${foreign.message}`,
+      JSON.stringify(tableSet.labels) === JSON.stringify(nodeTable.labels) && tableSet.source.file.sha256 === sha256(new TextEncoder().encode(text)) && tableSet.source.citation === 'A table of factor IX\'s labels'
+      && foreign.ok === false && /disagree with the target/.test(foreign.message));
+    const focused = await act('focus', { kind: 'control set', name: 'From a table' });
+    const inspector = await browser.eval(`document.querySelector('#inspector')?.textContent ?? ''`);
+    const removed = await act('remove_control_set', { name: 'From a table' });
+    const after = JSON.parse(await browser.eval('JSON.stringify(window.mavescape.store.ws)'));
+    check('focus a control set (the inspector says where its labels came from), remove_control_set: gone, made and deleted in the history', `${focused.message} ${removed.message}; ${after.history.filter((e) => e.action === 'controls').map((e) => e.detail).join(' | ').slice(0, 220)}`,
+      /From a table/.test(inspector) && /Open in Calibrate/.test(inspector) && after.controlSets.length === 1 && after.history.filter((e) => e.action === 'controls').length === 3 && /^Deleted the control set "From a table"$/.test(after.history.at(-1).detail));
+  }
+
   // WebGPU lost under the view (the 0.5.0 release; GitHub's runner lost it on its own): the GPU
   // process crashed (Browser.crashGpuProcess) while factor IX's 1RFN is drawn with WebGPU, the view goes on with
   // the Canvas renderer on a fresh canvas, its badge and words saying why, the structure drawn again
@@ -1465,7 +1503,10 @@ try {
   const afterLoss = await send('set_structure', { select: 'chain B', show: 'sticks' });
   check('WebGPU lost under the view (the GPU process crashed): the view goes on with the Canvas renderer, its badge and words saying why, the structure drawn again, still answering', `${beforeCrash.kind === 'webgpu' ? 'crashed under WebGPU' : `already ${beforeCrash.kind}`}; now ${afterCrash.kind} (${afterCrash.failure.slice(0, 120)}); badge ${badge}; ${fmtShare(lostShare)}; then ${afterLoss.ok ? afterLoss.data.renderer : afterLoss.message}`, afterCrash.kind === 'canvas' && /graphics device was lost|WebGPU failed|does not offer WebGPU|No WebGPU|WebGPU did not start/.test(afterCrash.failure) && badge === 'Canvas' && lostShare > 0.03 && afterLoss.ok && afterLoss.data.renderer === 'canvas');
 
-  // The Canvas renderer, the page opened again.
+  // The Canvas renderer, the page opened again: the workspace saved first, as before the review
+  // report's file (a page with a change not yet saved asks before it is left, and the navigation
+  // waits on the question).
+  await browser.eval('window.mavescape.saveNow()');
   await browser.goto(`${URL}?renderer=canvas`, 1500);
   for (let i = 0; i < 100 && !(await browser.eval('Boolean(window.mavescape?.remote)')); i += 1) await sleep(100);
   await sleep(500);

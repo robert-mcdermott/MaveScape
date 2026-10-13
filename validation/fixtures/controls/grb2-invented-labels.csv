@@ -1,0 +1,21 @@
+variant,label
+p.Ala163Val,pathogenic
+L164P,LP
+p.(Gly196Asp),abnormal
+NM_002086.5(GRB2):c.587G>A (p.Gly196Glu),likely pathogenic
+p.Trp193Ter,pathogenic
+p.Thr159Ala,benign
+p.Gln162Lys,likely benign
+p.Asp168=,normal
+E171K,B
+p.Ser189Pro,VUS
+p.Arg178Gly,uncertain significance
+p.Ala163Val,benign
+p.Gly173Ala,benign
+p.Gly173Ala,likely benign
+p.Met100Leu,pathogenic
+p.Val161Ile,normal
+p.Phe175Ser,abnormal
+not-a-variant,benign
+p.Lys195Glu,benign
+p.Asn214Ser,

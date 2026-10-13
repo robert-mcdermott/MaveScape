@@ -12,6 +12,7 @@ import { retrievalText } from '../lib/uniprot.js';
 import { recordView } from './mavedb.js';
 import { setsFor } from './selections.js';
 import { exportSelection } from './record.js';
+import { composition } from '../lib/controls.js';
 
 export function mountInspector(app) {
   const root = document.getElementById('inspector');
@@ -125,8 +126,28 @@ export function mountInspector(app) {
       } }, icon('structure'), 'Open the view')));
   }
 
+  // A control set (wave 8, slice 1): where its labels came from, and how many on each side.
+  function controlSetSection(set) {
+    const c = composition(set);
+    return h('section.inspector-section', h('h3', icon('calibrate'), set.name),
+      h('dl.kv',
+        h('dt', 'From'), h('dd', set.source.kind === 'clinvar' ? `ClinVar, ${set.source.transcript}` : set.source.file.fileName),
+        set.source.citation ? [h('dt', 'Citation'), h('dd', set.source.citation)] : null,
+        set.source.kind === 'clinvar' ? [h('dt', 'Review status'), h('dd', `at least ${set.rules.minStars} star${set.rules.minStars === 1 ? '' : 's'}`)] : null,
+        h('dt', 'Kinds'), h('dd', set.rules.kinds.join(', ')),
+        h('dt', 'P controls'), h('dd', formatCount(c.P.total)),
+        h('dt', 'B controls'), h('dd', formatCount(c.B.total)),
+        h('dt', 'Made'), h('dd', relativeTime(set.created))),
+      h('p.muted', { style: { fontSize: '11.5px', margin: '8px 0 0' } }, 'Labels as their source gives them, for research: MaveScape does not classify variants.'),
+      h('div.btn-row', { style: { marginTop: '8px' } }, h('button.btn.small', { type: 'button', onclick: () => app.setMode('calibrate') }, icon('calibrate'), 'Open in Calibrate')));
+  }
+
   function focusSection() {
     const focus = app.store.ui.focus;
+    if (focus?.kind === 'controls') {
+      const set = (app.store.ws.controlSets ?? []).find((x) => x.id === focus.id);
+      if (set) return controlSetSection(set);
+    }
     if (focus?.kind === 'source') {
       const source = app.store.ws.sources.find((x) => x.id === focus.id);
       if (source) return sourceSection(source);

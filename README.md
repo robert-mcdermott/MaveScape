@@ -135,6 +135,10 @@ guides to every view, with screenshots.
     positions cluster beyond what burial explains.
   - Views saved with the workspace, its archive and methods; figure panels with their legend.
   - Opened in Proteoscope as its own session, when it runs on your computer.
+- **Calibration, for research.** Control sets of variants whose effect is known, from ClinVar's
+  records of the gene or a table of labels, each label shown with its source, matched to a run's
+  scores, with what may make them circular (labels that set the run's scale, ClinVar
+  classifications evaluated since the assay was published). MaveScape never classifies a variant.
 - **Figures.** A page at a journal's column width (85, 114 or 174 mm) or a slide, its panels any
   view's plots, added with **Add to figure**: the variant-effect map of a run (a range of
   positions, its tracks, color bar and key), a QC finding's charts, the scores by class, a
@@ -343,6 +347,7 @@ every file MaveScape reads and writes, and the start page has blank layouts to f
 | **Map** | The variant-effect map of a run or a difference between conditions, with tracks, selections and the inspector |
 | **Compare** | Two replicates, conditions, runs, score sets or a predictor; robustness to analysis choices |
 | **Structure** | The scores on a PDB entry, AlphaFold DB model or file, and the structure as evidence |
+| **Calibrate** | For research: control sets of variants whose effect is known, from ClinVar or a table, each label as its source gives it, matched to a run, with what may make them circular |
 | **Figures** | Pages of panels (any view's plots, maps and text) for a paper or a talk, exported as SVG, PDF or PNG |
 | **Report** | The methods of the whole workspace with their references, written from its record, copied as Markdown or downloaded with its BibTeX; checkpoints, and what changed since one; certificates and review reports made and verified |
 
@@ -520,7 +525,8 @@ check, its tolerance and how the reference outputs were made are in
   at once under the name it gives. What you change in the window while an agent's action runs
   counts as the agent's.
 - The R and Python packages are installed from this repository, not from CRAN or PyPI.
-- Calibration is planned for a later release; see the [roadmap](mavescape-spec/roadmap.md).
+- Calibration has its control sets; how far the scores separate them, and evidence strength (OddsPath,
+  likelihood ratios), are planned; see the [roadmap](mavescape-spec/roadmap.md).
 
 ## Development
 

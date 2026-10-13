@@ -74,11 +74,11 @@ var remoteActions = []remoteAction{
 		"paths":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Absolute paths of files or folders."},
 		"new_workspace": flagArg("Open them in a new workspace rather than the open one."),
 	}, "paths"), long: true, reads: true},
-	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map, compare, structure, figures or report.", InputSchema: schema(map[string]any{
-		"mode": textArg("start, experiment, qc, score, map, compare, structure, figures or report."),
+	{Name: "set_mode", Description: "Shows a view: start, experiment, qc, score, map, compare, structure, calibrate, figures or report.", InputSchema: schema(map[string]any{
+		"mode": textArg("start, experiment, qc, score, map, compare, structure, calibrate, figures or report."),
 	}, "mode")},
-	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
-		"kind": textArg("table, target, run, selection, structure view or variant; found by name across all of them if not given."),
+	{Name: "focus", Description: "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view, control set or variant, by name. With no name, clears the focus.", InputSchema: schema(map[string]any{
+		"kind": textArg("table, target, run, selection, structure view, control set or variant; found by name across all of them if not given."),
 		"name": textArg("Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala)."),
 		"run":  runArg,
 	})},
@@ -269,6 +269,25 @@ var remoteActions = []remoteAction{
 	{Name: "remove_structure_view", Description: "Removes a saved view, and its structure when no other view shows it (undoable, in the history).", InputSchema: schema(map[string]any{
 		"name": textArg("The saved view's name."),
 	}, "name")},
+	{Name: "make_control_set", Description: "Makes a control set, for calibration (research use): variants whose effect is known, each label as its source gives it, kept with the workspace and shown in the Calibrate view. From ClinVar (the ClinVar track's records of the gene: add_track clinvar first), pathogenic and likely pathogenic records as P, benign and likely benign as B, conflicting and uncertain ones left out, with at least min_stars review stars; or from a table of labels (file_name and text: a column of variants, such as p.Trp36Ala or W36A, and one of labels: pathogenic, likely pathogenic, benign, likely benign, or abnormal and normal from another assay), numbered on the reference or the target. Placed on the target as the tracks place ClinVar's; says what was left out and why. MaveScape reports functional evidence and never classifies a variant.", InputSchema: schema(map[string]any{
+		"source":    textArg("clinvar (the default) or table."),
+		"name":      textArg("The set's name; one is made from its source if not given."),
+		"min_stars": map[string]any{"type": "integer", "minimum": 0, "maximum": 4, "description": "clinvar: the fewest review stars a record may have (1, criteria provided, if not given)."},
+		"kinds":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The kinds of variant kept: missense, nonsense, synonymous (clinvar: missense if not given; table: all three)."},
+		"file_name": textArg("table: the file's name (labels.csv)."),
+		"text":      textArg("table: the file's text (CSV or TSV)."),
+		"citation":  textArg("table: where the labels were published, with its DOI."),
+		"numbering": textArg("table: reference or target; whichever the residues agree with if not given."),
+		"run":       runArg,
+	})},
+	{Name: "control_sets", Description: "The workspace's control sets (research use): each one's source and rules, its P and B controls by label, review stars and kind, what was left out when it was made; matched to a run (the latest if not given), how many of each side it scored, did not score or does not hold, and what may make the labels circular for it (labels anchoring the run's scale, the design's own controls, ClinVar classifications evaluated since the assay was published, the assay's own publication, too few controls, a predictor whose classes were set with the same labels). With labels, each control: its variant, side, label as its source gives it, ids and state in the run.", InputSchema: schema(map[string]any{
+		"name":   textArg("A control set by name: only that one."),
+		"run":    runArg,
+		"labels": flagArg("Each control too (its variant, side, label, ids, state and score in the run)."),
+	})},
+	{Name: "remove_control_set", Description: "Deletes a control set (undoable, in the history).", InputSchema: schema(map[string]any{
+		"name": textArg("The control set's name."),
+	}, "name")},
 	{Name: "figures", Description: "The workspace's figures: each one's name, page (millimeters, and the text size in points), its panels lettered in reading order with what each shows, where it is (millimeters) and anything wrong with it (text under 6 pt, a map too narrow for its positions, a run no longer there), and the figure described in words.", InputSchema: schema(map[string]any{
 		"figure": textArg("A figure by name or id: only that one."),
 		"image":  flagArg("Each page as a picture too: a PNG as export_figure writes it."),
@@ -431,6 +450,9 @@ var actionHints = map[string]actionHint{
 	"save_structure_view":   {title: "Save the structure view", kind: "edit"},
 	"open_structure_view":   {title: "Open a saved structure view", kind: "read", public: true},
 	"remove_structure_view": {title: "Remove a saved structure view", kind: "edit", destructive: true},
+	"make_control_set":      {title: "Make a control set", kind: "edit"},
+	"control_sets":          {title: "The control sets", kind: "read"},
+	"remove_control_set":    {title: "Delete a control set", kind: "edit", destructive: true},
 	"figures":               {title: "The workspace's figures", kind: "read"},
 	"create_figure":         {title: "Make a figure", kind: "edit"},
 	"add_figure_panel":      {title: "Add a panel to a figure", kind: "edit"},

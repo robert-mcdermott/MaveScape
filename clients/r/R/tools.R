@@ -65,10 +65,11 @@ ms_open_files <- function(paths, new_workspace = NULL, ms = ms_default()) {
 
 #' Show a view
 #'
-#' Shows a view: start, experiment, qc, score, map, compare, structure, figures or report.
+#' Shows a view: start, experiment, qc, score, map, compare, structure, calibrate, figures or
+#' report.
 #'
-#' @param mode start, experiment, qc, score, map, compare, structure, figures or report.
-#' Required; a string.
+#' @param mode start, experiment, qc, score, map, compare, structure, calibrate, figures or
+#' report. Required; a string.
 #' @param ms A connection from ms_connect() (default: the last one made).
 #' @return A mavescape_result: the message and the data MaveScape answered with.
 #' @export
@@ -79,10 +80,10 @@ ms_set_mode <- function(mode, ms = ms_default()) {
 #' Show an item in the inspector
 #'
 #' Shows an item in the inspector: a table, target, score run, saved selection, saved structure
-#' view or variant, by name. With no name, clears the focus.
+#' view, control set or variant, by name. With no name, clears the focus.
 #'
-#' @param kind table, target, run, selection, structure view or variant; found by name across
-#' all of them if not given. Optional; a string.
+#' @param kind table, target, run, selection, structure view, control set or variant; found by
+#' name across all of them if not given. Optional; a string.
 #' @param name Its name (a variant by its MAVE-HGVS name, such as p.Trp36Ala). Optional; a
 #' string.
 #' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
@@ -861,6 +862,74 @@ ms_open_structure_view <- function(name, ms = ms_default()) {
 #' @export
 ms_remove_structure_view <- function(name, ms = ms_default()) {
   ms_call("remove_structure_view", name = name, ms = ms)
+}
+
+#' Make a control set
+#'
+#' Makes a control set, for calibration (research use): variants whose effect is known, each
+#' label as its source gives it, kept with the workspace and shown in the Calibrate view. From
+#' ClinVar (the ClinVar track's records of the gene: add_track clinvar first), pathogenic and
+#' likely pathogenic records as P, benign and likely benign as B, conflicting and uncertain
+#' ones left out, with at least min_stars review stars; or from a table of labels (file_name
+#' and text: a column of variants, such as p.Trp36Ala or W36A, and one of labels: pathogenic,
+#' likely pathogenic, benign, likely benign, or abnormal and normal from another assay),
+#' numbered on the reference or the target. Placed on the target as the tracks place ClinVar's;
+#' says what was left out and why. MaveScape reports functional evidence and never classifies a
+#' variant.
+#'
+#' @param citation table: where the labels were published, with its DOI. Optional; a string.
+#' @param file_name table: the file's name (labels.csv). Optional; a string.
+#' @param kinds The kinds of variant kept: missense, nonsense, synonymous (clinvar: missense if
+#' not given; table: all three). Optional; a vector of strings (Python: a list).
+#' @param min_stars clinvar: the fewest review stars a record may have (1, criteria provided,
+#' if not given). Optional; a whole number.
+#' @param name The set's name; one is made from its source if not given. Optional; a string.
+#' @param numbering table: reference or target; whichever the residues agree with if not given.
+#' Optional; a string.
+#' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
+#' given. Optional; a string.
+#' @param source clinvar (the default) or table. Optional; a string.
+#' @param text table: the file's text (CSV or TSV). Optional; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_make_control_set <- function(citation = NULL, file_name = NULL, kinds = NULL, min_stars = NULL, name = NULL, numbering = NULL, run = NULL, source = NULL, text = NULL, ms = ms_default()) {
+  ms_call("make_control_set", citation = citation, file_name = file_name, kinds = .ms_array(kinds), min_stars = min_stars, name = name, numbering = numbering, run = run, source = source, text = text, ms = ms)
+}
+
+#' The control sets
+#'
+#' The workspace's control sets (research use): each one's source and rules, its P and B
+#' controls by label, review stars and kind, what was left out when it was made; matched to a
+#' run (the latest if not given), how many of each side it scored, did not score or does not
+#' hold, and what may make the labels circular for it (labels anchoring the run's scale, the
+#' design's own controls, ClinVar classifications evaluated since the assay was published, the
+#' assay's own publication, too few controls, a predictor whose classes were set with the same
+#' labels). With labels, each control: its variant, side, label as its source gives it, ids and
+#' state in the run.
+#'
+#' @param labels Each control too (its variant, side, label, ids, state and score in the run).
+#' Optional; TRUE or FALSE (Python: True or False).
+#' @param name A control set by name: only that one. Optional; a string.
+#' @param run A score run by name ("Run 2") or id; the latest run of the current design if not
+#' given. Optional; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_control_sets <- function(labels = NULL, name = NULL, run = NULL, ms = ms_default()) {
+  ms_call("control_sets", labels = labels, name = name, run = run, ms = ms)
+}
+
+#' Delete a control set
+#'
+#' Deletes a control set (undoable, in the history).
+#'
+#' @param name The control set's name. Required; a string.
+#' @param ms A connection from ms_connect() (default: the last one made).
+#' @return A mavescape_result: the message and the data MaveScape answered with.
+#' @export
+ms_remove_control_set <- function(name, ms = ms_default()) {
+  ms_call("remove_control_set", name = name, ms = ms)
 }
 
 #' The workspace's figures

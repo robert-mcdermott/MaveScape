@@ -405,7 +405,7 @@ author, opened, changes }`, each change one of
 
 | `kind` | What | Fields |
 | --- | --- | --- |
-| `add` | an item the agent made: a table, target, run, selection, annotation, structure view, figure, analysis kept in the report or checkpoint, made at once | `collection` (the workspace's field: `sources`, `targets`, `runs`, `selections`, `annotations`, `structureViews`, `figures`, `analyses`, `checkpoints`), `id`, `name` |
+| `add` | an item the agent made: a table, target, run, selection, annotation, structure view, figure, analysis kept in the report, checkpoint or control set, made at once | `collection` (the workspace's field: `sources`, `targets`, `runs`, `selections`, `annotations`, `structureViews`, `figures`, `analyses`, `checkpoints`, `controlSets`), `id`, `name` |
 | `edit` | a change of the person's item, made at once (a figure's panels; what a higher score of a score set means) | `collection`, `id`, `name`, `before` (the item as it was) |
 | `design` | a design set or drafted, held | `design` (`null`: cleared), `source` (the table it describes), `detail` |
 | `qc-thresholds` | QC thresholds, held | `thresholds` (`null`: MaveScape's defaults), `detail` |
@@ -557,6 +557,35 @@ name, output }, total, skipped, max, seed, choices: [{ id, label, options: [{ id
 targets: [{ id, name, kind, n, counts, text }] }`, the choices varied (the declared option first),
 how many analyses and each target's verdicts, as the Robustness export's record has them.
 
+`controlSets` (MaveScape 0.8, absent until the first) keeps the **control sets**, for calibration
+(research use): variants whose effect is known, each label as its source gives it. Each is `{ id,
+name, created, source, rules, labels, excluded, notes }`:
+- `source`: `{ kind: "clinvar", annotation (the ClinVar annotation's id), file: { sha256 },
+  retrieved, transcript }`, or `{ kind: "table", file: { fileName, sha256, size }, citation,
+  numbering ("reference" or "target") }`;
+- `rules`: `minStars` (ClinVar: the fewest review stars kept) and `kinds` (`missense`, `nonsense`,
+  `synonymous`);
+- `labels`: one per protein change on the target, `{ key (p.Trp36Ala, numbered on the target),
+  side ("P" or "B"), label (the source's words: "Likely pathogenic"), kind, variant (as the source
+  wrote it), ids (ClinVar's accessions, or the table's rows: "row 7"), stars (ClinVar: 0–4),
+  evaluated (ClinVar: the latest last-evaluated date) }`. P is pathogenic or likely pathogenic, or
+  abnormal in another assay; B is benign or likely benign, or normal. Records of one change on one
+  side are one label (their ids together); a change on both sides is left out;
+- `excluded`: what was left out when the set was made, and why: `{ reason: n }` ("uncertain
+  significance", "fewer than 1 review star", label not read: "VUS", "outside the target", …);
+- `notes`: what the reader said (the numbering it chose).
+
+A set is made once, from ClinVar's records of the gene (the ClinVar annotation's table, below,
+Tracks) or from a **table of labels**: CSV or TSV with a column of variants (named `variant`,
+`hgvs_pro`, `hgvs_p`, `protein_change`, `hgvs`, `name` or `title`: MAVE-HGVS protein changes,
+one-letter changes such as `W36A`, or ClinVar's titles, `NM_002086.5(GRB2):c.587G>A (p.Gly196Glu)`)
+and a column of labels (`label`, `class`, `classification`, `clinical_significance`,
+`germline_classification`, `significance` or `side`: pathogenic, likely pathogenic, P, LP, P/LP,
+abnormal; benign, likely benign, B, LB, B/LB, normal), numbered on the reference (the target's
+offset) or on the target, whichever its residues agree with. Making and deleting one are in the
+history (action `controls`). MaveScape reports functional evidence and does not classify variants:
+a label is its source's, and the views and exports always name the source beside it.
+
 `checkpoints` (MaveScape 0.6, absent until the first) keeps the **checkpoints**: each a named
 state of the analysis, `{ id, name, created, head, sha256, state }`, where `state` is the workspace
 document as it stood without its identity (`format`, `version`, `id`, `created`, `modified`), its
@@ -566,7 +595,7 @@ and deleting one are in the history (action `checkpoint`). A **diff** compares t
 checkpoint and now, two checkpoints, or two archives' workspaces; the Report view, remote control's
 `diff`) and says, in words, each change of the tables, targets, design, runs (scored, removed), QC
 thresholds and acknowledgements, selections, annotations, structure views, figures (made, deleted,
-a panel added, removed, changed or moved), the report's analyses and the MaveDB details; from
+a panel added, removed, changed or moved), the report's analyses, the control sets (made, deleted) and the MaveDB details; from
 MaveScape 0.7, who proposed what an AI agent made ("Run 2 was scored (proposed by Claude Code)"),
 what the person accepted since, and what waits for the person (kind `proposal`). For each
 table scored in both states it pairs the latest run of each and says how its parameters, filters and

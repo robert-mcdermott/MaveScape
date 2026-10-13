@@ -91,6 +91,7 @@ benign. Use these words consistently in the UI, exports, methods and agent tools
 | standard error (SE), 95% CI | uncertainty of a score | "confidence" for a QC status |
 | WT-like, intermediate, abnormal-like | research-use functional classes from user-set thresholds (exported in MaveDB's vocabulary: normal, not specified, abnormal) | "benign", "pathogenic" |
 | evidence strength (research use) | calibration output (OddsPath, likelihood ratios) | an ACMG/AMP classification |
+| a control's label, attributed | a known-effect label as its source gives it, never without the source: "ClinVar: Likely pathogenic ★★", "Fayer et al. 2021: abnormal"; a control set's two sides are P (pathogenic, likely pathogenic, or abnormal in another assay) and B (benign, likely benign, or normal) | MaveScape's own word for a variant |
 | missing | not observed in the counts | "zero", "neutral" |
 | filtered | observed, excluded by a filter (with a reason code) | "missing" |
 | low-confidence | scored, but flagged (SE, replicate disagreement, depth) | |

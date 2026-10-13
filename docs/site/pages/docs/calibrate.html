@@ -1,0 +1,36 @@
+---
+title: Calibration
+description: Calibration for research in MaveScape's Calibrate view: control sets of variants whose effect is known, from ClinVar's records of the gene or a table of labels, each label as its source gives it, matched to a run's scores, with what may make the labels circular. MaveScape reports functional evidence and does not classify variants.
+lede: Calibration asks how far an assay's functional scores separate variants whose effect is already known. It starts from a control set, the variants with their labels as their source gives them. Nothing here runs by itself, and MaveScape does not classify variants.
+---
+      <h2 id="research">For research</h2>
+      <p>Three questions stay apart in MaveScape: whether an assay measures what a question needs, which functional class a variant falls in in this assay, and how a variant is classified clinically. The <strong>Calibrate</strong> view addresses only how far the scores separate variants already labeled elsewhere. Its labels are always shown with their source ("ClinVar: Likely pathogenic ★★"); MaveScape's own words for a variant stay a functional score and, later in this release, an evidence strength marked for research use.</p>
+
+      <h2 id="controls">Control sets</h2>
+      <shot name="calibrate-controls" alt="The Calibrate view with factor IX's control set from ClinVar: 169 P controls (pathogenic or likely pathogenic) and 22 B controls (benign or likely benign), 164 and 22 of them scored in Run 1; their labels, review stars and kinds; and a warning that 70 were last evaluated by ClinVar's submitters in or after 2025, when the assay was published">Factor IX's ClinVar controls, matched to Run 1: what the run scored of each side, and a classification date that may make 70 of them circular.</shot>
+      <p>A control set holds variants whose effect is known, each label as its source gives it. Its two sides are <strong>P</strong> (pathogenic or likely pathogenic, or abnormal in another assay) and <strong>B</strong> (benign or likely benign, or normal). In Calibrate, <strong>New control set</strong> makes one:</p>
+      <ul>
+        <li><strong>From ClinVar</strong>: from the ClinVar track's records of the gene (add it first in Map, Tracks; it needs the target's gene symbol, which a UniProt check gives). Pathogenic and likely pathogenic records are P, benign and likely benign B; conflicting and uncertain records are left out. By default a record needs at least one review star (criteria provided) and only missense variants are kept: nonsense and synonymous variants set most runs' scales, so including them is a choice to make knowingly. Records are placed on the target as the ClinVar track places them: the transcript most of them name, numbered by the target's offset, where the residues agree.</li>
+        <li><strong>From a table</strong>: a CSV or TSV with a column of variants (<code>p.Trp36Ala</code>, <code>W36A</code>, or ClinVar's names) and one of labels (pathogenic, likely pathogenic, benign, likely benign, or abnormal and normal from another assay), numbered on the reference or the target, whichever its residues agree with. Give its citation if it was published. <a href="{{github}}/blob/main/docs/FORMATS.md#workspace-archives-msz">FORMATS.md</a> lists the column names it reads.</li>
+      </ul>
+      <p>Records of the same protein change on one side become one label, with all their accessions; a change labeled on both sides is left out. The set says what it left out and why: uncertain, conflicting, too few stars, a kind not chosen, another transcript, outside the target, a residue the target lacks, a label it could not read.</p>
+
+      <h3 id="matched">Matched to a run</h3>
+      <p>The view matches the set to the run shown (the one focused, or the latest) at the protein level, a nucleotide run through its protein view: each control is <em>scored</em>, <em>not scored</em> (in the run, but filtered or missing) or <em>not in the run</em>. The table below lists every label with its source, its state and its score in the run.</p>
+
+      <h3 id="circular">What may make labels circular</h3>
+      <p>Labels are evidence about the scores only when they were not made from them. For the run shown, the view says when:</p>
+      <ul>
+        <li>nonsense or synonymous controls score where the run's scale puts them: its rescaling (nonsense median 0, wild type 1), its bins' scale or its normalization to the synonymous variants uses them;</li>
+        <li>controls are among the design's own named controls;</li>
+        <li>ClinVar's classifications were last evaluated in or after the year the assay was published, so they may rest on it (functional evidence, ACMG/AMP's PS3 or BS3); when the year is not recorded, it says so;</li>
+        <li>a table's labels come from the assay's own publication (the same DOI);</li>
+        <li>fewer than 10 controls on a side are scored, too few for any measure of separation to rely on;</li>
+        <li>a predictor beside the map had its classes set with ClinVar's classifications (AlphaMissense's were).</li>
+      </ul>
+
+      <h3 id="kept">Kept with the workspace</h3>
+      <p>A set is made once and keeps its labels as they were then, with where they came from: the ClinVar annotation's file by its SHA-256 and its retrieval date, or the table's file by its SHA-256 and its citation. Sets are in the dataset tree, go into the workspace's archive, and making and deleting one are in its history; a checkpoint's diff names them. An AI agent's set is made at once and marked proposed, and deleting yours waits for you (<a href="scripting.html#proposals">Reviewing an agent's changes</a>). Scripts and agents use <code>make_control_set</code>, <code>control_sets</code> and <code>remove_control_set</code> (<a href="scripting.html">Agents and scripts</a>).</p>
+
+      <h2 id="later">Coming</h2>
+      <p>The rest of calibration arrives in 0.8: distributions by side, ROC and precision–recall curves with their intervals, thresholds and an indeterminate zone; OddsPath (Brnich et al. 2019) and score-level likelihood ratios (Pejaver et al. 2022), each an evidence strength marked for research use; and calibration in the report, figures, certificates and MaveDB deposits (<a href="{{github}}/blob/main/mavescape-spec/roadmap.md">roadmap</a>, wave 8).</p>

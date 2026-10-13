@@ -4,12 +4,13 @@
 // says what changed between two states (two checkpoints, a checkpoint and now, two archives), in
 // words: the tables and targets, the design, the runs scored and removed, the QC thresholds and
 // acknowledgements, the selections, annotations, structure views, figures, the analyses kept in
-// the report, the MaveDB details. For the latest run of each table in the two states it says how
-// the analysis changed (its parameters and filters, its design) and what that did: the variants
-// whose effect moved beyond their earlier 95% interval, crossed a class (lower than, like or
-// higher than the wild type, q < 0.05, as the robustness check calls them), or were newly filtered
-// or scored; the QC findings whose verdict changed; and a map of the change. After CytoWeave
-// 0.8.0's web/lib/diff.js (a change list in words); the analysis and its words are MaveScape's.
+// the report, the control sets, the MaveDB details. For the latest run of each table in the two
+// states it says how the analysis changed (its parameters and filters, its design) and what that
+// did: the variants whose effect moved beyond their earlier 95% interval, crossed a class (lower
+// than, like or higher than the wild type, q < 0.05, as the robustness check calls them), or were
+// newly filtered or scored; the QC findings whose verdict changed; and a map of the change. After
+// CytoWeave 0.8.0's web/lib/diff.js (a change list in words); the analysis and its words are
+// MaveScape's.
 
 import { sha256 } from './sha256.js';
 import { canonicalJSON } from './workspace.js';
@@ -429,10 +430,19 @@ export function diffStates(before, after, { pairs = [] } = {}) {
   const kept = (a) => (a.kind === 'comparison' ? `the comparison of ${a.a.label} and ${a.b.label}` : `${possessive(a.run.name)} robustness check`);
   for (const [id, a] of kb) if (!ka.has(id)) add('report', id, kept(a), `${kept(a).replace(/^./, (c) => c.toUpperCase())} was added to the report${byAgent(a)}.`);
   for (const [id, a] of ka) if (!kb.has(id)) add('report', id, kept(a), `${kept(a).replace(/^./, (c) => c.toUpperCase())} was taken out of the report${byAgent(a)}.`);
+  // Control sets (wave 8, slice 1): made once, so a set is added or removed, not changed.
+  const cs = (c) => `${c.labels.filter((l) => l.side === 'P').length} P and ${c.labels.filter((l) => l.side === 'B').length} B controls, from ${c.source.kind === 'clinvar' ? 'ClinVar' : c.source.file?.fileName ?? 'a table'}`;
+  const ca = byId(before.controlSets);
+  const cb = byId(after.controlSets);
+  for (const [id, c] of cb) {
+    if (!ca.has(id)) add('controls', id, c.name, `The control set "${c.name}" was made (${cs(c)})${byAgent(c)}.`);
+    else if (!sameItem(ca.get(id), c)) add('controls', id, c.name, `The control set "${c.name}": ${cs(ca.get(id))} → ${cs(c)}.`);
+  }
+  for (const [id, c] of ca) if (!cb.has(id)) add('controls', id, c.name, `The control set "${c.name}" was deleted${byAgent(c)}.`);
 
   // AI agents' proposals (wave 7, slice 2): what an agent proposed and the person accepted since,
   // and what waits for the person in the later state that did not in the earlier.
-  for (const [key, kind] of [['sources', 'table'], ['targets', 'target'], ['runs', 'run'], ['selections', 'selection'], ['annotations', 'annotation'], ['structureViews', 'structure-view'], ['figures', 'figure'], ['analyses', 'report']]) {
+  for (const [key, kind] of [['sources', 'table'], ['targets', 'target'], ['runs', 'run'], ['selections', 'selection'], ['annotations', 'annotation'], ['structureViews', 'structure-view'], ['figures', 'figure'], ['analyses', 'report'], ['controlSets', 'control set']]) {
     const was = byId(before[key]);
     for (const x of after[key] ?? []) {
       const old = was.get(x.id);
@@ -444,7 +454,7 @@ export function diffStates(before, after, { pairs = [] } = {}) {
   for (const [k, { author, c }] of waiting(after)) if (!wa.has(k)) add('proposal', k, author, `Proposed by ${author}, waiting for the person: ${c.detail ?? (c.kind === 'remove' ? `remove ${c.name}` : c.kind)}.`);
   if (!same(before.deposit, after.deposit)) add('deposit', 'deposit', 'MaveDB details', `The MaveDB details: ${lower(fieldsChanged(before.deposit ?? {}, after.deposit ?? {})).replace(/^changed \((.*)\)$/, '$1 changed')}.`);
   if (!same(before.tracks, after.tracks)) add('tracks', 'tracks', 'tracks', 'The tracks beside the map were arranged or filtered otherwise.');
-  const covered = new Set(['name', 'sources', 'targets', 'design', 'designSource', 'runs', 'qc', 'selections', 'annotations', 'structureViews', 'structures', 'figures', 'analyses', 'deposit', 'tracks', 'proposals']);
+  const covered = new Set(['name', 'sources', 'targets', 'design', 'designSource', 'runs', 'qc', 'selections', 'annotations', 'structureViews', 'structures', 'figures', 'analyses', 'controlSets', 'deposit', 'tracks', 'proposals']);
   for (const key of Object.keys({ ...before, ...after })) if (!covered.has(key) && !same(before[key], after[key])) add('workspace', key, key, `The workspace's ${key} changed.`);
 
   // The latest run of each table: how its analysis changed and what that did.

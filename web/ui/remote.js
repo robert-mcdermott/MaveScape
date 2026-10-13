@@ -77,6 +77,8 @@ import { qcCharts } from '../lib/qc-plots.js';
 import { COLOR_SCHEMES } from '../lib/structure/coloring.js';
 import { SelectionError } from '../lib/structure/select.js';
 import { ASYMMETRIC_UNIT_ID, assemblyChoices, chainSummaries, describeStructure, residueLabel, residueRuns } from '../lib/structures.js';
+import { KINDS as CONTROL_KINDS, SIDES, composition as controlComposition, controlSetWords } from '../lib/controls.js';
+import { controlsForRun, deleteControlSet, makeClinVarControls, makeTableControls } from './controls.js';
 
 export class ActionError extends Error {}
 
@@ -85,7 +87,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const ONE_TO_THREE = { A: 'Ala', R: 'Arg', N: 'Asn', D: 'Asp', C: 'Cys', Q: 'Gln', E: 'Glu', G: 'Gly', H: 'His', I: 'Ile', L: 'Leu', K: 'Lys', M: 'Met', F: 'Phe', P: 'Pro', S: 'Ser', T: 'Thr', W: 'Trp', Y: 'Tyr', V: 'Val', '*': 'Ter', X: 'Ter' };
 
 // The views by the names scripts use.
-const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure', figures: 'figures', figure: 'figures', report: 'report', methods: 'report' };
+const MODES = { start: 'welcome', welcome: 'welcome', experiment: 'experiment', design: 'experiment', qc: 'qc', 'quality control': 'qc', score: 'score', scores: 'score', map: 'map', compare: 'compare', comparison: 'compare', structure: 'structure', structures: 'structure', calibrate: 'calibrate', calibration: 'calibrate', figures: 'figures', figure: 'figures', report: 'report', methods: 'report' };
 
 // One of `options` (strings) by a forgiving name: exact, then ignoring case, then the one that
 // starts with or contains it. Errors list the choices.
@@ -589,6 +591,23 @@ export function installRemote(app) {
     for (let i = 0; i < 300 && viewer.surface.kind !== 'off' && viewer.kind === 'webgpu' && !viewer.surface.ready && !/could not/.test(viewer.surface.status); i += 1) await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
+  // A control set as data (wave 8, slice 1): where it came from, its composition, what was left
+  // out; matched to a run, what it measured and what may make the labels circular; with labels,
+  // each control and its state and score in the run.
+  async function controlSetData(set, run, withLabels) {
+    const c = controlComposition(set);
+    const report = run ? await controlsForRun(app, set, run) : null;
+    const score = report?.match.view.conditions[0]?.score;
+    return {
+      id: set.id, name: set.name, created: set.created, source: set.source, rules: set.rules,
+      ...Object.fromEntries(SIDES.map((side) => [side, { controls: c[side].total, labels: c[side].labels, ...(set.source.kind === 'clinvar' ? { stars: c[side].stars } : {}), kinds: c[side].kinds }])),
+      excluded: set.excluded ?? {}, notes: set.notes ?? [],
+      ...(set.proposed ? { proposed: { by: set.proposed.by, accepted: Boolean(set.proposed.accepted) } } : {}),
+      ...(report ? { run: run.name, measured: report.match.counts, circularity: report.warnings.map((w) => ({ id: w.id, n: w.n, text: w.text })) } : {}),
+      ...(withLabels ? { labels: set.labels.map((l, k) => ({ variant: l.key, side: l.side, label: l.label, kind: l.kind, ids: l.ids, ...(Number.isInteger(l.stars) ? { stars: l.stars } : {}), ...(l.evaluated ? { evaluated: l.evaluated } : {}), ...(report ? { state: report.match.states[k], score: report.match.rows[k] >= 0 && Number.isFinite(score?.[report.match.rows[k]]) ? score[report.match.rows[k]] : null } : {}) })) } : {}),
+    };
+  }
+
   const actions = {
     async get_state() {
       const w = ws();
@@ -612,6 +631,8 @@ export function installRemote(app) {
         // The structures kept and their saved views (wave 5, slice 5).
         structures: (w.structures ?? []).map((x) => ({ id: x.id, name: x.name, origin: x.origin?.kind ?? null, file: x.file.fileName, sha256: x.file.sha256, ...(x.pae ? { alignedError: x.pae.sha256 } : {}) })),
         structureViews: (w.structureViews ?? []).map((v) => ({ id: v.id, name: v.name, structure: v.structure, chain: v.chain, shows: viewWords(v, w), created: v.created })),
+        // Control sets, for calibration (wave 8, slice 1).
+        controlSets: (w.controlSets ?? []).map((c) => ({ name: c.name, source: c.source.kind, P: c.labels.filter((l) => l.side === 'P').length, B: c.labels.filter((l) => l.side === 'B').length, created: c.created })),
       };
       const message = `${w.name}: ${plural(w.sources.length, 'table')}, ${plural(w.runs.length, 'score run')}${w.design ? `, a ${w.design.model} design` : ', no design'}; showing ${data.mode}.${next ? ` ${next.state === 'optional' ? 'All done' : 'Next'}: ${next.detail}` : ''}`;
       return { message, data };
@@ -929,6 +950,63 @@ export function installRemote(app) {
       return { message: held ? `Proposed removing the view "${name}".${waits}` : removed.message, data: { removed: name, ...(held ? { waiting: true } : {}), views: (ws().structureViews ?? []).map((v) => v.name), structures: (ws().structures ?? []).map((x) => x.name) } };
     },
 
+    // --- Control sets (wave 8, slice 1) ---------------------------------------------------------
+
+    // A control set from ClinVar's records of the gene (the ClinVar track's) or a table of labels,
+    // kept with the workspace and shown in Calibrate. An agent's is made at once, marked proposed.
+    async make_control_set(args) {
+      const run = ws().runs.length ? resolveRun(args.run) : null;
+      const from = choose(args.source ?? 'clinvar', ['clinvar', 'table'], 'source');
+      const kinds = args.kinds === undefined || args.kinds === null ? undefined : (Array.isArray(args.kinds) ? args.kinds : [args.kinds]).map((k) => choose(k, CONTROL_KINDS, 'kind'));
+      if (kinds && !kinds.length) throw new ActionError(`kinds names at least one of ${CONTROL_KINDS.join(', ')}.`);
+      let made;
+      if (from === 'clinvar') {
+        const minStars = args.min_stars === undefined || args.min_stars === null ? 1 : Number(args.min_stars);
+        if (!Number.isInteger(minStars) || minStars < 0 || minStars > 4) throw new ActionError('min_stars is a whole number from 0 to 4.');
+        try {
+          made = await makeClinVarControls(app, { name: args.name ?? null, minStars, kinds: kinds ?? ['missense'], run });
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+      } else {
+        if (!args.file_name || args.text === undefined || args.text === null) throw new ActionError('A table is given by its file_name and text.');
+        const numbering = args.numbering ? choose(args.numbering, ['reference', 'target'], 'numbering') : null;
+        try {
+          made = makeTableControls(app, { name: args.name ?? null, fileName: String(args.file_name), text: String(args.text), citation: args.citation ?? null, numbering, kinds, run });
+        } catch (error) {
+          throw new ActionError(error.message);
+        }
+      }
+      app.focusItem({ kind: 'controls', id: made.id });
+      await app.setMode('calibrate');
+      await settle();
+      const set = (ws().controlSets ?? []).find((c) => c.id === made.id);
+      const left = Object.entries(made.read.excluded).sort((a, b) => b[1] - a[1]).map(([why, n]) => `${n} ${why}`);
+      return { message: `Made the control set ${controlSetWords(set)}.${left.length ? ` Left out: ${left.join('; ')}.` : ''}${(made.read.notes ?? []).length ? ` ${made.read.notes.join(' ')}` : ''}`, data: await controlSetData(set, run, false) };
+    },
+
+    // The control sets, each matched to a run: its composition, what the run measured of it, and
+    // what may make its labels circular; with labels, each control.
+    async control_sets(args) {
+      const all = ws().controlSets ?? [];
+      const list = args.name ? [all.find((c) => c.name === choose(String(args.name), all.map((x) => x.name), 'control set'))] : all;
+      const run = ws().runs.length ? resolveRun(args.run) : null;
+      const sets = [];
+      for (const set of list) sets.push(await controlSetData(set, run, args.labels === true));
+      const said = sets.map((x) => `${controlSetWords(list.find((c) => c.id === x.id))}${x.measured ? `; ${x.run} scores ${x.measured.P.scored} P and ${x.measured.B.scored} B${x.circularity.length ? `; ${x.circularity.length === 1 ? 'one thing' : `${x.circularity.length} things`} may make it circular: ${x.circularity.map((w) => w.text).join(' ')}` : ''}` : ''}`.replace(/\.?$/, '.'));
+      return { message: list.length ? `${list.length === 1 ? '' : `${list.length} control sets. `}${said.join(' ')}` : 'No control set yet: make one from ClinVar (make_control_set, after add_track clinvar) or from a table of labels.', data: { sets } };
+    },
+
+    async remove_control_set(args) {
+      const list = ws().controlSets ?? [];
+      if (!list.length) throw new ActionError('The workspace has no control set.');
+      const name = choose(String(args.name ?? ''), list.map((c) => c.name), 'control set');
+      const set = list.find((c) => c.name === name);
+      const held = removing(set, 'controlSets', `the control set "${name}"`, `Deleted the control set "${name}"`, () => deleteControlSet(app, set.id), `Propose deleting the control set "${name}"`);
+      await settle();
+      return { message: held ? `Proposed deleting the control set "${name}".${waits}` : `Deleted the control set "${name}".`, data: { removed: name, ...(held ? { waiting: true } : {}), sets: (ws().controlSets ?? []).map((c) => c.name) } };
+    },
+
     // --- Figures (wave 6, slice 1) -----------------------------------------------------------------
 
     // image: each page as exported, a PNG at dpi (150 by default), for an agent to look at (wave 7,
@@ -1116,9 +1194,9 @@ export function installRemote(app) {
         app.focusItem(null);
         return { message: 'Cleared the focus.' };
       }
-      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant', 'structure view': 'structureView' };
+      const kinds = { table: 'source', target: 'target', run: 'run', selection: 'selection', variant: 'variant', 'structure view': 'structureView', 'control set': 'controls' };
       const kind = args.kind ? kinds[choose(args.kind, Object.keys(kinds), 'kind')] : null;
-      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections, structureView: w.structureViews ?? [] };
+      const lists = { source: w.sources, target: w.targets, run: w.runs, selection: w.selections, structureView: w.structureViews ?? [], controls: w.controlSets ?? [] };
       const candidates = Object.entries(lists).filter(([k]) => !kind || k === kind).flatMap(([k, items]) => items.map((item) => ({ kind: k, id: item.id, name: item.name })));
       // A variant by its name, when nothing else is called that.
       const looksLikeVariant = /^p\.[A-Z][a-z]{2}\d+/.test(variantName(args.name)) && !candidates.some((c) => c.name === args.name);
@@ -1127,7 +1205,7 @@ export function installRemote(app) {
       const item = candidates.find((c) => c.name === name);
       app.focusItem({ kind: item.kind, id: item.id });
       await settle();
-      return { message: `Showing ${name} in the inspector.`, data: { kind: item.kind === 'source' ? 'table' : item.kind === 'structureView' ? 'structure view' : item.kind, name } };
+      return { message: `Showing ${name} in the inspector.`, data: { kind: item.kind === 'source' ? 'table' : item.kind === 'structureView' ? 'structure view' : item.kind === 'controls' ? 'control set' : item.kind, name } };
     },
 
     async draft_design(args) {

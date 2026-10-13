@@ -913,6 +913,14 @@ const scenes = {
     await click('Review', '.proposal-strip button');
     await sleep(600);
   },
+  // Calibration, for research (wave 8, slice 1): factor IX's control set from ClinVar, matched to
+  // Run 1, with what may make it circular.
+  async 'calibrate-controls'() {
+    await example('factor9');
+    await act('add_track', { provider: 'clinvar' });
+    await act('make_control_set', {});
+    await sleep(800);
+  },
   // The guide's session on Hsp90: the design the agent proposed, in Experiment beside the person's,
   // and the strip reviewed.
   async 'agent-hsp90'() {

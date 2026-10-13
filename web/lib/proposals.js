@@ -37,7 +37,7 @@
 // rejecting removes and restores. Either decision is one "proposal" entry, the person's.
 
 import { newId, now as clockNow } from './clock.js';
-import { appendHistory, canonicalJSON, change, recordTargetCheck, removeAnalysis, removeAnnotation, removeCheckpoint, removeFigure, removeSelection, removeSource, removeStructureView, saveFigure, setAcknowledgement, setDeposit, setDesign, setQcThresholds, updateTarget, withHistoryActor } from './workspace.js';
+import { appendHistory, canonicalJSON, change, recordTargetCheck, removeAnalysis, removeAnnotation, removeCheckpoint, removeControlSet, removeFigure, removeSelection, removeSource, removeStructureView, saveFigure, setAcknowledgement, setDeposit, setDesign, setQcThresholds, updateTarget, withHistoryActor } from './workspace.js';
 import { removeRun } from './runs.js';
 import { panelSummary, removePanel } from './figures.js';
 import { possessive } from './words.js';
@@ -62,6 +62,7 @@ export const COLLECTIONS = {
   figures: { noun: (f) => `the figure "${f.name}"`, made: 'made', remove: (ws, id) => removeFigure(ws, id) },
   analyses: { noun: analysisWords, made: 'kept in the report', remove: (ws, id) => removeAnalysis(ws, id, `Took ${analysisWords(ws.analyses.find((a) => a.id === id))} out of the report`) },
   checkpoints: { noun: (c) => `the checkpoint "${c.name}"`, made: 'kept', remove: (ws, id) => removeCheckpoint(ws, id) },
+  controlSets: { noun: (c) => `the control set "${c.name}"`, made: 'made', remove: (ws, id) => removeControlSet(ws, id) },
 };
 
 // Fields an agent's change may alter freely: the record of the change itself, the tracks'

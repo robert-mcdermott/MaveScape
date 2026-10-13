@@ -89,12 +89,12 @@
   {
     "name": "set_mode",
     "title": "Show a view",
-    "description": "Shows a view: start, experiment, qc, score, map, compare, structure, figures or report.",
+    "description": "Shows a view: start, experiment, qc, score, map, compare, structure, calibrate, figures or report.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
         "mode": {
-          "description": "start, experiment, qc, score, map, compare, structure, figures or report.",
+          "description": "start, experiment, qc, score, map, compare, structure, calibrate, figures or report.",
           "type": "string"
         }
       },
@@ -111,12 +111,12 @@
   {
     "name": "focus",
     "title": "Show an item in the inspector",
-    "description": "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view or variant, by name. With no name, clears the focus.",
+    "description": "Shows an item in the inspector: a table, target, score run, saved selection, saved structure view, control set or variant, by name. With no name, clears the focus.",
     "inputSchema": {
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "description": "table, target, run, selection, structure view or variant; found by name across all of them if not given.",
+          "description": "table, target, run, selection, structure view, control set or variant; found by name across all of them if not given.",
           "type": "string"
         },
         "name": {
@@ -1189,6 +1189,113 @@
       "properties": {
         "name": {
           "description": "The saved view's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "make_control_set",
+    "title": "Make a control set",
+    "description": "Makes a control set, for calibration (research use): variants whose effect is known, each label as its source gives it, kept with the workspace and shown in the Calibrate view. From ClinVar (the ClinVar track's records of the gene: add_track clinvar first), pathogenic and likely pathogenic records as P, benign and likely benign as B, conflicting and uncertain ones left out, with at least min_stars review stars; or from a table of labels (file_name and text: a column of variants, such as p.Trp36Ala or W36A, and one of labels: pathogenic, likely pathogenic, benign, likely benign, or abnormal and normal from another assay), numbered on the reference or the target. Placed on the target as the tracks place ClinVar's; says what was left out and why. MaveScape reports functional evidence and never classifies a variant.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "citation": {
+          "description": "table: where the labels were published, with its DOI.",
+          "type": "string"
+        },
+        "file_name": {
+          "description": "table: the file's name (labels.csv).",
+          "type": "string"
+        },
+        "kinds": {
+          "description": "The kinds of variant kept: missense, nonsense, synonymous (clinvar: missense if not given; table: all three).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "min_stars": {
+          "description": "clinvar: the fewest review stars a record may have (1, criteria provided, if not given).",
+          "maximum": 4,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The set's name; one is made from its source if not given.",
+          "type": "string"
+        },
+        "numbering": {
+          "description": "table: reference or target; whichever the residues agree with if not given.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        },
+        "source": {
+          "description": "clinvar (the default) or table.",
+          "type": "string"
+        },
+        "text": {
+          "description": "table: the file's text (CSV or TSV).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "readOnlyHint": false
+    }
+  },
+  {
+    "name": "control_sets",
+    "title": "The control sets",
+    "description": "The workspace's control sets (research use): each one's source and rules, its P and B controls by label, review stars and kind, what was left out when it was made; matched to a run (the latest if not given), how many of each side it scored, did not score or does not hold, and what may make the labels circular for it (labels anchoring the run's scale, the design's own controls, ClinVar classifications evaluated since the assay was published, the assay's own publication, too few controls, a predictor whose classes were set with the same labels). With labels, each control: its variant, side, label as its source gives it, ids and state in the run.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "labels": {
+          "description": "Each control too (its variant, side, label, ids, state and score in the run).",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "A control set by name: only that one.",
+          "type": "string"
+        },
+        "run": {
+          "description": "A score run by name (\"Run 2\") or id; the latest run of the current design if not given.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    }
+  },
+  {
+    "name": "remove_control_set",
+    "title": "Delete a control set",
+    "description": "Deletes a control set (undoable, in the history).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The control set's name.",
           "type": "string"
         }
       },

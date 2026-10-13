@@ -135,6 +135,12 @@ import { dataRange, linkPayload, residueData, sessionDocument } from '../web/lib
 import { inflateRawSync } from 'node:zlib';
 import { saveStructureView } from '../web/lib/workspace.js';
 import { structureFiles } from '../web/lib/archive.js';
+import { circularity, clinvarControls, composition, matchControls, tableControls } from '../web/lib/controls.js';
+import { clinvarAccount } from './control-cases.mjs';
+import { cachedGet } from './cached-fetch.mjs';
+import { CLINVAR } from '../web/lib/providers/clinvar.js';
+import { scoresTable } from '../web/lib/exports.js';
+import { addControlSet } from '../web/lib/workspace.js';
 import { calibrationClasses, cellsAtPositions, coloringPalette, placeOnTarget, POSITION, POSITION_NAMES, positionRanges, positionsOfKeys, positionValues, QC_CLASSES, residueColors, STATE_COLORS, thresholdClasses } from '../web/lib/structure-scores.js';
 import { describeMapping, mapTarget, mapTargetOnChain, rankStructures } from '../web/lib/mapping.js';
 import { assemblyChoices, chainSummaries, openStructureText, readStructureBytes } from '../web/lib/structures.js';
@@ -5044,6 +5050,94 @@ const suites = {
       rows.push({ id: e.id, total: x.total, bad: x.bad.length, external: externalReferences(m.review).length, mb: m.review.length / 1e6 });
     }
     check('review', `each of the ${EXAMPLES.length} examples' review report: every traced number as the certificate or the workspace records it, nothing loaded from outside`, `${rows.reduce((n, x) => n + x.total, 0)} traced numbers; ${rows.filter((x) => x.bad || x.external).map((x) => `${x.id}: ${x.bad} wrong, ${x.external} external`).join('; ') || 'every one'}; largest ${Math.max(...rows.map((x) => x.mb)).toFixed(1)} MB`, rows.every((x) => !x.bad && !x.external && x.total > 20), 'every one');
+  },
+
+  // Wave 8, slice 1 (K1): control sets, variants of known effect for calibration (lib/controls.js).
+  // ClinVar's controls of factor IX against an account of its own read straight from NCBI's cached
+  // answers (control-cases.mjs); matched to the example's Run 1 against its scores export; a table
+  // of invented labels with every case a reader meets planted (fixtures/controls/); each
+  // circularity planted, and none where none is; the sets through the workspace archive and a
+  // checkpoint's diff.
+  async controls() {
+    const f9 = openExampleInNode(exampleById('factor9'));
+    const target = { ...f9.design.targets[0], identifiers: { ...(f9.design.targets[0].identifiers ?? {}), gene: 'F9' } };
+    const text = (await CLINVAR.fetch(target, {}, cachedGet())).text;
+    const describe = (l) => `${l.side} ${l.stars} ${[...l.ids].sort().join('|')} ${l.evaluated ?? ''} ${l.kind}`;
+    const rulesTried = [{}, { minStars: 0, kinds: ['missense', 'nonsense', 'synonymous'] }, { minStars: 2, kinds: ['missense', 'nonsense'] }, { minStars: 3, kinds: ['missense'] }];
+    const agreed = rulesTried.map((rules) => {
+      const mod = clinvarControls(text, target, rules);
+      const acc = clinvarAccount('F9', target, rules);
+      const a = new Map(mod.labels.map((l) => [l.key, describe(l)]));
+      const b = new Map([...acc.controls].map(([k, v]) => [k, describe(v)]));
+      const differ = [...new Set([...a.keys(), ...b.keys()])].filter((k) => a.get(k) !== b.get(k));
+      const c = composition({ labels: mod.labels });
+      return { rules, n: mod.labels.length, P: c.P.total, B: c.B.total, differ, transcript: mod.transcript === acc.transcript };
+    });
+    check('controls', 'factor IX\'s ClinVar controls under four rules (the default: at least one star, missense; any review, every kind; two stars; three stars): every control, its side, stars, records, latest evaluation and kind, as an account read straight from NCBI\'s cached answers gives them', agreed.map((x) => `${JSON.stringify(x.rules)}: ${x.n} (${x.P} P, ${x.B} B)${x.differ.length ? `, ${x.differ.length} differ: ${x.differ.slice(0, 3).join(', ')}` : ''}`).join('; '),
+      agreed.every((x) => !x.differ.length && x.transcript && x.n > 0) && agreed[0].P === 169 && agreed[0].B === 22, '169 P and 22 B by default; all the same');
+
+    // Matched to the example's Run 1, against its scores export.
+    const set = { name: 'ClinVar', source: { kind: 'clinvar' }, rules: {}, labels: clinvarControls(text, target).labels };
+    const run1 = makeRun({ inputs: runInputs({ source: f9.ws.sources[0], design: f9.design, parameters: f9.parameters }), source: f9.ws.sources[0], results: f9.scored.results, software: SOFTWARE, name: 'Run 1' });
+    const m = matchControls(set, f9.scored.results);
+    const table = scoresTable(f9.scored.results, run1);
+    const hp = table.header.indexOf('hgvs_pro');
+    const sc = table.header.indexOf('score');
+    const byName = new Map(table.rows.map((r) => [r[hp], r[sc]]));
+    const wrong = set.labels.filter((l, k) => {
+      const exported = byName.get(l.key);
+      const state = m.states[k];
+      if (exported === undefined) return state !== 'not in the run';
+      if (!Number.isFinite(exported)) return state !== 'not scored';
+      return state !== 'scored' || f9.scored.results.conditions[0].score[m.rows[k]] !== exported;
+    });
+    check('controls', 'factor IX\'s ClinVar controls matched to Run 1: each scored, not scored or not in the run as its scores export has it, every score the export\'s', `P ${JSON.stringify(m.counts.P)}, B ${JSON.stringify(m.counts.B)}; ${wrong.length ? `differ: ${wrong.slice(0, 3).map((l) => l.key).join(', ')}` : 'all as exported'}`, !wrong.length && m.counts.P.scored === 164 && m.counts.B.scored === 22, '164 P and 22 B scored; each as exported');
+
+    // A table of invented labels (fixtures/controls/NOTICE.txt): every case planted.
+    const grb2 = openExampleInNode(exampleById('grb2-sh3'));
+    const invented = readFileSync(new URL('./fixtures/controls/grb2-invented-labels.csv', import.meta.url), 'utf8');
+    const t = tableControls(invented, grb2.design.targets[0]);
+    const expected = ['p.Thr1Ala B benign', 'p.Val3Ile B normal', 'p.Gln4Lys B likely benign', 'p.Leu6Pro P LP', 'p.Asp10= B normal', 'p.Glu13Lys B B', 'p.Gly15Ala B benign', 'p.Trp35Ter P pathogenic', 'p.Lys37Glu B benign', 'p.Gly38Asp P abnormal', 'p.Gly38Glu P likely pathogenic'];
+    const expectedExcluded = { 'label not read: "VUS"': 1, 'label not read: "uncertain significance"': 1, 'label not read: "(empty)"': 1, 'not a single protein substitution': 1, 'outside the target': 1, 'another residue on the target': 1, 'records disagree': 1 };
+    const got = t.labels.map((l) => `${l.key} ${l.side} ${l.label}`);
+    check('controls', 'a table of invented labels for GRB2 (P62993\'s numbering, each side\'s words, MAVE-HGVS, one-letter and ClinVar\'s names): read on the reference\'s numbering, each planted case as it must become (a change on both sides left out, one labeled twice on one side merged, unread labels, a position outside the target, a residue the target lacks, no variant)', `${t.numbering}; ${got.join(', ')}; left out ${JSON.stringify(t.excluded)}`,
+      t.numbering === 'reference' && JSON.stringify(got) === JSON.stringify(expected) && JSON.stringify(Object.fromEntries(Object.entries(t.excluded).sort())) === JSON.stringify(Object.fromEntries(Object.entries(expectedExcluded).sort())) && t.labels.find((l) => l.key === 'p.Gly15Ala').ids.join() === 'row 14,row 15', 'each case as planted');
+
+    // Each circularity planted, and none where none is.
+    const tableSet = { name: 'Invented', source: { kind: 'table', citation: grb2.design.source.citation }, labels: t.labels };
+    const runWith = (parameters, design = grb2.design) => ({ inputs: { design, parameters: { ...withDefaults({}), ...parameters } } });
+    const ids = (warnings) => warnings.map((w) => `${w.id}${w.n === null ? '' : ` ${w.n}`}`);
+    const named = { ...grb2.design, controls: { ...grb2.design.controls, synonymous: ['p.Asp10='] } };
+    const planted = {
+      'rescaled by nonsense and wild type': ids(circularity(tableSet, { ws: {}, run: runWith({ rescale: 'nonsense-wt' }) })),
+      'normalized to the synonymous variants': ids(circularity(tableSet, { ws: {}, run: runWith({ normalization: 'synonymous' }) })),
+      'the design names a control': ids(circularity(tableSet, { ws: {}, run: runWith({}, named) })),
+    };
+    const clinvarSet = { name: 'ClinVar', source: { kind: 'clinvar' }, labels: set.labels };
+    const since = [...clinvarAccount('F9', target).controls.values()].filter((v) => v.evaluated && v.evaluated >= '2025-01-01').length;
+    const withPredictor = ids(circularity(clinvarSet, { ws: { annotations: [{ provider: 'alphamissense' }] }, run: run1, matched: m }));
+    // Factor IX's ClinVar controls as a table of their own, cited elsewhere: missense only, ten or
+    // more a side, the run's scale anchored by nothing they hold.
+    const asTable = `variant,label\n${set.labels.map((l) => `${l.key},${l.side}`).join('\n')}\n`;
+    const clean = { name: 'Clean', source: { kind: 'table', citation: 'Elsewhere 2020. doi:10.1000/elsewhere' }, labels: tableControls(asTable, f9.design.targets[0], { numbering: 'target' }).labels };
+    const none = circularity(clean, { ws: {}, run: run1, matched: matchControls(clean, f9.scored.results) });
+    check('controls', 'circularity, each kind planted: nonsense controls on a scale set by the nonsense variants, synonymous ones on a scale set by the synonymous, the design\'s own named controls, labels from the assay\'s own publication, ClinVar classifications evaluated since the assay was published (as many as the account dates), too few controls, a predictor whose classes were set with ClinVar; and none for factor IX\'s missense controls as a table cited elsewhere', `${Object.entries(planted).map(([k, v]) => `${k}: ${v.join(', ')}`).join('; ')}; factor IX: ${withPredictor.join(', ')} (account: ${since} since 2025); clean: ${none.length ? ids(none).join(', ') : 'none'}`,
+      planted['rescaled by nonsense and wild type'].join() === 'anchor-nonsense 1,same-publication 11,few-P 4,few-B 7'
+      && planted['normalized to the synonymous variants'].join() === 'anchor-synonymous 1,same-publication 11,few-P 4,few-B 7'
+      && planted['the design names a control'].join() === 'design-controls 1,same-publication 11,few-P 4,few-B 7'
+      && withPredictor.join() === `evaluated-since ${since},predictor` && since === 70 && clean.labels.length === 191 && !none.length, 'each where planted, none elsewhere');
+
+    // The record: through the workspace archive, and in a checkpoint's diff.
+    let ws = f9.ws;
+    const before = analysisState(ws);
+    ws = addControlSet(ws, { ...set, rules: { minStars: 1, kinds: ['missense'] }, excluded: {}, notes: [] }, '2026-10-13T06:00:00.000Z').ws;
+    ws = addControlSet(ws, { ...tableSet, rules: { kinds: ['missense', 'nonsense', 'synonymous'] }, excluded: t.excluded, notes: [] }, '2026-10-13T06:01:00.000Z').ws;
+    // Its tables named by their checksums: the sets are what is checked.
+    const written = await writeArchive(ws, { software: SOFTWARE, results: new Map(), methods: null });
+    const back = await readArchive(written.bytes);
+    const words = diffStates(before, analysisState(back.ws)).changes.filter((c) => c.kind === 'controls').map((c) => c.text);
+    check('controls', 'control sets kept with the workspace: through its archive the same, every label as made, the history\'s chain unbroken; a checkpoint\'s diff names each set made', `${(back.ws.controlSets ?? []).map((c) => `${c.name}: ${c.labels.length}`).join(', ')}; ${words.join(' ')}`,
+      JSON.stringify(back.ws.controlSets) === JSON.stringify(ws.controlSets) && verifyHistory(back.ws).ok && words.join(' ') === 'The control set "ClinVar" was made (169 P and 22 B controls, from ClinVar). The control set "Invented" was made (4 P and 7 B controls, from a table).', 'the same; both named');
   },
 
 };
