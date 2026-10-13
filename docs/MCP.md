@@ -165,8 +165,9 @@ file is never replaced unless the call passes `overwrite: true`.
 ## Scripts without an agent
 
 A script's changes are not proposals: you wrote it, and they apply as yours do (the window's log
-names the script). `mavescape --remote-control` accepts the same actions from programs on this
-computer: post JSON
+names the script). The R and Python packages in [`clients/`](../clients/) make each action a
+function (`ms_scores()`, `ms.scores()`), with tables as data frames and pictures as files.
+`mavescape --remote-control` accepts the same actions from programs on this computer: post JSON
 such as `{"action": "score", "args": {"preset": "enrich2"}, "client": "My pipeline"}` to
 `/api/remote/action`, with the token MaveScape prints (and writes to `remote.json` in its data
 folder) for actions that read or write files. See

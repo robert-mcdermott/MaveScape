@@ -43,6 +43,14 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   scale, of the whole target or a stretch of positions), `render_structure` the Structure view with
   its legend, and `figures` with `image` each page as exported. `mavescape mcp` sends the pictures
   to an agent as images it can look at; a script gets them as data URLs.
+- **R and Python clients** (wave 7, slice 4; `clients/`, after CytoWeave's): the packages
+  `mavescape` for R (curl and jsonlite) and Python (the standard library; pandas for data frames)
+  make each of the 54 actions a function with its arguments and help (`ms_scores()`,
+  `ms.scores()`), generated from `clients/tools.json`, which a Go test keeps equal to the actions.
+  They find the running MaveScape through `remote.json`; tables come back as data frames, pictures
+  as files (`file =` on `render_map`, `render_structure` and `figures`), and an action refused is
+  an error carrying MaveScape's reason. Installed from the repository; their version is
+  MaveScape's.
 
 ### Changed
 
@@ -90,6 +98,12 @@ Wave 7 of the [roadmap](mavescape-spec/roadmap.md): agents and scripts.
   gives it (the whole map, a stretch at 3×, and with tracks); the Structure view's picture is pixel
   for pixel the panel `structure-image` exports; a figure's picture is the page at the dpi asked,
   its manifest inside. A Go test of pictures as MCP image content.
+- The R and Python clients (`clients/test-clients.mjs`; CI job `clients`, with `generate.mjs
+  --check` and `R CMD check`): each against MaveScape in headless Chrome, GRB2 opened and scored
+  through the client, its scores table every number of Node's (in R read by the same exact parser
+  as the client's), a figure, the map and the Structure view written as files, exports needing the
+  token and never replacing a file, errors carrying MaveScape's reason, results equal to the HTTP
+  API's for the same actions, and the connection found through `remote.json`.
 
 ## 0.6.0 (2026-10-12)
 

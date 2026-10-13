@@ -3176,6 +3176,27 @@ Decisions taken in planning (confirmed before slice 1):
    - Validation: `node clients/generate.mjs --check` in CI; `clients/test-clients.mjs` runs both
      against a running build in headless Chrome (a CI job `clients`): the GRB2 example scored, its
      scores table Node's, a figure written, an error's reason.
+   - **Done.** `clients/` after CytoWeave 0.8.0's: `tools.json` (written by
+     `TestTheClientsToolListIsCurrent -update` from `actions.go`), `generate.mjs` (each action a
+     Python method and an R function `ms_<name>` with a help page; the NAMESPACE; both versions
+     `main.go`'s; `--check`), the packages' own code (`client.py`, `client.R`: the connection from
+     the environment or `remote.json`, any action by name, results, `records()`/`frame()` and
+     `as.data.frame()`, pictures with `images()`/`save_image()` and `ms_images()`/
+     `ms_save_image()`), their help, READMEs and tests.
+     - The three actions that give pictures take `file` in the clients (which also asks for the
+       picture); in Python `from` is `from_`. Arguments are MaveScape's own names, already in
+       snake case.
+     - Found by slice 4:
+       - **R matched `compare`'s and `add_figure_panel`'s argument `a` to `ms_call`'s `action`** (R
+         completes a partial name of an argument before `...`): the generated call sent no action,
+         and MaveScape said to send one. `ms_call`'s first argument is `.action` now, as R's own
+         functions name theirs for that reason.
+       - R's `as.numeric` is not correctly rounded at 17 digits, and jsonlite's parser is: the
+         R test reads the export's numbers with jsonlite's, and finds them identical.
+     - Validation: `clients/test-clients.mjs` (MaveScape with remote control, offline, its page in
+       headless Chrome; Node's scores of GRB2's Run 1 written for the tests): Python 9 tests (the
+       data frame skipped without pandas; CI installs it), R 9; `R CMD check` with no note; CI job
+       `clients`.
 5. **The guide: agents and scripts.** `docs/MCP.md` (Claude Code, Claude Desktop and other clients;
    the tools with the PRD's names; proposals; privacy; how it works), the site's page *Agents and
    scripts* (with the scripting page's remote control and headless runs), the clients' READMEs, the
