@@ -3816,30 +3816,150 @@ sets, calibrations, figure and checkpoint kept.
 
 ## 0.9.0: ready for others (wave 9)
 
-The 1.0 candidate: what the PRD's phase 3 asks for beyond features.
+The 1.0 candidate: what the PRD's phase 3 asks for beyond features, so that a laboratory that has
+never met MaveScape can trust it with its data, open what it saved in every later version, and
+learn it alone.
 
 ### Wave 9
 
-1. **Accessibility audit (T6).** axe-core on every view in both themes, keyboard operation of the
-   map, structure view and tables, screen-reader descriptions, UI scaling.
-2. **Workspace migrations (T7).** Schema version 2 if needed, with migrations, tested on the
-   archive fixtures each release has kept since wave 2 (0.1–0.8).
-3. **Security review (T5, D11).** Fuzzing of CSV, FASTA, GenBank, HGVS, PDB/mmCIF, ZIP and design
-   parsing (CytoWeave's `fuzz.mjs` pattern), request-forgery and token tests, path handling, a
-   written review.
-4. **Documentation complete, and teaching mode.** The site (begun in wave 2) reviewed as a whole:
-   a full tutorial for each experiment type, every page's screenshots current. Exercises on the
-   examples, as CytoWeave's: a question, hints, answers checked against the simulated truth (which
-   the workspace never stores: it is regenerated from the exercise's seed), class codes.
-5. **Agent benchmark (M6).** Graded tasks on the examples (CytoWeave's `benchmark/` harness).
+The roadmap first had five items for this wave. Before it began, a survey of the code (2026-10-13)
+found more than they named, and they became seven slices: stable formats (T7), a security review
+(T5), hardened readers with Excel (D11, D1), keyboard and screen readers (T6), teaching mode, the
+agent benchmark (M6) and the documentation, then the release.
+
+What the survey found:
+- **Security**: the API trusts any program on this computer. Without a token, another user or
+  program of a shared computer can read, change and delete the library, read the files opened,
+  and, with remote control on, connect as the window (its channel asks only the session that
+  `/api/info` names) and receive an agent's actions; the token guards only the actions that read or
+  write files by path. The ZIPs of MaveDB packages and gzipped files have no size limit, nor has an
+  export's upload; `--host 0.0.0.0` serves all of it to the network without a word; no test passes
+  hostile labels through the map's SVG or the review report.
+- **Readers**: none is fuzzed. A `.xlsx` file is taken as a table and handed to the CSV parser.
+- **Formats**: the workspace has been version 1 since 0.1, each field added since "absent until
+  first used", its defaults spread through the code; `migrate.js` (`conventions.md`) does not
+  exist; only the design has a JSON Schema. Every release's archive opens and reproduces.
+- **Accessibility**: the axe-core audit sees only the screenshots' last states, never a dialog, a
+  menu, the command palette or an empty view. Ten tables' rows answer only a click, an existing
+  figure panel cannot be selected from the keyboard, and most redraws lose the focus. Toasts are
+  silent to screen readers, and most charts' descriptions are their titles. In a window narrower
+  than 980 pixels (or at 200% zoom) the dataset tree and the inspector are hidden with no way to
+  show them. The structure's colors ignore the color-vision setting.
+
+Decisions taken in planning (2026-10-13):
+- **MaveScape looks as it does.** Accessibility adds nothing a sighted person using a mouse sees:
+  keyboard operation, screen-reader descriptions and tables (read, not shown), and the
+  color-vision setting carried to the structure. No scale setting (the browser's zoom serves, once
+  nothing vanishes at it), no patterns added to charts, no buttons for tables. Most science
+  software has none of this; what MaveScape adds must not cost its looks or its layout.
+- **CI no longer and no more fragile.** No new CI job. The fuzzer runs a fixed set of cases in CI
+  (fixed seeds: the same cases every run, in under 30 s); long runs are by hand before a release.
+  Go's fuzz tests run only their seed corpus under `go test`. Accessibility is audited with the
+  screenshots at release, as now. The benchmark's expert runs in the agents job, which runs beside
+  the others and is not the longest.
+- **The workspace stays version 1.** A version 2 is not needed: every field added since 0.1 is one
+  an older MaveScape passes over, and every release's archive opens. The version changes only when
+  an older MaveScape would misread a newer file, so 0.8 and 0.9 open each other's workspaces. T7's
+  "at least two previous versions" is met by every release's archive opening (eight, from 0.1);
+  `migrate.js` is where older documents are brought up to date from now on.
+- **A session secret for the whole API**, as Jupyter's: made for each run, in the address the window
+  opens and the banner prints, and in a file of the data folder that only its owner reads (for a
+  second launch, and for the clients and agents, which have it already as `remote.json`'s token).
+  Without it the API answers nothing, and the page says to open MaveScape from its window or from
+  the address it printed. Nothing changes for someone who starts MaveScape and uses its window.
+- **Excel, if small**: count tables and sample sheets read from `.xlsx` with no library (the
+  workbook's ZIP through `zip.js`, its XML by a reader of its few elements): values only (a
+  formula's saved result, never evaluated), the sheet chosen when there are several; `.xls` and
+  encrypted workbooks refused by name. If it proves larger, or needs a dependency, `.xlsx` is
+  refused with a clear message instead and Excel parked.
+- **Signed releases**: GitHub's build attestations (no key to keep); `gh attestation verify` checks
+  a download.
+- **The benchmark's model runs are by hand**, on the maintainer's `claude` login, and published only
+  from a clean checkout; CI runs the expert's solutions, with no key.
+
+1. **Stable formats (T7).** What 1.0 promises to keep, written down and checked when read.
+   - `web/lib/migrate.js`: the one place an older workspace (and a checkpoint's state within it) is
+     brought up to date when read, the defaults now spread through the code gathered there; run
+     ids, the history's chain and checkpoints' digests untouched.
+   - JSON Schemas (`docs/schemas/`) for the workspace, the archive's manifest, the certificate,
+     `run.json` and the figure manifest, beside the design's; a workspace's shape checked when read,
+     with a message naming the field (today a `sources` that is not a list fails later, unclearly).
+   - The API's own version in `/api/info`, its actions the contract; the clients say when
+     MaveScape's is newer than theirs.
+   - The policy in `docs/FORMATS.md`: when a version changes, what an older MaveScape does with a
+     newer file, how the hashes are kept.
+   - Fixtures: an archive with checksums only, a workspace as the library keeps it, and the
+     refusals of a newer certificate and figure manifest (untested today); every release's archive
+     opened through `migrate.js`.
+2. **Security review (T5).**
+   - The session secret (above); remote control's channel and its results bound to it, the
+     results' ids unguessable.
+   - A `--host` that is not loopback says what it exposes, and still asks for the secret.
+   - Limits on every ZIP the page reads (MaveDB packages' included; an entry no longer allocated
+     from its declared size), every gunzip, and an export's upload.
+   - The Content Security Policy tightened (no `blob:` workers, `form-action 'none'`) and tested
+     whole; the review report given its own.
+   - Hostile labels (`<img onerror>`, `"><script>`) through every writer of HTML and SVG (the map's
+     SVG, the plots, the report, the review report); the unused `html` property of `h()` removed.
+   - Go: fuzz tests of the host's parsers (the public hosts' allowlist, MCP's lines, a deposit's
+     entries, a structure's check); a hostile deposit ZIP; `Origin: null`, `[::1]` and a wildcard
+     host tested; the library's folder its owner's only.
+   - Signed releases (`release.yml`). `docs/SECURITY.md`, the written review: what MaveScape
+     protects, against whom, each control and its test, what this review found and changed; and
+     `SECURITY.md`, how to report a vulnerability.
+3. **Hardened readers (D11), and Excel (D1).**
+   - Excel (above).
+   - Limits on a table's columns and a cell's length, on HGVS and query text, and on BinaryCIF's
+     declared sizes and nesting.
+   - `validation/fuzz.mjs`, CytoWeave's pattern over every reader instead of one: seeded mutations
+     of generated and bundled files for CSV and TSV (whole and streamed), Excel, FASTA, GenBank,
+     MAVE-HGVS (both modes), the selection queries, PDB, mmCIF and BinaryCIF, ZIP, `.msz` and
+     certificates, designs, sample sheets and import templates, workspaces, and the readers of
+     MaveDB, ClinVar, UniProt, gnomAD, alignments and GFF3. A failure is an error of the engine
+     (TypeError, RangeError) rather than the reader's own refusal; a message empty or with
+     `undefined`, `NaN` or `[object`; an allocation beyond what the input's size allows; a hang (the
+     worker stopped after its time); or the streamed and whole readers disagreeing. Every case
+     replays from its file and seed.
+   - Each find kept as a unit test.
+4. **Keyboard and screen readers (T6)**, with no visible change (above).
+   - Keyboard: every row that answers a click answers Enter and Space; figure panels reached and
+     selected from the keyboard (and the parked overlapping panels: a panel added without a place
+     goes where there is room); arrow keys in the view tabs, the drawer's tabs and the dataset tree;
+     the focus kept when a view redraws and returned when a menu or the palette closes; the map's
+     focused cell shows its tooltip as the pointer's does.
+   - Screen readers: toasts announced (a live region), and the workbench no longer one; the
+     palette a dialog with a list; menus' checked items said; each chart's description with its
+     numbers, and a table of its data that is read, not shown; the structure described as drawn;
+     Compare's three maps described as the Map view's is.
+   - The color-vision setting carried to the structure's chains, secondary structure and classes.
+   - A window narrower than 980 pixels (or at 200% zoom) can show the dataset tree and the inspector
+     (⌘\, ⇧⌘\), as a wide one does.
+   - The release's audit: axe-core over the dialogs, menus, palette and empty views too (without
+     screenshots of them), and a walk through every view by keyboard; the site's page
+     *Accessibility*.
+5. **Teaching mode.** Exercises on the simulated examples, as CytoWeave's: a question, hints one at
+   a time, answers checked against the truth regenerated from the exercise's seed (the workspace
+   never stores it); a class code, the seed, gives a class the same data; an Exercises panel. The
+   grading checked in Node (an oracle's answers score 1, none 0), the panel by a few steps of the
+   remote session; the site's page *Teaching*.
+6. **Agent benchmark (M6).** `benchmark/`, CytoWeave's harness: graded tasks on the examples
+   through MCP, partial credit computed (no model grades), the agent given MaveScape's tools only;
+   the expert's solutions in CI; model runs by hand, their results on the site's page *Benchmark*.
+7. **Documentation complete.** A full tutorial for each experiment type (two populations, time
+   series, sort-seq bins, barcodes, conditions, published scores); the site read through as a
+   whole; `requirements.md`'s statuses brought up to date (P5, P6, V1, T1, T3 and T8 still read
+   planned or partial); the PRD's metrics not met written down as exceptions, as 1.0's exit asks.
+   Then 0.9.0.
 
 ## Toward 1.0
 
 1.0 means, from the PRD's phase-3 exit:
-- stable design, run and archive schemas, with a promise that later versions open them;
-- a versioned HTTP and MCP API covered by the clients' tests;
-- an external reproducibility review;
-- automated, signed releases and documented exceptions to unmet metrics.
+- stable design, run and archive schemas, with a promise that later versions open them (wave 9,
+  slice 1);
+- a versioned HTTP and MCP API covered by the clients' tests (wave 9, slice 1);
+- an external reproducibility review, arranged by the maintainer as the laboratories are (below);
+- automated, signed releases (wave 9, slice 2) and documented exceptions to unmet metrics (wave 9,
+  slice 7).
 
 Outside laboratories using MaveScape on their own data (the PRD's phase-2 exit, and its 1.0 goal of
 two) are arranged by the maintainer, outside this plan. No wave or release waits for them; what they
